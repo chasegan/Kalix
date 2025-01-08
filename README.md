@@ -15,14 +15,17 @@ which can be found online at https://www.mozilla.org/en-US/MPL/2.0/ and in the f
 
 ## Current work (and backlog)
 
-- Implement a model reader. Use TOML for the model format. This should be prioirty #1.
-  - Call these files *.kx for "kalix"
-- Implement a fast compressed extendable multi-timeseries format (like Pixie and Gorilla).
-  - Use a single codec, so that we can easily build a 
+https://www.notion.so/chasegan/Development-tasks-14c3cd7417a280a79bfcc0405e9d75a1 
+https://github.com/users/chasegan/projects/1
+
+- TOML for the model format. Maybe call these files *.kx for "kalix"
+- Optional fast compressed extendable multi-timeseries format (like Pixie, based on Facebook's Gorilla algorithm).
+  - Use a single codec
   - Index file = *.kin = kalix index file
   - Binary file = *.kbn = kalix binary file 
-- CSV writer should use "yyyy-MM-dd'T'HH:mm:ss.SSS" e.g. "2000-10-31T01:30:00.000". 
-- CSV reader currently doesn't handle dates properly. 
+- CSV reader and writer. Reader should be flexible with date stamps, writer should be strict, using a choice of these depending on granularity required:
+  - "yyyy-MM-dd"
+  - "yyyy-MM-dd'T'HH:mm:ss.SSS" 
 - How can we think about global optimisation and parameter uncertainty estimators together?
 - Implement global optimisation:
    - DE 
