@@ -1,0 +1,20 @@
+[optimera settings]
+algorithm = grid
+threads = 1
+size = 100
+quiet = false
+objective = CUSTOM
+customobjective = bias(0)
+
+[model]
+filename = c:\chas\kalix\kalixengine\src\tests\rex_creek_gr4j.fors
+
+[observed data]
+rex_creek\1 = c:\chas\kalix\kalixengine\src\tests\rex_creek_gr4j_flow_original.csv
+
+[calibration parameters]
+"gr4\rex_creek\x1"="lin_range(g(1), 10, 2000)"
+"gr4\rex_creek\x2"=""
+"gr4\rex_creek\x3"=""
+"gr4\rex_creek\x4"=""
+"gr4\rex_creek\rfsum"=""

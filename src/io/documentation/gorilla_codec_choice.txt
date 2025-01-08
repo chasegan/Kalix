@@ -1,0 +1,97 @@
+Here is a dump of the different codecs used when I converted one Source .res.csv to Pixie.
+
+15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 16 
+15 15 15 15 15 15 15 15 15 15 16 16 15 15 15 15 
+15 15 15 15 15 15 15 15 15 15 15 16 15 15 15 15 
+15 15 15 15 15 15 15 15 15 16 16 16 16 15 15 15 
+15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 
+15 15 15 15 15 15 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 
+16 16 16 16 16 16 16 16
+
+Codec 15 is the original Gorilla algroithm. It was used 78 times. These were within the 
+first 100 timeseries and were mostly flows. If I was just to use this codec, the file size 
+would be 23_554kb.
+
+Codec 16 is a modified Gorilla, which includes a run-length encoder. It was used 
+186 times. These were after the first 100 timeseries and were mostly diversions, which were 
+repetative. If I was just to use this codec, the file size would be 23_407kb.
+
+And using the mix of the two, the file size is 23_021kb. There seems to be very little 
+difference. Why don't I just stick with the original Gorilla codec?!
+
+BUT IF I USE PIXIE EXACTLY, I CAN LOAD THE FILES TO PLOT IN SOURCE.
+
+--------- EXISTING IMPLEMENTATIONS ---------------------------
+
+Here is a Python implementation of Gorilla. This one is good because it includes a 
+values-only version which is perfect for timeseries with regular intervals.
+    https://github.com/ghilesmeddour/gorilla-time-series-compression
+
+Here is a Rust implementation that looks pretty neat, but I think this encodes 
+timestamps with values, so I may want to re-engineer that.
+    https://lib.rs/crates/tsz
+
+The original Gorilla implementation encodes time using the delta of the timedelta. I.e. if the 
+series is regular the delta-of-delta is 0 (a single bit), and this is written before the value is 
+encoded. If the series is not regular, the d-o-d will be some value, which gets written before 
+the value is encoded. While this seems wastefull in the circumstance that the timestep is always
+regular, we might be able to leverage it to encode repeat values. I.e. if we take the convention
+that any missing values mean that the previous value is repeated, then we can effectively encode
+each pesky constant series using just a few bytes. Lets do it.
+
+One of the headaches with Gorilla is that every implementation I've seen is slightly different, 
+so I'm not sure we can rely on a standard to take advantage of libraries written for differnet 
+languages. The best chance you have is if you follow the facebook spec verbatim.
+
+The timestamp is a u64. Normally this would be Unix time. The original definition of Unix time
+is seconds since 1970 (ref = https://en.wikipedia.org/wiki/Unix_time) but versions in milliseconds
+and nanoseconds have been added. The original one seems to work for our needs. Negative values 
+give us times prior to 1970. If we used a signed i64, the full representable range is +-292B
+years - starting before the big bang and ending far after the Sun has died. Despite the large 
+size of i64 (or u64), these values will compress well with Gorilla since the delta-of-delta will 
+just be zero.
+
+pub const MIN: i64 = i64::MIN; // -9_223_372_036_854_775_808
+pub const MAX: i64 = i64::MAX; // 9_223_372_036_854_775_807
+
+i64 values can be hidden in u64 variables obviously by adding ~half of u64::MAX. It turns out
+that this is the way to do it:
+
+pub fn wrap_to_u64(x: i64) -> u64 {
+    (x as u64).wrapping_add(u64::MAX/2 + 1)
+}
+pub fn wrap_to_i64(x: u64) -> i64 {
+    x.wrapping_sub(u64::MAX/2 + 1) as i64
+}
+
+
+
+Refs
+    //https://blog.acolyer.org/2016/05/03/gorilla-a-fast-scalable-in-memory-time-series-database/
+    //https://www.vldb.org/pvldb/vol8/p1816-teller.pdf
+
+
+            //Gorilla works as follows:
+            //1) The first value in the sequence is stored with no compression.
+            //2) Take the bitwise XOR from the previous value.
+            //3) Write a 1-bit flag to indicate if the XOR was all zeros (i.e. the two data values are the same):
+            //     The flag is 0 if the XOR was all zero. 
+            //     The flag is 1 if the XOR was not all zeros.
+            //4) If the above flag is 1 (i.e. the XOR was not all zeros) then next we write another 1-bit flag: 
+            //     This flag is 0 if the previous XOR has the same or fewer leading zeros, and the same or fewer trailing zeros.
+            //     Otherwise the flag is 1.
+            //5) If the above flag is 1, we write a 5-bit integer showing the new number of leading zeros (00000 -> 0, 11111 -> 31) followed 
+            //     by at 6-bit integer showing the number of significant bits (000000 -> 0, 111111 -> 63).
+            //6) Then we write the significant bits, i.e. those that were nonzero in the previous XOR. We will know how many there are 
+            //     by using the bits encoded in steps 4 and 5.
+            //

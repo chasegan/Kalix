@@ -1,0 +1,35 @@
+// fors model saved at 15/11/2022 18:11:17.509
+
+///////////////////////////////////////
+// input data definitions
+
+[input]
+name = rain
+file = ./rex_rain.csv
+
+[input]
+name = evap
+file = ./rex_mpot.csv
+
+///////////////////////////////////////
+// node definitions
+
+[gr4j]
+name = rex_creek
+location = 50.5, 89
+area = 22.8
+rainfall = 1.72036997687526*rain
+evaporation = evap
+parameters = 1999.99999999996, 5.99999999999991, 65.2245666006408, 0.380800595584489
+
+///////////////////////////////////////
+// sacramento models
+
+///////////////////////////////////////
+// recorders
+
+[recorder]
+node = rex_creek
+outno = 1
+filename = modelled_rex_creek_flow_(fors).csv
+

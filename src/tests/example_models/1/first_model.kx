@@ -1,0 +1,46 @@
+[kalix_model]
+version = 0.0.1
+
+[input_data]
+name = "d_mpot"
+file = "./rex_mpot.csv"
+
+[input_data]
+name = "d_rain"
+file = "./rex_rain.csv"
+
+[gr4j_node]
+name = "n_node1"
+loc = [50.5, 89]
+area = 22.8
+rain = "1.72036997687526*d_rain"      # I will have some form of function. Maybe these should be pre-computed somewhere. 
+evap = "d_mpot"
+params = [
+    1999.99999999996, 
+    5.99999999999991, 
+    65.2245666006408, 
+    0.380800595584489,                # Terminating commas avoid having to worry about special formatting for the last line.
+]
+
+[node]
+name = "n_node1"
+loc = [50.5, 89]
+area = 22.8
+rain = "1.72036997687526*d_rain"      # I will have some form of function. Maybe these should be pre-computed somewhere. 
+evap = "d_mpot"
+params = [
+    1999.99999999996, 
+    5.99999999999991, 
+    65.2245666006408, 
+    0.380800595584489,                # Terminating commas avoid having to worry about special formatting for the last line.
+]
+
+[output]
+recorder = "n_node1\dsflow"           # TODO: not sure whether to use backslashes or dots to do nesting. I need to think about how I want functions to look.
+recorders = [                         # I guess allow both of these options. No hurt really. Just anything ever mentioned will be recorded.
+    "n_node1\dsflow",
+    "n_node1\storage",
+    "n_node1\rain",
+]
+file = "./output/all_results.kin"     # Kalix outputs (.kin and .kbn) are a subset of Pixie that is simple enough to implement natively in Python. Kalix tools 
+                                      # cant generally open Pixie. This means I have a spare "codec" variable at the start of each block that I can use for later. 

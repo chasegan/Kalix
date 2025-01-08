@@ -1,0 +1,328 @@
+Single Configuration
+End,2013-08-28 00:00:00
+Input Set,Default Input Set
+Start,2010-01-02 00:00:00
+Time Step,Daily
+
+Constituents
+Constituents,
+End,2013-08-28 00:00:00
+Minimum Marker Gap,0 %
+Minimum Volume,0.001 ML
+Process Constituents,True
+Restrict Run Date Range,False
+Start,2010-01-02 00:00:00
+Use Lumped Routing,True
+Use Marker Routing,False
+
+Wetland Configuration
+Convergence Limit,1
+Maximum Halving Steps,0
+Maximum Iterations,5
+Run Wetlands,True
+
+Ordering System,New rules based ordering system
+Scenario Input Sets,Default Input Set
+Plugins,SourcePlugin.DataSourcesTools
+Crop Parameters
+
+Gauge
+Outflow1
+Apply Unaccounted Difference,False
+Deactivated,False
+Elevation,0 m
+In Built Station Selected,False
+Latitude,0
+Longitude,0
+Observed Flow,0 ML/d
+Ownership.Reset Method,Ratio
+Ownership.Reset Ownership,False
+Ownership.Reset Sharing.Owner 1.Share,100 %
+Ownership.Reset Sharing.Owner 1.Value,0 ML/d
+
+Outflow2
+Apply Unaccounted Difference,False
+Deactivated,False
+Elevation,0 m
+In Built Station Selected,False
+Latitude,0
+Longitude,0
+Observed Flow,0 ML/d
+Ownership.Reset Method,Ratio
+Ownership.Reset Ownership,False
+Ownership.Reset Sharing.Owner 1.Share,100 %
+Ownership.Reset Sharing.Owner 1.Value,0 ML/d
+
+Outflow3
+Apply Unaccounted Difference,False
+Deactivated,False
+Elevation,0 m
+In Built Station Selected,False
+Latitude,0
+Longitude,0
+Observed Flow,0 ML/d
+Ownership.Reset Method,Ratio
+Ownership.Reset Ownership,False
+Ownership.Reset Sharing.Owner 1.Share,100 %
+Ownership.Reset Sharing.Owner 1.Value,0 ML/d
+
+Outflow4
+Apply Unaccounted Difference,False
+Deactivated,False
+Elevation,0 m
+In Built Station Selected,False
+Latitude,0
+Longitude,0
+Observed Flow,0 ML/d
+Ownership.Reset Method,Ratio
+Ownership.Reset Ownership,False
+Ownership.Reset Sharing.Owner 1.Share,100 %
+Ownership.Reset Sharing.Owner 1.Value,0 ML/d
+
+Inflow
+Inflow1
+Deactivated,False
+Elevation,0 m
+Flow,picnic_crossing_modelled_flow_routed_csv.Flow [ML/d]
+Forecast Model.Forecast From Previous Timestep,False
+Forecast Model.Rate,0
+Forecast Model.Target,0 ML/d
+Forecast Multiplier,1 proportion
+Forecast Multiplier Enabled,False
+Latitude,0
+Longitude,0
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.Sharing Method,Fixed Ratio
+Replace Flow,False
+
+Inflow2
+Deactivated,False
+Elevation,0 m
+Flow,0 ML/d
+Forecast Model.Forecast From Previous Timestep,False
+Forecast Model.Rate,0
+Forecast Model.Target,0 ML/d
+Forecast Multiplier,1 proportion
+Forecast Multiplier Enabled,False
+Latitude,0
+Longitude,0
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.Sharing Method,Fixed Ratio
+Replace Flow,False
+
+Inflow3
+Deactivated,False
+Elevation,0 m
+Flow,0 ML/d
+Forecast Model.Forecast From Previous Timestep,False
+Forecast Model.Rate,0
+Forecast Model.Target,0 ML/d
+Forecast Multiplier,1 proportion
+Forecast Multiplier Enabled,False
+Latitude,0
+Longitude,0
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.Sharing Method,Fixed Ratio
+Replace Flow,False
+
+Inflow4
+Deactivated,False
+Elevation,0 m
+Flow,0 ML/d
+Forecast Model.Forecast From Previous Timestep,False
+Forecast Model.Rate,0
+Forecast Model.Target,0 ML/d
+Forecast Multiplier,1 proportion
+Forecast Multiplier Enabled,False
+Latitude,0
+Longitude,0
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.Sharing Method,Fixed Ratio
+Replace Flow,False
+
+StorageRouting
+Baseline
+Average Regulated Flow,0 ML/d
+Connection,'Inflow1' to 'Outflow1'
+Deactivated,False
+Elevation,0 m
+Evaporation,0 mm/d
+Groundwater Flux,[]{m ML/d}
+Inflow Bias,0
+Initial Flow,0 ML/d
+Initial Storage,0 ML
+Loss Gain Relationship,[]{ML/d ML/d}
+Number Of Divisions,10
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Time Series Flux Override,0 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.High Flow Threshold,0 ML/d
+Ownership.Is Time Series Flux Per Owner,False
+Ownership.Override Owner Share,False
+Piecewise Relationship,[[0 5][10 2][100.00000000000001 3][999.99999999999989 1.5][10000 1][100000 0]]{ML/d d}
+Rainfall,0 mm/d
+Reach Length,0 m
+Storage Constant,0 None
+Storage Exponent,1
+Timeseries Flux,0 ML/d
+Use Exact Solution,False
+Use Groundwater In Ordering,False
+Use Initial Flow,True
+Use Loss Gain In Ordering,False
+Use Net Evaporation In Ordering,False
+Use Piecewise Calculation,True
+Use Time Series Loss In Ordering,False
+
+Inflowbias0.5
+Average Regulated Flow,0 ML/d
+Connection,'Inflow4' to 'Outflow4'
+Deactivated,False
+Elevation,0 m
+Evaporation,0 mm/d
+Groundwater Flux,[]{m ML/d}
+Inflow Bias,0.5
+Initial Flow,0 ML/d
+Initial Storage,0 ML
+Loss Gain Relationship,[]{ML/d ML/d}
+Number Of Divisions,10
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Time Series Flux Override,0 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.High Flow Threshold,0 ML/d
+Ownership.Is Time Series Flux Per Owner,False
+Ownership.Override Owner Share,False
+Piecewise Relationship,[[0 5][10 2][100.00000000000001 3][999.99999999999989 1.5][10000 1][100000 0]]{ML/d d}
+Rainfall,0 mm/d
+Reach Length,0 m
+Storage Constant,0 None
+Storage Exponent,1
+Timeseries Flux,0 ML/d
+Use Exact Solution,False
+Use Groundwater In Ordering,False
+Use Initial Flow,True
+Use Loss Gain In Ordering,False
+Use Net Evaporation In Ordering,False
+Use Piecewise Calculation,True
+Use Time Series Loss In Ordering,False
+
+Inflowbias1.0
+Average Regulated Flow,0 ML/d
+Connection,'Inflow3' to 'Outflow3'
+Deactivated,False
+Elevation,0 m
+Evaporation,0 mm/d
+Groundwater Flux,[]{m ML/d}
+Inflow Bias,1
+Initial Flow,0 ML/d
+Initial Storage,0 ML
+Loss Gain Relationship,[]{ML/d ML/d}
+Number Of Divisions,10
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Time Series Flux Override,0 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.High Flow Threshold,0 ML/d
+Ownership.Is Time Series Flux Per Owner,False
+Ownership.Override Owner Share,False
+Piecewise Relationship,[[0 5][10 2][100.00000000000001 3][999.99999999999989 1.5][10000 1][100000 0]]{ML/d d}
+Rainfall,0 mm/d
+Reach Length,0 m
+Storage Constant,0 None
+Storage Exponent,1
+Timeseries Flux,0 ML/d
+Use Exact Solution,False
+Use Groundwater In Ordering,False
+Use Initial Flow,True
+Use Loss Gain In Ordering,False
+Use Net Evaporation In Ordering,False
+Use Piecewise Calculation,True
+Use Time Series Loss In Ordering,False
+
+Onediv
+Average Regulated Flow,0 ML/d
+Connection,'Inflow2' to 'Outflow2'
+Deactivated,False
+Elevation,0 m
+Evaporation,0 mm/d
+Groundwater Flux,[]{m ML/d}
+Inflow Bias,0
+Initial Flow,0 ML/d
+Initial Storage,0 ML
+Loss Gain Relationship,[]{ML/d ML/d}
+Number Of Divisions,1
+Ownership.Flow Sharing.Owner 1.Share,100 %
+Ownership.Flow Sharing.Owner 1.Time Series Flux Override,0 %
+Ownership.Flow Sharing.Owner 1.Value,0 ML/d
+Ownership.High Flow Threshold,0 ML/d
+Ownership.Is Time Series Flux Per Owner,False
+Ownership.Override Owner Share,False
+Piecewise Relationship,[[0 5][10 2][100.00000000000001 3][999.99999999999989 1.5][10000 1][100000 0]]{ML/d d}
+Rainfall,0 mm/d
+Reach Length,0 m
+Storage Constant,0 None
+Storage Exponent,1
+Timeseries Flux,0 ML/d
+Use Exact Solution,False
+Use Groundwater In Ordering,False
+Use Initial Flow,True
+Use Loss Gain In Ordering,False
+Use Net Evaporation In Ordering,False
+Use Piecewise Calculation,True
+Use Time Series Loss In Ordering,False
+
+Function Manager
+Custom Functions,CalculateRestrictedDemand,GetRestrictionValue,GetRestrictionLevel,GetDataPeriod,GetDataTimeSteps,ProbabilityOfExceedancePercentage,ProbabilityOfExceedanceFlow
+Function Execution Orders..Order,
+Function Execution Orders..Order,
+Function Execution Orders..Order,
+Function Execution Orders.End of TimeStep.Order,
+Function Execution Orders.Environmental Flow Prioritisation.Order,
+Function Execution Orders.Flow Phase.Order,
+Function Execution Orders.None.Order,
+Function Execution Orders.Ordering Phase.Order,
+Function Execution Orders.Post of Flow Phase.Order,
+Function Execution Orders.Post of TimeStep.Order,
+Function Execution Orders.Resource Assessment Entry.Order,
+Function Execution Orders.Resource Assessment Triggers.Order,
+Function Execution Orders.Run Initialisation.Order,
+Function Execution Orders.Start of Run.Order,
+Function Execution Orders.Start of TimeStep.Order,
+Function Execution Orders.Water User & Constraint Phase.Order,
+
+Ownership
+Is Enabled,False
+Ownership Systems.Ownership System 1.Default Distribution System.Priorities.1.Assignments.Owner 1.Enabled,True
+Ownership Systems.Ownership System 1.Default Distribution System.Priorities.1.Assignments.Owner 1.Name,Owner 1
+Ownership Systems.Ownership System 1.Default Distribution System.Priorities.1.Level,1
+Ownership Systems.Ownership System 1.Global And Payback System.Distribution System,Default Distribution System
+Ownership Systems.Ownership System 1.Global And Payback System.Payback Storage,
+Ownership Systems.Ownership System 1.Global And Payback System.Payback Type,System
+Ownership Systems.Ownership System 1.Operational Excess Sharing,FixedRatio
+Ownership Systems.Ownership System 1.Other Lateral Flux Sharing,FixedRatio
+Ownership Systems.Ownership System 1.Owners,Owner 1
+Ownership Systems.Ownership System 1.Time Series Flux Sharing,FixedRatio
+Ownership Systems.Ownership System 1.Use Murray Style Losses,False
+
+Data Sources Manager
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.Flow [ML/d].Column,0
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.Flow [ML/d].Reload On Run,False
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M1.Column,1
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M1.Reload On Run,False
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M2.Column,2
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M2.Reload On Run,False
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M3.Column,3
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data.M3.Reload On Run,False
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data Source Details.Filename,C:\Chas\Kalix\KalixEngine\src\hydrology\routing\storage_routing\picnic_crossing_modelled_flow_routed.csv
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Data Source Details.Use Relative Path,False
+Data Sources.picnic_crossing_modelled_flow_routed_csv.Data Items.Default Input Set.Input Sets,Default Input Set
+
+Meta Parameters,
+Execution Order,Inflow1, Outflow1, Inflow2, Outflow2, Inflow3, Outflow3, Inflow4, Outflow4
+
+ParameterChanger
+Input Set Parameters
+Input Set.Default Input Set.Config.Instructions.Param.P,
+
