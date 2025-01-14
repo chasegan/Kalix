@@ -1,7 +1,20 @@
 //use statements from the binary need to reference the package name "gr4j_rust" rather than "crate".
-use kalix_engine::hydrology::rainfall_runoff::gr4j::Gr4j;
-use kalix_engine::timeseries::Timeseries;
-use kalix_engine::io;
+#[macro_use]
+extern crate ini;
+
+pub mod hydrology;
+pub mod io;
+pub mod model;
+pub mod nodes;
+pub mod timeseries;
+pub mod timeseries_input;
+mod numerical;
+pub mod tests;
+pub mod tid;
+pub mod data_cache;
+
+use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
+use crate::timeseries::Timeseries;
 
 
 fn main() {
