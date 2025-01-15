@@ -61,7 +61,7 @@ pub fn load(s: &str) {
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
 #[pymodule]
-fn kalix(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn kalixpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(guess_the_number, m)?)?;
     m.add_function(wrap_pyfunction!(load, m)?)?;
     m.add_class::<pybindings::model::PyModel>()?;

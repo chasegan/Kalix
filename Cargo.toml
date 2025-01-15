@@ -6,9 +6,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "kalix"
-# "cdylib" is necessary to produce a shared library for Python to import from.
-crate-type = ["cdylib"]
+name = "kalixpy" #note the wheel file will be named "kalix" per the package (i.e. "pip install kalix") but the python module will be called "kalixpy" (i.e. "import kalixpy as kx")
+crate-type = ["cdylib"] # "cdylib" is necessary to produce a shared library for Python to import from.
 
 [dependencies]
 libm = "0.2.2"
@@ -24,8 +23,7 @@ numpy = "0.13.0"
 
 [dependencies.pyo3]
 version = "0.23.1"
-# "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
-features = ["abi3-py38"]
+features = ["abi3-py38"] # "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
 
 [dependencies.uuid]
 version = "1.1.2"
