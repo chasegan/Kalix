@@ -1,7 +1,5 @@
 mod model;
 
-use kalix_lib;
-
 use pyo3::prelude::*;
 use rand::Rng;
 use std::cmp::Ordering;

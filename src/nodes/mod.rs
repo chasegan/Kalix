@@ -13,7 +13,7 @@ pub mod routing_node;
 pub mod sacramento_node;
 
 
-pub trait Node: DynClone {
+pub trait Node: DynClone + Sync + Send {
 
     //To Initialise node before model run
     fn initialise(&mut self, result_manager: &mut DataCache);

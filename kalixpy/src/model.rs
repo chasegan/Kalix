@@ -1,12 +1,13 @@
-use crate::model;
 use numpy::PyArray;
 use pyo3::prelude::*;
 
+use kalix_lib::model as kalix_model;
+
 // https://pyo3.rs/v0.23.3/class.html#defining-a-new-class
-// This should be a wrapper for a Model, with methods calling Model's methods
+// This should be a wrapper for a kalix Model, with methods calling said Model's methods
 #[pyclass]
 pub struct Model {
-    model: Py<model::Model>,
+    model: kalix_model::Model,
 }
 
 #[pymethods]
@@ -26,7 +27,7 @@ impl Model {
 
     // run -> ()
     fn run(&mut self) -> PyResult<()> {
-        // TODO implement
+        self.model.run();
         Ok(())
     }
 
