@@ -50,8 +50,13 @@ To get started you will need:
   - Rust: install rust using rustup from https://www.rust-lang.org/tools/install
     - "cargo version" to check version (Current version = 1.68.0)
     - "cargo update" to update to the latest version.
+  - Maturin and PyO3: these are for building python crates from rust code 
+    - "pip install maturin"
+    - Tell PyO3 where to find python by adding a new system environmental variable "PYO3_PYTHON". 
+      - I want to use python from my py312 env, so I set the value to "C:\Users\**\anaconda3\envs\py312\python.exe"
   - Git: im a big fan of Fork https://git-fork.com/
-  - IDE: VSCode 
+  - IDE Option #1: RustRover
+  - IDE Option #2: VSCode 
     - Extension "rust-analyzer" with setting "rust-analyzer.check.command": "clippy"
 
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -70,7 +75,7 @@ Run all tests by using:
 > cargo test
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-3) Building an executable for deployment
+3A) Building an executable for deployment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Build by using:
@@ -87,6 +92,17 @@ To build for a different architecture, use the following:
 where the general format of the triple is <arch><sub>-<vendor>-<sys>-<abi>. Run rustc --print target-list for a list of supported targets. This flag may be specified multiple times. At the time of writing there were 199 supported targets. These are listed at the bottom of this document. The most important are probably:
    aarch64-apple-darwin
    x86_64-pc-windows-msvc
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3B) Building a Python wheel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Open a terminal in an environment with Maturin installed (see "Setting up dev environment"), and use the following to
+build a wheel and install it in your environment in one go:
+> maturin develop
+
+Note additional linker instructions required on macOS:
+> https://pyo3.rs/v0.10.1/
 
 ~~~~~~~~~~~~~~~~~~~~
 4) Getting more help
