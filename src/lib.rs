@@ -53,8 +53,13 @@ fn guess_the_number() {
 }
 
 #[pyfunction]
-pub fn load(s: &str) {
+pub fn load(s: &str) 
+// -> PyResult<pybindings::Model> 
+{
     // TODO
+    // Ok(pybindings::Model {
+    //     model: model::Model::new(),
+    // })
 }
 
 /// A Python module implemented in Rust. The name of this function must match
@@ -64,6 +69,6 @@ pub fn load(s: &str) {
 fn kalixpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(guess_the_number, m)?)?;
     m.add_function(wrap_pyfunction!(load, m)?)?;
-    m.add_class::<pybindings::model::PyModel>()?;
+    m.add_class::<pybindings::Model>()?;
     Ok(())
 }
