@@ -98,7 +98,8 @@ where the general format of the triple is <arch><sub>-<vendor>-<sys>-<abi>. Run 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Open a terminal in an environment with Maturin installed (see "Setting up dev environment"), and use the following to
-build a wheel and install it in your environment in one go:
+build a wheel and install it in your environment:
+> cd kalixpy
 > maturin develop
 
 Note additional linker instructions required on macOS:

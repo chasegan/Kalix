@@ -204,6 +204,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "kalixpy"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "csv",
+ "dyn-clone",
+ "ini",
+ "kalix",
+ "libm",
+ "numpy",
+ "pyo3 0.23.4",
+ "rand",
+ "serde",
+ "serde_derive",
+ "tsz",
+ "uuid",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
