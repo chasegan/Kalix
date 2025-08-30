@@ -1,4 +1,5 @@
-﻿use uuid::Uuid;
+﻿use std::collections::HashMap;
+use uuid::Uuid;
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]
@@ -156,6 +157,23 @@ impl DataCache {
         let answer = self.series[series_idx].values[self.current_step];
         answer
     }
+
+
+
+    /*
+
+     */
+    pub fn get_critical_input_names(&self) -> Vec<&str> {
+        let mut critical_inputs: Vec<&str> = vec![];
+        for idx in 0..self.series.len() {
+            if self.is_critical[idx] {
+                let name = self.series[idx].name.clone();
+                critical_inputs.push(name.as_str());
+            }
+        }
+        critical_inputs
+    }
+
 
 
     /*
