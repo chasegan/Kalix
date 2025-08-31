@@ -2,20 +2,10 @@
 #[macro_use]
 extern crate ini;
 
-pub mod hydrology;
-pub mod io;
-pub mod model;
-pub mod nodes;
-pub mod timeseries;
-pub mod timeseries_input;
-mod numerical;
-pub mod tests;
-pub mod tid;
-pub mod data_cache;
 
-use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
-use crate::timeseries::Timeseries;
-
+use kalix_lib::hydrology::rainfall_runoff::gr4j::Gr4j;
+use kalix_lib::timeseries::Timeseries;
+use kalix_lib::io::csv_io::read_ts;
 
 fn main() {
     // println!("something big is coming");
@@ -26,14 +16,14 @@ fn main() {
 
 fn test_gr4j_rex_performance() {
     // Read the driving rainfall and evap
-    let mut pp = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
+    let mut pp = read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
     let mut pp = pp[0].clone();
-    let mut ee = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
+    let mut ee = read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
     let mut ee = ee[0].clone();
     let n = ee.len();
 
     // Read the answer data (from Fors)
-    let aa = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/modelled_rex_creek_flow_(fors)_with_kalix_formatting.csv").expect("Error");
+    let aa = read_ts("./src/tests/fors_gr4j_model/modelled_rex_creek_flow_(fors)_with_kalix_formatting.csv").expect("Error");
     let aa = aa[0].clone();
     assert_eq!(aa.len(),n);
 
