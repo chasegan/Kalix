@@ -27,7 +27,7 @@ pub struct StorageNode {
     storage: f64, //TODO: what is this? It looks like all nodes have "storage". Maybe i should use this instead of 'v'
     level: f64,
     pub d: Table,       //Level m, Volume ML, Area ha, Spill ML
-    d_delta: Table,     //d_Level m, d_Volume_ML, d_Area ha, d_Spill ML
+    //d_delta: Table,     //d_Level m, d_Volume_ML, d_Area ha, d_Spill ML
     pub v: f64,
     pub v_initial: f64,
     pub area0: f64,
@@ -263,6 +263,7 @@ impl Node for StorageNode {
         self.q_rx_0 += v;
     }
 
+    #[allow(unused_variables)]
     fn remove_all(&mut self, i: i32) -> f64 {
         let answer = self.q_tx_0;
         self.q_tx_0 = 0_f64;

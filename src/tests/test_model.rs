@@ -17,7 +17,7 @@ use crate::data_cache::DataCache;
 #[test]
 fn test_create_and_run_model_with_storage_node() {
 
-    let mut m = Model::new();
+    //let m = Model::new();
     let mut st1 = StorageNode::new();
     st1.d = Table::from_csv("./src/tests/example_tables/test_4_dim_table.csv");
     //t1.d.print();
@@ -55,11 +55,8 @@ fn test_create_and_run_model_with_nodes() {
     inflow_ts2.push(2, 20.0);
 
     // Create two inflow nodes
-    let mut in1 = InflowNode::new();
-    //in1.inflow_ts = Some(inflow_ts1);
-
-    let mut in2 = InflowNode::new();
-    //in2.inflow_ts = Some(inflow_ts2);
+    let in1 = InflowNode::new();
+    let in2 = InflowNode::new();
 
     let id1 = in1.get_id();
     let id2 = in2.get_id();
@@ -92,11 +89,8 @@ fn test_create_and_run_model_with_nodes_reverse_order() {
     inflow_ts2.push(2, 20.0);
 
     // Create two inflow nodes
-    let mut in1 = InflowNode::new();
-    //in1.inflow_ts = Some(inflow_ts1);
-
-    let mut in2 = InflowNode::new();
-    //in2.inflow_ts = Some(inflow_ts2);
+    let in1 = InflowNode::new();
+    let in2 = InflowNode::new();
 
     let id1 = in1.get_id();
     let id2 = in2.get_id();

@@ -162,11 +162,19 @@ impl DataCache {
      */
     pub fn print(&self) {
         for i in 0..self.series.len() {
-            let mut start_date = "-".to_string();
-            // if self.series[i].len() > 0 {
-            //     start_date = self.series[i].timestamps[0].to_string();
-            // }
+            let start_date = Self::get_start_date(&self.series[i]);
             println!("{}, {}, {}:{}", self.series_name[i], start_date, self.series[i].timestamps.len(), self.series[i].values.len());
+        }
+    }
+
+    /*
+    Moved this code to own function. This seems a bit weird and dirty.
+     */
+    fn get_start_date(series: &Timeseries) -> String {
+        if series.len() > 0 {
+            series.timestamps[0].to_string()
+        } else {
+            String::from("-")
         }
     }
 }

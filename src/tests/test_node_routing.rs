@@ -10,11 +10,7 @@ use crate::nodes::Node;
 fn test_inflow_node_with_timeseries() {
 
     //Creat a new inflow node
-    let timeseries_vec = crate::io::csv_io::read_ts("./src/tests/example_data/test3.csv").expect("Error");
-    let inflow_ts = timeseries_vec[0].clone();
-    // let inflow_ts_len = inflow_ts.len();
-    let mut n = InflowNode::new();
-    //n.inflow_ts = Option::from(inflow_ts);
+    let n = InflowNode::new();
     let n_id = n.get_id();
 
     //Create a new routing node
@@ -30,6 +26,11 @@ fn test_inflow_node_with_timeseries() {
     let mut m = Model::new();
     m.nodes.push(Box::new(n));
     m.nodes.push(Box::new(r));
+
+    // TODO: Configure inflow data
+    // let timeseries_vec = crate::io::csv_io::read_ts("./src/tests/example_data/test3.csv").expect("Error");
+    // let inflow_ts = timeseries_vec[0].clone();
+    // m <---- add data here and tell the inflow node how to find it.
 
     // Link the nodes
     println!("Inflow={n_id}, Routing={r_id}");

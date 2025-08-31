@@ -92,11 +92,11 @@ impl Model {
 
         //Run all timesteps
         for t in self.sim_start..self.sim_end {
-            let step = self.data_cache.current_step;
+            //let step = self.data_cache.current_step;
             //println!("Step: {}, Datetime: {}", step, t);
 
             self.run_timestep(t);
-            self.data_cache.increment_current_step();
+            self.data_cache.increment_current_step(); //TODO: why am I using 't' if I also have a concept of a 'current_step'?
         }
     }
 
@@ -124,6 +124,7 @@ impl Model {
     }
 
 
+    #[allow(unused_variables)] //TODO: remove this and make use of unused variable t
     pub fn run_timestep(&mut self, t: i32) {
         for ex_tuple in self.execution_order.iter() {
             let id = ex_tuple.0;
@@ -191,7 +192,7 @@ impl Model {
                 break;
             }
 
-            let mut idx_next = self.find_next_node(&unsorted_node_idxs);
+            let idx_next = self.find_next_node(&unsorted_node_idxs);
             match idx_next {
                 None => { panic!("Is the model cyclic?!"); },
                 Some(idx) => {

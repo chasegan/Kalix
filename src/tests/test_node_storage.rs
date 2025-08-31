@@ -8,7 +8,7 @@ Create a new inflow node and check out it's ID (GUID)
  */
 #[test]
 fn test_create_storage_node() {
-    let mut i = InflowNode::new();
+    let i = InflowNode::new();
     let id = i.get_id();
     println!("ID = {}", i.get_id());
     let mut m = Model::new();

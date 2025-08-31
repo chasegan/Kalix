@@ -74,9 +74,9 @@ fn test_gr4j_rex_creek() {
 fn test_gr4j_rex_performance() {
     // Read the driving rainfall and evap
 
-    let mut pp = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
+    let pp = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
     let mut pp = pp[0].clone();
-    let mut ee = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
+    let ee = crate::io::csv_io::read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
     let mut ee = ee[0].clone();
     let n = ee.len();
 
@@ -140,7 +140,7 @@ Create a unit hydrograph.
 #[test]
 fn test_create_unit_hydrograph() {
     println!("========== STARTING TEST ==========");
-    let uh = UHDyn::new(5);
+    let _uh = UHDyn::new(5);
     assert_eq!(30, 30);
 }
 

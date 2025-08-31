@@ -49,7 +49,7 @@ impl IniModelIO {
 
                     if k == "attributes" {
                         // A section for model attributes
-                        for (vp, vv) in &v {
+                        for (vp, _vv) in &v {
                             if vp == "ini_version" {
                                 // Already read this
                             } else {
@@ -58,7 +58,7 @@ impl IniModelIO {
                         }
                     } else if k == "inputs" {
                         // We are in an input section
-                        for (vp, vv) in &v {
+                        for (vp, _vv) in &v {
                             // Each vp is a path to an input file
                             print!("Loading data into model {}... ", vp.as_str());
                             model.load_input_data(vp.as_str())?; //TODO: Why is there a questionmark here?
@@ -70,7 +70,7 @@ impl IniModelIO {
                         if node_type == "confluence" {
                             let mut n = ConfluenceNode::new();
                             n.name = node_name.to_string();
-                            for (vp, vv) in &v {
+                            for (vp, _vv) in &v {
                                 if vp == "type" {
                                     // skipping this
                                 } else {
@@ -213,7 +213,7 @@ impl IniModelIO {
                         }
                     } else if k == "outputs" {
                         // We are in an output section
-                        for (vp, vv) in &v {
+                        for (vp, _vv) in &v {
                             if vp == "file" {
                                 // TODO: specify the filename to write file to disk? Or should this not be part of the model?
                             } else {

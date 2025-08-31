@@ -1,5 +1,4 @@
 use super::{make_result_name, InputDataDefinition, Node};
-use crate::timeseries::Timeseries;
 use uuid::Uuid;
 use crate::data_cache::DataCache;
 
@@ -106,6 +105,7 @@ impl Node for InflowNode {
         self.q_rx_0 += v;
     }
 
+    #[allow(unused_variables)]
     fn remove_all(&mut self, i: i32) -> f64 {
         let answer = self.q_tx_0;
         self.q_tx_0 = 0_f64;

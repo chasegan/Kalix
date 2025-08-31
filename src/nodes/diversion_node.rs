@@ -160,6 +160,7 @@ impl Node for DiversionNode {
         self.q_rx_0 += v;
     }
 
+    #[allow(unused_variables)]
     fn remove_all(&mut self, i: i32) -> f64 {
         let answer = self.q_tx_0;
         self.q_tx_0 = 0_f64;

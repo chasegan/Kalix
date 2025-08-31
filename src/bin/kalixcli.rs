@@ -1,11 +1,11 @@
 //use statements from the binary need to reference the package name "gr4j_rust" rather than "crate".
-#[macro_use]
+//#[macro_use]
 extern crate ini;
 
 
-use kalix_lib::hydrology::rainfall_runoff::gr4j::Gr4j;
-use kalix_lib::timeseries::Timeseries;
-use kalix_lib::io::csv_io::read_ts;
+use kalix::hydrology::rainfall_runoff::gr4j::Gr4j;
+use kalix::timeseries::Timeseries;
+use kalix::io::csv_io::read_ts;
 
 fn main() {
     // println!("something big is coming");
@@ -16,9 +16,9 @@ fn main() {
 
 fn test_gr4j_rex_performance() {
     // Read the driving rainfall and evap
-    let mut pp = read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
+    let pp = read_ts("./src/tests/fors_gr4j_model/rex_rain.csv").expect("Error");
     let mut pp = pp[0].clone();
-    let mut ee = read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
+    let ee = read_ts("./src/tests/fors_gr4j_model/rex_mpot.csv").expect("Error");
     let mut ee = ee[0].clone();
     let n = ee.len();
 
@@ -43,7 +43,7 @@ fn test_gr4j_rex_performance() {
         g.initialize();
         let area = 22.8; // km2
         let rainfall_factor = 1.72036997687526;
-        for i in 0..n {
+        for _i in 0..n {
             pp.next();
             ee.next();
             let p = pp.current_played_value * rainfall_factor;
@@ -56,6 +56,7 @@ fn test_gr4j_rex_performance() {
         // Now compare the mean runoff
         let maf_model = mm.mean();
         let maf_answer = aa.mean();
+        println!("{}, {}", maf_model, maf_answer);
     }
     let duration = current.elapsed();
     println!("Time elapsed is: {:?}", duration);

@@ -1,6 +1,6 @@
 use crate::io::csv_io::{read_ts};
 use std::time::SystemTime;
-use tsz::{DataPoint, Encode, StdDecoder, StdEncoder};
+use tsz::{DataPoint, Encode, StdEncoder};
 use tsz::stream::BufferedWriter;
 
 
@@ -137,3 +137,6 @@ fn test_gorilla_with_dummy_dates() {
     let duration = end.duration_since(start).unwrap().as_millis();
     println!("Data compressed in {duration} ms.");
 }
+
+
+//TODO: need test for StdDecoder

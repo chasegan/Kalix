@@ -27,7 +27,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
 
     //Get the headers from the reader
     let mut file_line = 1;
-    let mut n_data_cols = -1;
+    let n_data_cols;
     match reader.headers() {
         Ok(headers) => {
             let headers_len = headers.len();
@@ -42,9 +42,9 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
             return Err(CsvError::ReadError(format!("Error reading '{filename}' line {file_line}.")));
         }
     };
-    if n_data_cols <= 0 {
-        return Err(CsvError::ReadError(format!("File '{filename}' has no data columns on line {file_line}.")));
-    }
+    // if n_data_cols <= 0 {
+    //     return Err(CsvError::ReadError(format!("File '{filename}' has no data columns on line {file_line}.")));
+    // }
 
     //Iterate through the records and parse the data
     for result in reader.records() {

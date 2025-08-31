@@ -3,6 +3,7 @@ pub mod de;
 pub mod sce_ua;
 pub mod sp_uci;
 
+#[allow(unused)]
 pub trait Optimiser {
 
     fn set_objective(&mut self);

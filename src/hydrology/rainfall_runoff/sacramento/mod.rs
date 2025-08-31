@@ -8,6 +8,7 @@ const PDNOR: f64 = 25.4;
 #[derive(Clone)]
 pub struct Sacramento {
     // Sacramento model parameters
+    #[allow(dead_code)]
     name: String,
 
     // TODO: this is only needed if we want the Sacs to be self-contained (with inputs)
