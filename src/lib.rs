@@ -7,6 +7,7 @@ pub mod io;
 pub mod model;
 pub mod nodes;
 mod numerical;
+pub mod perf;
 pub mod tests;
 pub mod tid;
 pub mod timeseries;
