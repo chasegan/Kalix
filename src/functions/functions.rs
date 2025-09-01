@@ -1,8 +1,8 @@
-//! Built-in mathematical functions for the functions module.
-//!
-//! This module provides implementations of all the mathematical functions that
-//! can be called from expressions. Functions are organized by category and
-//! include domain validation for mathematical correctness.
+/// Built-in mathematical functions for the functions module.
+///
+/// This module provides implementations of all the mathematical functions that
+/// can be called from expressions. Functions are organized by category and
+/// include domain validation for mathematical correctness.
 
 use crate::functions::errors::EvaluationError;
 
@@ -50,14 +50,12 @@ use crate::functions::errors::EvaluationError;
 ///
 /// # Examples
 ///
-/// ```rust
 /// use kalix::functions::functions::evaluate_builtin_function;
 ///
 /// assert_eq!(evaluate_builtin_function("abs", &[-5.0]).unwrap(), 5.0);
 /// assert_eq!(evaluate_builtin_function("sqrt", &[16.0]).unwrap(), 4.0);
 /// assert_eq!(evaluate_builtin_function("max", &[3.0, 7.0, 2.0]).unwrap(), 7.0);
 /// assert!(evaluate_builtin_function("sqrt", &[-1.0]).is_err()); // Domain error
-/// ```
 pub fn evaluate_builtin_function(name: &str, args: &[f64]) -> Result<f64, EvaluationError> {
     match name {
         // Single argument functions

@@ -1,8 +1,8 @@
-//! Mathematical and logical operators for the functions module.
-//!
-//! This module defines the binary and unary operators supported by the expression
-//! parser, along with their precedence rules and string representations. The
-//! precedence values follow standard mathematical conventions.
+/// Mathematical and logical operators for the functions module.
+///
+/// This module defines the binary and unary operators supported by the expression
+/// parser, along with their precedence rules and string representations. The
+/// precedence values follow standard mathematical conventions.
 
 /// Binary operators that operate on two operands.
 ///
@@ -80,12 +80,10 @@ impl BinaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::BinaryOperator;
     ///
     /// assert!(BinaryOperator::Power.precedence() > BinaryOperator::Multiply.precedence());
     /// assert!(BinaryOperator::Multiply.precedence() > BinaryOperator::Add.precedence());
-    /// ```
     pub fn precedence(&self) -> u8 {
         match self {
             BinaryOperator::Or => 1,
@@ -112,12 +110,10 @@ impl BinaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::BinaryOperator;
     ///
     /// assert!(BinaryOperator::Power.is_right_associative());
     /// assert!(!BinaryOperator::Add.is_right_associative());
-    /// ```
     pub fn is_right_associative(&self) -> bool {
         matches!(self, BinaryOperator::Power)
     }
@@ -132,13 +128,11 @@ impl BinaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::BinaryOperator;
     ///
     /// assert_eq!(BinaryOperator::Add.symbol(), "+");
     /// assert_eq!(BinaryOperator::Equal.symbol(), "==");
     /// assert_eq!(BinaryOperator::Power.symbol(), "^");
-    /// ```
     pub fn symbol(&self) -> &'static str {
         match self {
             BinaryOperator::Add => "+",
@@ -175,14 +169,12 @@ impl BinaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::BinaryOperator;
     ///
     /// assert_eq!(BinaryOperator::from_str("+"), Some(BinaryOperator::Add));
     /// assert_eq!(BinaryOperator::from_str("=="), Some(BinaryOperator::Equal));
     /// assert_eq!(BinaryOperator::from_str("**"), Some(BinaryOperator::Power));
     /// assert_eq!(BinaryOperator::from_str("xyz"), None);
-    /// ```
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "+" => Some(BinaryOperator::Add),
@@ -215,12 +207,10 @@ impl UnaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::UnaryOperator;
     ///
     /// assert_eq!(UnaryOperator::Minus.symbol(), "-");
     /// assert_eq!(UnaryOperator::Not.symbol(), "!");
-    /// ```
     pub fn symbol(&self) -> &'static str {
         match self {
             UnaryOperator::Plus => "+",
@@ -243,13 +233,11 @@ impl UnaryOperator {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::operators::UnaryOperator;
     ///
     /// assert_eq!(UnaryOperator::from_str("-"), Some(UnaryOperator::Minus));
     /// assert_eq!(UnaryOperator::from_str("!"), Some(UnaryOperator::Not));
     /// assert_eq!(UnaryOperator::from_str("xyz"), None);
-    /// ```
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "+" => Some(UnaryOperator::Plus),

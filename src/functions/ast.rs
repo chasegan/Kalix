@@ -1,8 +1,8 @@
-//! Abstract Syntax Tree (AST) definitions for mathematical expressions.
-//!
-//! This module defines the AST node types and evaluation logic for parsed
-//! mathematical expressions. The AST represents the structure of an expression
-//! and can be evaluated efficiently with different variable contexts.
+/// Abstract Syntax Tree (AST) definitions for mathematical expressions.
+///
+/// This module defines the AST node types and evaluation logic for parsed
+/// mathematical expressions. The AST represents the structure of an expression
+/// and can be evaluated efficiently with different variable contexts.
 
 use std::collections::HashSet;
 use crate::functions::errors::EvaluationError;

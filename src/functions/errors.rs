@@ -1,8 +1,8 @@
-//! Error types for the functions module.
-//!
-//! This module defines the error types that can occur during parsing and evaluation
-//! of mathematical expressions. All errors implement the standard [`std::error::Error`]
-//! trait and provide detailed information about what went wrong and where.
+/// Error types for the functions module.
+///
+/// This module defines the error types that can occur during parsing and evaluation
+/// of mathematical expressions. All errors implement the standard [`std::error::Error`]
+/// trait and provide detailed information about what went wrong and where.
 
 use std::fmt;
 

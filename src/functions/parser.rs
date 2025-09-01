@@ -1,12 +1,12 @@
-//! Expression parser for mathematical expressions.
-//!
-//! This module provides a complete recursive descent parser that converts string
-//! expressions into Abstract Syntax Trees (AST). The parser handles operator
-//! precedence, associativity, function calls, variables, and parentheses.
-//!
-//! The parser is implemented using the recursive descent technique with separate
-//! functions for each precedence level, ensuring correct evaluation order
-//! according to mathematical conventions.
+/// Expression parser for mathematical expressions.
+///
+/// This module provides a complete recursive descent parser that converts string
+/// expressions into Abstract Syntax Trees (AST). The parser handles operator
+/// precedence, associativity, function calls, variables, and parentheses.
+///
+/// The parser is implemented using the recursive descent technique with separate
+/// functions for each precedence level, ensuring correct evaluation order
+/// according to mathematical conventions.
 
 use std::collections::HashSet;
 use crate::functions::ast::{ASTNode, ExpressionNode};
@@ -288,13 +288,11 @@ impl FunctionParser {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use kalix::functions::parser::FunctionParser;
     ///
     /// let parser = FunctionParser::new();
     /// let function = parser.parse("2 * x + sin(y)").unwrap();
     /// let vars = function.get_variables(); // Contains {"x", "y"}
-    /// ```
     pub fn parse(&self, expression: &str) -> Result<ParsedFunction, ParseError> {
         let mut parser = Self {
             tokenizer: Tokenizer::new(expression),

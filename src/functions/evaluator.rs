@@ -1,8 +1,8 @@
-//! Expression evaluation context and configuration.
-//!
-//! This module provides the runtime environment for evaluating parsed mathematical
-//! expressions. It includes configuration options for handling edge cases like
-//! missing variables, division by zero, and mathematical errors.
+/// Expression evaluation context and configuration.
+///
+/// This module provides the runtime environment for evaluating parsed mathematical
+/// expressions. It includes configuration options for handling edge cases like
+/// missing variables, division by zero, and mathematical errors.
 
 use std::collections::HashMap;
 use crate::functions::errors::EvaluationError;
@@ -87,7 +87,6 @@ pub enum MathErrorBehavior {
 ///
 /// # Examples
 ///
-/// ```rust
 /// use kalix::functions::evaluator::{EvaluationConfig, MissingVariableBehavior};
 ///
 /// // Strict configuration (default)
@@ -98,7 +97,6 @@ pub enum MathErrorBehavior {
 ///     missing_variable_behavior: MissingVariableBehavior::Zero,
 ///     ..Default::default()
 /// };
-/// ```
 #[derive(Debug, Clone)]
 pub struct EvaluationConfig {
     /// How to handle missing variables
@@ -140,7 +138,6 @@ impl Default for EvaluationConfig {
 ///
 /// # Examples
 ///
-/// ```rust
 /// use std::collections::HashMap;
 /// use kalix::functions::evaluator::{VariableContext, EvaluationConfig};
 ///
@@ -152,7 +149,6 @@ impl Default for EvaluationConfig {
 /// let context = VariableContext::new(&vars, &config);
 ///
 /// // Now the context can be used to evaluate expressions
-/// ```
 pub struct VariableContext<'a> {
     variables: &'a HashMap<String, f64>,
     config: &'a EvaluationConfig,
@@ -172,14 +168,12 @@ impl<'a> VariableContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use std::collections::HashMap;
     /// use kalix::functions::evaluator::{VariableContext, EvaluationConfig};
     ///
     /// let vars = HashMap::new();
     /// let config = EvaluationConfig::default();
     /// let context = VariableContext::new(&vars, &config);
-    /// ```
     pub fn new(variables: &'a HashMap<String, f64>, config: &'a EvaluationConfig) -> Self {
         Self { variables, config }
     }
@@ -202,7 +196,6 @@ impl<'a> VariableContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
     /// use std::collections::HashMap;
     /// use kalix::functions::evaluator::{VariableContext, EvaluationConfig};
     ///
@@ -214,7 +207,6 @@ impl<'a> VariableContext<'a> {
     ///
     /// assert_eq!(context.get_variable("temperature").unwrap(), 25.0);
     /// assert!(context.get_variable("humidity").is_err()); // Missing variable
-    /// ```
     pub fn get_variable(&self, name: &str) -> Result<f64, EvaluationError> {
         if let Some(&value) = self.variables.get(name) {
             Ok(value)
