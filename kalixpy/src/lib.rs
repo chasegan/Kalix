@@ -40,6 +40,7 @@ fn guess_the_number() {
 }
 
 #[pyfunction]
+#[allow(unused_variables)] //allowing unused while functions are not implemented
 pub fn load(s: &str)
 // -> PyResult<pybindings::Model>
 {

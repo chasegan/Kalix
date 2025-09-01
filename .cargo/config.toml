@@ -1,0 +1,8 @@
+[build]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib"]
