@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::nodes::Node;
+use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
 use crate::timeseries::Timeseries;
@@ -16,9 +16,12 @@ pub struct Model {
     pub outputs: Vec<String>,           //For now: a vec of all the data series paths we want to output
     pub data_cache: DataCache,
 
-    // //"nodes" - this is a Vec of boxed nodes. Note Vec<Node> doesn't work because Node is a 
-    // //trait and not all Nodes have same length. 
-    pub  nodes: Vec<Box<dyn Node>>,
+    // "nodes" - this is a Vec of boxed nodes. Note Vec<Node> doesn't work because Node is a
+    // trait and not all Nodes have same length. Even if I use the trick of associating the
+    // node types with enum variants (as associated data) I still cant keep them on the stack
+    // because I don't know how many there will be (i.e. it's still a Vec).
+    // pub nodes: Vec<Box<dyn Node>>,
+    pub nodes: Vec<NodeEnum>,
 
     // Vector of tuples defining the links (upstream node uuid, downstream node uuid).
     pub links: Vec<(Uuid, Uuid)>,
@@ -130,8 +133,12 @@ impl Model {
             let id = ex_tuple.0;
             let i = ex_tuple.1;
 
+            //Get a reference to node i
+            //let mut n = &self.nodes[i];
+
             //Run node i
             self.nodes[i].run_flow_phase(&mut self.data_cache);
+            //self.nodes[i].run_flow_phase(&mut self.data_cache);
 
             //TODO: here is where I need to pass water from the node into the next one
             if let Some(ds_id) = self.find_ds_node(id) {
@@ -141,6 +148,7 @@ impl Model {
             }
         }
     }
+
 
     
     pub fn initialize_network(&mut self) {
@@ -214,15 +222,15 @@ impl Model {
     
     // Add a node to the model.
     // DONE BUT NOT TESTED
-    pub fn add_node(&mut self, boxed_node: Box<dyn Node>) {
+    pub fn add_node(&mut self, node_enum: NodeEnum) {
         //TODO: Maybe it's a good idea for the uuid to be an Option<Uuid> so it can be
         //   None to start with and it can receive a unique id when it gets added to a
         //   model.
-        let id= boxed_node.get_id();
+        let id= node_enum.get_id();
         if self.get_node(id).is_some() {
             panic!("A node with that Uuid already exists!")
         }
-        self.nodes.push(boxed_node);
+        self.nodes.push(node_enum);
     }
 
 
@@ -320,10 +328,10 @@ impl Model {
 
 
     /// Returns a reference to the node with a given ID
-    pub fn get_node(&self, id: Uuid) -> Option<&Box<dyn Node>> {
+    pub fn get_node(&self, id: Uuid) -> Option<&NodeEnum> {
         for x in &self.nodes {
             if x.get_id() == id {
-                return Some(&x);
+                return Some(x);
             }
         }
         None

@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::f64;
+use serde::de::Unexpected::Enum;
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::model::Model;
 use crate::nodes::confluence_node::ConfluenceNode;
 use crate::nodes::diversion_node::DiversionNode;
 use crate::nodes::gr4j_node::Gr4jNode;
 use crate::nodes::inflow_node::InflowNode;
+use crate::nodes::NodeEnum;
 use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::sacramento_node::SacramentoNode;
 use crate::nodes::storage_node::StorageNode;
@@ -70,6 +72,7 @@ impl IniModelIO {
                         if node_type == "confluence" {
                             let mut n = ConfluenceNode::new();
                             n.name = node_name.to_string();
+                            let ne = NodeEnum::ConfluenceNode(n);
                             for (vp, _vv) in &v {
                                 if vp == "type" {
                                     // skipping this
@@ -77,7 +80,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(ne);
                         } else if node_type == "diversion" {
                             let mut n = DiversionNode::new();
                             n.name = node_name.to_string();
@@ -90,7 +93,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::DiversionNode(n));
                         } else if node_type == "gr4j" {
                             let mut n = Gr4jNode::new();
                             n.name = node_name.to_string();
@@ -114,7 +117,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::Gr4jNode(n));
                         } else if node_type == "inflow" {
                             let mut n = InflowNode::new();
                             n.name = node_name.to_string();
@@ -127,7 +130,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::InflowNode(n));
                         } else if node_type == "routing" {
                             let mut n = RoutingNode::new();
                             let mut r_flows: Option<Vec<f64>> = None;
@@ -161,7 +164,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::RoutingNode(n));
                         } else if node_type == "sacramento" {
                             let mut n = SacramentoNode::new();
                             n.name = node_name.to_string();
@@ -185,7 +188,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::SacramentoNode(n));
                         } else if node_type == "storage" {
                             let mut n = StorageNode::new();
                             n.name = node_name.to_string();
@@ -207,7 +210,7 @@ impl IniModelIO {
                                     Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                 }
                             }
-                            model.add_node(Box::new(n));
+                            model.add_node(NodeEnum::StorageNode(n));
                         } else {
                             Err(format!("Unexpected node type: {}", node_type))?
                         }
