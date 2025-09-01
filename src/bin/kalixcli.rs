@@ -1,17 +1,69 @@
-//use statements from the binary need to reference the package name "gr4j_rust" rather than "crate".
-//#[macro_use]
-extern crate ini;
-
-
+use clap::{Parser, Subcommand};
 use kalix::hydrology::rainfall_runoff::gr4j::Gr4j;
 use kalix::timeseries::Timeseries;
 use kalix::io::csv_io::read_ts;
 
+#[derive(Parser)]
+#[command(name = "kalixcli")]
+#[command(about = "A command line interface for the Kalix hydrological modeling system")]
+#[command(version = "0.1.0")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run performance tests
+    Test,
+    /// Run a simulation
+    Sim {
+        /// Path to the configuration file
+        #[arg(short, long)]
+        config: Option<String>,
+    },
+    /// Run calibration
+    Calibrate {
+        /// Path to the configuration file
+        #[arg(short, long)]
+        config: Option<String>,
+        /// Number of iterations
+        #[arg(short, long, default_value = "1000")]
+        iterations: u32,
+    },
+}
+
 fn main() {
-    // println!("something big is coming");
-    // let mut model = gr4j
-    test_gr4j_rex_performance();
-    println!("Done!")
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Test => {
+            println!("Running performance tests...");
+            test_gr4j_rex_performance();
+            println!("Performance tests completed!");
+        }
+        Commands::Sim { config } => {
+            println!("Running simulation...");
+            if let Some(config_path) = config {
+                println!("Using configuration file: {}", config_path);
+            } else {
+                println!("No configuration file specified, using defaults");
+            }
+            // TODO: Implement simulation logic
+            println!("Simulation placeholder - not yet implemented");
+        }
+        Commands::Calibrate { config, iterations } => {
+            println!("Running calibration...");
+            if let Some(config_path) = config {
+                println!("Using configuration file: {}", config_path);
+            } else {
+                println!("No configuration file specified, using defaults");
+            }
+            println!("Running {} iterations", iterations);
+            // TODO: Implement calibration logic
+            println!("Calibration placeholder - not yet implemented");
+        }
+    }
 }
 
 fn test_gr4j_rex_performance() {
@@ -67,7 +119,7 @@ fn test_gr4j_rex_performance() {
     // ------------ FORS ---------------
     // 2023-10-20T15:01:57.8884585+10:00 - Starting model runs.
     // 2023-10-20T15:01:59.0068520+10:00 - Grid run finished.
-    // Rumtime = 1120 ms
+    // Runtime = 1120 ms
     // The Fors benchmark was a single threaded 100-point grid run with objective function
     // evaluation (just bias as per above test). This was done on the same machine (Willow,
     // Ryzen 7).
