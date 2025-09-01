@@ -26,6 +26,9 @@ mod test_gorilla;
 mod test_csv_io;
 
 #[cfg(test)]
+mod test_functions_integration;
+
+#[cfg(test)]
 mod test_tid;
 
 #[cfg(test)]
