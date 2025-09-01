@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kalix.org/schema/model/v0.0.1",
+  "title": "Kalix Hydrological Model",
+  "description": "JSON Schema for Kalix hydrological model definitions",
+  "type": "object",
+  "required": ["attributes", "nodes"],
+  "properties": {
+    "attributes": {
+      "type": "object",
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Model format version",
+          "enum": ["0.0.1"]
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Input data file references",
+      "patternProperties": {
+        ".*": {
+          "type": "string",
+          "description": "Path to input data file"
+        }
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "description": "Model nodes definition",
+      "patternProperties": {
+        "^[a-zA-Z_][a-zA-Z0-9_]*$": {
+          "oneOf": [
+            {"$ref": "#/definitions/confluenceNode"},
+            {"$ref": "#/definitions/diversionNode"},
+            {"$ref": "#/definitions/gr4jNode"},
+            {"$ref": "#/definitions/inflowNode"},
+            {"$ref": "#/definitions/routingNode"},
+            {"$ref": "#/definitions/sacramentoNode"},
+            {"$ref": "#/definitions/storageNode"}
+          ]
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Output configuration",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Output filename"
+        }
+      },
+      "patternProperties": {
+        "^(?!file$).*": {
+          "type": ["string", "null"],
+          "description": "Output variable to record"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "confluenceNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "confluence"
+        }
+      },
+      "additionalProperties": false
+    },
+    "diversionNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "diversion"
+        },
+        "demand": {
+          "type": "string",
+          "description": "Demand data reference name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "gr4jNode": {
+      "type": "object",
+      "required": ["type", "area", "params"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "gr4j"
+        },
+        "evap": {
+          "type": "string",
+          "description": "Evaporation data reference name"
+        },
+        "rain": {
+          "type": "string", 
+          "description": "Rainfall data reference name"
+        },
+        "area": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Catchment area in km²"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "GR4J model parameters [x1, x2, x3, x4]"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inflowNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "inflow"
+        },
+        "inflow": {
+          "type": "string",
+          "description": "Inflow data reference name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "routingNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "routing"
+        },
+        "lag": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lag parameter"
+        },
+        "divs": {
+          "type": "integer", 
+          "minimum": 1,
+          "description": "Number of divisions"
+        },
+        "x": {
+          "type": "number",
+          "description": "X parameter"
+        },
+        "index_flows": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Routing table flow indices"
+        },
+        "index_times": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Routing table time indices"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sacramentoNode": {
+      "type": "object",
+      "required": ["type", "area", "params"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "sacramento"
+        },
+        "evap": {
+          "type": "string",
+          "description": "Evaporation data reference name"
+        },
+        "rain": {
+          "type": "string",
+          "description": "Rainfall data reference name"
+        },
+        "area": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Catchment area in km²"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 17,
+          "description": "Sacramento model parameters (17 values)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "storageNode": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "storage"
+        },
+        "evap": {
+          "type": "string",
+          "description": "Evaporation data reference name"
+        },
+        "rain": {
+          "type": "string",
+          "description": "Rainfall data reference name"
+        },
+        "seep": {
+          "type": "string",
+          "description": "Seepage data reference name"
+        },
+        "pond_demand": {
+          "type": "string",
+          "description": "Pond demand data reference name"
+        },
+        "dimensions_file": {
+          "type": "string",
+          "description": "Path to storage dimensions CSV file"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
