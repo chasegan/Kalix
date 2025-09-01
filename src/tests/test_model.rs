@@ -3,7 +3,7 @@ use crate::nodes::inflow_node::InflowNode;
 use crate::nodes::storage_node::StorageNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
-use crate::nodes::Node;
+use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
 
 
@@ -63,8 +63,8 @@ fn test_create_and_run_model_with_nodes() {
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
-    m.nodes.push(Box::new(in1));
-    m.nodes.push(Box::new(in2));
+    m.nodes.push(NodeEnum::InflowNode(in1));
+    m.nodes.push(NodeEnum::InflowNode(in2));
 
     // Link the nodes
     println!("Upstream={id1}, Downstream={id2}");
@@ -97,8 +97,8 @@ fn test_create_and_run_model_with_nodes_reverse_order() {
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
-    m.nodes.push(Box::new(in2));
-    m.nodes.push(Box::new(in1));
+    m.nodes.push(NodeEnum::InflowNode(in2));
+    m.nodes.push(NodeEnum::InflowNode(in1));
 
     // Link the nodes
     println!("Upstream={id1}, Downstream={id2}");
@@ -122,7 +122,7 @@ fn test_clone_model() {
     let mut n = InflowNode::new();
     n.name = "my_inflow_node".to_owned();
     n.inflow_def.name = "data.test_csv.by_name.value".to_owned();
-    m.add_node(Box::new(n));
+    m.add_node(NodeEnum::InflowNode(n));
 
     //Specify some outputs
     m.outputs.push("node.my_inflow_node.usflow".to_owned());

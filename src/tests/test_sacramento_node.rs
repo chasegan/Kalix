@@ -1,6 +1,7 @@
 use crate::model::Model;
 use crate::io::csv_io;
 use crate::nodes::sacramento_node::SacramentoNode;
+use crate::nodes::NodeEnum;
 
 
 /// Create a Sacramento node, add it to a model, and test results
@@ -23,7 +24,7 @@ fn test_sacramento_node_with_timeseries() {
                  0.01,150.0,0.0,0.11,
                  1.5,0.0,0.2,0.01,
                  25.0,0.2,47.0,15.0,0.1);
-    m.add_node(Box::new(n));
+    m.add_node(NodeEnum::SacramentoNode(n));
 
     //Specify some outputs
     m.outputs.push("node.my_sac_node.dsflow".to_owned());
@@ -64,7 +65,7 @@ fn test_sacramento_node_with_timeseries_by_index() {
                                   0.01,150.0,0.0,0.11,
                                   1.5,0.0,0.2,0.01,
                                   25.0,0.2,47.0,15.0,0.1);
-    m.add_node(Box::new(n));
+    m.add_node(NodeEnum::SacramentoNode(n));
 
     //Specify some outputs
     m.outputs.push("node.my_sac_node.dsflow".to_owned());

@@ -1,7 +1,7 @@
 use crate::model::Model;
 use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::inflow_node::InflowNode;
-use crate::nodes::Node;
+use crate::nodes::{Node, NodeEnum};
 
 
 /// Create an inflow node, add it to a model, and drive the inflow
@@ -24,8 +24,8 @@ fn test_inflow_node_with_timeseries() {
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
-    m.nodes.push(Box::new(n));
-    m.nodes.push(Box::new(r));
+    m.nodes.push(NodeEnum::InflowNode(n));
+    m.nodes.push(NodeEnum::RoutingNode(r));
 
     // TODO: Configure inflow data
     // let timeseries_vec = crate::io::csv_io::read_ts("./src/tests/example_data/test3.csv").expect("Error");

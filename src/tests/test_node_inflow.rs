@@ -1,5 +1,6 @@
 use crate::model::Model;
 use crate::nodes::inflow_node::InflowNode;
+use crate::nodes::NodeEnum;
 
 
 /// Create an inflow node, add it to a model, and drive the inflow
@@ -15,7 +16,7 @@ fn test_inflow_node_with_timeseries() {
     let mut n = InflowNode::new();
     n.name = "my_inflow_node".to_owned();
     n.inflow_def.name = "data.test_csv.by_name.value".to_owned();
-    m.add_node(Box::new(n));
+    m.add_node(NodeEnum::InflowNode(n));
 
     //Specify some outputs
     m.outputs.push("node.my_inflow_node.usflow".to_owned());
