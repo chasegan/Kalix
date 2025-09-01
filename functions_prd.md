@@ -46,10 +46,10 @@ Custom functions allow users to define mathematical expressions as strings that:
 #### String-Based Definition
 ```rust
 // Example function definitions
-"2.5 * x + 10.0"
-"sin(theta) * cos(phi) + offset"
-"if(temperature > 25.0, evap_rate * 1.2, evap_rate)"
-"max(0.0, rainfall - losses)"
+//"2.5 * x + 10.0"
+//"sin(theta) * cos(phi) + offset"
+//"if(temperature > 25.0, evap_rate * 1.2, evap_rate)"
+//"max(0.0, rainfall - losses)"
 ```
 
 #### Supported Operations
@@ -84,9 +84,9 @@ Custom functions allow users to define mathematical expressions as strings that:
 
 #### Parse-Time Operations
 ```rust
-pub struct FunctionParser {
-    pub fn parse(expression: &str) -> Result<ParsedFunction, ParseError>;
-}
+//pub struct FunctionParser {
+//    pub fn parse(expression: &str) -> Result<ParsedFunction, ParseError>;
+//}
 
 pub struct ParsedFunction {
     ast: Box<dyn ASTNode>,
@@ -116,16 +116,16 @@ pub enum ParseError {
 
 #### Runtime Evaluation
 ```rust
-pub trait Evaluatable {
-    fn evaluate(&self, variables: &HashMap<String, f64>) -> Result<f64, EvaluationError>;
-}
-
-pub enum EvaluationError {
-    VariableNotFound { name: String },
-    DivisionByZero,
-    InvalidOperation { message: String },
-    MathematicalError { function: String, args: Vec<f64> },
-}
+//pub trait Evaluatable {
+//    fn evaluate(&self, variables: &HashMap<String, f64>) -> Result<f64, EvaluationError>;
+//}
+//
+//pub enum EvaluationError {
+//    VariableNotFound { name: String },
+//    DivisionByZero,
+//    InvalidOperation { message: String },
+//    MathematicalError { function: String, args: Vec<f64> },
+//}
 ```
 
 #### Performance Requirements
@@ -164,72 +164,72 @@ src/functions/
 
 #### 1. Parser (`parser.rs`)
 ```rust
-pub struct FunctionParser {
-    // Tokenizer for string processing
-    // Recursive descent parser implementation
-    // AST construction logic
-}
-
-// Public parsing interface
-impl FunctionParser {
-    pub fn new() -> Self;
-    pub fn parse(&self, expression: &str) -> Result<ParsedFunction, ParseError>;
-}
+//pub struct FunctionParser {
+//    // Tokenizer for string processing
+//    // Recursive descent parser implementation
+//    // AST construction logic
+//}
+//
+//// Public parsing interface
+//impl FunctionParser {
+//    pub fn new() -> Self;
+//    pub fn parse(&self, expression: &str) -> Result<ParsedFunction, ParseError>;
+//}
 ```
 
 #### 2. AST Nodes (`ast.rs`)
 ```rust
-pub trait ASTNode: Send + Sync {
-    fn evaluate(&self, context: &VariableContext) -> Result<f64, EvaluationError>;
-    fn get_variables(&self) -> HashSet<String>;
-}
-
-pub enum ExpressionNode {
-    BinaryOp { left: Box<dyn ASTNode>, op: Operator, right: Box<dyn ASTNode> },
-    UnaryOp { op: UnaryOperator, operand: Box<dyn ASTNode> },
-    FunctionCall { name: String, args: Vec<Box<dyn ASTNode>> },
-    Variable { name: String },
-    Constant { value: f64 },
-}
+//pub trait ASTNode: Send + Sync {
+//    fn evaluate(&self, context: &VariableContext) -> Result<f64, EvaluationError>;
+//    fn get_variables(&self) -> HashSet<String>;
+//}
+//
+//pub enum ExpressionNode {
+//    BinaryOp { left: Box<dyn ASTNode>, op: Operator, right: Box<dyn ASTNode> },
+//    UnaryOp { op: UnaryOperator, operand: Box<dyn ASTNode> },
+//    FunctionCall { name: String, args: Vec<Box<dyn ASTNode>> },
+//    Variable { name: String },
+//    Constant { value: f64 },
+//}
 ```
 
 #### 3. Evaluator (`evaluator.rs`)
 ```rust
-pub struct VariableContext<'a> {
-    variables: &'a HashMap<String, f64>,
-    config: &'a EvaluationConfig,
-}
-
-pub struct EvaluationConfig {
-    pub missing_variable_behavior: MissingVariableBehavior,
-    pub division_by_zero_behavior: DivisionByZeroBehavior,
-    pub math_error_behavior: MathErrorBehavior,
-}
+//pub struct VariableContext<'a> {
+//    variables: &'a HashMap<String, f64>,
+//    config: &'a EvaluationConfig,
+//}
+//
+//pub struct EvaluationConfig {
+//    pub missing_variable_behavior: MissingVariableBehavior,
+//    pub division_by_zero_behavior: DivisionByZeroBehavior,
+//    pub math_error_behavior: MathErrorBehavior,
+//}
 ```
 
 ### Integration with Kalix Core
 
 #### Model Integration
 ```rust
-// In model nodes
-pub struct CustomFunction {
-    parsed: ParsedFunction,
-    required_variables: HashSet<String>,
-}
-
-impl CustomFunction {
-    pub fn new(expression: &str) -> Result<Self, ParseError>;
-    pub fn evaluate(&self, model_state: &ModelState) -> Result<f64, EvaluationError>;
-}
+//// In model nodes
+//pub struct CustomFunction {
+//    parsed: ParsedFunction,
+//    required_variables: HashSet<String>,
+//}
+//
+//impl CustomFunction {
+//    pub fn new(expression: &str) -> Result<Self, ParseError>;
+//    pub fn evaluate(&self, model_state: &ModelState) -> Result<f64, EvaluationError>;
+//}
 ```
 
 #### Serialization Support
 ```rust
 // JSON/TOML representation
-{
-    "function_expression": "sin(x * pi / 180) * amplitude",
-    "description": "Sine wave with amplitude scaling"
-}
+//{
+//    "function_expression": "sin(x * pi / 180) * amplitude",
+//    "description": "Sine wave with amplitude scaling"
+//}
 ```
 
 ---
@@ -270,21 +270,21 @@ impl CustomFunction {
 
 ### Error Reporting
 ```rust
-#[derive(Debug)]
-pub struct ParseError {
-    pub position: usize,
-    pub line: usize,
-    pub column: usize,
-    pub message: String,
-    pub suggestion: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct EvaluationError {
-    pub error_type: EvaluationErrorType,
-    pub context: String,
-    pub variable_name: Option<String>,
-}
+//#[derive(Debug)]
+//pub struct ParseError {
+//    pub position: usize,
+//    pub line: usize,
+//    pub column: usize,
+//    pub message: String,
+//    pub suggestion: Option<String>,
+//}
+//
+//#[derive(Debug)]
+//pub struct EvaluationError {
+//    pub error_type: EvaluationErrorType,
+//    pub context: String,
+//    pub variable_name: Option<String>,
+//}
 ```
 
 ---
@@ -353,16 +353,16 @@ pub struct EvaluationError {
 
 ### Example Usage
 ```rust
-// Basic usage example
-let parser = FunctionParser::new();
-let function = parser.parse("2 * x + sin(y)")?;
-
-let mut variables = HashMap::new();
-variables.insert("x".to_string(), 3.14);
-variables.insert("y".to_string(), 1.57);
-
-let result = function.evaluate(&variables)?;
-println!("Result: {}", result); // Result: 7.28
+//// Basic usage example
+//let parser = FunctionParser::new();
+//let function = parser.parse("2 * x + sin(y)")?;
+//
+//let mut variables = HashMap::new();
+//variables.insert("x".to_string(), 3.14);
+//variables.insert("y".to_string(), 1.57);
+//
+//let result = function.evaluate(&variables)?;
+//println!("Result: {}", result); // Result: 7.28
 ```
 
 ---
