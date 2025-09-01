@@ -12,6 +12,16 @@ pub enum CsvError {
     WriteError(String),
 }
 
+impl From<CsvError> for String {
+    fn from(error: CsvError) -> Self {
+        match error {
+            CsvError::OpenFileError => "Failed to open file".to_string(),
+            CsvError::ReadError(msg) => format!("Read error: {}", msg),
+            CsvError::WriteError(msg) => format!("Write error: {}", msg),
+        }
+    }
+}
+
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
 
     //Here is where we will construct our result
@@ -131,8 +141,20 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<Timeseries>) -> Result<()
 
 
 
-pub fn csv_string_to_f64_vec(s: &str) -> Vec<f64> {
-    s.split(",").map(|x| x.parse::<f64>().unwrap()).collect()
+pub fn csv_string_to_f64_vec(s: &str) -> Result<Vec<f64>, CsvError> {
+    let mut result = Vec::new();
+    for (i, part) in s.split(",").enumerate() {
+        match part.trim().parse::<f64>() {
+            Ok(val) => result.push(val),
+            Err(_) => {
+                return Err(CsvError::ReadError(format!(
+                    "Failed to parse '{}' as f64 at position {} in string '{}'", 
+                    part, i, s
+                )));
+            }
+        }
+    }
+    Ok(result)
 }
 
 

@@ -105,7 +105,10 @@ impl IniModelIO {
                                 } else if vp == "area" {
                                     n.area_km2 = vv.clone().unwrap().parse::<f64>().unwrap();
                                 } else if vp == "params" {
-                                    let params = csv_string_to_f64_vec(vv.clone().unwrap().as_str());
+                                    let params = csv_string_to_f64_vec(vv.clone().unwrap().as_str())?;
+                                    if params.len() != 4 {
+                                        return Err(format!("GR4J params must have 4 values, got {}", params.len()));
+                                    }
                                     n.gr4j_model.x1 = params[0];
                                     n.gr4j_model.x2 = params[1];
                                     n.gr4j_model.x3 = params[2];
@@ -144,14 +147,14 @@ impl IniModelIO {
                                 } else if vp == "x" {
                                     n.set_x(vvc.parse::<f64>().unwrap());
                                 } else if vp == "index_flows" {
-                                    let index_flows = csv_string_to_f64_vec(vvc.as_str());
+                                    let index_flows = csv_string_to_f64_vec(vvc.as_str())?;
                                     if let Some(index_times) = &r_times {
                                         n.set_routing_table(index_flows, index_times.clone());
                                     } else {
                                         r_flows = Some(index_flows);
                                     }
                                 } else if vp == "index_times" {
-                                    let index_times = csv_string_to_f64_vec(vvc.as_str());
+                                    let index_times = csv_string_to_f64_vec(vvc.as_str())?;
                                     if let Some(index_flows) = &r_flows {
                                         n.set_routing_table(index_flows.clone(), index_times);
                                     } else {
@@ -176,7 +179,10 @@ impl IniModelIO {
                                 } else if vp == "area" {
                                     n.area_km2 = vvc.parse::<f64>().unwrap();
                                 } else if vp == "params" {
-                                    let params = csv_string_to_f64_vec(vvc.as_str());
+                                    let params = csv_string_to_f64_vec(vvc.as_str())?;
+                                    if params.len() < 17 {
+                                        return Err(format!("Sacramento params must have 17 values, got {}", params.len()));
+                                    }
                                     n.sacramento_model.set_params(params[0], params[1], params[2], params[3],
                                                                   params[4], params[5], params[6], params[7],
                                                                   params[8], params[9], params[10],params[11],
