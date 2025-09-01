@@ -85,16 +85,14 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
 
 pub fn write_ts(filename: &str, timeseries_vector: Vec<Timeseries>) -> Result<(), CsvError> {
 
-    if timeseries_vector.len() == 0 {
-        // TODO: Not sure how to handle empty inputs. Improve this.
-        panic!("Cannot write empty timeseries_vector.");
-    }
-
-    // Get the date range
-    let n = timeseries_vector[0].timestamps.len();
+    // Check that all timeseries in the vector have the same length
+    let data_length = match timeseries_vector.len() {
+        0 => { 0 }
+        _ => {timeseries_vector[0].timestamps.len() }
+    };
     for tsv in &timeseries_vector {
-        if tsv.timestamps.len() != n {
-            panic!("Cannot handle timeseries with different lengths.");
+        if tsv.timestamps.len() != data_length {
+            return Err(CsvError::WriteError("Cannot handle timeseries with different lengths.".to_string()))
         }
     }
 
@@ -109,16 +107,18 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<Timeseries>) -> Result<()
 
     // Build the data section
     let mut i = 0;
-    for timestamp in timeseries_vector[0].timestamps.iter() {
-        let timestamp_string = u64_to_date_string(*timestamp);
-        data_string.push_str(&timestamp_string);
-        //data_string.push_str(",");
-        for ts in timeseries_vector.iter() {
-            let value = ts.values[i];
-            data_string.push_str(format!(",{value}").as_str());
+    if timeseries_vector.len() > 0 {
+        for timestamp in timeseries_vector[0].timestamps.iter() {
+            let timestamp_string = u64_to_date_string(*timestamp);
+            data_string.push_str(&timestamp_string);
+            //data_string.push_str(",");
+            for ts in timeseries_vector.iter() {
+                let value = ts.values[i];
+                data_string.push_str(format!(",{value}").as_str());
+            }
+            data_string.push_str("\r\n");
+            i += 1;
         }
-        data_string.push_str("\r\n");
-        i += 1;
     }
 
     // Write it all to file
@@ -126,8 +126,7 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<Timeseries>) -> Result<()
     match fs::write(filename_path, data_string) {
         Ok(_) => Ok(()),
         Err(_) => Err(CsvError::WriteError(format!("Error writing file {filename}.")))
-    }?;
-    Ok(())
+    }
 }
 
 
