@@ -29,8 +29,8 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
 
     //Create a new csv reader
     let mut reader = match csv::Reader::from_path(filename) {
-        Result::Ok(r) => r,
-        Result::Err(_) => {
+        Ok(r) => r,
+        Err(_) => {
             return Err(CsvError::OpenFileError);
         }
     };

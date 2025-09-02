@@ -22,6 +22,8 @@ impl TimeseriesInput {
         }
     }
 
+    /// Loads the timeseries data file. A successful result contains a vector
+    /// of TimeseriesInput structs (not just Timeseries).
     pub fn load(file_path: &str) -> Result<Vec<TimeseriesInput>, String> {
         if let Ok(vts) = crate::io::csv_io::read_ts(file_path) {
             let mut vinputts: Vec<TimeseriesInput> = vec![];
@@ -52,11 +54,13 @@ impl TimeseriesInput {
     }
 
 
+    /// Returns the length of the contained timeseries.
     pub fn len(&self) -> usize {
         self.timeseries.len()
     }
 
-
+    /// Prints the name (full_colname_path) and length of the contained timeseries
+    /// to stdout.
     pub fn print(&self) {
         println!("{}: {}", self.full_colname_path, self.len());
     }
