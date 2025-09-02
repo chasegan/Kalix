@@ -62,8 +62,8 @@ impl IniModelIO {
                             for (vp, _vv) in &v {
                                 // Each vp is a path to an input file
                                 print!("Loading data into model {}... ", vp.as_str());
-                                model.load_input_data(vp.as_str())?; //TODO: Why is there a questionmark here?
-                                println!("done.");
+                                let l = model.load_input_data(vp.as_str())?; //TODO: Why is there a questionmark here?
+                                println!("done (len={}).", l);
                             }
                         } else if k.starts_with("node.") {
                             let node_name = &k[5..];

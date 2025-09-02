@@ -10,6 +10,14 @@ fn test_csv_reader_1() {
 
 
 #[test]
+fn test_csv_reader_2() {
+    let mpot = "./src/tests/example_models/1/rex_mpot.csv";
+    let r = read_ts(mpot).unwrap();
+    r[0].print();
+}
+
+
+#[test]
 fn test_csv_reader() {
     let filename = "./src/tests/example_data/output_31d6f6b4.csv";
     let r = read_ts(filename);

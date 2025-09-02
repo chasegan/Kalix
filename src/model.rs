@@ -4,6 +4,7 @@ use uuid::Uuid;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
+use crate::misc::configuration_summary::ConfigurationSummary;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
 
@@ -49,7 +50,7 @@ impl Model {
     /*
     Model configuration needs to be done once, after loading the model, but not for every run.
      */
-    pub fn configure(&mut self) {
+    pub fn configure(&mut self) -> ConfigurationSummary {
         //TASKS
         //1) Define output series
         for series_name in self.outputs.iter() {
@@ -82,6 +83,11 @@ impl Model {
         }
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
+        //8) Return a summary_of_the_configuration
+        ConfigurationSummary {
+            sim_start: self.sim_start,
+            sim_end: self.sim_end
+        }
     }
 
 
@@ -165,9 +171,10 @@ impl Model {
     }
 
 
-    pub fn load_input_data(&mut self, file_path: &str) -> Result<(), String> {
-        self.inputs.append(&mut TimeseriesInput::load(file_path)?);
-        Ok(())
+    pub fn load_input_data(&mut self, file_path: &str) -> Result<usize, String> {
+        let mut x = TimeseriesInput::load(file_path)?;
+        self.inputs.append(&mut x);
+        Ok(x.len())
     }
 
 
