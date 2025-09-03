@@ -115,6 +115,59 @@ impl Model {
     pub fn auto_set_simulation_period(&mut self) {
         // TODO: Dodgy! The proper way would be to build a mask over a default period, removing dates when any critical input was missing.
 
+        // Get a vec of the critical data from the data_cache
+        let civ = self.data_cache.get_critical_input_names();
+
+        // If there is no critical input data, set default values and return.
+        if civ.len() == 0 {
+            self.sim_start = 0;
+            self.sim_end = 0;
+            return;
+        }
+
+        // Go through all the critical inputs and make sure they are all in the model.
+        // As you find them, you can go ahead and update the mask of data availability.
+        let critical_data_availability_mask: Option<Timeseries> = None;
+        for ci in civ.iter() {
+            for ts in self.inputs.iter() {
+                if (ci == ts.full_colindex_path) || (ci == ts.full_colname_path) {
+                    //This timeseries is a critical input
+
+                    break; //break loop over timeseries, and move to the next ci
+                }
+
+                //If we get here, it means ci is a critical input which we couldn't find in self.inputs
+                panic!(format!("Critical input not found in input data {}", ci));
+                //TODO: improve error response rather than panicking
+            }
+        }
+
+        self.inputs
+
+        // Now we need to look through  the loaded data and identify those which are referenced as
+        // critical inputs.
+        for i in 0..self.inputs.len() {
+            for name in [&self.inputs[i].full_colindex_path, &self.inputs[i].full_colname_path] {
+                if critical_inputs.contains_key(name.as_str()) {
+                    //
+                }
+            }
+            self.inputs[i].full_colindex_path
+        }
+
+        // Find the first critical series, and clone it. This will be our starting mask.
+        // After that, keep iterating through the other series and remove any missing values.
+
+        let min_timestamp = 0u64;
+        let max_timestamp = 0u64;
+        let n_critical_inputs = 0;
+        for tsi in self.inputs.iter() {
+            if tsi.
+            if min_timestamp =
+        }
+
+
+
         //Look through the shortest length of the nonzero length series
         let mut n_steps = 0;
         for tsi in self.inputs.iter() {
