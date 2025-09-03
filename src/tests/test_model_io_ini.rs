@@ -5,17 +5,28 @@ use crate::model::Model;
 fn test_model_1_io_ini_read() {
     let ini_reader = IniModelIO::new();
 
-    let mut m:Model;
-    match  ini_reader.read_model("./src/tests/example_models/1/first_model.ini") {
+    //Read the model
+    let model_filename = "./src/tests/example_models/1/first_model.ini";
+    println!("model_file = {}", model_filename);
+    let mut m= match  ini_reader.read_model(model_filename) {
         Ok(v) => {
-            m = v;
+            println!("Model read okay from file.");
+            println!("number of inputs = {}", v.inputs.len());
+            v.print_inputs();
+            println!("inputs[0]:");
+            v.inputs[0].print();
+            v
         },
         Err(s) => {
-            panic!("Error: {}", s);
+            panic!("Model not read due to error: {}", s);
         }
-    }
-    m.configure();
+    };
+
+    let config = m.configure();
+    println!("Config: {:?}", config);
+
     m.run();
+    println!("Done!");
 
     //Check the number of nodes
     assert_eq!(m.nodes.len(), 1);

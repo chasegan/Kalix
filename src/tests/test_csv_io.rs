@@ -13,7 +13,9 @@ fn test_csv_reader_1() {
 fn test_csv_reader_2() {
     let mpot = "./src/tests/example_models/1/rex_mpot.csv";
     let r = read_ts(mpot).unwrap();
-    r[0].print();
+    let ts = &r[0];
+    println!("len={}", ts.len());
+    ts.print();
 }
 
 
