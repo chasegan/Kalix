@@ -24,6 +24,7 @@ fn test_inflow_node_with_timeseries() {
 
     //Configure and run the model
     m.configure();
+    println!("Configuration:\n{:#?}", &m.configuration);
     m.run();
 
     //Check the results

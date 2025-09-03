@@ -1,27 +1,23 @@
-use std::cmp::min;
 use std::collections::HashMap;
 use uuid::Uuid;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
-use crate::misc::configuration_summary::ConfigurationSummary;
+use crate::misc::configuration::{Configuration};
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
 
 #[derive(Default)]
 #[derive(Clone)]
 pub struct Model {
-    pub sim_start: i32,
-    pub sim_end: i32,
+    pub configuration: Configuration,
     pub inputs: Vec<TimeseriesInput>,   //For now: a vec of all the input files loaded
     pub outputs: Vec<String>,           //For now: a vec of all the data series paths we want to output
     pub data_cache: DataCache,
 
-    // "nodes" - this is a Vec of boxed nodes. Note Vec<Node> doesn't work because Node is a
-    // trait and not all Nodes have same length. Even if I use the trick of associating the
-    // node types with enum variants (as associated data) I still cant keep them on the stack
-    // because I don't know how many there will be (i.e. it's still a Vec).
-    // pub nodes: Vec<Box<dyn Node>>,
+    // "nodes" - this is a Vec of NodeEnums. Note Vec<Node> doesn't work because Node is a
+    // trait and not all Nodes have same length. The other standard method would be to use
+    // dynamic dispatch --> Vec<Box<dyn Node>>.
     pub nodes: Vec<NodeEnum>,
 
     // Vector of tuples defining the links (upstream node uuid, downstream node uuid).
@@ -38,8 +34,7 @@ impl Model {
     pub fn new() -> Model {
 
         Model {
-            sim_start: -1, 
-            sim_end: -1, 
+            configuration: Configuration::new(),
             inputs: vec![],
             outputs: vec![],
             ..Default::default()
@@ -50,7 +45,7 @@ impl Model {
     /*
     Model configuration needs to be done once, after loading the model, but not for every run.
      */
-    pub fn configure(&mut self) -> ConfigurationSummary {
+    pub fn configure(&mut self) {
         //TASKS
         //1) Define output series
         for series_name in self.outputs.iter() {
@@ -62,10 +57,11 @@ impl Model {
         // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
         // TODO: E.g. if we were doing reload on run with a subset of the data, or
         //4) Automatically determining the maximum simulation period
-        self.auto_set_simulation_period();
+        self.configuration = self.auto_determine_simulation_period();
         //5) Allow the user to override the sim period
         // TODO: provide this functionality later
         //6) Load input data into the data_cache
+        // TODO: Fix this. Currently it just jams data into the cache irrespective of the simulation period.
         for i in 0..self.inputs.len() {
             //Fill any data that might be using the column name as a reference
             //Fill any data that might be using the column number as a reference
@@ -83,11 +79,6 @@ impl Model {
         }
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
-        //8) Return a summary_of_the_configuration
-        ConfigurationSummary {
-            sim_start: self.sim_start,
-            sim_end: self.sim_end
-        }
     }
 
 
@@ -96,98 +87,126 @@ impl Model {
         //TODO: We shouldn't do a full initialisation again here! Maybe we need an "initialize()" and a "reset()" on each node?
         self.initialize_network();
 
-        //What's the plan?
-        //self.data_cache.print();
-
         //Run all timesteps
-        for t in self.sim_start..self.sim_end {
-            //let step = self.data_cache.current_step;
-            //println!("Step: {}, Datetime: {}", step, t);
+        let mut step = 0;
+        let mut time = self.configuration.sim_start_timestamp;
+        while time <= self.configuration.sim_end_timestamp {
 
-            self.run_timestep(t);
-            self.data_cache.increment_current_step(); //TODO: why am I using 't' if I also have a concept of a 'current_step'?
+            //Run the network
+            //println!("Step: {}, Timestamp: {} ({})", step, time, crate::tid::utils::u64_to_date_string(time as u64));
+            self.run_timestep(time);
+
+            //Increment time
+            //TODO: why am I using 'time' and 'step' if I also have a concept of a 'current_step'?
+            time += self.configuration.sim_stepsize;
+            step += 1;
+            self.data_cache.increment_current_step();
         }
     }
 
     /*
     Determine the simulation period on the basis of the available input data
      */
-    pub fn auto_set_simulation_period(&mut self) {
-        // TODO: Dodgy! The proper way would be to build a mask over a default period, removing dates when any critical input was missing.
+    pub fn auto_determine_simulation_period(&self) -> Configuration {
 
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
+        println!("Number of critical inputs: {}", civ.len());
+        for i in 0..civ.len() {
+            println!("Critical input [{}]: {}", i, civ[i]);
+        }
 
-        // If there is no critical input data, set default values and return.
+        // If there is no critical input data, return a default configuration.
         if civ.len() == 0 {
-            self.sim_start = 0;
-            self.sim_end = 0;
-            return;
+            return Configuration::new();
         }
 
         // Go through all the critical inputs and make sure they are all in the model.
         // As you find them, you can go ahead and update the mask of data availability.
-        let critical_data_availability_mask: Option<Timeseries> = None;
-        for ci in civ.iter() {
+        let mut critical_data_availability_mask: Option<Timeseries> = None;
+        for ci in civ {
+
+            println!("Searching for timeseries that matches ci: {}", ci);
+            let mut found : bool = false;
+
             for ts in self.inputs.iter() {
+                println!("Timeseries: {} {}", ts.full_colindex_path, ts.full_colname_path);
                 if (ci == ts.full_colindex_path) || (ci == ts.full_colname_path) {
-                    //This timeseries is a critical input
 
-                    break; //break loop over timeseries, and move to the next ci
+                    println!("Got it!");
+                    found = true;
+                    // This timeseries appears to be the one we're looking for!
+                    // If it is a critical input AND THE SOURCE IS A FILE then the model run
+                    // will be limited by the data available in the file.
+                    if ts.source_path != "" {
+                        match critical_data_availability_mask {
+                            None => {
+                                //This is the first critical data file
+                                critical_data_availability_mask = Some(ts.timeseries.clone());
+                                println!("Initial mask based on {}", ts.source_path);
+                            }
+                            Some(ref mut mask) => {
+                                mask.mask_with(&ts.timeseries);
+                                println!("Mask updated based on {}", ts.source_path);
+                            }
+                        }
+                    } else {
+                        println!("Mask not influenced by {}", ts.source_path);
+                    }
                 }
+            }
 
-                //If we get here, it means ci is a critical input which we couldn't find in self.inputs
-                panic!(format!("Critical input not found in input data {}", ci));
-                //TODO: improve error response rather than panicking
+            if !found {
+                // If we reach this code, it means ci is a critical input which was not matched by any
+                // timeseries in self.inputs
+                // TODO: improve error response by returning a Result rather than panicking
+                panic!("Input data has nothing matching this critical input: {}", ci);
             }
         }
 
-        self.inputs
+        // Now in principle the model could run for any sequence where critical_data_availability_mask
+        // has values. Like Fors, we are going to default to the first period.
+        let mask = critical_data_availability_mask.unwrap();
+        let mut start_index = 0;          //start at here
+        let mut end_index = mask.len();   //end at here (exclusive)
 
-        // Now we need to look through  the loaded data and identify those which are referenced as
-        // critical inputs.
-        for i in 0..self.inputs.len() {
-            for name in [&self.inputs[i].full_colindex_path, &self.inputs[i].full_colname_path] {
-                if critical_inputs.contains_key(name.as_str()) {
-                    //
-                }
-            }
-            self.inputs[i].full_colindex_path
-        }
-
-        // Find the first critical series, and clone it. This will be our starting mask.
-        // After that, keep iterating through the other series and remove any missing values.
-
-        let min_timestamp = 0u64;
-        let max_timestamp = 0u64;
-        let n_critical_inputs = 0;
-        for tsi in self.inputs.iter() {
-            if tsi.
-            if min_timestamp =
-        }
-
-
-
-        //Look through the shortest length of the nonzero length series
-        let mut n_steps = 0;
-        for tsi in self.inputs.iter() {
-            let len_i = tsi.len();
-            if len_i > 0 {
-                if n_steps == 0 {
-                    n_steps = len_i;
-                } else {
-                    n_steps = min(n_steps, len_i);
-                }
+        //Look for the start_index
+        //Start and 0 and break when we find the first non-nan value.
+        for i in 0..mask.len() {
+            if !mask.values[i].is_nan() {
+                start_index = i;
+                break;
             }
         }
 
-        self.sim_start = 0;
-        self.sim_end = self.sim_start + (n_steps as i32);
+        //Look for the end_index
+        //Start at start_index and then break when we find the first nan value.
+        for i in start_index..mask.len() {
+            if mask.values[i].is_nan() {
+                end_index = i;
+                break;
+            }
+        }
+
+        // Return the configuration
+        //TODO: change sim_start to u64 and delete cast
+        println!("Mask start_timestamp: {}", mask.start_timestamp);
+        println!("Mask start_index: {}", start_index);
+        println!("Mask end_index: {}", end_index);
+        let nsteps = (end_index - start_index) as u64;
+        let start_timestamp = mask.start_timestamp + (start_index as u64 * mask.step_size);
+        let end_timestamp = mask.start_timestamp + ((end_index - 1) as u64 * mask.step_size);
+        Configuration {
+            sim_stepsize: mask.step_size,
+            sim_start_timestamp: start_timestamp,
+            sim_end_timestamp: end_timestamp,
+            sim_nsteps: nsteps,
+        }
     }
 
 
     #[allow(unused_variables)] //TODO: remove this and make use of unused variable t
-    pub fn run_timestep(&mut self, t: i32) {
+    pub fn run_timestep(&mut self, t: u64) {
         for ex_tuple in self.execution_order.iter() {
             let id = ex_tuple.0;
             let i = ex_tuple.1;

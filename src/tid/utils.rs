@@ -1,5 +1,23 @@
 use chrono::{DateTime, ParseResult, NaiveDate};
 
+//TODO: I should change these so that I'm directly using the i64 value that comes from .timestamp(),
+//TODO: rather than wrapping it to make a u64. (I dont think there's any real reason I need positive
+//TODO: values).
+
+
+
+/// Converts a date string (must be "%Y-%m-%d") into an u64 integer timestamp that counts the
+/// number of seconds since some fixed time in the past.
+///
+/// # Arguments
+///
+/// A string date in "%Y-%m-%d" format.
+///
+/// # Returns
+///
+/// A ParseResult enum where the Ok() variant contains an u64 representation of the date. This u64
+/// counts the number of seconds since some fixed time far in the past. The representation supports
+/// datetimes earlier than -9999-01-01 and later than +9999-12-31.
 pub fn date_string_to_u64(date_str: &str) -> ParseResult<u64> {
     let formatter = "%Y-%m-%d"; //"%Y-%m-%d %H:%M:%S"
     match NaiveDate::parse_and_remainder(date_str,formatter) {
@@ -8,6 +26,17 @@ pub fn date_string_to_u64(date_str: &str) -> ParseResult<u64> {
     }
 }
 
+
+
+/// Converts an u64 datetime integer into a string.
+///
+/// # Arguments
+///
+/// An u64 value representing the datetime.
+///
+/// # Returns
+///
+/// A date in "%Y-%m-%d" format. Partial days are truncated to fit in the "%Y-%m-%d" format.
 pub fn u64_to_date_string(value: u64) -> String {
     let formatter = "%Y-%m-%d"; //"%Y-%m-%d %H:%M:%S"
     match DateTime::from_timestamp(wrap_to_i64(value), 0).
@@ -16,6 +45,7 @@ pub fn u64_to_date_string(value: u64) -> String {
         None => value.to_string(),
     }
 }
+
 
 pub fn wrap_to_u64(x: i64) -> u64 {
     (x as u64).wrapping_add(u64::MAX/2 + 1)

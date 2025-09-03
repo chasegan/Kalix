@@ -88,6 +88,14 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
         }
     }
 
+    //Set the start_timestamp
+    //TODO: I should get rid of this "start_timestamp" property. It is a recipe for disaster.
+    for ts in answer.iter_mut() {
+        if ts.len() > 0 {
+            ts.start_timestamp = ts.timestamps[0];
+        }
+    }
+
     //Return
     Ok(answer)
 }

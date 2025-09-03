@@ -120,6 +120,46 @@ impl Timeseries {
         }
     }
 
+
+    /*
+    Removes data on timestamps when the
+     */
+    pub fn mask_with(&mut self, mask: &Self) -> &mut Self {
+
+        //TODO: is there a sensible way to apply a mask with a different step_size?
+        if self.step_size != mask.step_size {
+            panic!("Base data has step_size {} but mask has step_size {}. These must be the same.",
+                   self.step_size, mask.step_size);
+        }
+
+        if mask.len() == 0 {
+            //Clear all the data.
+            self.set_all_values_to(f64::NAN);
+        } else {
+            //Get the index offset. I.e. how many steps is self[0] ahead of mask[0]?
+            let mask_offset = ((self.start_timestamp - mask.start_timestamp) / self.step_size) as usize;
+
+            //Now for each element of self, delete the value if the mask is NAN.
+            for i_self in 0..self.len() {
+                // Find the mask value
+                let i_mask = i_self + mask_offset;
+                let mask_value = if (i_mask < 0) || (i_mask >= mask.len()) {
+                    // Out of range of mask. Implied value is f64::NAN.
+                    self.values[i_self] = f64::NAN;
+                } else {
+                    // In range of mask. Check if value is NAN.
+                    if mask.values[i_mask].is_nan() {
+                        self.values[i_self] = f64::NAN;
+                    }
+                };
+            }
+        }
+
+        //Return updated self
+        self
+    }
+
+
     /*
     Returns the sum of all values in the timeseries, including any non-finite values.
      */
@@ -161,6 +201,16 @@ impl Timeseries {
     */
     pub fn count_nonzero(&self) -> usize {
         self.values.iter().filter(|&x| (*x) != 0.0 && !f64::is_nan(*x)).count()
+    }
+
+    /*
+    Set all values to given f64.
+    */
+    pub fn set_all_values_to(&mut self, new_value: f64) -> &mut Self {
+        for i in 0..self.values.len() {
+            self.values[i] = new_value;
+        }
+        self
     }
 }
 

@@ -12,6 +12,49 @@ pub struct DataCache {
 }
 
 
+/*
+==========
+DATA CACHE
+==========
+
+The data cache is an amalgamation of the input data, result manager and function variable manager.
+
+Everything in the data cache is a timeseries. Every series has equivalent accessibility regardless
+of where the data comes from (a timeseries input, model result, or function result). Nodes access
+series based on the name during initialisation, and subsequently by integer. An optional offset
+specifies the temporal offset, if you don’t want today’s value. Anything more complex (e.g. maximum
+value over last 365 days) needs to be done using a function.
+
+==========================
+About dates and timestamps
+==========================
+
+For the benefit of simplicity and speed, I think I want all series in the data_cache to have the
+same shape. This means they all have the same start date, and length. By having it like this, I
+don’t need to worry about the timestamps for each series. The data cache can know what index we are
+up to simply counting the timesteps.
+
+One implication of this is that loading data in is probably a two-step process:
+   (1) Read the data files into timeseries and then,
+   (2) copy the relevant values into the data cache.
+That is fine as an initial implementation.
+
+The data_cache should keep track of the number of model steps that have passed, and the timestamp
+(integer representation). Nodes can get these values from the data_cache if they ever need them.
+
+==========
+Data names
+==========
+
+The names of series in the data cache must be unique. These names (maybe I should refer to them as
+“data paths”) may only contain alphanumeric chars (a-z and 0-9), periods (.), and underscores
+(_). They must begin with an alphabetical character (a-z) and must not have multiple periods in
+succession (e.g. ..). This should give us the ability to have conceptual folders using periods as
+the delimiter.
+
+Note: we should be similarly restrictive with node names, disallowing "." so that node names may be
+used within a data path without interfering with the syntax for folder structure.
+ */
 impl DataCache {
 
     /*
@@ -31,7 +74,7 @@ impl DataCache {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
-        self.set_current_step(0); //Reset the date to 0
+        self.set_current_step(0); //Reset the step counter to 0
     }
 
 
@@ -167,13 +210,12 @@ impl DataCache {
         let mut critical_inputs: Vec<&str> = vec![];
         for idx in 0..self.series.len() {
             if self.is_critical[idx] {
-                let name = self.series[idx].name.clone();
-                critical_inputs.push(name.as_str());
+                let name = self.series[idx].name.as_str();
+                critical_inputs.push(name);
             }
         }
         critical_inputs
     }
-
 
 
     /*

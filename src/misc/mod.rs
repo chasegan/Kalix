@@ -1,1 +1,1 @@
-pub mod configuration_summary;
+pub mod configuration;
