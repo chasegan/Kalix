@@ -22,14 +22,25 @@ fn test_model_1_io_ini_read() {
         }
     };
 
-    let config = m.configure();
-    println!("Config: {:?}", config);
+    m.configure();
+    println!("Config: {:?}", m.configuration);
 
     m.run();
     println!("Done!");
 
     //Check the number of nodes
     assert_eq!(m.nodes.len(), 1);
+
+    //Outputs
+    for output_name in &m.outputs {
+        let idx = m.data_cache.get_existing_series_idx(output_name).unwrap();
+        let ts = m.data_cache.series[idx].clone();
+        println!("output: {}, idx: {}, len:{}", output_name, idx, ts.len());
+    }
+
+    //
+    let output_filename = "./src/tests/example_models/1/first_model_outputs.csv";
+    let output_write_result = m.write_outputs(output_filename);
 
     // //Check the results
     // let ds_idx = m.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();
