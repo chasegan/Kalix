@@ -49,3 +49,41 @@ Thumbs.db
 *.wmv
 
 .venv
+
+# Gradle
+.gradle/
+*/build/
+*/out/
+*.log
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Compiled Class Files
+*.class
+
+# Package Files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Other temporary or user-specific files
+*.bak
+*.swp
+*~
