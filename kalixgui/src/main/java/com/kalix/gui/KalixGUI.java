@@ -1,16 +1,27 @@
 package com.kalix.gui;
 
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.prefs.Preferences;
 
 public class KalixGUI extends JFrame {
     private MapPanel mapPanel;
     private JTextArea textEditor;
     private JLabel statusLabel;
+    private Preferences prefs;
+    private boolean isDarkTheme;
 
     public KalixGUI() {
+        // Initialize preferences
+        prefs = Preferences.userNodeForPackage(KalixGUI.class);
+        isDarkTheme = prefs.getBoolean("darkTheme", false);
+        
         setTitle("Kalix Hydrologic Modeling GUI");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1200, 800);
@@ -80,6 +91,24 @@ public class KalixGUI extends JFrame {
         viewMenu.add(createMenuItem("Zoom In", e -> zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> zoomOut()));
         viewMenu.add(createMenuItem("Reset Zoom", e -> resetZoom()));
+        viewMenu.addSeparator();
+        
+        // Theme submenu
+        JMenu themeMenu = new JMenu("Theme");
+        ButtonGroup themeGroup = new ButtonGroup();
+        
+        JRadioButtonMenuItem lightThemeItem = new JRadioButtonMenuItem("Light", !isDarkTheme);
+        JRadioButtonMenuItem darkThemeItem = new JRadioButtonMenuItem("Dark", isDarkTheme);
+        
+        lightThemeItem.addActionListener(e -> switchTheme(false));
+        darkThemeItem.addActionListener(e -> switchTheme(true));
+        
+        themeGroup.add(lightThemeItem);
+        themeGroup.add(darkThemeItem);
+        
+        themeMenu.add(lightThemeItem);
+        themeMenu.add(darkThemeItem);
+        viewMenu.add(themeMenu);
         
         // Graph menu
         JMenu graphMenu = new JMenu("Graph");
@@ -180,9 +209,68 @@ public class KalixGUI extends JFrame {
     private void updateStatus(String message) {
         statusLabel.setText(message);
     }
+    
+    private void switchTheme(boolean darkTheme) {
+        if (this.isDarkTheme != darkTheme) {
+            this.isDarkTheme = darkTheme;
+            
+            // Save preference
+            prefs.putBoolean("darkTheme", darkTheme);
+            
+            // Apply the new theme with animation
+            FlatAnimatedLafChange.showSnapshot();
+            
+            try {
+                if (darkTheme) {
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
+                } else {
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+            } catch (UnsupportedLookAndFeelException e) {
+                System.err.println("Failed to set look and feel: " + e.getMessage());
+            }
+            
+            // Update all components
+            FlatAnimatedLafChange.hideSnapshotWithAnimation();
+            SwingUtilities.updateComponentTreeUI(this);
+            
+            updateStatus(darkTheme ? "Switched to dark theme" : "Switched to light theme");
+        }
+    }
 
     public static void main(String[] args) {
+        // Set system properties for better FlatLaf experience
+        System.setProperty("apple.laf.useScreenMenuBar", "true");
+        System.setProperty("apple.awt.application.name", "Kalix GUI");
+        System.setProperty("flatlaf.useWindowDecorations", "false");
+        System.setProperty("flatlaf.menuBarEmbedded", "false");
+        
         SwingUtilities.invokeLater(() -> {
+            // Initialize FlatLaf
+            try {
+                // Load saved theme preference
+                Preferences prefs = Preferences.userNodeForPackage(KalixGUI.class);
+                boolean darkTheme = prefs.getBoolean("darkTheme", false);
+                
+                if (darkTheme) {
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
+                } else {
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                
+                // Configure FlatLaf properties for better appearance
+                UIManager.put("TextComponent.arc", 4);
+                UIManager.put("Button.arc", 6);
+                UIManager.put("Component.focusWidth", 1);
+                UIManager.put("ScrollBar.width", 12);
+                UIManager.put("TabbedPane.tabHeight", 32);
+                UIManager.put("Table.rowHeight", 24);
+                
+            } catch (UnsupportedLookAndFeelException e) {
+                System.err.println("Failed to initialize FlatLaf: " + e.getMessage());
+                e.printStackTrace();
+            }
+            
             new KalixGUI();
         });
     }
