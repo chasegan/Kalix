@@ -3,6 +3,9 @@ package com.kalix.gui;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
+import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
+import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
+import com.formdev.flatlaf.intellijthemes.FlatCarbonIJTheme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -15,12 +18,12 @@ public class KalixGUI extends JFrame {
     private JTextArea textEditor;
     private JLabel statusLabel;
     private Preferences prefs;
-    private boolean isDarkTheme;
+    private String currentTheme;
 
     public KalixGUI() {
         // Initialize preferences
         prefs = Preferences.userNodeForPackage(KalixGUI.class);
-        isDarkTheme = prefs.getBoolean("darkTheme", false);
+        currentTheme = prefs.get("theme", "Light");
         
         setTitle("Kalix Hydrologic Modeling GUI");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -97,17 +100,16 @@ public class KalixGUI extends JFrame {
         JMenu themeMenu = new JMenu("Theme");
         ButtonGroup themeGroup = new ButtonGroup();
         
-        JRadioButtonMenuItem lightThemeItem = new JRadioButtonMenuItem("Light", !isDarkTheme);
-        JRadioButtonMenuItem darkThemeItem = new JRadioButtonMenuItem("Dark", isDarkTheme);
+        // Define theme options
+        String[] themes = {"Light", "Dark", "Dracula", "One Dark", "Carbon"};
         
-        lightThemeItem.addActionListener(e -> switchTheme(false));
-        darkThemeItem.addActionListener(e -> switchTheme(true));
+        for (String theme : themes) {
+            JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(theme, theme.equals(currentTheme));
+            themeItem.addActionListener(e -> switchTheme(theme));
+            themeGroup.add(themeItem);
+            themeMenu.add(themeItem);
+        }
         
-        themeGroup.add(lightThemeItem);
-        themeGroup.add(darkThemeItem);
-        
-        themeMenu.add(lightThemeItem);
-        themeMenu.add(darkThemeItem);
         viewMenu.add(themeMenu);
         
         // Graph menu
@@ -210,21 +212,36 @@ public class KalixGUI extends JFrame {
         statusLabel.setText(message);
     }
     
-    private void switchTheme(boolean darkTheme) {
-        if (this.isDarkTheme != darkTheme) {
-            this.isDarkTheme = darkTheme;
+    private void switchTheme(String theme) {
+        if (!this.currentTheme.equals(theme)) {
+            this.currentTheme = theme;
             
             // Save preference
-            prefs.putBoolean("darkTheme", darkTheme);
+            prefs.put("theme", theme);
             
             // Apply the new theme with animation
             FlatAnimatedLafChange.showSnapshot();
             
             try {
-                if (darkTheme) {
-                    UIManager.setLookAndFeel(new FlatDarkLaf());
-                } else {
-                    UIManager.setLookAndFeel(new FlatLightLaf());
+                switch (theme) {
+                    case "Light":
+                        UIManager.setLookAndFeel(new FlatLightLaf());
+                        break;
+                    case "Dark":
+                        UIManager.setLookAndFeel(new FlatDarkLaf());
+                        break;
+                    case "Dracula":
+                        UIManager.setLookAndFeel(new FlatDraculaIJTheme());
+                        break;
+                    case "One Dark":
+                        UIManager.setLookAndFeel(new FlatOneDarkIJTheme());
+                        break;
+                    case "Carbon":
+                        UIManager.setLookAndFeel(new FlatCarbonIJTheme());
+                        break;
+                    default:
+                        UIManager.setLookAndFeel(new FlatLightLaf());
+                        break;
                 }
             } catch (UnsupportedLookAndFeelException e) {
                 System.err.println("Failed to set look and feel: " + e.getMessage());
@@ -234,7 +251,7 @@ public class KalixGUI extends JFrame {
             FlatAnimatedLafChange.hideSnapshotWithAnimation();
             SwingUtilities.updateComponentTreeUI(this);
             
-            updateStatus(darkTheme ? "Switched to dark theme" : "Switched to light theme");
+            updateStatus("Switched to " + theme + " theme");
         }
     }
 
@@ -250,12 +267,27 @@ public class KalixGUI extends JFrame {
             try {
                 // Load saved theme preference
                 Preferences prefs = Preferences.userNodeForPackage(KalixGUI.class);
-                boolean darkTheme = prefs.getBoolean("darkTheme", false);
+                String theme = prefs.get("theme", "Light");
                 
-                if (darkTheme) {
-                    UIManager.setLookAndFeel(new FlatDarkLaf());
-                } else {
-                    UIManager.setLookAndFeel(new FlatLightLaf());
+                switch (theme) {
+                    case "Light":
+                        UIManager.setLookAndFeel(new FlatLightLaf());
+                        break;
+                    case "Dark":
+                        UIManager.setLookAndFeel(new FlatDarkLaf());
+                        break;
+                    case "Dracula":
+                        UIManager.setLookAndFeel(new FlatDraculaIJTheme());
+                        break;
+                    case "One Dark":
+                        UIManager.setLookAndFeel(new FlatOneDarkIJTheme());
+                        break;
+                    case "Carbon":
+                        UIManager.setLookAndFeel(new FlatCarbonIJTheme());
+                        break;
+                    default:
+                        UIManager.setLookAndFeel(new FlatLightLaf());
+                        break;
                 }
                 
                 // Configure FlatLaf properties for better appearance
