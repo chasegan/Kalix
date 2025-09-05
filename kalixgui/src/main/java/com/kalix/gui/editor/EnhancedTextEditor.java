@@ -28,6 +28,7 @@ public class EnhancedTextEditor extends JPanel {
     private LineNumberPanel lineNumberPanel;
     private JScrollPane scrollPane;
     private UndoManager undoManager;
+    private IniTomlSyntaxHighlighter syntaxHighlighter;
     
     // State tracking
     private boolean isDirty = false;
@@ -64,6 +65,7 @@ public class EnhancedTextEditor extends JPanel {
         setupFont();
         setupKeyBindings();
         setupDocumentListener();
+        setupSyntaxHighlighting();
     }
     
     private void initializeComponents() {
@@ -209,16 +211,19 @@ public class EnhancedTextEditor extends JPanel {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 setDirty(true);
+                applySyntaxHighlightingDelayed();
             }
             
             @Override
             public void removeUpdate(DocumentEvent e) {
                 setDirty(true);
+                applySyntaxHighlightingDelayed();
             }
             
             @Override
             public void changedUpdate(DocumentEvent e) {
                 setDirty(true);
+                applySyntaxHighlightingDelayed();
             }
         });
         
@@ -229,6 +234,25 @@ public class EnhancedTextEditor extends JPanel {
             textPane.repaint();
             lineNumberPanel.repaint();
         });
+    }
+    
+    private void setupSyntaxHighlighting() {
+        syntaxHighlighter = new IniTomlSyntaxHighlighter(textPane);
+        // Apply initial syntax highlighting
+        SwingUtilities.invokeLater(() -> syntaxHighlighter.highlightSyntax());
+    }
+    
+    private Timer syntaxTimer = new Timer(300, e -> applySyntaxHighlighting());
+    
+    private void applySyntaxHighlightingDelayed() {
+        syntaxTimer.setRepeats(false);
+        syntaxTimer.restart();
+    }
+    
+    private void applySyntaxHighlighting() {
+        if (syntaxHighlighter != null) {
+            syntaxHighlighter.highlightSyntax();
+        }
     }
     
     private void highlightCurrentLine(Graphics g) {
