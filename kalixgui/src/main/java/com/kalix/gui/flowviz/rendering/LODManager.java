@@ -7,7 +7,7 @@ import java.util.Map;
 public class LODManager {
     
     // LOD threshold - switch to statistical bands when more than this many points per pixel
-    private static final double POINTS_PER_PIXEL_THRESHOLD = 2.0;
+    private static final double POINTS_PER_PIXEL_THRESHOLD = 5.0;
     
     // Cache for pre-computed LOD data
     private final Map<String, LODData> lodCache = new ConcurrentHashMap<>();
