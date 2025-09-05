@@ -1,6 +1,7 @@
 use uuid::Uuid;
 use crate::data_cache::DataCache;
 use dyn_clone::{clone_trait_object, DynClone};
+pub use node_trait::Node;
 pub use node_enum::NodeEnum;
 
 //List all the sub-modules here
@@ -12,35 +13,12 @@ pub mod diversion_node;
 pub mod routing_node;
 pub mod sacramento_node;
 pub mod node_enum;
-
-
-pub trait Node: DynClone + Sync + Send {
-
-    //To Initialise node before model run
-    fn initialise(&mut self, result_manager: &mut DataCache);
-
-    //Runs the node for the current timestep and updates the node state
-    fn run_flow_phase(&mut self, result_manager: &mut DataCache);
-
-    //Gets the unique id of the node
-    fn get_id(&self) -> Uuid;
-
-    //Adds water to inlet i of the node
-    fn add(&mut self, v: f64, i: i32);
-
-    //Removes water from outlet i of the node
-    fn remove_all(&mut self, i: i32) -> f64;
-}
-
-
-
+pub mod node_trait;
 
 
 fn make_result_name(node_name: &str, parameter: &str) -> String {
     format!("node.{node_name}.{parameter}")
 }
-
-clone_trait_object!(Node);
 
 
 #[derive(Clone)]
