@@ -8,6 +8,8 @@ pub struct DataCache {
     pub series_name: Vec<String>,
     pub is_critical: Vec<bool>,
     pub current_step: usize,
+    pub start_timestamp: u64,
+    //pub step_size: u64,
 }
 
 
@@ -69,11 +71,12 @@ impl DataCache {
     Delete all recorders (including data) from the result manager, and set the starting
     date for 
      */
-    pub fn initialize(&mut self) {
+    pub fn initialize(&mut self, start_timestamp: u64) {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
         self.set_current_step(0); //Reset the step counter to 0
+        self.start_timestamp = start_timestamp; //Set the timestamp for step 0
     }
 
 
@@ -81,6 +84,18 @@ impl DataCache {
      */
     pub fn set_current_step(&mut self, value: usize) {
         self.current_step = value;
+    }
+
+
+    /*
+
+     */
+    pub fn set_start_and_stepsize(&mut self, start_timestep: u64, stepsize: u64) {
+        self.start_timestamp = start_timestep;
+        for ts in &mut self.series {
+            ts.start_timestamp = start_timestep;
+            ts.step_size = stepsize;
+        }
     }
 
 
@@ -102,6 +117,7 @@ impl DataCache {
         let mut answer = Timeseries::new_daily();
         let d = format!("{}_{}", node_id, description);
         answer.name = d.clone();
+        answer.start_timestamp = self.start_timestamp;
         
         //Add the new timeseries and return the index
         self.series.push(answer);
@@ -157,6 +173,7 @@ impl DataCache {
             //Prep a new timeseries
             let mut answer = Timeseries::new_daily();
             answer.name = name.to_string();
+            answer.start_timestamp = self.start_timestamp;
 
             //Add it and return the idx
             let idx = self.series.len();
@@ -220,6 +237,9 @@ impl DataCache {
     /*
      */
     pub fn print(&self) {
+        println!("Data cache has {} series elements", self.series.len());
+        println!("Current step: {}", self.current_step);
+        println!("Start timestamp: {}", self.start_timestamp);
         for i in 0..self.series.len() {
             let start_date = Self::get_start_date(&self.series[i]);
             println!("{}, {}, {}:{}", self.series_name[i], start_date, self.series[i].timestamps.len(), self.series[i].values.len());

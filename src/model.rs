@@ -62,6 +62,7 @@ impl Model {
         // TODO: provide this functionality later
         //6) Load input data into the data_cache
         // TODO: Fix this. Currently it just jams data into the cache irrespective of the simulation period.
+        //self.data_cache.start_timestamp = self.configuration.sim_start_timestamp; //TODO: can I delete the property "data_cache.start_timestamp"?
         for i in 0..self.inputs.len() {
             //Fill any data that might be using the column name as a reference
             //Fill any data that might be using the column number as a reference
@@ -70,13 +71,18 @@ impl Model {
                 self.inputs[i].full_colindex_path.clone()] {
                 if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
                     self.data_cache.series[idx].values.clear();
+                    self.data_cache.series[idx].timestamps.clear();
+                    self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
+                    self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
                     for j in 0..self.inputs[i].timeseries.len() {
                         let value = self.inputs[i].timeseries.values[j];
-                        self.data_cache.series[idx].values.push(value);
+                        self.data_cache.series[idx].push_value(value);
                     }
                 }
             }
         }
+        self.data_cache.set_start_and_stepsize(self.configuration.sim_start_timestamp,
+                                               self.configuration.sim_stepsize);
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
     }
@@ -427,6 +433,9 @@ impl Model {
 
 
     pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
+        //TODO: I feel like I should be able to borrow references and temporarily create a
+        //TODO: Vec<&Timeseries> for the purposes of writing before returning the borrow and
+        //TODO: leaving ownership of the series in the data cache.
         let mut vec_ts: Vec<Timeseries> = vec![];
         for output_name in &self.outputs {
             let idx = self.data_cache.get_existing_series_idx(output_name).unwrap();

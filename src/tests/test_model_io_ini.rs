@@ -38,9 +38,18 @@ fn test_model_1_io_ini_read() {
         println!("output: {}, idx: {}, len:{}", output_name, idx, ts.len());
     }
 
-    //
+    // Writing outputs
     let output_filename = "./src/tests/example_models/1/outputs.csv";
     let output_write_result = m.write_outputs(output_filename);
+
+    // Printing data cache
+    println!(" ");
+    println!("Printing the data cache");
+    m.data_cache.print();
+    println!(" ");
+    for temp in &m.data_cache.series {
+         temp.print();
+    }
 
     // //Check the results
     // let ds_idx = m.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();
@@ -110,10 +119,11 @@ fn test_model_3_io_ini_read() {
         let ts = m.data_cache.series[idx].clone();
         println!("output: {}, idx: {}, len:{}", output_name, idx, ts.len());
     }
+    //m.data_cache.print();
 
     //
     let output_filename = "./src/tests/example_models/3/outputs.csv";
-    let output_write_result = m.write_outputs(output_filename);
+    m.write_outputs(output_filename);
 
     // //Check the results
     // let ds_idx = m.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();
@@ -123,5 +133,5 @@ fn test_model_3_io_ini_read() {
     // println!("Timestamps: {:?}", ans.timestamps);
     //
     // //Write the results
-    // m.write_outputs("./src/tests/example_models/2/output.csv").expect("Csv write failed");
+    //m.write_outputs("./src/tests/example_models/2/output.csv").expect("Csv write failed");
 }

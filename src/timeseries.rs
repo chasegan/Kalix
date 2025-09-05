@@ -4,6 +4,8 @@
 // we copy the next value into a cache property), and then all the nodes using the value can get it
 // from there (maybe using immutable refs).
 
+use crate::numerical::mathfn::u64_subtraction;
+
 #[derive(Clone)]
 #[derive(Default)]
 pub struct Timeseries {
@@ -60,12 +62,12 @@ impl Timeseries {
     based on previous one and the step_size (or uses start_timestamp if there are no timestamps yet).
      */
     pub fn push_value(&mut self, value: f64) {
-        let mut new_timestamp = self.start_timestamp;
         let len = self.values.len();
-        if len > 0 {
-            new_timestamp = self.timestamps[len - 1] + self.step_size;
-        }
-        self.push(new_timestamp, value);
+        if len == 0 {
+            self.push(self.start_timestamp, value);
+        } else {
+            self.push(self.timestamps[len - 1] + self.step_size, value);
+        };
     }
 
 
@@ -137,21 +139,27 @@ impl Timeseries {
             self.set_all_values_to(f64::NAN);
         } else {
             //Get the index offset. I.e. how many steps is self[0] ahead of mask[0]?
-            let mask_offset = ((self.start_timestamp - mask.start_timestamp) / self.step_size) as usize;
+            let mask_offset = u64_subtraction(self.start_timestamp / self.step_size,
+                                              mask.start_timestamp / self.step_size);
 
-            //Now for each element of self, delete the value if the mask is NAN.
+            //Now for each element of self, set self.value=NAN if the mask is NAN.
             for i_self in 0..self.len() {
-                // Find the mask value
-                let i_mask = i_self + mask_offset;
-                let mask_value = if (i_mask < 0) || (i_mask >= mask.len()) {
-                    // Out of range of mask. Implied value is f64::NAN.
+                let i_mask = (i_self as i64) + mask_offset;
+                if i_mask < 0 {
+                    // Before mask start. Implied value is f64::NAN.
                     self.values[i_self] = f64::NAN;
                 } else {
-                    // In range of mask. Check if value is NAN.
-                    if mask.values[i_mask].is_nan() {
+                    let i_mask_usize = i_mask as usize;
+                    if i_mask_usize >= mask.len() {
+                        // Beyond mask end. Implied value is f64::NAN.
                         self.values[i_self] = f64::NAN;
+                    } else {
+                        // In range of mask. Check if value is NAN.
+                        if mask.values[i_mask_usize].is_nan() {
+                            self.values[i_self] = f64::NAN;
+                        }
                     }
-                };
+                }
             }
         }
 

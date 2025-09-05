@@ -1,11 +1,5 @@
 use chrono::{DateTime, ParseResult, NaiveDate};
 
-//TODO: I should change these so that I'm directly using the i64 value that comes from .timestamp(),
-//TODO: rather than wrapping it to make a u64. (I dont think there's any real reason I need positive
-//TODO: values).
-
-
-
 /// Converts a date string (must be "%Y-%m-%d") into an u64 integer timestamp that counts the
 /// number of seconds since some fixed time in the past.
 ///
@@ -16,8 +10,11 @@ use chrono::{DateTime, ParseResult, NaiveDate};
 /// # Returns
 ///
 /// A ParseResult enum where the Ok() variant contains an u64 representation of the date. This u64
-/// counts the number of seconds since some fixed time far in the past. The representation supports
-/// datetimes earlier than -9999-01-01 and later than +9999-12-31.
+/// is based on the UNIX timestamp in seconds, but wrapped from an i64 to an u64. I chose to go with
+/// an u64 for two reasons: (1) The external compression library "tsz" uses u64 for the timestamp,
+/// and (2) min and max values are unlikely to clash with real datetime values meaning errors are
+/// easily detected. The representation supports datetimes earlier than -9999-01-01 and later than
+/// +9999-12-31.
 pub fn date_string_to_u64(date_str: &str) -> ParseResult<u64> {
     let formatter = "%Y-%m-%d"; //"%Y-%m-%d %H:%M:%S"
     match NaiveDate::parse_and_remainder(date_str,formatter) {
@@ -32,7 +29,12 @@ pub fn date_string_to_u64(date_str: &str) -> ParseResult<u64> {
 ///
 /// # Arguments
 ///
-/// An u64 value representing the datetime.
+/// An u64 value representing the datetime. This u64
+/// is based on the UNIX timestamp in seconds, but wrapped from an i64 to an u64. I chose to go with
+/// an u64 for two reasons: (1) The external compression library "tsz" uses u64 for the timestamp,
+/// and (2) min and max values are unlikely to clash with real datetime values meaning errors are
+/// easily detected. The representation supports datetimes earlier than -9999-01-01 and later than
+/// +9999-12-31.
 ///
 /// # Returns
 ///
