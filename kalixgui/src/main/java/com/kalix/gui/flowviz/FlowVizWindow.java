@@ -29,6 +29,7 @@ public class FlowVizWindow extends JFrame {
     private JLabel statusLabel;
     private JSplitPane splitPane;
     private boolean legendVisible = true;
+    private boolean autoYMode = false;
     
     // Data management
     private DataSet dataSet;
@@ -90,7 +91,7 @@ public class FlowVizWindow extends JFrame {
         add(statusPanel, BorderLayout.SOUTH);
         
         // Set up visibility change listener for legend
-        legendPanel.setVisibilityChangeListener(this::updatePlotPanel);
+        legendPanel.setVisibilityChangeListener(this::updatePlotVisibility);
         
         // Set up drag-and-drop file loading
         setupDragAndDrop();
@@ -113,11 +114,19 @@ public class FlowVizWindow extends JFrame {
         JCheckBoxMenuItem legendToggle = new JCheckBoxMenuItem("Show Legend", legendVisible);
         legendToggle.addActionListener(e -> toggleLegend());
         viewMenu.add(legendToggle);
-        viewMenu.addSeparator();
-        viewMenu.add(createMenuItem("Zoom In", e -> zoomIn()));
-        viewMenu.add(createMenuItem("Zoom Out", e -> zoomOut()));
-        viewMenu.add(createMenuItem("Zoom to Fit", e -> zoomToFit()));
-        viewMenu.add(createMenuItem("Reset View", e -> resetView()));
+        
+        // Zoom menu
+        JMenu zoomMenu = new JMenu("Zoom");
+        zoomMenu.add(createMenuItem("Zoom In", e -> zoomIn()));
+        zoomMenu.add(createMenuItem("Zoom Out", e -> zoomOut()));
+        zoomMenu.addSeparator();
+        zoomMenu.add(createMenuItem("Zoom to Fit", e -> zoomToFit()));
+        zoomMenu.add(createMenuItem("Reset View", e -> resetView()));
+        zoomMenu.addSeparator();
+        
+        JCheckBoxMenuItem autoYToggle = new JCheckBoxMenuItem("Auto-Y", autoYMode);
+        autoYToggle.addActionListener(e -> toggleAutoYMode());
+        zoomMenu.add(autoYToggle);
         
         // Tools menu
         JMenu toolsMenu = new JMenu("Tools");
@@ -131,6 +140,7 @@ public class FlowVizWindow extends JFrame {
         
         menuBar.add(fileMenu);
         menuBar.add(viewMenu);
+        menuBar.add(zoomMenu);
         menuBar.add(toolsMenu);
         menuBar.add(helpMenu);
         
@@ -298,6 +308,18 @@ public class FlowVizWindow extends JFrame {
         }
         
         plotPanel.setSeriesColors(colorMap);
+        plotPanel.setVisibleSeries(visibleSeriesList);
+    }
+    
+    private void updatePlotVisibility() {
+        // Update only visibility without resetting viewport
+        List<String> visibleSeriesList = legendPanel.getVisibleSeries();
+        
+        // If no series are marked as visible in legend (initial state), show all series
+        if (visibleSeriesList.isEmpty() && !dataSet.isEmpty()) {
+            visibleSeriesList = new ArrayList<>(dataSet.getSeriesNames());
+        }
+        
         plotPanel.setVisibleSeries(visibleSeriesList);
     }
 
@@ -593,6 +615,12 @@ public class FlowVizWindow extends JFrame {
     private void zoomToFit() {
         plotPanel.zoomToFit();
         updateStatus("Zoomed to fit data");
+    }
+    
+    private void toggleAutoYMode() {
+        autoYMode = !autoYMode;
+        plotPanel.setAutoYMode(autoYMode);
+        updateStatus(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
     }
     
     private void resetView() {

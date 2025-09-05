@@ -305,8 +305,8 @@ public class TimeSeriesRenderer {
             return dateTime.format(DateTimeFormatter.ofPattern("HH:mm"));
         } else if (timeRangeMs < 2592000000L) {  // Less than 30 days - show date
             return dateTime.format(DateTimeFormatter.ofPattern("MM-dd"));
-        } else {  // Show year and month
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        } else {  // Show year, month, and day
+            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         }
     }
     

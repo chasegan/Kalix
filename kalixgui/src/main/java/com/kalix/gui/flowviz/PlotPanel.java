@@ -1,6 +1,7 @@
 package com.kalix.gui.flowviz;
 
 import com.kalix.gui.flowviz.data.DataSet;
+import com.kalix.gui.flowviz.data.TimeSeriesData;
 import com.kalix.gui.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.gui.flowviz.rendering.ViewPort;
 
@@ -35,6 +36,7 @@ public class PlotPanel extends JPanel {
     private ViewPort currentViewport;
     private Map<String, Color> seriesColors;
     private List<String> visibleSeries;
+    private boolean autoYMode = false;
     
     public PlotPanel() {
         setBackground(Color.WHITE);
@@ -200,12 +202,29 @@ public class PlotPanel extends JPanel {
         
         double zoomFactor = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
         
-        // Convert mouse position to data coordinates
-        long centerTime = currentViewport.screenXToTime(e.getX());
-        double centerValue = currentViewport.screenYToValue(e.getY());
-        
-        // Apply zoom centered on mouse position
-        currentViewport = currentViewport.zoom(zoomFactor, centerTime, centerValue);
+        if (autoYMode) {
+            // Auto-Y mode: only zoom X-axis, then auto-fit Y
+            long centerTime = currentViewport.screenXToTime(e.getX());
+            long timeRange = currentViewport.getTimeRangeMs();
+            long newTimeRange = (long) (timeRange / zoomFactor);
+            
+            long startTime = centerTime - newTimeRange / 2;
+            long endTime = centerTime + newTimeRange / 2;
+            
+            // Calculate Y range for visible data in new X range
+            double[] yRange = calculateVisibleYRange(startTime, endTime);
+            
+            Rectangle plotArea = getPlotArea();
+            currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
+                                         plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        } else {
+            // Standard zoom: zoom both axes
+            long centerTime = currentViewport.screenXToTime(e.getX());
+            double centerValue = currentViewport.screenYToValue(e.getY());
+            
+            // Apply zoom centered on mouse position
+            currentViewport = currentViewport.zoom(zoomFactor, centerTime, centerValue);
+        }
         
         repaint();
     }
@@ -281,22 +300,56 @@ public class PlotPanel extends JPanel {
     public void zoomIn() {
         if (currentViewport == null) return;
         
-        // Zoom toward center
-        long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-        double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
-        
-        currentViewport = currentViewport.zoom(ZOOM_FACTOR, centerTime, centerValue);
+        if (autoYMode) {
+            // Auto-Y mode: only zoom X-axis, then auto-fit Y
+            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
+            long timeRange = currentViewport.getTimeRangeMs();
+            long newTimeRange = (long) (timeRange / ZOOM_FACTOR);
+            
+            long startTime = centerTime - newTimeRange / 2;
+            long endTime = centerTime + newTimeRange / 2;
+            
+            // Calculate Y range for visible data in new X range
+            double[] yRange = calculateVisibleYRange(startTime, endTime);
+            
+            Rectangle plotArea = getPlotArea();
+            currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
+                                         plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        } else {
+            // Standard zoom: zoom both axes
+            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
+            double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
+            
+            currentViewport = currentViewport.zoom(ZOOM_FACTOR, centerTime, centerValue);
+        }
         repaint();
     }
     
     public void zoomOut() {
         if (currentViewport == null) return;
         
-        // Zoom toward center
-        long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-        double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
-        
-        currentViewport = currentViewport.zoom(1.0 / ZOOM_FACTOR, centerTime, centerValue);
+        if (autoYMode) {
+            // Auto-Y mode: only zoom X-axis, then auto-fit Y
+            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
+            long timeRange = currentViewport.getTimeRangeMs();
+            long newTimeRange = (long) (timeRange * ZOOM_FACTOR);
+            
+            long startTime = centerTime - newTimeRange / 2;
+            long endTime = centerTime + newTimeRange / 2;
+            
+            // Calculate Y range for visible data in new X range
+            double[] yRange = calculateVisibleYRange(startTime, endTime);
+            
+            Rectangle plotArea = getPlotArea();
+            currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
+                                         plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        } else {
+            // Standard zoom: zoom both axes
+            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
+            double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
+            
+            currentViewport = currentViewport.zoom(1.0 / ZOOM_FACTOR, centerTime, centerValue);
+        }
         repaint();
     }
     
@@ -308,5 +361,59 @@ public class PlotPanel extends JPanel {
     public void resetView() {
         zoomToFitData();
         repaint();
+    }
+    
+    public void setAutoYMode(boolean autoYMode) {
+        this.autoYMode = autoYMode;
+    }
+    
+    private double[] calculateVisibleYRange(long startTime, long endTime) {
+        if (dataSet == null || dataSet.isEmpty() || visibleSeries.isEmpty()) {
+            return new double[]{-1.0, 1.0}; // Default range
+        }
+        
+        double minValue = Double.POSITIVE_INFINITY;
+        double maxValue = Double.NEGATIVE_INFINITY;
+        boolean hasValidData = false;
+        
+        // Check each visible series for data in the time range
+        for (String seriesName : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(seriesName);
+            if (series == null) continue;
+            
+            long[] timestamps = series.getTimestamps();
+            double[] values = series.getValues();
+            boolean[] validPoints = series.getValidPoints();
+            
+            // Find data points within the time range
+            for (int i = 0; i < timestamps.length; i++) {
+                if (timestamps[i] >= startTime && timestamps[i] <= endTime && validPoints[i]) {
+                    double value = values[i];
+                    if (!Double.isNaN(value)) {
+                        minValue = Math.min(minValue, value);
+                        maxValue = Math.max(maxValue, value);
+                        hasValidData = true;
+                    }
+                }
+            }
+        }
+        
+        if (!hasValidData) {
+            return new double[]{-1.0, 1.0}; // Default range when no data
+        }
+        
+        // Add 5% padding
+        double valueRange = maxValue - minValue;
+        if (valueRange < 0.001) { // Very small range
+            double center = (minValue + maxValue) / 2;
+            minValue = center - 0.5;
+            maxValue = center + 0.5;
+        } else {
+            double padding = valueRange * 0.05;
+            minValue -= padding;
+            maxValue += padding;
+        }
+        
+        return new double[]{minValue, maxValue};
     }
 }
