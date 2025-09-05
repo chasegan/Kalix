@@ -899,4 +899,29 @@ public class EnhancedTextEditor extends JPanel {
     public JTextPane getTextPane() {
         return textPane;
     }
+    
+    /**
+     * Sets the font for both the text editor and line numbers.
+     * @param font The new font to apply
+     */
+    public void setEditorFont(Font font) {
+        // Apply font to text pane
+        textPane.setFont(font);
+        
+        // Apply font to line number panel
+        if (lineNumberPanel != null) {
+            lineNumberPanel.setFont(font);
+        }
+        
+        // Re-apply syntax highlighting to ensure proper font rendering
+        if (syntaxHighlighter != null) {
+            SwingUtilities.invokeLater(() -> syntaxHighlighter.highlightSyntax());
+        }
+        
+        // Repaint components
+        textPane.repaint();
+        if (lineNumberPanel != null) {
+            lineNumberPanel.repaint();
+        }
+    }
 }

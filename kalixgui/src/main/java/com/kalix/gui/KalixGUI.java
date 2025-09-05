@@ -61,6 +61,9 @@ public class KalixGUI extends JFrame {
         textEditor = new EnhancedTextEditor();
         textEditor.setText("# Kalix Model\n# Edit your hydrologic model here...\n");
         
+        // Load saved font preferences
+        loadFontPreferences();
+        
         // Set up dirty file indicator listener
         textEditor.setDirtyStateListener(isDirty -> {
             updateWindowTitle(isDirty);
@@ -128,6 +131,10 @@ public class KalixGUI extends JFrame {
         editMenu.add(createMenuItem("Copy", e -> copyAction()));
         editMenu.add(createMenuItem("Paste", e -> pasteAction()));
         
+        // Editor menu
+        JMenu editorMenu = new JMenu("Editor");
+        editorMenu.add(createMenuItem("Font...", e -> showFontDialog()));
+        
         // View menu
         JMenu viewMenu = new JMenu("View");
         viewMenu.add(createMenuItem("Zoom In", e -> zoomIn()));
@@ -163,6 +170,7 @@ public class KalixGUI extends JFrame {
         
         menuBar.add(fileMenu);
         menuBar.add(editMenu);
+        menuBar.add(editorMenu);
         menuBar.add(viewMenu);
         menuBar.add(graphMenu);
         menuBar.add(helpMenu);
@@ -397,6 +405,113 @@ public class KalixGUI extends JFrame {
             "Kalix Hydrologic Modeling GUI\nVersion 1.0\n\nA Java Swing interface for Kalix hydrologic models.",
             "About Kalix GUI",
             JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    private void showFontDialog() {
+        // Current font from text editor
+        Font currentFont = textEditor.getTextPane().getFont();
+        
+        // Available monospace fonts
+        String[] monospaceFonts = {
+            "JetBrains Mono",
+            "Fira Code", 
+            "Consolas",
+            "Courier New",
+            "Monaco",
+            "Menlo",
+            "DejaVu Sans Mono",
+            "Liberation Mono",
+            "Source Code Pro",
+            "Ubuntu Mono"
+        };
+        
+        // Font sizes
+        Integer[] fontSizes = {8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36, 48};
+        
+        // Create dialog
+        JDialog fontDialog = new JDialog(this, "Font Settings", true);
+        fontDialog.setSize(400, 300);
+        fontDialog.setLocationRelativeTo(this);
+        fontDialog.setLayout(new BorderLayout());
+        
+        // Create components
+        JPanel settingsPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        
+        // Font family selection
+        gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST;
+        settingsPanel.add(new JLabel("Font:"), gbc);
+        
+        JComboBox<String> fontComboBox = new JComboBox<>(monospaceFonts);
+        fontComboBox.setSelectedItem(currentFont.getFontName());
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        settingsPanel.add(fontComboBox, gbc);
+        
+        // Font size selection
+        gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE;
+        settingsPanel.add(new JLabel("Size:"), gbc);
+        
+        JComboBox<Integer> sizeComboBox = new JComboBox<>(fontSizes);
+        sizeComboBox.setSelectedItem(currentFont.getSize());
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        settingsPanel.add(sizeComboBox, gbc);
+        
+        // Preview area
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; gbc.weightx = 1.0; gbc.weighty = 1.0;
+        JTextArea previewArea = new JTextArea("Sample text:\n[Section]\nname = value\n# Comment");
+        previewArea.setFont(currentFont);
+        previewArea.setEditable(false);
+        previewArea.setBorder(BorderFactory.createTitledBorder("Preview"));
+        settingsPanel.add(new JScrollPane(previewArea), gbc);
+        
+        // Update preview when selections change
+        ActionListener updatePreview = e -> {
+            String fontName = (String) fontComboBox.getSelectedItem();
+            Integer fontSize = (Integer) sizeComboBox.getSelectedItem();
+            Font newFont = new Font(fontName, Font.PLAIN, fontSize);
+            previewArea.setFont(newFont);
+        };
+        fontComboBox.addActionListener(updatePreview);
+        sizeComboBox.addActionListener(updatePreview);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        
+        okButton.addActionListener(e -> {
+            String fontName = (String) fontComboBox.getSelectedItem();
+            Integer fontSize = (Integer) sizeComboBox.getSelectedItem();
+            Font newFont = new Font(fontName, Font.PLAIN, fontSize);
+            
+            // Apply font to text editor and line numbers
+            textEditor.setEditorFont(newFont);
+            
+            // Save preference
+            prefs.put("editor.font.name", fontName);
+            prefs.putInt("editor.font.size", fontSize);
+            
+            fontDialog.dispose();
+        });
+        
+        cancelButton.addActionListener(e -> fontDialog.dispose());
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        
+        fontDialog.add(settingsPanel, BorderLayout.CENTER);
+        fontDialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        fontDialog.setVisible(true);
+    }
+    
+    private void loadFontPreferences() {
+        String fontName = prefs.get("editor.font.name", "Consolas");
+        int fontSize = prefs.getInt("editor.font.size", 12);
+        
+        Font savedFont = new Font(fontName, Font.PLAIN, fontSize);
+        textEditor.setEditorFont(savedFont);
     }
 
     private void updateStatus(String message) {
