@@ -1,5 +1,4 @@
-﻿use std::collections::HashMap;
-use uuid::Uuid;
+﻿use uuid::Uuid;
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]

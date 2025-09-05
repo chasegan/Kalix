@@ -1,8 +1,7 @@
 use super::{make_result_name, InputDataDefinition, Node};
 use uuid::Uuid;
 use crate::data_cache::DataCache;
-
-
+use crate::misc::location::Location;
 //------- IDEAS FOR ORDERING IN KALIX ----------//
 // A couple of thoughts are:
 //   - Having an ordering phase means you kinda have to know everything before
@@ -53,6 +52,7 @@ pub struct DiversionNode {
     //Generic Node stuff
     pub name: String,
     pub id: Uuid,
+    pub location: Location,
 
     //Vars for receiving and transmitting water
     q_rx_0: f64,    //pub us1: Terminal,

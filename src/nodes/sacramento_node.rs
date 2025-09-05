@@ -2,6 +2,7 @@ use super::{make_result_name, InputDataDefinition, Node};
 use uuid::Uuid;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_cache::DataCache;
+use crate::misc::location::Location;
 
 #[derive(Default)]
 #[derive(Clone)]
@@ -9,6 +10,7 @@ pub struct SacramentoNode {
     //Generic Node stuff
     pub name: String,
     pub id: Uuid,
+    pub location: Location,
 
     //Vars for receiving and transmitting water
     q_rx_0: f64,

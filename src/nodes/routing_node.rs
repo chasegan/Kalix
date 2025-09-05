@@ -2,6 +2,7 @@ use std::i32;
 use super::{make_result_name, Node};
 use uuid::Uuid;
 use crate::data_cache::DataCache;
+use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
 
 #[derive(Default)]
@@ -9,6 +10,7 @@ use super::super::numerical::mathfn::quadratic_plus;
 pub struct RoutingNode {
     pub name: String,
     pub id: Uuid,
+    pub location: Location,
 
     //Vars for receiving and transmitting water
     q_rx_0: f64,    //pub us1: Terminal,

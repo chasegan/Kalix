@@ -1,12 +1,14 @@
 use super::{make_result_name, Node};
 use uuid::Uuid;
 use crate::data_cache::DataCache;
+use crate::misc::location::Location;
 
 #[derive(Default)]
 #[derive(Clone)]
 pub struct ConfluenceNode {
     pub name: String,
     pub id: Uuid,
+    pub location: Location,
 
     //Vars for receiving and transmitting water
     q_rx_0: f64,    //pub us1: Terminal,

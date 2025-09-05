@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::f64;
 use crate::io::csv_io::csv_string_to_f64_vec;
+use crate::misc::location::Location;
 use crate::model::Model;
 use crate::nodes::confluence_node::ConfluenceNode;
 use crate::nodes::diversion_node::DiversionNode;
@@ -71,20 +72,23 @@ impl IniModelIO {
                             if node_type == "confluence" {
                                 let mut n = ConfluenceNode::new();
                                 n.name = node_name.to_string();
-                                let ne = NodeEnum::ConfluenceNode(n);
-                                for (vp, _vv) in &v {
-                                    if vp == "type" {
+                                for (vp, vv) in &v {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "type" {
                                         // skipping this
                                     } else {
                                         Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name))?
                                     }
                                 }
-                                model.add_node(ne);
+                                model.add_node(NodeEnum::ConfluenceNode(n));
                             } else if node_type == "diversion" {
                                 let mut n = DiversionNode::new();
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
-                                    if vp == "demand" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "demand" {
                                         n.demand_def.name = vv.clone().unwrap();
                                     } else if vp == "type" {
                                         // skipping this
@@ -98,7 +102,9 @@ impl IniModelIO {
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
                                     let vvc = vv.clone().unwrap();
-                                    if vp == "evap" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "evap" {
                                         n.evap_mm_def.name = vvc.clone();
                                     } else if vp == "rain" {
                                         n.rain_mm_def.name = vvc.clone();
@@ -124,7 +130,9 @@ impl IniModelIO {
                                 let mut n = InflowNode::new();
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
-                                    if vp == "inflow" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "inflow" {
                                         n.inflow_def.name = vv.clone().unwrap();
                                     } else if vp == "type" {
                                         // skipping this
@@ -140,7 +148,9 @@ impl IniModelIO {
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
                                     let vvc = vv.clone().unwrap();
-                                    if vp == "lag" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "lag" {
                                         n.set_lag(vvc.parse::<i32>().unwrap());
                                     } else if vp == "divs" {
                                         n.set_divs(vvc.parse::<usize>().unwrap());
@@ -172,7 +182,9 @@ impl IniModelIO {
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
                                     let vvc = vv.clone().unwrap();
-                                    if vp == "evap" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "evap" {
                                         n.evap_mm_def.name = vvc.clone();
                                     } else if vp == "rain" {
                                         n.rain_mm_def.name = vvc.clone();
@@ -199,7 +211,9 @@ impl IniModelIO {
                                 n.name = node_name.to_string();
                                 for (vp, vv) in &v {
                                     let vvc = vv.clone().unwrap();
-                                    if vp == "evap" {
+                                    if vp == "loc" {
+                                        n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                                    } else if vp == "evap" {
                                         n.evap_mm_def.name = vvc.clone();
                                     } else if vp == "rain" {
                                         n.rain_mm_def.name = vvc.clone();
