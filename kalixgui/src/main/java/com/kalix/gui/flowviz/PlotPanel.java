@@ -164,15 +164,32 @@ public class PlotPanel extends JPanel {
                     int dx = e.getX() - lastMousePos.x;
                     int dy = e.getY() - lastMousePos.y;
                     
-                    // Convert screen delta to data space delta
-                    long timeRange = currentViewport.getTimeRangeMs();
-                    double valueRange = currentViewport.getValueRange();
-                    
-                    long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
-                    double deltaValue = dy * valueRange / currentViewport.getPlotHeight();
-                    
-                    // Pan the viewport
-                    currentViewport = currentViewport.pan(deltaTime, deltaValue);
+                    if (autoYMode) {
+                        // Auto-Y mode: only pan X-axis, then auto-fit Y
+                        long timeRange = currentViewport.getTimeRangeMs();
+                        long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
+                        
+                        // Calculate new time range
+                        long newStartTime = currentViewport.getStartTimeMs() + deltaTime;
+                        long newEndTime = currentViewport.getEndTimeMs() + deltaTime;
+                        
+                        // Calculate Y range for visible data in new X range
+                        double[] yRange = calculateVisibleYRange(newStartTime, newEndTime);
+                        
+                        Rectangle plotArea = getPlotArea();
+                        currentViewport = new ViewPort(newStartTime, newEndTime, yRange[0], yRange[1],
+                                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    } else {
+                        // Standard pan: pan both axes
+                        long timeRange = currentViewport.getTimeRangeMs();
+                        double valueRange = currentViewport.getValueRange();
+                        
+                        long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
+                        double deltaValue = dy * valueRange / currentViewport.getPlotHeight();
+                        
+                        // Pan the viewport
+                        currentViewport = currentViewport.pan(deltaTime, deltaValue);
+                    }
                     
                     lastMousePos = e.getPoint();
                     repaint();

@@ -29,7 +29,7 @@ public class FlowVizWindow extends JFrame {
     private JLabel statusLabel;
     private JSplitPane splitPane;
     private boolean legendVisible = true;
-    private boolean autoYMode = false;
+    private boolean autoYMode = true;
     
     // Data management
     private DataSet dataSet;
