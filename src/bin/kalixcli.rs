@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use kalix::io::ini_model_io::IniModelIO;
 use kalix::perf::benchmarks;
 
 #[derive(Parser)]
@@ -16,9 +17,8 @@ enum Commands {
     Test,
     /// Run a simulation
     Sim {
-        /// Path to the configuration file
-        #[arg(short, long)]
-        config: Option<String>,
+        /// Path to the model file
+        model_file: Option<String>,
     },
     /// Run calibration
     Calibrate {
@@ -40,15 +40,26 @@ fn main() {
             benchmarks::bench1();
             println!("Performance tests completed!");
         }
-        Commands::Sim { config } => {
+        Commands::Sim { model_file } => {
+            let model_filename = model_file.as_deref().unwrap_or(""); //use the positional parameter or empty string as fallback
+            let output_filename = "output.csv"; //placeholder to be overwritten by optional named CLI input parameter.
+
             println!("Running simulation...");
-            if let Some(config_path) = config {
-                println!("Using configuration file: {}", config_path);
-            } else {
-                println!("No configuration file specified, using defaults");
+            fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
+                let ini_reader = IniModelIO::new();
+                let mut m = ini_reader.read_model(model_filename)?;
+                m.configure();
+                m.run();
+                m.write_outputs(output_filename)?;
+                Ok(())
             }
-            // TODO: Implement simulation logic
-            println!("Simulation placeholder - not yet implemented");
+            match run_model(model_filename, output_filename) {
+                Ok(_) => println!("Done!"),
+                Err(s) => {
+                    println!("Error: {}", s);
+                    // End program with nonzero code.
+                }
+            }
         }
         Commands::Calibrate { config, iterations } => {
             println!("Running calibration...");

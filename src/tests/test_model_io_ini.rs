@@ -135,3 +135,22 @@ fn test_model_3_io_ini_read() {
     // //Write the results
     //m.write_outputs("./src/tests/example_models/2/output.csv").expect("Csv write failed");
 }
+
+
+
+#[test]
+fn test_model_3_minimal_version() {
+
+    fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
+        let ini_reader = IniModelIO::new();
+        let mut m = ini_reader.read_model(model_filename)?;
+        m.configure();
+        m.run();
+        m.write_outputs(output_filename)?;
+        Ok(())
+    }
+
+    let r = run_model("./src/tests/example_models/3/model_3.ini",
+                      "./src/tests/example_models/3/outputs.csv");
+    assert!(r.is_ok());
+}
