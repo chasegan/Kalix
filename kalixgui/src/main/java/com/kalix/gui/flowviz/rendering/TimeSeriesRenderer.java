@@ -127,10 +127,23 @@ public class TimeSeriesRenderer {
         double[][] minMaxBands = lodData.minMaxBands;
         boolean[] hasValidData = lodData.hasValidData;
         
-        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         
+        // First pass: draw connected envelope (upper and lower bounds)
+        Path2D.Double upperPath = new Path2D.Double();
+        Path2D.Double lowerPath = new Path2D.Double();
+        
+        boolean upperPathStarted = false;
+        boolean lowerPathStarted = false;
+        
+        // Build continuous envelope paths
         for (int pixelX = 0; pixelX < lodData.pixelWidth; pixelX++) {
-            if (!hasValidData[pixelX]) continue;
+            if (!hasValidData[pixelX]) {
+                // Gap in data - break the paths
+                upperPathStarted = false;
+                lowerPathStarted = false;
+                continue;
+            }
             
             double minValue = minMaxBands[pixelX][0];
             double maxValue = minMaxBands[pixelX][1];
@@ -139,13 +152,46 @@ public class TimeSeriesRenderer {
             int minScreenY = viewport.valueToScreenY(maxValue);  // Note: Y is inverted
             int maxScreenY = viewport.valueToScreenY(minValue);
             
-            // Draw vertical line representing min-max range for this pixel column
-            if (minScreenY == maxScreenY) {
-                // Single point - draw small circle
-                g2d.fillOval(screenX - 1, minScreenY - 1, 2, 2);
+            // Add to upper path (max values)
+            if (!upperPathStarted) {
+                upperPath.moveTo(screenX, minScreenY);
+                upperPathStarted = true;
             } else {
-                // Range - draw vertical line
+                upperPath.lineTo(screenX, minScreenY);
+            }
+            
+            // Add to lower path (min values) 
+            if (!lowerPathStarted) {
+                lowerPath.moveTo(screenX, maxScreenY);
+                lowerPathStarted = true;
+            } else {
+                lowerPath.lineTo(screenX, maxScreenY);
+            }
+        }
+        
+        // Draw the envelope paths
+        g2d.draw(upperPath);
+        g2d.draw(lowerPath);
+        
+        // Second pass: draw vertical connectors only where there's significant range
+        g2d.setStroke(new BasicStroke(1.0f));
+        
+        for (int pixelX = 0; pixelX < lodData.pixelWidth; pixelX++) {
+            if (!hasValidData[pixelX]) continue;
+            
+            double minValue = minMaxBands[pixelX][0];
+            double maxValue = minMaxBands[pixelX][1];
+            
+            // Only draw vertical connector if there's a significant range (more than 3 pixels)
+            int screenX = viewport.getPlotX() + pixelX;
+            int minScreenY = viewport.valueToScreenY(maxValue);  // Note: Y is inverted
+            int maxScreenY = viewport.valueToScreenY(minValue);
+            
+            if (Math.abs(maxScreenY - minScreenY) > 3) {
+                // Draw thin vertical line to show full range
+                g2d.setStroke(new BasicStroke(0.5f));
                 g2d.drawLine(screenX, minScreenY, screenX, maxScreenY);
+                g2d.setStroke(new BasicStroke(1.0f));
             }
         }
     }

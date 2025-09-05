@@ -200,16 +200,23 @@ public class PlotPanel extends JPanel {
     private void handleZoom(MouseWheelEvent e) {
         if (currentViewport == null) return;
         
-        double zoomFactor = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
+        // Use smaller zoom factor for mouse wheel (less sensitive)
+        double wheelZoomFactor = Math.pow(1.1, -e.getWheelRotation());
         
         if (autoYMode) {
-            // Auto-Y mode: only zoom X-axis, then auto-fit Y
-            long centerTime = currentViewport.screenXToTime(e.getX());
-            long timeRange = currentViewport.getTimeRangeMs();
-            long newTimeRange = (long) (timeRange / zoomFactor);
+            // Auto-Y mode: only zoom X-axis centered on mouse, then auto-fit Y
+            long mouseTime = currentViewport.screenXToTime(e.getX());
+            long currentStartTime = currentViewport.getStartTimeMs();
+            long currentEndTime = currentViewport.getEndTimeMs();
+            long currentTimeRange = currentEndTime - currentStartTime;
             
-            long startTime = centerTime - newTimeRange / 2;
-            long endTime = centerTime + newTimeRange / 2;
+            // Calculate new time range
+            long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
+            
+            // Center the new range on the mouse position
+            double mouseRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
+            long startTime = mouseTime - (long) (newTimeRange * mouseRatio);
+            long endTime = startTime + newTimeRange;
             
             // Calculate Y range for visible data in new X range
             double[] yRange = calculateVisibleYRange(startTime, endTime);
@@ -218,12 +225,36 @@ public class PlotPanel extends JPanel {
             currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
                                          plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         } else {
-            // Standard zoom: zoom both axes
-            long centerTime = currentViewport.screenXToTime(e.getX());
-            double centerValue = currentViewport.screenYToValue(e.getY());
+            // Standard zoom: zoom both axes centered on mouse position
+            long mouseTime = currentViewport.screenXToTime(e.getX());
+            double mouseValue = currentViewport.screenYToValue(e.getY());
             
-            // Apply zoom centered on mouse position
-            currentViewport = currentViewport.zoom(zoomFactor, centerTime, centerValue);
+            // Get current ranges
+            long currentStartTime = currentViewport.getStartTimeMs();
+            long currentEndTime = currentViewport.getEndTimeMs();
+            double currentMinValue = currentViewport.getMinValue();
+            double currentMaxValue = currentViewport.getMaxValue();
+            
+            long currentTimeRange = currentEndTime - currentStartTime;
+            double currentValueRange = currentMaxValue - currentMinValue;
+            
+            // Calculate new ranges
+            long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
+            double newValueRange = currentValueRange / wheelZoomFactor;
+            
+            // Center the new ranges on mouse position
+            double mouseTimeRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
+            double mouseValueRatio = (mouseValue - currentMinValue) / currentValueRange;
+            
+            long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
+            long endTime = startTime + newTimeRange;
+            
+            double minValue = mouseValue - (newValueRange * mouseValueRatio);
+            double maxValue = minValue + newValueRange;
+            
+            Rectangle plotArea = getPlotArea();
+            currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+                                         plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         }
         
         repaint();
