@@ -7,23 +7,41 @@ import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatCarbonIJTheme;
 
+import com.kalix.gui.editor.EnhancedTextEditor;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 import java.util.prefs.Preferences;
+import java.util.ArrayList;
 
 public class KalixGUI extends JFrame {
     private MapPanel mapPanel;
-    private JTextArea textEditor;
+    private EnhancedTextEditor textEditor;
     private JLabel statusLabel;
     private Preferences prefs;
     private String currentTheme;
+    private List<String> recentFiles;
+    private JMenu recentFilesMenu;
+    private static final int MAX_RECENT_FILES = 5;
 
     public KalixGUI() {
         // Initialize preferences
         prefs = Preferences.userNodeForPackage(KalixGUI.class);
         currentTheme = prefs.get("theme", "Light");
+        
+        // Initialize recent files
+        recentFiles = new ArrayList<>();
+        loadRecentFiles();
         
         setTitle("Kalix Hydrologic Modeling GUI");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -33,18 +51,31 @@ public class KalixGUI extends JFrame {
         initializeComponents();
         setupLayout();
         setupMenuBar();
+        setupDragAndDrop();
         
         setVisible(true);
     }
 
     private void initializeComponents() {
         mapPanel = new MapPanel();
-        textEditor = new JTextArea();
-        textEditor.setFont(new Font("Consolas", Font.PLAIN, 12));
+        textEditor = new EnhancedTextEditor();
         textEditor.setText("# Kalix Model\n# Edit your hydrologic model here...\n");
+        
+        // Set up dirty file indicator listener
+        textEditor.setDirtyStateListener(isDirty -> {
+            updateWindowTitle(isDirty);
+        });
         
         statusLabel = new JLabel("Ready");
         statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    }
+    
+    private void updateWindowTitle(boolean isDirty) {
+        String title = "Kalix Hydrologic Modeling GUI";
+        if (isDirty) {
+            title = "*" + title;
+        }
+        setTitle(title);
     }
 
     private void setupLayout() {
@@ -54,7 +85,7 @@ public class KalixGUI extends JFrame {
         JSplitPane splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             new JScrollPane(mapPanel),
-            new JScrollPane(textEditor)
+            textEditor  // Enhanced text editor already includes scroll pane
         );
         splitPane.setDividerLocation(600);
         splitPane.setResizeWeight(0.5);
@@ -75,6 +106,14 @@ public class KalixGUI extends JFrame {
         JMenu fileMenu = new JMenu("File");
         fileMenu.add(createMenuItem("New", e -> newModel()));
         fileMenu.add(createMenuItem("Open", e -> openModel()));
+        fileMenu.addSeparator();
+        
+        // Recent files submenu
+        recentFilesMenu = new JMenu("Recent Files");
+        updateRecentFilesMenu();
+        fileMenu.add(recentFilesMenu);
+        
+        fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", e -> saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> saveAsModel()));
         fileMenu.addSeparator();
@@ -130,6 +169,88 @@ public class KalixGUI extends JFrame {
         
         setJMenuBar(menuBar);
     }
+    
+    private void setupDragAndDrop() {
+        // Enable drag and drop for the entire window
+        new DropTarget(this, new DropTargetListener() {
+            @Override
+            public void dragEnter(DropTargetDragEvent dtde) {
+                if (isValidFileDrop(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragOver(DropTargetDragEvent dtde) {
+                if (isValidFileDrop(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dropActionChanged(DropTargetDragEvent dtde) {
+                if (isValidFileDrop(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragExit(DropTargetEvent dte) {
+                // Nothing to do
+            }
+
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                        dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                        
+                        Transferable transferable = dtde.getTransferable();
+                        @SuppressWarnings("unchecked")
+                        List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
+                        
+                        if (!files.isEmpty()) {
+                            // Process the first valid model file
+                            for (File file : files) {
+                                if (isKalixModelFile(file)) {
+                                    loadModelFile(file);
+                                    dtde.dropComplete(true);
+                                    return;
+                                }
+                            }
+                            // No valid model files found
+                            updateStatus("Dropped files do not contain valid Kalix model files (.ini or .toml)");
+                            dtde.dropComplete(false);
+                        } else {
+                            dtde.dropComplete(false);
+                        }
+                    } else {
+                        dtde.rejectDrop();
+                    }
+                } catch (Exception e) {
+                    updateStatus("Error processing dropped file: " + e.getMessage());
+                    dtde.dropComplete(false);
+                }
+            }
+        });
+    }
+    
+    private boolean isValidFileDrop(DropTargetDragEvent dtde) {
+        return dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+    }
+    
+    private boolean isKalixModelFile(File file) {
+        if (!file.isFile()) return false;
+        
+        String fileName = file.getName().toLowerCase();
+        return fileName.endsWith(".ini") || fileName.endsWith(".toml");
+    }
 
     private JMenuItem createMenuItem(String text, ActionListener listener) {
         JMenuItem item = new JMenuItem(text);
@@ -145,7 +266,60 @@ public class KalixGUI extends JFrame {
     }
 
     private void openModel() {
-        updateStatus("Open model - Not yet implemented");
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Open Kalix Model");
+        
+        // Set file filters for supported model formats
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+            "Kalix Model Files (*.ini, *.toml)", "ini", "toml"));
+        fileChooser.addChoosableFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+            "INI Files (*.ini)", "ini"));
+        fileChooser.addChoosableFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+            "TOML Files (*.toml)", "toml"));
+        
+        int result = fileChooser.showOpenDialog(this);
+        
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            loadModelFile(selectedFile);
+        }
+    }
+    
+    private void loadModelFile(File file) {
+        try {
+            // Read the file content as plain text
+            String content = Files.readString(file.toPath());
+            
+            // Set the content in the text editor (this also clears dirty state and undo history)
+            textEditor.setText(content);
+            
+            // Get file extension to determine format
+            String fileName = file.getName();
+            String format = "unknown";
+            if (fileName.toLowerCase().endsWith(".ini")) {
+                format = "INI";
+            } else if (fileName.toLowerCase().endsWith(".toml")) {
+                format = "TOML";
+            }
+            
+            // Update status with file info
+            updateStatus(String.format("Opened %s model: %s (%s format)", 
+                format, file.getName(), format));
+                
+            // Add to recent files
+            addRecentFile(file.getAbsolutePath());
+                
+            // Clear the map panel when opening a new model
+            mapPanel.clearModel();
+            
+        } catch (IOException e) {
+            // Show error dialog if file reading fails
+            JOptionPane.showMessageDialog(this,
+                "Error opening file: " + e.getMessage(),
+                "File Open Error",
+                JOptionPane.ERROR_MESSAGE);
+            updateStatus("Failed to open file: " + file.getName());
+        }
     }
 
     private void saveModel() {
@@ -161,11 +335,21 @@ public class KalixGUI extends JFrame {
     }
 
     private void undoAction() {
-        updateStatus("Undo - Not yet implemented");
+        if (textEditor.canUndo()) {
+            textEditor.undo();
+            updateStatus("Undo");
+        } else {
+            updateStatus("Nothing to undo");
+        }
     }
 
     private void redoAction() {
-        updateStatus("Redo - Not yet implemented");
+        if (textEditor.canRedo()) {
+            textEditor.redo();
+            updateStatus("Redo");
+        } else {
+            updateStatus("Nothing to redo");
+        }
     }
 
     private void cutAction() {
@@ -260,6 +444,100 @@ public class KalixGUI extends JFrame {
             
             updateStatus("Switched to " + theme + " theme");
         }
+    }
+    
+    // Recent files management
+    private void loadRecentFiles() {
+        recentFiles.clear();
+        for (int i = 0; i < MAX_RECENT_FILES; i++) {
+            String filePath = prefs.get("recentFile" + i, null);
+            if (filePath != null && !filePath.isEmpty()) {
+                recentFiles.add(filePath);
+            }
+        }
+    }
+    
+    private void saveRecentFiles() {
+        // Clear all existing recent file preferences
+        for (int i = 0; i < MAX_RECENT_FILES; i++) {
+            prefs.remove("recentFile" + i);
+        }
+        
+        // Save current recent files
+        for (int i = 0; i < recentFiles.size(); i++) {
+            prefs.put("recentFile" + i, recentFiles.get(i));
+        }
+    }
+    
+    private void addRecentFile(String filePath) {
+        // Remove if already exists
+        recentFiles.remove(filePath);
+        
+        // Add to front
+        recentFiles.add(0, filePath);
+        
+        // Limit size
+        while (recentFiles.size() > MAX_RECENT_FILES) {
+            recentFiles.remove(recentFiles.size() - 1);
+        }
+        
+        // Save and update menu
+        saveRecentFiles();
+        updateRecentFilesMenu();
+    }
+    
+    private void updateRecentFilesMenu() {
+        recentFilesMenu.removeAll();
+        
+        if (recentFiles.isEmpty()) {
+            JMenuItem emptyItem = new JMenuItem("No recent files");
+            emptyItem.setEnabled(false);
+            recentFilesMenu.add(emptyItem);
+        } else {
+            for (int i = 0; i < recentFiles.size(); i++) {
+                String filePath = recentFiles.get(i);
+                String fileName = new java.io.File(filePath).getName();
+                String displayText = String.format("%d. %s", i + 1, fileName);
+                
+                JMenuItem item = new JMenuItem(displayText);
+                item.setToolTipText(filePath);
+                
+                // Create final reference for lambda
+                final String pathToOpen = filePath;
+                item.addActionListener(e -> openRecentFile(pathToOpen));
+                
+                recentFilesMenu.add(item);
+            }
+            
+            recentFilesMenu.addSeparator();
+            JMenuItem clearItem = new JMenuItem("Clear Recent Files");
+            clearItem.addActionListener(e -> clearRecentFiles());
+            recentFilesMenu.add(clearItem);
+        }
+    }
+    
+    private void openRecentFile(String filePath) {
+        java.io.File file = new java.io.File(filePath);
+        if (file.exists()) {
+            loadModelFile(file);
+        } else {
+            // File no longer exists, remove from recent files
+            recentFiles.remove(filePath);
+            saveRecentFiles();
+            updateRecentFilesMenu();
+            
+            JOptionPane.showMessageDialog(this,
+                "File no longer exists:\n" + filePath,
+                "File Not Found",
+                JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    private void clearRecentFiles() {
+        recentFiles.clear();
+        saveRecentFiles();
+        updateRecentFilesMenu();
+        updateStatus("Recent files cleared");
     }
 
     public static void main(String[] args) {
