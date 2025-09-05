@@ -95,6 +95,8 @@ public class KalixGUI extends JFrame {
         viewMenu.add(createMenuItem("Zoom Out", e -> zoomOut()));
         viewMenu.add(createMenuItem("Reset Zoom", e -> resetZoom()));
         viewMenu.addSeparator();
+        viewMenu.add(createMenuItem("Show Splash Screen", e -> showSplashScreen()));
+        viewMenu.addSeparator();
         
         // Theme submenu
         JMenu themeMenu = new JMenu("Theme");
@@ -201,6 +203,11 @@ public class KalixGUI extends JFrame {
         updateStatus("FlowViz window opened");
     }
 
+    private void showSplashScreen() {
+        SplashScreen.showSplashScreen();
+        updateStatus("Splash screen displayed");
+    }
+
     private void showAbout() {
         JOptionPane.showMessageDialog(this,
             "Kalix Hydrologic Modeling GUI\nVersion 1.0\n\nA Java Swing interface for Kalix hydrologic models.",
@@ -261,6 +268,9 @@ public class KalixGUI extends JFrame {
         System.setProperty("apple.awt.application.name", "Kalix GUI");
         System.setProperty("flatlaf.useWindowDecorations", "false");
         System.setProperty("flatlaf.menuBarEmbedded", "false");
+        
+        // Show splash screen first
+        SplashScreen.showSplashScreen();
         
         SwingUtilities.invokeLater(() -> {
             // Initialize FlatLaf
