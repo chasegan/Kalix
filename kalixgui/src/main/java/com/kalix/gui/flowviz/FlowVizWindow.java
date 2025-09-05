@@ -63,6 +63,7 @@ public class FlowVizWindow extends JFrame {
     
     private void initializeComponents() {
         plotPanel = new PlotPanel();
+        plotPanel.setAutoYMode(autoYMode);  // Initialize Auto-Y mode
         legendPanel = new LegendPanel();
         legendPanel.setPreferredSize(new Dimension(250, 0));
         

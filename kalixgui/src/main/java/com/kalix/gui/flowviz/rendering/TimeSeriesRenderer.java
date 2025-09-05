@@ -357,14 +357,21 @@ public class TimeSeriesRenderer {
     }
     
     private String formatValue(double value) {
-        if (Math.abs(value) >= 1000000) {
-            return String.format("%.1fM", value / 1000000);
-        } else if (Math.abs(value) >= 1000) {
-            return String.format("%.1fK", value / 1000);
+        // Always show full numbers, omit decimals if not needed
+        if (value == Math.floor(value)) {
+            // Integer value - no decimal places
+            return String.format("%.0f", value);
         } else if (Math.abs(value) >= 1) {
-            return String.format("%.1f", value);
+            // Values >= 1 - show 1-3 decimal places as needed
+            String formatted = String.format("%.3f", value);
+            // Remove trailing zeros and decimal point if not needed
+            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
+            return formatted;
         } else {
-            return String.format("%.3f", value);
+            // Small values < 1 - show up to 6 decimal places, remove trailing zeros
+            String formatted = String.format("%.6f", value);
+            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
+            return formatted;
         }
     }
     
