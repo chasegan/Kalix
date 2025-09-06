@@ -7,6 +7,11 @@ import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatCarbonIJTheme;
 
+import io.github.andrewauclair.moderndocking.app.Docking;
+import io.github.andrewauclair.moderndocking.app.RootDockingPanel;
+import io.github.andrewauclair.moderndocking.Dockable;
+import io.github.andrewauclair.moderndocking.ui.DockingSettings;
+
 import com.kalix.gui.editor.EnhancedTextEditor;
 
 import javax.swing.*;
@@ -33,6 +38,7 @@ public class KalixGUI extends JFrame {
     private List<String> recentFiles;
     private JMenu recentFilesMenu;
     private static final int MAX_RECENT_FILES = 5;
+    private RootDockingPanel rootDockingPanel;
 
     public KalixGUI() {
         // Initialize preferences
@@ -48,8 +54,11 @@ public class KalixGUI extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         
+        // Initialize ModernDocking
+        initializeDocking();
+        
         initializeComponents();
-        setupLayout();
+        setupDockingLayout();
         setupMenuBar();
         setupDragAndDrop();
         
@@ -86,25 +95,44 @@ public class KalixGUI extends JFrame {
         setTitle(title);
     }
 
-    private void setupLayout() {
-        setLayout(new BorderLayout());
+    private void initializeDocking() {
+        // Initialize the Docking system first
+        Docking.initialize(this);
         
-        // Create split pane with map panel on left, text editor on right
-        JSplitPane splitPane = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(mapPanel),
-            textEditor  // Enhanced text editor already includes scroll pane
-        );
-        splitPane.setDividerLocation(600);
-        splitPane.setResizeWeight(0.5);
+        // Create the root docking panel
+        rootDockingPanel = new RootDockingPanel(this);
+        setContentPane(rootDockingPanel);
+    }
+
+    private void setupDockingLayout() {
+        // Create dockable wrappers for our components
+        JScrollPane mapScrollPane = new JScrollPane(mapPanel);
+        mapScrollPane.setBorder(BorderFactory.createTitledBorder("Model Map View"));
         
-        add(splitPane, BorderLayout.CENTER);
+        // Create SimpleDockable objects
+        SimpleDockable mapDockable = new SimpleDockable("mapPanel", "Model Map", mapScrollPane);
+        SimpleDockable editorDockable = new SimpleDockable("textEditor", "Text Editor", textEditor);
         
-        // Add status bar at bottom
+        // Register the dockables with the Docking system
+        Docking.registerDockable(mapDockable);
+        Docking.registerDockable(editorDockable);
+        
+        // Display the dockables
+        Docking.display("mapPanel");
+        Docking.display("textEditor");
+        
+        // Add status bar at bottom - use GridBagConstraints for RootDockingPanel
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusPanel.add(statusLabel, BorderLayout.WEST);
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
-        add(statusPanel, BorderLayout.SOUTH);
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.SOUTH;
+        gbc.weightx = 1.0;
+        rootDockingPanel.add(statusPanel, gbc);
     }
 
     private void setupMenuBar() {
@@ -173,6 +201,15 @@ public class KalixGUI extends JFrame {
         }
         
         viewMenu.add(themeMenu);
+        
+        // Window management submenu
+        viewMenu.addSeparator();
+        JMenu windowMenu = new JMenu("Windows");
+        windowMenu.add(createMenuItem("Show Model Map", e -> showMapPanel()));
+        windowMenu.add(createMenuItem("Show Text Editor", e -> showTextEditor()));
+        windowMenu.addSeparator();
+        windowMenu.add(createMenuItem("Reset Layout", e -> resetDockingLayout()));
+        viewMenu.add(windowMenu);
         
         // Graph menu
         JMenu graphMenu = new JMenu("Graph");
@@ -667,6 +704,28 @@ public class KalixGUI extends JFrame {
         saveRecentFiles();
         updateRecentFilesMenu();
         updateStatus("Recent files cleared");
+    }
+    
+    // Docking window management methods
+    private void showMapPanel() {
+        Docking.display("mapPanel");
+        updateStatus("Model Map panel shown");
+    }
+    
+    private void showTextEditor() {
+        Docking.display("textEditor");
+        updateStatus("Text Editor panel shown");  
+    }
+    
+    private void resetDockingLayout() {
+        // Close all dockables first
+        Docking.undock("mapPanel");
+        Docking.undock("textEditor");
+        
+        // Re-display them in default layout
+        Docking.display("mapPanel");
+        Docking.display("textEditor");
+        updateStatus("Docking layout reset");
     }
 
     public static void main(String[] args) {

@@ -20,6 +20,9 @@ dependencies {
     implementation("com.formdev:flatlaf-extras:3.2.5")
     implementation("com.formdev:flatlaf-intellij-themes:3.2.5")
     
+    // ModernDocking for docking functionality
+    implementation("io.github.andrewauclair:modern-docking-single-app:1.3.1")
+    
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
