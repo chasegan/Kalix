@@ -24,7 +24,8 @@ public class SettingsDialog extends JDialog {
     private final EnhancedTextEditor textEditor;
     
     // Settings panels
-    private AppearancePanel appearancePanel;
+    private ThemePanel themePanel;
+    private EditorPanel editorPanel;
     private KalixCliPanel kalixCliPanel;
     
     // Dialog result
@@ -55,10 +56,12 @@ public class SettingsDialog extends JDialog {
         JTabbedPane tabbedPane = new JTabbedPane();
         
         // Create and add tabs
-        appearancePanel = new AppearancePanel();
+        themePanel = new ThemePanel();
+        editorPanel = new EditorPanel();
         kalixCliPanel = new KalixCliPanel();
         
-        tabbedPane.addTab("Appearance", createTabIcon("appearance"), appearancePanel, "Configure visual appearance");
+        tabbedPane.addTab("Theme", createTabIcon("theme"), themePanel, "Configure visual theme");
+        tabbedPane.addTab("Editor", createTabIcon("editor"), editorPanel, "Configure editor settings");
         tabbedPane.addTab("KalixCLI", createTabIcon("cli"), kalixCliPanel, "Configure Kalix CLI settings");
         
         add(tabbedPane, BorderLayout.CENTER);
@@ -80,7 +83,13 @@ public class SettingsDialog extends JDialog {
      */
     private Icon createTabIcon(String type) {
         // Simple colored square icons
-        Color color = "appearance".equals(type) ? new Color(100, 149, 237) : new Color(34, 139, 34);
+        Color color;
+        switch (type) {
+            case "theme": color = new Color(138, 43, 226); break; // Purple
+            case "editor": color = new Color(100, 149, 237); break; // Blue
+            case "cli": color = new Color(34, 139, 34); break; // Green
+            default: color = Color.GRAY;
+        }
         
         return new Icon() {
             @Override
@@ -138,7 +147,8 @@ public class SettingsDialog extends JDialog {
      * Loads current settings into the panels.
      */
     private void loadSettings() {
-        appearancePanel.loadSettings();
+        themePanel.loadSettings();
+        editorPanel.loadSettings();
         kalixCliPanel.loadSettings();
     }
     
@@ -149,10 +159,11 @@ public class SettingsDialog extends JDialog {
      */
     private boolean applySettings() {
         try {
-            boolean appearanceChanged = appearancePanel.applySettings();
+            boolean themeChanged = themePanel.applySettings();
+            boolean editorChanged = editorPanel.applySettings();
             boolean cliChanged = kalixCliPanel.applySettings();
             
-            if (appearanceChanged || cliChanged) {
+            if (themeChanged || editorChanged || cliChanged) {
                 settingsChanged = true;
             }
             
@@ -183,23 +194,19 @@ public class SettingsDialog extends JDialog {
     }
     
     /**
-     * Panel for appearance settings (theme, font).
+     * Panel for theme settings.
      */
-    private class AppearancePanel extends SettingsPanel {
+    private class ThemePanel extends SettingsPanel {
         private JComboBox<String> themeComboBox;
-        private JComboBox<String> fontNameComboBox;
-        private JComboBox<Integer> fontSizeComboBox;
-        private JCheckBox lineWrapCheckBox;
-        private JLabel previewLabel;
         
-        public AppearancePanel() {
-            initializeAppearancePanel();
+        public ThemePanel() {
+            initializeThemePanel();
         }
         
-        private void initializeAppearancePanel() {
+        private void initializeThemePanel() {
             setLayout(new GridBagLayout());
             GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.insets = new Insets(10, 10, 10, 10);
             gbc.anchor = GridBagConstraints.WEST;
             
             // Theme selection
@@ -208,11 +215,56 @@ public class SettingsDialog extends JDialog {
             
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             themeComboBox = new JComboBox<>(AppConstants.AVAILABLE_THEMES);
-            themeComboBox.addActionListener(e -> updatePreview());
             add(themeComboBox, gbc);
             
+            // Add some vertical space at the bottom
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2; gbc.weighty = 1.0;
+            add(new JPanel(), gbc);
+        }
+        
+        @Override
+        public void loadSettings() {
+            // Load theme
+            String currentTheme = themeManager.getCurrentTheme();
+            themeComboBox.setSelectedItem(currentTheme);
+        }
+        
+        @Override
+        public boolean applySettings() {
+            boolean changed = false;
+            
+            // Apply theme
+            String selectedTheme = (String) themeComboBox.getSelectedItem();
+            if (!selectedTheme.equals(themeManager.getCurrentTheme())) {
+                themeManager.switchTheme(selectedTheme);
+                changed = true;
+            }
+            
+            return changed;
+        }
+    }
+    
+    /**
+     * Panel for editor settings (font, line wrap).
+     */
+    private class EditorPanel extends SettingsPanel {
+        private JComboBox<String> fontNameComboBox;
+        private JComboBox<Integer> fontSizeComboBox;
+        private JCheckBox lineWrapCheckBox;
+        private JLabel previewLabel;
+        
+        public EditorPanel() {
+            initializeEditorPanel();
+        }
+        
+        private void initializeEditorPanel() {
+            setLayout(new GridBagLayout());
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.anchor = GridBagConstraints.WEST;
+            
             // Font name selection
-            gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.gridx = 0; gbc.gridy = 0;
             add(new JLabel("Font:"), gbc);
             
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
@@ -221,7 +273,7 @@ public class SettingsDialog extends JDialog {
             add(fontNameComboBox, gbc);
             
             // Font size selection
-            gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             add(new JLabel("Font Size:"), gbc);
             
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
@@ -229,13 +281,16 @@ public class SettingsDialog extends JDialog {
             fontSizeComboBox.addActionListener(e -> updatePreview());
             add(fontSizeComboBox, gbc);
             
-            // Line wrap checkbox
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            lineWrapCheckBox = new JCheckBox("Line Wrap");
+            // Line wrap checkbox with aligned layout
+            gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            add(new JLabel("Line Wrap:"), gbc);
+            
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            lineWrapCheckBox = new JCheckBox();
             add(lineWrapCheckBox, gbc);
             
             // Preview area
-            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             
             JPanel previewPanel = createPreviewPanel();
@@ -271,10 +326,6 @@ public class SettingsDialog extends JDialog {
         
         @Override
         public void loadSettings() {
-            // Load theme
-            String currentTheme = themeManager.getCurrentTheme();
-            themeComboBox.setSelectedItem(currentTheme);
-            
             // Load font settings
             String fontName = prefs.get(AppConstants.PREF_FONT_NAME, AppConstants.DEFAULT_FONT_NAME);
             int fontSize = prefs.getInt(AppConstants.PREF_FONT_SIZE, AppConstants.DEFAULT_FONT_SIZE);
@@ -291,13 +342,6 @@ public class SettingsDialog extends JDialog {
         @Override
         public boolean applySettings() {
             boolean changed = false;
-            
-            // Apply theme
-            String selectedTheme = (String) themeComboBox.getSelectedItem();
-            if (!selectedTheme.equals(themeManager.getCurrentTheme())) {
-                themeManager.switchTheme(selectedTheme);
-                changed = true;
-            }
             
             // Apply font settings
             String selectedFont = (String) fontNameComboBox.getSelectedItem();
@@ -489,6 +533,6 @@ public class SettingsDialog extends JDialog {
      * Gets the configured CLI binary path.
      */
     public String getConfiguredCliPath() {
-        return prefs.get("kalixcli.binary.path", "");
+        return kalixCliPanel.getConfiguredCliPath();
     }
 }

@@ -228,7 +228,6 @@ public class FlowVizWindow extends JFrame {
                 // Generate color for the series (cycle through predefined colors)
                 Color seriesColor = generateSeriesColor(dataSet.getSeriesCount() - 1);
                 
-                System.out.println("DEBUG: Adding series to legend: '" + series.getName() + "' with " + series.getPointCount() + " points");
                 legendPanel.addSeries(series.getName(), seriesColor, series.getPointCount());
                 
                 // Update plot panel with new data

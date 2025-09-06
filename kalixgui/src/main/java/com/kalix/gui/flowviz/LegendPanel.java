@@ -67,11 +67,8 @@ public class LegendPanel extends JPanel {
     }
     
     public void addSeries(String seriesName, Color seriesColor, int pointCount) {
-        System.out.println("DEBUG LegendPanel.addSeries: '" + seriesName + "', color=" + seriesColor + ", points=" + pointCount);
-        
         // Remove empty state if this is the first series
         if (legendItems.isEmpty()) {
-            System.out.println("DEBUG: Removing empty state from legend");
             seriesListPanel.removeAll();
         }
         
@@ -86,10 +83,6 @@ public class LegendPanel extends JPanel {
         
         // Add some spacing between items
         seriesListPanel.add(Box.createVerticalStrut(2));
-        
-        System.out.println("DEBUG: Legend now has " + legendItems.size() + " items");
-        System.out.println("DEBUG: seriesListPanel component count: " + seriesListPanel.getComponentCount());
-        System.out.println("DEBUG: seriesListPanel bounds: " + seriesListPanel.getBounds());
         
         revalidate();
         repaint();
@@ -269,9 +262,6 @@ public class LegendPanel extends JPanel {
             infoLabel.setFont(new Font("Arial", Font.PLAIN, 9));
             infoLabel.setForeground(Color.GRAY);
             
-            System.out.println("DEBUG: nameLabel text='" + nameLabel.getText() + "', visible=" + nameLabel.isVisible());
-            System.out.println("DEBUG: infoLabel text='" + infoLabel.getText() + "', visible=" + infoLabel.isVisible());
-            
             rightPanel.add(nameLabel, BorderLayout.NORTH);
             rightPanel.add(infoLabel, BorderLayout.SOUTH);
             
@@ -291,10 +281,6 @@ public class LegendPanel extends JPanel {
                     setSelectedItem(SeriesLegendItem.this);
                 }
             });
-            
-            System.out.println("DEBUG: Created legend item for '" + seriesName + "' with " + pointCount + " points");
-            System.out.println("DEBUG: Item preferred size: " + prefSize);
-            System.out.println("DEBUG: Item bounds: " + getBounds());
         }
         
         public void setSelected(boolean selected) {

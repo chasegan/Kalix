@@ -324,25 +324,7 @@ public class PlotPanel extends JPanel {
             g2d.drawString(message, messageX, messageY);
         }
         
-        // Draw debug info
-        drawDebugInfo(g2d);
-        
         g2d.dispose();
-    }
-    
-    
-    private void drawDebugInfo(Graphics2D g2d) {
-        if (currentViewport == null) return;
-        
-        g2d.setColor(Color.DARK_GRAY);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 10));
-        
-        String debugInfo = String.format("Viewport: %.0f ms range, %.3f value range | Cache: %d", 
-            (double) currentViewport.getTimeRangeMs(), 
-            currentViewport.getValueRange(),
-            renderer != null ? renderer.getCacheSize() : 0);
-        
-        g2d.drawString(debugInfo, 10, getHeight() - 10);
     }
     
     public void zoomIn() {
