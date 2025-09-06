@@ -1,6 +1,7 @@
 package com.kalix.gui.dialogs;
 
 import com.kalix.gui.constants.AppConstants;
+import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.managers.FontDialogManager;
 import com.kalix.gui.managers.ThemeManager;
 
@@ -20,6 +21,7 @@ public class SettingsDialog extends JDialog {
     private final Preferences prefs;
     private final ThemeManager themeManager;
     private final FontDialogManager fontDialogManager;
+    private final EnhancedTextEditor textEditor;
     
     // Settings panels
     private AppearancePanel appearancePanel;
@@ -31,12 +33,13 @@ public class SettingsDialog extends JDialog {
     /**
      * Creates a new SettingsDialog.
      */
-    public SettingsDialog(JFrame parent, ThemeManager themeManager, FontDialogManager fontDialogManager) {
+    public SettingsDialog(JFrame parent, ThemeManager themeManager, FontDialogManager fontDialogManager, EnhancedTextEditor textEditor) {
         super(parent, "Settings", true);
         this.parent = parent;
         this.prefs = Preferences.userNodeForPackage(SettingsDialog.class);
         this.themeManager = themeManager;
         this.fontDialogManager = fontDialogManager;
+        this.textEditor = textEditor;
         
         initializeDialog();
     }
@@ -186,6 +189,7 @@ public class SettingsDialog extends JDialog {
         private JComboBox<String> themeComboBox;
         private JComboBox<String> fontNameComboBox;
         private JComboBox<Integer> fontSizeComboBox;
+        private JCheckBox lineWrapCheckBox;
         private JLabel previewLabel;
         
         public AppearancePanel() {
@@ -225,8 +229,13 @@ public class SettingsDialog extends JDialog {
             fontSizeComboBox.addActionListener(e -> updatePreview());
             add(fontSizeComboBox, gbc);
             
+            // Line wrap checkbox
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            lineWrapCheckBox = new JCheckBox("Line Wrap");
+            add(lineWrapCheckBox, gbc);
+            
             // Preview area
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
+            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             
             JPanel previewPanel = createPreviewPanel();
@@ -273,6 +282,9 @@ public class SettingsDialog extends JDialog {
             fontNameComboBox.setSelectedItem(fontName);
             fontSizeComboBox.setSelectedItem(fontSize);
             
+            // Load line wrap setting
+            lineWrapCheckBox.setSelected(textEditor.isLineWrap());
+            
             updatePreview();
         }
         
@@ -300,6 +312,13 @@ public class SettingsDialog extends JDialog {
                 
                 // Apply font changes through FontDialogManager
                 fontDialogManager.applyFont(selectedFont, selectedSize);
+                changed = true;
+            }
+            
+            // Apply line wrap setting
+            boolean selectedLineWrap = lineWrapCheckBox.isSelected();
+            if (selectedLineWrap != textEditor.isLineWrap()) {
+                textEditor.setLineWrap(selectedLineWrap);
                 changed = true;
             }
             

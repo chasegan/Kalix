@@ -335,7 +335,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showSettings() {
-        SettingsDialog settingsDialog = new SettingsDialog(this, themeManager, fontDialogManager);
+        SettingsDialog settingsDialog = new SettingsDialog(this, themeManager, fontDialogManager, textEditor);
         boolean settingsChanged = settingsDialog.showDialog();
         
         if (settingsChanged) {

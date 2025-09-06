@@ -106,6 +106,8 @@ public class MenuBarBuilder {
         fileMenu.add(createMenuItem("Save", e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
+        fileMenu.add(createMenuItem("Settings...", e -> callbacks.showSettings()));
+        fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
         
         return fileMenu;
@@ -133,8 +135,6 @@ public class MenuBarBuilder {
     private JMenu createEditorMenu() {
         JMenu editorMenu = new JMenu("Editor");
         
-        editorMenu.add(createMenuItem("Settings...", e -> callbacks.showSettings()));
-        editorMenu.addSeparator();
         editorMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
         editorMenu.addSeparator();
         
