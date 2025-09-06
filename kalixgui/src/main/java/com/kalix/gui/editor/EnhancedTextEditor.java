@@ -37,6 +37,7 @@ public class EnhancedTextEditor extends JPanel {
     // State tracking
     private boolean isDirty = false;
     private boolean showLineNumbers = true;
+    private boolean lineWrap = true;
     private DirtyStateListener dirtyStateListener;
     private FileDropHandler fileDropHandler;
     
@@ -90,6 +91,11 @@ public class EnhancedTextEditor extends JPanel {
                 highlightSelections(g);
                 highlightBrackets(g);
             }
+            
+            @Override
+            public boolean getScrollableTracksViewportWidth() {
+                return lineWrap;
+            }
         };
         
         lineNumberPanel = new LineNumberPanel(textPane);
@@ -101,6 +107,9 @@ public class EnhancedTextEditor extends JPanel {
         scrollPane = new JScrollPane(textPane);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        
+        // Set default line wrap (enabled by default)
+        updateLineWrap();
     }
     
     private void setupLayout() {
@@ -360,6 +369,28 @@ public class EnhancedTextEditor extends JPanel {
     
     public boolean isShowingLineNumbers() {
         return showLineNumbers;
+    }
+    
+    public void setLineWrap(boolean wrap) {
+        this.lineWrap = wrap;
+        updateLineWrap();
+    }
+    
+    public boolean isLineWrap() {
+        return lineWrap;
+    }
+    
+    private void updateLineWrap() {
+        // Update horizontal scroll policy based on wrap setting
+        if (scrollPane != null) {
+            scrollPane.setHorizontalScrollBarPolicy(
+                lineWrap ? JScrollPane.HORIZONTAL_SCROLLBAR_NEVER : JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
+            );
+        }
+        
+        // Force layout update to apply the new wrap setting
+        revalidate();
+        repaint();
     }
     
     public void setDirty(boolean dirty) {

@@ -139,6 +139,15 @@ public class KalixGUI extends JFrame {
         // Editor menu
         JMenu editorMenu = new JMenu("Editor");
         editorMenu.add(createMenuItem("Font...", e -> showFontDialog()));
+        editorMenu.addSeparator();
+        
+        // Line wrap checkbox
+        JCheckBoxMenuItem lineWrapItem = new JCheckBoxMenuItem("Line Wrap");
+        lineWrapItem.setSelected(textEditor.isLineWrap());
+        lineWrapItem.addActionListener(e -> {
+            textEditor.setLineWrap(lineWrapItem.isSelected());
+        });
+        editorMenu.add(lineWrapItem);
         
         // View menu
         JMenu viewMenu = new JMenu("View");
