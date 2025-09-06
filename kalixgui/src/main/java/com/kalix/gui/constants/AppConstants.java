@@ -125,7 +125,7 @@ public final class AppConstants {
     public static final int STATUS_LABEL_BORDER_H = 10;
     
     // Toolbar properties
-    public static final int TOOLBAR_ICON_SIZE = 24;
+    public static final int TOOLBAR_ICON_SIZE = 16;
     public static final String TOOLBAR_NEW_TOOLTIP = "New Model (Ctrl+N)";
     public static final String TOOLBAR_OPEN_TOOLTIP = "Open Model (Ctrl+O)";
     public static final String TOOLBAR_SAVE_TOOLTIP = "Save Model (Ctrl+S)";

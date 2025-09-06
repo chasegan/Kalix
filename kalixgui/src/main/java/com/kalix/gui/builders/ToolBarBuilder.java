@@ -1,9 +1,10 @@
 package com.kalix.gui.builders;
 
 import com.kalix.gui.constants.AppConstants;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
-import java.awt.*;
 import java.awt.event.ActionListener;
 
 /**
@@ -37,21 +38,21 @@ public class ToolBarBuilder {
         toolBar.add(createToolBarButton(
             "New", 
             AppConstants.TOOLBAR_NEW_TOOLTIP,
-            createNewIcon(),
+            FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.newModel()
         ));
         
         toolBar.add(createToolBarButton(
             "Open", 
             AppConstants.TOOLBAR_OPEN_TOOLTIP,
-            createOpenIcon(),
+            FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openModel()
         ));
         
         toolBar.add(createToolBarButton(
             "Save", 
             AppConstants.TOOLBAR_SAVE_TOOLTIP,
-            createSaveIcon(),
+            FontIcon.of(FontAwesomeSolid.SAVE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.saveModel()
         ));
         
@@ -61,7 +62,7 @@ public class ToolBarBuilder {
         toolBar.add(createToolBarButton(
             "Run", 
             AppConstants.TOOLBAR_RUN_TOOLTIP,
-            createRunIcon(),
+            FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.runModel()
         ));
         
@@ -71,14 +72,14 @@ public class ToolBarBuilder {
         toolBar.add(createToolBarButton(
             "Search", 
             AppConstants.TOOLBAR_SEARCH_TOOLTIP,
-            createSearchIcon(),
+            FontIcon.of(FontAwesomeSolid.SEARCH, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.searchModel()
         ));
         
         toolBar.add(createToolBarButton(
             "FlowViz", 
             AppConstants.TOOLBAR_FLOWVIZ_TOOLTIP,
-            createFlowVizIcon(),
+            FontIcon.of(FontAwesomeSolid.CHART_BAR, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.flowViz()
         ));
         
@@ -109,78 +110,4 @@ public class ToolBarBuilder {
         return button;
     }
     
-    // Icon creation methods - using simple geometric shapes for now
-    // These can be replaced with proper icon files later
-    
-    private Icon createNewIcon() {
-        return createSimpleIcon(Color.GREEN, "N");
-    }
-    
-    private Icon createOpenIcon() {
-        return createSimpleIcon(Color.BLUE, "O");
-    }
-    
-    private Icon createSaveIcon() {
-        return createSimpleIcon(Color.ORANGE, "S");
-    }
-    
-    private Icon createRunIcon() {
-        return createSimpleIcon(Color.RED, "▶");
-    }
-    
-    private Icon createSearchIcon() {
-        return createSimpleIcon(Color.GRAY, "🔍");
-    }
-    
-    private Icon createFlowVizIcon() {
-        return createSimpleIcon(Color.CYAN, "📊");
-    }
-    
-    /**
-     * Creates a simple colored icon with text for toolbar buttons.
-     * This is a placeholder implementation - replace with actual icons later.
-     * 
-     * @param color Background color
-     * @param text Text to display on icon
-     * @return Simple icon
-     */
-    private Icon createSimpleIcon(Color color, String text) {
-        return new Icon() {
-            @Override
-            public void paintIcon(Component c, Graphics g, int x, int y) {
-                Graphics2D g2d = (Graphics2D) g.create();
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                
-                // Draw colored circle background
-                g2d.setColor(color);
-                g2d.fillOval(x, y, getIconWidth(), getIconHeight());
-                
-                // Draw border
-                g2d.setColor(Color.DARK_GRAY);
-                g2d.drawOval(x, y, getIconWidth() - 1, getIconHeight() - 1);
-                
-                // Draw text
-                g2d.setColor(Color.WHITE);
-                g2d.setFont(new Font("SansSerif", Font.BOLD, 10));
-                FontMetrics fm = g2d.getFontMetrics();
-                int textWidth = fm.stringWidth(text);
-                int textHeight = fm.getAscent();
-                int textX = x + (getIconWidth() - textWidth) / 2;
-                int textY = y + (getIconHeight() + textHeight) / 2 - 2;
-                g2d.drawString(text, textX, textY);
-                
-                g2d.dispose();
-            }
-            
-            @Override
-            public int getIconWidth() {
-                return AppConstants.TOOLBAR_ICON_SIZE;
-            }
-            
-            @Override
-            public int getIconHeight() {
-                return AppConstants.TOOLBAR_ICON_SIZE;
-            }
-        };
-    }
 }

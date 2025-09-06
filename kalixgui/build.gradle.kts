@@ -20,6 +20,11 @@ dependencies {
     implementation("com.formdev:flatlaf-extras:3.2.5")
     implementation("com.formdev:flatlaf-intellij-themes:3.2.5")
     
+    // Ikonli icons
+    implementation("org.kordamp.ikonli:ikonli-core:12.3.1")
+    implementation("org.kordamp.ikonli:ikonli-swing:12.3.1")
+    implementation("org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1")
+    
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
