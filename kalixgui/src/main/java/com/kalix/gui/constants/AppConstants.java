@@ -14,7 +14,7 @@ public final class AppConstants {
     }
     
     // Application metadata
-    public static final String APP_NAME = "Kalix Hydrologic Modeling GUI";
+    public static final String APP_NAME = "Kalix";
     public static final String APP_VERSION = "1.0";
     public static final String APP_DESCRIPTION = "A Java Swing interface for Kalix hydrologic models.";
     
@@ -70,6 +70,8 @@ public final class AppConstants {
     public static final String PREF_THEME = "theme";
     public static final String PREF_FONT_NAME = "editor.font.name";
     public static final String PREF_FONT_SIZE = "editor.font.size";
+    public static final String PREF_LINE_WRAP = "editor.line.wrap";
+    public static final String PREF_EDITOR_THEME = "editor.theme";
     
     // Default values
     public static final String DEFAULT_FONT_NAME = "Consolas";

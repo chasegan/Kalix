@@ -80,7 +80,7 @@ public class ThemeManager {
         
         // Update all components with animation
         FlatAnimatedLafChange.hideSnapshotWithAnimation();
-        SwingUtilities.updateComponentTreeUI(parentComponent);
+        updateAllWindows();
         
         return "Switched to " + theme + " theme";
     }
@@ -124,6 +124,28 @@ public class ThemeManager {
         UIManager.put("ScrollBar.width", 12);
         UIManager.put("TabbedPane.tabHeight", 32);
         UIManager.put("Table.rowHeight", 24);
+    }
+    
+    /**
+     * Updates all open windows with the new theme.
+     */
+    private void updateAllWindows() {
+        // Update the main application window
+        if (parentComponent != null) {
+            SwingUtilities.updateComponentTreeUI(parentComponent);
+        }
+        
+        // Update all open FlowViz windows
+        for (com.kalix.gui.flowviz.FlowVizWindow window : com.kalix.gui.flowviz.FlowVizWindow.getOpenWindows()) {
+            SwingUtilities.updateComponentTreeUI(window);
+        }
+        
+        // Update all open dialogs (iterate through all windows to find dialogs)
+        for (Window window : Window.getWindows()) {
+            if (window instanceof JDialog && window.isDisplayable()) {
+                SwingUtilities.updateComponentTreeUI(window);
+            }
+        }
     }
     
     /**

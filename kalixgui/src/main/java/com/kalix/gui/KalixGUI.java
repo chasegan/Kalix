@@ -10,6 +10,9 @@ import com.kalix.gui.managers.*;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.io.File;
 import java.util.prefs.Preferences;
 
 /**
@@ -45,6 +48,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private FileDropHandler fileDropHandler;
     private ModelRunner modelRunner;
     private VersionChecker versionChecker;
+    private TitleBarManager titleBarManager;
     
     // Application state
     private Preferences prefs;
@@ -77,9 +81,12 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupLayout();
         setupMenuBar();
         setupDragAndDrop();
+        setupWindowListeners();
         
         // Load saved preferences
         fontDialogManager.loadFontPreferences();
+        loadLineWrapPreference();
+        loadEditorThemePreference();
         
         setVisible(true);
     }
@@ -100,6 +107,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void initializeManagers() {
         // Theme manager
         themeManager = new ThemeManager(prefs, this);
+        
+        // Title bar manager
+        titleBarManager = new TitleBarManager(this);
         
         // File operations manager (initialized after components)
         
@@ -130,7 +140,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         fileOperations = new FileOperationsManager(
             this, textEditor, mapPanel,
             this::updateStatus,
-            recentFilesManager::addRecentFile
+            recentFilesManager::addRecentFile,
+            () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile) // File change callback for title bar updates
         );
         
         fontDialogManager = new FontDialogManager(this, textEditor, prefs);
@@ -139,21 +150,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         versionChecker = new VersionChecker(this::updateStatus);
         
         // Set up component listeners
-        textEditor.setDirtyStateListener(this::updateWindowTitle);
+        textEditor.setDirtyStateListener(isDirty -> titleBarManager.updateTitle(isDirty, fileOperations::getCurrentFile));
         textEditor.setFileDropHandler(fileOperations::loadModelFile);
-    }
-    
-    /**
-     * Updates the window title to reflect dirty file state.
-     * 
-     * @param isDirty true if the file has unsaved changes
-     */
-    private void updateWindowTitle(boolean isDirty) {
-        String title = AppConstants.APP_NAME;
-        if (isDirty) {
-            title = "*" + title;
-        }
-        setTitle(title);
     }
 
     /**
@@ -205,6 +203,19 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     /**
+     * Sets up window event listeners including resize listener for dynamic title bar updates.
+     */
+    private void setupWindowListeners() {
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                // Update title bar when window is resized to ensure path still fits
+                titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
+            }
+        });
+    }
+    
+    /**
      * Updates the status label with the given message.
      * 
      * @param message The status message to display
@@ -221,6 +232,22 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void loadModelFile(String filePath) {
         fileOperations.loadModelFile(filePath);
+    }
+    
+    /**
+     * Loads the line wrap preference and applies it to the text editor.
+     */
+    private void loadLineWrapPreference() {
+        boolean savedLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
+        textEditor.setLineWrap(savedLineWrap);
+    }
+    
+    /**
+     * Loads the editor theme preference and applies it to the text editor.
+     */
+    private void loadEditorThemePreference() {
+        String savedTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
+        textEditor.setEditorTheme(savedTheme);
     }
 
     //

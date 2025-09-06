@@ -185,9 +185,7 @@ public class FontDialogManager {
      */
     public void applyFont(String fontName, int fontSize) {
         Font newFont = new Font(fontName, Font.PLAIN, fontSize);
-        textEditor.getTextPane().setFont(newFont);
-        textEditor.revalidate();
-        textEditor.repaint();
+        textEditor.setEditorFont(newFont);
     }
     
     /**

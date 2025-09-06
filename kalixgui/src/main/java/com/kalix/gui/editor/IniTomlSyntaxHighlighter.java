@@ -9,17 +9,20 @@ import java.util.regex.Pattern;
 /**
  * Syntax highlighter for INI and TOML files.
  * Provides color highlighting for sections, properties, comments, strings, and numbers.
+ * Supports theming with configurable color schemes.
  */
 public class IniTomlSyntaxHighlighter {
     
-    // Color definitions for syntax highlighting
-    private static final Color SECTION_COLOR = new Color(0, 102, 153);      // Dark blue for [sections]
-    private static final Color PROPERTY_NAME_COLOR = new Color(153, 0, 85);  // Dark magenta for property names
-    private static final Color PROPERTY_VALUE_COLOR = new Color(0, 128, 0);  // Green for property values
-    private static final Color COMMENT_COLOR = new Color(128, 128, 128);     // Gray for comments
-    private static final Color STRING_COLOR = new Color(196, 26, 22);        // Red for strings
-    private static final Color NUMBER_COLOR = new Color(25, 23, 124);        // Dark blue for numbers
-    private static final Color DEFAULT_COLOR = Color.BLACK;                   // Default text color
+    // Color definitions for syntax highlighting (can be overridden by themes)
+    private Color sectionColor = new Color(0, 102, 153);      // Dark blue for [sections]
+    private Color propertyNameColor = new Color(153, 0, 85);  // Dark magenta for property names
+    private Color propertyValueColor = new Color(0, 128, 0);  // Green for property values
+    private Color commentColor = new Color(128, 128, 128);    // Gray for comments
+    private Color stringColor = new Color(196, 26, 22);       // Red for strings
+    private Color numberColor = new Color(25, 23, 124);       // Dark blue for numbers
+    private Color defaultColor = Color.BLACK;                 // Default text color
+    
+    private String currentTheme = "Default";
     
     // Regular expression patterns for different syntax elements
     private static final Pattern SECTION_PATTERN = Pattern.compile("^\\s*\\[([^\\]]+)\\]\\s*$", Pattern.MULTILINE);
@@ -42,28 +45,16 @@ public class IniTomlSyntaxHighlighter {
         
         // Create styles
         this.defaultStyle = StyleContext.getDefaultStyleContext().getStyle(StyleContext.DEFAULT_STYLE);
-        StyleConstants.setForeground(defaultStyle, DEFAULT_COLOR);
         
         this.sectionStyle = document.addStyle("section", defaultStyle);
-        StyleConstants.setForeground(sectionStyle, SECTION_COLOR);
-        StyleConstants.setBold(sectionStyle, true);
-        
         this.propertyNameStyle = document.addStyle("propertyName", defaultStyle);
-        StyleConstants.setForeground(propertyNameStyle, PROPERTY_NAME_COLOR);
-        StyleConstants.setBold(propertyNameStyle, true);
-        
         this.propertyValueStyle = document.addStyle("propertyValue", defaultStyle);
-        StyleConstants.setForeground(propertyValueStyle, PROPERTY_VALUE_COLOR);
-        
         this.commentStyle = document.addStyle("comment", defaultStyle);
-        StyleConstants.setForeground(commentStyle, COMMENT_COLOR);
-        StyleConstants.setItalic(commentStyle, true);
-        
         this.stringStyle = document.addStyle("string", defaultStyle);
-        StyleConstants.setForeground(stringStyle, STRING_COLOR);
-        
         this.numberStyle = document.addStyle("number", defaultStyle);
-        StyleConstants.setForeground(numberStyle, NUMBER_COLOR);
+        
+        // Apply default colors and styles
+        updateStyles();
     }
     
     /**
@@ -197,5 +188,51 @@ public class IniTomlSyntaxHighlighter {
         } catch (Exception e) {
             System.err.println("Error highlighting range: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Sets the color theme for syntax highlighting.
+     * 
+     * @param themeName The name of the theme to apply
+     */
+    public void setTheme(String themeName) {
+        this.currentTheme = themeName;
+        
+        // Load theme colors
+        java.util.Map<String, Color> themeColors = EditorTheme.getTheme(themeName);
+        
+        // Update colors from theme
+        this.sectionColor = themeColors.getOrDefault("section", this.sectionColor);
+        this.propertyNameColor = themeColors.getOrDefault("propertyName", this.propertyNameColor);
+        this.propertyValueColor = themeColors.getOrDefault("propertyValue", this.propertyValueColor);
+        this.commentColor = themeColors.getOrDefault("comment", this.commentColor);
+        this.stringColor = themeColors.getOrDefault("string", this.stringColor);
+        this.numberColor = themeColors.getOrDefault("number", this.numberColor);
+        this.defaultColor = themeColors.getOrDefault("default", this.defaultColor);
+        
+        // Update styles with new colors
+        updateStyles();
+    }
+    
+    /**
+     * Updates the style objects with current color values.
+     */
+    private void updateStyles() {
+        StyleConstants.setForeground(defaultStyle, defaultColor);
+        
+        StyleConstants.setForeground(sectionStyle, sectionColor);
+        StyleConstants.setBold(sectionStyle, true);
+        
+        StyleConstants.setForeground(propertyNameStyle, propertyNameColor);
+        StyleConstants.setBold(propertyNameStyle, true);
+        
+        StyleConstants.setForeground(propertyValueStyle, propertyValueColor);
+        
+        StyleConstants.setForeground(commentStyle, commentColor);
+        StyleConstants.setItalic(commentStyle, true);
+        
+        StyleConstants.setForeground(stringStyle, stringColor);
+        
+        StyleConstants.setForeground(numberStyle, numberColor);
     }
 }

@@ -13,6 +13,7 @@ import java.awt.event.*;
 import java.io.File;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,8 +39,10 @@ public class EnhancedTextEditor extends JPanel {
     private boolean isDirty = false;
     private boolean showLineNumbers = true;
     private boolean lineWrap = true;
+    private String currentEditorTheme = "GitHub Light Colorblind";
     private DirtyStateListener dirtyStateListener;
     private FileDropHandler fileDropHandler;
+    private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
     
     // Styling
     private static final Color CURRENT_LINE_COLOR = new Color(232, 242, 254);
@@ -230,19 +233,25 @@ public class EnhancedTextEditor extends JPanel {
         textPane.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                setDirty(true);
+                if (!programmaticUpdate) {
+                    setDirty(true);
+                }
                 applySyntaxHighlightingDelayed();
             }
             
             @Override
             public void removeUpdate(DocumentEvent e) {
-                setDirty(true);
+                if (!programmaticUpdate) {
+                    setDirty(true);
+                }
                 applySyntaxHighlightingDelayed();
             }
             
             @Override
             public void changedUpdate(DocumentEvent e) {
-                setDirty(true);
+                if (!programmaticUpdate) {
+                    setDirty(true);
+                }
                 applySyntaxHighlightingDelayed();
             }
         });
@@ -259,7 +268,14 @@ public class EnhancedTextEditor extends JPanel {
     private void setupSyntaxHighlighting() {
         syntaxHighlighter = new IniTomlSyntaxHighlighter(textPane);
         // Apply initial syntax highlighting
-        SwingUtilities.invokeLater(() -> syntaxHighlighter.highlightSyntax());
+        SwingUtilities.invokeLater(() -> {
+            programmaticUpdate = true;
+            try {
+                syntaxHighlighter.highlightSyntax();
+            } finally {
+                programmaticUpdate = false;
+            }
+        });
     }
     
     private Timer syntaxTimer = new Timer(300, e -> applySyntaxHighlighting());
@@ -271,7 +287,12 @@ public class EnhancedTextEditor extends JPanel {
     
     private void applySyntaxHighlighting() {
         if (syntaxHighlighter != null) {
-            syntaxHighlighter.highlightSyntax();
+            programmaticUpdate = true; // Disable dirty marking during syntax highlighting
+            try {
+                syntaxHighlighter.highlightSyntax();
+            } finally {
+                programmaticUpdate = false; // Re-enable dirty marking
+            }
         }
     }
     
@@ -388,6 +409,11 @@ public class EnhancedTextEditor extends JPanel {
             );
         }
         
+        // Force the text pane to recalculate its preferred width
+        if (textPane != null) {
+            textPane.invalidate();
+        }
+        
         // Force layout update to apply the new wrap setting
         revalidate();
         repaint();
@@ -411,10 +437,15 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     public void setText(String text) {
-        textPane.setText(text);
-        textPane.setCaretPosition(0);
-        setDirty(false);
-        undoManager.discardAllEdits();
+        programmaticUpdate = true; // Disable dirty marking
+        try {
+            textPane.setText(text);
+            textPane.setCaretPosition(0);
+            setDirty(false);
+            undoManager.discardAllEdits();
+        } finally {
+            programmaticUpdate = false; // Re-enable dirty marking
+        }
     }
     
     public String getText() {
@@ -957,7 +988,14 @@ public class EnhancedTextEditor extends JPanel {
         
         // Re-apply syntax highlighting to ensure proper font rendering
         if (syntaxHighlighter != null) {
-            SwingUtilities.invokeLater(() -> syntaxHighlighter.highlightSyntax());
+            SwingUtilities.invokeLater(() -> {
+                programmaticUpdate = true;
+                try {
+                    syntaxHighlighter.highlightSyntax();
+                } finally {
+                    programmaticUpdate = false;
+                }
+            });
         }
         
         // Repaint components
@@ -965,6 +1003,54 @@ public class EnhancedTextEditor extends JPanel {
         if (lineNumberPanel != null) {
             lineNumberPanel.repaint();
         }
+    }
+    
+    /**
+     * Sets the editor theme and applies the color scheme to syntax highlighting.
+     * @param themeName The name of the theme to apply
+     */
+    public void setEditorTheme(String themeName) {
+        this.currentEditorTheme = themeName;
+        
+        // Update syntax highlighter with new theme colors
+        if (syntaxHighlighter != null) {
+            syntaxHighlighter.setTheme(themeName);
+            programmaticUpdate = true;
+            try {
+                syntaxHighlighter.highlightSyntax();
+            } finally {
+                programmaticUpdate = false;
+            }
+        }
+        
+        // Update editor UI colors based on theme
+        Map<String, Color> themeColors = EditorTheme.getTheme(themeName);
+        
+        // Apply background color
+        Color backgroundColor = themeColors.get("background");
+        if (backgroundColor != null) {
+            textPane.setBackground(backgroundColor);
+            if (lineNumberPanel != null) {
+                lineNumberPanel.setBackground(backgroundColor);
+            }
+        }
+        
+        // Apply foreground color
+        Color foregroundColor = themeColors.get("foreground");
+        if (foregroundColor != null) {
+            textPane.setForeground(foregroundColor);
+        }
+        
+        // Refresh the display
+        repaint();
+    }
+    
+    /**
+     * Gets the current editor theme.
+     * @return The name of the current editor theme
+     */
+    public String getCurrentEditorTheme() {
+        return currentEditorTheme;
     }
     
     /**

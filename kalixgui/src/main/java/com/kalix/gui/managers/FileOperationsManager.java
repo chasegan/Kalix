@@ -23,6 +23,7 @@ public class FileOperationsManager {
     private final MapPanel mapPanel;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
+    private final Runnable fileChangedCallback;
     
     // Current file tracking for save functionality
     private File currentFile;
@@ -35,17 +36,20 @@ public class FileOperationsManager {
      * @param mapPanel The map panel component
      * @param statusUpdateCallback Callback for status updates
      * @param addRecentFileCallback Callback for adding recent files
+     * @param fileChangedCallback Callback when current file changes (load/new/save as)
      */
     public FileOperationsManager(Component parentComponent, 
                                EnhancedTextEditor textEditor,
                                MapPanel mapPanel,
                                Consumer<String> statusUpdateCallback,
-                               Consumer<String> addRecentFileCallback) {
+                               Consumer<String> addRecentFileCallback,
+                               Runnable fileChangedCallback) {
         this.parentComponent = parentComponent;
         this.textEditor = textEditor;
         this.mapPanel = mapPanel;
         this.statusUpdateCallback = statusUpdateCallback;
         this.addRecentFileCallback = addRecentFileCallback;
+        this.fileChangedCallback = fileChangedCallback;
     }
     
     /**
@@ -56,6 +60,7 @@ public class FileOperationsManager {
         mapPanel.clearModel();
         currentFile = null; // Clear current file path for new model
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
+        fileChangedCallback.run(); // Notify title bar of file change
     }
     
     /**
@@ -108,6 +113,9 @@ public class FileOperationsManager {
             
             // Clear the map panel
             mapPanel.clearModel();
+            
+            // Notify title bar of file change
+            fileChangedCallback.run();
             
         } catch (IOException e) {
             showFileOpenError(file, e);
@@ -178,6 +186,9 @@ public class FileOperationsManager {
                 
                 String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
                 statusUpdateCallback.accept(statusMessage);
+                
+                // Notify title bar of file change
+                fileChangedCallback.run();
                 
             } catch (IOException e) {
                 showFileSaveError(selectedFile, e);

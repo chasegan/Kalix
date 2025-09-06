@@ -250,6 +250,7 @@ public class SettingsDialog extends JDialog {
     private class EditorPanel extends SettingsPanel {
         private JComboBox<String> fontNameComboBox;
         private JComboBox<Integer> fontSizeComboBox;
+        private JComboBox<String> editorThemeComboBox;
         private JCheckBox lineWrapCheckBox;
         private JLabel previewLabel;
         
@@ -281,8 +282,17 @@ public class SettingsDialog extends JDialog {
             fontSizeComboBox.addActionListener(e -> updatePreview());
             add(fontSizeComboBox, gbc);
             
-            // Line wrap checkbox with aligned layout
+            // Editor theme selection
             gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            add(new JLabel("Editor Theme:"), gbc);
+            
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            editorThemeComboBox = new JComboBox<>(com.kalix.gui.editor.EditorTheme.getAvailableThemes());
+            editorThemeComboBox.addActionListener(e -> updatePreview());
+            add(editorThemeComboBox, gbc);
+            
+            // Line wrap checkbox with aligned layout
+            gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             add(new JLabel("Line Wrap:"), gbc);
             
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
@@ -290,7 +300,7 @@ public class SettingsDialog extends JDialog {
             add(lineWrapCheckBox, gbc);
             
             // Preview area
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
+            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             
             JPanel previewPanel = createPreviewPanel();
@@ -333,8 +343,14 @@ public class SettingsDialog extends JDialog {
             fontNameComboBox.setSelectedItem(fontName);
             fontSizeComboBox.setSelectedItem(fontSize);
             
-            // Load line wrap setting
-            lineWrapCheckBox.setSelected(textEditor.isLineWrap());
+            // Load editor theme setting
+            String editorTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
+            editorThemeComboBox.setSelectedItem(editorTheme);
+            
+            // Load line wrap setting from preferences
+            boolean savedLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
+            lineWrapCheckBox.setSelected(savedLineWrap);
+            textEditor.setLineWrap(savedLineWrap);
             
             updatePreview();
         }
@@ -359,9 +375,22 @@ public class SettingsDialog extends JDialog {
                 changed = true;
             }
             
+            // Apply editor theme setting
+            String selectedTheme = (String) editorThemeComboBox.getSelectedItem();
+            String currentTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
+            
+            if (!selectedTheme.equals(currentTheme)) {
+                prefs.put(AppConstants.PREF_EDITOR_THEME, selectedTheme);
+                textEditor.setEditorTheme(selectedTheme);
+                changed = true;
+            }
+            
             // Apply line wrap setting
             boolean selectedLineWrap = lineWrapCheckBox.isSelected();
-            if (selectedLineWrap != textEditor.isLineWrap()) {
+            boolean currentLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
+            
+            if (selectedLineWrap != currentLineWrap) {
+                prefs.putBoolean(AppConstants.PREF_LINE_WRAP, selectedLineWrap);
                 textEditor.setLineWrap(selectedLineWrap);
                 changed = true;
             }
