@@ -123,4 +123,21 @@ public final class AppConstants {
     public static final Insets DEFAULT_INSETS = new Insets(10, 10, 10, 10);
     public static final int STATUS_LABEL_BORDER_V = 5;
     public static final int STATUS_LABEL_BORDER_H = 10;
+    
+    // Toolbar properties
+    public static final int TOOLBAR_ICON_SIZE = 24;
+    public static final String TOOLBAR_NEW_TOOLTIP = "New Model (Ctrl+N)";
+    public static final String TOOLBAR_OPEN_TOOLTIP = "Open Model (Ctrl+O)";
+    public static final String TOOLBAR_SAVE_TOOLTIP = "Save Model (Ctrl+S)";
+    public static final String TOOLBAR_RUN_TOOLTIP = "Run Model (F5)";
+    public static final String TOOLBAR_SEARCH_TOOLTIP = "Search in Model (Ctrl+F)";
+    public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
+    
+    // Status messages for new actions
+    public static final String STATUS_MODEL_RUNNING = "Running model...";
+    public static final String STATUS_MODEL_RUN_COMPLETE = "Model run completed";
+    public static final String STATUS_MODEL_RUN_ERROR = "Model run failed";
+    public static final String STATUS_SEARCH_OPENED = "Search dialog opened";
+    public static final String STATUS_RUN_NOT_IMPLEMENTED = "Run model - Not yet implemented";
+    public static final String STATUS_SEARCH_NOT_IMPLEMENTED = "Search - Not yet implemented";
 }

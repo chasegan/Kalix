@@ -1,6 +1,7 @@
 package com.kalix.gui;
 
 import com.kalix.gui.builders.MenuBarBuilder;
+import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
@@ -155,6 +156,11 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void setupLayout() {
         setLayout(new BorderLayout());
+        
+        // Add toolbar at top
+        ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
+        JToolBar toolBar = toolBarBuilder.buildToolBar();
+        add(toolBar, BorderLayout.NORTH);
         
         // Create split pane with map panel on left, text editor on right
         JSplitPane splitPane = new JSplitPane(
@@ -325,6 +331,30 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public String switchTheme(String theme) {
         return themeManager.switchTheme(theme);
+    }
+    
+    @Override
+    public void runModel() {
+        // Placeholder implementation for running the model
+        updateStatus(AppConstants.STATUS_RUN_NOT_IMPLEMENTED);
+        // TODO: Implement actual model execution logic
+        // This could involve:
+        // 1. Validating the current model
+        // 2. Saving the model to a temporary file
+        // 3. Calling the Rust CLI with the model file
+        // 4. Displaying progress and results
+    }
+    
+    @Override
+    public void searchModel() {
+        // Placeholder implementation for search functionality
+        updateStatus(AppConstants.STATUS_SEARCH_NOT_IMPLEMENTED);
+        // TODO: Implement search dialog
+        // This could involve:
+        // 1. Creating a search dialog with find/replace functionality
+        // 2. Highlighting search results in the text editor
+        // 3. Navigation between search results
+        // 4. Regular expression support
     }
 
     /**

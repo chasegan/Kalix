@@ -17,7 +17,7 @@ public class MenuBarBuilder {
     private JMenu recentFilesMenu;
     
     /**
-     * Interface defining all callback methods needed for menu actions.
+     * Interface defining all callback methods needed for menu and toolbar actions.
      */
     public interface MenuBarCallbacks {
         void newModel();
@@ -39,6 +39,10 @@ public class MenuBarBuilder {
         void flowViz();
         void showAbout();
         void updateStatus(String message);
+        
+        // New toolbar-specific actions
+        void runModel();
+        void searchModel();
     }
     
     /**
