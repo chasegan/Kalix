@@ -12,6 +12,8 @@ use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::sacramento_node::SacramentoNode;
 use crate::nodes::storage_node::StorageNode;
 use crate::numerical::table::Table;
+use configparser::ini::Ini;
+
 
 #[derive(Default)]
 pub struct IniModelIO {
@@ -26,15 +28,20 @@ impl IniModelIO {
         }
     }
 
-    fn read_ini_file(&self, path: &str) -> Result<HashMap<String, HashMap<String, Option<String>>>, String> {
+    pub fn read_model_file(&self, path: &str) -> Result<Model, String> {
         // This is just a wrapper in case we want to change the lib we use for this.
-        let map = ini!(safe path);
-        map
+        let result_map = ini!(safe path);
+        Self::result_map_to_model(result_map)
     }
 
-    pub fn read_model(&self, path: &str) -> Result<Model, String> {
+    pub fn read_model_string(&self, ini_string: &str) -> Result<Model, String> {
+        let result_map = Ini::new().read(String::from(ini_string));
+        Self::result_map_to_model(result_map)
+    }
 
-        match self.read_ini_file(path) {
+    pub fn result_map_to_model(result_map: Result<HashMap<String, HashMap<String, Option<String>>>, String>) -> Result<Model, String> {
+        // TODO: do this match in the calling function, and just provide the Hashmap.
+        match result_map {
             Ok(map) => {
                 // The first thing we want to read is the ini format version.
                 // After that we will just loop through all the sections in the order they appear.
@@ -253,7 +260,7 @@ impl IniModelIO {
                 Ok(model)
             }
             Err(msg) => {
-                Err(format!("Could not read the file: '{}'. Details: {}", path, msg))
+                Err(format!("Failed: {}", msg))
             }
         }
     }

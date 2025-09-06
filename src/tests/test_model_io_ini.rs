@@ -8,7 +8,7 @@ fn test_model_1_io_ini_read() {
     //Read the model
     let model_filename = "./src/tests/example_models/1/first_model.ini";
     println!("model_file = {}", model_filename);
-    let mut m= match  ini_reader.read_model(model_filename) {
+    let mut m= match  ini_reader.read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
             println!("number of inputs = {}", v.inputs.len());
@@ -65,7 +65,7 @@ fn test_model_1_io_ini_read() {
 #[test]
 fn test_model_2_io_ini_read() {
     let ini_reader = IniModelIO::new();
-    let mut m = ini_reader.read_model("./src/tests/example_models/2/model.ini").unwrap();
+    let mut m = ini_reader.read_model_file("./src/tests/example_models/2/model.ini").unwrap();
     m.configure();
     m.run();
 
@@ -90,7 +90,7 @@ fn test_model_3_io_ini_read() {
     //Read the model
     let model_filename = "./src/tests/example_models/3/model_3.ini";
     println!("model_file = {}", model_filename);
-    let mut m= match  ini_reader.read_model(model_filename) {
+    let mut m= match  ini_reader.read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
             println!("number of inputs = {}", v.inputs.len());
@@ -143,7 +143,7 @@ fn test_model_3_minimal_version() {
 
     fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
         let ini_reader = IniModelIO::new();
-        let mut m = ini_reader.read_model(model_filename)?;
+        let mut m = ini_reader.read_model_file(model_filename)?;
         m.configure();
         m.run();
         m.write_outputs(output_filename)?;
