@@ -69,6 +69,11 @@ public class KalixGUI extends JFrame {
             updateWindowTitle(isDirty);
         });
         
+        // Set up file drop handler for text editor
+        textEditor.setFileDropHandler(file -> {
+            loadModelFile(file);
+        });
+        
         statusLabel = new JLabel("Ready");
         statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     }

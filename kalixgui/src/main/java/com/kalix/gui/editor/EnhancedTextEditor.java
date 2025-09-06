@@ -6,7 +6,11 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.*;
 import javax.swing.undo.UndoManager;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.*;
 import java.awt.event.*;
+import java.io.File;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +38,7 @@ public class EnhancedTextEditor extends JPanel {
     private boolean isDirty = false;
     private boolean showLineNumbers = true;
     private DirtyStateListener dirtyStateListener;
+    private FileDropHandler fileDropHandler;
     
     // Styling
     private static final Color CURRENT_LINE_COLOR = new Color(232, 242, 254);
@@ -59,6 +64,11 @@ public class EnhancedTextEditor extends JPanel {
         void onDirtyStateChanged(boolean isDirty);
     }
     
+    // Interface for handling file drops
+    public interface FileDropHandler {
+        void onFileDropped(File file);
+    }
+    
     public EnhancedTextEditor() {
         initializeComponents();
         setupLayout();
@@ -66,6 +76,7 @@ public class EnhancedTextEditor extends JPanel {
         setupKeyBindings();
         setupDocumentListener();
         setupSyntaxHighlighting();
+        setupDragAndDrop();
     }
     
     private void initializeComponents() {
@@ -923,5 +934,142 @@ public class EnhancedTextEditor extends JPanel {
         if (lineNumberPanel != null) {
             lineNumberPanel.repaint();
         }
+    }
+    
+    /**
+     * Sets the handler for file drop events.
+     * @param handler The handler to call when files are dropped
+     */
+    public void setFileDropHandler(FileDropHandler handler) {
+        this.fileDropHandler = handler;
+    }
+    
+    /**
+     * Sets up drag and drop functionality for the text editor.
+     */
+    private void setupDragAndDrop() {
+        // Create drop target for this panel
+        new DropTarget(this, new DropTargetListener() {
+            @Override
+            public void dragEnter(DropTargetDragEvent dtde) {
+                if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+            
+            @Override
+            public void dragOver(DropTargetDragEvent dtde) {
+                // Accept the drag
+            }
+            
+            @Override
+            public void dropActionChanged(DropTargetDragEvent dtde) {
+                // Handle action change if needed
+            }
+            
+            @Override
+            public void dragExit(DropTargetEvent dte) {
+                // Handle drag exit if needed
+            }
+            
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    
+                    Transferable transferable = dtde.getTransferable();
+                    if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                        @SuppressWarnings("unchecked")
+                        java.util.List<File> files = (java.util.List<File>) 
+                            transferable.getTransferData(DataFlavor.javaFileListFlavor);
+                        
+                        if (!files.isEmpty()) {
+                            File file = files.get(0); // Take the first file
+                            String fileName = file.getName().toLowerCase();
+                            
+                            // Only accept .ini and .toml files
+                            if (fileName.endsWith(".ini") || fileName.endsWith(".toml")) {
+                                if (fileDropHandler != null) {
+                                    fileDropHandler.onFileDropped(file);
+                                }
+                                dtde.dropComplete(true);
+                            } else {
+                                System.out.println("Rejected file: " + fileName + " (only .ini and .toml files are accepted)");
+                                dtde.dropComplete(false);
+                            }
+                        }
+                    } else {
+                        dtde.dropComplete(false);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error handling file drop: " + e.getMessage());
+                    dtde.dropComplete(false);
+                }
+            }
+        });
+        
+        // Also set up drop target on the text pane itself
+        new DropTarget(textPane, new DropTargetListener() {
+            @Override
+            public void dragEnter(DropTargetDragEvent dtde) {
+                if (dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+            
+            @Override
+            public void dragOver(DropTargetDragEvent dtde) {
+                // Accept the drag
+            }
+            
+            @Override
+            public void dropActionChanged(DropTargetDragEvent dtde) {
+                // Handle action change if needed
+            }
+            
+            @Override
+            public void dragExit(DropTargetEvent dte) {
+                // Handle drag exit if needed
+            }
+            
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    
+                    Transferable transferable = dtde.getTransferable();
+                    if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                        @SuppressWarnings("unchecked")
+                        java.util.List<File> files = (java.util.List<File>) 
+                            transferable.getTransferData(DataFlavor.javaFileListFlavor);
+                        
+                        if (!files.isEmpty()) {
+                            File file = files.get(0); // Take the first file
+                            String fileName = file.getName().toLowerCase();
+                            
+                            // Only accept .ini and .toml files
+                            if (fileName.endsWith(".ini") || fileName.endsWith(".toml")) {
+                                if (fileDropHandler != null) {
+                                    fileDropHandler.onFileDropped(file);
+                                }
+                                dtde.dropComplete(true);
+                            } else {
+                                System.out.println("Rejected file: " + fileName + " (only .ini and .toml files are accepted)");
+                                dtde.dropComplete(false);
+                            }
+                        }
+                    } else {
+                        dtde.dropComplete(false);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error handling file drop: " + e.getMessage());
+                    dtde.dropComplete(false);
+                }
+            }
+        });
     }
 }
