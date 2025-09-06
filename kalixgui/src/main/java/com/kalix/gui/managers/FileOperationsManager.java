@@ -24,6 +24,9 @@ public class FileOperationsManager {
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     
+    // Current file tracking for save functionality
+    private File currentFile;
+    
     /**
      * Creates a new FileOperationsManager instance.
      * 
@@ -51,6 +54,7 @@ public class FileOperationsManager {
     public void newModel() {
         textEditor.setText(AppConstants.NEW_MODEL_TEXT);
         mapPanel.clearModel();
+        currentFile = null; // Clear current file path for new model
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
     }
     
@@ -88,6 +92,9 @@ public class FileOperationsManager {
             // Set content in text editor
             textEditor.setText(content);
             
+            // Store the current file path for save functionality
+            currentFile = file;
+            
             // Determine file format
             String format = getFileFormat(file.getName());
             
@@ -108,17 +115,74 @@ public class FileOperationsManager {
     }
     
     /**
-     * Placeholder for save functionality.
+     * Saves the current model to the previously opened file.
+     * If no file is currently open, delegates to saveAsModel().
      */
     public void saveModel() {
-        statusUpdateCallback.accept(AppConstants.STATUS_SAVE_NOT_IMPLEMENTED);
+        if (currentFile == null) {
+            // No current file, prompt for save as
+            saveAsModel();
+            return;
+        }
+        
+        try {
+            String content = textEditor.getText();
+            Files.writeString(currentFile.toPath(), content);
+            
+            // Reset dirty state
+            textEditor.setDirty(false);
+            
+            String statusMessage = String.format("Saved model: %s", currentFile.getName());
+            statusUpdateCallback.accept(statusMessage);
+            
+        } catch (IOException e) {
+            showFileSaveError(currentFile, e);
+        }
     }
     
     /**
-     * Placeholder for save as functionality.
+     * Shows a save dialog and saves the model to the selected location.
      */
     public void saveAsModel() {
-        statusUpdateCallback.accept(AppConstants.STATUS_SAVE_AS_NOT_IMPLEMENTED);
+        JFileChooser fileChooser = createFileChooser();
+        fileChooser.setDialogTitle("Save Kalix Model");
+        
+        // Set default filename if there's a current file
+        if (currentFile != null) {
+            fileChooser.setSelectedFile(currentFile);
+        } else {
+            fileChooser.setSelectedFile(new File("model.ini"));
+        }
+        
+        int result = fileChooser.showSaveDialog(parentComponent);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            
+            // Add extension if not present
+            String fileName = selectedFile.getName();
+            if (!fileName.contains(".")) {
+                // Default to .ini extension
+                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
+            }
+            
+            try {
+                String content = textEditor.getText();
+                Files.writeString(selectedFile.toPath(), content);
+                
+                // Update current file and reset dirty state
+                currentFile = selectedFile;
+                textEditor.setDirty(false);
+                
+                // Add to recent files
+                addRecentFileCallback.accept(selectedFile.getAbsolutePath());
+                
+                String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
+                statusUpdateCallback.accept(statusMessage);
+                
+            } catch (IOException e) {
+                showFileSaveError(selectedFile, e);
+            }
+        }
     }
     
     /**
@@ -192,5 +256,39 @@ public class FileOperationsManager {
             JOptionPane.ERROR_MESSAGE
         );
         statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
+    }
+    
+    /**
+     * Shows an error dialog for file saving failures.
+     * 
+     * @param file The file that failed to save
+     * @param e The exception that occurred
+     */
+    private void showFileSaveError(File file, IOException e) {
+        JOptionPane.showMessageDialog(
+            parentComponent,
+            "Failed to save file: " + e.getMessage(),
+            "Save Error",
+            JOptionPane.ERROR_MESSAGE
+        );
+        statusUpdateCallback.accept("Failed to save: " + file.getName());
+    }
+    
+    /**
+     * Gets the currently loaded file, if any.
+     * 
+     * @return The current file or null if no file is loaded
+     */
+    public File getCurrentFile() {
+        return currentFile;
+    }
+    
+    /**
+     * Checks if there is a current file loaded for saving.
+     * 
+     * @return true if a file is currently loaded
+     */
+    public boolean hasCurrentFile() {
+        return currentFile != null;
     }
 }

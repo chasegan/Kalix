@@ -43,6 +43,10 @@ public class MenuBarBuilder {
         // New toolbar-specific actions
         void runModel();
         void searchModel();
+        void getCliVersion();
+        
+        // Settings dialog
+        void showSettings();
     }
     
     /**
@@ -129,6 +133,8 @@ public class MenuBarBuilder {
     private JMenu createEditorMenu() {
         JMenu editorMenu = new JMenu("Editor");
         
+        editorMenu.add(createMenuItem("Settings...", e -> callbacks.showSettings()));
+        editorMenu.addSeparator();
         editorMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
         editorMenu.addSeparator();
         

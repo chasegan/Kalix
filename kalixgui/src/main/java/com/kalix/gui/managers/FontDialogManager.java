@@ -177,6 +177,20 @@ public class FontDialogManager {
     }
     
     /**
+     * Applies a font to the text editor without showing the dialog.
+     * Used by the settings dialog to apply font changes.
+     * 
+     * @param fontName The font family name
+     * @param fontSize The font size
+     */
+    public void applyFont(String fontName, int fontSize) {
+        Font newFont = new Font(fontName, Font.PLAIN, fontSize);
+        textEditor.getTextPane().setFont(newFont);
+        textEditor.revalidate();
+        textEditor.repaint();
+    }
+    
+    /**
      * Helper class to hold dialog components.
      */
     private static class FontDialogComponents {

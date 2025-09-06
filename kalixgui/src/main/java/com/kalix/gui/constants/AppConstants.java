@@ -91,8 +91,6 @@ public final class AppConstants {
     public static final String STATUS_FLOWVIZ_OPENED = "FlowViz window opened";
     public static final String STATUS_SPLASH_DISPLAYED = "Splash screen displayed";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
-    public static final String STATUS_SAVE_NOT_IMPLEMENTED = "Save model - Not yet implemented";
-    public static final String STATUS_SAVE_AS_NOT_IMPLEMENTED = "Save as - Not yet implemented";
     public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini or .toml)";
     
     // Error messages
@@ -132,12 +130,12 @@ public final class AppConstants {
     public static final String TOOLBAR_RUN_TOOLTIP = "Run Model (F5)";
     public static final String TOOLBAR_SEARCH_TOOLTIP = "Search in Model (Ctrl+F)";
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
+    public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
     
     // Status messages for new actions
     public static final String STATUS_MODEL_RUNNING = "Running model...";
     public static final String STATUS_MODEL_RUN_COMPLETE = "Model run completed";
     public static final String STATUS_MODEL_RUN_ERROR = "Model run failed";
     public static final String STATUS_SEARCH_OPENED = "Search dialog opened";
-    public static final String STATUS_RUN_NOT_IMPLEMENTED = "Run model - Not yet implemented";
     public static final String STATUS_SEARCH_NOT_IMPLEMENTED = "Search - Not yet implemented";
 }

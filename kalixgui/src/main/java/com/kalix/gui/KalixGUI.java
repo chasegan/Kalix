@@ -3,6 +3,7 @@ package com.kalix.gui;
 import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.constants.AppConstants;
+import com.kalix.gui.dialogs.SettingsDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
 import com.kalix.gui.managers.*;
@@ -42,6 +43,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private FileOperationsManager fileOperations;
     private FontDialogManager fontDialogManager;
     private FileDropHandler fileDropHandler;
+    private ModelRunner modelRunner;
+    private VersionChecker versionChecker;
     
     // Application state
     private Preferences prefs;
@@ -132,6 +135,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         fontDialogManager = new FontDialogManager(this, textEditor, prefs);
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
+        modelRunner = new ModelRunner(this, this::updateStatus);
+        versionChecker = new VersionChecker(this::updateStatus);
         
         // Set up component listeners
         textEditor.setDirtyStateListener(this::updateWindowTitle);
@@ -329,20 +334,55 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
+    public void showSettings() {
+        SettingsDialog settingsDialog = new SettingsDialog(this, themeManager, fontDialogManager);
+        boolean settingsChanged = settingsDialog.showDialog();
+        
+        if (settingsChanged) {
+            updateStatus("Settings updated");
+        }
+    }
+    
+    @Override
     public String switchTheme(String theme) {
         return themeManager.switchTheme(theme);
     }
     
     @Override
     public void runModel() {
-        // Placeholder implementation for running the model
-        updateStatus(AppConstants.STATUS_RUN_NOT_IMPLEMENTED);
-        // TODO: Implement actual model execution logic
-        // This could involve:
-        // 1. Validating the current model
-        // 2. Saving the model to a temporary file
-        // 3. Calling the Rust CLI with the model file
-        // 4. Displaying progress and results
+        // Check if there's a current file loaded
+        if (!fileOperations.hasCurrentFile()) {
+            updateStatus("No model file is loaded. Please open a model file first.");
+            return;
+        }
+        
+        // Check if the file has unsaved changes
+        if (textEditor.isDirty()) {
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                "The model has unsaved changes. Save before running?",
+                "Unsaved Changes",
+                JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+            );
+            
+            if (result == JOptionPane.YES_OPTION) {
+                // Save the file first
+                fileOperations.saveModel();
+                // Check if save was successful (file might still be dirty if save failed)
+                if (textEditor.isDirty()) {
+                    updateStatus("Cannot run model: failed to save file");
+                    return;
+                }
+            } else if (result == JOptionPane.CANCEL_OPTION) {
+                // User cancelled
+                return;
+            }
+            // If NO_OPTION, proceed with the existing file on disk
+        }
+        
+        // Run the model simulation
+        modelRunner.runModelWithDialog(fileOperations.getCurrentFile());
     }
     
     @Override
@@ -355,6 +395,11 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // 2. Highlighting search results in the text editor
         // 3. Navigation between search results
         // 4. Regular expression support
+    }
+    
+    @Override
+    public void getCliVersion() {
+        versionChecker.checkVersionWithStatusUpdate();
     }
 
     /**

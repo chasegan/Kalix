@@ -83,6 +83,16 @@ public class ToolBarBuilder {
             e -> callbacks.flowViz()
         ));
         
+        toolBar.addSeparator();
+        
+        // CLI operations
+        toolBar.add(createToolBarButton(
+            "Version", 
+            AppConstants.TOOLBAR_VERSION_TOOLTIP,
+            FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.getCliVersion()
+        ));
+        
         return toolBar;
     }
     
