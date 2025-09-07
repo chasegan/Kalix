@@ -2,7 +2,23 @@ use clap::{CommandFactory, Parser, Subcommand};
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::perf::benchmarks;
 use kalix::misc::cli_helpers::describe_cli_api;
-use kalix::model::Model;
+use std::io::{self, Read, Write};
+use std::thread;
+use std::time::Duration;
+
+// KALIX_<TYPE>_<STATUS>[ : <additional_info>]
+//
+// Examples:
+// KALIX_SESSION_READY
+// KALIX_SESSION_READY: Model validation complete
+// KALIX_COMMAND_COMPLETE
+// KALIX_COMMAND_COMPLETE: Version check finished
+// KALIX_SESSION_ENDING
+// KALIX_SESSION_ENDING: User requested shutdown
+// KALIX_ERROR_FATAL: Out of memory
+// KALIX_ERROR_RECOVERABLE: Warning - using default parameters
+
+
 
 #[derive(Parser)]
 #[command(name = "kalixcli")]
@@ -20,6 +36,9 @@ enum Commands {
         //#[clap(subcommand)]
         #[arg(long)]
         sim_duration_seconds: Option<i32>,
+        //#[clap(subcommand)]
+        #[arg(long)]
+        new_session: Option<i32>,
     },
     /// Return API spec as JSON on STDOUT
     GetAPI,
@@ -47,13 +66,20 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Test { sim_duration_seconds } => {
+        Commands::Test { sim_duration_seconds, new_session } => {
+            if let Some(new_session) = new_session {
+                println!("KALIX_SESSION_READY");
+                //pause indefinitely
+                let duration = Duration::from_millis(5000);
+                let mut buffer=String::new();
+                while buffer.trim().is_empty() {
+                    io::stdin().read_to_string(&mut buffer).expect("TODO: panic message");
+                    println!("Input was: {}", &buffer);
+                }
+                println!("KALIX_SESSION_ENDING");
+            }
             match sim_duration_seconds {
                 Some(sim_duration) => {
-                    use std::io::{self, Write};
-                    use std::thread;
-                    use std::time::Duration;
-                    
                     let total_steps = 100; // 100 steps for 0% to 100%
                     let step_duration = Duration::from_millis((sim_duration * 1000 / total_steps) as u64);
                     
