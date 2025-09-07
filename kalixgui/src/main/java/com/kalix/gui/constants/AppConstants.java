@@ -72,6 +72,7 @@ public final class AppConstants {
     public static final String PREF_FONT_SIZE = "editor.font.size";
     public static final String PREF_LINE_WRAP = "editor.line.wrap";
     public static final String PREF_EDITOR_THEME = "editor.theme";
+    public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
     
     // Default values
     public static final String DEFAULT_FONT_NAME = "Consolas";

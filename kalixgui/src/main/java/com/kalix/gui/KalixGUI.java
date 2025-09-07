@@ -3,7 +3,7 @@ package com.kalix.gui;
 import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.constants.AppConstants;
-import com.kalix.gui.dialogs.SettingsDialog;
+import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
 import com.kalix.gui.managers.*;
@@ -39,6 +39,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private JLabel statusLabel;
+    private JSplitPane splitPane;
     
     // Manager classes for specialized functionality
     private ThemeManager themeManager;
@@ -87,6 +88,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         fontDialogManager.loadFontPreferences();
         loadLineWrapPreference();
         loadEditorThemePreference();
+        loadSplitPaneDividerPosition();
         
         setVisible(true);
     }
@@ -166,13 +168,18 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         add(toolBar, BorderLayout.NORTH);
         
         // Create split pane with map panel on left, text editor on right
-        JSplitPane splitPane = new JSplitPane(
+        splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             new JScrollPane(mapPanel),
             textEditor  // Enhanced text editor already includes scroll pane
         );
         splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
         splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
+        
+        // Add property change listener to save divider position when it changes
+        splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+            saveSplitPaneDividerPosition();
+        });
         
         add(splitPane, BorderLayout.CENTER);
         
@@ -248,6 +255,28 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void loadEditorThemePreference() {
         String savedTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
         textEditor.setEditorTheme(savedTheme);
+    }
+    
+    /**
+     * Loads the saved split pane divider position and applies it to the split pane.
+     * Uses the default location if no saved preference exists.
+     */
+    private void loadSplitPaneDividerPosition() {
+        int savedPosition = prefs.getInt(AppConstants.PREF_SPLIT_PANE_DIVIDER, AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
+        // Set the position after the window is visible to ensure proper calculation
+        SwingUtilities.invokeLater(() -> {
+            splitPane.setDividerLocation(savedPosition);
+        });
+    }
+    
+    /**
+     * Saves the current split pane divider position to preferences.
+     */
+    private void saveSplitPaneDividerPosition() {
+        if (splitPane != null) {
+            int currentPosition = splitPane.getDividerLocation();
+            prefs.putInt(AppConstants.PREF_SPLIT_PANE_DIVIDER, currentPosition);
+        }
     }
 
     //
@@ -361,12 +390,12 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
-    public void showSettings() {
-        SettingsDialog settingsDialog = new SettingsDialog(this, themeManager, fontDialogManager, textEditor);
-        boolean settingsChanged = settingsDialog.showDialog();
+    public void showPreferences() {
+        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, fontDialogManager, textEditor);
+        boolean preferencesChanged = preferencesDialog.showDialog();
         
-        if (settingsChanged) {
-            updateStatus("Settings updated");
+        if (preferencesChanged) {
+            updateStatus("Preferences updated");
         }
     }
     

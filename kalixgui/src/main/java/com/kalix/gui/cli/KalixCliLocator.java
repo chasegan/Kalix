@@ -97,7 +97,7 @@ public class KalixCliLocator {
      */
     public static Optional<CliLocation> findKalixCliWithPreferences() {
         try {
-            Preferences prefs = Preferences.userNodeForPackage(com.kalix.gui.dialogs.SettingsDialog.class);
+            Preferences prefs = Preferences.userNodeForPackage(com.kalix.gui.dialogs.PreferencesDialog.class);
             String configuredPath = prefs.get("kalixcli.binary.path", "");
             return findKalixCli(configuredPath);
         } catch (Exception e) {

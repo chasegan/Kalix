@@ -45,8 +45,8 @@ public class MenuBarBuilder {
         void searchModel();
         void getCliVersion();
         
-        // Settings dialog
-        void showSettings();
+        // Preferences dialog
+        void showPreferences();
     }
     
     /**
@@ -99,14 +99,14 @@ public class MenuBarBuilder {
         fileMenu.addSeparator();
         
         // Recent files submenu (initialized but will be populated externally)
-        recentFilesMenu = new JMenu("Recent Files");
+        recentFilesMenu = new JMenu("Recent");
         fileMenu.add(recentFilesMenu);
         
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Settings...", e -> callbacks.showSettings()));
+        fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
         

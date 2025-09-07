@@ -12,10 +12,10 @@ import java.awt.event.ActionListener;
 import java.util.prefs.Preferences;
 
 /**
- * Settings dialog with tabbed interface for application configuration.
- * Provides centralized access to appearance settings and CLI configuration.
+ * Preferences dialog with tabbed interface for application configuration.
+ * Provides centralized access to appearance preferences and CLI configuration.
  */
-public class SettingsDialog extends JDialog {
+public class PreferencesDialog extends JDialog {
     
     private final JFrame parent;
     private final Preferences prefs;
@@ -32,12 +32,12 @@ public class SettingsDialog extends JDialog {
     private boolean settingsChanged = false;
     
     /**
-     * Creates a new SettingsDialog.
+     * Creates a new PreferencesDialog.
      */
-    public SettingsDialog(JFrame parent, ThemeManager themeManager, FontDialogManager fontDialogManager, EnhancedTextEditor textEditor) {
-        super(parent, "Settings", true);
+    public PreferencesDialog(JFrame parent, ThemeManager themeManager, FontDialogManager fontDialogManager, EnhancedTextEditor textEditor) {
+        super(parent, "Preferences", true);
         this.parent = parent;
-        this.prefs = Preferences.userNodeForPackage(SettingsDialog.class);
+        this.prefs = Preferences.userNodeForPackage(PreferencesDialog.class);
         this.themeManager = themeManager;
         this.fontDialogManager = fontDialogManager;
         this.textEditor = textEditor;
@@ -188,7 +188,7 @@ public class SettingsDialog extends JDialog {
     /**
      * Base class for settings panels.
      */
-    private abstract class SettingsPanel extends JPanel {
+    private abstract class PreferencesPanel extends JPanel {
         public abstract void loadSettings();
         public abstract boolean applySettings();
     }
@@ -196,7 +196,7 @@ public class SettingsDialog extends JDialog {
     /**
      * Panel for theme settings.
      */
-    private class ThemePanel extends SettingsPanel {
+    private class ThemePanel extends PreferencesPanel {
         private JComboBox<String> themeComboBox;
         
         public ThemePanel() {
@@ -247,7 +247,7 @@ public class SettingsDialog extends JDialog {
     /**
      * Panel for editor settings (font, line wrap).
      */
-    private class EditorPanel extends SettingsPanel {
+    private class EditorPanel extends PreferencesPanel {
         private JComboBox<String> fontNameComboBox;
         private JComboBox<Integer> fontSizeComboBox;
         private JComboBox<String> editorThemeComboBox;
@@ -402,7 +402,7 @@ public class SettingsDialog extends JDialog {
     /**
      * Panel for KalixCLI settings.
      */
-    private class KalixCliPanel extends SettingsPanel {
+    private class KalixCliPanel extends PreferencesPanel {
         private JTextField binaryPathField;
         private JButton browseButton;
         private JButton testButton;
