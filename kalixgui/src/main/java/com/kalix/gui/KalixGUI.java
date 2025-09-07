@@ -2,6 +2,10 @@ package com.kalix.gui;
 
 import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
+import com.kalix.gui.cli.InteractiveKalixProcess;
+import com.kalix.gui.cli.ProcessExecutor;
+import com.kalix.gui.cli.KalixCliLocator;
+import com.kalix.gui.components.StatusProgressBar;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
@@ -13,7 +17,13 @@ import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.prefs.Preferences;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Main GUI class for the Kalix Hydrologic Modeling application.
@@ -39,6 +49,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private JLabel statusLabel;
+    private StatusProgressBar progressBar;
     private JSplitPane splitPane;
     
     // Manager classes for specialized functionality
@@ -50,6 +61,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private ModelRunner modelRunner;
     private VersionChecker versionChecker;
     private TitleBarManager titleBarManager;
+    private ProcessExecutor processExecutor;
     
     // Application state
     private Preferences prefs;
@@ -113,6 +125,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Title bar manager
         titleBarManager = new TitleBarManager(this);
         
+        // Process executor for CLI operations
+        processExecutor = new ProcessExecutor();
+        
         // File operations manager (initialized after components)
         
         // Recent files manager
@@ -137,6 +152,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H,
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H
         ));
+        
+        progressBar = new StatusProgressBar();
         
         // Complete manager initialization now that components exist
         fileOperations = new FileOperationsManager(
@@ -186,6 +203,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Add status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusPanel.add(statusLabel, BorderLayout.WEST);
+        statusPanel.add(progressBar, BorderLayout.EAST);
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         add(statusPanel, BorderLayout.SOUTH);
     }
@@ -456,6 +474,168 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void getCliVersion() {
         versionChecker.checkVersionWithStatusUpdate();
+    }
+    
+    @Override
+    public void runTestSimulation() {
+        runTestSimulationAsync();
+    }
+    
+    /**
+     * Runs a test simulation using kalixcli with progress monitoring.
+     * This demonstrates the interactive CLI integration with real-time progress updates.
+     */
+    private void runTestSimulationAsync() {
+        // Pattern to match progress output: "Progress: 45%"
+        Pattern progressPattern = Pattern.compile("Progress:\\s*(\\d+(?:\\.\\d+)?)%");
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Locate kalixcli
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCli();
+                
+                if (!cliLocation.isPresent()) {
+                    SwingUtilities.invokeLater(() -> {
+                        updateStatus("Error: kalixcli not found");
+                        JOptionPane.showMessageDialog(this,
+                            "kalixcli executable not found. Please ensure it's installed and in your PATH.",
+                            "CLI Not Found", JOptionPane.ERROR_MESSAGE);
+                    });
+                    return;
+                }
+                
+                // Update UI to show simulation starting
+                SwingUtilities.invokeLater(() -> {
+                    updateStatus("Starting test simulation...");
+                    progressBar.showProgress(0.0, "0%");
+                });
+                
+                // Start interactive process
+                InteractiveKalixProcess process = InteractiveKalixProcess.start(
+                    cliLocation.get().getPath(), processExecutor, "test", "--sim-duration-seconds=8");
+                
+                try {
+                    // Monitor output for progress updates
+                    String line;
+                    boolean completed = false;
+                    
+                    while (process.isRunning() && !completed) {
+                        Optional<String> outputLine = process.readOutputLine();
+                        if (outputLine.isPresent()) {
+                            line = outputLine.get();
+                            System.out.println("CLI Output: " + line); // Debug output
+                            
+                            // Check if this is a progress line
+                            Matcher matcher = progressPattern.matcher(line);
+                            if (matcher.find()) {
+                                double percentage = Double.parseDouble(matcher.group(1));
+                                
+                                SwingUtilities.invokeLater(() -> {
+                                    progressBar.setProgressPercentage(percentage);
+                                    progressBar.setProgressText(String.format("%.0f%%", percentage));
+                                    updateStatus("Test simulation: " + String.format("%.0f%%", percentage));
+                                });
+                            }
+                            
+                            // Check for completion message (separate check, not else-if)
+                            if (line.contains("Simulation completed!")) {
+                                completed = true;
+                                SwingUtilities.invokeLater(() -> {
+                                    progressBar.setProgressPercentage(100);
+                                    progressBar.setProgressText("Complete");
+                                    updateStatus("Test simulation completed successfully!");
+                                });
+                                
+                                // Hide progress bar after a short delay
+                                Timer hideTimer = new Timer(2000, e -> {
+                                    progressBar.hideProgress();
+                                    updateStatus(AppConstants.STATUS_READY);
+                                });
+                                hideTimer.setRepeats(false);
+                                SwingUtilities.invokeLater(hideTimer::start);
+                                
+                                break;
+                            }
+                        } else if (!process.isRunning()) {
+                            // Process ended but no completion message - check if we need to force completion
+                            SwingUtilities.invokeLater(() -> {
+                                if (progressBar.isProgressVisible()) {
+                                    progressBar.setProgressPercentage(100);
+                                    progressBar.setProgressText("Complete");
+                                    updateStatus("Test simulation completed!");
+                                    
+                                    Timer hideTimer = new Timer(2000, e -> {
+                                        progressBar.hideProgress();
+                                        updateStatus(AppConstants.STATUS_READY);
+                                    });
+                                    hideTimer.setRepeats(false);
+                                    hideTimer.start();
+                                }
+                            });
+                            break;
+                        }
+                        
+                        // Small delay to avoid busy waiting
+                        Thread.sleep(50);
+                    }
+                    
+                    // Final check - read any remaining output after process ends
+                    if (!completed) {
+                        while (true) {
+                            Optional<String> outputLine = process.readOutputLine();
+                            if (outputLine.isPresent()) {
+                                line = outputLine.get();
+                                System.out.println("Final CLI Output: " + line);
+                                
+                                if (line.contains("Simulation completed!")) {
+                                    SwingUtilities.invokeLater(() -> {
+                                        progressBar.setProgressPercentage(100);
+                                        progressBar.setProgressText("Complete");
+                                        updateStatus("Test simulation completed successfully!");
+                                        
+                                        Timer hideTimer = new Timer(2000, e -> {
+                                            progressBar.hideProgress();
+                                            updateStatus(AppConstants.STATUS_READY);
+                                        });
+                                        hideTimer.setRepeats(false);
+                                        hideTimer.start();
+                                    });
+                                    break;
+                                }
+                            } else {
+                                break; // No more output
+                            }
+                        }
+                    }
+                    
+                } finally {
+                    process.close();
+                }
+                
+            } catch (IOException e) {
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.hideProgress();
+                    updateStatus("Error: Failed to start test simulation");
+                    JOptionPane.showMessageDialog(this,
+                        "Failed to start test simulation: " + e.getMessage(),
+                        "Simulation Error", JOptionPane.ERROR_MESSAGE);
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.hideProgress();
+                    updateStatus("Test simulation interrupted");
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.hideProgress();
+                    updateStatus("Error: Test simulation failed");
+                    JOptionPane.showMessageDialog(this,
+                        "Test simulation failed: " + e.getMessage(),
+                        "Simulation Error", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        });
     }
 
     /**

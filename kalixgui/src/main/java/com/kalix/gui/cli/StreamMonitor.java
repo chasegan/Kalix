@@ -20,11 +20,17 @@ public class StreamMonitor {
     private final Consumer<String> lineCallback;
     private final Consumer<String> progressCallback;
     
-    // Common progress patterns that CLI tools often use
-    private static final Pattern PROGRESS_PERCENTAGE = Pattern.compile("(\\d+)%");
-    private static final Pattern PROGRESS_FRACTION = Pattern.compile("(\\d+)/(\\d+)");
-    private static final Pattern PROGRESS_STEP = Pattern.compile("Step (\\d+) of (\\d+)");
-    private static final Pattern PROGRESS_WORDS = Pattern.compile("(?i)(processing|analyzing|building|running|completed|finished|done)");
+    // Enhanced progress patterns for kalixcli and similar tools
+    private static final Pattern PROGRESS_PERCENTAGE = Pattern.compile("(?i)(?:progress:?\\s*)?(\\d+(?:\\.\\d+)?)%");
+    private static final Pattern PROGRESS_FRACTION = Pattern.compile("(?i)(?:progress:?\\s*)?(\\d+)/(\\d+)");
+    private static final Pattern PROGRESS_STEP = Pattern.compile("(?i)step\\s+(\\d+)\\s+(?:of|/)\\s+(\\d+)");
+    private static final Pattern PROGRESS_WORDS = Pattern.compile("(?i)(processing|analyzing|building|running|completed|finished|done|executing|simulating|calibrating|optimizing)");
+    
+    // Kalixcli-specific patterns
+    private static final Pattern KALIX_PROGRESS = Pattern.compile("(?i)(?:simulation|calibration|optimization)\\s+progress:?\\s*(\\d+(?:\\.\\d+)?)%");
+    private static final Pattern KALIX_ITERATION = Pattern.compile("(?i)iteration\\s+(\\d+)(?:\\s+of\\s+(\\d+))?(?:.*?(\\d+(?:\\.\\d+)?)%)?");
+    private static final Pattern KALIX_TIME_STEP = Pattern.compile("(?i)time\\s+step\\s+(\\d+)(?:\\s+of\\s+(\\d+))?");
+    private static final Pattern KALIX_PHASE = Pattern.compile("(?i)(initialization|simulation|calibration|optimization|post-processing)\\s*(?:phase)?\\s*(?::|-)\\s*(\\d+(?:\\.\\d+)?)%");
     
     /**
      * Creates a new StreamMonitor.
@@ -92,6 +98,7 @@ public class StreamMonitor {
     
     /**
      * Parses a line for progress information.
+     * Enhanced with kalixcli-specific patterns.
      * 
      * @param line the line to parse
      * @return progress information string, or null if no progress found
@@ -102,6 +109,61 @@ public class StreamMonitor {
         }
         
         String trimmedLine = line.trim();
+        
+        // Check kalixcli-specific patterns first (most specific)
+        
+        // Kalixcli progress with phase (e.g., "Simulation progress: 45%")
+        Matcher kalixMatcher = KALIX_PROGRESS.matcher(trimmedLine);
+        if (kalixMatcher.find()) {
+            String percentage = kalixMatcher.group(1);
+            return "Progress: " + percentage + "%";
+        }
+        
+        // Kalixcli phase progress (e.g., "Initialization: 25%", "Simulation phase - 67%")
+        Matcher phaseMatcher = KALIX_PHASE.matcher(trimmedLine);
+        if (phaseMatcher.find()) {
+            String phase = capitalizeFirst(phaseMatcher.group(1));
+            String percentage = phaseMatcher.group(2);
+            return phase + ": " + percentage + "%";
+        }
+        
+        // Kalixcli iteration with optional percentage (e.g., "Iteration 5 of 20 - 45%")
+        Matcher iterMatcher = KALIX_ITERATION.matcher(trimmedLine);
+        if (iterMatcher.find()) {
+            int current = Integer.parseInt(iterMatcher.group(1));
+            String totalStr = iterMatcher.group(2);
+            String percentageStr = iterMatcher.group(3);
+            
+            if (totalStr != null) {
+                int total = Integer.parseInt(totalStr);
+                int calculatedPercentage = (int) ((current * 100.0) / total);
+                
+                if (percentageStr != null) {
+                    return "Iteration " + current + "/" + total + " (" + percentageStr + "%)";
+                } else {
+                    return "Iteration " + current + "/" + total + " (" + calculatedPercentage + "%)";
+                }
+            } else {
+                return "Iteration " + current + (percentageStr != null ? " (" + percentageStr + "%)" : "");
+            }
+        }
+        
+        // Kalixcli time step (e.g., "Time step 150 of 1000")
+        Matcher timeStepMatcher = KALIX_TIME_STEP.matcher(trimmedLine);
+        if (timeStepMatcher.find()) {
+            int current = Integer.parseInt(timeStepMatcher.group(1));
+            String totalStr = timeStepMatcher.group(2);
+            
+            if (totalStr != null) {
+                int total = Integer.parseInt(totalStr);
+                int percentage = (int) ((current * 100.0) / total);
+                return "Time step " + current + "/" + total + " (" + percentage + "%)";
+            } else {
+                return "Time step " + current;
+            }
+        }
+        
+        // Generic patterns (less specific)
         
         // Look for percentage (e.g., "50%", "Progress: 75%")
         Matcher percentageMatcher = PROGRESS_PERCENTAGE.matcher(trimmedLine);
@@ -149,12 +211,18 @@ public class StreamMonitor {
     private boolean containsProgressKeywords(String line) {
         String lowerLine = line.toLowerCase();
         
-        // Common progress-related keywords
+        // Common progress-related keywords including kalixcli-specific terms
         String[] keywords = {
             "loading", "initializing", "starting", "executing", "running",
             "processing", "analyzing", "building", "compiling", "generating",
             "writing", "reading", "parsing", "validating", "computing",
-            "calculating", "optimizing", "finishing", "completing", "done"
+            "calculating", "optimizing", "finishing", "completing", "done",
+            
+            // Kalixcli-specific terms
+            "simulating", "simulation", "calibrating", "calibration",
+            "optimization", "iteration", "time step", "convergence",
+            "solving", "model", "parameter", "objective", "constraint",
+            "initialization", "post-processing", "results", "output"
         };
         
         for (String keyword : keywords) {

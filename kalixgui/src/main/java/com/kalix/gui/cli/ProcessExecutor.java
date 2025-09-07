@@ -1,12 +1,18 @@
 package com.kalix.gui.cli;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -129,15 +135,38 @@ public class ProcessExecutor {
     
     /**
      * Represents a running process that can be monitored and cancelled.
+     * Enhanced with interactive communication capabilities.
      */
     public static class RunningProcess {
         private final Process process;
         private final CompletableFuture<ProcessResult> future;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final BufferedWriter stdinWriter;
+        private final BufferedReader stdoutReader;
+        private final BufferedReader stderrReader;
+        private final boolean interactive;
         
         RunningProcess(Process process, CompletableFuture<ProcessResult> future) {
+            this(process, future, false);
+        }
+        
+        RunningProcess(Process process, CompletableFuture<ProcessResult> future, boolean interactive) {
             this.process = process;
             this.future = future;
+            this.interactive = interactive;
+            
+            if (interactive) {
+                this.stdinWriter = new BufferedWriter(
+                    new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
+                this.stdoutReader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                this.stderrReader = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8));
+            } else {
+                this.stdinWriter = null;
+                this.stdoutReader = null;
+                this.stderrReader = null;
+            }
         }
         
         /**
@@ -148,6 +177,24 @@ public class ProcessExecutor {
          */
         public boolean cancel(boolean forceKill) {
             if (cancelled.compareAndSet(false, true)) {
+                // Close interactive streams first if in interactive mode
+                if (interactive) {
+                    try {
+                        if (stdinWriter != null) {
+                            stdinWriter.close();
+                        }
+                        if (stdoutReader != null) {
+                            stdoutReader.close();
+                        }
+                        if (stderrReader != null) {
+                            stderrReader.close();
+                        }
+                    } catch (IOException e) {
+                        // Log but don't fail cancellation
+                        System.err.println("Warning: Failed to close interactive streams: " + e.getMessage());
+                    }
+                }
+                
                 if (process.isAlive()) {
                     if (forceKill) {
                         process.destroyForcibly();
@@ -187,6 +234,129 @@ public class ProcessExecutor {
          */
         public ProcessResult waitFor(long timeout, TimeUnit unit) throws Exception {
             return future.get(timeout, unit);
+        }
+        
+        /**
+         * Sends input to the process via STDIN (interactive mode only).
+         * 
+         * @param input the input to send
+         * @throws IOException if the process is not interactive or writing fails
+         */
+        public void sendInput(String input) throws IOException {
+            if (!interactive || stdinWriter == null) {
+                throw new IOException("Process is not in interactive mode");
+            }
+            
+            stdinWriter.write(input);
+            if (!input.endsWith("\n")) {
+                stdinWriter.newLine();
+            }
+            stdinWriter.flush();
+        }
+        
+        /**
+         * Sends multiple lines of input to the process (interactive mode only).
+         * 
+         * @param lines the lines to send
+         * @throws IOException if the process is not interactive or writing fails
+         */
+        public void sendLines(List<String> lines) throws IOException {
+            if (!interactive || stdinWriter == null) {
+                throw new IOException("Process is not in interactive mode");
+            }
+            
+            for (String line : lines) {
+                stdinWriter.write(line);
+                stdinWriter.newLine();
+            }
+            stdinWriter.flush();
+        }
+        
+        /**
+         * Reads a single line from STDOUT (interactive mode only).
+         * This is a blocking operation.
+         * 
+         * @return the line read, or null if stream is closed
+         * @throws IOException if the process is not interactive or reading fails
+         */
+        public String readOutputLine() throws IOException {
+            if (!interactive || stdoutReader == null) {
+                throw new IOException("Process is not in interactive mode");
+            }
+            
+            return stdoutReader.readLine();
+        }
+        
+        /**
+         * Reads a single line from STDERR (interactive mode only).
+         * This is a blocking operation.
+         * 
+         * @return the line read, or null if stream is closed
+         * @throws IOException if the process is not interactive or reading fails
+         */
+        public String readErrorLine() throws IOException {
+            if (!interactive || stderrReader == null) {
+                throw new IOException("Process is not in interactive mode");
+            }
+            
+            return stderrReader.readLine();
+        }
+        
+        /**
+         * Checks if STDOUT has data ready to read without blocking (interactive mode only).
+         * 
+         * @return true if data is available
+         * @throws IOException if the process is not interactive or checking fails
+         */
+        public boolean isOutputReady() throws IOException {
+            if (!interactive || stdoutReader == null) {
+                return false;
+            }
+            
+            return stdoutReader.ready();
+        }
+        
+        /**
+         * Checks if STDERR has data ready to read without blocking (interactive mode only).
+         * 
+         * @return true if data is available
+         * @throws IOException if the process is not interactive or checking fails
+         */
+        public boolean isErrorReady() throws IOException {
+            if (!interactive || stderrReader == null) {
+                return false;
+            }
+            
+            return stderrReader.ready();
+        }
+        
+        /**
+         * Closes the STDIN writer, signaling end of input to the process.
+         * 
+         * @throws IOException if closing fails
+         */
+        public void closeStdin() throws IOException {
+            if (interactive && stdinWriter != null) {
+                stdinWriter.close();
+            }
+        }
+        
+        /**
+         * Checks if this process is in interactive mode.
+         * 
+         * @return true if interactive communication is available
+         */
+        public boolean isInteractive() {
+            return interactive;
+        }
+        
+        /**
+         * Gets the underlying Process object for advanced operations.
+         * 
+         * @return the Process object
+         */
+        public Process getProcess() {
+            return process;
         }
     }
     
@@ -298,6 +468,80 @@ public class ProcessExecutor {
     public ProcessResult execute(String command, String... args) throws Exception {
         List<String> argList = args != null ? List.of(args) : List.of();
         return execute(command, argList, new ProcessConfig());
+    }
+    
+    /**
+     * Starts an interactive process that allows bidirectional communication.
+     * The process will not automatically terminate and streams will not be monitored
+     * by StreamMonitor - use the RunningProcess methods for communication.
+     * 
+     * @param command the command to execute
+     * @param args command arguments
+     * @param config process configuration (callbacks will be ignored in interactive mode)
+     * @return a RunningProcess in interactive mode
+     * @throws IOException if the process cannot be started
+     */
+    public RunningProcess startInteractive(String command, List<String> args, ProcessConfig config) throws IOException {
+        if (shutdown.get()) {
+            throw new IllegalStateException("ProcessExecutor has been shut down");
+        }
+        
+        // Build command list
+        List<String> commandList = new ArrayList<>();
+        commandList.add(command);
+        if (args != null) {
+            commandList.addAll(args);
+        }
+        
+        // Create ProcessBuilder
+        ProcessBuilder builder = new ProcessBuilder(commandList);
+        
+        // Set working directory
+        if (config.getWorkingDirectory() != null) {
+            builder.directory(config.getWorkingDirectory().toFile());
+        }
+        
+        // Set environment variables
+        if (config.getEnvironmentVariables() != null) {
+            builder.environment().putAll(config.getEnvironmentVariables());
+        }
+        
+        // Don't redirect streams - we need access to them
+        builder.redirectErrorStream(false);
+        
+        // Start the process
+        Process process = builder.start();
+        
+        // Create a future that completes only when the process terminates
+        // (not when streams are exhausted like in normal execution)
+        CompletableFuture<ProcessResult> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                // Wait for process to complete (no timeout in interactive mode)
+                int exitCode = process.waitFor();
+                
+                // In interactive mode, we don't collect stream output automatically
+                // The caller should use the interactive methods to communicate
+                return new ProcessResult(exitCode, "", "");
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                process.destroyForcibly();
+                return new ProcessResult(true); // Cancelled
+            } catch (Exception e) {
+                process.destroyForcibly();
+                return new ProcessResult(e);
+            }
+        }, executorService);
+        
+        return new RunningProcess(process, future, true); // true = interactive mode
+    }
+    
+    /**
+     * Convenience method to start an interactive process.
+     */
+    public RunningProcess startInteractive(String command, String... args) throws IOException {
+        List<String> argList = args != null ? List.of(args) : List.of();
+        return startInteractive(command, argList, new ProcessConfig());
     }
     
     /**

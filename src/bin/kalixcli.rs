@@ -16,16 +16,18 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run performance tests
-    Test,
+    Test {
+        //#[clap(subcommand)]
+        #[arg(long)]
+        sim_duration_seconds: Option<i32>,
+    },
     /// Return API spec as JSON on STDOUT
     GetAPI,
     /// Run a simulation
     Sim {
-        /// Path to the model file
+        /// Path to the model file. If this argument is not used, Kalix will
+        /// ask for the model via STDIO.
         model_file: Option<String>,
-        /// Raw JSON string argument
-        #[arg(long)]
-        raw_json: Option<String>,
         /// Path to the output file
         #[arg(long)]
         output_file: Option<String>,
@@ -45,34 +47,72 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Test => {
-            println!("Running performance tests...");
-            benchmarks::bench1();
-            println!("Performance tests completed!");
+        Commands::Test { sim_duration_seconds } => {
+            match sim_duration_seconds {
+                Some(sim_duration) => {
+                    use std::io::{self, Write};
+                    use std::thread;
+                    use std::time::Duration;
+                    
+                    let total_steps = 100; // 100 steps for 0% to 100%
+                    let step_duration = Duration::from_millis((sim_duration * 1000 / total_steps) as u64);
+                    
+                    println!("Running simulation for {} seconds...", sim_duration);
+                    
+                    for i in 0..=total_steps {
+                        print!("\rProgress: {}%", i);
+                        io::stdout().flush().unwrap(); // Force output to appear immediately
+                        
+                        if i < total_steps {
+                            thread::sleep(step_duration);
+                        }
+                    }
+                    
+                    println!(); // New line after completion
+                    println!("Simulation completed!");
+                    thread::sleep(step_duration);
+                },
+                None => {
+                    println!("Running performance tests...");
+                    benchmarks::bench1();
+                    println!("Performance tests completed!");
+                }
+            }
         }
-        Commands::Sim { model_file,
-            raw_json,
-            output_file } => {
-
-            let mut m = match raw_json {
-                Some(raw_json) => {
-                    println!("json:{}", raw_json);
-                    let model = IniModelIO::new().read_model_string(raw_json.as_str()).unwrap(); //TODO: handle error
-                    model
+        Commands::Sim { model_file, output_file } => {
+            // Read model either from a file (if provided) or from STDIN
+            let mut m = match model_file {
+                Some(filename) => {
+                    println!("Loading model file: {}", filename);
+                    match IniModelIO::new().read_model_file(filename.as_str()) {
+                        Ok(model) => model,
+                        Err(s) => {
+                            panic!("Error: {}", s); // TODO: handle error properly
+                        }
+                    }
                 }
                 None => {
-                    let model_filename = model_file.as_deref().unwrap(); //TODO: handle error
-                    let model = IniModelIO::new().read_model_file(model_filename).unwrap(); //TODO: handle error
-                    model
+                    println!("Waiting for model...");
+                    use std::io::{self, Read};
+                    let mut buffer = String::new();
+                    io::stdin().read_to_string(&mut buffer).expect("Failed to read from STDIN");
+                    println!("Reading model from STDIN ({} bytes)...", buffer.len());
+                    match IniModelIO::new().read_model_string(buffer.as_str()) {
+                        Ok(model) => model,
+                        Err(s) => {
+                            panic!("Error: {}", s); // TODO: handle error properly
+                        }
+                    }
                 }
             };
+
             println!("Running simulation...");
             m.configure();
             m.run();
 
             match output_file {
                 Some(f) => {
-                    m.write_outputs(f.as_str());  //TODO: handle error
+                    m.write_outputs(f.as_str()); // TODO: handle error
                 }
                 None => {
                     println!("No output filename specified!");

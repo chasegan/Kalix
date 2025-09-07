@@ -44,6 +44,7 @@ public class MenuBarBuilder {
         void runModel();
         void searchModel();
         void getCliVersion();
+        void runTestSimulation();
         
         // Preferences dialog
         void showPreferences();
@@ -71,8 +72,8 @@ public class MenuBarBuilder {
         
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
-        menuBar.add(createEditorMenu());
         menuBar.add(createViewMenu(currentTheme));
+        menuBar.add(createToolsMenu());
         menuBar.add(createGraphMenu());
         menuBar.add(createHelpMenu());
         
@@ -129,23 +130,6 @@ public class MenuBarBuilder {
         return editMenu;
     }
     
-    /**
-     * Creates the Editor menu.
-     */
-    private JMenu createEditorMenu() {
-        JMenu editorMenu = new JMenu("Editor");
-        
-        editorMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
-        editorMenu.addSeparator();
-        
-        // Line wrap checkbox
-        JCheckBoxMenuItem lineWrapItem = new JCheckBoxMenuItem("Line Wrap");
-        lineWrapItem.setSelected(textEditor.isLineWrap());
-        lineWrapItem.addActionListener(e -> textEditor.setLineWrap(lineWrapItem.isSelected()));
-        editorMenu.add(lineWrapItem);
-        
-        return editorMenu;
-    }
     
     /**
      * Creates the View menu.
@@ -157,6 +141,10 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
         viewMenu.add(createMenuItem("Reset Zoom", e -> callbacks.resetZoom()));
+        viewMenu.addSeparator();
+        
+        // Font settings
+        viewMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
         viewMenu.addSeparator();
         
         viewMenu.add(createMenuItem("Show Splash Screen", e -> callbacks.showSplashScreen()));
@@ -187,6 +175,15 @@ public class MenuBarBuilder {
         }
         
         return themeMenu;
+    }
+    
+    /**
+     * Creates the Tools menu.
+     */
+    private JMenu createToolsMenu() {
+        JMenu toolsMenu = new JMenu("Tools");
+        toolsMenu.add(createMenuItem("Run Test Simulation", e -> callbacks.runTestSimulation()));
+        return toolsMenu;
     }
     
     /**
