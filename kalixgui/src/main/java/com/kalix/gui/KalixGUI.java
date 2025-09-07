@@ -4,6 +4,7 @@ import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.cli.ProcessExecutor;
 import com.kalix.gui.components.StatusProgressBar;
+import com.kalix.gui.windows.SessionsWindow;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
@@ -168,6 +169,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             progressBar,
             this
         );
+        
         
         // Set up component listeners
         textEditor.setDirtyStateListener(isDirty -> titleBarManager.updateTitle(isDirty, fileOperations::getCurrentFile));
@@ -480,6 +482,88 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void runTestSimulation() {
         cliTaskManager.runTestSimulation();
+    }
+    
+    @Override
+    public void showSessionsWindow() {
+        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
+        updateStatus("Sessions window opened");
+    }
+    
+    @Override
+    public void runTestSession() {
+        // Run test session and handle the result
+        cliTaskManager.runTestSession(9)
+            .thenAccept(sessionId -> {
+                SwingUtilities.invokeLater(() -> {
+                    updateStatus("Test session started: " + sessionId);
+                    
+                    // Automatically open Sessions window if not already open
+                    if (!SessionsWindow.isWindowOpen()) {
+                        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
+                    }
+                    
+                    // Show informational dialog
+                    String message = "Test session " + sessionId + " is now running.\n\n" +
+                                   "This session uses 'kalixcli test --new-session=9' to demonstrate\n" +
+                                   "the session management features.\n\n" +
+                                   "The Sessions window has been opened to monitor progress.";
+                    
+                    JOptionPane.showMessageDialog(this, message,
+                        "Test Session Started", JOptionPane.INFORMATION_MESSAGE);
+                });
+            })
+            .exceptionally(throwable -> {
+                SwingUtilities.invokeLater(() -> {
+                    updateStatus("Error starting test session: " + throwable.getMessage());
+                    JOptionPane.showMessageDialog(this,
+                        "Failed to start test session: " + throwable.getMessage(),
+                        "Test Session Error", JOptionPane.ERROR_MESSAGE);
+                });
+                return null;
+            });
+    }
+    
+    @Override
+    public void runModelFromMemory() {
+        String modelText = textEditor.getText();
+        if (modelText == null || modelText.trim().isEmpty()) {
+            updateStatus("Error: No model content to run");
+            JOptionPane.showMessageDialog(this,
+                "The text editor is empty. Please create or load a model first.",
+                "No Model Content", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Run model from memory and handle the session
+        cliTaskManager.runModelFromMemory(modelText)
+            .thenAccept(sessionId -> {
+                SwingUtilities.invokeLater(() -> {
+                    updateStatus("Model session started: " + sessionId);
+                    
+                    // Automatically open Sessions window if not already open
+                    if (!SessionsWindow.isWindowOpen()) {
+                        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
+                    }
+                    
+                    // Show informational dialog
+                    String message = "Model session " + sessionId + " is now running.\n\n" +
+                                   "The Sessions window has been opened to monitor progress.\n" +
+                                   "You can request results when the session is ready.";
+                    
+                    JOptionPane.showMessageDialog(this, message,
+                        "Session Started", JOptionPane.INFORMATION_MESSAGE);
+                });
+            })
+            .exceptionally(throwable -> {
+                SwingUtilities.invokeLater(() -> {
+                    updateStatus("Error starting model session: " + throwable.getMessage());
+                    JOptionPane.showMessageDialog(this,
+                        "Failed to start model session: " + throwable.getMessage(),
+                        "Model Session Error", JOptionPane.ERROR_MESSAGE);
+                });
+                return null;
+            });
     }
 
     /**

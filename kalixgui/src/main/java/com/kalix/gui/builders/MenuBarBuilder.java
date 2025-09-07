@@ -42,9 +42,16 @@ public class MenuBarBuilder {
         
         // New toolbar-specific actions
         void runModel();
+        void runModelFromMemory();
         void searchModel();
         void getCliVersion();
         void runTestSimulation();
+        
+        // Sessions window
+        void showSessionsWindow();
+        
+        // Test session command
+        void runTestSession();
         
         // Preferences dialog
         void showPreferences();
@@ -73,7 +80,7 @@ public class MenuBarBuilder {
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu(currentTheme));
-        menuBar.add(createToolsMenu());
+        menuBar.add(createRunMenu());
         menuBar.add(createGraphMenu());
         menuBar.add(createHelpMenu());
         
@@ -178,12 +185,17 @@ public class MenuBarBuilder {
     }
     
     /**
-     * Creates the Tools menu.
+     * Creates the Run menu.
      */
-    private JMenu createToolsMenu() {
-        JMenu toolsMenu = new JMenu("Tools");
-        toolsMenu.add(createMenuItem("Run Test Simulation", e -> callbacks.runTestSimulation()));
-        return toolsMenu;
+    private JMenu createRunMenu() {
+        JMenu runMenu = new JMenu("Run");
+        runMenu.add(createMenuItem("Run Model (Memory)", e -> callbacks.runModelFromMemory()));
+        runMenu.addSeparator();
+        runMenu.add(createMenuItem("Run Test Simulation", e -> callbacks.runTestSimulation()));
+        runMenu.add(createMenuItem("Run Test Session", e -> callbacks.runTestSession()));
+        runMenu.addSeparator();
+        runMenu.add(createMenuItem("Sessions Window", e -> callbacks.showSessionsWindow()));
+        return runMenu;
     }
     
     /**
