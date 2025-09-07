@@ -256,37 +256,17 @@ public class InteractiveKalixProcess {
     }
     
     /**
-     * Parses progress information from a line of output.
+     * Parses progress information from a line of output using the centralized parser.
      * 
      * @param line the line to parse
      * @return progress information if found, empty otherwise
      */
     public Optional<ProgressInfo> parseProgress(String line) {
-        if (line == null || line.trim().isEmpty()) {
-            return Optional.empty();
-        }
+        Optional<ProgressParser.ProgressInfo> parsed = ProgressParser.parseProgress(line);
         
-        // Pattern for percentage: "Progress: 45%" or "45%"
-        Pattern percentPattern = Pattern.compile("(\\d+(?:\\.\\d+)?)%");
-        Matcher matcher = percentPattern.matcher(line);
-        
-        if (matcher.find()) {
-            try {
-                double percentage = Double.parseDouble(matcher.group(1));
-                
-                // Try to extract task description
-                String task = line.replaceAll("\\d+(?:\\.\\d+)?%", "").trim();
-                if (task.startsWith("Progress:")) {
-                    task = task.substring("Progress:".length()).trim();
-                }
-                if (task.startsWith("-")) {
-                    task = task.substring(1).trim();
-                }
-                
-                return Optional.of(new ProgressInfo(percentage, task, line));
-            } catch (NumberFormatException e) {
-                // Invalid percentage format
-            }
+        if (parsed.isPresent()) {
+            ProgressParser.ProgressInfo p = parsed.get();
+            return Optional.of(new ProgressInfo(p.getPercentage(), p.getDescription(), p.getRawLine()));
         }
         
         return Optional.empty();
