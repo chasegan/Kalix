@@ -109,6 +109,43 @@ impl Model {
             self.data_cache.increment_current_step();
         }
     }
+    
+    pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String> 
+    where
+        F: Fn() -> bool,
+    {
+        //Initialise the node network
+        self.initialize_network();
+        
+        //Calculate total steps for progress reporting
+        let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp) 
+            / self.configuration.sim_stepsize) + 1;
+        
+        //Run all timesteps
+        let mut step = 0;
+        let mut time = self.configuration.sim_start_timestamp;
+        while time <= self.configuration.sim_end_timestamp {
+            // Check for interrupt at start of each timestep
+            if interrupt_check() {
+                return Ok(false); // Simulation was interrupted
+            }
+            
+            //Run the network
+            self.run_timestep(time);
+            
+            //Report progress if callback provided
+            if let Some(ref mut callback) = progress_callback {
+                callback(step, total_steps);
+            }
+            
+            //Increment time
+            time += self.configuration.sim_stepsize;
+            step += 1;
+            self.data_cache.increment_current_step();
+        }
+        
+        Ok(true) // Simulation completed successfully
+    }
 
     /*
     Determine the simulation period on the basis of the available input data

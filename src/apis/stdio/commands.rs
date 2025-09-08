@@ -63,6 +63,7 @@ impl CommandRegistry {
         registry.register(Arc::new(TestProgressCommand));
         registry.register(Arc::new(LoadModelFileCommand));
         registry.register(Arc::new(LoadModelStringCommand));
+        registry.register(Arc::new(RunSimulationCommand));
         
         registry
     }
@@ -419,6 +420,176 @@ impl Command for LoadModelStringCommand {
     }
 }
 
+pub struct RunSimulationCommand;
+
+impl Command for RunSimulationCommand {
+    fn name(&self) -> &str {
+        "run_simulation"
+    }
+    
+    fn description(&self) -> &str {
+        "Execute model simulation with loaded model and data"
+    }
+    
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![] // No parameters for now
+    }
+    
+    fn interruptible(&self) -> bool {
+        true // This is a long-running operation
+    }
+    
+    fn execute(
+        &self,
+        session: &mut Session,
+        _params: serde_json::Value,
+        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        use std::time::Instant;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        
+        // Validation phase - 10%
+        progress_sender(ProgressInfo {
+            percent_complete: 10.0,
+            current_step: "Validating model and data".to_string(),
+            estimated_remaining: None,
+            details: None,
+        });
+        
+        // Get interrupt flag before getting mutable model reference
+        let interrupt_flag = Arc::clone(&session.interrupt_flag);
+        
+        // Check if model is loaded
+        let model = session.get_model_mut()
+            .ok_or(CommandError::ModelNotLoaded)?;
+        
+        // Check if model has input data
+        if model.inputs.is_empty() {
+            return Err(CommandError::DataNotLoaded);
+        }
+        
+        // Configuration phase - 20%
+        progress_sender(ProgressInfo {
+            percent_complete: 20.0,
+            current_step: "Configuring model for simulation".to_string(),
+            estimated_remaining: None,
+            details: None,
+        });
+        
+        model.configure();
+        
+        // Get simulation info for result
+        let start_timestamp = model.configuration.sim_start_timestamp;
+        let end_timestamp = model.configuration.sim_end_timestamp;
+        let stepsize = model.configuration.sim_stepsize;
+        let total_timesteps = ((end_timestamp - start_timestamp) / stepsize) + 1;
+        
+        // Track progress timing for rate limiting (max 1 update per second, 1 per percentage)
+        let last_progress_time = Arc::new(std::sync::Mutex::new(Instant::now()));
+        let last_progress_percent = Arc::new(AtomicU64::new(20));
+        
+        // Create progress callback for the model
+        let progress_sender_clone = Arc::new(progress_sender);
+        let progress_callback = {
+            let last_time = Arc::clone(&last_progress_time);
+            let last_percent = Arc::clone(&last_progress_percent);
+            let sender = Arc::clone(&progress_sender_clone);
+            
+            Box::new(move |current_step: u64, total_steps: u64| {
+                // Calculate percentage (20% to 90% range for simulation phase)
+                let sim_progress = (current_step as f64 / total_steps as f64) * 70.0;
+                let overall_progress = 20.0 + sim_progress;
+                let overall_percent = overall_progress as u64;
+                
+                // Check rate limiting conditions
+                let now = Instant::now();
+                let should_update = {
+                    let mut last_time_guard = last_time.lock().unwrap();
+                    let time_elapsed = now.duration_since(*last_time_guard).as_secs() >= 1;
+                    let percent_changed = overall_percent > last_percent.load(Ordering::Relaxed);
+                    
+                    if time_elapsed && percent_changed {
+                        *last_time_guard = now;
+                        last_percent.store(overall_percent, Ordering::Relaxed);
+                        true
+                    } else {
+                        false
+                    }
+                };
+                
+                if should_update {
+                    sender(ProgressInfo {
+                        percent_complete: overall_progress,
+                        current_step: format!("Running simulation - Processing timestep {} of {}", current_step + 1, total_steps),
+                        estimated_remaining: None,
+                        details: Some(serde_json::json!({
+                            "current_timestep": current_step + 1,
+                            "total_timesteps": total_steps,
+                            "simulation_progress": format!("{:.1}%", sim_progress + (20.0/70.0)*100.0)
+                        })),
+                    });
+                }
+            })
+        };
+        
+        // Simulation phase - 20% to 90%
+        let simulation_start = Instant::now();
+        
+        // Run the simulation with interrupt checking
+        let completed = model.run_with_interrupt(
+            move || interrupt_flag.load(Ordering::Relaxed),
+            Some(progress_callback)
+        ).map_err(|e| CommandError::ExecutionError(format!("Simulation failed: {}", e)))?;
+        
+        let simulation_duration = simulation_start.elapsed();
+        
+        if !completed {
+            // Simulation was interrupted
+            return Err(CommandError::Interrupted);
+        }
+        
+        // Results phase - 90% to 100%
+        progress_sender_clone(ProgressInfo {
+            percent_complete: 90.0,
+            current_step: "Finalizing results".to_string(),
+            estimated_remaining: None,
+            details: None,
+        });
+        
+        // Collect output information
+        let outputs_generated: Vec<String> = model.outputs.clone();
+        
+        progress_sender_clone(ProgressInfo {
+            percent_complete: 100.0,
+            current_step: "Simulation completed".to_string(),
+            estimated_remaining: None,
+            details: None,
+        });
+        
+        // Store simulation metadata in session results
+        let simulation_metadata = serde_json::json!({
+            "timestamp": chrono::Utc::now(),
+            "duration_seconds": simulation_duration.as_secs(),
+            "timesteps": total_timesteps,
+            "outputs": outputs_generated.clone(),
+        });
+        session.store_result("last_simulation".to_string(), simulation_metadata);
+        
+        Ok(serde_json::json!({
+            "simulation_completed": true,
+            "timesteps_processed": total_timesteps,
+            "outputs_generated": outputs_generated,
+            "simulation_period": format!("{} to {}", 
+                crate::tid::utils::u64_to_date_string(start_timestamp),
+                crate::tid::utils::u64_to_date_string(end_timestamp)
+            ),
+            "execution_time_seconds": simulation_duration.as_secs(),
+            "available_results": ["timeseries_data", "summary_statistics"]
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -433,6 +604,7 @@ mod tests {
         assert!(commands.contains(&"test_progress"));
         assert!(commands.contains(&"load_model_file"));
         assert!(commands.contains(&"load_model_string"));
+        assert!(commands.contains(&"run_simulation"));
     }
 
     #[test]
