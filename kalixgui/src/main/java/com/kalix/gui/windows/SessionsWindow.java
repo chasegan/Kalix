@@ -2,6 +2,7 @@ package com.kalix.gui.windows;
 
 import com.kalix.gui.managers.CliTaskManager;
 import com.kalix.gui.cli.SessionManager;
+import com.kalix.gui.utils.DialogUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -394,15 +395,9 @@ public class SessionsWindow extends JFrame {
         if (selected != null) {
             String sessionId = selected.getSessionId();
             
-            int result = JOptionPane.showConfirmDialog(
-                this,
-                "Are you sure you want to terminate session " + sessionId + "?",
-                "Terminate Session",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-            );
-            
-            if (result == JOptionPane.YES_OPTION) {
+            if (DialogUtils.showConfirmation(this, 
+                    "Are you sure you want to terminate session " + sessionId + "?", 
+                    "Terminate Session")) {
                 cliTaskManager.terminateSession(sessionId)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Session terminated: " + sessionId);
@@ -411,12 +406,9 @@ public class SessionsWindow extends JFrame {
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
                             statusUpdater.accept("Failed to terminate session: " + throwable.getMessage());
-                            JOptionPane.showMessageDialog(
-                                this,
+                            DialogUtils.showError(this, 
                                 "Failed to terminate session: " + throwable.getMessage(),
-                                "Termination Error",
-                                JOptionPane.ERROR_MESSAGE
-                            );
+                                "Termination Error");
                         });
                         return null;
                     });

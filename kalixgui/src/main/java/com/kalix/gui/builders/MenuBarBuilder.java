@@ -3,7 +3,11 @@ package com.kalix.gui.builders;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
 
-import javax.swing.*;
+import javax.swing.ButtonGroup;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JRadioButtonMenuItem;
 import java.awt.event.ActionListener;
 
 /**

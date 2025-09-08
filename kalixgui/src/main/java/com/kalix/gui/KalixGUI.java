@@ -10,6 +10,7 @@ import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
 import com.kalix.gui.managers.*;
+import com.kalix.gui.utils.DialogUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -397,10 +398,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showAbout() {
-        JOptionPane.showMessageDialog(this,
+        DialogUtils.showInfo(this,
             AppConstants.APP_NAME + "\nVersion " + AppConstants.APP_VERSION + "\n\n" + AppConstants.APP_DESCRIPTION,
-            "About Kalix GUI",
-            JOptionPane.INFORMATION_MESSAGE);
+            "About Kalix GUI");
     }
     
     @Override
@@ -458,9 +458,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String modelText = textEditor.getText();
         if (modelText == null || modelText.trim().isEmpty()) {
             updateStatus("Error: No model content to run");
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showWarning(this,
                 "The text editor is empty. Please create or load a model first.",
-                "No Model Content", JOptionPane.WARNING_MESSAGE);
+                "No Model Content");
             return;
         }
         
