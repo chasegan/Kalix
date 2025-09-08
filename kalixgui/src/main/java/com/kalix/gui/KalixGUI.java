@@ -159,16 +159,18 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         fontDialogManager = new FontDialogManager(this, textEditor, prefs);
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
-        modelRunner = new ModelRunner(this, this::updateStatus);
         versionChecker = new VersionChecker(this::updateStatus);
         
-        // Initialize CLI task manager
+        // Initialize CLI task manager first
         cliTaskManager = new CliTaskManager(
             processExecutor,
             this::updateStatus,
             progressBar,
             this
         );
+        
+        // Initialize ModelRunner with CliTaskManager for session integration
+        modelRunner = new ModelRunner(this, this::updateStatus, cliTaskManager);
         
         
         // Set up component listeners

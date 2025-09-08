@@ -2,6 +2,7 @@ package com.kalix.gui.managers;
 
 import com.kalix.gui.cli.*;
 import com.kalix.gui.components.StatusProgressBar;
+import com.kalix.gui.windows.SessionsWindow;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -393,6 +394,110 @@ public class CliTaskManager {
     }
     
     /**
+     * Runs a model using the new JSON STDIO protocol with full logging.
+     * This integrates with the SessionsWindow for debugging STDIO communication.
+     * 
+     * @param modelText the model definition from the editor
+     * @return CompletableFuture with the session ID
+     */
+    public CompletableFuture<String> runModelWithJsonProtocol(String modelText) {
+        System.out.println("[CliTaskManager] runModelWithJsonProtocol called with model length: " + modelText.length());
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                System.out.println("[CliTaskManager] Looking for kalixcli...");
+                // Locate kalixcli
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCli();
+                if (!cliLocation.isPresent()) {
+                    System.err.println("[CliTaskManager] kalixcli not found!");
+                    handleCliNotFound();
+                    throw new RuntimeException("kalixcli not found");
+                }
+                
+                System.out.println("[CliTaskManager] Found kalixcli at: " + cliLocation.get().getPath());
+                statusUpdater.accept("Starting JSON STDIO session...");
+                
+                System.out.println("[CliTaskManager] Creating JsonStdioProtocol...");
+                // Create JsonStdioProtocol with logging integration
+                JsonStdioProtocol protocol = new JsonStdioProtocol(processExecutor)
+                    .onReady(message -> {
+                        String sessionId = message.getSessionId();
+                        statusUpdater.accept("Session ready: " + sessionId);
+                        SessionsWindow.logSessionMessage(sessionId, "CLI->GUI", 
+                            "READY - Available commands: " + message.getAvailableCommands().size());
+                        
+                        // Log that the session is ready
+                        SessionsWindow.logSessionMessage(sessionId, "SYSTEM", 
+                            "JSON STDIO protocol session ready - " + sessionId);
+                    })
+                    .onBusy(message -> {
+                        statusUpdater.accept("Executing: " + message.getExecutingCommand());
+                        SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                            "BUSY - Executing: " + message.getExecutingCommand());
+                    })
+                    .onProgress(message -> {
+                        double progress = message.getPercentComplete();
+                        String step = message.getCurrentStep();
+                        statusUpdater.accept(String.format("Progress: %.0f%% - %s", progress, step));
+                        SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                            String.format("PROGRESS - %.1f%% - %s", progress, step));
+                    })
+                    .onResult(message -> {
+                        if (message.isSuccess()) {
+                            statusUpdater.accept("Simulation completed successfully");
+                            SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                                "RESULT - SUCCESS: " + message.getCommand() + " completed");
+                        } else {
+                            statusUpdater.accept("Simulation failed: " + message.getStatus());
+                            SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                                "RESULT - FAILED: " + message.getStatus());
+                        }
+                    })
+                    .onError(message -> {
+                        String errorMsg = message.getErrorCode() + ": " + message.getErrorMessage();
+                        statusUpdater.accept("Error: " + errorMsg);
+                        SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                            "ERROR - " + errorMsg);
+                    })
+                    .onStopped(message -> {
+                        statusUpdater.accept("Simulation stopped: " + message.getCommand());
+                        SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                            "STOPPED - " + message.getCommand());
+                    })
+                    .onLog(message -> {
+                        SessionsWindow.logSessionMessage(message.getSessionId(), "CLI->GUI", 
+                            "LOG [" + message.getLevel() + "] - " + message.getMessage());
+                    });
+                
+                System.out.println("[CliTaskManager] Starting protocol session...");
+                // Start session
+                CompletableFuture<String> sessionFuture = protocol.startSession(cliLocation.get().getPath());
+                System.out.println("[CliTaskManager] Waiting for session to start...");
+                String sessionId = sessionFuture.get();
+                System.out.println("[CliTaskManager] Session started with ID: " + sessionId);
+                
+                statusUpdater.accept("Loading model definition...");
+                SessionsWindow.logSessionMessage(sessionId, "GUI->CLI", 
+                    "COMMAND - load_model_string (model length: " + modelText.length() + " chars)");
+                
+                // Send load_model_string command
+                protocol.loadModelString(modelText).get();
+                
+                statusUpdater.accept("Running simulation...");
+                SessionsWindow.logSessionMessage(sessionId, "GUI->CLI", "COMMAND - run_simulation");
+                
+                // Send run_simulation command
+                protocol.runSimulation().get();
+                
+                return sessionId;
+                
+            } catch (Exception e) {
+                statusUpdater.accept("Error in JSON STDIO protocol: " + e.getMessage());
+                throw new RuntimeException("Failed to run model with JSON protocol", e);
+            }
+        });
+    }
+    
+    /**
      * Requests specific results from a model session.
      * 
      * @param sessionId the session to query
@@ -511,6 +616,23 @@ public class CliTaskManager {
             progressBar.setProgressText(String.format("%.0f%%", progressInfo.getPercentage()));
             statusUpdater.accept(progressInfo.getDescription());
         });
+    }
+    
+    /**
+     * Creates a virtual session in SessionManager for JsonStdioProtocol sessions.
+     * This allows SessionsWindow to track and display JSON protocol sessions.
+     */
+    private void createVirtualSession(String sessionId, JsonStdioProtocol protocol) {
+        // This is a simplified approach - ideally we'd extend SessionManager
+        // to support JsonStdioProtocol sessions directly
+        try {
+            // For now, just ensure the session gets logged
+            SessionsWindow.logSessionMessage(sessionId, "SYSTEM", 
+                "JSON STDIO protocol session created - " + sessionId);
+        } catch (Exception e) {
+            // Don't let logging errors break the session
+            System.err.println("Error creating virtual session: " + e.getMessage());
+        }
     }
     
     /**
