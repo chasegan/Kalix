@@ -82,16 +82,14 @@ Sent when kalixcli starts (with newly generated session_id) and after each comma
         "name": "load_model_file",
         "description": "Load a hydrological model from a file path",
         "parameters": [
-          {"name": "model_path", "type": "string", "required": true},
-          {"name": "validation", "type": "boolean", "required": false, "default": true}
+          {"name": "model_path", "type": "string", "required": true}
         ]
       },
       {
         "name": "load_model_string",
         "description": "Load a hydrological model from an INI string",
         "parameters": [
-          {"name": "model_ini", "type": "string", "required": true},
-          {"name": "validation", "type": "boolean", "required": false, "default": true}
+          {"name": "model_ini", "type": "string", "required": true}
         ]
       },
       {
@@ -137,8 +135,7 @@ Frontend messages do not need to include session_id (each kalixcli process handl
   "data": {
     "command": "load_model_file",
     "parameters": {
-      "model_path": "/path/to/model.ini",
-      "validation": true
+      "model_path": "/path/to/model.ini"
     }
   }
 }

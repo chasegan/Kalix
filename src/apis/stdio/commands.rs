@@ -246,12 +246,6 @@ impl Command for LoadModelFileCommand {
                 param_type: "string".to_string(),
                 required: true,
                 default: None,
-            },
-            ParameterSpec {
-                name: "validation".to_string(),
-                param_type: "boolean".to_string(),
-                required: false,
-                default: Some(serde_json::json!(true)),
             }
         ]
     }
@@ -271,17 +265,12 @@ impl Command for LoadModelFileCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_path is required".to_string()))?;
         
-        let validation = params.get("validation")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        
         progress_sender(ProgressInfo {
             percent_complete: 10.0,
             current_step: format!("Loading model from file: {}", model_path),
             estimated_remaining: None,
             details: Some(serde_json::json!({
-                "file_path": model_path,
-                "validation_enabled": validation
+                "file_path": model_path
             })),
         });
         
@@ -318,7 +307,6 @@ impl Command for LoadModelFileCommand {
         Ok(serde_json::json!({
             "success": true,
             "model_path": model_path,
-            "validation_enabled": validation,
             "model_info": model_info
         }))
     }
@@ -342,12 +330,6 @@ impl Command for LoadModelStringCommand {
                 param_type: "string".to_string(),
                 required: true,
                 default: None,
-            },
-            ParameterSpec {
-                name: "validation".to_string(),
-                param_type: "boolean".to_string(),
-                required: false,
-                default: Some(serde_json::json!(true)),
             }
         ]
     }
@@ -367,17 +349,12 @@ impl Command for LoadModelStringCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_ini is required".to_string()))?;
         
-        let validation = params.get("validation")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        
         progress_sender(ProgressInfo {
             percent_complete: 10.0,
             current_step: format!("Parsing INI model ({} bytes)", model_ini.len()),
             estimated_remaining: None,
             details: Some(serde_json::json!({
-                "ini_length": model_ini.len(),
-                "validation_enabled": validation
+                "ini_length": model_ini.len()
             })),
         });
         
@@ -414,7 +391,6 @@ impl Command for LoadModelStringCommand {
         Ok(serde_json::json!({
             "success": true,
             "ini_length": model_ini.len(),
-            "validation_enabled": validation,
             "model_info": model_info
         }))
     }
