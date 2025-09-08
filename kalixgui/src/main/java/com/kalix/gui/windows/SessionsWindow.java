@@ -2,6 +2,7 @@ package com.kalix.gui.windows;
 
 import com.kalix.gui.managers.CliTaskManager;
 import com.kalix.gui.cli.SessionManager;
+import com.kalix.gui.cli.SessionCommunicationLog;
 import com.kalix.gui.utils.DialogUtils;
 
 import javax.swing.*;
@@ -32,6 +33,10 @@ public class SessionsWindow extends JFrame {
     private JLabel sessionStateLabel;
     private JLabel sessionStartTimeLabel;
     private JButton terminateButton;
+    private JButton removeFromListButton;
+    private JTextArea communicationLogArea;
+    private JScrollPane communicationLogScrollPane;
+    private String lastLogContent = ""; // Track last communication log content
     
     /**
      * Private constructor for singleton pattern.
@@ -85,7 +90,7 @@ public class SessionsWindow extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("CLI Sessions");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(500, 400);
+        setSize(700, 500);
         
         // Position relative to parent window
         if (parentFrame != null) {
@@ -114,7 +119,11 @@ public class SessionsWindow extends JFrame {
         sessionList.setCellRenderer(new SessionListCellRenderer());
         sessionList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
+                // Reset log content tracking when session changes
+                lastLogContent = "";
                 updateDetailsPanel();
+                // Update communication log when user actually selects a different session
+                forceUpdateCommunicationLog();
             }
         });
         
@@ -126,6 +135,19 @@ public class SessionsWindow extends JFrame {
         terminateButton = new JButton("Terminate Session");
         terminateButton.setEnabled(false);
         terminateButton.addActionListener(this::terminateSelectedSession);
+        
+        removeFromListButton = new JButton("Remove from List");
+        removeFromListButton.setEnabled(false);
+        removeFromListButton.addActionListener(this::removeSelectedSession);
+        
+        // Initialize communication log components
+        communicationLogArea = new JTextArea();
+        communicationLogArea.setEditable(false);
+        communicationLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        communicationLogArea.setBackground(Color.WHITE);
+        communicationLogScrollPane = new JScrollPane(communicationLogArea);
+        communicationLogScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        communicationLogScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         
         createDetailsPanel();
     }
@@ -143,8 +165,12 @@ public class SessionsWindow extends JFrame {
         noSelectionLabel.setForeground(Color.GRAY);
         noSelectionPanel.add(noSelectionLabel, BorderLayout.CENTER);
         
-        // Create "session selected" panel
+        // Create "session selected" panel with tabbed pane
         JPanel sessionSelectedPanel = new JPanel(new BorderLayout());
+        JTabbedPane tabbedPane = new JTabbedPane();
+        
+        // === Session Info Tab ===
+        JPanel infoTabPanel = new JPanel(new BorderLayout());
         
         // Info panel for session details
         JPanel infoPanel = new JPanel(new GridBagLayout());
@@ -176,10 +202,40 @@ public class SessionsWindow extends JFrame {
         // Button panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttonPanel.add(terminateButton);
+        buttonPanel.add(removeFromListButton);
+        
+        // Assemble info tab
+        infoTabPanel.add(infoPanel, BorderLayout.CENTER);
+        infoTabPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // === Communication Log Tab ===
+        JPanel logTabPanel = new JPanel(new BorderLayout());
+        
+        // Add header for communication log
+        JPanel logHeaderPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel logHeaderLabel = new JLabel("Raw communication log (newest at bottom):");
+        logHeaderLabel.setFont(logHeaderLabel.getFont().deriveFont(Font.BOLD));
+        logHeaderPanel.add(logHeaderLabel);
+        
+        // Add refresh button for communication log
+        JButton refreshLogButton = new JButton("Refresh");
+        refreshLogButton.addActionListener(e -> forceUpdateCommunicationLog());
+        logHeaderPanel.add(refreshLogButton);
+        
+        // Add clear button for communication log
+        JButton clearLogButton = new JButton("Clear");
+        clearLogButton.addActionListener(e -> clearCommunicationLog());
+        logHeaderPanel.add(clearLogButton);
+        
+        logTabPanel.add(logHeaderPanel, BorderLayout.NORTH);
+        logTabPanel.add(communicationLogScrollPane, BorderLayout.CENTER);
+        
+        // Add tabs to tabbed pane
+        tabbedPane.addTab("Session Info", infoTabPanel);
+        tabbedPane.addTab("Communication Log", logTabPanel);
         
         // Assemble session selected panel
-        sessionSelectedPanel.add(infoPanel, BorderLayout.CENTER);
-        sessionSelectedPanel.add(buttonPanel, BorderLayout.SOUTH);
+        sessionSelectedPanel.add(tabbedPane, BorderLayout.CENTER);
         
         // Add panels to card layout
         detailsPanel.add(noSelectionPanel, "NO_SELECTION");
@@ -369,6 +425,7 @@ public class SessionsWindow extends JFrame {
             // No selection - show "select a session" message
             cl.show(detailsPanel, "NO_SELECTION");
             terminateButton.setEnabled(false);
+            removeFromListButton.setEnabled(false);
         } else {
             // Session selected - show details
             cl.show(detailsPanel, "SESSION_SELECTED");
@@ -379,8 +436,12 @@ public class SessionsWindow extends JFrame {
             sessionStateLabel.setText(selected.getState().toString());
             sessionStartTimeLabel.setText(selected.getStartTime().toString());
             
-            // Enable/disable terminate button based on session state
+            // Enable/disable buttons based on session state
             terminateButton.setEnabled(selected.isActive());
+            removeFromListButton.setEnabled(!selected.isActive()); // Only allow removal of terminated/error sessions
+            
+            // Note: Communication log is NOT updated here to prevent timer-driven focus stealing
+            // It will be updated when user switches sessions or clicks refresh
         }
         
         detailsPanel.revalidate();
@@ -396,7 +457,7 @@ public class SessionsWindow extends JFrame {
             String sessionId = selected.getSessionId();
             
             if (DialogUtils.showConfirmation(this, 
-                    "Are you sure you want to terminate session " + sessionId + "?", 
+                    "Are you sure you want to terminate session " + sessionId + "?\n\nThe session will remain visible in the list but the kalixcli process will be closed.", 
                     "Terminate Session")) {
                 cliTaskManager.terminateSession(sessionId)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
@@ -409,6 +470,36 @@ public class SessionsWindow extends JFrame {
                             DialogUtils.showError(this, 
                                 "Failed to terminate session: " + throwable.getMessage(),
                                 "Termination Error");
+                        });
+                        return null;
+                    });
+            }
+        }
+    }
+    
+    /**
+     * Removes the currently selected session from the list.
+     * Only works for terminated or error sessions.
+     */
+    private void removeSelectedSession(java.awt.event.ActionEvent e) {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        if (selected != null) {
+            String sessionId = selected.getSessionId();
+            
+            if (DialogUtils.showConfirmation(this, 
+                    "Are you sure you want to remove session " + sessionId + " from the list?\n\nThis will permanently remove it from the Sessions window.", 
+                    "Remove Session")) {
+                cliTaskManager.removeSession(sessionId)
+                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                        statusUpdater.accept("Session removed from list: " + sessionId);
+                        updateSessionsList();
+                    }))
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            statusUpdater.accept("Failed to remove session: " + throwable.getMessage());
+                            DialogUtils.showError(this, 
+                                "Failed to remove session: " + throwable.getMessage(),
+                                "Remove Session Error");
                         });
                         return null;
                     });
@@ -459,6 +550,102 @@ public class SessionsWindow extends JFrame {
             }
             
             return this;
+        }
+    }
+    
+    /**
+     * Updates the communication log only if the content has actually changed.
+     * This prevents unnecessary updates and scroll disruption.
+     */
+    private void updateCommunicationLogIfChanged() {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        if (selected != null && selected.getCommunicationLog() != null) {
+            String logContent = selected.getCommunicationLog().getFormattedLog();
+            
+            // Only update if content has actually changed
+            if (!logContent.equals(lastLogContent)) {
+                updateCommunicationLogWithContent(logContent);
+            }
+        } else {
+            String noLogMessage = "No communication log available for this session.";
+            if (!noLogMessage.equals(lastLogContent)) {
+                updateCommunicationLogWithContent(noLogMessage);
+            }
+        }
+    }
+    
+    /**
+     * Forces an update of the communication log regardless of content changes.
+     * Used for manual refresh actions.
+     */
+    private void forceUpdateCommunicationLog() {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        if (selected != null && selected.getCommunicationLog() != null) {
+            String logContent = selected.getCommunicationLog().getFormattedLog();
+            updateCommunicationLogWithContent(logContent);
+        } else {
+            updateCommunicationLogWithContent("No communication log available for this session.");
+        }
+    }
+    
+    /**
+     * Updates the communication log with the given content, implementing smart auto-scroll.
+     */
+    private void updateCommunicationLogWithContent(String logContent) {
+        // Check if user is at or near the bottom before updating
+        boolean shouldAutoScroll = isUserAtBottom();
+        
+        communicationLogArea.setText(logContent);
+        lastLogContent = logContent; // Remember this content
+        
+        // Only auto-scroll if user was already at the bottom
+        if (shouldAutoScroll) {
+            SwingUtilities.invokeLater(() -> {
+                communicationLogArea.setCaretPosition(communicationLogArea.getDocument().getLength());
+            });
+        }
+    }
+    
+    /**
+     * Checks if the user is currently at or near the bottom of the communication log.
+     * This is used to determine if auto-scrolling should occur when the log updates.
+     * 
+     * @return true if the user is at the bottom and should see auto-scroll, false otherwise
+     */
+    private boolean isUserAtBottom() {
+        if (communicationLogScrollPane == null || communicationLogArea == null) {
+            return true; // Default to auto-scroll if components aren't ready
+        }
+        
+        JScrollBar verticalScrollBar = communicationLogScrollPane.getVerticalScrollBar();
+        if (verticalScrollBar == null) {
+            return true; // Default to auto-scroll if no scroll bar
+        }
+        
+        // Check if user is within a small threshold of the bottom
+        // This accounts for slight rounding errors and gives a bit of tolerance
+        int currentValue = verticalScrollBar.getValue();
+        int maximum = verticalScrollBar.getMaximum();
+        int extent = verticalScrollBar.getVisibleAmount();
+        int threshold = 10; // pixels of tolerance
+        
+        // User is considered "at bottom" if they're within threshold pixels of the actual bottom
+        return (currentValue + extent + threshold) >= maximum;
+    }
+    
+    /**
+     * Clears the communication log for the currently selected session.
+     */
+    private void clearCommunicationLog() {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        if (selected != null && selected.getCommunicationLog() != null) {
+            if (DialogUtils.showConfirmation(this, 
+                    "Are you sure you want to clear the communication log for session " + selected.getSessionId() + "?", 
+                    "Clear Communication Log")) {
+                selected.getCommunicationLog().clear();
+                forceUpdateCommunicationLog();
+                statusUpdater.accept("Communication log cleared for session: " + selected.getSessionId());
+            }
         }
     }
 }

@@ -428,6 +428,17 @@ public class CliTaskManager {
     }
     
     /**
+     * Removes a terminated session from the session list for cleanup.
+     * Only works on terminated or error sessions.
+     * 
+     * @param sessionId the session to remove
+     * @return CompletableFuture that completes when session is removed
+     */
+    public CompletableFuture<Void> removeSession(String sessionId) {
+        return sessionManager.removeSession(sessionId);
+    }
+    
+    /**
      * Handles session events for UI updates.
      */
     private void handleSessionEvent(SessionManager.SessionEvent event) {

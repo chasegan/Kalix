@@ -74,6 +74,7 @@ public class SessionManager {
         private final String sessionId;
         private final InteractiveKalixProcess process;
         private final LocalDateTime startTime;
+        private final SessionCommunicationLog communicationLog;
         private volatile SessionState state;
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
@@ -82,6 +83,7 @@ public class SessionManager {
             this.sessionId = sessionId;
             this.process = process;
             this.startTime = LocalDateTime.now();
+            this.communicationLog = new SessionCommunicationLog(sessionId);
             this.state = SessionState.STARTING;
             this.lastActivity = LocalDateTime.now();
         }
@@ -89,6 +91,7 @@ public class SessionManager {
         public String getSessionId() { return sessionId; }
         public InteractiveKalixProcess getProcess() { return process; }
         public LocalDateTime getStartTime() { return startTime; }
+        public SessionCommunicationLog getCommunicationLog() { return communicationLog; }
         public SessionState getState() { return state; }
         public String getLastMessage() { return lastMessage; }
         public LocalDateTime getLastActivity() { return lastActivity; }
@@ -202,6 +205,8 @@ public class SessionManager {
         return CompletableFuture.runAsync(() -> {
             try {
                 KalixSession session = validateActiveSession(sessionId, "Send command");
+                // Log outgoing command first
+                session.getCommunicationLog().logGuiToCli(command);
                 session.getProcess().sendCommand(command);
                 session.setState(SessionState.RUNNING, "Executing command: " + command);
                 updateStatus("Sent command to session " + sessionId + ": " + command);
@@ -227,6 +232,11 @@ public class SessionManager {
                     throw new IllegalArgumentException("Session not found: " + sessionId);
                 }
                 
+                // Log outgoing model definition (truncated for log readability)
+                String logMessage = modelText.length() > 100 ? 
+                    modelText.substring(0, 100) + "... (" + modelText.length() + " chars total)" : 
+                    modelText;
+                session.getCommunicationLog().logGuiToCli("Model definition: " + logMessage);
                 session.getProcess().sendModelDefinition(modelText);
                 session.setState(SessionState.RUNNING, "Running model from memory");
                 updateStatus("Sent model definition to session: " + sessionId);
@@ -281,11 +291,12 @@ public class SessionManager {
         return CompletableFuture.runAsync(() -> {
             KalixSession session = activeSessions.get(sessionId);
             if (session != null) {
-                session.setState(SessionState.COMPLETING, "Terminating session");
+                SessionState oldState = session.getState();
+                session.setState(SessionState.TERMINATED, "Session terminated by user");
                 session.getProcess().close();
-                activeSessions.remove(sessionId);
+                // Keep session in activeSessions map for visibility, don't remove it
                 
-                fireSessionEvent(sessionId, SessionState.COMPLETING, SessionState.TERMINATED, "Session terminated");
+                fireSessionEvent(sessionId, oldState, SessionState.TERMINATED, "Session terminated");
                 updateStatus("Terminated session: " + sessionId);
             }
         });
@@ -311,25 +322,78 @@ public class SessionManager {
     }
     
     /**
-     * Monitors a session for output and state changes.
+     * Removes a terminated session from the session list.
+     * This is for cleanup purposes - only works on TERMINATED or ERROR sessions.
+     * 
+     * @param sessionId the session to remove
+     * @return CompletableFuture that completes when session is removed
+     */
+    public CompletableFuture<Void> removeSession(String sessionId) {
+        return CompletableFuture.runAsync(() -> {
+            KalixSession session = activeSessions.get(sessionId);
+            if (session != null) {
+                // Only allow removal of terminated or error sessions
+                if (session.getState() == SessionState.TERMINATED || session.getState() == SessionState.ERROR) {
+                    activeSessions.remove(sessionId);
+                    updateStatus("Removed session from list: " + sessionId);
+                } else {
+                    throw new IllegalStateException("Cannot remove active session: " + sessionId + " (state: " + session.getState() + ")");
+                }
+            }
+        });
+    }
+    
+    /**
+     * Monitors a session for output and state changes on both stdout and stderr.
      */
     private void monitorSession(KalixSession session, SessionConfig config) {
-        CompletableFuture.runAsync(() -> {
+        String sessionId = session.getSessionId();
+        
+        // Monitor stdout
+        CompletableFuture<Void> stdoutMonitor = CompletableFuture.runAsync(() -> {
             try {
                 while (session.getProcess().isRunning() && session.isActive()) {
                     Optional<String> outputLine = session.getProcess().readOutputLine();
                     
                     if (outputLine.isPresent()) {
                         String line = outputLine.get();
+                        // Log the raw message first
+                        session.getCommunicationLog().logCliToGuiStdout(line);
                         processSessionOutput(session, line, config);
-                        Thread.sleep(50); // Small delay to avoid busy waiting
                     }
+                    Thread.sleep(50); // Small delay to avoid busy waiting
                 }
             } catch (IOException | InterruptedException e) {
-                session.setState(SessionState.ERROR, "Session monitoring error: " + e.getMessage());
-                fireSessionEvent(session.getSessionId(), session.getState(), SessionState.ERROR, e.getMessage());
+                handleSessionError(sessionId, e, "stdout monitoring");
             }
         });
+        
+        // Monitor stderr
+        CompletableFuture<Void> stderrMonitor = CompletableFuture.runAsync(() -> {
+            try {
+                while (session.getProcess().isRunning() && session.isActive()) {
+                    Optional<String> errorLine = session.getProcess().readErrorLine();
+                    
+                    if (errorLine.isPresent()) {
+                        String line = errorLine.get();
+                        // Log the raw message first
+                        session.getCommunicationLog().logCliToGuiStderr(line);
+                        processSessionError(session, line, config);
+                    }
+                    Thread.sleep(50); // Small delay to avoid busy waiting
+                }
+            } catch (IOException | InterruptedException e) {
+                handleSessionError(sessionId, e, "stderr monitoring");
+            }
+        });
+        
+        // Combine both monitoring futures - session completes when both streams are done
+        CompletableFuture.allOf(stdoutMonitor, stderrMonitor)
+            .whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    handleSessionError(sessionId, new RuntimeException(throwable), "session monitoring");
+                }
+            });
     }
     
     /**
@@ -353,7 +417,55 @@ public class SessionManager {
             }
         }
         
-        // Prompt handling removed - not currently used in the application
+        // Log stdout for debugging (only if verbose)
+        // updateStatus("Session " + sessionId + " stdout: " + line);
+    }
+    
+    /**
+     * Processes error output from a session.
+     * Handles stderr messages which may contain important error information or diagnostics.
+     */
+    private void processSessionError(KalixSession session, String errorLine, SessionConfig config) {
+        String sessionId = session.getSessionId();
+        
+        // Always log stderr as it contains important error information
+        updateStatus("Session " + sessionId + " stderr: " + errorLine);
+        
+        // Check if this is a critical error that should terminate the session
+        if (isCriticalError(errorLine)) {
+            SessionState oldState = session.getState();
+            session.setState(SessionState.ERROR, "Critical error: " + errorLine);
+            fireSessionEvent(sessionId, oldState, SessionState.ERROR, "Critical error from kalixcli: " + errorLine);
+            return;
+        }
+        
+        // Check for protocol messages on stderr (some CLIs send protocol info there)
+        Optional<KalixCliProtocol.ProtocolMessage> protocolMsg = KalixCliProtocol.parseProtocolMessage(errorLine);
+        if (protocolMsg.isPresent()) {
+            handleProtocolMessage(session, protocolMsg.get());
+            return;
+        }
+        
+        // Check for progress updates on stderr (some CLIs send progress there)
+        if (config.getProgressCallback() != null) {
+            Optional<ProgressParser.ProgressInfo> progress = ProgressParser.parseProgress(errorLine);
+            if (progress.isPresent()) {
+                config.getProgressCallback().accept(progress.get());
+            }
+        }
+    }
+    
+    /**
+     * Determines if an error line indicates a critical error that should terminate the session.
+     */
+    private boolean isCriticalError(String errorLine) {
+        String lowerError = errorLine.toLowerCase();
+        return lowerError.contains("fatal") || 
+               lowerError.contains("critical") ||
+               lowerError.contains("exception") ||
+               lowerError.contains("error:") ||
+               lowerError.contains("failed to") ||
+               lowerError.matches(".*error.*\\d+.*"); // Pattern like "Error 123"
     }
     
     /**
@@ -396,10 +508,11 @@ public class SessionManager {
     private void scheduleSessionCleanup(String sessionId, int delayMs) {
         CompletableFuture.delayedExecutor(delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             .execute(() -> {
-                KalixSession session = activeSessions.remove(sessionId);
+                KalixSession session = activeSessions.get(sessionId);
                 if (session != null) {
                     session.setState(SessionState.TERMINATED, "Session cleanup completed");
                     session.getProcess().close();
+                    // Keep session in activeSessions map for visibility, don't remove it
                     fireSessionEvent(sessionId, SessionState.COMPLETING, SessionState.TERMINATED, "Session cleaned up");
                 }
             });
