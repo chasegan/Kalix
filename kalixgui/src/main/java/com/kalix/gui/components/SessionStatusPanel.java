@@ -98,7 +98,7 @@ public class SessionStatusPanel extends JPanel {
         // Session info panel
         JPanel infoPanel = new JPanel(new GridLayout(0, 1));
         infoPanel.add(new JLabel("ID: " + session.getSessionId()));
-        infoPanel.add(new JLabel("Type: " + session.getType()));
+        infoPanel.add(new JLabel("Type: Model Run"));
         infoPanel.add(new JLabel("State: " + session.getState()));
         
         // Controls panel

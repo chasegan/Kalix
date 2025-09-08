@@ -1,12 +1,13 @@
 package com.kalix.gui.windows;
 
-import com.kalix.gui.components.SessionStatusPanel;
 import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.cli.SessionManager;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -16,10 +17,20 @@ import java.util.function.Consumer;
  */
 public class SessionsWindow extends JFrame {
     
-    private final SessionStatusPanel sessionStatusPanel;
     private final CliTaskManager cliTaskManager;
+    private final Consumer<String> statusUpdater;
     private Timer sessionUpdateTimer;
     private static SessionsWindow instance;
+    
+    // UI Components
+    private DefaultListModel<SessionManager.KalixSession> sessionListModel;
+    private JList<SessionManager.KalixSession> sessionList;
+    private JPanel detailsPanel;
+    private JLabel sessionIdLabel;
+    private JLabel sessionTypeLabel;
+    private JLabel sessionStateLabel;
+    private JLabel sessionStartTimeLabel;
+    private JButton terminateButton;
     
     /**
      * Private constructor for singleton pattern.
@@ -30,16 +41,10 @@ public class SessionsWindow extends JFrame {
      */
     private SessionsWindow(JFrame parentFrame, CliTaskManager cliTaskManager, Consumer<String> statusUpdater) {
         this.cliTaskManager = cliTaskManager;
+        this.statusUpdater = statusUpdater;
         
         setupWindow(parentFrame);
-        
-        // Create session status panel
-        sessionStatusPanel = new SessionStatusPanel(
-            statusUpdater,
-            cliTaskManager::terminateSession,
-            cliTaskManager::getActiveSessions
-        );
-        
+        initializeComponents();
         setupLayout();
         setupUpdateTimer();
         setupWindowListeners();
@@ -98,6 +103,93 @@ public class SessionsWindow extends JFrame {
     }
     
     /**
+     * Initialize UI components.
+     */
+    private void initializeComponents() {
+        // Initialize session list
+        sessionListModel = new DefaultListModel<>();
+        sessionList = new JList<>(sessionListModel);
+        sessionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        sessionList.setCellRenderer(new SessionListCellRenderer());
+        sessionList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                updateDetailsPanel();
+            }
+        });
+        
+        // Initialize details panel components
+        sessionIdLabel = new JLabel();
+        sessionTypeLabel = new JLabel();
+        sessionStateLabel = new JLabel();
+        sessionStartTimeLabel = new JLabel();
+        terminateButton = new JButton("Terminate Session");
+        terminateButton.setEnabled(false);
+        terminateButton.addActionListener(this::terminateSelectedSession);
+        
+        createDetailsPanel();
+    }
+    
+    /**
+     * Creates the session details panel.
+     */
+    private void createDetailsPanel() {
+        detailsPanel = new JPanel(new CardLayout());
+        detailsPanel.setBorder(BorderFactory.createTitledBorder("Session Details"));
+        
+        // Create "no selection" panel
+        JPanel noSelectionPanel = new JPanel(new BorderLayout());
+        JLabel noSelectionLabel = new JLabel("Select a session to view details", SwingConstants.CENTER);
+        noSelectionLabel.setForeground(Color.GRAY);
+        noSelectionPanel.add(noSelectionLabel, BorderLayout.CENTER);
+        
+        // Create "session selected" panel
+        JPanel sessionSelectedPanel = new JPanel(new BorderLayout());
+        
+        // Info panel for session details
+        JPanel infoPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 10, 5, 10);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Add session info fields
+        gbc.gridx = 0; gbc.gridy = 0;
+        infoPanel.add(new JLabel("Session ID:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+        infoPanel.add(sessionIdLabel, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
+        infoPanel.add(new JLabel("Type:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+        infoPanel.add(sessionTypeLabel, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
+        infoPanel.add(new JLabel("State:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+        infoPanel.add(sessionStateLabel, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
+        infoPanel.add(new JLabel("Start Time:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+        infoPanel.add(sessionStartTimeLabel, gbc);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.add(terminateButton);
+        
+        // Assemble session selected panel
+        sessionSelectedPanel.add(infoPanel, BorderLayout.CENTER);
+        sessionSelectedPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Add panels to card layout
+        detailsPanel.add(noSelectionPanel, "NO_SELECTION");
+        detailsPanel.add(sessionSelectedPanel, "SESSION_SELECTED");
+        
+        // Initially show no selection panel
+        CardLayout cl = (CardLayout) detailsPanel.getLayout();
+        cl.show(detailsPanel, "NO_SELECTION");
+    }
+    
+    /**
      * Sets up the window layout.
      */
     private void setupLayout() {
@@ -111,7 +203,22 @@ public class SessionsWindow extends JFrame {
         headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
         
         add(headerPanel, BorderLayout.NORTH);
-        add(sessionStatusPanel, BorderLayout.CENTER);
+        
+        // Create split pane with session list on left and details on right
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitPane.setDividerLocation(250);
+        splitPane.setResizeWeight(0.4);
+        
+        // Left side: session list
+        JPanel leftPanel = new JPanel(new BorderLayout());
+        leftPanel.setBorder(BorderFactory.createTitledBorder("Sessions"));
+        JScrollPane listScrollPane = new JScrollPane(sessionList);
+        leftPanel.add(listScrollPane, BorderLayout.CENTER);
+        
+        splitPane.setLeftComponent(leftPanel);
+        splitPane.setRightComponent(detailsPanel);
+        
+        add(splitPane, BorderLayout.CENTER);
         
         // Add footer with close button
         JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -129,7 +236,7 @@ public class SessionsWindow extends JFrame {
     private void setupUpdateTimer() {
         sessionUpdateTimer = new Timer(2000, e -> {
             if (cliTaskManager != null && isVisible()) {
-                sessionStatusPanel.updateSessions(cliTaskManager.getActiveSessions());
+                updateSessionsList();
             }
         });
     }
@@ -177,7 +284,7 @@ public class SessionsWindow extends JFrame {
             public void windowActivated(WindowEvent e) {
                 // Immediate update when window becomes active
                 if (cliTaskManager != null) {
-                    sessionStatusPanel.updateSessions(cliTaskManager.getActiveSessions());
+                    updateSessionsList();
                 }
             }
         });
@@ -201,8 +308,7 @@ public class SessionsWindow extends JFrame {
      */
     public void refreshSessions() {
         if (cliTaskManager != null) {
-            SwingUtilities.invokeLater(() -> 
-                sessionStatusPanel.updateSessions(cliTaskManager.getActiveSessions()));
+            SwingUtilities.invokeLater(this::updateSessionsList);
         }
     }
     
@@ -213,6 +319,154 @@ public class SessionsWindow extends JFrame {
     public static void refreshSessionsWindowIfOpen() {
         if (instance != null) {
             instance.refreshSessions();
+        }
+    }
+    
+    // ========================
+    // Private helper methods
+    // ========================
+    
+    /**
+     * Updates the sessions list with current active sessions.
+     */
+    private void updateSessionsList() {
+        Map<String, SessionManager.KalixSession> activeSessions = cliTaskManager.getActiveSessions();
+        
+        // Remember currently selected session
+        SessionManager.KalixSession selectedSession = sessionList.getSelectedValue();
+        
+        // Update the list model
+        sessionListModel.clear();
+        for (SessionManager.KalixSession session : activeSessions.values()) {
+            sessionListModel.addElement(session);
+        }
+        
+        // Try to restore selection if the session still exists
+        if (selectedSession != null) {
+            for (int i = 0; i < sessionListModel.size(); i++) {
+                SessionManager.KalixSession session = sessionListModel.getElementAt(i);
+                if (session.getSessionId().equals(selectedSession.getSessionId())) {
+                    sessionList.setSelectedIndex(i);
+                    break;
+                }
+            }
+        }
+        
+        // If no selection and there are sessions, don't auto-select
+        // Let user explicitly select
+        updateDetailsPanel();
+    }
+    
+    /**
+     * Updates the details panel based on the selected session.
+     */
+    private void updateDetailsPanel() {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        CardLayout cl = (CardLayout) detailsPanel.getLayout();
+        
+        if (selected == null) {
+            // No selection - show "select a session" message
+            cl.show(detailsPanel, "NO_SELECTION");
+            terminateButton.setEnabled(false);
+        } else {
+            // Session selected - show details
+            cl.show(detailsPanel, "SESSION_SELECTED");
+            
+            // Update labels
+            sessionIdLabel.setText(selected.getSessionId());
+            sessionTypeLabel.setText("Model Run");
+            sessionStateLabel.setText(selected.getState().toString());
+            sessionStartTimeLabel.setText(selected.getStartTime().toString());
+            
+            // Enable/disable terminate button based on session state
+            terminateButton.setEnabled(selected.isActive());
+        }
+        
+        detailsPanel.revalidate();
+        detailsPanel.repaint();
+    }
+    
+    /**
+     * Terminates the currently selected session.
+     */
+    private void terminateSelectedSession(java.awt.event.ActionEvent e) {
+        SessionManager.KalixSession selected = sessionList.getSelectedValue();
+        if (selected != null) {
+            String sessionId = selected.getSessionId();
+            
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                "Are you sure you want to terminate session " + sessionId + "?",
+                "Terminate Session",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            );
+            
+            if (result == JOptionPane.YES_OPTION) {
+                cliTaskManager.terminateSession(sessionId)
+                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                        statusUpdater.accept("Session terminated: " + sessionId);
+                        updateSessionsList();
+                    }))
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            statusUpdater.accept("Failed to terminate session: " + throwable.getMessage());
+                            JOptionPane.showMessageDialog(
+                                this,
+                                "Failed to terminate session: " + throwable.getMessage(),
+                                "Termination Error",
+                                JOptionPane.ERROR_MESSAGE
+                            );
+                        });
+                        return null;
+                    });
+            }
+        }
+    }
+    
+    // ========================
+    // Inner classes
+    // ========================
+    
+    /**
+     * Custom list cell renderer for session list.
+     */
+    private static class SessionListCellRenderer extends DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                boolean isSelected, boolean cellHasFocus) {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            
+            if (value instanceof SessionManager.KalixSession) {
+                SessionManager.KalixSession session = (SessionManager.KalixSession) value;
+                String displayText = String.format("%s (%s)", 
+                    session.getSessionId(), 
+                    session.getState().toString());
+                setText(displayText);
+                
+                // Color code by state
+                if (!isSelected) {
+                    switch (session.getState()) {
+                        case READY:
+                            setForeground(new Color(0, 120, 0)); // Dark green
+                            break;
+                        case RUNNING:
+                            setForeground(new Color(0, 0, 200)); // Blue
+                            break;
+                        case ERROR:
+                            setForeground(new Color(200, 0, 0)); // Red
+                            break;
+                        case STARTING:
+                            setForeground(new Color(150, 150, 0)); // Dark yellow
+                            break;
+                        default:
+                            setForeground(Color.BLACK);
+                            break;
+                    }
+                }
+            }
+            
+            return this;
         }
     }
 }

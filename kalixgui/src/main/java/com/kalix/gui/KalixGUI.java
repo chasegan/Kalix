@@ -51,7 +51,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private FileOperationsManager fileOperations;
     private FontDialogManager fontDialogManager;
     private FileDropHandler fileDropHandler;
-    private ModelRunner modelRunner;
     private VersionChecker versionChecker;
     private TitleBarManager titleBarManager;
     private ProcessExecutor processExecutor;
@@ -159,7 +158,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         fontDialogManager = new FontDialogManager(this, textEditor, prefs);
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
-        modelRunner = new ModelRunner(this, this::updateStatus);
         versionChecker = new VersionChecker(this::updateStatus);
         
         // Initialize CLI task manager
@@ -425,42 +423,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         return themeManager.switchTheme(theme);
     }
     
-    @Override
-    public void runModel() {
-        // Check if there's a current file loaded
-        if (!fileOperations.hasCurrentFile()) {
-            updateStatus("No model file is loaded. Please open a model file first.");
-            return;
-        }
-        
-        // Check if the file has unsaved changes
-        if (textEditor.isDirty()) {
-            int result = JOptionPane.showConfirmDialog(
-                this,
-                "The model has unsaved changes. Save before running?",
-                "Unsaved Changes",
-                JOptionPane.YES_NO_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE
-            );
-            
-            if (result == JOptionPane.YES_OPTION) {
-                // Save the file first
-                fileOperations.saveModel();
-                // Check if save was successful (file might still be dirty if save failed)
-                if (textEditor.isDirty()) {
-                    updateStatus("Cannot run model: failed to save file");
-                    return;
-                }
-            } else if (result == JOptionPane.CANCEL_OPTION) {
-                // User cancelled
-                return;
-            }
-            // If NO_OPTION, proceed with the existing file on disk
-        }
-        
-        // Run the model simulation
-        modelRunner.runModelWithDialog(fileOperations.getCurrentFile());
-    }
     
     @Override
     public void searchModel() {
@@ -490,39 +452,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         updateStatus("Sessions window opened");
     }
     
-    @Override
-    public void runTestSession() {
-        // Run test session and handle the result
-        cliTaskManager.runTestSession(9)
-            .thenAccept(sessionId -> {
-                SwingUtilities.invokeLater(() -> {
-                    updateStatus("Test session started: " + sessionId);
-                    
-                    // Automatically open Sessions window if not already open
-                    if (!SessionsWindow.isWindowOpen()) {
-                        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
-                    }
-                    
-                    // Show informational dialog
-                    String message = "Test session " + sessionId + " is now running.\n\n" +
-                                   "This session uses 'kalixcli test --new-session=9' to demonstrate\n" +
-                                   "the session management features.\n\n" +
-                                   "The Sessions window has been opened to monitor progress.";
-                    
-                    JOptionPane.showMessageDialog(this, message,
-                        "Test Session Started", JOptionPane.INFORMATION_MESSAGE);
-                });
-            })
-            .exceptionally(throwable -> {
-                SwingUtilities.invokeLater(() -> {
-                    updateStatus("Error starting test session: " + throwable.getMessage());
-                    JOptionPane.showMessageDialog(this,
-                        "Failed to start test session: " + throwable.getMessage(),
-                        "Test Session Error", JOptionPane.ERROR_MESSAGE);
-                });
-                return null;
-            });
-    }
     
     @Override
     public void runModelFromMemory() {

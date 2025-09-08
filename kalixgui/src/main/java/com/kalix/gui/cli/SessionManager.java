@@ -18,7 +18,6 @@ import java.util.function.Consumer;
 public class SessionManager {
     
     private static final AtomicLong SESSION_COUNTER = new AtomicLong(0);
-    private static final DateTimeFormatter SESSION_ID_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     
     private final ProcessExecutor processExecutor;
     private final Map<String, KalixSession> activeSessions = new ConcurrentHashMap<>();
@@ -37,15 +36,6 @@ public class SessionManager {
         TERMINATED      // Session has ended
     }
     
-    /**
-     * Types of kalixcli sessions.
-     */
-    public enum SessionType {
-        MODEL_RUN,      // Long-running model execution, stays alive for queries
-        COMMAND,        // One-shot command execution
-        ANALYSIS,       // Background analysis session
-        TEST_SESSION    // Test session for UI testing
-    }
     
     /**
      * Events that can occur during session lifecycle.
@@ -82,16 +72,14 @@ public class SessionManager {
      */
     public static class KalixSession {
         private final String sessionId;
-        private final SessionType type;
         private final InteractiveKalixProcess process;
         private final LocalDateTime startTime;
         private volatile SessionState state;
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
         
-        public KalixSession(String sessionId, SessionType type, InteractiveKalixProcess process) {
+        public KalixSession(String sessionId, InteractiveKalixProcess process) {
             this.sessionId = sessionId;
-            this.type = type;
             this.process = process;
             this.startTime = LocalDateTime.now();
             this.state = SessionState.STARTING;
@@ -99,7 +87,6 @@ public class SessionManager {
         }
         
         public String getSessionId() { return sessionId; }
-        public SessionType getType() { return type; }
         public InteractiveKalixProcess getProcess() { return process; }
         public LocalDateTime getStartTime() { return startTime; }
         public SessionState getState() { return state; }
@@ -122,7 +109,7 @@ public class SessionManager {
         
         @Override
         public String toString() {
-            return String.format("KalixSession[id=%s, type=%s, state=%s]", sessionId, type, state);
+            return String.format("KalixSession[id=%s, state=%s]", sessionId, state);
         }
     }
     
@@ -130,20 +117,12 @@ public class SessionManager {
      * Configuration for starting a new session.
      */
     public static class SessionConfig {
-        private SessionType type = SessionType.COMMAND;
-        private String[] args;
+        private final String[] args;
         private String customSessionId;
         private Consumer<ProgressParser.ProgressInfo> progressCallback;
-        private Consumer<KalixCliProtocol.Prompt> promptCallback;
         
-        public SessionConfig withType(SessionType type) {
-            this.type = type;
-            return this;
-        }
-        
-        public SessionConfig withArgs(String... args) {
+        public SessionConfig(String... args) {
             this.args = args;
-            return this;
         }
         
         public SessionConfig withSessionId(String sessionId) {
@@ -156,17 +135,10 @@ public class SessionManager {
             return this;
         }
         
-        public SessionConfig onPrompt(Consumer<KalixCliProtocol.Prompt> callback) {
-            this.promptCallback = callback;
-            return this;
-        }
-        
         // Getters
-        public SessionType getType() { return type; }
         public String[] getArgs() { return args; }
         public String getCustomSessionId() { return customSessionId; }
         public Consumer<ProgressParser.ProgressInfo> getProgressCallback() { return progressCallback; }
-        public Consumer<KalixCliProtocol.Prompt> getPromptCallback() { return promptCallback; }
     }
     
     /**
@@ -201,7 +173,7 @@ public class SessionManager {
                     cliPath, processExecutor, config.getArgs());
                 
                 // Create session
-                KalixSession session = new KalixSession(sessionId, config.getType(), process);
+                KalixSession session = new KalixSession(sessionId, process);
                 activeSessions.put(sessionId, session);
                 
                 // Start monitoring the session
@@ -228,21 +200,13 @@ public class SessionManager {
      */
     public CompletableFuture<Void> sendCommand(String sessionId, String command) {
         return CompletableFuture.runAsync(() -> {
-            KalixSession session = activeSessions.get(sessionId);
-            if (session == null) {
-                throw new IllegalArgumentException("Session not found: " + sessionId);
-            }
-            
-            if (!session.isActive()) {
-                throw new IllegalStateException("Session not active: " + sessionId + " (state: " + session.getState() + ")");
-            }
-            
             try {
+                KalixSession session = validateActiveSession(sessionId, "Send command");
                 session.getProcess().sendCommand(command);
                 session.setState(SessionState.RUNNING, "Executing command: " + command);
                 updateStatus("Sent command to session " + sessionId + ": " + command);
             } catch (IOException e) {
-                session.setState(SessionState.ERROR, "Failed to send command: " + e.getMessage());
+                handleSessionError(sessionId, e, "Send command");
                 throw new RuntimeException("Failed to send command to session " + sessionId, e);
             }
         });
@@ -257,17 +221,17 @@ public class SessionManager {
      */
     public CompletableFuture<Void> sendModelDefinition(String sessionId, String modelText) {
         return CompletableFuture.runAsync(() -> {
-            KalixSession session = activeSessions.get(sessionId);
-            if (session == null) {
-                throw new IllegalArgumentException("Session not found: " + sessionId);
-            }
-            
             try {
+                KalixSession session = activeSessions.get(sessionId); // Don't validate active since we're just starting
+                if (session == null) {
+                    throw new IllegalArgumentException("Session not found: " + sessionId);
+                }
+                
                 session.getProcess().sendModelDefinition(modelText);
                 session.setState(SessionState.RUNNING, "Running model from memory");
                 updateStatus("Sent model definition to session: " + sessionId);
             } catch (IOException e) {
-                session.setState(SessionState.ERROR, "Failed to send model: " + e.getMessage());
+                handleSessionError(sessionId, e, "Send model definition");
                 throw new RuntimeException("Failed to send model to session " + sessionId, e);
             }
         });
@@ -389,13 +353,7 @@ public class SessionManager {
             }
         }
         
-        // Check for prompts
-        if (config.getPromptCallback() != null) {
-            KalixCliProtocol.Prompt prompt = KalixCliProtocol.parsePrompt(line);
-            if (prompt.getType() != KalixCliProtocol.PromptType.UNKNOWN) {
-                config.getPromptCallback().accept(prompt);
-            }
-        }
+        // Prompt handling removed - not currently used in the application
     }
     
     /**
@@ -414,10 +372,6 @@ public class SessionManager {
             session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
             fireSessionEvent(sessionId, oldState, SessionState.COMPLETING, "Command completed");
             
-            // Schedule cleanup for command-type sessions
-            if (session.getType() == SessionType.COMMAND) {
-                scheduleSessionCleanup(sessionId, 2000);
-            }
             
         } else if (message.isSessionEnding()) {
             session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
@@ -480,6 +434,33 @@ public class SessionManager {
     }
     
     /**
+     * Handles session errors consistently.
+     */
+    private void handleSessionError(String sessionId, Exception e, String operation) {
+        KalixSession session = activeSessions.get(sessionId);
+        if (session != null) {
+            SessionState oldState = session.getState();
+            session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
+            fireSessionEvent(sessionId, oldState, SessionState.ERROR, e.getMessage());
+        }
+        updateStatus("Session " + sessionId + " error: " + operation + " failed");
+    }
+    
+    /**
+     * Validates session exists and is active.
+     */
+    private KalixSession validateActiveSession(String sessionId, String operation) {
+        KalixSession session = activeSessions.get(sessionId);
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found: " + sessionId);
+        }
+        if (!session.isActive()) {
+            throw new IllegalStateException(operation + " failed: Session not active: " + sessionId + " (state: " + session.getState() + ")");
+        }
+        return session;
+    }
+    
+    /**
      * Generates a unique session ID.
      */
     private String generateSessionId(String customId) {
@@ -487,9 +468,7 @@ public class SessionManager {
             return customId.trim();
         }
         
-        LocalDateTime now = LocalDateTime.now();
-        long counter = SESSION_COUNTER.incrementAndGet();
-        return "kalix_" + now.format(SESSION_ID_FORMAT) + "_" + counter;
+        return "session-" + SESSION_COUNTER.incrementAndGet();
     }
     
     /**

@@ -58,16 +58,6 @@ public class ToolBarBuilder {
         
         toolBar.addSeparator();
         
-        // Model operations
-        toolBar.add(createToolBarButton(
-            "Run", 
-            AppConstants.TOOLBAR_RUN_TOOLTIP,
-            FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
-            e -> callbacks.runModel()
-        ));
-        
-        toolBar.addSeparator();
-        
         // Utility operations  
         toolBar.add(createToolBarButton(
             "Search", 

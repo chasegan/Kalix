@@ -130,7 +130,6 @@ public final class AppConstants {
     public static final String TOOLBAR_NEW_TOOLTIP = "New Model (Ctrl+N)";
     public static final String TOOLBAR_OPEN_TOOLTIP = "Open Model (Ctrl+O)";
     public static final String TOOLBAR_SAVE_TOOLTIP = "Save Model (Ctrl+S)";
-    public static final String TOOLBAR_RUN_TOOLTIP = "Run Model (F5)";
     public static final String TOOLBAR_SEARCH_TOOLTIP = "Search in Model (Ctrl+F)";
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
     public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";

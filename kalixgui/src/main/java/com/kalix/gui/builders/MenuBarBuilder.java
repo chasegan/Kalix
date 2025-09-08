@@ -41,7 +41,6 @@ public class MenuBarBuilder {
         void updateStatus(String message);
         
         // New toolbar-specific actions
-        void runModel();
         void runModelFromMemory();
         void searchModel();
         void getCliVersion();
@@ -50,8 +49,6 @@ public class MenuBarBuilder {
         // Sessions window
         void showSessionsWindow();
         
-        // Test session command
-        void runTestSession();
         
         // Preferences dialog
         void showPreferences();
@@ -192,7 +189,6 @@ public class MenuBarBuilder {
         runMenu.add(createMenuItem("Run Model (Memory)", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Run Test Simulation", e -> callbacks.runTestSimulation()));
-        runMenu.add(createMenuItem("Run Test Session", e -> callbacks.runTestSession()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Sessions Window", e -> callbacks.showSessionsWindow()));
         return runMenu;

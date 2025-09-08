@@ -119,39 +119,6 @@ public class CliTaskManager {
         runTestSimulation(Integer.parseInt(DEFAULT_SIM_DURATION));
     }
     
-    /**
-     * Runs a test session with the specified session parameter.
-     * This creates a persistent session for testing the session management UI.
-     * 
-     * @param sessionValue session parameter value
-     * @return CompletableFuture with the session ID
-     */
-    public CompletableFuture<String> runTestSession(int sessionValue) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Locate kalixcli
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCli();
-                if (!cliLocation.isPresent()) {
-                    handleCliNotFound();
-                    throw new RuntimeException("kalixcli not found");
-                }
-                
-                // Configure session for test session
-                SessionManager.SessionConfig config = new SessionManager.SessionConfig()
-                    .withType(SessionManager.SessionType.TEST_SESSION)
-                    .withArgs("test", "--new-session=" + sessionValue)
-                    .onProgress(this::updateProgressFromSession);
-                
-                // Start session
-                CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
-                
-                return sessionFuture.get(); // Return session ID
-                
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to run test session", e);
-            }
-        });
-    }
     
     /**
      * Runs a CLI task with the given configuration.
@@ -366,9 +333,7 @@ public class CliTaskManager {
                 }
                 
                 // Configure session for model run
-                SessionManager.SessionConfig config = new SessionManager.SessionConfig()
-                    .withType(SessionManager.SessionType.MODEL_RUN)
-                    .withArgs("run", "-") // Use stdin for model input
+                SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session")
                     .onProgress(this::updateProgressFromSession);
                 
                 // Start session
