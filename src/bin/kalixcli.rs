@@ -2,21 +2,12 @@ use clap::{CommandFactory, Parser, Subcommand};
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::perf::benchmarks;
 use kalix::misc::cli_helpers::describe_cli_api;
+use kalix::apis::stdio::handlers::run_stdio_session;
 use std::io::{self, Read, Write};
 use std::thread;
 use std::time::Duration;
 
-// KALIX_<TYPE>_<STATUS>[ : <additional_info>]
-//
-// Examples:
-// KALIX_SESSION_READY
-// KALIX_SESSION_READY: Model validation complete
-// KALIX_COMMAND_COMPLETE
-// KALIX_COMMAND_COMPLETE: Version check finished
-// KALIX_SESSION_ENDING
-// KALIX_SESSION_ENDING: User requested shutdown
-// KALIX_ERROR_FATAL: Out of memory
-// KALIX_ERROR_RECOVERABLE: Warning - using default parameters
+
 
 
 
@@ -31,6 +22,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    NewSession {
+
+    },
     /// Run performance tests
     Test {
         //#[clap(subcommand)]
@@ -66,6 +60,12 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::NewSession { } => {
+            if let Err(e) = run_stdio_session() {
+                eprintln!("Session error: {}", e);
+                std::process::exit(1);
+            }
+        }
         Commands::Test { sim_duration_seconds, new_session } => {
             if let Some(new_session) = new_session {
                 println!("KALIX_SESSION_READY");
