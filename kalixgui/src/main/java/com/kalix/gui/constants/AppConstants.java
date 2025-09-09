@@ -92,7 +92,6 @@ public final class AppConstants {
     public static final String STATUS_ZOOMED_OUT = "Zoomed out";
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
     public static final String STATUS_FLOWVIZ_OPENED = "FlowViz window opened";
-    public static final String STATUS_SPLASH_DISPLAYED = "Splash screen displayed";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
     public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini or .toml)";
     

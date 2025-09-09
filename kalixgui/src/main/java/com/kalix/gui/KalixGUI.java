@@ -390,11 +390,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         updateStatus(AppConstants.STATUS_FLOWVIZ_OPENED);
     }
 
-    @Override
-    public void showSplashScreen() {
-        SplashScreen.showSplashScreen();
-        updateStatus(AppConstants.STATUS_SPLASH_DISPLAYED);
-    }
 
     @Override
     public void showAbout() {
@@ -499,9 +494,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public static void main(String[] args) {
         // Configure system properties for better macOS integration
         ThemeManager.configureSystemProperties();
-        
-        // Show splash screen first
-        SplashScreen.showSplashScreen();
         
         SwingUtilities.invokeLater(() -> {
             try {

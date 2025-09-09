@@ -38,7 +38,6 @@ public class MenuBarBuilder {
         void zoomIn();
         void zoomOut();
         void resetZoom();
-        void showSplashScreen();
         String switchTheme(String theme);
         void flowViz();
         void showAbout();
@@ -152,9 +151,6 @@ public class MenuBarBuilder {
         
         // Font settings
         viewMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
-        viewMenu.addSeparator();
-        
-        viewMenu.add(createMenuItem("Show Splash Screen", e -> callbacks.showSplashScreen()));
         viewMenu.addSeparator();
         
         // Theme submenu
