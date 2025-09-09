@@ -154,10 +154,10 @@ impl Model {
 
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
-        println!("Number of critical inputs: {}", civ.len());
-        for i in 0..civ.len() {
-            println!("Critical input [{}]: {}", i, civ[i]);
-        }
+        // println!("Number of critical inputs: {}", civ.len());
+        // for i in 0..civ.len() {
+        //     println!("Critical input [{}]: {}", i, civ[i]);
+        // }
 
         // If there is no critical input data, return a default configuration.
         if civ.len() == 0 {
@@ -169,14 +169,14 @@ impl Model {
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         for ci in civ {
 
-            println!("Searching for timeseries that matches ci: {}", ci);
+            // println!("Searching for timeseries that matches ci: {}", ci);
             let mut found : bool = false;
 
             for ts in self.inputs.iter() {
-                println!("Timeseries: {} {}", ts.full_colindex_path, ts.full_colname_path);
+                // println!("Timeseries: {} {}", ts.full_colindex_path, ts.full_colname_path);
                 if (ci == ts.full_colindex_path) || (ci == ts.full_colname_path) {
 
-                    println!("Got it!");
+                    // println!("Got it!");
                     found = true;
                     // This timeseries appears to be the one we're looking for!
                     // If it is a critical input AND THE SOURCE IS A FILE then the model run
@@ -186,15 +186,15 @@ impl Model {
                             None => {
                                 //This is the first critical data file
                                 critical_data_availability_mask = Some(ts.timeseries.clone());
-                                println!("Initial mask based on {}", ts.source_path);
+                                // println!("Initial mask based on {}", ts.source_path);
                             }
                             Some(ref mut mask) => {
                                 mask.mask_with(&ts.timeseries);
-                                println!("Mask updated based on {}", ts.source_path);
+                                // println!("Mask updated based on {}", ts.source_path);
                             }
                         }
                     } else {
-                        println!("Mask not influenced by {}", ts.source_path);
+                        // println!("Mask not influenced by {}", ts.source_path);
                     }
                 }
             }
@@ -233,9 +233,9 @@ impl Model {
 
         // Return the configuration
         //TODO: change sim_start to u64 and delete cast
-        println!("Mask start_timestamp: {}", mask.start_timestamp);
-        println!("Mask start_index: {}", start_index);
-        println!("Mask end_index: {}", end_index);
+        // println!("Mask start_timestamp: {}", mask.start_timestamp);
+        // println!("Mask start_index: {}", start_index);
+        // println!("Mask end_index: {}", end_index);
         let nsteps = (end_index - start_index) as u64;
         let start_timestamp = mask.start_timestamp + (start_index as u64 * mask.step_size);
         let end_timestamp = mask.start_timestamp + ((end_index - 1) as u64 * mask.step_size);
