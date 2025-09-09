@@ -13,7 +13,6 @@ public class MapPanel extends JPanel {
     public MapPanel() {
         setBackground(Color.WHITE);
         setPreferredSize(new Dimension(600, 600));
-        setBorder(BorderFactory.createTitledBorder("Model Map View"));
     }
 
     @Override
