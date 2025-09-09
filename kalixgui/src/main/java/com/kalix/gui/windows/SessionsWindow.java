@@ -52,7 +52,6 @@ public class SessionsWindow extends JFrame {
         setupWindow(parentFrame);
         initializeComponents();
         setupLayout();
-        setupUpdateTimer();
         setupWindowListeners();
     }
     
@@ -285,17 +284,6 @@ public class SessionsWindow extends JFrame {
         footerPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
         
         add(footerPanel, BorderLayout.SOUTH);
-    }
-    
-    /**
-     * Sets up the timer for updating session status.
-     */
-    private void setupUpdateTimer() {
-        sessionUpdateTimer = new Timer(2000, e -> {
-            if (cliTaskManager != null && isVisible()) {
-                updateSessionsList();
-            }
-        });
     }
     
     /**
