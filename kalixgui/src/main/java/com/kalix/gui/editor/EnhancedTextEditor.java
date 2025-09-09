@@ -118,15 +118,12 @@ public class EnhancedTextEditor extends JPanel {
     private void setupLayout() {
         setLayout(new BorderLayout());
         
-        // Create a panel to hold line numbers and text editor
-        JPanel editorPanel = new JPanel(new BorderLayout());
-        editorPanel.add(lineNumberPanel, BorderLayout.WEST);
-        editorPanel.add(scrollPane, BorderLayout.CENTER);
+        // Set line number panel as row header so it scrolls with the editor
+        if (showLineNumbers) {
+            scrollPane.setRowHeaderView(lineNumberPanel);
+        }
         
-        add(editorPanel, BorderLayout.CENTER);
-        
-        // Initially show line numbers
-        lineNumberPanel.setVisible(showLineNumbers);
+        add(scrollPane, BorderLayout.CENTER);
     }
     
     private void setupFont() {
@@ -383,7 +380,11 @@ public class EnhancedTextEditor extends JPanel {
     
     public void toggleLineNumbers() {
         showLineNumbers = !showLineNumbers;
-        lineNumberPanel.setVisible(showLineNumbers);
+        if (showLineNumbers) {
+            scrollPane.setRowHeaderView(lineNumberPanel);
+        } else {
+            scrollPane.setRowHeaderView(null);
+        }
         revalidate();
         repaint();
     }
