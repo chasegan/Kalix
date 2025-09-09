@@ -441,10 +441,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         versionChecker.checkVersionWithStatusUpdate();
     }
     
-    @Override
-    public void runTestSimulation() {
-        cliTaskManager.runTestSimulation();
-    }
     
     @Override
     public void showSessionsWindow() {

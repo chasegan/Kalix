@@ -48,7 +48,6 @@ public class MenuBarBuilder {
         void runModelFromMemory();
         void searchModel();
         void getCliVersion();
-        void runTestSimulation();
         
         // Sessions window
         void showSessionsWindow();
@@ -191,8 +190,6 @@ public class MenuBarBuilder {
     private JMenu createRunMenu() {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model (Memory)", e -> callbacks.runModelFromMemory()));
-        runMenu.addSeparator();
-        runMenu.add(createMenuItem("Run Test Simulation", e -> callbacks.runTestSimulation()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Sessions Window", e -> callbacks.showSessionsWindow()));
         return runMenu;
