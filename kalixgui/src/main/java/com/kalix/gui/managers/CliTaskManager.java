@@ -69,7 +69,7 @@ public class CliTaskManager {
     
     /**
      * Runs a model from the text editor without saving to disk.
-     * This creates a persistent session that stays alive for querying results.
+     * This creates a persistent session and starts the Run Model program.
      * 
      * @param modelText the model definition from the editor
      * @return CompletableFuture with the session ID
@@ -91,13 +91,30 @@ public class CliTaskManager {
                 // Start session
                 CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
                 
-                // Send model definition once session starts
+                // Start Run Model program once session is ready
                 sessionFuture.thenAccept(sessionId -> {
                     try {
                         Thread.sleep(500); // Give process time to start
-                        sessionManager.sendModelDefinition(sessionId, modelText);
+                        
+                        // Create and start the Run Model program
+                        RunModelProgram runModelProgram = new RunModelProgram(
+                            sessionId,
+                            sessionManager,
+                            statusUpdater,
+                            this::updateProgressFromSession
+                        );
+                        
+                        // Attach program to session
+                        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
+                        if (session.isPresent()) {
+                            session.get().setActiveProgram(runModelProgram);
+                            runModelProgram.start(modelText);
+                        } else {
+                            statusUpdater.accept("Error: Session not found: " + sessionId);
+                        }
+                        
                     } catch (Exception e) {
-                        statusUpdater.accept("Error sending model: " + e.getMessage());
+                        statusUpdater.accept("Error starting Run Model program: " + e.getMessage());
                     }
                 });
                 

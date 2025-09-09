@@ -78,6 +78,7 @@ public class SessionManager {
         private volatile SessionState state;
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
+        private volatile RunModelProgram activeProgram;
         
         public KalixSession(String sessionId, InteractiveKalixProcess process) {
             this.sessionId = sessionId;
@@ -109,6 +110,9 @@ public class SessionManager {
         public boolean isReady() {
             return state == SessionState.READY;
         }
+        
+        public RunModelProgram getActiveProgram() { return activeProgram; }
+        public void setActiveProgram(RunModelProgram program) { this.activeProgram = program; }
         
         @Override
         public String toString() {
@@ -217,38 +221,6 @@ public class SessionManager {
         });
     }
     
-    /**
-     * Sends model definition to a session (for in-memory model execution).
-     * Uses the JSON protocol with load_model_string command.
-     * 
-     * @param sessionId the session to send model to
-     * @param modelText the model definition text
-     * @return CompletableFuture that completes when model is sent
-     */
-    public CompletableFuture<Void> sendModelDefinition(String sessionId, String modelText) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                KalixSession session = activeSessions.get(sessionId); // Don't validate active since we're just starting
-                if (session == null) {
-                    throw new IllegalArgumentException("Session not found: " + sessionId);
-                }
-                
-                // Create JSON command using the new protocol
-                String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
-                
-                // Log the raw JSON command that will be sent to STDIN
-                session.getCommunicationLog().logGuiToCli(jsonCommand);
-                
-                session.getProcess().sendCommand(jsonCommand);
-                
-                session.setState(SessionState.RUNNING, "Running model from memory");
-                updateStatus("Sent model definition to session: " + sessionId);
-            } catch (IOException e) {
-                handleSessionError(sessionId, e, "Send model definition");
-                throw new RuntimeException("Failed to send model to session " + sessionId, e);
-            }
-        });
-    }
     
     /**
      * Requests results from a ready session.
@@ -401,18 +373,21 @@ public class SessionManager {
     
     /**
      * Processes output from a session and updates state accordingly.
+     * Handles JSON protocol messages from kalixcli.
      */
     private void processSessionOutput(KalixSession session, String line, SessionConfig config) {
         String sessionId = session.getSessionId();
         
-        // Check for protocol messages
-        Optional<KalixCliProtocol.ProtocolMessage> protocolMsg = KalixCliProtocol.parseProtocolMessage(line);
-        if (protocolMsg.isPresent()) {
-            handleProtocolMessage(session, protocolMsg.get());
-            return;
+        // Check for JSON protocol messages
+        if (JsonStdioProtocol.looksLikeJson(line)) {
+            Optional<JsonStdioProtocol.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
+            if (jsonMsg.isPresent()) {
+                handleJsonProtocolMessage(session, jsonMsg.get(), config);
+                return;
+            }
         }
         
-        // Check for progress updates
+        // Check for progress updates in non-JSON format (legacy support)
         if (config.getProgressCallback() != null) {
             Optional<ProgressParser.ProgressInfo> progress = ProgressParser.parseProgress(line);
             if (progress.isPresent()) {
@@ -442,11 +417,13 @@ public class SessionManager {
             return;
         }
         
-        // Check for protocol messages on stderr (some CLIs send protocol info there)
-        Optional<KalixCliProtocol.ProtocolMessage> protocolMsg = KalixCliProtocol.parseProtocolMessage(errorLine);
-        if (protocolMsg.isPresent()) {
-            handleProtocolMessage(session, protocolMsg.get());
-            return;
+        // Check for JSON protocol messages on stderr (some CLIs send protocol info there)
+        if (JsonStdioProtocol.looksLikeJson(errorLine)) {
+            Optional<JsonStdioProtocol.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
+            if (jsonMsg.isPresent()) {
+                handleJsonProtocolMessage(session, jsonMsg.get(), config);
+                return;
+            }
         }
         
         // Check for progress updates on stderr (some CLIs send progress there)
@@ -472,7 +449,46 @@ public class SessionManager {
     }
     
     /**
-     * Handles protocol messages and updates session state.
+     * Handles JSON protocol messages by delegating to active programs or handling generically.
+     */
+    private void handleJsonProtocolMessage(KalixSession session, JsonStdioProtocol.SystemMessage message, SessionConfig config) {
+        String sessionId = session.getSessionId();
+        
+        // First try to delegate to any active program
+        if (session.getActiveProgram() != null && session.getActiveProgram().isActive()) {
+            boolean handled = session.getActiveProgram().handleMessage(message);
+            if (handled) {
+                return; // Message was handled by the program
+            }
+        }
+        
+        // Handle generic messages that aren't part of a specific program
+        JsonStdioProtocol.SystemMessageType msgType = message.getSystemMessageType();
+        if (msgType == null) {
+            updateStatus("Unknown JSON message type from session " + sessionId);
+            return;
+        }
+        
+        switch (msgType) {
+            case LOG:
+                // Generic log message
+                try {
+                    String logMsg = message.getData().asText();
+                    updateStatus("Session " + sessionId + " log: " + logMsg);
+                } catch (Exception e) {
+                    updateStatus("Session " + sessionId + " log message received");
+                }
+                break;
+                
+            default:
+                // Other message types should be handled by programs
+                updateStatus("Unhandled JSON message type from session " + sessionId + ": " + msgType);
+                break;
+        }
+    }
+
+    /**
+     * Handles legacy protocol messages and updates session state.
      */
     private void handleProtocolMessage(KalixSession session, KalixCliProtocol.ProtocolMessage message) {
         String sessionId = session.getSessionId();
