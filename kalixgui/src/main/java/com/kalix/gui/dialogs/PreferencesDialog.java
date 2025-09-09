@@ -2,7 +2,6 @@ package com.kalix.gui.dialogs;
 
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
-import com.kalix.gui.managers.FontDialogManager;
 import com.kalix.gui.managers.ThemeManager;
 
 import javax.swing.*;
@@ -20,12 +19,10 @@ public class PreferencesDialog extends JDialog {
     private final JFrame parent;
     private final Preferences prefs;
     private final ThemeManager themeManager;
-    private final FontDialogManager fontDialogManager;
     private final EnhancedTextEditor textEditor;
     
     // Settings panels
     private ThemePanel themePanel;
-    private EditorPanel editorPanel;
     private KalixCliPanel kalixCliPanel;
     
     // Dialog result
@@ -34,12 +31,11 @@ public class PreferencesDialog extends JDialog {
     /**
      * Creates a new PreferencesDialog.
      */
-    public PreferencesDialog(JFrame parent, ThemeManager themeManager, FontDialogManager fontDialogManager, EnhancedTextEditor textEditor) {
+    public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor) {
         super(parent, "Preferences", true);
         this.parent = parent;
         this.prefs = Preferences.userNodeForPackage(PreferencesDialog.class);
         this.themeManager = themeManager;
-        this.fontDialogManager = fontDialogManager;
         this.textEditor = textEditor;
         
         initializeDialog();
@@ -57,11 +53,9 @@ public class PreferencesDialog extends JDialog {
         
         // Create and add tabs
         themePanel = new ThemePanel();
-        editorPanel = new EditorPanel();
         kalixCliPanel = new KalixCliPanel();
         
         tabbedPane.addTab("Theme", createTabIcon("theme"), themePanel, "Configure visual theme");
-        tabbedPane.addTab("Editor", createTabIcon("editor"), editorPanel, "Configure editor settings");
         tabbedPane.addTab("KalixCLI", createTabIcon("cli"), kalixCliPanel, "Configure Kalix CLI settings");
         
         add(tabbedPane, BorderLayout.CENTER);
@@ -86,7 +80,6 @@ public class PreferencesDialog extends JDialog {
         Color color;
         switch (type) {
             case "theme": color = new Color(138, 43, 226); break; // Purple
-            case "editor": color = new Color(100, 149, 237); break; // Blue
             case "cli": color = new Color(34, 139, 34); break; // Green
             default: color = Color.GRAY;
         }
@@ -148,7 +141,6 @@ public class PreferencesDialog extends JDialog {
      */
     private void loadSettings() {
         themePanel.loadSettings();
-        editorPanel.loadSettings();
         kalixCliPanel.loadSettings();
     }
     
@@ -160,10 +152,9 @@ public class PreferencesDialog extends JDialog {
     private boolean applySettings() {
         try {
             boolean themeChanged = themePanel.applySettings();
-            boolean editorChanged = editorPanel.applySettings();
             boolean cliChanged = kalixCliPanel.applySettings();
             
-            if (themeChanged || editorChanged || cliChanged) {
+            if (themeChanged || cliChanged) {
                 settingsChanged = true;
             }
             
@@ -244,160 +235,6 @@ public class PreferencesDialog extends JDialog {
         }
     }
     
-    /**
-     * Panel for editor settings (font, line wrap).
-     */
-    private class EditorPanel extends PreferencesPanel {
-        private JComboBox<String> fontNameComboBox;
-        private JComboBox<Integer> fontSizeComboBox;
-        private JComboBox<String> editorThemeComboBox;
-        private JCheckBox lineWrapCheckBox;
-        private JLabel previewLabel;
-        
-        public EditorPanel() {
-            initializeEditorPanel();
-        }
-        
-        private void initializeEditorPanel() {
-            setLayout(new GridBagLayout());
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-            
-            // Font name selection
-            gbc.gridx = 0; gbc.gridy = 0;
-            add(new JLabel("Font:"), gbc);
-            
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            fontNameComboBox = new JComboBox<>(AppConstants.MONOSPACE_FONTS);
-            fontNameComboBox.addActionListener(e -> updatePreview());
-            add(fontNameComboBox, gbc);
-            
-            // Font size selection
-            gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            add(new JLabel("Font Size:"), gbc);
-            
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            fontSizeComboBox = new JComboBox<>(AppConstants.FONT_SIZES);
-            fontSizeComboBox.addActionListener(e -> updatePreview());
-            add(fontSizeComboBox, gbc);
-            
-            // Editor theme selection
-            gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            add(new JLabel("Editor Theme:"), gbc);
-            
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            editorThemeComboBox = new JComboBox<>(com.kalix.gui.editor.EditorTheme.getAvailableThemes());
-            editorThemeComboBox.addActionListener(e -> updatePreview());
-            add(editorThemeComboBox, gbc);
-            
-            // Line wrap checkbox with aligned layout
-            gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            add(new JLabel("Line Wrap:"), gbc);
-            
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            lineWrapCheckBox = new JCheckBox();
-            add(lineWrapCheckBox, gbc);
-            
-            // Preview area
-            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH; 
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            
-            JPanel previewPanel = createPreviewPanel();
-            add(previewPanel, gbc);
-        }
-        
-        private JPanel createPreviewPanel() {
-            JPanel panel = new JPanel(new BorderLayout());
-            panel.setBorder(BorderFactory.createTitledBorder("Preview"));
-            panel.setPreferredSize(new Dimension(400, 120));
-            
-            previewLabel = new JLabel();
-            previewLabel.setText(AppConstants.FONT_PREVIEW_TEXT);
-            previewLabel.setVerticalAlignment(SwingConstants.TOP);
-            previewLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-            
-            JScrollPane scrollPane = new JScrollPane(previewLabel);
-            scrollPane.setPreferredSize(new Dimension(380, 100));
-            
-            panel.add(scrollPane, BorderLayout.CENTER);
-            return panel;
-        }
-        
-        private void updatePreview() {
-            String fontName = (String) fontNameComboBox.getSelectedItem();
-            Integer fontSize = (Integer) fontSizeComboBox.getSelectedItem();
-            
-            if (fontName != null && fontSize != null) {
-                Font font = new Font(fontName, Font.PLAIN, fontSize);
-                previewLabel.setFont(font);
-            }
-        }
-        
-        @Override
-        public void loadSettings() {
-            // Load font settings
-            String fontName = prefs.get(AppConstants.PREF_FONT_NAME, AppConstants.DEFAULT_FONT_NAME);
-            int fontSize = prefs.getInt(AppConstants.PREF_FONT_SIZE, AppConstants.DEFAULT_FONT_SIZE);
-            
-            fontNameComboBox.setSelectedItem(fontName);
-            fontSizeComboBox.setSelectedItem(fontSize);
-            
-            // Load editor theme setting
-            String editorTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
-            editorThemeComboBox.setSelectedItem(editorTheme);
-            
-            // Load line wrap setting from preferences
-            boolean savedLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
-            lineWrapCheckBox.setSelected(savedLineWrap);
-            textEditor.setLineWrap(savedLineWrap);
-            
-            updatePreview();
-        }
-        
-        @Override
-        public boolean applySettings() {
-            boolean changed = false;
-            
-            // Apply font settings
-            String selectedFont = (String) fontNameComboBox.getSelectedItem();
-            Integer selectedSize = (Integer) fontSizeComboBox.getSelectedItem();
-            
-            String currentFont = prefs.get(AppConstants.PREF_FONT_NAME, AppConstants.DEFAULT_FONT_NAME);
-            int currentSize = prefs.getInt(AppConstants.PREF_FONT_SIZE, AppConstants.DEFAULT_FONT_SIZE);
-            
-            if (!selectedFont.equals(currentFont) || !selectedSize.equals(currentSize)) {
-                prefs.put(AppConstants.PREF_FONT_NAME, selectedFont);
-                prefs.putInt(AppConstants.PREF_FONT_SIZE, selectedSize);
-                
-                // Apply font changes through FontDialogManager
-                fontDialogManager.applyFont(selectedFont, selectedSize);
-                changed = true;
-            }
-            
-            // Apply editor theme setting
-            String selectedTheme = (String) editorThemeComboBox.getSelectedItem();
-            String currentTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
-            
-            if (!selectedTheme.equals(currentTheme)) {
-                prefs.put(AppConstants.PREF_EDITOR_THEME, selectedTheme);
-                textEditor.setEditorTheme(selectedTheme);
-                changed = true;
-            }
-            
-            // Apply line wrap setting
-            boolean selectedLineWrap = lineWrapCheckBox.isSelected();
-            boolean currentLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
-            
-            if (selectedLineWrap != currentLineWrap) {
-                prefs.putBoolean(AppConstants.PREF_LINE_WRAP, selectedLineWrap);
-                textEditor.setLineWrap(selectedLineWrap);
-                changed = true;
-            }
-            
-            return changed;
-        }
-    }
     
     /**
      * Panel for KalixCLI settings.

@@ -43,6 +43,7 @@ public class CliTaskManager {
         this.progressBar = progressBar;
         this.parentFrame = parentFrame;
         
+        
         // Initialize session manager
         this.sessionManager = new SessionManager(
             processExecutor, 
@@ -75,6 +76,7 @@ public class CliTaskManager {
      * @return CompletableFuture with the session ID
      */
     public CompletableFuture<String> runModelFromMemory(String modelText) {
+        // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // Locate kalixcli
@@ -88,37 +90,38 @@ public class CliTaskManager {
                 SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session")
                     .onProgress(this::updateProgressFromSession);
                 
-                // Start session
+                // Start session and wait for it to be ready
                 CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
+                String sessionId = sessionFuture.get(); // Wait for session to start
                 
-                // Start Run Model program once session is ready
-                sessionFuture.thenAccept(sessionId -> {
-                    try {
-                        Thread.sleep(500); // Give process time to start
-                        
-                        // Create and start the Run Model program
-                        RunModelProgram runModelProgram = new RunModelProgram(
-                            sessionId,
-                            sessionManager,
-                            statusUpdater,
-                            this::updateProgressFromSession
-                        );
-                        
-                        // Attach program to session
-                        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
-                        if (session.isPresent()) {
-                            session.get().setActiveProgram(runModelProgram);
-                            runModelProgram.start(modelText);
-                        } else {
-                            statusUpdater.accept("Error: Session not found: " + sessionId);
-                        }
-                        
-                    } catch (Exception e) {
-                        statusUpdater.accept("Error starting Run Model program: " + e.getMessage());
+                // Now set up the Run Model program synchronously
+                try {
+                    Thread.sleep(500); // Give process time to start
+                    
+                    // Create and start the Run Model program
+                    RunModelProgram runModelProgram = new RunModelProgram(
+                        sessionId,
+                        sessionManager,
+                        statusUpdater,
+                        this::updateProgressFromSession
+                    );
+                    
+                    // Attach program to session
+                    Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
+                    if (session.isPresent()) {
+                        session.get().setActiveProgram(runModelProgram);
+                        runModelProgram.start(modelText);
+                    } else {
+                        throw new RuntimeException("Session not found: " + sessionId);
                     }
-                });
+                    
+                } catch (Exception e) {
+                    // Clean up session if RunModelProgram setup fails
+                    sessionManager.terminateSession(sessionId);
+                    throw new RuntimeException("Error starting Run Model program: " + e.getMessage(), e);
+                }
                 
-                return sessionFuture.get(); // Return session ID
+                return sessionId;
                 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to run model from memory", e);

@@ -21,44 +21,23 @@ import java.util.regex.Pattern;
 /**
  * Enhanced text editor component with professional code editor features.
  * Features include:
- * - Monospace font
- * - Line numbers (toggleable)
- * - Current line highlighting
  * - Better undo/redo system
  * - Dirty file tracking
  */
 public class EnhancedTextEditor extends JPanel {
     
     private JTextPane textPane;
-    private LineNumberPanel lineNumberPanel;
     private JScrollPane scrollPane;
     private UndoManager undoManager;
-    private IniTomlSyntaxHighlighter syntaxHighlighter;
     
     // State tracking
     private boolean isDirty = false;
-    private boolean showLineNumbers = true;
     private boolean lineWrap = true;
-    private String currentEditorTheme = "GitHub Light Colorblind";
     private DirtyStateListener dirtyStateListener;
     private FileDropHandler fileDropHandler;
     private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
     
-    // Styling
-    private static final Color CURRENT_LINE_COLOR = new Color(232, 242, 254);
-    private static final Color LINE_NUMBER_COLOR = new Color(128, 128, 128);
-    private static final Color LINE_NUMBER_BACKGROUND = new Color(248, 248, 248);
-    private static final Color SELECTION_HIGHLIGHT_COLOR = new Color(255, 255, 0, 100); // Semi-transparent yellow
-    private static final Color BRACKET_HIGHLIGHT_COLOR = new Color(0, 150, 255, 100); // Semi-transparent blue
     
-    // Selection highlighting
-    private String lastSelectedText = "";
-    private final List<Integer[]> selectionHighlights = new ArrayList<>();
-    
-    // Bracket matching
-    private final List<Integer[]> bracketHighlights = new ArrayList<>();
-    private static final String BRACKETS = "()[]{}";
-    private static final String QUOTES = "\"'`";
     
     // Find and replace
     private String lastSearchTerm = "";
@@ -76,32 +55,19 @@ public class EnhancedTextEditor extends JPanel {
     public EnhancedTextEditor() {
         initializeComponents();
         setupLayout();
-        setupFont();
         setupKeyBindings();
         setupDocumentListener();
-        setupSyntaxHighlighting();
         setupDragAndDrop();
     }
     
     private void initializeComponents() {
         textPane = new JTextPane() {
             @Override
-            protected void paintComponent(Graphics g) {
-                // Highlight current line
-                highlightCurrentLine(g);
-                super.paintComponent(g);
-                // Highlight selected text instances and brackets on top of text
-                highlightSelections(g);
-                highlightBrackets(g);
-            }
-            
-            @Override
             public boolean getScrollableTracksViewportWidth() {
                 return lineWrap;
             }
         };
         
-        lineNumberPanel = new LineNumberPanel(textPane);
         undoManager = new UndoManager();
         
         // Enable undo/redo tracking
@@ -118,44 +84,9 @@ public class EnhancedTextEditor extends JPanel {
     private void setupLayout() {
         setLayout(new BorderLayout());
         
-        // Set line number panel as row header so it scrolls with the editor
-        if (showLineNumbers) {
-            scrollPane.setRowHeaderView(lineNumberPanel);
-        }
-        
         add(scrollPane, BorderLayout.CENTER);
     }
     
-    private void setupFont() {
-        // Try to use high-quality monospace fonts, fallback to available ones
-        String[] preferredFonts = {
-            "JetBrains Mono", 
-            "Fira Code", 
-            "Source Code Pro",
-            "Consolas",
-            "Monaco",
-            "Menlo",
-            Font.MONOSPACED
-        };
-        
-        Font chosenFont = null;
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        String[] availableFonts = ge.getAvailableFontFamilyNames();
-        
-        for (String fontName : preferredFonts) {
-            if (Arrays.asList(availableFonts).contains(fontName) || fontName.equals(Font.MONOSPACED)) {
-                chosenFont = new Font(fontName, Font.PLAIN, 14);
-                break;
-            }
-        }
-        
-        if (chosenFont == null) {
-            chosenFont = new Font(Font.MONOSPACED, Font.PLAIN, 14);
-        }
-        
-        textPane.setFont(chosenFont);
-        lineNumberPanel.setFont(chosenFont);
-    }
     
     private void setupKeyBindings() {
         InputMap inputMap = textPane.getInputMap();
@@ -178,17 +109,6 @@ public class EnhancedTextEditor extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 redo();
-            }
-        });
-        
-        // Toggle line numbers
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.META_DOWN_MASK), "toggleLineNumbers");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK), "toggleLineNumbers");
-        
-        actionMap.put("toggleLineNumbers", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toggleLineNumbers();
             }
         });
         
@@ -233,7 +153,6 @@ public class EnhancedTextEditor extends JPanel {
                 if (!programmaticUpdate) {
                     setDirty(true);
                 }
-                applySyntaxHighlightingDelayed();
             }
             
             @Override
@@ -241,7 +160,6 @@ public class EnhancedTextEditor extends JPanel {
                 if (!programmaticUpdate) {
                     setDirty(true);
                 }
-                applySyntaxHighlightingDelayed();
             }
             
             @Override
@@ -249,114 +167,11 @@ public class EnhancedTextEditor extends JPanel {
                 if (!programmaticUpdate) {
                     setDirty(true);
                 }
-                applySyntaxHighlightingDelayed();
-            }
-        });
-        
-        // Add caret listener for current line highlighting and selection updates
-        textPane.addCaretListener(e -> {
-            updateSelectionHighlighting();
-            updateBracketHighlighting();
-            textPane.repaint();
-            lineNumberPanel.repaint();
-        });
-    }
-    
-    private void setupSyntaxHighlighting() {
-        syntaxHighlighter = new IniTomlSyntaxHighlighter(textPane);
-        // Apply initial syntax highlighting
-        SwingUtilities.invokeLater(() -> {
-            programmaticUpdate = true;
-            try {
-                syntaxHighlighter.highlightSyntax();
-            } finally {
-                programmaticUpdate = false;
             }
         });
     }
     
-    private Timer syntaxTimer = new Timer(300, e -> applySyntaxHighlighting());
     
-    private void applySyntaxHighlightingDelayed() {
-        syntaxTimer.setRepeats(false);
-        syntaxTimer.restart();
-    }
-    
-    private void applySyntaxHighlighting() {
-        if (syntaxHighlighter != null) {
-            programmaticUpdate = true; // Disable dirty marking during syntax highlighting
-            try {
-                syntaxHighlighter.highlightSyntax();
-            } finally {
-                programmaticUpdate = false; // Re-enable dirty marking
-            }
-        }
-    }
-    
-    private void highlightCurrentLine(Graphics g) {
-        try {
-            int caretPos = textPane.getCaretPosition();
-            int lineStart = Utilities.getRowStart(textPane, caretPos);
-            int lineEnd = Utilities.getRowEnd(textPane, caretPos);
-            
-            Rectangle startRect = textPane.modelToView(lineStart);
-            Rectangle endRect = textPane.modelToView(lineEnd);
-            
-            if (startRect != null && endRect != null) {
-                g.setColor(CURRENT_LINE_COLOR);
-                g.fillRect(0, startRect.y, textPane.getWidth(), startRect.height);
-            }
-        } catch (BadLocationException ex) {
-            // Ignore - just don't highlight
-        }
-    }
-    
-    private void highlightSelections(Graphics g) {
-        g.setColor(SELECTION_HIGHLIGHT_COLOR);
-        for (Integer[] range : selectionHighlights) {
-            try {
-                Rectangle startRect = textPane.modelToView(range[0]);
-                Rectangle endRect = textPane.modelToView(range[1]);
-                
-                if (startRect != null && endRect != null) {
-                    if (startRect.y == endRect.y) {
-                        // Single line selection
-                        g.fillRect(startRect.x, startRect.y, endRect.x - startRect.x, startRect.height);
-                    } else {
-                        // Multi-line selection - fill from start to end of first line
-                        g.fillRect(startRect.x, startRect.y, textPane.getWidth() - startRect.x, startRect.height);
-                        
-                        // Fill complete lines in between
-                        for (int y = startRect.y + startRect.height; y < endRect.y; y += startRect.height) {
-                            g.fillRect(0, y, textPane.getWidth(), startRect.height);
-                        }
-                        
-                        // Fill from start of last line to end position
-                        g.fillRect(0, endRect.y, endRect.x, endRect.height);
-                    }
-                }
-            } catch (BadLocationException ex) {
-                // Skip this highlight
-            }
-        }
-    }
-    
-    private void highlightBrackets(Graphics g) {
-        g.setColor(BRACKET_HIGHLIGHT_COLOR);
-        for (Integer[] range : bracketHighlights) {
-            try {
-                Rectangle startRect = textPane.modelToView(range[0]);
-                Rectangle endRect = textPane.modelToView(range[1]);
-                
-                if (startRect != null && endRect != null) {
-                    // Highlight individual brackets
-                    g.fillRect(startRect.x, startRect.y, endRect.x - startRect.x, startRect.height);
-                }
-            } catch (BadLocationException ex) {
-                // Skip this highlight
-            }
-        }
-    }
     
     public void undo() {
         if (undoManager.canUndo()) {
@@ -378,20 +193,6 @@ public class EnhancedTextEditor extends JPanel {
         return undoManager.canRedo();
     }
     
-    public void toggleLineNumbers() {
-        showLineNumbers = !showLineNumbers;
-        if (showLineNumbers) {
-            scrollPane.setRowHeaderView(lineNumberPanel);
-        } else {
-            scrollPane.setRowHeaderView(null);
-        }
-        revalidate();
-        repaint();
-    }
-    
-    public boolean isShowingLineNumbers() {
-        return showLineNumbers;
-    }
     
     public void setLineWrap(boolean wrap) {
         this.lineWrap = wrap;
@@ -469,163 +270,6 @@ public class EnhancedTextEditor extends JPanel {
         textPane.selectAll();
     }
     
-    private void updateSelectionHighlighting() {
-        selectionHighlights.clear();
-        
-        String selectedText = textPane.getSelectedText();
-        if (selectedText != null && !selectedText.trim().isEmpty() && selectedText.length() > 1) {
-            // Only highlight if selection has changed to avoid performance issues
-            if (!selectedText.equals(lastSelectedText)) {
-                lastSelectedText = selectedText;
-                
-                String fullText = textPane.getText();
-                String escapedText = Pattern.quote(selectedText);
-                Pattern pattern = Pattern.compile(escapedText, Pattern.CASE_INSENSITIVE);
-                Matcher matcher = pattern.matcher(fullText);
-                
-                int currentSelectionStart = textPane.getSelectionStart();
-                int currentSelectionEnd = textPane.getSelectionEnd();
-                
-                while (matcher.find()) {
-                    int start = matcher.start();
-                    int end = matcher.end();
-                    
-                    // Don't highlight the currently selected text
-                    if (!(start == currentSelectionStart && end == currentSelectionEnd)) {
-                        selectionHighlights.add(new Integer[]{start, end});
-                    }
-                }
-            }
-        } else {
-            lastSelectedText = "";
-        }
-    }
-    
-    private void updateBracketHighlighting() {
-        bracketHighlights.clear();
-        
-        int caretPos = textPane.getCaretPosition();
-        String text = textPane.getText();
-        
-        if (text == null || text.isEmpty() || caretPos < 0 || caretPos >= text.length()) {
-            return;
-        }
-        
-        // Check character at caret position and previous position
-        char currentChar = caretPos < text.length() ? text.charAt(caretPos) : '\0';
-        char prevChar = caretPos > 0 ? text.charAt(caretPos - 1) : '\0';
-        
-        // Try to match bracket at current position
-        int matchPos = findMatchingBracket(text, caretPos, currentChar, true);
-        if (matchPos != -1) {
-            bracketHighlights.add(new Integer[]{caretPos, caretPos + 1});
-            bracketHighlights.add(new Integer[]{matchPos, matchPos + 1});
-            return;
-        }
-        
-        // Try to match bracket at previous position
-        if (caretPos > 0) {
-            matchPos = findMatchingBracket(text, caretPos - 1, prevChar, true);
-            if (matchPos != -1) {
-                bracketHighlights.add(new Integer[]{caretPos - 1, caretPos});
-                bracketHighlights.add(new Integer[]{matchPos, matchPos + 1});
-                return;
-            }
-        }
-        
-        // Try to match quotes
-        matchPos = findMatchingQuote(text, caretPos, currentChar);
-        if (matchPos != -1) {
-            bracketHighlights.add(new Integer[]{caretPos, caretPos + 1});
-            bracketHighlights.add(new Integer[]{matchPos, matchPos + 1});
-            return;
-        }
-        
-        if (caretPos > 0) {
-            matchPos = findMatchingQuote(text, caretPos - 1, prevChar);
-            if (matchPos != -1) {
-                bracketHighlights.add(new Integer[]{caretPos - 1, caretPos});
-                bracketHighlights.add(new Integer[]{matchPos, matchPos + 1});
-            }
-        }
-    }
-    
-    private int findMatchingBracket(String text, int pos, char bracket, boolean forward) {
-        if (BRACKETS.indexOf(bracket) == -1) {
-            return -1;
-        }
-        
-        char openBracket, closeBracket;
-        int direction;
-        int startPos;
-        
-        switch (bracket) {
-            case '(':
-                openBracket = '('; closeBracket = ')'; direction = 1; startPos = pos + 1;
-                break;
-            case ')':
-                openBracket = '('; closeBracket = ')'; direction = -1; startPos = pos - 1;
-                break;
-            case '[':
-                openBracket = '['; closeBracket = ']'; direction = 1; startPos = pos + 1;
-                break;
-            case ']':
-                openBracket = '['; closeBracket = ']'; direction = -1; startPos = pos - 1;
-                break;
-            case '{':
-                openBracket = '{'; closeBracket = '}'; direction = 1; startPos = pos + 1;
-                break;
-            case '}':
-                openBracket = '{'; closeBracket = '}'; direction = -1; startPos = pos - 1;
-                break;
-            default:
-                return -1;
-        }
-        
-        int count = 1;
-        for (int i = startPos; i >= 0 && i < text.length(); i += direction) {
-            char c = text.charAt(i);
-            if (c == openBracket) {
-                count += direction;
-            } else if (c == closeBracket) {
-                count -= direction;
-            }
-            
-            if (count == 0) {
-                return i;
-            }
-        }
-        
-        return -1;
-    }
-    
-    private int findMatchingQuote(String text, int pos, char quote) {
-        if (QUOTES.indexOf(quote) == -1) {
-            return -1;
-        }
-        
-        // Look backward first to find opening quote
-        for (int i = pos - 1; i >= 0; i--) {
-            if (text.charAt(i) == quote) {
-                // Found opening quote, now look forward for closing quote
-                for (int j = pos + 1; j < text.length(); j++) {
-                    if (text.charAt(j) == quote) {
-                        return j;
-                    }
-                }
-                return -1;
-            }
-        }
-        
-        // Look forward for closing quote
-        for (int i = pos + 1; i < text.length(); i++) {
-            if (text.charAt(i) == quote) {
-                return i;
-            }
-        }
-        
-        return -1;
-    }
     
     private void showGoToLineDialog() {
         // Get total line count
@@ -974,85 +618,7 @@ public class EnhancedTextEditor extends JPanel {
         return textPane;
     }
     
-    /**
-     * Sets the font for both the text editor and line numbers.
-     * @param font The new font to apply
-     */
-    public void setEditorFont(Font font) {
-        // Apply font to text pane
-        textPane.setFont(font);
-        
-        // Apply font to line number panel
-        if (lineNumberPanel != null) {
-            lineNumberPanel.setFont(font);
-        }
-        
-        // Re-apply syntax highlighting to ensure proper font rendering
-        if (syntaxHighlighter != null) {
-            SwingUtilities.invokeLater(() -> {
-                programmaticUpdate = true;
-                try {
-                    syntaxHighlighter.highlightSyntax();
-                } finally {
-                    programmaticUpdate = false;
-                }
-            });
-        }
-        
-        // Repaint components
-        textPane.repaint();
-        if (lineNumberPanel != null) {
-            lineNumberPanel.repaint();
-        }
-    }
     
-    /**
-     * Sets the editor theme and applies the color scheme to syntax highlighting.
-     * @param themeName The name of the theme to apply
-     */
-    public void setEditorTheme(String themeName) {
-        this.currentEditorTheme = themeName;
-        
-        // Update syntax highlighter with new theme colors
-        if (syntaxHighlighter != null) {
-            syntaxHighlighter.setTheme(themeName);
-            programmaticUpdate = true;
-            try {
-                syntaxHighlighter.highlightSyntax();
-            } finally {
-                programmaticUpdate = false;
-            }
-        }
-        
-        // Update editor UI colors based on theme
-        Map<String, Color> themeColors = EditorTheme.getTheme(themeName);
-        
-        // Apply background color
-        Color backgroundColor = themeColors.get("background");
-        if (backgroundColor != null) {
-            textPane.setBackground(backgroundColor);
-            if (lineNumberPanel != null) {
-                lineNumberPanel.setBackground(backgroundColor);
-            }
-        }
-        
-        // Apply foreground color
-        Color foregroundColor = themeColors.get("foreground");
-        if (foregroundColor != null) {
-            textPane.setForeground(foregroundColor);
-        }
-        
-        // Refresh the display
-        repaint();
-    }
-    
-    /**
-     * Gets the current editor theme.
-     * @return The name of the current editor theme
-     */
-    public String getCurrentEditorTheme() {
-        return currentEditorTheme;
-    }
     
     /**
      * Sets the handler for file drop events.

@@ -53,7 +53,7 @@ public class FontDialogManager {
         int fontSize = prefs.getInt(AppConstants.PREF_FONT_SIZE, AppConstants.DEFAULT_FONT_SIZE);
         
         Font savedFont = new Font(fontName, Font.PLAIN, fontSize);
-        textEditor.setEditorFont(savedFont);
+        textEditor.getTextPane().setFont(savedFont);
     }
     
     /**
@@ -169,7 +169,7 @@ public class FontDialogManager {
         Font newFont = new Font(fontName, Font.PLAIN, fontSize);
         
         // Apply font to text editor
-        textEditor.setEditorFont(newFont);
+        textEditor.getTextPane().setFont(newFont);
         
         // Save preferences
         prefs.put(AppConstants.PREF_FONT_NAME, fontName);
@@ -185,7 +185,7 @@ public class FontDialogManager {
      */
     public void applyFont(String fontName, int fontSize) {
         Font newFont = new Font(fontName, Font.PLAIN, fontSize);
-        textEditor.setEditorFont(newFont);
+        textEditor.getTextPane().setFont(newFont);
     }
     
     /**

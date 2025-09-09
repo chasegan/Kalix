@@ -93,7 +93,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Load saved preferences
         fontDialogManager.loadFontPreferences();
         loadLineWrapPreference();
-        loadEditorThemePreference();
         loadSplitPaneDividerPosition();
         
         setVisible(true);
@@ -269,13 +268,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         textEditor.setLineWrap(savedLineWrap);
     }
     
-    /**
-     * Loads the editor theme preference and applies it to the text editor.
-     */
-    private void loadEditorThemePreference() {
-        String savedTheme = prefs.get(AppConstants.PREF_EDITOR_THEME, "GitHub Light Colorblind");
-        textEditor.setEditorTheme(savedTheme);
-    }
     
     /**
      * Loads the saved split pane divider position and applies it to the split pane.
@@ -424,7 +416,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showPreferences() {
-        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, fontDialogManager, textEditor);
+        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor);
         boolean preferencesChanged = preferencesDialog.showDialog();
         
         if (preferencesChanged) {
