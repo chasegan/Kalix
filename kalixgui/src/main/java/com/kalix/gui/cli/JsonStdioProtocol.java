@@ -1,5 +1,6 @@
 package com.kalix.gui.cli;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -111,6 +112,7 @@ public class JsonStdioProtocol {
         public String getSessionId() { return sessionId; }
         public void setSessionId(String sessionId) { this.sessionId = sessionId; }
         
+        @JsonIgnore
         public SystemMessageType getSystemMessageType() {
             return SystemMessageType.fromString(getType()).orElse(null);
         }
@@ -136,6 +138,7 @@ public class JsonStdioProtocol {
             setType(type.getValue());
         }
         
+        @JsonIgnore
         public CommandMessageType getCommandMessageType() {
             for (CommandMessageType type : CommandMessageType.values()) {
                 if (type.getValue().equals(getType())) {
