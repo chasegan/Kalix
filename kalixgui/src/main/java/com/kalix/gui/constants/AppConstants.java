@@ -17,6 +17,7 @@ public final class AppConstants {
     public static final String APP_NAME = "Kalix";
     public static final String APP_VERSION = "1.0";
     public static final String APP_DESCRIPTION = "A Java Swing interface for Kalix hydrologic models.";
+    public static final String APP_WEBSITE_URL = "https://www.notion.so/chasegan/Kalix-development-762687200b564e8e8c82b4f98879974f?pvs=12";
     
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;
@@ -132,6 +133,11 @@ public final class AppConstants {
     public static final String TOOLBAR_SEARCH_TOOLTIP = "Search in Model (Ctrl+F)";
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
     public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
+    
+    // Branding
+    public static final String KALIX_LOGO_PATH = "/images/kalix_landscape_1024_241.png";
+    public static final String TOOLBAR_LOGO_TOOLTIP = "Visit Kalix Development Website";
+    public static final int TOOLBAR_LOGO_HEIGHT = 24; // Scaled height for toolbar
     
     // Status messages for new actions
     public static final String STATUS_MODEL_RUNNING = "Running model...";

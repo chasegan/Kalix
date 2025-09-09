@@ -399,6 +399,25 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
+    public void openWebsite() {
+        try {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                if (desktop.isSupported(java.awt.Desktop.Action.BROWSE)) {
+                    desktop.browse(java.net.URI.create(AppConstants.APP_WEBSITE_URL));
+                    updateStatus("Opening Kalix development website");
+                } else {
+                    updateStatus("Browser not supported - website: " + AppConstants.APP_WEBSITE_URL);
+                }
+            } else {
+                updateStatus("Desktop not supported - website: " + AppConstants.APP_WEBSITE_URL);
+            }
+        } catch (Exception e) {
+            updateStatus("Error opening website: " + e.getMessage());
+        }
+    }
+    
+    @Override
     public void showFontDialog() {
         fontDialogManager.showFontDialog();
     }

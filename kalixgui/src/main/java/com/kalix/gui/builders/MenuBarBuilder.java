@@ -51,6 +51,8 @@ public class MenuBarBuilder {
         // Sessions window
         void showSessionsWindow();
         
+        // Website launch
+        void openWebsite();
         
         // Preferences dialog
         void showPreferences();
