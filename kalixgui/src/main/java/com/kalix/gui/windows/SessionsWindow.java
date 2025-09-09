@@ -13,6 +13,10 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
+import org.fife.ui.rtextarea.RTextScrollPane;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+
 /**
  * Separate window for managing CLI sessions.
  * Provides a dedicated interface for monitoring active sessions and requesting results.
@@ -34,8 +38,8 @@ public class SessionsWindow extends JFrame {
     private JLabel sessionStartTimeLabel;
     private JButton terminateButton;
     private JButton removeFromListButton;
-    private JTextArea communicationLogArea;
-    private JScrollPane communicationLogScrollPane;
+    private RSyntaxTextArea communicationLogArea;
+    private RTextScrollPane communicationLogScrollPane;
     private String lastLogContent = ""; // Track last communication log content
     
     /**
@@ -140,11 +144,12 @@ public class SessionsWindow extends JFrame {
         removeFromListButton.addActionListener(this::removeSelectedSession);
         
         // Initialize communication log components
-        communicationLogArea = new JTextArea();
+        communicationLogArea = new RSyntaxTextArea();
+        communicationLogArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE); // Plain text
         communicationLogArea.setEditable(false);
         communicationLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         communicationLogArea.setBackground(Color.WHITE);
-        communicationLogScrollPane = new JScrollPane(communicationLogArea);
+        communicationLogScrollPane = new RTextScrollPane(communicationLogArea);
         communicationLogScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         communicationLogScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         

@@ -25,6 +25,9 @@ dependencies {
     implementation("org.kordamp.ikonli:ikonli-swing:12.3.1")
     implementation("org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1")
     
+    // RSyntaxTextArea for enhanced text components
+    implementation("com.fifesoft:rsyntaxtextarea:3.3.4")
+    
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

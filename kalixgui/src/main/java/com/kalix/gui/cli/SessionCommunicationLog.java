@@ -14,7 +14,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class SessionCommunicationLog {
     
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-    private static final int MAX_MESSAGE_LENGTH = 800;
     
     private final List<LogEntry> entries = new CopyOnWriteArrayList<>();
     private final String sessionId;
@@ -57,9 +56,8 @@ public class SessionCommunicationLog {
         public String getFormattedEntry() {
             String timestampStr = timestamp.format(TIMESTAMP_FORMAT);
             String streamStr = (stream != Stream.SYSTEM) ? " (" + stream + ")" : "";
-            String displayMessage = truncateMessage(message);
             return String.format("[%s] %s%s: %s", 
-                timestampStr, direction, streamStr, displayMessage);
+                timestampStr, direction, streamStr, message);
         }
         
         @Override
@@ -208,21 +206,4 @@ public class SessionCommunicationLog {
         return allEntries.subList(allEntries.size() - count, allEntries.size());
     }
     
-    /**
-     * Truncates a message to the maximum display length.
-     * 
-     * @param message the original message
-     * @return truncated message with ellipsis if needed
-     */
-    private static String truncateMessage(String message) {
-        if (message == null) {
-            return "";
-        }
-        
-        if (message.length() <= MAX_MESSAGE_LENGTH) {
-            return message;
-        }
-        
-        return message.substring(0, MAX_MESSAGE_LENGTH) + "...";
-    }
 }
