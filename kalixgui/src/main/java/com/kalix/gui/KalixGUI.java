@@ -50,7 +50,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private ThemeManager themeManager;
     private RecentFilesManager recentFilesManager;
     private FileOperationsManager fileOperations;
-    private FontDialogManager fontDialogManager;
     private FileDropHandler fileDropHandler;
     private VersionChecker versionChecker;
     private TitleBarManager titleBarManager;
@@ -91,8 +90,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupWindowListeners();
         
         // Load saved preferences
-        fontDialogManager.loadFontPreferences();
-        loadLineWrapPreference();
         loadSplitPaneDividerPosition();
         
         setVisible(true);
@@ -156,7 +153,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile) // File change callback for title bar updates
         );
         
-        fontDialogManager = new FontDialogManager(this, textEditor, prefs);
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
         versionChecker = new VersionChecker(this::updateStatus);
         
@@ -260,13 +256,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         fileOperations.loadModelFile(filePath);
     }
     
-    /**
-     * Loads the line wrap preference and applies it to the text editor.
-     */
-    private void loadLineWrapPreference() {
-        boolean savedLineWrap = prefs.getBoolean(AppConstants.PREF_LINE_WRAP, true);
-        textEditor.setLineWrap(savedLineWrap);
-    }
     
     
     /**
@@ -409,10 +398,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
     }
     
-    @Override
-    public void showFontDialog() {
-        fontDialogManager.showFontDialog();
-    }
     
     @Override
     public void showPreferences() {

@@ -26,7 +26,6 @@ public class EnhancedTextEditor extends JPanel {
     
     // State tracking
     private boolean isDirty = false;
-    private boolean lineWrap = true;
     private DirtyStateListener dirtyStateListener;
     private FileDropManager.FileDropHandler fileDropHandler;
     private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
@@ -67,8 +66,6 @@ public class EnhancedTextEditor extends JPanel {
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         
-        // Set default line wrap (enabled by default)
-        updateLineWrap();
     }
     
     private void setupLayout() {
@@ -235,21 +232,6 @@ public class EnhancedTextEditor extends JPanel {
         textPane.selectAll();
     }
     
-    // Line wrap functionality
-    public void setLineWrap(boolean wrap) {
-        this.lineWrap = wrap;
-        updateLineWrap();
-    }
-    
-    public boolean getLineWrap() {
-        return lineWrap;
-    }
-    
-    private void updateLineWrap() {
-        if (textPane != null) {
-            textPane.invalidate();
-        }
-    }
     
     // Dirty state management
     public boolean isDirty() {

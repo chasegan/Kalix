@@ -35,7 +35,6 @@ public class MenuBarBuilder {
         void cutAction();
         void copyAction();
         void pasteAction();
-        void showFontDialog();
         void zoomIn();
         void zoomOut();
         void resetZoom();
@@ -153,9 +152,6 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Reset Zoom", e -> callbacks.resetZoom()));
         viewMenu.addSeparator();
         
-        // Font settings
-        viewMenu.add(createMenuItem("Font...", e -> callbacks.showFontDialog()));
-        viewMenu.addSeparator();
         
         // Theme submenu
         JMenu themeMenu = createThemeMenu(currentTheme);

@@ -39,27 +39,6 @@ public final class AppConstants {
     public static final String INI_FILES_DESCRIPTION = "INI Files (*.ini)";
     public static final String TOML_FILES_DESCRIPTION = "TOML Files (*.toml)";
     
-    // Font dialog
-    public static final String[] MONOSPACE_FONTS = {
-        "JetBrains Mono",
-        "Fira Code", 
-        "Consolas",
-        "Courier New",
-        "Monaco",
-        "Menlo",
-        "DejaVu Sans Mono",
-        "Liberation Mono",
-        "Source Code Pro",
-        "Ubuntu Mono"
-    };
-    
-    public static final Integer[] FONT_SIZES = {
-        8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36, 48
-    };
-    
-    public static final int FONT_DIALOG_WIDTH = 400;
-    public static final int FONT_DIALOG_HEIGHT = 300;
-    public static final String FONT_PREVIEW_TEXT = "Sample text:\n[Section]\nname = value\n# Comment";
     
     // Themes
     public static final String[] AVAILABLE_THEMES = {
@@ -69,15 +48,9 @@ public final class AppConstants {
     
     // Preferences keys
     public static final String PREF_THEME = "theme";
-    public static final String PREF_FONT_NAME = "editor.font.name";
-    public static final String PREF_FONT_SIZE = "editor.font.size";
-    public static final String PREF_LINE_WRAP = "editor.line.wrap";
     public static final String PREF_EDITOR_THEME = "editor.theme";
     public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
     
-    // Default values
-    public static final String DEFAULT_FONT_NAME = "Consolas";
-    public static final int DEFAULT_FONT_SIZE = 12;
     
     // Status messages
     public static final String STATUS_READY = "Ready";
