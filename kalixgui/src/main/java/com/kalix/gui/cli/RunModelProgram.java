@@ -73,8 +73,8 @@ public class RunModelProgram {
      * @param message the JSON message from kalixcli
      * @return true if message was handled
      */
-    public boolean handleMessage(JsonStdioProtocol.SystemMessage message) {
-        JsonStdioProtocol.SystemMessageType msgType = message.getSystemMessageType();
+    public boolean handleMessage(JsonMessage.SystemMessage message) {
+        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
             return false;
         }
@@ -100,8 +100,8 @@ public class RunModelProgram {
     /**
      * Handles messages while waiting for model to load.
      */
-    private boolean handleModelLoadingState(JsonStdioProtocol.SystemMessageType msgType, 
-                                          JsonStdioProtocol.SystemMessage message) {
+    private boolean handleModelLoadingState(JsonStdioTypes.SystemMessageType msgType, 
+                                          JsonMessage.SystemMessage message) {
         switch (msgType) {
             case READY:
                 // Model loaded successfully, now start simulation
@@ -134,8 +134,8 @@ public class RunModelProgram {
     /**
      * Handles messages while simulation is running.
      */
-    private boolean handleSimulationRunningState(JsonStdioProtocol.SystemMessageType msgType,
-                                                JsonStdioProtocol.SystemMessage message) {
+    private boolean handleSimulationRunningState(JsonStdioTypes.SystemMessageType msgType,
+                                                JsonMessage.SystemMessage message) {
         switch (msgType) {
             case BUSY:
                 // Simulation started
@@ -145,8 +145,8 @@ public class RunModelProgram {
             case PROGRESS:
                 // Progress update during simulation
                 try {
-                    JsonStdioProtocol.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.ProgressData.class);
-                    JsonStdioProtocol.ProgressInfo progress = progressData.getProgress();
+                    JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
+                    JsonMessage.ProgressInfo progress = progressData.getProgress();
                     if (progress != null && progressCallback != null) {
                         ProgressParser.ProgressInfo progressInfo = new ProgressParser.ProgressInfo(
                             progress.getPercentComplete(),
@@ -192,7 +192,7 @@ public class RunModelProgram {
     /**
      * Extracts error message from JSON error response.
      */
-    private String extractErrorMessage(JsonStdioProtocol.SystemMessage message) {
+    private String extractErrorMessage(JsonMessage.SystemMessage message) {
         try {
             if (message.getData() != null && message.getData().has("error")) {
                 return message.getData().get("error").asText();

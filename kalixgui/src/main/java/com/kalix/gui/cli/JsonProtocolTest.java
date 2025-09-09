@@ -72,7 +72,7 @@ public class JsonProtocolTest {
             
             // Wait for ready message
             System.out.println("Waiting for kalixcli to become ready...");
-            Optional<JsonStdioProtocol.SystemMessage> readyMessage = process.waitForReady(30);
+            Optional<JsonMessage.SystemMessage> readyMessage = process.waitForReady(30);
             
             if (readyMessage.isEmpty()) {
                 throw new RuntimeException("kalixcli did not become ready within 30 seconds");
@@ -83,7 +83,7 @@ public class JsonProtocolTest {
             
             // Extract ready data
             try {
-                JsonStdioProtocol.ReadyData readyData = JsonStdioProtocol.extractData(readyMessage.get(), JsonStdioProtocol.ReadyData.class);
+                JsonMessage.ReadyData readyData = JsonStdioProtocol.extractData(readyMessage.get(), JsonMessage.ReadyData.class);
                 System.out.println("  Status: " + readyData.getStatus());
                 System.out.println("  Available commands: " + (readyData.getAvailableCommands() != null ? readyData.getAvailableCommands().size() : 0));
                 
@@ -102,7 +102,7 @@ public class JsonProtocolTest {
             // Read response (could be result, log, or ready message)
             for (int i = 0; i < 5; i++) {
                 if (process.hasOutputReady()) {
-                    Optional<JsonStdioProtocol.SystemMessage> response = process.readJsonMessage();
+                    Optional<JsonMessage.SystemMessage> response = process.readJsonMessage();
                     if (response.isPresent()) {
                         System.out.println("✓ Received response: " + response.get().getType());
                         break;
@@ -119,7 +119,7 @@ public class JsonProtocolTest {
             // Read response
             for (int i = 0; i < 5; i++) {
                 if (process.hasOutputReady()) {
-                    Optional<JsonStdioProtocol.SystemMessage> response = process.readJsonMessage();
+                    Optional<JsonMessage.SystemMessage> response = process.readJsonMessage();
                     if (response.isPresent()) {
                         System.out.println("✓ Received response: " + response.get().getType());
                         break;
@@ -137,16 +137,16 @@ public class JsonProtocolTest {
             int messageCount = 0;
             while (messageCount < 10 && process.isRunning()) {
                 if (process.hasOutputReady()) {
-                    Optional<JsonStdioProtocol.SystemMessage> message = process.readJsonMessage();
+                    Optional<JsonMessage.SystemMessage> message = process.readJsonMessage();
                     if (message.isPresent()) {
                         messageCount++;
-                        JsonStdioProtocol.SystemMessageType type = message.get().getSystemMessageType();
+                        JsonStdioTypes.SystemMessageType type = message.get().systemMessageType();
                         System.out.println("  Received: " + type);
                         
-                        if (type == JsonStdioProtocol.SystemMessageType.READY) {
+                        if (type == JsonStdioTypes.SystemMessageType.READY) {
                             System.out.println("✓ Model loading completed (back to ready)");
                             break;
-                        } else if (type == JsonStdioProtocol.SystemMessageType.ERROR) {
+                        } else if (type == JsonStdioTypes.SystemMessageType.ERROR) {
                             System.out.println("  Model loading failed (this may be expected if model is invalid)");
                             break;
                         }

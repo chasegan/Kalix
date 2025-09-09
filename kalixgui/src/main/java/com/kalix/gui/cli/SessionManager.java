@@ -380,7 +380,7 @@ public class SessionManager {
         
         // Check for JSON protocol messages
         if (JsonStdioProtocol.looksLikeJson(line)) {
-            Optional<JsonStdioProtocol.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
+            Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
             if (jsonMsg.isPresent()) {
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
                 return;
@@ -419,7 +419,7 @@ public class SessionManager {
         
         // Check for JSON protocol messages on stderr (some CLIs send protocol info there)
         if (JsonStdioProtocol.looksLikeJson(errorLine)) {
-            Optional<JsonStdioProtocol.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
+            Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
             if (jsonMsg.isPresent()) {
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
                 return;
@@ -451,7 +451,7 @@ public class SessionManager {
     /**
      * Handles JSON protocol messages by delegating to active programs or handling generically.
      */
-    private void handleJsonProtocolMessage(KalixSession session, JsonStdioProtocol.SystemMessage message, SessionConfig config) {
+    private void handleJsonProtocolMessage(KalixSession session, JsonMessage.SystemMessage message, SessionConfig config) {
         String sessionId = session.getSessionId();
         
         // First try to delegate to any active program
@@ -463,7 +463,7 @@ public class SessionManager {
         }
         
         // Handle generic messages that aren't part of a specific program
-        JsonStdioProtocol.SystemMessageType msgType = message.getSystemMessageType();
+        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
             updateStatus("Unknown JSON message type from session " + sessionId);
             return;

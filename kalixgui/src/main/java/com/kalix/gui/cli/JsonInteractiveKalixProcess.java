@@ -21,7 +21,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
     
     // Current session state tracking
     private volatile String sessionId;
-    private volatile JsonStdioProtocol.SystemMessageType currentState;
+    private volatile JsonStdioTypes.SystemMessageType currentState;
     private volatile String currentExecutingCommand;
     private volatile boolean interruptible = false;
     
@@ -30,7 +30,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      */
     @FunctionalInterface
     public interface SystemMessageHandler {
-        void handle(JsonStdioProtocol.SystemMessage message);
+        void handle(JsonMessage.SystemMessage message);
     }
     
     /**
@@ -204,14 +204,14 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * @return the parsed message if it's valid JSON, or empty if stream is closed or invalid JSON
      * @throws IOException if reading fails
      */
-    public Optional<JsonStdioProtocol.SystemMessage> readJsonMessage() throws IOException {
+    public Optional<JsonMessage.SystemMessage> readJsonMessage() throws IOException {
         checkNotClosed();
         String line = runningProcess.readOutputLine();
         if (line != null) {
             logger.debug("Received output: " + line);
             
             // Try to parse as JSON message
-            Optional<JsonStdioProtocol.SystemMessage> message = JsonStdioProtocol.parseSystemMessage(line);
+            Optional<JsonMessage.SystemMessage> message = JsonStdioProtocol.parseSystemMessage(line);
             if (message.isPresent()) {
                 updateStateFromMessage(message.get());
                 return message;
@@ -265,7 +265,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
             try {
                 while (isRunning() && !closed.get()) {
                     if (hasOutputReady()) {
-                        Optional<JsonStdioProtocol.SystemMessage> message = readJsonMessage();
+                        Optional<JsonMessage.SystemMessage> message = readJsonMessage();
                         if (message.isPresent() && messageHandler != null) {
                             try {
                                 messageHandler.handle(message.get());
@@ -297,7 +297,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * @return the message if received, empty if timeout
      * @throws IOException if reading fails
      */
-    public Optional<JsonStdioProtocol.SystemMessage> waitForMessage(JsonStdioProtocol.SystemMessageType expectedType, int timeoutSeconds) throws IOException {
+    public Optional<JsonMessage.SystemMessage> waitForMessage(JsonStdioTypes.SystemMessageType expectedType, int timeoutSeconds) throws IOException {
         checkNotClosed();
         
         long startTime = System.currentTimeMillis();
@@ -305,8 +305,8 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
         
         while (System.currentTimeMillis() - startTime < timeoutMillis) {
             if (hasOutputReady()) {
-                Optional<JsonStdioProtocol.SystemMessage> message = readJsonMessage();
-                if (message.isPresent() && message.get().getSystemMessageType() == expectedType) {
+                Optional<JsonMessage.SystemMessage> message = readJsonMessage();
+                if (message.isPresent() && message.get().systemMessageType() == expectedType) {
                     return message;
                 }
             } else {
@@ -331,8 +331,8 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * @return the ready message with session info
      * @throws IOException if reading fails
      */
-    public Optional<JsonStdioProtocol.SystemMessage> waitForReady(int timeoutSeconds) throws IOException {
-        return waitForMessage(JsonStdioProtocol.SystemMessageType.READY, timeoutSeconds);
+    public Optional<JsonMessage.SystemMessage> waitForReady(int timeoutSeconds) throws IOException {
+        return waitForMessage(JsonStdioTypes.SystemMessageType.READY, timeoutSeconds);
     }
     
     /**
@@ -380,7 +380,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * 
      * @return current state
      */
-    public JsonStdioProtocol.SystemMessageType getCurrentState() {
+    public JsonStdioTypes.SystemMessageType getCurrentState() {
         return currentState;
     }
     
@@ -408,7 +408,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * @return true if ready
      */
     public boolean isReady() {
-        return currentState == JsonStdioProtocol.SystemMessageType.READY;
+        return currentState == JsonStdioTypes.SystemMessageType.READY;
     }
     
     /**
@@ -417,7 +417,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
      * @return true if busy
      */
     public boolean isBusy() {
-        return currentState == JsonStdioProtocol.SystemMessageType.BUSY;
+        return currentState == JsonStdioTypes.SystemMessageType.BUSY;
     }
     
     /**
@@ -463,7 +463,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
     /**
      * Updates internal state based on received system message.
      */
-    private void updateStateFromMessage(JsonStdioProtocol.SystemMessage message) {
+    private void updateStateFromMessage(JsonMessage.SystemMessage message) {
         // Update session ID if not set
         if (sessionId == null) {
             sessionId = message.getSessionId();
@@ -471,7 +471,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
         }
         
         // Update current state
-        JsonStdioProtocol.SystemMessageType messageType = message.getSystemMessageType();
+        JsonStdioTypes.SystemMessageType messageType = message.systemMessageType();
         if (messageType != null) {
             currentState = messageType;
             
@@ -485,7 +485,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
                     
                 case BUSY:
                     try {
-                        JsonStdioProtocol.BusyData busyData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.BusyData.class);
+                        JsonMessage.BusyData busyData = JsonStdioProtocol.extractData(message, JsonMessage.BusyData.class);
                         currentExecutingCommand = busyData.getExecutingCommand();
                         interruptible = busyData.isInterruptible();
                         logger.debug("Session is now busy executing: " + currentExecutingCommand + " (interruptible: " + interruptible + ")");
@@ -534,7 +534,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
         public static JsonInteractiveKalixProcess startAndWaitForReady(Path cliPath, ProcessExecutor processExecutor, int timeoutSeconds) throws IOException {
             JsonInteractiveKalixProcess process = JsonInteractiveKalixProcess.start(cliPath, processExecutor);
             
-            Optional<JsonStdioProtocol.SystemMessage> readyMessage = process.waitForReady(timeoutSeconds);
+            Optional<JsonMessage.SystemMessage> readyMessage = process.waitForReady(timeoutSeconds);
             if (readyMessage.isEmpty()) {
                 process.close(true);
                 throw new IOException("kalixcli did not become ready within " + timeoutSeconds + " seconds");
@@ -550,7 +550,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
          * @param modelText the model definition
          * @return CompletableFuture that completes when operation finishes
          */
-        public static CompletableFuture<JsonStdioProtocol.SystemMessage> loadAndRunModel(JsonInteractiveKalixProcess process, String modelText) {
+        public static CompletableFuture<JsonMessage.SystemMessage> loadAndRunModel(JsonInteractiveKalixProcess process, String modelText) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     if (!process.isReady()) {
@@ -561,7 +561,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
                     process.sendModelDefinition(modelText);
                     
                     // Wait for ready or result
-                    Optional<JsonStdioProtocol.SystemMessage> response = process.waitForMessage(JsonStdioProtocol.SystemMessageType.READY, 30);
+                    Optional<JsonMessage.SystemMessage> response = process.waitForMessage(JsonStdioTypes.SystemMessageType.READY, 30);
                     if (response.isEmpty()) {
                         throw new RuntimeException("Timeout waiting for model load completion");
                     }
@@ -570,7 +570,7 @@ public class JsonInteractiveKalixProcess implements AutoCloseable {
                     process.runSimulation();
                     
                     // Wait for result
-                    Optional<JsonStdioProtocol.SystemMessage> result = process.waitForMessage(JsonStdioProtocol.SystemMessageType.RESULT, 300);
+                    Optional<JsonMessage.SystemMessage> result = process.waitForMessage(JsonStdioTypes.SystemMessageType.RESULT, 300);
                     if (result.isEmpty()) {
                         throw new RuntimeException("Timeout waiting for simulation completion");
                     }

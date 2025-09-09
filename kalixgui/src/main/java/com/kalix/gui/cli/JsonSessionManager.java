@@ -45,9 +45,9 @@ public class JsonSessionManager {
         private final SessionState newState;
         private final String message;
         private final LocalDateTime timestamp;
-        private final JsonStdioProtocol.SystemMessage originalMessage;
+        private final JsonMessage.SystemMessage originalMessage;
         
-        public SessionEvent(String sessionId, String kalixSessionId, SessionState oldState, SessionState newState, String message, JsonStdioProtocol.SystemMessage originalMessage) {
+        public SessionEvent(String sessionId, String kalixSessionId, SessionState oldState, SessionState newState, String message, JsonMessage.SystemMessage originalMessage) {
             this.sessionId = sessionId;
             this.kalixSessionId = kalixSessionId;
             this.oldState = oldState;
@@ -63,7 +63,7 @@ public class JsonSessionManager {
         public SessionState getNewState() { return newState; }
         public String getMessage() { return message; }
         public LocalDateTime getTimestamp() { return timestamp; }
-        public JsonStdioProtocol.SystemMessage getOriginalMessage() { return originalMessage; }
+        public JsonMessage.SystemMessage getOriginalMessage() { return originalMessage; }
         
         @Override
         public String toString() {
@@ -87,7 +87,7 @@ public class JsonSessionManager {
         private volatile LocalDateTime lastActivity;
         private volatile String currentCommand;
         private volatile boolean interruptible;
-        private volatile JsonStdioProtocol.ReadyData readyData;
+        private volatile JsonMessage.ReadyData readyData;
         
         public JsonKalixSession(String sessionId, JsonInteractiveKalixProcess process) {
             this.sessionId = sessionId;
@@ -108,13 +108,13 @@ public class JsonSessionManager {
         public LocalDateTime getLastActivity() { return lastActivity; }
         public String getCurrentCommand() { return currentCommand; }
         public boolean isInterruptible() { return interruptible; }
-        public JsonStdioProtocol.ReadyData getReadyData() { return readyData; }
+        public JsonMessage.ReadyData getReadyData() { return readyData; }
         
-        public void updateFromMessage(JsonStdioProtocol.SystemMessage message) {
+        public void updateFromMessage(JsonMessage.SystemMessage message) {
             this.kalixSessionId = message.getSessionId();
             this.lastActivity = LocalDateTime.now();
             
-            JsonStdioProtocol.SystemMessageType messageType = message.getSystemMessageType();
+            JsonStdioTypes.SystemMessageType messageType = message.systemMessageType();
             if (messageType != null) {
                 switch (messageType) {
                     case READY:
@@ -122,7 +122,7 @@ public class JsonSessionManager {
                         this.currentCommand = null;
                         this.interruptible = false;
                         try {
-                            this.readyData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.ReadyData.class);
+                            this.readyData = JsonStdioProtocol.extractData(message, JsonMessage.ReadyData.class);
                             this.lastMessage = "Ready - " + (readyData.getStatus() != null ? readyData.getStatus() : "available for commands");
                         } catch (Exception e) {
                             this.lastMessage = "Ready";
@@ -132,7 +132,7 @@ public class JsonSessionManager {
                     case BUSY:
                         this.state = SessionState.BUSY;
                         try {
-                            JsonStdioProtocol.BusyData busyData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.BusyData.class);
+                            JsonMessage.BusyData busyData = JsonStdioProtocol.extractData(message, JsonMessage.BusyData.class);
                             this.currentCommand = busyData.getExecutingCommand();
                             this.interruptible = busyData.isInterruptible();
                             this.lastMessage = "Busy executing: " + currentCommand;
@@ -144,8 +144,8 @@ public class JsonSessionManager {
                     case PROGRESS:
                         // Don't change state, just update message
                         try {
-                            JsonStdioProtocol.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.ProgressData.class);
-                            JsonStdioProtocol.ProgressInfo progress = progressData.getProgress();
+                            JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
+                            JsonMessage.ProgressInfo progress = progressData.getProgress();
                             this.lastMessage = String.format("Progress: %.1f%% - %s", 
                                 progress.getPercentComplete(), 
                                 progress.getCurrentStep() != null ? progress.getCurrentStep() : "running");
@@ -213,8 +213,8 @@ public class JsonSessionManager {
     public static class SessionConfig {
         private final String[] args;
         private String customSessionId;
-        private Consumer<JsonStdioProtocol.SystemMessage> messageCallback;
-        private Consumer<JsonStdioProtocol.ProgressInfo> progressCallback;
+        private Consumer<JsonMessage.SystemMessage> messageCallback;
+        private Consumer<JsonMessage.ProgressInfo> progressCallback;
         
         public SessionConfig(String... args) {
             this.args = args;
@@ -225,12 +225,12 @@ public class JsonSessionManager {
             return this;
         }
         
-        public SessionConfig onMessage(Consumer<JsonStdioProtocol.SystemMessage> callback) {
+        public SessionConfig onMessage(Consumer<JsonMessage.SystemMessage> callback) {
             this.messageCallback = callback;
             return this;
         }
         
-        public SessionConfig onProgress(Consumer<JsonStdioProtocol.ProgressInfo> callback) {
+        public SessionConfig onProgress(Consumer<JsonMessage.ProgressInfo> callback) {
             this.progressCallback = callback;
             return this;
         }
@@ -238,8 +238,8 @@ public class JsonSessionManager {
         // Getters
         public String[] getArgs() { return args; }
         public String getCustomSessionId() { return customSessionId; }
-        public Consumer<JsonStdioProtocol.SystemMessage> getMessageCallback() { return messageCallback; }
-        public Consumer<JsonStdioProtocol.ProgressInfo> getProgressCallback() { return progressCallback; }
+        public Consumer<JsonMessage.SystemMessage> getMessageCallback() { return messageCallback; }
+        public Consumer<JsonMessage.ProgressInfo> getProgressCallback() { return progressCallback; }
     }
     
     /**
@@ -281,7 +281,7 @@ public class JsonSessionManager {
                 monitorSession(session, config);
                 
                 // Wait for ready message with timeout
-                Optional<JsonStdioProtocol.SystemMessage> readyMessage = process.waitForReady(30);
+                Optional<JsonMessage.SystemMessage> readyMessage = process.waitForReady(30);
                 if (readyMessage.isEmpty()) {
                     // Cleanup failed session
                     activeSessions.remove(sessionId);
@@ -553,13 +553,13 @@ public class JsonSessionManager {
                 }
                 
                 // Handle specific message types
-                JsonStdioProtocol.SystemMessageType messageType = message.getSystemMessageType();
+                JsonStdioTypes.SystemMessageType messageType = message.systemMessageType();
                 if (messageType != null) {
                     switch (messageType) {
                         case PROGRESS:
                             if (config.getProgressCallback() != null) {
                                 try {
-                                    JsonStdioProtocol.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonStdioProtocol.ProgressData.class);
+                                    JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
                                     config.getProgressCallback().accept(progressData.getProgress());
                                 } catch (Exception e) {
                                     // Ignore progress parsing errors
@@ -607,7 +607,7 @@ public class JsonSessionManager {
     /**
      * Fires a session event to registered callbacks.
      */
-    private void fireSessionEvent(String sessionId, String kalixSessionId, SessionState oldState, SessionState newState, String message, JsonStdioProtocol.SystemMessage originalMessage) {
+    private void fireSessionEvent(String sessionId, String kalixSessionId, SessionState oldState, SessionState newState, String message, JsonMessage.SystemMessage originalMessage) {
         if (eventCallback != null) {
             try {
                 eventCallback.accept(new SessionEvent(sessionId, kalixSessionId, oldState, newState, message, originalMessage));
