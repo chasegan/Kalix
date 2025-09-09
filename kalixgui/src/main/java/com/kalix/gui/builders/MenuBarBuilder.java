@@ -19,6 +19,7 @@ public class MenuBarBuilder {
     private final MenuBarCallbacks callbacks;
     private final EnhancedTextEditor textEditor;
     private JMenu recentFilesMenu;
+    private JMenu fileMenu;
     
     /**
      * Interface defining all callback methods needed for menu and toolbar actions.
@@ -101,23 +102,24 @@ public class MenuBarBuilder {
      * Creates the File menu.
      */
     private JMenu createFileMenu() {
-        JMenu fileMenu = new JMenu("File");
+        fileMenu = new JMenu("File");
         
         fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
-        fileMenu.addSeparator();
-        
-        // Recent files submenu (initialized but will be populated externally)
-        recentFilesMenu = new JMenu("Recent");
-        fileMenu.add(recentFilesMenu);
-        
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
-        fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
+        
+        // Recent files will be added here by the proxy menu
+        // Exit will be added at the very end by the proxy menu
+        
+        // Create a proxy menu that delegates to adding items directly to the File menu
+        recentFilesMenu = new RecentFilesProxyMenu();
+        
+        // Initialize the menu with Exit at the bottom
+        ((RecentFilesProxyMenu) recentFilesMenu).initializeMenu();
         
         return fileMenu;
     }
@@ -222,5 +224,99 @@ public class MenuBarBuilder {
         JMenuItem item = new JMenuItem(text);
         item.addActionListener(listener);
         return item;
+    }
+    
+    /**
+     * A proxy menu that intercepts RecentFilesManager calls and adds items
+     * directly to the File menu instead of a submenu.
+     */
+    private class RecentFilesProxyMenu extends JMenu {
+        private JMenuItem exitMenuItem;
+        private int recentFilesStartIndex = -1;
+        
+        public RecentFilesProxyMenu() {
+            super("Recent");
+            // Create the Exit menu item that will be managed by this proxy
+            exitMenuItem = createMenuItem("Exit", e -> callbacks.exitApplication());
+        }
+        
+        @Override
+        public void removeAll() {
+            // Remove recent file items and Exit, then re-add Exit at the end
+            if (fileMenu != null) {
+                // Remove Exit if it exists
+                removeExitFromMenu();
+                
+                // Remove recent files if they were added
+                if (recentFilesStartIndex != -1) {
+                    int itemCount = fileMenu.getMenuComponentCount();
+                    for (int i = itemCount - 1; i >= recentFilesStartIndex; i--) {
+                        fileMenu.remove(i);
+                    }
+                    recentFilesStartIndex = -1;
+                }
+            }
+        }
+        
+        @Override
+        public JMenuItem add(JMenuItem item) {
+            // Add recent files items before Exit
+            if (fileMenu != null) {
+                // Remove Exit temporarily if it exists
+                removeExitFromMenu();
+                
+                // Mark the start of recent files section if this is the first item
+                if (recentFilesStartIndex == -1) {
+                    // Add separator before recent files
+                    fileMenu.addSeparator();
+                    recentFilesStartIndex = fileMenu.getMenuComponentCount();
+                }
+                
+                // Add the recent file item
+                JMenuItem addedItem = fileMenu.add(item);
+                
+                // Always add Exit at the end
+                addExitToMenu();
+                
+                return addedItem;
+            }
+            return item;
+        }
+        
+        @Override
+        public void addSeparator() {
+            // Add separator to the File menu (but before Exit)
+            if (fileMenu != null) {
+                removeExitFromMenu();
+                fileMenu.addSeparator();
+                addExitToMenu();
+            }
+        }
+        
+        private void removeExitFromMenu() {
+            if (fileMenu == null) return;
+            
+            for (int i = fileMenu.getMenuComponentCount() - 1; i >= 0; i--) {
+                if (fileMenu.getMenuComponent(i) instanceof JMenuItem) {
+                    JMenuItem item = (JMenuItem) fileMenu.getMenuComponent(i);
+                    if ("Exit".equals(item.getText())) {
+                        fileMenu.remove(i);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        private void addExitToMenu() {
+            if (fileMenu != null) {
+                fileMenu.addSeparator();
+                fileMenu.add(exitMenuItem);
+            }
+        }
+        
+        public void initializeMenu() {
+            // Add Exit to the menu initially
+            addExitToMenu();
+        }
     }
 }

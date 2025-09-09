@@ -468,11 +468,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String modelText = textEditor.getText();
         if (modelText == null || modelText.trim().isEmpty()) {
             updateStatus("Error: No model content to run");
-            DialogUtils.showWarning(this,
-                "The text editor is empty. Please create or load a model first.",
-                "No Model Content");
             return;
         }
+        
+        updateStatus("Starting model run...");
         
         // Run model from memory and handle the session
         cliTaskManager.runModelFromMemory(modelText)
@@ -483,23 +482,13 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     // Automatically open Sessions window if not already open
                     if (!SessionsWindow.isWindowOpen()) {
                         SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
+                        updateStatus("Sessions window opened to monitor progress");
                     }
-                    
-                    // Show informational dialog
-                    String message = "Model session " + sessionId + " is now running.\n\n" +
-                                   "The Sessions window has been opened to monitor progress.\n" +
-                                   "You can request results when the session is ready.";
-                    
-                    JOptionPane.showMessageDialog(this, message,
-                        "Session Started", JOptionPane.INFORMATION_MESSAGE);
                 });
             })
             .exceptionally(throwable -> {
                 SwingUtilities.invokeLater(() -> {
                     updateStatus("Error starting model session: " + throwable.getMessage());
-                    JOptionPane.showMessageDialog(this,
-                        "Failed to start model session: " + throwable.getMessage(),
-                        "Model Session Error", JOptionPane.ERROR_MESSAGE);
                 });
                 return null;
             });

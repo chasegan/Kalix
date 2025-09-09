@@ -55,8 +55,8 @@ public class JsonStdioProtocol {
             ObjectNode dataNode = objectMapper.createObjectNode();
             dataNode.put("command", command);
             
+            ObjectNode paramsNode = objectMapper.createObjectNode();
             if (parameters != null && !parameters.isEmpty()) {
-                ObjectNode paramsNode = objectMapper.createObjectNode();
                 parameters.forEach((key, value) -> {
                     if (value instanceof String) {
                         paramsNode.put(key, (String) value);
@@ -70,8 +70,8 @@ public class JsonStdioProtocol {
                         paramsNode.put(key, value.toString());
                     }
                 });
-                dataNode.set("parameters", paramsNode);
             }
+            dataNode.set("parameters", paramsNode);
             
             message.setData(dataNode);
             
@@ -206,7 +206,7 @@ public class JsonStdioProtocol {
         }
         
         public static String runSimulation() {
-            return createCommandMessage("run_simulation", null);
+            return createCommandMessage("run_simulation", Map.of());
         }
         
         public static String testProgress() {

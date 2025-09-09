@@ -81,6 +81,23 @@ public class ToolBarBuilder {
         
         toolBar.addSeparator();
         
+        // Model operations
+        toolBar.add(createToolBarButton(
+            "Run Model", 
+            AppConstants.TOOLBAR_RUN_MODEL_TOOLTIP,
+            FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.runModelFromMemory()
+        ));
+        
+        toolBar.add(createToolBarButton(
+            "Sessions", 
+            AppConstants.TOOLBAR_SESSIONS_TOOLTIP,
+            FontIcon.of(FontAwesomeSolid.TASKS, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.showSessionsWindow()
+        ));
+        
+        toolBar.addSeparator();
+        
         // CLI operations
         toolBar.add(createToolBarButton(
             "Version", 
