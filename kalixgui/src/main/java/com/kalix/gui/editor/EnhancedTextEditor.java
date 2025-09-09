@@ -9,6 +9,10 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rtextarea.RTextScrollPane;
+
 /**
  * Simplified enhanced text editor component with professional code editor features.
  * Features include:
@@ -20,8 +24,8 @@ import java.io.File;
  */
 public class EnhancedTextEditor extends JPanel {
     
-    private JTextPane textPane;
-    private JScrollPane scrollPane;
+    private RSyntaxTextArea textArea;
+    private RTextScrollPane scrollPane;
     private UndoManager undoManager;
     
     // State tracking
@@ -51,18 +55,15 @@ public class EnhancedTextEditor extends JPanel {
     private void initializeComponents() {
         undoManager = new UndoManager();
         
-        textPane = new JTextPane() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                invalidate();
-            }
-        };
+        textArea = new RSyntaxTextArea();
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE); // Plain text initially
+        textArea.setLineWrap(false); // Disable line wrapping
+        textArea.setWrapStyleWord(false);
         
         // Enable undo/redo tracking
-        textPane.getDocument().addUndoableEditListener(undoManager);
+        textArea.getDocument().addUndoableEditListener(undoManager);
         
-        scrollPane = new JScrollPane(textPane);
+        scrollPane = new RTextScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         
@@ -77,8 +78,8 @@ public class EnhancedTextEditor extends JPanel {
      * Initializes the manager instances.
      */
     private void initializeManagers() {
-        searchManager = new TextSearchManager(textPane, this);
-        navigationManager = new TextNavigationManager(textPane, this);
+        searchManager = new TextSearchManager(textArea, this);
+        navigationManager = new TextNavigationManager(textArea, this);
         dropManager = new FileDropManager(file -> {
             if (fileDropHandler != null) {
                 fileDropHandler.onFileDropped(file);
@@ -87,8 +88,8 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     private void setupKeyBindings() {
-        InputMap inputMap = textPane.getInputMap();
-        ActionMap actionMap = textPane.getActionMap();
+        InputMap inputMap = textArea.getInputMap();
+        ActionMap actionMap = textArea.getActionMap();
         
         // Undo/Redo
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.META_DOWN_MASK), "undo");
@@ -146,7 +147,7 @@ public class EnhancedTextEditor extends JPanel {
     
     private void setupDocumentListener() {
         // Set up document change listener for dirty tracking
-        textPane.getDocument().addDocumentListener(new DocumentListener() {
+        textArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
@@ -175,7 +176,7 @@ public class EnhancedTextEditor extends JPanel {
      */
     private void setupDragAndDrop() {
         // Use the FileDropManager to handle drag and drop for both components
-        dropManager.setupDragAndDrop(this, textPane);
+        dropManager.setupDragAndDrop(this, textArea);
     }
     
     // Core functionality methods
@@ -203,8 +204,8 @@ public class EnhancedTextEditor extends JPanel {
     public void setText(String text) {
         programmaticUpdate = true;
         try {
-            textPane.setText(text);
-            textPane.setCaretPosition(0);
+            textArea.setText(text);
+            textArea.setCaretPosition(0);
             setDirty(false);
             undoManager.discardAllEdits();
         } finally {
@@ -213,23 +214,23 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     public String getText() {
-        return textPane.getText();
+        return textArea.getText();
     }
     
     public void cut() {
-        textPane.cut();
+        textArea.cut();
     }
     
     public void copy() {
-        textPane.copy();
+        textArea.copy();
     }
     
     public void paste() {
-        textPane.paste();
+        textArea.paste();
     }
     
     public void selectAll() {
-        textPane.selectAll();
+        textArea.selectAll();
     }
     
     
@@ -251,8 +252,8 @@ public class EnhancedTextEditor extends JPanel {
         this.dirtyStateListener = listener;
     }
     
-    public JTextPane getTextPane() {
-        return textPane;
+    public RSyntaxTextArea getTextArea() {
+        return textArea;
     }
     
     /**
