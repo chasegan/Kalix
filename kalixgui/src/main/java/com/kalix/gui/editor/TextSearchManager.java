@@ -1,34 +1,44 @@
 package com.kalix.gui.editor;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rtextarea.SearchContext;
+import org.fife.ui.rtextarea.SearchEngine;
+import org.fife.ui.rtextarea.SearchResult;
+
 import javax.swing.*;
-import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.awt.event.KeyEvent;
 
 /**
- * Manages search and replace functionality for text components.
- * Extracted from EnhancedTextEditor to improve maintainability.
+ * Manages search and replace functionality for RSyntaxTextArea using the SearchEngine API.
+ * Provides find and find-replace dialogs with proper integration.
  */
 public class TextSearchManager {
     
-    private final JTextComponent textComponent;
-    private final Component parentComponent;
+    private final RSyntaxTextArea textArea;
+    private final JComponent parentComponent;
     
-    // Search state
-    private String lastSearchTerm = "";
-    private int lastFoundPosition = -1;
+    // Dialog references
+    private JDialog findDialog;
+    private JDialog replaceDialog;
+    
+    // Search fields
+    private JTextField searchField;
+    private JTextField replaceField;
+    private JCheckBox matchCaseCheckBox;
+    private JCheckBox wholeWordCheckBox;
+    private JCheckBox regexCheckBox;
     
     /**
-     * Creates a new TextSearchManager.
+     * Creates a new TextSearchManager for the specified text area.
      * 
-     * @param textComponent the text component to search in
-     * @param parentComponent the parent component for dialog positioning
+     * @param textArea the RSyntaxTextArea to manage
+     * @param parentComponent the parent component for dialogs
      */
-    public TextSearchManager(JTextComponent textComponent, Component parentComponent) {
-        this.textComponent = textComponent;
+    public TextSearchManager(RSyntaxTextArea textArea, JComponent parentComponent) {
+        this.textArea = textArea;
         this.parentComponent = parentComponent;
     }
     
@@ -36,264 +46,302 @@ public class TextSearchManager {
      * Shows the find dialog.
      */
     public void showFindDialog() {
-        JDialog findDialog = new JDialog((JFrame) SwingUtilities.getWindowAncestor(parentComponent), "Find", true);
-        findDialog.setSize(400, 150);
-        findDialog.setLocationRelativeTo(parentComponent);
-        findDialog.setLayout(new BorderLayout());
+        if (findDialog == null) {
+            createFindDialog();
+        }
         
-        // Create components
-        JPanel inputPanel = new JPanel(new FlowLayout());
-        JLabel findLabel = new JLabel("Find:");
-        JTextField findField = new JTextField(lastSearchTerm, 20);
-        JCheckBox caseSensitive = new JCheckBox("Case sensitive");
+        // Pre-populate with selected text if any
+        String selectedText = textArea.getSelectedText();
+        if (selectedText != null && !selectedText.isEmpty()) {
+            searchField.setText(selectedText);
+        }
         
-        inputPanel.add(findLabel);
-        inputPanel.add(findField);
-        inputPanel.add(caseSensitive);
-        
-        JPanel buttonPanel = new JPanel(new FlowLayout());
-        JButton findNextButton = new JButton("Find Next");
-        JButton findPrevButton = new JButton("Find Previous");
-        JButton cancelButton = new JButton("Cancel");
-        
-        buttonPanel.add(findNextButton);
-        buttonPanel.add(findPrevButton);
-        buttonPanel.add(cancelButton);
-        
-        findDialog.add(inputPanel, BorderLayout.CENTER);
-        findDialog.add(buttonPanel, BorderLayout.SOUTH);
-        
-        // Button actions
-        findNextButton.addActionListener(e -> {
-            String searchTerm = findField.getText();
-            if (!searchTerm.isEmpty()) {
-                lastSearchTerm = searchTerm;
-                findNext(searchTerm, caseSensitive.isSelected());
-            }
-        });
-        
-        findPrevButton.addActionListener(e -> {
-            String searchTerm = findField.getText();
-            if (!searchTerm.isEmpty()) {
-                lastSearchTerm = searchTerm;
-                findPrevious(searchTerm, caseSensitive.isSelected());
-            }
-        });
-        
-        cancelButton.addActionListener(e -> findDialog.dispose());
-        
-        // Enter key for find next
-        findField.addActionListener(e -> findNextButton.doClick());
-        
-        // Focus and show
-        findField.selectAll();
         findDialog.setVisible(true);
+        searchField.requestFocus();
+        searchField.selectAll();
     }
     
     /**
      * Shows the find and replace dialog.
      */
     public void showFindReplaceDialog() {
-        JDialog replaceDialog = new JDialog((JFrame) SwingUtilities.getWindowAncestor(parentComponent), "Find and Replace", true);
-        replaceDialog.setSize(450, 200);
-        replaceDialog.setLocationRelativeTo(parentComponent);
-        replaceDialog.setLayout(new BorderLayout());
+        if (replaceDialog == null) {
+            createReplaceDialog();
+        }
         
-        // Create components
-        JPanel inputPanel = new JPanel(new GridBagLayout());
+        // Pre-populate with selected text if any
+        String selectedText = textArea.getSelectedText();
+        if (selectedText != null && !selectedText.isEmpty()) {
+            searchField.setText(selectedText);
+        }
+        
+        replaceDialog.setVisible(true);
+        searchField.requestFocus();
+        searchField.selectAll();
+    }
+    
+    /**
+     * Creates the find dialog.
+     */
+    private void createFindDialog() {
+        Window window = SwingUtilities.getWindowAncestor(parentComponent);
+        findDialog = new JDialog(window instanceof Frame ? (Frame) window : null, "Find", true);
+        findDialog.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         
-        JLabel findLabel = new JLabel("Find:");
-        JTextField findField = new JTextField(lastSearchTerm, 20);
-        JLabel replaceLabel = new JLabel("Replace:");
-        JTextField replaceField = new JTextField(20);
-        JCheckBox caseSensitive = new JCheckBox("Case sensitive");
-        
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
-        
+        // Search field
         gbc.gridx = 0; gbc.gridy = 0;
-        inputPanel.add(findLabel, gbc);
-        gbc.gridx = 1;
-        inputPanel.add(findField, gbc);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        panel.add(new JLabel("Find:"), gbc);
         
+        searchField = new JTextField(20);
+        gbc.gridx = 1; gbc.gridy = 0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        panel.add(searchField, gbc);
+        
+        // Options
+        matchCaseCheckBox = new JCheckBox("Match case");
         gbc.gridx = 0; gbc.gridy = 1;
-        inputPanel.add(replaceLabel, gbc);
-        gbc.gridx = 1;
-        inputPanel.add(replaceField, gbc);
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        panel.add(matchCaseCheckBox, gbc);
         
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2;
-        inputPanel.add(caseSensitive, gbc);
+        wholeWordCheckBox = new JCheckBox("Whole word");
+        gbc.gridy = 2;
+        panel.add(wholeWordCheckBox, gbc);
         
+        regexCheckBox = new JCheckBox("Regular expression");
+        gbc.gridy = 3;
+        panel.add(regexCheckBox, gbc);
+        
+        // Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout());
-        JButton findNextButton = new JButton("Find Next");
+        
+        JButton findButton = new JButton("Find Next");
+        findButton.addActionListener(e -> findNext());
+        buttonPanel.add(findButton);
+        
+        JButton findPrevButton = new JButton("Find Previous");
+        findPrevButton.addActionListener(e -> findPrevious());
+        buttonPanel.add(findPrevButton);
+        
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(e -> findDialog.setVisible(false));
+        buttonPanel.add(closeButton);
+        
+        gbc.gridx = 0; gbc.gridy = 4;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(buttonPanel, gbc);
+        
+        // Enter key support
+        searchField.addActionListener(e -> findNext());
+        
+        // Escape key support
+        findDialog.getRootPane().registerKeyboardAction(
+            e -> findDialog.setVisible(false),
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+        
+        findDialog.add(panel);
+        findDialog.pack();
+        findDialog.setLocationRelativeTo(parentComponent);
+    }
+    
+    /**
+     * Creates the find and replace dialog.
+     */
+    private void createReplaceDialog() {
+        Window window = SwingUtilities.getWindowAncestor(parentComponent);
+        replaceDialog = new JDialog(window instanceof Frame ? (Frame) window : null, "Find and Replace", true);
+        replaceDialog.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        
+        // Search field
+        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        panel.add(new JLabel("Find:"), gbc);
+        
+        searchField = new JTextField(20);
+        gbc.gridx = 1; gbc.gridy = 0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        panel.add(searchField, gbc);
+        
+        // Replace field
+        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        panel.add(new JLabel("Replace:"), gbc);
+        
+        replaceField = new JTextField(20);
+        gbc.gridx = 1; gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        panel.add(replaceField, gbc);
+        
+        // Options (reuse from find dialog)
+        matchCaseCheckBox = new JCheckBox("Match case");
+        gbc.gridx = 0; gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        panel.add(matchCaseCheckBox, gbc);
+        
+        wholeWordCheckBox = new JCheckBox("Whole word");
+        gbc.gridy = 3;
+        panel.add(wholeWordCheckBox, gbc);
+        
+        regexCheckBox = new JCheckBox("Regular expression");
+        gbc.gridy = 4;
+        panel.add(regexCheckBox, gbc);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        
+        JButton findButton = new JButton("Find Next");
+        findButton.addActionListener(e -> findNext());
+        buttonPanel.add(findButton);
+        
         JButton replaceButton = new JButton("Replace");
-        JButton replaceAllButton = new JButton("Replace All");
-        JButton cancelButton = new JButton("Cancel");
-        
-        buttonPanel.add(findNextButton);
+        replaceButton.addActionListener(e -> replaceNext());
         buttonPanel.add(replaceButton);
+        
+        JButton replaceAllButton = new JButton("Replace All");
+        replaceAllButton.addActionListener(e -> replaceAll());
         buttonPanel.add(replaceAllButton);
-        buttonPanel.add(cancelButton);
         
-        replaceDialog.add(inputPanel, BorderLayout.CENTER);
-        replaceDialog.add(buttonPanel, BorderLayout.SOUTH);
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(e -> replaceDialog.setVisible(false));
+        buttonPanel.add(closeButton);
         
-        // Button actions
-        findNextButton.addActionListener(e -> {
-            String searchTerm = findField.getText();
-            if (!searchTerm.isEmpty()) {
-                lastSearchTerm = searchTerm;
-                findNext(searchTerm, caseSensitive.isSelected());
-            }
-        });
+        gbc.gridx = 0; gbc.gridy = 5;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(buttonPanel, gbc);
         
-        replaceButton.addActionListener(e -> {
-            String searchTerm = findField.getText();
-            String replaceTerm = replaceField.getText();
-            if (!searchTerm.isEmpty()) {
-                lastSearchTerm = searchTerm;
-                replaceNext(searchTerm, replaceTerm, caseSensitive.isSelected());
-            }
-        });
+        // Enter key support
+        searchField.addActionListener(e -> findNext());
+        replaceField.addActionListener(e -> replaceNext());
         
-        replaceAllButton.addActionListener(e -> {
-            String searchTerm = findField.getText();
-            String replaceTerm = replaceField.getText();
-            if (!searchTerm.isEmpty()) {
-                lastSearchTerm = searchTerm;
-                int count = replaceAll(searchTerm, replaceTerm, caseSensitive.isSelected());
-                JOptionPane.showMessageDialog(replaceDialog, 
-                    String.format("Replaced %d occurrence(s)", count),
-                    "Replace All", JOptionPane.INFORMATION_MESSAGE);
-            }
-        });
+        // Escape key support
+        replaceDialog.getRootPane().registerKeyboardAction(
+            e -> replaceDialog.setVisible(false),
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
         
-        cancelButton.addActionListener(e -> replaceDialog.dispose());
-        
-        // Enter key for find next
-        findField.addActionListener(e -> findNextButton.doClick());
-        
-        // Focus and show
-        findField.selectAll();
-        replaceDialog.setVisible(true);
+        replaceDialog.add(panel);
+        replaceDialog.pack();
+        replaceDialog.setLocationRelativeTo(parentComponent);
     }
     
     /**
      * Finds the next occurrence of the search term.
      */
-    public void findNext(String searchTerm, boolean caseSensitive) {
-        String text = textComponent.getText();
-        if (text == null || text.isEmpty() || searchTerm.isEmpty()) {
+    private void findNext() {
+        String searchText = searchField.getText();
+        if (searchText.isEmpty()) {
             return;
         }
         
-        int startPos = Math.max(0, textComponent.getCaretPosition());
+        SearchContext context = createSearchContext(searchText, true);
+        SearchResult result = SearchEngine.find(textArea, context);
         
-        // Create pattern for search
-        Pattern pattern = caseSensitive ? 
-            Pattern.compile(Pattern.quote(searchTerm)) :
-            Pattern.compile(Pattern.quote(searchTerm), Pattern.CASE_INSENSITIVE);
-        
-        Matcher matcher = pattern.matcher(text);
-        if (matcher.find(startPos)) {
-            int foundPos = matcher.start();
-            textComponent.setCaretPosition(foundPos);
-            textComponent.select(foundPos, foundPos + searchTerm.length());
-            lastFoundPosition = foundPos;
-        } else {
-            // Search from beginning if not found from current position
-            if (matcher.find(0)) {
-                int foundPos = matcher.start();
-                textComponent.setCaretPosition(foundPos);
-                textComponent.select(foundPos, foundPos + searchTerm.length());
-                lastFoundPosition = foundPos;
-            }
+        if (!result.wasFound()) {
+            showNotFoundMessage();
         }
     }
     
     /**
      * Finds the previous occurrence of the search term.
      */
-    public void findPrevious(String searchTerm, boolean caseSensitive) {
-        String text = textComponent.getText();
-        if (text == null || text.isEmpty() || searchTerm.isEmpty()) {
+    private void findPrevious() {
+        String searchText = searchField.getText();
+        if (searchText.isEmpty()) {
             return;
         }
         
-        int startPos = Math.min(text.length() - 1, textComponent.getCaretPosition() - 1);
+        SearchContext context = createSearchContext(searchText, false);
+        SearchResult result = SearchEngine.find(textArea, context);
         
-        // Create pattern for search
-        Pattern pattern = caseSensitive ? 
-            Pattern.compile(Pattern.quote(searchTerm)) :
-            Pattern.compile(Pattern.quote(searchTerm), Pattern.CASE_INSENSITIVE);
-        
-        // Find all matches up to current position
-        Matcher matcher = pattern.matcher(text.substring(0, startPos + 1));
-        int lastMatchStart = -1;
-        while (matcher.find()) {
-            lastMatchStart = matcher.start();
-        }
-        
-        if (lastMatchStart >= 0) {
-            textComponent.setCaretPosition(lastMatchStart);
-            textComponent.select(lastMatchStart, lastMatchStart + searchTerm.length());
-            lastFoundPosition = lastMatchStart;
+        if (!result.wasFound()) {
+            showNotFoundMessage();
         }
     }
     
     /**
-     * Replaces the currently selected text if it matches the search term.
+     * Replaces the current selection and finds the next occurrence.
      */
-    public void replaceNext(String searchTerm, String replaceTerm, boolean caseSensitive) {
-        String selectedText = textComponent.getSelectedText();
-        if (selectedText != null) {
-            boolean matches = caseSensitive ? 
-                selectedText.equals(searchTerm) :
-                selectedText.equalsIgnoreCase(searchTerm);
-            
-            if (matches) {
-                textComponent.replaceSelection(replaceTerm);
-            }
+    private void replaceNext() {
+        String searchText = searchField.getText();
+        String replaceText = replaceField.getText();
+        
+        if (searchText.isEmpty()) {
+            return;
         }
         
-        // Find next occurrence
-        findNext(searchTerm, caseSensitive);
+        SearchContext context = createSearchContext(searchText, true);
+        context.setReplaceWith(replaceText);
+        SearchResult result = SearchEngine.replace(textArea, context);
+        
+        if (!result.wasFound()) {
+            showNotFoundMessage();
+        }
     }
     
     /**
      * Replaces all occurrences of the search term.
      */
-    public int replaceAll(String searchTerm, String replaceTerm, boolean caseSensitive) {
-        String text = textComponent.getText();
-        if (text == null || text.isEmpty() || searchTerm.isEmpty()) {
-            return 0;
+    private void replaceAll() {
+        String searchText = searchField.getText();
+        String replaceText = replaceField.getText();
+        
+        if (searchText.isEmpty()) {
+            return;
         }
         
-        int flags = caseSensitive ? 0 : Pattern.CASE_INSENSITIVE;
-        Pattern pattern = Pattern.compile(Pattern.quote(searchTerm), flags);
-        Matcher matcher = pattern.matcher(text);
+        SearchContext context = createSearchContext(searchText, true);
+        context.setReplaceWith(replaceText);
+        SearchResult result = SearchEngine.replaceAll(textArea, context);
         
-        int count = 0;
-        StringBuffer result = new StringBuffer();
-        while (matcher.find()) {
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replaceTerm));
-            count++;
-        }
-        matcher.appendTail(result);
-        
-        if (count > 0) {
-            textComponent.setText(result.toString());
-            textComponent.setCaretPosition(0);
-        }
-        
-        return count;
+        JOptionPane.showMessageDialog(replaceDialog,
+            result.getCount() + " occurrence(s) replaced.",
+            "Replace All Complete",
+            JOptionPane.INFORMATION_MESSAGE);
     }
     
     /**
-     * Gets the last search term used.
+     * Creates a SearchContext with the current options.
      */
-    public String getLastSearchTerm() {
-        return lastSearchTerm;
+    private SearchContext createSearchContext(String searchText, boolean searchForward) {
+        SearchContext context = new SearchContext();
+        context.setSearchFor(searchText);
+        context.setMatchCase(matchCaseCheckBox.isSelected());
+        context.setRegularExpression(regexCheckBox.isSelected());
+        context.setSearchForward(searchForward);
+        context.setWholeWord(wholeWordCheckBox.isSelected());
+        return context;
+    }
+    
+    /**
+     * Shows a message when search text is not found.
+     */
+    private void showNotFoundMessage() {
+        JOptionPane.showMessageDialog(
+            findDialog != null && findDialog.isVisible() ? findDialog : replaceDialog,
+            "Search text not found.",
+            "Not Found",
+            JOptionPane.INFORMATION_MESSAGE
+        );
     }
 }

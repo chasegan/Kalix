@@ -417,14 +417,14 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void searchModel() {
-        // Placeholder implementation for search functionality
-        updateStatus(AppConstants.STATUS_SEARCH_NOT_IMPLEMENTED);
-        // TODO: Implement search dialog
-        // This could involve:
-        // 1. Creating a search dialog with find/replace functionality
-        // 2. Highlighting search results in the text editor
-        // 3. Navigation between search results
-        // 4. Regular expression support
+        textEditor.getSearchManager().showFindDialog();
+        updateStatus("Find dialog opened");
+    }
+    
+    @Override
+    public void showFindReplaceDialog() {
+        textEditor.getSearchManager().showFindReplaceDialog();
+        updateStatus("Find and Replace dialog opened");
     }
     
     @Override

@@ -12,6 +12,8 @@ import java.io.File;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
+import org.fife.ui.rtextarea.SearchContext;
+import org.fife.ui.rtextarea.SearchEngine;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -35,8 +37,8 @@ public class EnhancedTextEditor extends JPanel {
     private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
     
     // Manager instances
-    private TextSearchManager searchManager;
     private TextNavigationManager navigationManager;
+    private TextSearchManager searchManager;
     private FileDropManager dropManager;
     
     public interface DirtyStateListener {
@@ -56,9 +58,22 @@ public class EnhancedTextEditor extends JPanel {
         undoManager = new UndoManager();
         
         textArea = new RSyntaxTextArea();
-        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE); // Plain text initially
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI); // INI syntax highlighting
         textArea.setLineWrap(false); // Disable line wrapping
         textArea.setWrapStyleWord(false);
+        
+        // Enable bracket matching
+        textArea.setBracketMatchingEnabled(true);
+//        textArea.setPaintMatchedBracketPair(true);
+//        textArea.setAnimateBracketMatching(true);
+//
+//        // Enable current line highlighting
+        textArea.setCurrentLineHighlightColor(new java.awt.Color(232, 242, 254));
+//        textArea.setHighlightCurrentLine(true);
+        
+        // Enable mark occurrences
+        textArea.setMarkOccurrences(true);
+        textArea.setMarkOccurrencesDelay(300); // 500ms delay before highlighting
         
         // Enable undo/redo tracking
         textArea.getDocument().addUndoableEditListener(undoManager);
@@ -78,8 +93,8 @@ public class EnhancedTextEditor extends JPanel {
      * Initializes the manager instances.
      */
     private void initializeManagers() {
-        searchManager = new TextSearchManager(textArea, this);
         navigationManager = new TextNavigationManager(textArea, this);
+        searchManager = new TextSearchManager(textArea, this);
         dropManager = new FileDropManager(file -> {
             if (fileDropHandler != null) {
                 fileDropHandler.onFileDropped(file);
@@ -134,10 +149,10 @@ public class EnhancedTextEditor extends JPanel {
         });
         
         // Find and Replace
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.META_DOWN_MASK), "findReplace");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK), "findReplace");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.META_DOWN_MASK), "replace");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK), "replace");
         
-        actionMap.put("findReplace", new AbstractAction() {
+        actionMap.put("replace", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 searchManager.showFindReplaceDialog();
@@ -265,12 +280,13 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     // Manager access methods (if needed)
-    public TextSearchManager getSearchManager() {
-        return searchManager;
-    }
     
     public TextNavigationManager getNavigationManager() {
         return navigationManager;
+    }
+    
+    public TextSearchManager getSearchManager() {
+        return searchManager;
     }
     
     public FileDropManager getDropManager() {

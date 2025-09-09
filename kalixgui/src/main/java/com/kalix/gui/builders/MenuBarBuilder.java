@@ -46,6 +46,7 @@ public class MenuBarBuilder {
         // New toolbar-specific actions
         void runModelFromMemory();
         void searchModel();
+        void showFindReplaceDialog();
         void getCliVersion();
         
         // Sessions window
@@ -135,6 +136,9 @@ public class MenuBarBuilder {
         editMenu.add(createMenuItem("Cut", e -> callbacks.cutAction()));
         editMenu.add(createMenuItem("Copy", e -> callbacks.copyAction()));
         editMenu.add(createMenuItem("Paste", e -> callbacks.pasteAction()));
+        editMenu.addSeparator();
+        editMenu.add(createMenuItem("Find...\tCtrl+F", e -> callbacks.searchModel()));
+        editMenu.add(createMenuItem("Find and Replace...\tCtrl+H", e -> callbacks.showFindReplaceDialog()));
         
         return editMenu;
     }
