@@ -124,25 +124,21 @@ public class InteractiveKalixProcess {
     }
     
     /**
-     * Sends a model definition to kalixcli without saving to a file.
-     * This is useful when kalixcli prompts for a model filename - we can
-     * send "-" to indicate STDIN and then send the model content.
+     * Sends a model definition to kalixcli using the JSON protocol.
+     * Creates a load_model_string command with the model content properly JSON-escaped.
      * 
      * @param modelText the model definition text
      * @throws IOException if sending fails
      */
     public void sendModelDefinition(String modelText) throws IOException {
         checkNotClosed();
-        logger.info("Sending model definition (" + modelText.length() + " characters)");
+        logger.info("Sending JSON load_model_string command (" + modelText.length() + " characters)");
         
-        // Send "-" to indicate we'll provide the model via STDIN
-        runningProcess.sendInput("-");
+        // Create JSON command using the new protocol
+        String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         
-        // Send the model content
-        runningProcess.sendInput(modelText);
-        
-        // Send EOF marker if needed (Ctrl+D equivalent)
-        // This might not be needed depending on kalixcli implementation
+        // Send the JSON command
+        runningProcess.sendInput(jsonCommand);
     }
     
     /**

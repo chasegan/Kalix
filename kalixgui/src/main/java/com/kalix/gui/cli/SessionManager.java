@@ -219,6 +219,7 @@ public class SessionManager {
     
     /**
      * Sends model definition to a session (for in-memory model execution).
+     * Uses the JSON protocol with load_model_string command.
      * 
      * @param sessionId the session to send model to
      * @param modelText the model definition text
@@ -232,12 +233,14 @@ public class SessionManager {
                     throw new IllegalArgumentException("Session not found: " + sessionId);
                 }
                 
-                // Log outgoing model definition (truncated for log readability)
-                String logMessage = modelText.length() > 100 ? 
-                    modelText.substring(0, 100) + "... (" + modelText.length() + " chars total)" : 
-                    modelText;
-                session.getCommunicationLog().logGuiToCli("Model definition: " + logMessage);
-                session.getProcess().sendModelDefinition(modelText);
+                // Create JSON command using the new protocol
+                String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
+                
+                // Log the raw JSON command that will be sent to STDIN
+                session.getCommunicationLog().logGuiToCli(jsonCommand);
+                
+                session.getProcess().sendCommand(jsonCommand);
+                
                 session.setState(SessionState.RUNNING, "Running model from memory");
                 updateStatus("Sent model definition to session: " + sessionId);
             } catch (IOException e) {
