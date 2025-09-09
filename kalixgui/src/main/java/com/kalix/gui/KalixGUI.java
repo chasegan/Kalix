@@ -139,7 +139,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Initialize core components
         mapPanel = new MapPanel();
         textEditor = new EnhancedTextEditor();
-        textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
+        textEditor.setText(com.kalix.gui.utils.QuoteLibrary.getDefaultEditorContent());
         
         statusLabel = new JLabel(AppConstants.STATUS_READY);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(

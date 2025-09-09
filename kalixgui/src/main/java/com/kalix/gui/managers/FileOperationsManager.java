@@ -56,7 +56,7 @@ public class FileOperationsManager {
      * Creates a new model by clearing the text editor and map panel.
      */
     public void newModel() {
-        textEditor.setText(AppConstants.NEW_MODEL_TEXT);
+        textEditor.setText(com.kalix.gui.utils.QuoteLibrary.getDefaultEditorContent());
         mapPanel.clearModel();
         currentFile = null; // Clear current file path for new model
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
