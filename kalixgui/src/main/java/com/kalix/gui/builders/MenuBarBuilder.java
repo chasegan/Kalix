@@ -187,7 +187,7 @@ public class MenuBarBuilder {
      */
     private JMenu createRunMenu() {
         JMenu runMenu = new JMenu("Run");
-        runMenu.add(createMenuItem("Run Model (Memory)", e -> callbacks.runModelFromMemory()));
+        runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Sessions Window", e -> callbacks.showSessionsWindow()));
         return runMenu;

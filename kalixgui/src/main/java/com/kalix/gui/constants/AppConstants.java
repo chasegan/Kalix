@@ -111,9 +111,8 @@ public final class AppConstants {
     public static final String MENU_CLEAR_RECENT_FILES = "Clear Recent Files";
     
     // Default text content
-    public static final String DEFAULT_MODEL_TEXT = "# Kalix Model\n# Edit your hydrologic model here...\n";
-    public static final String NEW_MODEL_TEXT = "# New Kalix Model\n";
-    
+    public static final String DEFAULT_MODEL_TEXT = "# Welcome, friend ...\n";
+
     // System properties for macOS
     public static final String PROP_MACOS_SCREEN_MENU = "apple.laf.useScreenMenuBar";
     public static final String PROP_MACOS_APP_NAME = "apple.awt.application.name";
