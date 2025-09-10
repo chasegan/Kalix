@@ -64,6 +64,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     // Application state
     private Preferences prefs;
+    private int previousNodeCount = 0;
 
     /**
      * Creates a new KalixGUI instance.
@@ -160,7 +161,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             this, textEditor, mapPanel,
             this::updateStatus,
             recentFilesManager::addRecentFile,
-            () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile) // File change callback for title bar updates
+            () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile), // File change callback for title bar updates
+            this::updateModelFromText // Model update callback for when files are loaded
         );
         
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
@@ -286,8 +288,15 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void onModelChanged(ModelChangeEvent event) {
         SwingUtilities.invokeLater(() -> {
             var stats = hydrologicalModel.getStatistics();
+            int currentNodeCount = stats.getNodeCount();
             String baseMessage = String.format("Model: %d nodes, %d links", 
-                stats.getNodeCount(), stats.getLinkCount());
+                currentNodeCount, stats.getLinkCount());
+            
+            // Auto-zoom to fit when transitioning from 0 to >0 nodes (text editing case)
+            if (previousNodeCount == 0 && currentNodeCount > 0) {
+                mapPanel.zoomToFit();
+            }
+            previousNodeCount = currentNodeCount;
             
             // Add affected counts if there were changes
             if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
@@ -309,7 +318,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         SwingUtilities.invokeLater(() -> {
             try {
                 String text = textEditor.getText();
-                if (text != null && !text.trim().isEmpty()) {
+                if (text != null) {
                     hydrologicalModel.parseFromIniTextIncremental(text);
                 }
             } catch (Exception e) {
@@ -436,6 +445,12 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void resetZoom() {
         mapPanel.resetZoom();
         updateStatus(AppConstants.STATUS_ZOOM_RESET);
+    }
+    
+    @Override
+    public void zoomToFit() {
+        mapPanel.zoomToFit();
+        updateStatus("Zoomed to fit all nodes");
     }
 
     @Override

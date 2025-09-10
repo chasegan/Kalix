@@ -38,6 +38,7 @@ public class MenuBarBuilder {
         void zoomIn();
         void zoomOut();
         void resetZoom();
+        void zoomToFit();
         String switchTheme(String theme);
         void flowViz();
         void showAbout();
@@ -154,6 +155,7 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
         viewMenu.add(createMenuItem("Reset Zoom", e -> callbacks.resetZoom()));
+        viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
         viewMenu.addSeparator();
         
         
