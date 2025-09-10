@@ -70,14 +70,14 @@ public class MapPanel extends JPanel implements KeyListener {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
                         
-                        if (nodeWasSelected && !e.isControlDown()) {
-                            // Clicking on already selected node without Ctrl - preserve selection and start drag
+                        if (nodeWasSelected && !e.isShiftDown()) {
+                            // Clicking on already selected node without Shift - preserve selection and start drag
                             if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
                                 interactionManager.startDrag(e.getPoint());
                             }
                         } else {
-                            // Clicking on unselected node, or Ctrl+clicking - handle selection normally
-                            handleNodeSelection(nodeAtPoint, e.isControlDown());
+                            // Clicking on unselected node, or Shift+clicking - handle selection normally
+                            handleNodeSelection(nodeAtPoint, e.isShiftDown());
                             
                             // Check if we can start dragging after selection change
                             if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
@@ -429,7 +429,7 @@ public class MapPanel extends JPanel implements KeyListener {
     /**
      * Handle node selection logic.
      * @param nodeName Name of the node to select
-     * @param addToSelection If true (Ctrl+click), add to selection; if false, replace selection
+     * @param addToSelection If true (Shift+click), add to selection; if false, replace selection
      */
     private void handleNodeSelection(String nodeName, boolean addToSelection) {
         if (model == null) {
@@ -437,7 +437,7 @@ public class MapPanel extends JPanel implements KeyListener {
         }
         
         if (addToSelection) {
-            // Ctrl+click: toggle selection of this node
+            // Shift+click: toggle selection of this node
             if (model.isNodeSelected(nodeName)) {
                 model.deselectNode(nodeName);
             } else {

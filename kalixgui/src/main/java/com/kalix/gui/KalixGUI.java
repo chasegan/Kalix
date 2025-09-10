@@ -19,6 +19,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.KeyStroke;
 import java.io.File;
 import java.util.prefs.Preferences;
 
@@ -95,6 +102,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupMenuBar();
         setupDragAndDrop();
         setupWindowListeners();
+        setupGlobalKeyBindings();
         
         // Load saved preferences
         loadSplitPaneDividerPosition();
@@ -272,6 +280,60 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             public void componentResized(ComponentEvent e) {
                 // Update title bar when window is resized to ensure path still fits
                 titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
+            }
+        });
+    }
+    
+    /**
+     * Sets up global key bindings for undo/redo that work regardless of component focus.
+     */
+    private void setupGlobalKeyBindings() {
+        JRootPane rootPane = getRootPane();
+        InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = rootPane.getActionMap();
+        
+        // Global Ctrl+Z for undo
+        KeyStroke ctrlZ = KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
+        inputMap.put(ctrlZ, "global-undo");
+        actionMap.put("global-undo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (textEditor.canUndo()) {
+                    textEditor.undo();
+                    updateStatus(AppConstants.STATUS_UNDO);
+                } else {
+                    updateStatus(AppConstants.STATUS_NOTHING_TO_UNDO);
+                }
+            }
+        });
+        
+        // Global Ctrl+Y for redo
+        KeyStroke ctrlY = KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK);
+        inputMap.put(ctrlY, "global-redo");
+        actionMap.put("global-redo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (textEditor.canRedo()) {
+                    textEditor.redo();
+                    updateStatus(AppConstants.STATUS_REDO);
+                } else {
+                    updateStatus(AppConstants.STATUS_NOTHING_TO_REDO);
+                }
+            }
+        });
+        
+        // Alternative Ctrl+Shift+Z for redo
+        KeyStroke ctrlShiftZ = KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK);
+        inputMap.put(ctrlShiftZ, "global-redo-alt");
+        actionMap.put("global-redo-alt", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (textEditor.canRedo()) {
+                    textEditor.redo();
+                    updateStatus(AppConstants.STATUS_REDO);
+                } else {
+                    updateStatus(AppConstants.STATUS_NOTHING_TO_REDO);
+                }
             }
         });
     }

@@ -131,8 +131,8 @@ public class MenuBarBuilder {
     private JMenu createEditMenu() {
         JMenu editMenu = new JMenu("Edit");
         
-        editMenu.add(createMenuItem("Undo", e -> callbacks.undoAction()));
-        editMenu.add(createMenuItem("Redo", e -> callbacks.redoAction()));
+        editMenu.add(createMenuItem("Undo\tCtrl+Z", e -> callbacks.undoAction()));
+        editMenu.add(createMenuItem("Redo\tCtrl+Y", e -> callbacks.redoAction()));
         editMenu.addSeparator();
         editMenu.add(createMenuItem("Cut", e -> callbacks.cutAction()));
         editMenu.add(createMenuItem("Copy", e -> callbacks.copyAction()));
@@ -257,6 +257,9 @@ public class MenuBarBuilder {
                     }
                     recentFilesStartIndex = -1;
                 }
+                
+                // Always re-add Exit with separator after clearing
+                addExitWithSeparator();
             }
         }
         
@@ -287,11 +290,12 @@ public class MenuBarBuilder {
         
         @Override
         public void addSeparator() {
-            // Add separator to the File menu (but before Exit)
+            // Add separator directly to the File menu as part of recent files section
+            // Remove Exit temporarily, add separator, then re-add Exit with separator
             if (fileMenu != null) {
                 removeExitFromMenu();
                 fileMenu.addSeparator();
-                addExitToMenu();
+                addExitWithSeparator();
             }
         }
         
@@ -311,14 +315,20 @@ public class MenuBarBuilder {
         
         private void addExitToMenu() {
             if (fileMenu != null) {
+                fileMenu.add(exitMenuItem);
+            }
+        }
+        
+        private void addExitWithSeparator() {
+            if (fileMenu != null) {
                 fileMenu.addSeparator();
                 fileMenu.add(exitMenuItem);
             }
         }
         
         public void initializeMenu() {
-            // Add Exit to the menu initially
-            addExitToMenu();
+            // Add Exit to the menu initially with separator
+            addExitWithSeparator();
         }
     }
 }
