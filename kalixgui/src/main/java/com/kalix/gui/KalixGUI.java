@@ -11,6 +11,8 @@ import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
 import com.kalix.gui.managers.*;
 import com.kalix.gui.utils.DialogUtils;
+import com.kalix.gui.schematic.SchematicGLPanel;
+import com.kalix.gui.schematic.TestDataGenerator;
 
 import javax.swing.*;
 import java.awt.*;
@@ -40,7 +42,7 @@ import java.util.prefs.Preferences;
  */
 public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks {
     // Core UI components
-    private MapPanel mapPanel;
+    private SchematicGLPanel schematicPanel;
     private EnhancedTextEditor textEditor;
     private JLabel statusLabel;
     private StatusProgressBar progressBar;
@@ -133,7 +135,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void initializeComponents() {
         // Initialize core components
-        mapPanel = new MapPanel();
+        schematicPanel = new SchematicGLPanel();
+        
+        // Load test data to demonstrate the schematic visualization
+        loadTestData();
         textEditor = new EnhancedTextEditor();
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
         
@@ -147,7 +152,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Complete manager initialization now that components exist
         fileOperations = new FileOperationsManager(
-            this, textEditor, mapPanel,
+            this, textEditor, schematicPanel,
             this::updateStatus,
             recentFilesManager::addRecentFile,
             () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile) // File change callback for title bar updates
@@ -181,11 +186,11 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         JToolBar toolBar = toolBarBuilder.buildToolBar();
         add(toolBar, BorderLayout.NORTH);
         
-        // Create split pane with map panel on left, text editor on right
+        // Create split pane with schematic panel on left, text editor on right
         splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(mapPanel),
-            textEditor  // Enhanced text editor already includes scroll pane
+            schematicPanel,  // OpenGL panel doesn't need scroll pane
+            textEditor       // Enhanced text editor already includes scroll pane
         );
         splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
         splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
@@ -349,19 +354,23 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void zoomIn() {
-        mapPanel.zoomIn();
+        schematicPanel.getViewport().zoomCentered(1.2f);
+        schematicPanel.repaint();
         updateStatus(AppConstants.STATUS_ZOOMED_IN);
     }
 
     @Override
     public void zoomOut() {
-        mapPanel.zoomOut();
+        schematicPanel.getViewport().zoomCentered(1.0f / 1.2f);
+        schematicPanel.repaint();
         updateStatus(AppConstants.STATUS_ZOOMED_OUT);
     }
 
     @Override
     public void resetZoom() {
-        mapPanel.resetZoom();
+        schematicPanel.getViewport().setZoom(1.0f);
+        schematicPanel.getViewport().setCenter(0.0f, 0.0f);
+        schematicPanel.repaint();
         updateStatus(AppConstants.STATUS_ZOOM_RESET);
     }
 
@@ -471,6 +480,66 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             });
     }
 
+    /**
+     * Load test data for schematic visualization demonstration
+     */
+    private void loadTestData() {
+        // Load basic test network for demonstration
+        var testNodes = TestDataGenerator.generateBasicTestNodes();
+        var testLinks = TestDataGenerator.generateBasicTestLinks();
+        
+        System.out.println("Loading test data: " + testNodes.size() + " nodes, " + testLinks.size() + " links");
+        for (var node : testNodes) {
+            System.out.println("  Node: " + node.getId() + " at (" + node.getX() + ", " + node.getY() + ") type=" + node.getType());
+        }
+        
+        schematicPanel.setNodes(testNodes);
+        schematicPanel.setLinks(testLinks);
+        
+        // Fit the view to show all nodes
+        SwingUtilities.invokeLater(() -> {
+            schematicPanel.fitToModel();
+            System.out.println("Fitted view to model, viewport: center=(" + 
+                             schematicPanel.getViewport().getCenterX() + ", " + 
+                             schematicPanel.getViewport().getCenterY() + ") zoom=" +
+                             schematicPanel.getViewport().getZoom());
+        });
+    }
+    
+    /**
+     * Load performance test data with specified number of nodes
+     */
+    public void loadPerformanceTestData(int nodeCount) {
+        TestDataGenerator.SchematicTestData testData = 
+            TestDataGenerator.generatePerformanceTestData(nodeCount);
+        
+        schematicPanel.setNodes(testData.nodes);
+        schematicPanel.setLinks(testData.links);
+        
+        // Fit the view to show all nodes
+        SwingUtilities.invokeLater(() -> {
+            schematicPanel.fitToModel();
+        });
+        
+        // Update status
+        statusLabel.setText("Loaded " + nodeCount + " nodes for performance testing");
+    }
+    
+    /**
+     * Clear the schematic visualization
+     */
+    public void clearSchematic() {
+        schematicPanel.clearModel();
+        statusLabel.setText("Schematic cleared");
+    }
+    
+    /**
+     * Get the schematic panel for external access
+     */
+    public SchematicGLPanel getSchematicPanel() {
+        return schematicPanel;
+    }
+    
     /**
      * Main entry point for the Kalix GUI application.
      * 

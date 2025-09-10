@@ -1,6 +1,6 @@
 package com.kalix.gui.managers;
 
-import com.kalix.gui.MapPanel;
+import com.kalix.gui.schematic.SchematicGLPanel;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
 
@@ -20,7 +20,7 @@ public class FileOperationsManager {
     
     private final Component parentComponent;
     private final EnhancedTextEditor textEditor;
-    private final MapPanel mapPanel;
+    private final SchematicGLPanel schematicPanel;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
@@ -40,13 +40,13 @@ public class FileOperationsManager {
      */
     public FileOperationsManager(Component parentComponent, 
                                EnhancedTextEditor textEditor,
-                               MapPanel mapPanel,
+                               SchematicGLPanel schematicPanel,
                                Consumer<String> statusUpdateCallback,
                                Consumer<String> addRecentFileCallback,
                                Runnable fileChangedCallback) {
         this.parentComponent = parentComponent;
         this.textEditor = textEditor;
-        this.mapPanel = mapPanel;
+        this.schematicPanel = schematicPanel;
         this.statusUpdateCallback = statusUpdateCallback;
         this.addRecentFileCallback = addRecentFileCallback;
         this.fileChangedCallback = fileChangedCallback;
@@ -57,7 +57,7 @@ public class FileOperationsManager {
      */
     public void newModel() {
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
-        mapPanel.clearModel();
+        schematicPanel.clearModel();
         currentFile = null; // Clear current file path for new model
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
         fileChangedCallback.run(); // Notify title bar of file change
@@ -112,7 +112,7 @@ public class FileOperationsManager {
             addRecentFileCallback.accept(file.getAbsolutePath());
             
             // Clear the map panel
-            mapPanel.clearModel();
+            schematicPanel.clearModel();
             
             // Notify title bar of file change
             fileChangedCallback.run();

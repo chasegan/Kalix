@@ -8,6 +8,10 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    // JogAmp repository for JOGL
+    maven {
+        url = uri("https://jogamp.org/deployment/maven")
+    }
 }
 
 dependencies {
@@ -27,6 +31,18 @@ dependencies {
     
     // RSyntaxTextArea for enhanced text components
     implementation("com.fifesoft:rsyntaxtextarea:3.3.4")
+    
+    // JOGL for OpenGL hardware-accelerated graphics
+    implementation("org.jogamp.jogl:jogl-all:2.4.0")
+    implementation("org.jogamp.gluegen:gluegen-rt:2.4.0")
+    
+    // JOGL native libraries for different platforms
+    runtimeOnly("org.jogamp.jogl:jogl-all:2.4.0:natives-macosx-universal")
+    runtimeOnly("org.jogamp.jogl:jogl-all:2.4.0:natives-windows-amd64")
+    runtimeOnly("org.jogamp.jogl:jogl-all:2.4.0:natives-linux-amd64")
+    runtimeOnly("org.jogamp.gluegen:gluegen-rt:2.4.0:natives-macosx-universal")
+    runtimeOnly("org.jogamp.gluegen:gluegen-rt:2.4.0:natives-windows-amd64")
+    runtimeOnly("org.jogamp.gluegen:gluegen-rt:2.4.0:natives-linux-amd64")
     
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
