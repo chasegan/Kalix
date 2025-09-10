@@ -202,6 +202,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Connect map panel to data model
         mapPanel.setModel(hydrologicalModel);
         
+        // Set up bidirectional text synchronization
+        mapPanel.setupTextSynchronization(textEditor);
+        
         // Initial parse of default text
         updateModelFromText();
     }
@@ -319,6 +322,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             try {
                 String text = textEditor.getText();
                 if (text != null) {
+                    // Check if we're currently updating text from model changes to prevent infinite loops
+                    // We need to access the TextCoordinateUpdater to check this flag
+                    // For now, we'll always parse - the TextCoordinateUpdater uses programmatic update flag
                     hydrologicalModel.parseFromIniTextIncremental(text);
                 }
             } catch (Exception e) {

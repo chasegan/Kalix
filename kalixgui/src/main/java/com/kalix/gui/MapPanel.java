@@ -11,6 +11,9 @@ import java.util.Map;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelNode;
 import com.kalix.gui.model.ModelChangeListener;
+import com.kalix.gui.interaction.MapInteractionManager;
+import com.kalix.gui.interaction.TextCoordinateUpdater;
+import com.kalix.gui.editor.EnhancedTextEditor;
 
 public class MapPanel extends JPanel {
     private double zoomLevel = 1.0;
@@ -35,6 +38,9 @@ public class MapPanel extends JPanel {
     private HydrologicalModel model = null;
     private final Map<String, Color> nodeTypeColors = new HashMap<>();
     private int nextColorIndex = 0;
+    
+    // Interaction management
+    private MapInteractionManager interactionManager;
 
     public MapPanel() {
         setBackground(Color.WHITE);
@@ -47,15 +53,47 @@ public class MapPanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
-                    lastPanPoint = e.getPoint();
-                    isPanning = true;
-                    setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    // Check if clicking on a node first
+                    String nodeAtPoint = getNodeAtPoint(e.getPoint());
+                    
+                    if (nodeAtPoint != null) {
+                        // Check if clicking on an already selected node
+                        boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
+                        
+                        if (nodeWasSelected && !e.isControlDown()) {
+                            // Clicking on already selected node without Ctrl - preserve selection and start drag
+                            if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
+                                interactionManager.startDrag(e.getPoint());
+                            }
+                        } else {
+                            // Clicking on unselected node, or Ctrl+clicking - handle selection normally
+                            handleNodeSelection(nodeAtPoint, e.isControlDown());
+                            
+                            // Check if we can start dragging after selection change
+                            if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
+                                interactionManager.startDrag(e.getPoint());
+                            }
+                        }
+                    } else {
+                        // Not clicking on a node - clear selection and start panning
+                        if (model != null) {
+                            model.clearSelection();
+                        }
+                        lastPanPoint = e.getPoint();
+                        isPanning = true;
+                        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    }
                 }
             }
             
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    // End dragging if active
+                    if (interactionManager != null && interactionManager.isDragging()) {
+                        interactionManager.endDrag(e.getPoint());
+                    }
+                    
                     isPanning = false;
                     lastPanPoint = null;
                     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
@@ -64,7 +102,12 @@ public class MapPanel extends JPanel {
             
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (isPanning && lastPanPoint != null) {
+                // Handle node dragging first
+                if (interactionManager != null && interactionManager.isDragging()) {
+                    interactionManager.updateDrag(e.getPoint());
+                    repaint();
+                } else if (isPanning && lastPanPoint != null) {
+                    // Handle map panning
                     Point currentPoint = e.getPoint();
                     double deltaX = currentPoint.x - lastPanPoint.x;
                     double deltaY = currentPoint.y - lastPanPoint.y;
@@ -208,10 +251,15 @@ public class MapPanel extends JPanel {
             g2d.fillOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
                         NODE_SIZE, NODE_SIZE);
             
-            // Optional: Draw node border
-            g2d.setColor(Color.BLACK);
+            // Draw node border - blue for selected nodes, black for unselected
+            boolean isSelected = model.isNodeSelected(node.getName());
+            g2d.setColor(isSelected ? Color.BLUE : Color.BLACK);
+            g2d.setStroke(isSelected ? new BasicStroke(3.0f) : new BasicStroke(1.0f));
             g2d.drawOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
                         NODE_SIZE, NODE_SIZE);
+            
+            // Reset stroke for next node
+            g2d.setStroke(new BasicStroke(1.0f));
         }
         
         // Restore the original transform
@@ -234,9 +282,12 @@ public class MapPanel extends JPanel {
         
         this.model = model;
         
-        // Add listener to new model
+        // Initialize interaction manager
         if (this.model != null) {
             this.model.addChangeListener(event -> repaint());
+            this.interactionManager = new MapInteractionManager(this, this.model);
+        } else {
+            this.interactionManager = null;
         }
         
         repaint();
@@ -331,5 +382,86 @@ public class MapPanel extends JPanel {
 
     public void clearModel() {
         repaint();
+    }
+    
+    // Hit testing for node interaction
+    
+    /**
+     * Find the node at the given screen coordinates.
+     * @param screenPoint Screen coordinates (mouse position)
+     * @return Node name if found, null if no node at that position
+     */
+    public String getNodeAtPoint(Point screenPoint) {
+        if (model == null) {
+            return null;
+        }
+        
+        // Check each node to see if the screen point is within its bounds
+        for (ModelNode node : model.getAllNodes()) {
+            // Transform node world coordinates to screen coordinates
+            double screenX = node.getX() * zoomLevel + panX;
+            double screenY = node.getY() * zoomLevel + panY;
+            
+            // Calculate distance from screen point to node center
+            double dx = screenPoint.x - screenX;
+            double dy = screenPoint.y - screenY;
+            double distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if within node radius (NODE_SIZE / 2)
+            if (distance <= NODE_SIZE / 2.0) {
+                return node.getName();
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Handle node selection logic.
+     * @param nodeName Name of the node to select
+     * @param addToSelection If true (Ctrl+click), add to selection; if false, replace selection
+     */
+    private void handleNodeSelection(String nodeName, boolean addToSelection) {
+        if (model == null) {
+            return;
+        }
+        
+        if (addToSelection) {
+            // Ctrl+click: toggle selection of this node
+            if (model.isNodeSelected(nodeName)) {
+                model.deselectNode(nodeName);
+            } else {
+                model.selectNode(nodeName, true); // Add to selection
+            }
+        } else {
+            // Regular click: select only this node
+            model.selectNode(nodeName, false); // Replace selection
+        }
+    }
+    
+    // Getters for MapInteractionManager
+    
+    public double getZoomLevel() {
+        return zoomLevel;
+    }
+    
+    public double getPanX() {
+        return panX;
+    }
+    
+    public double getPanY() {
+        return panY;
+    }
+    
+    /**
+     * Set up text synchronization with the text editor.
+     * This enables bidirectional sync between map dragging and text coordinate updates.
+     * @param textEditor The text editor to synchronize with
+     */
+    public void setupTextSynchronization(EnhancedTextEditor textEditor) {
+        if (interactionManager != null && textEditor != null) {
+            TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
+            interactionManager.setTextUpdater(textUpdater);
+        }
     }
 }

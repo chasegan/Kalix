@@ -30,6 +30,9 @@ public class HydrologicalModel {
     // Change listeners for UI updates
     private final List<ModelChangeListener> changeListeners;
     
+    // Selection tracking
+    private final Set<String> selectedNodes;
+    
     public HydrologicalModel() {
         // Use concurrent collections for thread safety
         this.nodes = new ConcurrentHashMap<>();
@@ -44,6 +47,9 @@ public class HydrologicalModel {
         
         // Listeners
         this.changeListeners = new CopyOnWriteArrayList<>();
+        
+        // Selection
+        this.selectedNodes = ConcurrentHashMap.newKeySet();
     }
     
     /**
@@ -366,8 +372,107 @@ public class HydrologicalModel {
         modifiedLinks.clear();
         removedNodes.clear();
         removedLinks.clear();
+        selectedNodes.clear();
         
         incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_CLEARED, null));
+    }
+    
+    // Selection management
+    
+    /**
+     * Select a node, optionally adding to current selection
+     * @param nodeName Name of node to select
+     * @param addToSelection If true, add to selection; if false, replace selection
+     */
+    public void selectNode(String nodeName, boolean addToSelection) {
+        if (!nodes.containsKey(nodeName)) {
+            return; // Node doesn't exist
+        }
+        
+        if (!addToSelection) {
+            selectedNodes.clear();
+        }
+        
+        selectedNodes.add(nodeName);
+        incrementVersion();
+        notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_SELECTED, nodeName));
+    }
+    
+    /**
+     * Deselect a specific node
+     * @param nodeName Name of node to deselect
+     */
+    public void deselectNode(String nodeName) {
+        if (selectedNodes.remove(nodeName)) {
+            incrementVersion();
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_DESELECTED, nodeName));
+        }
+    }
+    
+    /**
+     * Clear all selections
+     */
+    public void clearSelection() {
+        if (!selectedNodes.isEmpty()) {
+            selectedNodes.clear();
+            incrementVersion();
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
+        }
+    }
+    
+    /**
+     * Check if a node is selected
+     * @param nodeName Name of node to check
+     * @return true if node is selected
+     */
+    public boolean isNodeSelected(String nodeName) {
+        return selectedNodes.contains(nodeName);
+    }
+    
+    /**
+     * Get all selected node names
+     * @return Set of selected node names (defensive copy)
+     */
+    public Set<String> getSelectedNodes() {
+        return new HashSet<>(selectedNodes);
+    }
+    
+    /**
+     * Get count of selected nodes
+     * @return Number of selected nodes
+     */
+    public int getSelectedNodeCount() {
+        return selectedNodes.size();
+    }
+    
+    // Node coordinate updates for dragging
+    
+    /**
+     * Update the position of a node (for dragging operations)
+     * @param nodeName Name of the node to update
+     * @param x New X coordinate
+     * @param y New Y coordinate
+     */
+    public void updateNodePosition(String nodeName, double x, double y) {
+        ModelNode existingNode = nodes.get(nodeName);
+        if (existingNode == null) {
+            return; // Node doesn't exist
+        }
+        
+        // Create a new node with updated coordinates (ModelNode is immutable)
+        ModelNode updatedNode = new ModelNode(existingNode.getName(), existingNode.getType(), x, y);
+        
+        // Update in spatial index
+        spatialIndex.removeNode(existingNode);
+        spatialIndex.addNode(updatedNode);
+        
+        // Update in main collection
+        nodes.put(nodeName, updatedNode);
+        modifiedNodes.add(nodeName);
+        removedNodes.remove(nodeName);
+        
+        incrementVersion();
+        notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_MODIFIED, nodeName));
     }
 }

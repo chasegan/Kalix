@@ -13,7 +13,10 @@ public class ModelChangeEvent {
         LINK_REMOVED,
         LINK_MODIFIED,
         MODEL_CLEARED,
-        MODEL_RELOADED
+        MODEL_RELOADED,
+        NODE_SELECTED,
+        NODE_DESELECTED,
+        SELECTION_CLEARED
     }
     
     private final Type type;
