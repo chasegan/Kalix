@@ -2,6 +2,8 @@ package com.kalix.gui;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 
 public class MapPanel extends JPanel {
@@ -9,10 +11,57 @@ public class MapPanel extends JPanel {
     private static final double ZOOM_FACTOR = 1.2;
     private static final double MIN_ZOOM = 0.1;
     private static final double MAX_ZOOM = 5.0;
+    
+    // Panning variables
+    private double panX = 0.0;
+    private double panY = 0.0;
+    private Point lastPanPoint = null;
+    private boolean isPanning = false;
 
     public MapPanel() {
         setBackground(Color.WHITE);
         setPreferredSize(new Dimension(600, 600));
+        setupMouseListeners();
+    }
+    
+    private void setupMouseListeners() {
+        MouseAdapter panningHandler = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    lastPanPoint = e.getPoint();
+                    isPanning = true;
+                    setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                }
+            }
+            
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    isPanning = false;
+                    lastPanPoint = null;
+                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                }
+            }
+            
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (isPanning && lastPanPoint != null) {
+                    Point currentPoint = e.getPoint();
+                    double deltaX = currentPoint.x - lastPanPoint.x;
+                    double deltaY = currentPoint.y - lastPanPoint.y;
+                    
+                    panX += deltaX;
+                    panY += deltaY;
+                    
+                    lastPanPoint = currentPoint;
+                    repaint();
+                }
+            }
+        };
+        
+        addMouseListener(panningHandler);
+        addMouseMotionListener(panningHandler);
     }
 
     @Override
@@ -23,8 +72,9 @@ public class MapPanel extends JPanel {
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         
-        // Apply zoom transformation
+        // Apply pan and zoom transformations
         AffineTransform originalTransform = g2d.getTransform();
+        g2d.translate(panX, panY);
         g2d.scale(zoomLevel, zoomLevel);
         
         // Draw placeholder content
@@ -33,9 +83,10 @@ public class MapPanel extends JPanel {
         
         g2d.setTransform(originalTransform);
         
-        // Draw zoom level indicator
+        // Draw zoom level and pan indicators
         g2d.setColor(Color.GRAY);
-        g2d.drawString(String.format("Zoom: %.1f%%", zoomLevel * 100), 10, getHeight() - 10);
+        g2d.drawString(String.format("Zoom: %.1f%%", zoomLevel * 100), 10, getHeight() - 25);
+        g2d.drawString(String.format("Pan: (%.0f, %.0f)", panX, panY), 10, getHeight() - 10);
         
         g2d.dispose();
     }
@@ -44,39 +95,32 @@ public class MapPanel extends JPanel {
         g2d.setColor(new Color(240, 240, 240));
         g2d.setStroke(new BasicStroke(1));
         
-        int width = (int) (getWidth() / zoomLevel);
-        int height = (int) (getHeight() / zoomLevel);
         int gridSize = 50;
         
-        // Draw vertical lines
-        for (int x = 0; x < width; x += gridSize) {
-            g2d.drawLine(x, 0, x, height);
+        // Calculate the visible world bounds (accounting for pan and zoom transforms)
+        int viewWidth = (int) (getWidth() / zoomLevel);
+        int viewHeight = (int) (getHeight() / zoomLevel);
+        int worldLeft = (int) (-panX / zoomLevel);
+        int worldTop = (int) (-panY / zoomLevel);
+        int worldRight = worldLeft + viewWidth;
+        int worldBottom = worldTop + viewHeight;
+        
+        // Draw vertical lines - aligned to world grid
+        int startX = (worldLeft / gridSize) * gridSize;  // Snap to grid
+        for (int x = startX; x <= worldRight + gridSize; x += gridSize) {
+            g2d.drawLine(x, worldTop - gridSize, x, worldBottom + gridSize);
         }
         
-        // Draw horizontal lines
-        for (int y = 0; y < height; y += gridSize) {
-            g2d.drawLine(0, y, width, y);
+        // Draw horizontal lines - aligned to world grid  
+        int startY = (worldTop / gridSize) * gridSize;  // Snap to grid
+        for (int y = startY; y <= worldBottom + gridSize; y += gridSize) {
+            g2d.drawLine(worldLeft - gridSize, y, worldRight + gridSize, y);
         }
+        
     }
 
     private void drawPlaceholderContent(Graphics2D g2d) {
-        g2d.setColor(Color.LIGHT_GRAY);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 16));
-        
-        String message = "Kalix Model Map";
-        FontMetrics fm = g2d.getFontMetrics();
-        int x = (int) ((getWidth() / zoomLevel - fm.stringWidth(message)) / 2);
-        int y = (int) ((getHeight() / zoomLevel) / 2);
-        
-        g2d.drawString(message, x, y);
-        
-        g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-        String subMessage = "Nodes and links will appear here";
-        fm = g2d.getFontMetrics();
-        x = (int) ((getWidth() / zoomLevel - fm.stringWidth(subMessage)) / 2);
-        y += 25;
-        
-        g2d.drawString(subMessage, x, y);
+        // Placeholder method for future model content
     }
 
     public void zoomIn() {
@@ -95,6 +139,19 @@ public class MapPanel extends JPanel {
 
     public void resetZoom() {
         zoomLevel = 1.0;
+        repaint();
+    }
+    
+    public void resetPan() {
+        panX = 0.0;
+        panY = 0.0;
+        repaint();
+    }
+    
+    public void resetView() {
+        zoomLevel = 1.0;
+        panX = 0.0;
+        panY = 0.0;
         repaint();
     }
 
