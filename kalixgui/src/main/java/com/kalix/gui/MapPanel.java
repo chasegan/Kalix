@@ -5,6 +5,11 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
+import java.util.HashMap;
+import java.util.Map;
+import com.kalix.gui.model.HydrologicalModel;
+import com.kalix.gui.model.ModelNode;
+import com.kalix.gui.model.ModelChangeListener;
 
 public class MapPanel extends JPanel {
     private double zoomLevel = 1.0;
@@ -17,6 +22,18 @@ public class MapPanel extends JPanel {
     private double panY = 0.0;
     private Point lastPanPoint = null;
     private boolean isPanning = false;
+    
+    // Node rendering constants
+    private static final int NODE_SIZE = 20; // Constant screen size in pixels
+    private static final String[] COLOR_PALETTE = {
+        "F94144", "F3722C", "F8961E", "F9844A", "F9C74F", 
+        "90BE6D", "43AA8B", "4D908E", "577590", "277DA1"
+    };
+    
+    // Model integration
+    private HydrologicalModel model = null;
+    private final Map<String, Color> nodeTypeColors = new HashMap<>();
+    private int nextColorIndex = 0;
 
     public MapPanel() {
         setBackground(Color.WHITE);
@@ -77,11 +94,14 @@ public class MapPanel extends JPanel {
         g2d.translate(panX, panY);
         g2d.scale(zoomLevel, zoomLevel);
         
-        // Draw placeholder content
+        // Draw grid and model content
         drawGrid(g2d);
         drawPlaceholderContent(g2d);
         
         g2d.setTransform(originalTransform);
+        
+        // Draw nodes in screen space (constant size)
+        drawNodes(g2d);
         
         // Draw zoom level and pan indicators
         g2d.setColor(Color.GRAY);
@@ -121,6 +141,68 @@ public class MapPanel extends JPanel {
 
     private void drawPlaceholderContent(Graphics2D g2d) {
         // Placeholder method for future model content
+    }
+    
+    private void drawNodes(Graphics2D g2d) {
+        if (model == null) return;
+        
+        // Save the current transform
+        AffineTransform originalTransform = g2d.getTransform();
+        
+        // Draw each node
+        for (ModelNode node : model.getAllNodes()) {
+            // Get or assign color for this node type
+            Color nodeColor = getColorForNodeType(node.getType());
+            g2d.setColor(nodeColor);
+            
+            // Transform node coordinates to screen space
+            double screenX = node.getX();
+            double screenY = node.getY();
+            
+            // Reset transform to screen space for constant size rendering
+            g2d.setTransform(originalTransform);
+            
+            // Convert world coordinates to screen coordinates
+            double transformedX = screenX * zoomLevel + panX;
+            double transformedY = screenY * zoomLevel + panY;
+            
+            // Draw node as filled circle with constant screen size
+            int nodeRadius = NODE_SIZE / 2;
+            g2d.fillOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
+                        NODE_SIZE, NODE_SIZE);
+            
+            // Optional: Draw node border
+            g2d.setColor(Color.BLACK);
+            g2d.drawOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
+                        NODE_SIZE, NODE_SIZE);
+        }
+        
+        // Restore the original transform
+        g2d.setTransform(originalTransform);
+    }
+    
+    private Color getColorForNodeType(String nodeType) {
+        return nodeTypeColors.computeIfAbsent(nodeType, type -> {
+            String hexColor = COLOR_PALETTE[nextColorIndex % COLOR_PALETTE.length];
+            nextColorIndex++;
+            return Color.decode("#" + hexColor);
+        });
+    }
+    
+    public void setModel(HydrologicalModel model) {
+        // Remove listener from old model if it exists
+        if (this.model != null) {
+            // We'll add this when we implement the listener
+        }
+        
+        this.model = model;
+        
+        // Add listener to new model
+        if (this.model != null) {
+            this.model.addChangeListener(event -> repaint());
+        }
+        
+        repaint();
     }
 
     public void zoomIn() {

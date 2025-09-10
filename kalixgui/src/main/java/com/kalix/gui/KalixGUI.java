@@ -197,6 +197,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         });
         
+        // Connect map panel to data model
+        mapPanel.setModel(hydrologicalModel);
+        
         // Initial parse of default text
         updateModelFromText();
     }
