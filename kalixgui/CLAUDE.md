@@ -127,6 +127,8 @@ Each manager is initialized in `EnhancedTextEditor.initializeManagers()` and acc
    - Custom bracket matching implementation
    - Theme/color configuration
 
+2. **Eliminate File Loading Flicker** - Currently when loading files, there's a momentary flicker where nodes appear at default zoom before zoom-to-fit is applied. Would require refactoring the model update/repaint sequence to batch operations or suppress intermediate repaints.
+
 ## Dependencies
 
 Key libraries used:

@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
 import java.util.HashMap;
 import java.util.Map;
@@ -79,6 +80,42 @@ public class MapPanel extends JPanel {
         
         addMouseListener(panningHandler);
         addMouseMotionListener(panningHandler);
+        
+        // Mouse wheel zoom handler
+        addMouseWheelListener(this::handleMouseWheelZoom);
+    }
+    
+    /**
+     * Handles mouse wheel zoom events.
+     * Zooms in/out while keeping the point under the cursor fixed.
+     */
+    private void handleMouseWheelZoom(MouseWheelEvent e) {
+        // Get mouse position in screen coordinates
+        int mouseX = e.getX();
+        int mouseY = e.getY();
+        
+        // Convert mouse position to world coordinates before zoom
+        double worldX = (mouseX - panX) / zoomLevel;
+        double worldY = (mouseY - panY) / zoomLevel;
+        
+        // Calculate new zoom level
+        double oldZoom = zoomLevel;
+        double zoomChange = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
+        double newZoom = oldZoom * zoomChange;
+        
+        // Clamp zoom to valid range
+        newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+        
+        // Only update if zoom actually changed
+        if (newZoom != oldZoom) {
+            zoomLevel = newZoom;
+            
+            // Adjust pan so the world point under the mouse stays at the same screen position
+            panX = mouseX - worldX * zoomLevel;
+            panY = mouseY - worldY * zoomLevel;
+            
+            repaint();
+        }
     }
 
     @Override
