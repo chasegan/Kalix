@@ -179,4 +179,28 @@ public class MapInteractionManager {
         
         return new Point2D.Double(worldX, worldY);
     }
+    
+    /**
+     * Delete all currently selected nodes from both the model and text.
+     * This orchestrates deletion across the data model and text editor.
+     */
+    public void deleteSelectedNodes() {
+        Set<String> nodesToDelete = model.getSelectedNodes();
+        
+        if (nodesToDelete.isEmpty()) {
+            return; // Nothing to delete
+        }
+        
+        System.out.println("MapInteractionManager: Deleting " + nodesToDelete.size() + " selected nodes");
+        
+        // Delete from the data model first
+        model.deleteSelectedNodes();
+        
+        // Delete corresponding sections from text if updater is available
+        if (textUpdater != null) {
+            textUpdater.deleteNodesFromText(nodesToDelete);
+        }
+        
+        System.out.println("MapInteractionManager: Node deletion completed");
+    }
 }

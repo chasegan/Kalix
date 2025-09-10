@@ -39,7 +39,7 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
-### Text Editor Enhancement (September 2024)
+### Text Editor Enhancement (September 2025)
 
 **Objective**: Replace JTextArea with RSyntaxTextArea and simplify the EnhancedTextEditor class.
 
@@ -227,6 +227,70 @@ The protocol supports several message types:
 - Session timeout and retry settings
 - Progress update intervals
 - Communication logging levels
+
+## Interactive Map Implementation (September 2025)
+
+**Objective**: Implement complete interactive map functionality with node selection, dragging, and bidirectional text synchronization.
+
+### Key Features Implemented
+
+#### Phase 1: Node Selection System
+- **Visual Selection**: Selected nodes display blue 3px borders vs black 1px for unselected
+- **Multi-Selection**: Ctrl+click to add/remove nodes from selection
+- **Hit Testing**: Accurate detection of nodes under mouse cursor (20px constant screen size)
+- **Selection Management**: Click empty space to clear all selections
+- **Model Integration**: Selection state tracked in `HydrologicalModel` with change notifications
+
+#### Phase 2: Node Dragging System  
+- **Single Node Dragging**: Click and drag individual nodes
+- **Multi-Node Dragging**: Drag multiple selected nodes simultaneously maintaining relative positions
+- **Improved UX**: Smart selection preservation - clicking selected nodes preserves selection instead of clearing
+- **Real-time Feedback**: Node positions update live during drag operations
+- **Coordinate Transformation**: Proper screen-to-world coordinate conversion accounting for zoom/pan
+
+#### Phase 3: Bidirectional Text Synchronization
+- **Map-to-Text**: Dragging nodes automatically updates `loc = x, y` values in text editor
+- **Text-to-Map**: Editing text coordinates updates node positions on map
+- **Format Preservation**: Regex-based replacement preserves INI formatting and comments
+- **Loop Prevention**: Prevents infinite update cycles between text and model changes
+- **Precision Control**: Coordinates formatted to 2 decimal places
+
+### Technical Architecture
+
+#### New Classes Created
+- **`MapInteractionManager`** - Handles drag state, coordinate transformations, multi-node updates
+- **`TextCoordinateUpdater`** - Regex-based INI coordinate replacement with format preservation
+- **Model Enhancements** - Added selection tracking, coordinate update methods, new event types
+
+#### Key Implementation Details
+- **Selection Logic**: Preserves selection when clicking already-selected nodes (no accidental deselection)
+- **Drag State Management**: Tracks original positions, calculates delta movements, commits changes on release
+- **Text Synchronization**: Uses regex pattern `(\[node\.name\][^\[]*?loc\s*=\s*)([0-9.-]+)\s*,\s*([0-9.-]+)` to locate and replace coordinates
+- **Thread Safety**: Proper Swing EDT handling for all UI updates
+- **Error Handling**: Graceful handling of parsing errors and coordinate update failures
+
+#### Files Modified
+- `MapPanel.java` - Added interaction handling, hit testing, selection mouse handlers
+- `HydrologicalModel.java` - Added selection tracking, coordinate update methods, new event types  
+- `ModelChangeEvent.java` - Added NODE_SELECTED, NODE_DESELECTED, SELECTION_CLEARED event types
+- `KalixGUI.java` - Integrated text synchronization setup
+
+### User Interaction Flow
+1. **Load Model**: Text editor content automatically updates map visualization
+2. **Select Nodes**: Left-click to select single node, Ctrl+click for multi-select
+3. **Drag Nodes**: Click any selected node and drag - all selected nodes move together
+4. **Text Sync**: Coordinate changes automatically update `loc = x, y` in text editor
+5. **Seamless Integration**: Works with existing zoom, pan, auto-zoom-to-fit functionality
+
+### Current Features
+- ✅ Interactive node selection with visual feedback
+- ✅ Multi-node dragging with improved UX
+- ✅ Bidirectional text synchronization 
+- ✅ Mouse wheel zoom-at-cursor
+- ✅ Map panning via drag
+- ✅ Auto zoom-to-fit on file load and 0→>0 node transitions
+- ✅ Real-time model statistics in status bar
+- ✅ Complete preservation of INI formatting during coordinate updates
 
 ## Architecture Notes
 

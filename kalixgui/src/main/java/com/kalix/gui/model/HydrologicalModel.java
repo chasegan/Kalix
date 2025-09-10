@@ -475,4 +475,44 @@ public class HydrologicalModel {
         incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_MODIFIED, nodeName));
     }
+    
+    /**
+     * Delete all currently selected nodes from the model.
+     * Removes nodes from all collections, spatial index, and clears selection.
+     */
+    public void deleteSelectedNodes() {
+        Set<String> nodesToDelete = new HashSet<>(selectedNodes);
+        
+        if (nodesToDelete.isEmpty()) {
+            return; // Nothing to delete
+        }
+        
+        // Remove nodes from main collection and spatial index
+        for (String nodeName : nodesToDelete) {
+            ModelNode nodeToRemove = nodes.get(nodeName);
+            if (nodeToRemove != null) {
+                // Remove from spatial index
+                spatialIndex.removeNode(nodeToRemove);
+                
+                // Remove from main collection
+                nodes.remove(nodeName);
+                
+                // Update change tracking
+                modifiedNodes.remove(nodeName);
+                removedNodes.add(nodeName);
+                
+                // Notify of individual node removal
+                notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_REMOVED, nodeName));
+            }
+        }
+        
+        // Clear selection since deleted nodes can't be selected
+        selectedNodes.clear();
+        
+        // Update version and notify of selection clear
+        incrementVersion();
+        notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
+        
+        System.out.println("HydrologicalModel: Deleted " + nodesToDelete.size() + " selected nodes");
+    }
 }

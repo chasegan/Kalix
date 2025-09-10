@@ -3,6 +3,7 @@ package com.kalix.gui.interaction;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.Set;
 
 /**
  * Handles updating node coordinates in the text editor when nodes are moved via dragging.
@@ -88,5 +89,75 @@ public class TextCoordinateUpdater {
      */
     public boolean isUpdatingFromModel() {
         return updatingFromModel;
+    }
+    
+    /**
+     * Delete nodes from the text editor by removing their entire INI sections.
+     * Uses regex to find and remove complete [node.name] sections including all content.
+     * @param nodeNames Set of node names to delete from text
+     */
+    public void deleteNodesFromText(Set<String> nodeNames) {
+        if (textEditor == null || nodeNames == null || nodeNames.isEmpty()) {
+            return;
+        }
+        
+        // Set flag to prevent infinite update loops
+        updatingFromModel = true;
+        
+        try {
+            String currentText = textEditor.getText();
+            if (currentText == null || currentText.trim().isEmpty()) {
+                return;
+            }
+            
+            String updatedText = currentText;
+            
+            // Delete each node section
+            for (String nodeName : nodeNames) {
+                updatedText = deleteNodeSectionFromText(updatedText, nodeName);
+            }
+            
+            // Only update if text actually changed
+            if (!updatedText.equals(currentText)) {
+                textEditor.setText(updatedText);
+                System.out.println("TextCoordinateUpdater: Deleted " + nodeNames.size() + " node sections from text");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("TextCoordinateUpdater: Error deleting nodes from text: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Clear the flag
+            updatingFromModel = false;
+        }
+    }
+    
+    /**
+     * Delete a single node section from the text.
+     * @param text Current text content
+     * @param nodeName Node name to delete
+     * @return Updated text with node section removed
+     */
+    private String deleteNodeSectionFromText(String text, String nodeName) {
+        // Create regex pattern to match the entire node section
+        // Pattern explanation:
+        // \[node\.nodeName\]          - Match [node.nodeName] header
+        // (?:\r?\n|$)                 - Match newline or end of string after header
+        // (?:(?!\[)[^\r\n]*(?:\r?\n|$))* - Match all lines that don't start with [ (non-section lines)
+        String escapedNodeName = Pattern.quote(nodeName);
+        String pattern = "\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
+        Pattern nodePattern = Pattern.compile(pattern, Pattern.MULTILINE);
+        
+        Matcher matcher = nodePattern.matcher(text);
+        
+        if (matcher.find()) {
+            // Remove the matched section
+            String result = text.substring(0, matcher.start()) + text.substring(matcher.end());
+            System.out.println("TextCoordinateUpdater: Removed section for node: " + nodeName);
+            return result;
+        } else {
+            System.err.println("TextCoordinateUpdater: Could not find section for node: " + nodeName);
+            return text;
+        }
     }
 }

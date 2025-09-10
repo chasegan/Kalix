@@ -5,6 +5,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.geom.AffineTransform;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,7 +17,7 @@ import com.kalix.gui.interaction.MapInteractionManager;
 import com.kalix.gui.interaction.TextCoordinateUpdater;
 import com.kalix.gui.editor.EnhancedTextEditor;
 
-public class MapPanel extends JPanel {
+public class MapPanel extends JPanel implements KeyListener {
     private double zoomLevel = 1.0;
     private static final double ZOOM_FACTOR = 1.2;
     private static final double MIN_ZOOM = 0.1;
@@ -45,6 +47,11 @@ public class MapPanel extends JPanel {
     public MapPanel() {
         setBackground(Color.WHITE);
         setPreferredSize(new Dimension(600, 600));
+        
+        // Enable keyboard focus for delete key handling
+        setFocusable(true);
+        addKeyListener(this);
+        
         setupMouseListeners();
     }
     
@@ -53,6 +60,9 @@ public class MapPanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    // Request focus for keyboard events (delete key)
+                    requestFocusInWindow();
+                    
                     // Check if clicking on a node first
                     String nodeAtPoint = getNodeAtPoint(e.getPoint());
                     
@@ -463,5 +473,27 @@ public class MapPanel extends JPanel {
             TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
             interactionManager.setTextUpdater(textUpdater);
         }
+    }
+    
+    // KeyListener implementation for delete key handling
+    
+    @Override
+    public void keyPressed(KeyEvent e) {
+        if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+            if (interactionManager != null && model != null && model.getSelectedNodeCount() > 0) {
+                interactionManager.deleteSelectedNodes();
+                repaint();
+            }
+        }
+    }
+    
+    @Override
+    public void keyReleased(KeyEvent e) {
+        // Not used but required by KeyListener interface
+    }
+    
+    @Override
+    public void keyTyped(KeyEvent e) {
+        // Not used but required by KeyListener interface
     }
 }
