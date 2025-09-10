@@ -283,14 +283,23 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void onModelChanged(ModelChangeEvent event) {
         SwingUtilities.invokeLater(() -> {
             var stats = hydrologicalModel.getStatistics();
-            String message = String.format("Model: %d nodes, %d links", 
+            String baseMessage = String.format("Model: %d nodes, %d links", 
                 stats.getNodeCount(), stats.getLinkCount());
-            updateStatus(message);
+            
+            // Add affected counts if there were changes
+            if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
+                String changeMessage = String.format(" (%d nodes, %d links affected)", 
+                    event.getAffectedNodeCount(), event.getAffectedLinkCount());
+                updateStatus(baseMessage + changeMessage);
+            } else {
+                updateStatus(baseMessage);
+            }
         });
     }
     
     /**
      * Updates the data model from the current text editor content.
+     * Uses incremental parsing for better performance.
      * Called whenever the text changes.
      */
     private void updateModelFromText() {
@@ -298,7 +307,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             try {
                 String text = textEditor.getText();
                 if (text != null && !text.trim().isEmpty()) {
-                    hydrologicalModel.parseFromIniText(text);
+                    hydrologicalModel.parseFromIniTextIncremental(text);
                 }
             } catch (Exception e) {
                 // Log parsing errors but don't disrupt the UI

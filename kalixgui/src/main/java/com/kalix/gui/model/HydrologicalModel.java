@@ -24,6 +24,9 @@ public class HydrologicalModel {
     // Version tracking for change detection
     private volatile long version = 0;
     
+    // Previous parse result for incremental updates
+    private ModelParser.ParseResult previousParseResult;
+    
     // Change listeners for UI updates
     private final List<ModelChangeListener> changeListeners;
     
@@ -203,11 +206,102 @@ public class HydrologicalModel {
     }
     
     /**
-     * Parse and update model from INI text
+     * Parse and update model from INI text (full update)
      */
     public void parseFromIniText(String iniText) {
         ModelParser.ParseResult result = ModelParser.parse(iniText);
         updateFromParsedData(result);
+    }
+    
+    /**
+     * Parse and incrementally update model from INI text
+     */
+    public void parseFromIniTextIncremental(String iniText) {
+        ModelParser.ParseResult newResult = ModelParser.parse(iniText);
+        
+        if (previousParseResult == null) {
+            // First parse - do full update
+            updateFromParsedData(newResult);
+            previousParseResult = newResult;
+            return;
+        }
+        
+        // Calculate diff and apply incremental updates
+        ModelDiff diff = new ModelDiff(previousParseResult, newResult);
+        
+        if (!diff.hasChanges()) {
+            // No changes - skip update
+            return;
+        }
+        
+        applyIncrementalUpdate(diff);
+        previousParseResult = newResult;
+    }
+    
+    /**
+     * Apply incremental updates based on model diff
+     */
+    private void applyIncrementalUpdate(ModelDiff diff) {
+        // Remove nodes
+        for (String nodeName : diff.getRemovedNodes()) {
+            ModelNode removedNode = nodes.remove(nodeName);
+            if (removedNode != null) {
+                spatialIndex.removeNode(removedNode);
+                removedNodes.add(nodeName);
+                modifiedNodes.remove(nodeName); // Clean up tracking
+            }
+        }
+        
+        // Add and modify nodes
+        for (String nodeName : diff.getAddedNodes()) {
+            ModelNode newNode = diff.getNodeUpdates().get(nodeName);
+            if (newNode != null) {
+                nodes.put(nodeName, newNode);
+                spatialIndex.addNode(newNode);
+                modifiedNodes.add(nodeName);
+                removedNodes.remove(nodeName); // Clean up tracking
+            }
+        }
+        
+        for (String nodeName : diff.getModifiedNodes()) {
+            // Remove old node from spatial index
+            ModelNode oldNode = nodes.get(nodeName);
+            if (oldNode != null) {
+                spatialIndex.removeNode(oldNode);
+            }
+            
+            // Add updated node
+            ModelNode newNode = diff.getNodeUpdates().get(nodeName);
+            if (newNode != null) {
+                nodes.put(nodeName, newNode);
+                spatialIndex.addNode(newNode);
+                modifiedNodes.add(nodeName);
+            }
+        }
+        
+        // Update links if they changed
+        int affectedLinkCount = 0;
+        if (diff.areLinksChanged()) {
+            links.clear();
+            links.addAll(diff.getNewLinks());
+            // Clear and rebuild link change tracking
+            modifiedLinks.clear();
+            removedLinks.clear();
+            for (ModelLink link : diff.getNewLinks()) {
+                String linkId = link.getUpstreamTerminus() + "->" + link.getDownstreamTerminus();
+                modifiedLinks.add(linkId);
+            }
+            affectedLinkCount = diff.getNewLinks().size();
+        }
+        
+        incrementVersion();
+        
+        // Send single consolidated event with total affected counts
+        int totalAffectedNodes = diff.getAddedNodes().size() + diff.getRemovedNodes().size() + diff.getModifiedNodes().size();
+        if (totalAffectedNodes > 0 || affectedLinkCount > 0) {
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_RELOADED, "incremental", 
+                totalAffectedNodes, affectedLinkCount));
+        }
     }
     
     // Spatial query methods for performance

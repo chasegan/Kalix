@@ -19,10 +19,18 @@ public class ModelChangeEvent {
     private final Type type;
     private final String entityId;
     private final long timestamp;
+    private final int affectedNodeCount;
+    private final int affectedLinkCount;
     
     public ModelChangeEvent(Type type, String entityId) {
+        this(type, entityId, 0, 0);
+    }
+    
+    public ModelChangeEvent(Type type, String entityId, int affectedNodeCount, int affectedLinkCount) {
         this.type = type;
         this.entityId = entityId;
+        this.affectedNodeCount = affectedNodeCount;
+        this.affectedLinkCount = affectedLinkCount;
         this.timestamp = System.currentTimeMillis();
     }
     
@@ -38,9 +46,17 @@ public class ModelChangeEvent {
         return timestamp;
     }
     
+    public int getAffectedNodeCount() {
+        return affectedNodeCount;
+    }
+    
+    public int getAffectedLinkCount() {
+        return affectedLinkCount;
+    }
+    
     @Override
     public String toString() {
-        return String.format("ModelChangeEvent{type=%s, entityId='%s', timestamp=%d}", 
-            type, entityId, timestamp);
+        return String.format("ModelChangeEvent{type=%s, entityId='%s', affectedNodes=%d, affectedLinks=%d, timestamp=%d}", 
+            type, entityId, affectedNodeCount, affectedLinkCount, timestamp);
     }
 }
