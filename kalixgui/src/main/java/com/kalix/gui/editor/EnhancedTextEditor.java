@@ -36,6 +36,9 @@ public class EnhancedTextEditor extends JPanel {
     private FileDropManager.FileDropHandler fileDropHandler;
     private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
     
+    // External document listeners
+    private final java.util.List<DocumentListener> externalDocumentListeners = new java.util.ArrayList<>();
+    
     // Manager instances
     private TextNavigationManager navigationManager;
     private TextSearchManager searchManager;
@@ -161,12 +164,13 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     private void setupDocumentListener() {
-        // Set up document change listener for dirty tracking
+        // Set up document change listener for dirty tracking and external listeners
         textArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
                     setDirty(true);
+                    notifyExternalListeners((listener, event) -> listener.insertUpdate(event), e);
                 }
             }
             
@@ -174,6 +178,7 @@ public class EnhancedTextEditor extends JPanel {
             public void removeUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
                     setDirty(true);
+                    notifyExternalListeners((listener, event) -> listener.removeUpdate(event), e);
                 }
             }
             
@@ -181,6 +186,7 @@ public class EnhancedTextEditor extends JPanel {
             public void changedUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
                     setDirty(true);
+                    notifyExternalListeners((listener, event) -> listener.changedUpdate(event), e);
                 }
             }
         });
@@ -280,6 +286,33 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     // Manager access methods (if needed)
+    
+    /**
+     * Add an external document listener to be notified of text changes.
+     */
+    public void addDocumentListener(DocumentListener listener) {
+        externalDocumentListeners.add(listener);
+    }
+    
+    /**
+     * Remove an external document listener.
+     */
+    public void removeDocumentListener(DocumentListener listener) {
+        externalDocumentListeners.remove(listener);
+    }
+    
+    /**
+     * Notify external document listeners of changes.
+     */
+    private void notifyExternalListeners(java.util.function.BiConsumer<DocumentListener, DocumentEvent> method, DocumentEvent e) {
+        for (DocumentListener listener : externalDocumentListeners) {
+            try {
+                method.accept(listener, e);
+            } catch (Exception ex) {
+                System.err.println("Error in document listener: " + ex.getMessage());
+            }
+        }
+    }
     
     public TextNavigationManager getNavigationManager() {
         return navigationManager;

@@ -10,6 +10,9 @@ import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.handlers.FileDropHandler;
 import com.kalix.gui.managers.*;
+import com.kalix.gui.model.HydrologicalModel;
+import com.kalix.gui.model.ModelChangeEvent;
+import com.kalix.gui.model.ModelChangeListener;
 import com.kalix.gui.utils.DialogUtils;
 
 import javax.swing.*;
@@ -55,6 +58,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private TitleBarManager titleBarManager;
     private ProcessExecutor processExecutor;
     private CliTaskManager cliTaskManager;
+    
+    // Data model
+    private HydrologicalModel hydrologicalModel;
     
     // Application state
     private Preferences prefs;
@@ -118,6 +124,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Process executor for CLI operations
         processExecutor = new ProcessExecutor();
         
+        // Initialize data model with change listener
+        hydrologicalModel = new HydrologicalModel();
+        hydrologicalModel.addChangeListener(this::onModelChanged);
+        
         // File operations manager (initialized after components)
         
         // Recent files manager
@@ -168,6 +178,27 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Set up component listeners
         textEditor.setDirtyStateListener(isDirty -> titleBarManager.updateTitle(isDirty, fileOperations::getCurrentFile));
         textEditor.setFileDropHandler(fileOperations::loadModelFile);
+        
+        // Set up model parsing from text changes
+        textEditor.addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                updateModelFromText();
+            }
+            
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                updateModelFromText();
+            }
+            
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                updateModelFromText();
+            }
+        });
+        
+        // Initial parse of default text
+        updateModelFromText();
     }
 
     /**
@@ -244,6 +275,36 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public void updateStatus(String message) {
         statusLabel.setText(message);
+    }
+    
+    /**
+     * Handles model change events and updates status bar.
+     */
+    private void onModelChanged(ModelChangeEvent event) {
+        SwingUtilities.invokeLater(() -> {
+            var stats = hydrologicalModel.getStatistics();
+            String message = String.format("Model: %d nodes, %d links", 
+                stats.getNodeCount(), stats.getLinkCount());
+            updateStatus(message);
+        });
+    }
+    
+    /**
+     * Updates the data model from the current text editor content.
+     * Called whenever the text changes.
+     */
+    private void updateModelFromText() {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                String text = textEditor.getText();
+                if (text != null && !text.trim().isEmpty()) {
+                    hydrologicalModel.parseFromIniText(text);
+                }
+            } catch (Exception e) {
+                // Log parsing errors but don't disrupt the UI
+                System.err.println("Error parsing model from text: " + e.getMessage());
+            }
+        });
     }
     
     /**
