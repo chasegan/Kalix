@@ -165,6 +165,19 @@ public class MapInteractionManager {
     }
     
     /**
+     * Handle a node click for navigation purposes.
+     * Scrolls the text editor to the clicked node's definition.
+     * @param nodeName Name of the node that was clicked
+     * @return true if the node was found and scrolled to, false otherwise
+     */
+    public boolean handleNodeClick(String nodeName) {
+        if (textUpdater != null && nodeName != null) {
+            return textUpdater.scrollToNode(nodeName);
+        }
+        return false;
+    }
+    
+    /**
      * Convert screen coordinates to world coordinates.
      * @param screenPoint Screen coordinates
      * @return World coordinates

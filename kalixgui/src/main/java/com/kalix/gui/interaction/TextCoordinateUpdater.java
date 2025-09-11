@@ -99,6 +99,55 @@ public class TextCoordinateUpdater {
     }
     
     /**
+     * Scrolls the text editor to the specified node definition.
+     * Finds the node's section header and positions it in the visible area.
+     * @param nodeName Name of the node to scroll to
+     * @return true if the node was found and scrolled to, false otherwise
+     */
+    public boolean scrollToNode(String nodeName) {
+        if (textEditor == null || nodeName == null || nodeName.trim().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            Document doc = textEditor.getTextArea().getDocument();
+            String currentText = doc.getText(0, doc.getLength());
+            
+            if (currentText == null || currentText.trim().isEmpty()) {
+                return false;
+            }
+            
+            // Find the node section using the existing findNodeSection method
+            NodeSection section = findNodeSection(currentText, nodeName);
+            
+            if (section != null) {
+                // Set caret position to the start of the node section (the [node.name] header)
+                textEditor.getTextArea().setCaretPosition(section.start);
+                
+                // Scroll to make the caret position visible
+                textEditor.getTextArea().getCaret().setSelectionVisible(true);
+                
+                // Request focus to ensure the text editor is active
+                textEditor.getTextArea().requestFocusInWindow();
+                
+                // Successfully scrolled to node
+                return true;
+            } else {
+                System.err.println("TextCoordinateUpdater: Could not find node section to scroll to: " + nodeName);
+                return false;
+            }
+            
+        } catch (BadLocationException e) {
+            System.err.println("TextCoordinateUpdater: Bad location error scrolling to node " + nodeName + ": " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            System.err.println("TextCoordinateUpdater: Error scrolling to node " + nodeName + ": " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    /**
      * Delete nodes from the text editor by removing their entire INI sections using document operations.
      * This preserves undo/redo functionality by making targeted document removals.
      * @param nodeNames Set of node names to delete from text

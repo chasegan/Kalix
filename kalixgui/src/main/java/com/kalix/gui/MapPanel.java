@@ -30,6 +30,11 @@ public class MapPanel extends JPanel implements KeyListener {
     private Point lastPanPoint = null;
     private boolean isPanning = false;
     
+    // Click tracking for node navigation
+    private Point clickStartPoint = null;
+    private String clickedNodeName = null;
+    private static final int CLICK_TOLERANCE = 5; // pixels
+    
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
     
@@ -62,23 +67,21 @@ public class MapPanel extends JPanel implements KeyListener {
                     // Check if clicking on a node first
                     String nodeAtPoint = getNodeAtPoint(e.getPoint());
                     
+                    // Store click information for potential navigation
+                    clickStartPoint = new Point(e.getPoint());
+                    clickedNodeName = nodeAtPoint;
+                    
                     if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
                         
                         if (nodeWasSelected && !e.isShiftDown()) {
-                            // Clicking on already selected node without Shift - preserve selection and start drag
-                            if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
-                                interactionManager.startDrag(e.getPoint());
-                            }
+                            // Clicking on already selected node without Shift - preserve selection
+                            // Don't start drag here - wait for mouseDragged event
                         } else {
                             // Clicking on unselected node, or Shift+clicking - handle selection normally
                             handleNodeSelection(nodeAtPoint, e.isShiftDown());
-                            
-                            // Check if we can start dragging after selection change
-                            if (interactionManager != null && interactionManager.canStartDrag(e.getPoint())) {
-                                interactionManager.startDrag(e.getPoint());
-                            }
+                            // Don't start drag here - wait for mouseDragged event  
                         }
                     } else {
                         // Not clicking on a node - clear selection and start panning
@@ -95,20 +98,43 @@ public class MapPanel extends JPanel implements KeyListener {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    // Check if this was a simple click (not a drag) for navigation
+                    boolean wasClick = false;
+                    if (clickStartPoint != null && clickedNodeName != null) {
+                        double distance = clickStartPoint.distance(e.getPoint());
+                        wasClick = distance <= CLICK_TOLERANCE;
+                    }
+                    
                     // End dragging if active
                     if (interactionManager != null && interactionManager.isDragging()) {
                         interactionManager.endDrag(e.getPoint());
+                    } else if (wasClick && clickedNodeName != null) {
+                        // This was a click on a node without dragging - navigate to it
+                        if (interactionManager != null) {
+                            interactionManager.handleNodeClick(clickedNodeName);
+                        }
                     }
                     
                     isPanning = false;
                     lastPanPoint = null;
                     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                    
+                    // Clear click tracking
+                    clickStartPoint = null;
+                    clickedNodeName = null;
                 }
             }
             
             @Override
             public void mouseDragged(MouseEvent e) {
-                // Handle node dragging first
+                // Check if we should start node dragging
+                if (interactionManager != null && !interactionManager.isDragging() && 
+                    clickedNodeName != null && interactionManager.canStartDrag(clickStartPoint)) {
+                    // Start drag operation now that we know it's actually a drag
+                    interactionManager.startDrag(clickStartPoint);
+                }
+                
+                // Handle node dragging
                 if (interactionManager != null && interactionManager.isDragging()) {
                     interactionManager.updateDrag(e.getPoint());
                     repaint();
