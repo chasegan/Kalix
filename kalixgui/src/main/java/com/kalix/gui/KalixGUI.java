@@ -13,6 +13,7 @@ import com.kalix.gui.managers.*;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelChangeEvent;
 import com.kalix.gui.model.ModelChangeListener;
+import com.kalix.gui.themes.NodeTheme;
 import com.kalix.gui.utils.DialogUtils;
 
 import javax.swing.*;
@@ -153,6 +154,11 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void initializeComponents() {
         // Initialize core components
         mapPanel = new MapPanel();
+        
+        // Load saved node theme
+        String savedNodeTheme = prefs.get(AppConstants.PREF_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
+        NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
+        mapPanel.setNodeTheme(nodeTheme);
         textEditor = new EnhancedTextEditor();
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
         
@@ -257,7 +263,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void setupMenuBar() {
         MenuBarBuilder menuBuilder = new MenuBarBuilder(this, textEditor);
-        JMenuBar menuBar = menuBuilder.buildMenuBar(themeManager.getCurrentTheme());
+        JMenuBar menuBar = menuBuilder.buildMenuBar(themeManager.getCurrentTheme(), mapPanel.getCurrentNodeTheme());
         setJMenuBar(menuBar);
         
         // Update recent files menu
@@ -568,6 +574,76 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public String switchTheme(String theme) {
         return themeManager.switchTheme(theme);
+    }
+    
+    @Override
+    public void setNodeTheme(NodeTheme.Theme theme) {
+        mapPanel.setNodeTheme(theme);
+        // Save the preference
+        prefs.put(AppConstants.PREF_NODE_THEME, NodeTheme.themeToString(theme));
+    }
+    
+    @Override
+    public void clearAppData() {
+        // Show confirmation dialog
+        int result = JOptionPane.showConfirmDialog(
+            this,
+            "This will clear all Kalix GUI application data including:\n\n" +
+            "• Theme preferences\n" +
+            "• Node theme preferences\n" +
+            "• Recent files list\n" +
+            "• Window position and size settings\n" +
+            "• Split pane divider positions\n" +
+            "• All other saved preferences\n\n" +
+            "Are you sure you want to continue?\n\n" +
+            "Note: The application will restart after clearing data.",
+            "Clear App Data",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        
+        if (result == JOptionPane.YES_OPTION) {
+            try {
+                // Clear all preferences
+                prefs.clear();
+                
+                // Clear recent files
+                if (recentFilesManager != null) {
+                    recentFilesManager.clearRecentFiles();
+                }
+                
+                updateStatus("App data cleared. Application will restart...");
+                
+                // Schedule restart after a brief delay to show the status message
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        Thread.sleep(1000); // Give user time to see the message
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    
+                    // Exit the application - user will need to restart manually
+                    // This is safer than trying to restart programmatically
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "App data has been cleared.\nPlease restart Kalix GUI to continue.",
+                        "Restart Required",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                    
+                    System.exit(0);
+                });
+                
+            } catch (Exception e) {
+                updateStatus("Error clearing app data: " + e.getMessage());
+                JOptionPane.showMessageDialog(
+                    this,
+                    "An error occurred while clearing app data:\n" + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
     }
     
     

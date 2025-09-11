@@ -129,6 +129,8 @@ Each manager is initialized in `EnhancedTextEditor.initializeManagers()` and acc
 
 2. **Eliminate File Loading Flicker** - Currently when loading files, there's a momentary flicker where nodes appear at default zoom before zoom-to-fit is applied. Would require refactoring the model update/repaint sequence to batch operations or suppress intermediate repaints.
 
+3. **Add a separator before 'Exit' in the File menu** - The Exit menu item should have a separator before it to properly group it as the final action in the File menu. This involves modifying the proxy menu logic in `MenuBarBuilder.java` without creating extra separators between recent file items.
+
 ## Dependencies
 
 Key libraries used:

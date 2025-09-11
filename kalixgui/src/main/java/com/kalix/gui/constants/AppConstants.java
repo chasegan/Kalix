@@ -45,9 +45,11 @@ public final class AppConstants {
         "Light", "Dark", "Dracula", "One Dark", "Carbon"
     };
     public static final String DEFAULT_THEME = "Light";
+    public static final String DEFAULT_NODE_THEME = "Vibrant";
     
     // Preferences keys
     public static final String PREF_THEME = "theme";
+    public static final String PREF_NODE_THEME = "node.theme";
     public static final String PREF_EDITOR_THEME = "editor.theme";
     public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
     

@@ -16,6 +16,7 @@ import com.kalix.gui.model.ModelChangeListener;
 import com.kalix.gui.interaction.MapInteractionManager;
 import com.kalix.gui.interaction.TextCoordinateUpdater;
 import com.kalix.gui.editor.EnhancedTextEditor;
+import com.kalix.gui.themes.NodeTheme;
 
 public class MapPanel extends JPanel implements KeyListener {
     private double zoomLevel = 1.0;
@@ -31,15 +32,10 @@ public class MapPanel extends JPanel implements KeyListener {
     
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
-    private static final String[] COLOR_PALETTE = {
-        "F94144", "F3722C", "F8961E", "F9844A", "F9C74F", 
-        "90BE6D", "43AA8B", "4D908E", "577590", "277DA1"
-    };
     
     // Model integration
     private HydrologicalModel model = null;
-    private final Map<String, Color> nodeTypeColors = new HashMap<>();
-    private int nextColorIndex = 0;
+    private NodeTheme nodeTheme = new NodeTheme();
     
     // Interaction management
     private MapInteractionManager interactionManager;
@@ -277,11 +273,24 @@ public class MapPanel extends JPanel implements KeyListener {
     }
     
     private Color getColorForNodeType(String nodeType) {
-        return nodeTypeColors.computeIfAbsent(nodeType, type -> {
-            String hexColor = COLOR_PALETTE[nextColorIndex % COLOR_PALETTE.length];
-            nextColorIndex++;
-            return Color.decode("#" + hexColor);
-        });
+        return nodeTheme.getColorForNodeType(nodeType);
+    }
+    
+    /**
+     * Sets the node color theme and triggers a repaint.
+     * @param theme The new theme to use
+     */
+    public void setNodeTheme(NodeTheme.Theme theme) {
+        nodeTheme.setTheme(theme);
+        repaint();
+    }
+    
+    /**
+     * Gets the current node theme.
+     * @return The current node theme
+     */
+    public NodeTheme.Theme getCurrentNodeTheme() {
+        return nodeTheme.getCurrentTheme();
     }
     
     public void setModel(HydrologicalModel model) {

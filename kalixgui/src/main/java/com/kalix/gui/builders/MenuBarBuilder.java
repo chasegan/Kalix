@@ -2,6 +2,7 @@ package com.kalix.gui.builders;
 
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
+import com.kalix.gui.themes.NodeTheme;
 
 import javax.swing.ButtonGroup;
 import javax.swing.JMenu;
@@ -40,8 +41,10 @@ public class MenuBarBuilder {
         void resetZoom();
         void zoomToFit();
         String switchTheme(String theme);
+        void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
+        void clearAppData();
         void updateStatus(String message);
         
         // New toolbar-specific actions
@@ -75,16 +78,18 @@ public class MenuBarBuilder {
      * Builds and returns the complete menu bar.
      * 
      * @param currentTheme The current theme name for theme menu selection
+     * @param currentNodeTheme The current node theme for node theme menu selection
      * @return The configured JMenuBar
      */
-    public JMenuBar buildMenuBar(String currentTheme) {
+    public JMenuBar buildMenuBar(String currentTheme, NodeTheme.Theme currentNodeTheme) {
         JMenuBar menuBar = new JMenuBar();
         
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
-        menuBar.add(createViewMenu(currentTheme));
+        menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
         menuBar.add(createRunMenu());
         menuBar.add(createGraphMenu());
+        menuBar.add(createSystemMenu());
         menuBar.add(createHelpMenu());
         
         return menuBar;
@@ -148,7 +153,7 @@ public class MenuBarBuilder {
     /**
      * Creates the View menu.
      */
-    private JMenu createViewMenu(String currentTheme) {
+    private JMenu createViewMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
         JMenu viewMenu = new JMenu("View");
         
         // Zoom controls
@@ -158,10 +163,12 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
         viewMenu.addSeparator();
         
-        
-        // Theme submenu
+        // Theme submenus
         JMenu themeMenu = createThemeMenu(currentTheme);
         viewMenu.add(themeMenu);
+        
+        JMenu nodeThemeMenu = createNodeThemeMenu(currentNodeTheme);
+        viewMenu.add(nodeThemeMenu);
         
         return viewMenu;
     }
@@ -187,6 +194,26 @@ public class MenuBarBuilder {
     }
     
     /**
+     * Creates the node theme submenu.
+     */
+    private JMenu createNodeThemeMenu(NodeTheme.Theme currentNodeTheme) {
+        JMenu nodeThemeMenu = new JMenu("Node Theme");
+        ButtonGroup nodeThemeGroup = new ButtonGroup();
+        
+        for (NodeTheme.Theme theme : NodeTheme.getAllThemes()) {
+            JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(theme.getDisplayName(), theme.equals(currentNodeTheme));
+            themeItem.addActionListener(e -> {
+                callbacks.setNodeTheme(theme);
+                callbacks.updateStatus("Node theme changed to " + theme.getDisplayName());
+            });
+            nodeThemeGroup.add(themeItem);
+            nodeThemeMenu.add(themeItem);
+        }
+        
+        return nodeThemeMenu;
+    }
+    
+    /**
      * Creates the Run menu.
      */
     private JMenu createRunMenu() {
@@ -204,6 +231,15 @@ public class MenuBarBuilder {
         JMenu graphMenu = new JMenu("Graph");
         graphMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
         return graphMenu;
+    }
+    
+    /**
+     * Creates the System menu.
+     */
+    private JMenu createSystemMenu() {
+        JMenu systemMenu = new JMenu("System");
+        systemMenu.add(createMenuItem("Clear App Data...", e -> callbacks.clearAppData()));
+        return systemMenu;
     }
     
     /**
