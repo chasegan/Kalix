@@ -39,6 +39,54 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
+### Node Text Styling and Click Navigation (September 2025)
+
+**Objective**: Enhance node visualization with themed text styling and implement click-to-navigate functionality between map and editor.
+
+#### Key Changes Made:
+
+1. **NodeTheme Text Styling Enhancement**
+   - Added `TextStyle` inner class to `NodeTheme` with configurable properties:
+     - Font size, text color, Y offset positioning
+     - Background color and alpha transparency 
+   - Updated all four themes (Vibrant, Earth, Ocean, Sunset) with unique text styling
+   - Each theme now has distinct visual characteristics for node labels
+
+2. **Enhanced MapPanel Text Rendering**
+   - Modified `drawNodeText()` to use theme-specific styling instead of hardcoded values
+   - Removed `TEXT_OFFSET_Y` constant in favor of dynamic theme-based positioning
+   - Text properties now sourced from `nodeTheme.getCurrentTextStyle()`
+
+3. **Node Click Navigation Implementation**
+   - **TextCoordinateUpdater.scrollToNode()** - Finds and scrolls to node definitions in editor
+   - **MapInteractionManager.handleNodeClick()** - Delegates navigation to text updater
+   - **Enhanced mouse handling** - Smart click detection (≤5px tolerance) vs drag operations
+   - **Deferred drag start** - Only begins drag on actual mouse movement, preserving click detection
+
+4. **Fixed Mouse Event Logic**
+   - **Root Issue**: `startDrag()` called immediately in `mousePressed()` prevented click navigation
+   - **Solution**: Moved drag initiation to `mouseDragged()` event for actual movement detection
+   - **Result**: Clean separation between clicks (navigate) and drags (move nodes)
+
+#### Files Modified:
+- `NodeTheme.java` - Added TextStyle class and updated theme definitions with text styling
+- `MapPanel.java` - Enhanced text rendering and implemented click navigation logic
+- `TextCoordinateUpdater.java` - Added scrollToNode() method for editor navigation
+- `MapInteractionManager.java` - Added handleNodeClick() for delegated navigation
+
+#### Current Features:
+- ✅ Theme-specific text styling (font size, color, positioning, background)
+- ✅ Node click navigation to editor definitions
+- ✅ Smart click vs drag detection (5-pixel tolerance)
+- ✅ Preserved existing node selection and dragging behavior
+- ✅ Editor focus management and caret positioning
+
+#### Text Styling Configuration:
+- **VIBRANT**: Black text, 10px, white bg (180α), 15px offset
+- **EARTH**: Brown text, 11px, beige bg (200α), 16px offset  
+- **OCEAN**: Navy text, 10px, alice blue bg (190α), 14px offset
+- **SUNSET**: Saddle brown text, 11px, cornsilk bg (210α), 17px offset
+
 ### Text Editor Enhancement (September 2025)
 
 **Objective**: Replace JTextArea with RSyntaxTextArea and simplify the EnhancedTextEditor class.
