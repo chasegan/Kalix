@@ -32,6 +32,7 @@ public class MapPanel extends JPanel implements KeyListener {
     
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
+    private static final int TEXT_OFFSET_Y = 15; // Distance below node center for text
     
     // Model integration
     private HydrologicalModel model = null;
@@ -266,6 +267,9 @@ public class MapPanel extends JPanel implements KeyListener {
             
             // Reset stroke for next node
             g2d.setStroke(new BasicStroke(1.0f));
+            
+            // Draw node name text below the node
+            drawNodeText(g2d, node.getName(), transformedX, transformedY);
         }
         
         // Restore the original transform
@@ -274,6 +278,52 @@ public class MapPanel extends JPanel implements KeyListener {
     
     private Color getColorForNodeType(String nodeType) {
         return nodeTheme.getColorForNodeType(nodeType);
+    }
+    
+    /**
+     * Draws the node name text centered below the node at a constant screen distance.
+     * @param g2d Graphics context
+     * @param nodeName Name of the node to draw
+     * @param nodeScreenX Screen X coordinate of the node center
+     * @param nodeScreenY Screen Y coordinate of the node center
+     */
+    private void drawNodeText(Graphics2D g2d, String nodeName, double nodeScreenX, double nodeScreenY) {
+        if (nodeName == null || nodeName.trim().isEmpty()) {
+            return;
+        }
+        
+        // Set text properties
+        g2d.setColor(Color.BLACK);
+        Font originalFont = g2d.getFont();
+        Font textFont = new Font(Font.SANS_SERIF, Font.PLAIN, 10);
+        g2d.setFont(textFont);
+        
+        // Get text metrics for centering
+        FontMetrics fm = g2d.getFontMetrics();
+        int textWidth = fm.stringWidth(nodeName);
+        int textHeight = fm.getHeight();
+        
+        // Calculate text position (centered horizontally, below node)
+        double textX = nodeScreenX - (textWidth / 2.0);
+        double textY = nodeScreenY + (NODE_SIZE / 2.0) + TEXT_OFFSET_Y;
+        
+        // Draw text with a slight background for better readability
+        // First draw a light background rectangle
+        g2d.setColor(new Color(255, 255, 255, 180)); // Semi-transparent white
+        int bgPadding = 2;
+        g2d.fillRect(
+            (int)(textX - bgPadding), 
+            (int)(textY - fm.getAscent() - bgPadding),
+            textWidth + (bgPadding * 2),
+            textHeight + bgPadding
+        );
+        
+        // Draw the text
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(nodeName, (int)textX, (int)textY);
+        
+        // Restore original font
+        g2d.setFont(originalFont);
     }
     
     /**
