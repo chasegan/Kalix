@@ -32,7 +32,6 @@ public class MapPanel extends JPanel implements KeyListener {
     
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
-    private static final int TEXT_OFFSET_Y = 15; // Distance below node center for text
     
     // Model integration
     private HydrologicalModel model = null;
@@ -281,7 +280,7 @@ public class MapPanel extends JPanel implements KeyListener {
     }
     
     /**
-     * Draws the node name text centered below the node at a constant screen distance.
+     * Draws the node name text centered below the node using the current theme's text styling.
      * @param g2d Graphics context
      * @param nodeName Name of the node to draw
      * @param nodeScreenX Screen X coordinate of the node center
@@ -292,24 +291,26 @@ public class MapPanel extends JPanel implements KeyListener {
             return;
         }
         
-        // Set text properties
-        g2d.setColor(Color.BLACK);
+        // Get theme text styling
+        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
+        
+        // Set text properties from theme
         Font originalFont = g2d.getFont();
-        Font textFont = new Font(Font.SANS_SERIF, Font.PLAIN, 10);
-        g2d.setFont(textFont);
+        Font themeFont = textStyle.createFont();
+        g2d.setFont(themeFont);
         
         // Get text metrics for centering
         FontMetrics fm = g2d.getFontMetrics();
         int textWidth = fm.stringWidth(nodeName);
         int textHeight = fm.getHeight();
         
-        // Calculate text position (centered horizontally, below node)
+        // Calculate text position (centered horizontally, below node using theme offset)
         double textX = nodeScreenX - (textWidth / 2.0);
-        double textY = nodeScreenY + (NODE_SIZE / 2.0) + TEXT_OFFSET_Y;
+        double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
         
-        // Draw text with a slight background for better readability
-        // First draw a light background rectangle
-        g2d.setColor(new Color(255, 255, 255, 180)); // Semi-transparent white
+        // Draw background with theme colors and alpha
+        Color backgroundColor = textStyle.createBackgroundColorWithAlpha();
+        g2d.setColor(backgroundColor);
         int bgPadding = 2;
         g2d.fillRect(
             (int)(textX - bgPadding), 
@@ -318,8 +319,8 @@ public class MapPanel extends JPanel implements KeyListener {
             textHeight + bgPadding
         );
         
-        // Draw the text
-        g2d.setColor(Color.BLACK);
+        // Draw the text with theme color
+        g2d.setColor(textStyle.getTextColor());
         g2d.drawString(nodeName, (int)textX, (int)textY);
         
         // Restore original font

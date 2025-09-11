@@ -1,45 +1,94 @@
 package com.kalix.gui.themes;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Manages node color themes for the map visualization.
- * Provides multiple color palettes and handles node type to color mapping.
+ * Manages node color themes and text styling for the map visualization.
+ * Provides multiple color palettes and text styling configurations.
  */
 public class NodeTheme {
     
     /**
-     * Available color themes for nodes
+     * Text styling configuration for node labels.
+     */
+    public static class TextStyle {
+        private final int fontSize;
+        private final Color textColor;
+        private final int yOffset;
+        private final Color backgroundColor;
+        private final int backgroundAlpha;
+        
+        public TextStyle(int fontSize, Color textColor, int yOffset, Color backgroundColor, int backgroundAlpha) {
+            this.fontSize = fontSize;
+            this.textColor = textColor;
+            this.yOffset = yOffset;
+            this.backgroundColor = backgroundColor;
+            this.backgroundAlpha = backgroundAlpha;
+        }
+        
+        public int getFontSize() { return fontSize; }
+        public Color getTextColor() { return textColor; }
+        public int getYOffset() { return yOffset; }
+        public Color getBackgroundColor() { return backgroundColor; }
+        public int getBackgroundAlpha() { return backgroundAlpha; }
+        
+        public Font createFont() {
+            return new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
+        }
+        
+        public Color createBackgroundColorWithAlpha() {
+            return new Color(
+                backgroundColor.getRed(),
+                backgroundColor.getGreen(), 
+                backgroundColor.getBlue(),
+                backgroundAlpha
+            );
+        }
+    }
+    
+    /**
+     * Available color themes for nodes with text styling
      */
     public enum Theme {
-        VIBRANT("Vibrant", new String[]{
-            "F94144", "F3722C", "F8961E", "F9844A", "F9C74F", 
-            "90BE6D", "43AA8B", "4D908E", "577590", "277DA1"
-        }),
+        VIBRANT("Vibrant", 
+                new String[]{
+                    "F94144", "F3722C", "F8961E", "F9844A", "F9C74F", 
+                    "90BE6D", "43AA8B", "4D908E", "577590", "277DA1"
+                },
+                new TextStyle(10, Color.BLACK, 15, Color.WHITE, 180)),
         
-        EARTH("Earth Tones", new String[]{
-            "8B4513", "CD853F", "DEB887", "F4A460", "D2691E",
-            "BC8F8F", "A0522D", "8FBC8F", "556B2F", "9ACD32"
-        }),
+        EARTH("Earth Tones", 
+              new String[]{
+                  "8B4513", "CD853F", "DEB887", "F4A460", "D2691E",
+                  "BC8F8F", "A0522D", "8FBC8F", "556B2F", "9ACD32"
+              },
+              new TextStyle(11, new Color(92, 51, 23), 16, new Color(245, 245, 220), 200)),
         
-        OCEAN("Ocean Blues", new String[]{
-            "191970", "4169E1", "6495ED", "87CEEB", "00CED1",
-            "48D1CC", "20B2AA", "008B8B", "5F9EA0", "4682B4"
-        }),
+        OCEAN("Ocean Blues", 
+              new String[]{
+                  "191970", "4169E1", "6495ED", "87CEEB", "00CED1",
+                  "48D1CC", "20B2AA", "008B8B", "5F9EA0", "4682B4"
+              },
+              new TextStyle(10, new Color(25, 25, 112), 14, new Color(240, 248, 255), 190)),
         
-        SUNSET("Sunset Warmth", new String[]{
-            "FF6B35", "F7931E", "FFD23F", "06FFA5", "4ECDC4",
-            "45B7D1", "96CEB4", "FECA57", "FF9FF3", "54A0FF"
-        });
+        SUNSET("Sunset Warmth", 
+               new String[]{
+                   "FF6B35", "F7931E", "FFD23F", "06FFA5", "4ECDC4",
+                   "45B7D1", "96CEB4", "FECA57", "FF9FF3", "54A0FF"
+               },
+               new TextStyle(11, new Color(139, 69, 19), 17, new Color(255, 248, 220), 210));
         
         private final String displayName;
         private final String[] colors;
+        private final TextStyle textStyle;
         
-        Theme(String displayName, String[] colors) {
+        Theme(String displayName, String[] colors, TextStyle textStyle) {
             this.displayName = displayName;
             this.colors = colors;
+            this.textStyle = textStyle;
         }
         
         public String getDisplayName() {
@@ -48,6 +97,10 @@ public class NodeTheme {
         
         public String[] getColors() {
             return colors;
+        }
+        
+        public TextStyle getTextStyle() {
+            return textStyle;
         }
     }
     
@@ -103,6 +156,14 @@ public class NodeTheme {
      */
     public Theme getCurrentTheme() {
         return currentTheme;
+    }
+    
+    /**
+     * Gets the text style for the current theme.
+     * @return The text style configuration
+     */
+    public TextStyle getCurrentTextStyle() {
+        return currentTheme.getTextStyle();
     }
     
     /**
