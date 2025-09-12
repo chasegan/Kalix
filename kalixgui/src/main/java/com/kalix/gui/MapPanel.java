@@ -49,9 +49,12 @@ public class MapPanel extends JPanel implements KeyListener {
     
     // Interaction management
     private MapInteractionManager interactionManager;
+    
+    // Display settings
+    private boolean showGridlines = true;
 
     public MapPanel() {
-        setBackground(Color.WHITE);
+        updateThemeColors();
         setPreferredSize(new Dimension(600, 600));
         
         // Enable keyboard focus for delete key handling
@@ -233,7 +236,9 @@ public class MapPanel extends JPanel implements KeyListener {
         g2d.scale(zoomLevel, zoomLevel);
         
         // Draw grid and model content
-        drawGrid(g2d);
+        if (showGridlines) {
+            drawGrid(g2d);
+        }
         drawPlaceholderContent(g2d);
         
         g2d.setTransform(originalTransform);
@@ -255,7 +260,7 @@ public class MapPanel extends JPanel implements KeyListener {
     }
 
     private void drawGrid(Graphics2D g2d) {
-        g2d.setColor(new Color(240, 240, 240));
+        g2d.setColor(getGridlineColor());
         g2d.setStroke(new BasicStroke(1));
         
         int gridSize = 50;
@@ -399,6 +404,72 @@ public class MapPanel extends JPanel implements KeyListener {
      */
     public NodeTheme.Theme getCurrentNodeTheme() {
         return nodeTheme.getCurrentTheme();
+    }
+    
+    /**
+     * Updates the panel colors based on the current UI theme.
+     * This method should be called when the theme changes.
+     */
+    public void updateThemeColors() {
+        Color bgColor = UIManager.getColor("Panel.background");
+        
+        // For light themes, keep the original white background
+        if (isLightTheme()) {
+            setBackground(Color.WHITE);
+        } else {
+            // For dark themes, use the theme's panel background color
+            if (bgColor != null) {
+                setBackground(bgColor);
+            } else {
+                // Fallback to white if theme color not available
+                setBackground(Color.WHITE);
+            }
+        }
+        repaint();
+    }
+    
+    /**
+     * Determines if the current theme is light based on the background color.
+     * @return true if light theme, false if dark theme
+     */
+    private boolean isLightTheme() {
+        Color bg = UIManager.getColor("Panel.background");
+        if (bg == null) {
+            return true; // Default to light theme
+        }
+        // Consider theme light if the sum of RGB values is >= 384 (128 * 3)
+        return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= 384;
+    }
+    
+    /**
+     * Gets the appropriate gridline color based on the current theme.
+     * @return Color for gridlines that provides subtle contrast with the current background
+     */
+    private Color getGridlineColor() {
+        if (isLightTheme()) {
+            // Light theme: use light gray gridlines (original behavior)
+            return new Color(240, 240, 240);
+        } else {
+            // Dark theme: use subtle dark gridlines that are visible but not overwhelming
+            return new Color(80, 80, 80);
+        }
+    }
+    
+    /**
+     * Sets whether gridlines should be shown on the map.
+     * @param showGridlines true to show gridlines, false to hide them
+     */
+    public void setShowGridlines(boolean showGridlines) {
+        this.showGridlines = showGridlines;
+        repaint();
+    }
+    
+    /**
+     * Gets whether gridlines are currently shown on the map.
+     * @return true if gridlines are shown, false otherwise
+     */
+    public boolean isShowGridlines() {
+        return showGridlines;
     }
     
     public void setModel(HydrologicalModel model) {

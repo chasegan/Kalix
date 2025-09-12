@@ -56,6 +56,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JLabel statusLabel;
     private StatusProgressBar progressBar;
     private JSplitPane splitPane;
+    private JToolBar toolBar;
     
     // Manager classes for specialized functionality
     private ThemeManager themeManager;
@@ -159,6 +160,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String savedNodeTheme = prefs.get(AppConstants.PREF_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
         NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
         mapPanel.setNodeTheme(nodeTheme);
+        
+        // Load saved gridlines preference
+        boolean showGridlines = prefs.getBoolean(AppConstants.PREF_SHOW_GRIDLINES, true); // Default to true
+        mapPanel.setShowGridlines(showGridlines);
         textEditor = new EnhancedTextEditor();
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
         
@@ -219,6 +224,9 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Set up bidirectional text synchronization
         mapPanel.setupTextSynchronization(textEditor);
         
+        // Register theme-aware components with theme manager
+        themeManager.registerThemeAwareComponents(mapPanel, textEditor);
+        
         // Initial parse of default text
         updateModelFromText();
     }
@@ -231,7 +239,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Add toolbar at top
         ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
-        JToolBar toolBar = toolBarBuilder.buildToolBar();
+        toolBar = toolBarBuilder.buildToolBar();
         add(toolBar, BorderLayout.NORTH);
         
         // Create split pane with map panel on left, text editor on right
@@ -701,6 +709,38 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 });
                 return null;
             });
+    }
+    
+    @Override
+    public void toggleGridlines(boolean showGridlines) {
+        mapPanel.setShowGridlines(showGridlines);
+        // Save preference
+        prefs.putBoolean(AppConstants.PREF_SHOW_GRIDLINES, showGridlines);
+    }
+    
+    @Override
+    public boolean getGridlinesVisible() {
+        return mapPanel.isShowGridlines();
+    }
+    
+    /**
+     * Updates the toolbar with theme-appropriate icon colors.
+     * Called when the theme changes.
+     */
+    public void updateToolBar() {
+        if (toolBar != null) {
+            // Remove the old toolbar
+            remove(toolBar);
+            
+            // Create a new toolbar with updated theme colors
+            ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
+            toolBar = toolBarBuilder.buildToolBar();
+            add(toolBar, BorderLayout.NORTH);
+            
+            // Revalidate the layout
+            revalidate();
+            repaint();
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.themes.NodeTheme;
 
 import javax.swing.ButtonGroup;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -61,6 +62,10 @@ public class MenuBarBuilder {
         
         // Preferences dialog
         void showPreferences();
+        
+        // Appearance menu
+        void toggleGridlines(boolean showGridlines);
+        boolean getGridlinesVisible();
     }
     
     /**
@@ -87,6 +92,7 @@ public class MenuBarBuilder {
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
+        menuBar.add(createAppearanceMenu());
         menuBar.add(createRunMenu());
         menuBar.add(createGraphMenu());
         menuBar.add(createSystemMenu());
@@ -211,6 +217,24 @@ public class MenuBarBuilder {
         }
         
         return nodeThemeMenu;
+    }
+    
+    /**
+     * Creates the Appearance menu.
+     */
+    private JMenu createAppearanceMenu() {
+        JMenu appearanceMenu = new JMenu("Appearance");
+        
+        // Gridlines toggle
+        JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Gridlines", callbacks.getGridlinesVisible());
+        gridlinesItem.addActionListener(e -> {
+            boolean newState = gridlinesItem.isSelected();
+            callbacks.toggleGridlines(newState);
+            callbacks.updateStatus(newState ? "Gridlines enabled" : "Gridlines disabled");
+        });
+        appearanceMenu.add(gridlinesItem);
+        
+        return appearanceMenu;
     }
     
     /**

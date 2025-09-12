@@ -131,13 +131,16 @@ public class ToolBarBuilder {
     }
     
     /**
-     * Loads and scales the Kalix logo for toolbar use.
+     * Loads and scales the Kalix logo for toolbar use, choosing the appropriate version based on theme.
      * 
      * @return Scaled ImageIcon or a fallback icon if loading fails
      */
     private ImageIcon loadScaledLogo() {
         try {
-            java.net.URL logoUrl = getClass().getResource(AppConstants.KALIX_LOGO_PATH);
+            // Choose logo path based on current theme
+            String logoPath = getThemeAwareLogoPath();
+            java.net.URL logoUrl = getClass().getResource(logoPath);
+            
             if (logoUrl != null) {
                 ImageIcon originalIcon = new ImageIcon(logoUrl);
                 Image originalImage = originalIcon.getImage();
@@ -160,6 +163,28 @@ public class ToolBarBuilder {
         
         // Fallback to a simple icon if logo loading fails
         return new ImageIcon(createFallbackLogo());
+    }
+    
+    /**
+     * Gets the appropriate logo path based on the current theme.
+     * 
+     * @return Logo path for the current theme
+     */
+    private String getThemeAwareLogoPath() {
+        // Get the current toolbar background color from the theme
+        Color toolbarBackground = UIManager.getColor("ToolBar.background");
+        
+        if (toolbarBackground != null) {
+            // Calculate if the theme is dark or light
+            int sum = toolbarBackground.getRed() + toolbarBackground.getGreen() + toolbarBackground.getBlue();
+            boolean isDarkTheme = sum < 384; // Same threshold used elsewhere
+            
+            // Return appropriate logo path
+            return isDarkTheme ? AppConstants.KALIX_LOGO_DARK_PATH : AppConstants.KALIX_LOGO_PATH;
+        }
+        
+        // Fallback to light logo if theme color not available
+        return AppConstants.KALIX_LOGO_PATH;
     }
     
     /**
@@ -206,6 +231,13 @@ public class ToolBarBuilder {
      * @return Configured JButton
      */
     private JButton createToolBarButton(String text, String tooltip, Icon icon, ActionListener listener) {
+        // Apply theme-appropriate color to the icon if it's a FontIcon
+        if (icon instanceof FontIcon) {
+            FontIcon fontIcon = (FontIcon) icon;
+            Color iconColor = getThemeAwareIconColor();
+            fontIcon.setIconColor(iconColor);
+        }
+        
         JButton button = new JButton(icon);
         button.setToolTipText(tooltip);
         button.setFocusPainted(false);
@@ -218,6 +250,28 @@ public class ToolBarBuilder {
         button.getAccessibleContext().setAccessibleName(text);
         
         return button;
+    }
+    
+    /**
+     * Gets the appropriate icon color based on the current theme.
+     * 
+     * @return Color for toolbar icons that contrasts with the current theme
+     */
+    private Color getThemeAwareIconColor() {
+        // Get the current toolbar background color from the theme
+        Color toolbarBackground = UIManager.getColor("ToolBar.background");
+        
+        if (toolbarBackground != null) {
+            // Calculate if the theme is dark or light
+            int sum = toolbarBackground.getRed() + toolbarBackground.getGreen() + toolbarBackground.getBlue();
+            boolean isDarkTheme = sum < 384; // Same threshold used in MapPanel
+            
+            // Return appropriate icon color
+            return isDarkTheme ? Color.LIGHT_GRAY : Color.DARK_GRAY;
+        }
+        
+        // Fallback to dark gray if theme color not available
+        return Color.DARK_GRAY;
     }
     
 }

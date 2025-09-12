@@ -52,6 +52,7 @@ public final class AppConstants {
     public static final String PREF_NODE_THEME = "node.theme";
     public static final String PREF_EDITOR_THEME = "editor.theme";
     public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
+    public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
     
     
     // Status messages
@@ -112,6 +113,7 @@ public final class AppConstants {
     
     // Branding
     public static final String KALIX_LOGO_PATH = "/images/kalix_landscape_1024_241.png";
+    public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_landscape_1024_241_dark.png";
     public static final String TOOLBAR_LOGO_TOOLTIP = "Visit Kalix Development Website";
     public static final int TOOLBAR_LOGO_HEIGHT = 24; // Scaled height for toolbar
     

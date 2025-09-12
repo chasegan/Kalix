@@ -67,16 +67,13 @@ public class EnhancedTextEditor extends JPanel {
         
         // Enable bracket matching
         textArea.setBracketMatchingEnabled(true);
-//        textArea.setPaintMatchedBracketPair(true);
-//        textArea.setAnimateBracketMatching(true);
-//
-//        // Enable current line highlighting
-        textArea.setCurrentLineHighlightColor(new java.awt.Color(232, 242, 254));
-//        textArea.setHighlightCurrentLine(true);
+        
+        // Apply theme-aware colors
+        updateThemeColors();
         
         // Enable mark occurrences
         textArea.setMarkOccurrences(true);
-        textArea.setMarkOccurrencesDelay(300); // 500ms delay before highlighting
+        textArea.setMarkOccurrencesDelay(300); // 300ms delay before highlighting
         
         // Enable undo/redo tracking
         textArea.getDocument().addUndoableEditListener(undoManager);
@@ -324,5 +321,66 @@ public class EnhancedTextEditor extends JPanel {
     
     public FileDropManager getDropManager() {
         return dropManager;
+    }
+    
+    /**
+     * Updates the text editor colors based on the current UI theme.
+     * This method should be called when the theme changes.
+     */
+    public void updateThemeColors() {
+        if (textArea == null) {
+            return;
+        }
+        
+        // Apply background and foreground colors from current theme
+        Color bgColor = UIManager.getColor("TextArea.background");
+        Color fgColor = UIManager.getColor("TextArea.foreground");
+        Color selectionBgColor = UIManager.getColor("TextArea.selectionBackground");
+        
+        if (bgColor != null) {
+            textArea.setBackground(bgColor);
+        }
+        
+        if (fgColor != null) {
+            textArea.setForeground(fgColor);
+        }
+        
+        // Set current line highlight color based on theme
+        if (selectionBgColor != null) {
+            // Create a more subtle version of the selection color for line highlight
+            int alpha = 50; // Much more subtle than selection
+            Color lineHighlightColor = new Color(
+                selectionBgColor.getRed(),
+                selectionBgColor.getGreen(), 
+                selectionBgColor.getBlue(),
+                alpha
+            );
+            textArea.setCurrentLineHighlightColor(lineHighlightColor);
+        } else {
+            // Fallback: determine if dark theme and set appropriate color
+            if (isDarkTheme()) {
+                textArea.setCurrentLineHighlightColor(new Color(255, 255, 255, 25)); // Light highlight for dark theme
+            } else {
+                textArea.setCurrentLineHighlightColor(new Color(0, 0, 0, 25)); // Dark highlight for light theme
+            }
+        }
+        
+        // Enable current line highlighting
+        textArea.setHighlightCurrentLine(true);
+        
+        textArea.repaint();
+    }
+    
+    /**
+     * Determines if the current theme is dark based on the background color.
+     * @return true if dark theme, false if light theme
+     */
+    private boolean isDarkTheme() {
+        Color bg = UIManager.getColor("Panel.background");
+        if (bg == null) {
+            return false;
+        }
+        // Consider theme dark if the sum of RGB values is less than 384 (128 * 3)
+        return (bg.getRed() + bg.getGreen() + bg.getBlue()) < 384;
     }
 }

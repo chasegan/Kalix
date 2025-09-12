@@ -7,6 +7,8 @@ import com.formdev.flatlaf.intellijthemes.FlatCarbonIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
 import com.kalix.gui.constants.AppConstants;
+import com.kalix.gui.MapPanel;
+import com.kalix.gui.editor.EnhancedTextEditor;
 
 import javax.swing.*;
 import java.awt.*;
@@ -21,6 +23,10 @@ public class ThemeManager {
     private final Preferences prefs;
     private String currentTheme;
     private Component parentComponent;
+    
+    // Theme-aware components
+    private MapPanel mapPanel;
+    private EnhancedTextEditor textEditor;
     
     /**
      * Creates a new ThemeManager instance.
@@ -127,6 +133,17 @@ public class ThemeManager {
     }
     
     /**
+     * Registers theme-aware components that need custom theme updates.
+     * 
+     * @param mapPanel The MapPanel instance to update
+     * @param textEditor The EnhancedTextEditor instance to update
+     */
+    public void registerThemeAwareComponents(MapPanel mapPanel, EnhancedTextEditor textEditor) {
+        this.mapPanel = mapPanel;
+        this.textEditor = textEditor;
+    }
+    
+    /**
      * Updates all open windows with the new theme.
      */
     private void updateAllWindows() {
@@ -134,6 +151,9 @@ public class ThemeManager {
         if (parentComponent != null) {
             SwingUtilities.updateComponentTreeUI(parentComponent);
         }
+        
+        // Update custom theme-aware components
+        updateCustomComponents();
         
         // Update all open FlowViz windows
         for (com.kalix.gui.flowviz.FlowVizWindow window : com.kalix.gui.flowviz.FlowVizWindow.getOpenWindows()) {
@@ -145,6 +165,29 @@ public class ThemeManager {
             if (window instanceof JDialog && window.isDisplayable()) {
                 SwingUtilities.updateComponentTreeUI(window);
             }
+        }
+    }
+    
+    /**
+     * Updates custom theme-aware components that need special handling.
+     */
+    private void updateCustomComponents() {
+        // Update MapPanel background color
+        if (mapPanel != null) {
+            SwingUtilities.invokeLater(() -> mapPanel.updateThemeColors());
+        }
+        
+        // Update EnhancedTextEditor theme colors
+        if (textEditor != null) {
+            SwingUtilities.invokeLater(() -> textEditor.updateThemeColors());
+        }
+        
+        // Update toolbar icon colors
+        if (parentComponent instanceof com.kalix.gui.KalixGUI) {
+            SwingUtilities.invokeLater(() -> {
+                com.kalix.gui.KalixGUI kalixGUI = (com.kalix.gui.KalixGUI) parentComponent;
+                kalixGUI.updateToolBar();
+            });
         }
     }
     
