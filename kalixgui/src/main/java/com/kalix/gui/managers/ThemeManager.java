@@ -2,6 +2,7 @@ package com.kalix.gui.managers;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.FlatPropertiesLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.formdev.flatlaf.intellijthemes.FlatCarbonIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
@@ -113,6 +114,16 @@ public class ThemeManager {
                 break;
             case "Carbon":
                 UIManager.setLookAndFeel(new FlatCarbonIJTheme());
+                break;
+            case "Obsidian":
+                try {
+                    FlatPropertiesLaf obsidianLaf = new FlatPropertiesLaf("Obsidian", 
+                        getClass().getResourceAsStream("/themes/obsidian-theme.properties"));
+                    UIManager.setLookAndFeel(obsidianLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Obsidian theme properties, falling back to Dark theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
+                }
                 break;
             default:
                 UIManager.setLookAndFeel(new FlatLightLaf());

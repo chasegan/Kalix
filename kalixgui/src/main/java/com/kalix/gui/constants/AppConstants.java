@@ -42,7 +42,7 @@ public final class AppConstants {
     
     // Themes
     public static final String[] AVAILABLE_THEMES = {
-        "Light", "Dark", "Dracula", "One Dark", "Carbon"
+        "Light", "Dark", "Dracula", "One Dark", "Carbon", "Obsidian"
     };
     public static final String DEFAULT_THEME = "Light";
     public static final String DEFAULT_NODE_THEME = "Vibrant";
