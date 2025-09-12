@@ -35,6 +35,11 @@ public class MapPanel extends JPanel implements KeyListener {
     private String clickedNodeName = null;
     private static final int CLICK_TOLERANCE = 5; // pixels
     
+    // Rectangle selection state
+    private boolean isRectangleSelecting = false;
+    private Point rectangleStartPoint = null;
+    private Point rectangleCurrentPoint = null;
+    
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
     
@@ -84,13 +89,22 @@ public class MapPanel extends JPanel implements KeyListener {
                             // Don't start drag here - wait for mouseDragged event  
                         }
                     } else {
-                        // Not clicking on a node - clear selection and start panning
-                        if (model != null) {
-                            model.clearSelection();
+                        // Not clicking on a node - start rectangle selection if Shift held, otherwise clear selection and start panning
+                        if (e.isShiftDown()) {
+                            // Start rectangle selection
+                            isRectangleSelecting = true;
+                            rectangleStartPoint = new Point(e.getPoint());
+                            rectangleCurrentPoint = new Point(e.getPoint());
+                            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                        } else {
+                            // Clear selection and start panning
+                            if (model != null) {
+                                model.clearSelection();
+                            }
+                            lastPanPoint = e.getPoint();
+                            isPanning = true;
+                            setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                         }
-                        lastPanPoint = e.getPoint();
-                        isPanning = true;
-                        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                     }
                 }
             }
@@ -115,6 +129,14 @@ public class MapPanel extends JPanel implements KeyListener {
                         }
                     }
                     
+                    // Handle rectangle selection completion
+                    if (isRectangleSelecting) {
+                        completeRectangleSelection();
+                        isRectangleSelecting = false;
+                        rectangleStartPoint = null;
+                        rectangleCurrentPoint = null;
+                    }
+                    
                     isPanning = false;
                     lastPanPoint = null;
                     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
@@ -137,6 +159,10 @@ public class MapPanel extends JPanel implements KeyListener {
                 // Handle node dragging
                 if (interactionManager != null && interactionManager.isDragging()) {
                     interactionManager.updateDrag(e.getPoint());
+                    repaint();
+                } else if (isRectangleSelecting && rectangleStartPoint != null) {
+                    // Update rectangle selection
+                    rectangleCurrentPoint = new Point(e.getPoint());
                     repaint();
                 } else if (isPanning && lastPanPoint != null) {
                     // Handle map panning
@@ -214,6 +240,11 @@ public class MapPanel extends JPanel implements KeyListener {
         
         // Draw nodes in screen space (constant size)
         drawNodes(g2d);
+        
+        // Draw rectangle selection if active
+        if (isRectangleSelecting && rectangleStartPoint != null && rectangleCurrentPoint != null) {
+            drawSelectionRectangle(g2d);
+        }
         
         // Draw zoom level and pan indicators
         g2d.setColor(Color.GRAY);
@@ -581,5 +612,77 @@ public class MapPanel extends JPanel implements KeyListener {
     @Override
     public void keyTyped(KeyEvent e) {
         // Not used but required by KeyListener interface
+    }
+    
+    /**
+     * Draws the selection rectangle during rectangle selection.
+     * @param g2d Graphics context
+     */
+    private void drawSelectionRectangle(Graphics2D g2d) {
+        if (rectangleStartPoint == null || rectangleCurrentPoint == null) {
+            return;
+        }
+        
+        // Calculate rectangle bounds
+        int x1 = rectangleStartPoint.x;
+        int y1 = rectangleStartPoint.y;
+        int x2 = rectangleCurrentPoint.x;
+        int y2 = rectangleCurrentPoint.y;
+        
+        int rectX = Math.min(x1, x2);
+        int rectY = Math.min(y1, y2);
+        int rectWidth = Math.abs(x2 - x1);
+        int rectHeight = Math.abs(y2 - y1);
+        
+        // Draw selection rectangle with semi-transparent fill and dashed border
+        g2d.setColor(new Color(0, 120, 255, 50)); // Light blue with transparency
+        g2d.fillRect(rectX, rectY, rectWidth, rectHeight);
+        
+        g2d.setColor(new Color(0, 120, 255, 180)); // Darker blue for border
+        g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 
+                                     10.0f, new float[]{5.0f, 3.0f}, 0.0f)); // Dashed line
+        g2d.drawRect(rectX, rectY, rectWidth, rectHeight);
+        
+        // Reset stroke
+        g2d.setStroke(new BasicStroke(1.0f));
+    }
+    
+    /**
+     * Completes the rectangle selection by selecting all nodes within the rectangle.
+     */
+    private void completeRectangleSelection() {
+        if (model == null || rectangleStartPoint == null || rectangleCurrentPoint == null) {
+            return;
+        }
+        
+        // Calculate rectangle bounds in screen coordinates
+        int x1 = rectangleStartPoint.x;
+        int y1 = rectangleStartPoint.y;
+        int x2 = rectangleCurrentPoint.x;
+        int y2 = rectangleCurrentPoint.y;
+        
+        int rectX = Math.min(x1, x2);
+        int rectY = Math.min(y1, y2);
+        int rectWidth = Math.abs(x2 - x1);
+        int rectHeight = Math.abs(y2 - y1);
+        
+        // Only proceed if rectangle has meaningful size
+        if (rectWidth < 5 && rectHeight < 5) {
+            return; // Too small to be a meaningful selection
+        }
+        
+        // Find all nodes within the rectangle
+        for (ModelNode node : model.getAllNodes()) {
+            // Transform node world coordinates to screen coordinates
+            double screenX = node.getX() * zoomLevel + panX;
+            double screenY = node.getY() * zoomLevel + panY;
+            
+            // Check if node center is within the rectangle
+            if (screenX >= rectX && screenX <= rectX + rectWidth && 
+                screenY >= rectY && screenY <= rectY + rectHeight) {
+                // Add to selection
+                model.selectNode(node.getName(), true); // Add to selection
+            }
+        }
     }
 }
