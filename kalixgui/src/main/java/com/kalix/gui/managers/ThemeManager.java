@@ -125,6 +125,26 @@ public class ThemeManager {
                     UIManager.setLookAndFeel(new FlatDarkLaf());
                 }
                 break;
+            case "Keylime":
+                try {
+                    FlatPropertiesLaf keylimeLaf = new FlatPropertiesLaf("Keylime", 
+                        getClass().getResourceAsStream("/themes/keylime-theme.properties"));
+                    UIManager.setLookAndFeel(keylimeLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Keylime theme properties, falling back to Light theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                break;
+            case "Lapland":
+                try {
+                    FlatPropertiesLaf laplandLaf = new FlatPropertiesLaf("Lapland", 
+                        getClass().getResourceAsStream("/themes/lapland-theme.properties"));
+                    UIManager.setLookAndFeel(laplandLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Lapland theme properties, falling back to Light theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                break;
             default:
                 UIManager.setLookAndFeel(new FlatLightLaf());
                 break;

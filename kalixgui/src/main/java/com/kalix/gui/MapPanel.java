@@ -411,6 +411,15 @@ public class MapPanel extends JPanel implements KeyListener {
      * This method should be called when the theme changes.
      */
     public void updateThemeColors() {
+        // First check for custom MapPanel background color
+        Color customMapBg = UIManager.getColor("MapPanel.background");
+        if (customMapBg != null) {
+            setBackground(customMapBg);
+            repaint();
+            return;
+        }
+        
+        // Fallback to original logic
         Color bgColor = UIManager.getColor("Panel.background");
         
         // For light themes, keep the original white background
