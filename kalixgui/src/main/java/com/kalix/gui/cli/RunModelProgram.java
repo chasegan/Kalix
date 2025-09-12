@@ -184,7 +184,7 @@ public class RunModelProgram {
                 return true;
                 
             default:
-                // Other message types not relevant during simulation
+                // Other message types not relevant during simulation (including READY, which is handled by SessionManager)
                 return false;
         }
     }

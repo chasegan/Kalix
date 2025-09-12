@@ -480,6 +480,14 @@ public class SessionManager {
                 }
                 break;
                 
+            case READY:
+                // Session is ready for commands (generic session state)
+                SessionState oldState = session.getState();
+                session.setState(SessionState.READY, "Session ready for commands");
+                fireSessionEvent(sessionId, oldState, SessionState.READY, "Session ready");
+                updateStatus("Session ready: " + sessionId);
+                break;
+                
             default:
                 // Other message types should be handled by programs
                 updateStatus("Unhandled JSON message type from session " + sessionId + ": " + msgType);
