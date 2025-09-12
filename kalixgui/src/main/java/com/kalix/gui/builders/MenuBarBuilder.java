@@ -92,7 +92,7 @@ public class MenuBarBuilder {
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
-        menuBar.add(createAppearanceMenu());
+        menuBar.add(createAppearanceMenu(currentTheme, currentNodeTheme));
         menuBar.add(createRunMenu());
         menuBar.add(createGraphMenu());
         menuBar.add(createSystemMenu());
@@ -167,14 +167,6 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
         viewMenu.add(createMenuItem("Reset Zoom", e -> callbacks.resetZoom()));
         viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
-        viewMenu.addSeparator();
-        
-        // Theme submenus
-        JMenu themeMenu = createThemeMenu(currentTheme);
-        viewMenu.add(themeMenu);
-        
-        JMenu nodeThemeMenu = createNodeThemeMenu(currentNodeTheme);
-        viewMenu.add(nodeThemeMenu);
         
         return viewMenu;
     }
@@ -222,8 +214,17 @@ public class MenuBarBuilder {
     /**
      * Creates the Appearance menu.
      */
-    private JMenu createAppearanceMenu() {
+    private JMenu createAppearanceMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
         JMenu appearanceMenu = new JMenu("Appearance");
+        
+        // Theme submenus
+        JMenu themeMenu = createThemeMenu(currentTheme);
+        appearanceMenu.add(themeMenu);
+        
+        JMenu nodeThemeMenu = createNodeThemeMenu(currentNodeTheme);
+        appearanceMenu.add(nodeThemeMenu);
+        
+        appearanceMenu.addSeparator();
         
         // Gridlines toggle
         JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Gridlines", callbacks.getGridlinesVisible());

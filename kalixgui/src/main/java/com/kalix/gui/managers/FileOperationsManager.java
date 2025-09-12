@@ -65,6 +65,9 @@ public class FileOperationsManager {
         currentFile = null; // Clear current file path for new model
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
         fileChangedCallback.run(); // Notify title bar of file change
+        
+        // Trigger model parsing to update the map with the new default content
+        modelUpdateCallback.run();
     }
     
     /**
