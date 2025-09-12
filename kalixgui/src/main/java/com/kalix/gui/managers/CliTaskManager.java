@@ -86,7 +86,7 @@ public class CliTaskManager {
                     throw new RuntimeException("kalixcli not found");
                 }
                 
-                // Configure session for model run
+                // Configure session for model run (let SessionManager auto-generate unique ID)
                 SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session")
                     .onProgress(this::updateProgressFromSession);
                 

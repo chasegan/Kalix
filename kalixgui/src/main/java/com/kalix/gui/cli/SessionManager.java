@@ -218,7 +218,7 @@ public class SessionManager {
                 handleSessionError(sessionId, e, "Send command");
                 throw new RuntimeException("Failed to send command to session " + sessionId, e);
             }
-        });
+        }, processExecutor.getExecutorService());
     }
     
     
@@ -341,7 +341,7 @@ public class SessionManager {
             } catch (IOException | InterruptedException e) {
                 handleSessionError(sessionId, e, "stdout monitoring");
             }
-        });
+        }, processExecutor.getExecutorService());
         
         // Monitor stderr
         CompletableFuture<Void> stderrMonitor = CompletableFuture.runAsync(() -> {
@@ -360,7 +360,7 @@ public class SessionManager {
             } catch (IOException | InterruptedException e) {
                 handleSessionError(sessionId, e, "stderr monitoring");
             }
-        });
+        }, processExecutor.getExecutorService());
         
         // Combine both monitoring futures - session completes when both streams are done
         CompletableFuture.allOf(stdoutMonitor, stderrMonitor)

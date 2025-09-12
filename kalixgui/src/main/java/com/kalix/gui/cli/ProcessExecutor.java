@@ -567,4 +567,17 @@ public class ProcessExecutor {
     public boolean isShutdown() {
         return shutdown.get();
     }
+    
+    /**
+     * Gets the executor service for running async tasks.
+     * This allows other components to use the same thread pool instead of the common ForkJoinPool.
+     * 
+     * @return the executor service
+     */
+    public ExecutorService getExecutorService() {
+        if (shutdown.get()) {
+            throw new IllegalStateException("ProcessExecutor has been shut down");
+        }
+        return executorService;
+    }
 }
