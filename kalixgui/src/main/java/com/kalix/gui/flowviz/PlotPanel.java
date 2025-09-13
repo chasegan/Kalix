@@ -4,6 +4,7 @@ import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.data.TimeSeriesData;
 import com.kalix.gui.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.gui.flowviz.rendering.ViewPort;
+import com.kalix.gui.io.TimeSeriesCsvExporter;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -12,12 +13,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,6 +135,23 @@ public class PlotPanel extends JPanel {
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height);
     }
 
+    /**
+     * Initializes the right-click context menu for the plot area.
+     *
+     * <p>Creates a popup menu with the following options:</p>
+     * <ul>
+     *   <li><strong>Zoom In</strong> - Zooms into the plot area</li>
+     *   <li><strong>Zoom Out</strong> - Zooms out from the plot area</li>
+     *   <li><strong>Zoom to Fit</strong> - Fits all data within the plot area</li>
+     *   <li><strong>Save Data...</strong> - Exports current dataset to CSV format</li>
+     * </ul>
+     *
+     * <p>The context menu is shown when the user right-clicks within the plot area.
+     * The menu provides quick access to common plot operations without navigating
+     * through the main menu bar.</p>
+     *
+     * @see #saveData()
+     */
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
@@ -481,6 +494,19 @@ public class PlotPanel extends JPanel {
         return new double[]{minValue, maxValue};
     }
 
+    /**
+     * Displays a file save dialog and exports the current dataset to CSV format.
+     *
+     * <p>This method shows a file chooser dialog allowing the user to select
+     * a target CSV file. The export includes all time series data with proper
+     * datetime formatting and handles missing values appropriately.</p>
+     *
+     * <p>If no data is loaded or the dataset is empty, shows a warning dialog.
+     * On successful export, displays a confirmation message. On error, shows
+     * an error dialog with details.</p>
+     *
+     * @see TimeSeriesCsvExporter#export(DataSet, File)
+     */
     private void saveData() {
         if (dataSet == null || dataSet.isEmpty()) {
             JOptionPane.showMessageDialog(this, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
@@ -499,7 +525,7 @@ public class PlotPanel extends JPanel {
             }
 
             try {
-                exportDataToCsv(file);
+                TimeSeriesCsvExporter.export(dataSet, file);
                 JOptionPane.showMessageDialog(this,
                     "Data saved successfully to " + file.getName(),
                     "Save Data",
@@ -509,80 +535,12 @@ public class PlotPanel extends JPanel {
                     "Error saving data: " + e.getMessage(),
                     "Save Error",
                     JOptionPane.ERROR_MESSAGE);
+            } catch (IllegalArgumentException e) {
+                JOptionPane.showMessageDialog(this,
+                    "Invalid data: " + e.getMessage(),
+                    "Save Error",
+                    JOptionPane.ERROR_MESSAGE);
             }
         }
-    }
-
-    private void exportDataToCsv(File file) throws IOException {
-        List<TimeSeriesData> allSeries = dataSet.getAllSeries();
-        if (allSeries.isEmpty()) {
-            return;
-        }
-
-        // Collect all unique timestamps across all series
-        java.util.Set<Long> allTimestamps = new java.util.TreeSet<>();
-        for (TimeSeriesData series : allSeries) {
-            for (long timestamp : series.getTimestamps()) {
-                allTimestamps.add(timestamp);
-            }
-        }
-
-        try (FileWriter writer = new FileWriter(file)) {
-            // Write header
-            writer.write("Datetime");
-            for (TimeSeriesData series : allSeries) {
-                writer.write(",");
-                writer.write(escapeCsvField(series.getName()));
-            }
-            writer.write("\n");
-
-            // Write data rows
-            for (Long timestamp : allTimestamps) {
-                // Format datetime
-                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-                String dateTimeStr = formatDateTime(dateTime);
-                writer.write(dateTimeStr);
-
-                // Write values for each series
-                for (TimeSeriesData series : allSeries) {
-                    writer.write(",");
-                    Double value = getValueAtTimestamp(series, timestamp);
-                    if (value != null && !Double.isNaN(value)) {
-                        writer.write(String.valueOf(value));
-                    }
-                    // For NaN/missing values, write empty cell
-                }
-                writer.write("\n");
-            }
-        }
-    }
-
-    private String formatDateTime(LocalDateTime dateTime) {
-        // Check if it's a whole day (midnight with no time component)
-        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 && dateTime.getSecond() == 0 && dateTime.getNano() == 0) {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        } else {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
-        }
-    }
-
-    private String escapeCsvField(String field) {
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
-            return "\"" + field.replace("\"", "\"\"") + "\"";
-        }
-        return field;
-    }
-
-    private Double getValueAtTimestamp(TimeSeriesData series, long timestamp) {
-        long[] timestamps = series.getTimestamps();
-        double[] values = series.getValues();
-        boolean[] validPoints = series.getValidPoints();
-
-        for (int i = 0; i < timestamps.length; i++) {
-            if (timestamps[i] == timestamp && validPoints[i]) {
-                return values[i];
-            }
-        }
-        return null; // Not found or invalid
     }
 }
