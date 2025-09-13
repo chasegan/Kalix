@@ -103,17 +103,11 @@ public class ThemeManager {
             case "Light":
                 UIManager.setLookAndFeel(new FlatLightLaf());
                 break;
-            case "Dark":
-                UIManager.setLookAndFeel(new FlatDarkLaf());
-                break;
             case "Dracula":
                 UIManager.setLookAndFeel(new FlatDraculaIJTheme());
                 break;
             case "One Dark":
                 UIManager.setLookAndFeel(new FlatOneDarkIJTheme());
-                break;
-            case "Carbon":
-                UIManager.setLookAndFeel(new FlatCarbonIJTheme());
                 break;
             case "Obsidian":
                 try {
@@ -142,6 +136,16 @@ public class ThemeManager {
                     UIManager.setLookAndFeel(laplandLaf);
                 } catch (Exception e) {
                     System.err.println("Failed to load Lapland theme properties, falling back to Light theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                break;
+            case "Nemo":
+                try {
+                    FlatPropertiesLaf nemoLaf = new FlatPropertiesLaf("Nemo", 
+                        getClass().getResourceAsStream("/themes/finding-nemo-theme.properties"));
+                    UIManager.setLookAndFeel(nemoLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Nemo theme properties, falling back to Light theme: " + e.getMessage());
                     UIManager.setLookAndFeel(new FlatLightLaf());
                 }
                 break;

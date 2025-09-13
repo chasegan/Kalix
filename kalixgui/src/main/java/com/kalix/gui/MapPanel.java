@@ -455,6 +455,13 @@ public class MapPanel extends JPanel implements KeyListener {
      * @return Color for gridlines that provides subtle contrast with the current background
      */
     private Color getGridlineColor() {
+        // First check for custom gridline color from theme
+        Color customGridlineColor = UIManager.getColor("MapPanel.gridlineColor");
+        if (customGridlineColor != null) {
+            return customGridlineColor;
+        }
+        
+        // Fallback to original logic
         if (isLightTheme()) {
             // Light theme: use light gray gridlines (original behavior)
             return new Color(240, 240, 240);
