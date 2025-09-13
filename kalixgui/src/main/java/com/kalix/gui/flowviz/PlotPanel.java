@@ -6,10 +6,18 @@ import com.kalix.gui.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.gui.flowviz.rendering.ViewPort;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +45,8 @@ public class PlotPanel extends JPanel {
     private Map<String, Color> seriesColors;
     private List<String> visibleSeries;
     private boolean autoYMode = false;
-    
+    private JPopupMenu contextMenu;
+
     public PlotPanel() {
         setBackground(Color.WHITE);
         setBorder(BorderFactory.createTitledBorder("Time Series Plot"));
@@ -46,7 +55,8 @@ public class PlotPanel extends JPanel {
         seriesColors = new HashMap<>();
         visibleSeries = new java.util.ArrayList<>();
         renderer = new TimeSeriesRenderer(seriesColors, visibleSeries);
-        
+
+        setupContextMenu();
         setupMouseListeners();
     }
     
@@ -123,17 +133,41 @@ public class PlotPanel extends JPanel {
         long now = System.currentTimeMillis();
         long startTime = now - 3600000; // 1 hour ago
         long endTime = now + 3600000;   // 1 hour from now
-        
+
         Rectangle plotArea = getPlotArea();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height);
     }
-    
+
+    private void setupContextMenu() {
+        contextMenu = new JPopupMenu();
+
+        JMenuItem zoomInItem = new JMenuItem("Zoom In");
+        zoomInItem.addActionListener(e -> zoomIn());
+        contextMenu.add(zoomInItem);
+
+        JMenuItem zoomOutItem = new JMenuItem("Zoom Out");
+        zoomOutItem.addActionListener(e -> zoomOut());
+        contextMenu.add(zoomOutItem);
+
+        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
+        zoomToFitItem.addActionListener(e -> zoomToFit());
+        contextMenu.add(zoomToFitItem);
+
+        contextMenu.addSeparator();
+
+        JMenuItem saveDataItem = new JMenuItem("Save Data...");
+        saveDataItem.addActionListener(e -> saveData());
+        contextMenu.add(saveDataItem);
+    }
+
     private void setupMouseListeners() {
         MouseAdapter mouseHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                if (SwingUtilities.isLeftMouseButton(e)) {
+                if (SwingUtilities.isRightMouseButton(e) && isInPlotArea(e.getPoint())) {
+                    contextMenu.show(PlotPanel.this, e.getX(), e.getY());
+                } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
                     setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
@@ -445,5 +479,110 @@ public class PlotPanel extends JPanel {
         }
         
         return new double[]{minValue, maxValue};
+    }
+
+    private void saveData() {
+        if (dataSet == null || dataSet.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+        fileChooser.setSelectedFile(new File("timeseries_data.csv"));
+
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".csv")) {
+                file = new File(file.getAbsolutePath() + ".csv");
+            }
+
+            try {
+                exportDataToCsv(file);
+                JOptionPane.showMessageDialog(this,
+                    "Data saved successfully to " + file.getName(),
+                    "Save Data",
+                    JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this,
+                    "Error saving data: " + e.getMessage(),
+                    "Save Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void exportDataToCsv(File file) throws IOException {
+        List<TimeSeriesData> allSeries = dataSet.getAllSeries();
+        if (allSeries.isEmpty()) {
+            return;
+        }
+
+        // Collect all unique timestamps across all series
+        java.util.Set<Long> allTimestamps = new java.util.TreeSet<>();
+        for (TimeSeriesData series : allSeries) {
+            for (long timestamp : series.getTimestamps()) {
+                allTimestamps.add(timestamp);
+            }
+        }
+
+        try (FileWriter writer = new FileWriter(file)) {
+            // Write header
+            writer.write("Datetime");
+            for (TimeSeriesData series : allSeries) {
+                writer.write(",");
+                writer.write(escapeCsvField(series.getName()));
+            }
+            writer.write("\n");
+
+            // Write data rows
+            for (Long timestamp : allTimestamps) {
+                // Format datetime
+                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
+                String dateTimeStr = formatDateTime(dateTime);
+                writer.write(dateTimeStr);
+
+                // Write values for each series
+                for (TimeSeriesData series : allSeries) {
+                    writer.write(",");
+                    Double value = getValueAtTimestamp(series, timestamp);
+                    if (value != null && !Double.isNaN(value)) {
+                        writer.write(String.valueOf(value));
+                    }
+                    // For NaN/missing values, write empty cell
+                }
+                writer.write("\n");
+            }
+        }
+    }
+
+    private String formatDateTime(LocalDateTime dateTime) {
+        // Check if it's a whole day (midnight with no time component)
+        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 && dateTime.getSecond() == 0 && dateTime.getNano() == 0) {
+            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        } else {
+            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+        }
+    }
+
+    private String escapeCsvField(String field) {
+        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
+            return "\"" + field.replace("\"", "\"\"") + "\"";
+        }
+        return field;
+    }
+
+    private Double getValueAtTimestamp(TimeSeriesData series, long timestamp) {
+        long[] timestamps = series.getTimestamps();
+        double[] values = series.getValues();
+        boolean[] validPoints = series.getValidPoints();
+
+        for (int i = 0; i < timestamps.length; i++) {
+            if (timestamps[i] == timestamp && validPoints[i]) {
+                return values[i];
+            }
+        }
+        return null; // Not found or invalid
     }
 }
