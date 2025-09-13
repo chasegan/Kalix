@@ -1,6 +1,6 @@
 package com.kalix.gui.flowviz;
 
-import com.kalix.gui.flowviz.data.CsvParser;
+import com.kalix.gui.io.TimeSeriesCsvImporter;
 import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.data.TimeSeriesData;
 
@@ -372,24 +372,24 @@ public class FlowVizWindow extends JFrame {
         progressDialog.setSize(400, 120);
         progressDialog.setLocationRelativeTo(this);
         
-        // Create CSV parse task
-        CsvParser.CsvParseTask parseTask = new CsvParser.CsvParseTask(csvFile, new CsvParser.CsvParseOptions()) {
+        // Create CSV import task
+        TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
             @Override
             protected void process(List<Integer> chunks) {
                 if (!chunks.isEmpty()) {
                     int progress = chunks.get(chunks.size() - 1);
                     progressBar.setValue(progress);
-                    progressBar.setString(String.format("Parsing CSV... %d%%", progress));
+                    progressBar.setString(String.format("Importing CSV... %d%%", progress));
                 }
             }
-            
+
             @Override
             protected void done() {
                 progressDialog.dispose();
-                
+
                 try {
-                    CsvParser.CsvParseResult parseResult = get();
-                    handleParseResult(csvFile, parseResult);
+                    TimeSeriesCsvImporter.CsvImportResult importResult = get();
+                    handleImportResult(csvFile, importResult);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(FlowVizWindow.this,
                         "Error loading CSV file:\n" + e.getMessage(),
@@ -401,12 +401,12 @@ public class FlowVizWindow extends JFrame {
         };
         
         cancelButton.addActionListener(e -> {
-            parseTask.cancel(true);
+            importTask.cancel(true);
             progressDialog.dispose();
-            updateStatus("CSV loading cancelled");
+            updateStatus("CSV import cancelled");
         });
-        
-        parseTask.execute();
+
+        importTask.execute();
         progressDialog.setVisible(true);
     }
     
@@ -440,14 +440,14 @@ public class FlowVizWindow extends JFrame {
                     
                     publish(fileIndex);
                     
-                    // Parse file synchronously
-                    CsvParser.CsvParseTask parseTask = new CsvParser.CsvParseTask(csvFile, new CsvParser.CsvParseOptions()) {
+                    // Import file synchronously
+                    TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
                         @Override
                         protected void done() {
                             try {
-                                CsvParser.CsvParseResult result = get();
+                                TimeSeriesCsvImporter.CsvImportResult result = get();
                                 SwingUtilities.invokeLater(() -> {
-                                    handleParseResult(csvFile, result);
+                                    handleImportResult(csvFile, result);
                                 });
                             } catch (Exception e) {
                                 SwingUtilities.invokeLater(() -> {
@@ -461,8 +461,8 @@ public class FlowVizWindow extends JFrame {
                     
                     try {
                         // Execute and wait for completion
-                        parseTask.execute();
-                        parseTask.get(); // Wait for completion
+                        importTask.execute();
+                        importTask.get(); // Wait for completion
                     } catch (Exception e) {
                         SwingUtilities.invokeLater(() -> {
                             JOptionPane.showMessageDialog(FlowVizWindow.this,
@@ -505,14 +505,14 @@ public class FlowVizWindow extends JFrame {
         progressDialog.setVisible(true);
     }
     
-    private void handleParseResult(File csvFile, CsvParser.CsvParseResult parseResult) {
-        if (parseResult.hasErrors()) {
+    private void handleImportResult(File csvFile, TimeSeriesCsvImporter.CsvImportResult importResult) {
+        if (importResult.hasErrors()) {
             StringBuilder errorMessage = new StringBuilder("Failed to load CSV file:\n\n");
-            for (String error : parseResult.getErrors()) {
+            for (String error : importResult.getErrors()) {
                 errorMessage.append("• ").append(error).append("\n");
             }
-            
-            JOptionPane.showMessageDialog(this, errorMessage.toString(), 
+
+            JOptionPane.showMessageDialog(this, errorMessage.toString(),
                 "CSV Load Error", JOptionPane.ERROR_MESSAGE);
             updateStatus("Failed to load CSV file");
             return;
@@ -521,7 +521,7 @@ public class FlowVizWindow extends JFrame {
         // Add new data (don't clear existing data)
         String fileName = csvFile.getName();
         
-        for (TimeSeriesData series : parseResult.getDataSet().getAllSeries()) {
+        for (TimeSeriesData series : importResult.getDataSet().getAllSeries()) {
             // Create display name: "filename.csv: ColumnName"
             String columnName = series.getName();
             String displayName = fileName + ": " + columnName;
@@ -540,19 +540,19 @@ public class FlowVizWindow extends JFrame {
         updateTitle();
         
         // Show warnings if any
-        if (parseResult.hasWarnings()) {
+        if (importResult.hasWarnings()) {
             StringBuilder warningMessage = new StringBuilder("CSV loaded successfully with warnings:\n\n");
-            for (String warning : parseResult.getWarnings()) {
+            for (String warning : importResult.getWarnings()) {
                 warningMessage.append("• ").append(warning).append("\n");
             }
-            
+
             JOptionPane.showMessageDialog(this, warningMessage.toString(),
                 "Load Warnings", JOptionPane.WARNING_MESSAGE);
         }
-        
+
         // Update status with statistics
-        CsvParser.ParseStatistics stats = parseResult.getStatistics();
-        int newSeriesCount = parseResult.getDataSet().getSeriesCount();
+        TimeSeriesCsvImporter.ImportStatistics stats = importResult.getStatistics();
+        int newSeriesCount = importResult.getDataSet().getSeriesCount();
         updateStatus(String.format("Added %d new series (%,d total series, %,d total points) in %d ms", 
             newSeriesCount, dataSet.getSeriesCount(), dataSet.getTotalPointCount(), stats.getParseTimeMs()));
         
