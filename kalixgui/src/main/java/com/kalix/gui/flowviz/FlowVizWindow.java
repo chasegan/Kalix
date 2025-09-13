@@ -40,8 +40,9 @@ public class FlowVizWindow extends JFrame {
     // Preferences
     private final Preferences prefs;
 
-    // Menu items
-    private JCheckBoxMenuItem coordinateToggle;
+    // Managers
+    private FlowVizMenuManager menuManager;
+    private FlowVizDataManager dataManager;
     
     public FlowVizWindow() {
         windowCounter++;
@@ -52,6 +53,9 @@ public class FlowVizWindow extends JFrame {
 
         // Initialize preferences
         this.prefs = Preferences.userNodeForPackage(FlowVizWindow.class);
+
+        // Initialize menu manager
+        menuManager = new FlowVizMenuManager(this, prefs);
 
         // Track this window
         openWindows.add(this);
@@ -68,6 +72,7 @@ public class FlowVizWindow extends JFrame {
         setupLayout();
         setupMenuBar();
         setupDataModel();
+        setupDataManager();
         loadPreferences();
 
         setVisible(true);
@@ -106,133 +111,44 @@ public class FlowVizWindow extends JFrame {
         // Set up visibility change listener for data panel
         dataPanel.setVisibilityChangeListener(this::updatePlotVisibility);
         
-        // Set up drag-and-drop file loading
-        setupDragAndDrop();
+        // Data manager will handle drag-and-drop
     }
     
     private void setupMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-        
-        // File menu
-        JMenu fileMenu = new JMenu("File");
-        fileMenu.add(createMenuItem("New", e -> newSession()));
-        fileMenu.add(createMenuItem("Add CSV...", e -> openCsvFile()));
-        fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Export Plot...", e -> exportPlot()));
-        fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Close", e -> dispose()));
-        
-        // View menu
-        JMenu viewMenu = new JMenu("View");
-        JCheckBoxMenuItem dataToggle = new JCheckBoxMenuItem("Show Data", dataVisible);
-        dataToggle.addActionListener(e -> toggleData());
-        viewMenu.add(dataToggle);
+        // Setup action callbacks
+        menuManager.setupActionCallbacks(
+            this::newSession,
+            this::openCsvFile,
+            this::exportPlot,
+            this::toggleData,
+            this::toggleCoordinateDisplay,
+            this::zoomIn,
+            this::zoomOut,
+            this::zoomToFit,
+            this::resetView,
+            this::toggleAutoYMode,
+            this::showStatistics,
+            this::showDataInfo,
+            this::showAbout,
+            this::showShortcuts
+        );
 
-        coordinateToggle = new JCheckBoxMenuItem("Show Coordinates", false);
-        coordinateToggle.addActionListener(e -> toggleCoordinateDisplay());
-        viewMenu.add(coordinateToggle);
-        
-        // Zoom menu
-        JMenu zoomMenu = new JMenu("Zoom");
-        zoomMenu.add(createMenuItem("Zoom In", e -> zoomIn()));
-        zoomMenu.add(createMenuItem("Zoom Out", e -> zoomOut()));
-        zoomMenu.addSeparator();
-        zoomMenu.add(createMenuItem("Zoom to Fit", e -> zoomToFit()));
-        zoomMenu.add(createMenuItem("Reset View", e -> resetView()));
-        zoomMenu.addSeparator();
-        
-        JCheckBoxMenuItem autoYToggle = new JCheckBoxMenuItem("Auto-Y", autoYMode);
-        autoYToggle.addActionListener(e -> toggleAutoYMode());
-        zoomMenu.add(autoYToggle);
-        
-        // Tools menu
-        JMenu toolsMenu = new JMenu("Tools");
-        toolsMenu.add(createMenuItem("Statistics", e -> showStatistics()));
-        toolsMenu.add(createMenuItem("Data Info", e -> showDataInfo()));
-        
-        // Help menu
-        JMenu helpMenu = new JMenu("Help");
-        helpMenu.add(createMenuItem("About FlowViz", e -> showAbout()));
-        helpMenu.add(createMenuItem("Keyboard Shortcuts", e -> showShortcuts()));
-        
-        menuBar.add(fileMenu);
-        menuBar.add(viewMenu);
-        menuBar.add(zoomMenu);
-        menuBar.add(toolsMenu);
-        menuBar.add(helpMenu);
-        
+        // Setup state suppliers
+        menuManager.setupStateSuppliers(
+            () -> dataVisible,
+            () -> autoYMode,
+            () -> plotPanel.isShowCoordinates()
+        );
+
+        // Create and set the menu bar
+        JMenuBar menuBar = menuManager.createMenuBar();
         setJMenuBar(menuBar);
-        
+
         // Setup keyboard shortcuts
-        setupKeyboardShortcuts();
+        menuManager.setupKeyboardShortcuts();
     }
     
-    private void setupKeyboardShortcuts() {
-        // Ctrl+N for New
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("ctrl N"), "newSession");
-        getRootPane().getActionMap().put("newSession", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                newSession();
-            }
-        });
-        
-        // Ctrl+O for Add CSV
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("ctrl O"), "openFile");
-        getRootPane().getActionMap().put("openFile", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                openCsvFile();
-            }
-        });
-        
-        // Ctrl+W for Close
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("ctrl W"), "closeWindow");
-        getRootPane().getActionMap().put("closeWindow", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                dispose();
-            }
-        });
-        
-        // L for toggle data panel
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("L"), "toggleData");
-        getRootPane().getActionMap().put("toggleData", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toggleData();
-            }
-        });
-        
-        // Plus/Minus for zoom
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("PLUS"), "zoomIn");
-        getRootPane().getActionMap().put("zoomIn", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                zoomIn();
-            }
-        });
-        
-        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("MINUS"), "zoomOut");
-        getRootPane().getActionMap().put("zoomOut", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                zoomOut();
-            }
-        });
-    }
     
-    private JMenuItem createMenuItem(String text, ActionListener listener) {
-        JMenuItem item = new JMenuItem(text);
-        item.addActionListener(listener);
-        return item;
-    }
     
     private void setupDataModel() {
         dataSet = new DataSet();
@@ -339,10 +255,23 @@ public class FlowVizWindow extends JFrame {
         plotPanel.setVisibleSeries(visibleSeriesList);
     }
 
+    private void setupDataManager() {
+        // Create data manager after dataSet is initialized
+        dataManager = new FlowVizDataManager(this, dataSet);
+
+        dataManager.setupCallbacks(
+            this::updateStatus,
+            file -> currentFile = file,
+            this::updateTitle,
+            this::zoomToFit
+        );
+        dataManager.setupDragAndDrop();
+    }
+
     // Menu action methods
     private void newSession() {
         // Clear all existing data
-        dataSet.removeAllSeries();
+        dataManager.clearAllData();
         dataPanel.clearSeries();
         currentFile = null;
         updateTitle();
@@ -350,257 +279,13 @@ public class FlowVizWindow extends JFrame {
     }
     
     private void openCsvFile() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
-        fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
-        fileChooser.setMultiSelectionEnabled(true);  // Enable multi-select
-        
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File[] selectedFiles = fileChooser.getSelectedFiles();
-            
-            if (selectedFiles.length == 1) {
-                // Single file - use existing method
-                loadCsvFile(selectedFiles[0]);
-            } else if (selectedFiles.length > 1) {
-                // Multiple files - load them sequentially
-                loadMultipleCsvFiles(selectedFiles);
-            }
-        }
+        dataManager.openCsvFiles();
     }
     
-    private void loadCsvFile(File csvFile) {
-        updateStatus("Loading CSV file...");
-        
-        // Create progress dialog
-        JProgressBar progressBar = new JProgressBar(0, 100);
-        progressBar.setStringPainted(true);
-        progressBar.setString("Parsing CSV...");
-        
-        JDialog progressDialog = new JDialog(this, "Loading Data", true);
-        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-        progressDialog.add(new JLabel("Loading: " + csvFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
-        progressDialog.add(progressBar, BorderLayout.CENTER);
-        
-        JButton cancelButton = new JButton("Cancel");
-        progressDialog.add(cancelButton, BorderLayout.SOUTH);
-        
-        progressDialog.setSize(400, 120);
-        progressDialog.setLocationRelativeTo(this);
-        
-        // Create CSV import task
-        TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
-            @Override
-            protected void process(List<Integer> chunks) {
-                if (!chunks.isEmpty()) {
-                    int progress = chunks.get(chunks.size() - 1);
-                    progressBar.setValue(progress);
-                    progressBar.setString(String.format("Importing CSV... %d%%", progress));
-                }
-            }
-
-            @Override
-            protected void done() {
-                progressDialog.dispose();
-
-                try {
-                    TimeSeriesCsvImporter.CsvImportResult importResult = get();
-                    handleImportResult(csvFile, importResult);
-                } catch (Exception e) {
-                    JOptionPane.showMessageDialog(FlowVizWindow.this,
-                        "Error loading CSV file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
-                    updateStatus("Error loading CSV file");
-                }
-            }
-        };
-        
-        cancelButton.addActionListener(e -> {
-            importTask.cancel(true);
-            progressDialog.dispose();
-            updateStatus("CSV import cancelled");
-        });
-
-        importTask.execute();
-        progressDialog.setVisible(true);
-    }
     
-    private void loadMultipleCsvFiles(File[] csvFiles) {
-        updateStatus("Loading " + csvFiles.length + " CSV files...");
-        
-        // Create progress dialog for multiple files
-        JProgressBar progressBar = new JProgressBar(0, csvFiles.length);
-        progressBar.setStringPainted(true);
-        progressBar.setString("Loading files: 0 of " + csvFiles.length);
-        
-        JDialog progressDialog = new JDialog(this, "Loading Multiple Files", true);
-        progressDialog.setLayout(new BorderLayout());
-        progressDialog.add(new JLabel("Loading CSV files...", JLabel.CENTER), BorderLayout.NORTH);
-        progressDialog.add(progressBar, BorderLayout.CENTER);
-        
-        JButton cancelButton = new JButton("Cancel");
-        progressDialog.add(cancelButton, BorderLayout.SOUTH);
-        progressDialog.setSize(400, 120);
-        progressDialog.setLocationRelativeTo(this);
-        
-        // Load files sequentially in background thread
-        SwingWorker<Void, Integer> multiLoadTask = new SwingWorker<Void, Integer>() {
-            private volatile boolean cancelled = false;
-            
-            @Override
-            protected Void doInBackground() throws Exception {
-                for (int i = 0; i < csvFiles.length && !cancelled && !isCancelled(); i++) {
-                    final int fileIndex = i;
-                    final File csvFile = csvFiles[i];
-                    
-                    publish(fileIndex);
-                    
-                    // Import file synchronously
-                    TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
-                        @Override
-                        protected void done() {
-                            try {
-                                TimeSeriesCsvImporter.CsvImportResult result = get();
-                                SwingUtilities.invokeLater(() -> {
-                                    handleImportResult(csvFile, result);
-                                });
-                            } catch (Exception e) {
-                                SwingUtilities.invokeLater(() -> {
-                                    JOptionPane.showMessageDialog(FlowVizWindow.this,
-                                        "Failed to load " + csvFile.getName() + ": " + e.getMessage(),
-                                        "Load Error", JOptionPane.ERROR_MESSAGE);
-                                });
-                            }
-                        }
-                    };
-                    
-                    try {
-                        // Execute and wait for completion
-                        importTask.execute();
-                        importTask.get(); // Wait for completion
-                    } catch (Exception e) {
-                        SwingUtilities.invokeLater(() -> {
-                            JOptionPane.showMessageDialog(FlowVizWindow.this,
-                                "Failed to load " + csvFile.getName() + ": " + e.getMessage(),
-                                "Load Error", JOptionPane.ERROR_MESSAGE);
-                        });
-                    }
-                }
-                return null;
-            }
-            
-            @Override
-            protected void process(java.util.List<Integer> chunks) {
-                if (!chunks.isEmpty()) {
-                    int fileIndex = chunks.get(chunks.size() - 1);
-                    progressBar.setValue(fileIndex);
-                    progressBar.setString("Loading files: " + (fileIndex + 1) + " of " + csvFiles.length);
-                }
-            }
-            
-            @Override
-            protected void done() {
-                progressDialog.dispose();
-                updateStatus("Loaded " + csvFiles.length + " CSV files");
-            }
-            
-            public void cancel() {
-                cancelled = true;
-                cancel(true);
-            }
-        };
-        
-        cancelButton.addActionListener(e -> {
-            multiLoadTask.cancel(true);
-            progressDialog.dispose();
-            updateStatus("File loading cancelled");
-        });
-        
-        multiLoadTask.execute();
-        progressDialog.setVisible(true);
-    }
     
-    private void handleImportResult(File csvFile, TimeSeriesCsvImporter.CsvImportResult importResult) {
-        if (importResult.hasErrors()) {
-            StringBuilder errorMessage = new StringBuilder("Failed to load CSV file:\n\n");
-            for (String error : importResult.getErrors()) {
-                errorMessage.append("• ").append(error).append("\n");
-            }
-
-            JOptionPane.showMessageDialog(this, errorMessage.toString(),
-                "CSV Load Error", JOptionPane.ERROR_MESSAGE);
-            updateStatus("Failed to load CSV file");
-            return;
-        }
-        
-        // Add new data (don't clear existing data)
-        String fileName = csvFile.getName();
-        
-        for (TimeSeriesData series : importResult.getDataSet().getAllSeries()) {
-            // Create display name: "filename.csv: ColumnName"
-            String columnName = series.getName();
-            String displayName = fileName + ": " + columnName;
-            String uniqueName = getUniqueSeriesName(displayName);
-            
-            // Create new series with the display name
-            TimeSeriesData namedSeries = new TimeSeriesData(
-                uniqueName, 
-                convertTimestampsToLocalDateTime(series.getTimestamps()),
-                series.getValues()
-            );
-            dataSet.addSeries(namedSeries);
-        }
-        
-        currentFile = csvFile;
-        updateTitle();
-        
-        // Show warnings if any
-        if (importResult.hasWarnings()) {
-            StringBuilder warningMessage = new StringBuilder("CSV loaded successfully with warnings:\n\n");
-            for (String warning : importResult.getWarnings()) {
-                warningMessage.append("• ").append(warning).append("\n");
-            }
-
-            JOptionPane.showMessageDialog(this, warningMessage.toString(),
-                "Load Warnings", JOptionPane.WARNING_MESSAGE);
-        }
-
-        // Update status with statistics
-        TimeSeriesCsvImporter.ImportStatistics stats = importResult.getStatistics();
-        int newSeriesCount = importResult.getDataSet().getSeriesCount();
-        updateStatus(String.format("Added %d new series (%,d total series, %,d total points) in %d ms", 
-            newSeriesCount, dataSet.getSeriesCount(), dataSet.getTotalPointCount(), stats.getParseTimeMs()));
-        
-        // Zoom to fit all data (including existing + new)
-        zoomToFit();
-    }
     
-    private String getUniqueSeriesName(String baseName) {
-        if (!dataSet.hasSeries(baseName)) {
-            return baseName;
-        }
-        
-        // Find unique name by appending number
-        int counter = 2;
-        String candidateName;
-        do {
-            candidateName = baseName + " (" + counter + ")";
-            counter++;
-        } while (dataSet.hasSeries(candidateName));
-        
-        return candidateName;
-    }
     
-    private java.time.LocalDateTime[] convertTimestampsToLocalDateTime(long[] timestamps) {
-        java.time.LocalDateTime[] result = new java.time.LocalDateTime[timestamps.length];
-        for (int i = 0; i < timestamps.length; i++) {
-            result[i] = java.time.LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamps[i]), 
-                java.time.ZoneOffset.UTC);
-        }
-        return result;
-    }
     
     private void exportPlot() {
         updateStatus("Export plot - Not yet implemented");
@@ -615,6 +300,7 @@ public class FlowVizWindow extends JFrame {
             splitPane.setLeftComponent(null);
             splitPane.setDividerLocation(0);
         }
+        menuManager.updateMenuStates();
         updateStatus("Data panel " + (dataVisible ? "shown" : "hidden"));
     }
     
@@ -636,6 +322,7 @@ public class FlowVizWindow extends JFrame {
     private void toggleAutoYMode() {
         autoYMode = !autoYMode;
         plotPanel.setAutoYMode(autoYMode);
+        menuManager.updateMenuStates();
         updateStatus(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
     }
 
@@ -695,94 +382,6 @@ public class FlowVizWindow extends JFrame {
             JOptionPane.INFORMATION_MESSAGE);
     }
     
-    private void setupDragAndDrop() {
-        // Enable drag-and-drop for CSV files on the entire window
-        new DropTarget(this, new DropTargetListener() {
-            @Override
-            public void dragEnter(DropTargetDragEvent dtde) {
-                if (isDragAcceptable(dtde)) {
-                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                    updateStatus("Drop CSV files to load them...");
-                } else {
-                    dtde.rejectDrag();
-                }
-            }
-            
-            @Override
-            public void dragOver(DropTargetDragEvent dtde) {
-                if (isDragAcceptable(dtde)) {
-                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                } else {
-                    dtde.rejectDrag();
-                }
-            }
-            
-            @Override
-            public void dragExit(DropTargetEvent dte) {
-                updateStatus("Ready");
-            }
-            
-            @Override
-            public void dropActionChanged(DropTargetDragEvent dtde) {
-                if (isDragAcceptable(dtde)) {
-                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                } else {
-                    dtde.rejectDrag();
-                }
-            }
-            
-            @Override
-            public void drop(DropTargetDropEvent dtde) {
-                if (isDropAcceptable(dtde)) {
-                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
-                    
-                    try {
-                        Transferable transferable = dtde.getTransferable();
-                        @SuppressWarnings("unchecked")
-                        List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
-                        
-                        // Filter for CSV files
-                        List<File> csvFiles = files.stream()
-                            .filter(file -> file.getName().toLowerCase().endsWith(".csv"))
-                            .toList();
-                        
-                        if (csvFiles.isEmpty()) {
-                            updateStatus("No CSV files found in drop");
-                            JOptionPane.showMessageDialog(FlowVizWindow.this,
-                                "Please drop CSV files only.", 
-                                "Invalid File Type", 
-                                JOptionPane.WARNING_MESSAGE);
-                        } else if (csvFiles.size() == 1) {
-                            // Single file - use existing method
-                            loadCsvFile(csvFiles.get(0));
-                        } else {
-                            // Multiple files - use batch loading method
-                            loadMultipleCsvFiles(csvFiles.toArray(new File[0]));
-                        }
-                        
-                        dtde.dropComplete(true);
-                    } catch (Exception e) {
-                        dtde.dropComplete(false);
-                        updateStatus("Failed to load dropped files");
-                        JOptionPane.showMessageDialog(FlowVizWindow.this,
-                            "Failed to load dropped files: " + e.getMessage(),
-                            "Drop Error",
-                            JOptionPane.ERROR_MESSAGE);
-                    }
-                } else {
-                    dtde.rejectDrop();
-                }
-            }
-            
-            private boolean isDragAcceptable(DropTargetDragEvent dtde) {
-                return dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
-            }
-            
-            private boolean isDropAcceptable(DropTargetDropEvent dtde) {
-                return dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
-            }
-        });
-    }
     
     private void updateStatus(String message) {
         statusLabel.setText(message);
@@ -798,10 +397,8 @@ public class FlowVizWindow extends JFrame {
         // Apply the setting to the plot panel
         plotPanel.setShowCoordinates(showCoordinates);
 
-        // Update the menu checkbox to match
-        if (coordinateToggle != null) {
-            coordinateToggle.setSelected(showCoordinates);
-        }
+        // Load menu preferences
+        menuManager.loadMenuPreferences();
     }
 
     public static void createNewWindow() {

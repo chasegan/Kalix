@@ -39,6 +39,118 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
+### FlowViz Manager-Based Architecture Refactoring (September 2025)
+
+**Objective**: Comprehensive refactoring of large FlowViz classes using manager pattern for improved maintainability, code organization, and separation of concerns.
+
+#### Refactoring Results:
+
+**PlotPanel Refactoring:**
+- **Original size**: 910 lines → **Final size**: 246 lines
+- **Reduction**: 73% reduction (664 lines extracted into focused managers)
+
+**FlowVizWindow Refactoring:**
+- **Original size**: 817 lines → **Final size**: 412 lines
+- **Reduction**: 50% reduction (405 lines extracted into specialized managers)
+
+#### Manager Classes Created:
+
+1. **CoordinateDisplayManager** (439 lines)
+   - **Purpose**: Mouse hover coordinate display with optimal performance
+   - **Key Features**:
+     - Binary search algorithms for O(log n) data point lookup
+     - Smart positioning with overlap avoidance and automatic stacking
+     - Throttled updates (60 FPS) for smooth performance
+     - Translucent coordinate boxes with series-colored data points
+   - **Integration**: Handles all coordinate display logic extracted from PlotPanel
+
+2. **PlotInteractionManager** (458 lines)
+   - **Purpose**: All user interactions with the plot including mouse handling
+   - **Key Features**:
+     - Mouse wheel zooming with cursor-centered scaling
+     - Click and drag panning with visual feedback
+     - Right-click context menu with plot operations
+     - Double-click zoom-to-fit functionality
+     - Auto-Y mode support for intelligent Y-axis scaling
+   - **Integration**: Complete mouse interaction system with callback-based data access
+
+3. **FlowVizMenuManager** (300 lines)
+   - **Purpose**: Complete menu system management for FlowViz window
+   - **Key Features**:
+     - Menu bar creation and organization
+     - Keyboard shortcut registration and handling
+     - Menu item state management (checkboxes, toggles)
+     - Action delegation to parent window components
+     - Preference-based state persistence
+   - **Integration**: Manages all menu functionality with callback-based architecture
+
+4. **FlowVizDataManager** (447 lines)
+   - **Purpose**: Comprehensive data import/export operations
+   - **Key Features**:
+     - CSV file import with progress tracking and error handling
+     - Multiple file batch loading with sequential processing
+     - Drag-and-drop file operations with validation
+     - Data processing and unique series name management
+     - Import result handling with user feedback
+   - **Integration**: Handles all data operations with callback communication pattern
+
+#### Architecture Improvements:
+
+**Manager Pattern Benefits:**
+- **Clean Separation of Concerns**: Each manager handles a specific domain of functionality
+- **Callback-Based Communication**: Managers communicate with parent components through well-defined interfaces
+- **Improved Maintainability**: Related functionality is grouped together in focused classes
+- **Enhanced Testability**: Isolated components can be tested independently
+- **Preserved Functionality**: All existing features maintained during refactoring
+
+**Key Design Patterns:**
+- **Manager Pattern**: Central coordination with specialized managers
+- **Callback Pattern**: Loose coupling through function-based communication
+- **Supplier/Consumer Pattern**: Clean data access without tight coupling
+- **Strategy Pattern**: Different interaction behaviors (Auto-Y mode, etc.)
+
+#### Technical Details:
+
+**Communication Architecture:**
+- Managers use callback functions (Runnable, Consumer, Supplier) for parent communication
+- No direct dependencies between managers - all coordination through parent
+- State management through supplier functions for real-time updates
+- Action delegation through consumer callbacks for loose coupling
+
+**Performance Optimizations:**
+- Binary search algorithms for coordinate lookup: O(log n) performance
+- Throttled coordinate updates: 60 FPS maximum to prevent excessive repainting
+- Efficient mouse event handling with smart drag detection
+- Optimized viewport transformations for smooth interactions
+
+#### Files Modified/Created:
+
+**New Manager Classes:**
+- `CoordinateDisplayManager.java` - Mouse hover coordinate display system
+- `PlotInteractionManager.java` - Complete mouse interaction handling
+- `FlowVizMenuManager.java` - Menu system and keyboard shortcuts
+- `FlowVizDataManager.java` - Data import/export operations
+
+**Refactored Classes:**
+- `PlotPanel.java` - Reduced from 910 to 246 lines, now focuses on core plotting
+- `FlowVizWindow.java` - Reduced from 817 to 412 lines, now handles window coordination
+
+**Documentation:**
+- Added comprehensive Javadoc comments to all manager classes
+- Documented design patterns, performance characteristics, and usage examples
+- Explained callback-based communication architecture
+
+#### Current Features (All Preserved):
+- ✅ Mouse hover coordinate display with smart positioning
+- ✅ Right-click context menu with zoom and CSV export
+- ✅ Mouse wheel zooming and drag panning
+- ✅ Auto-Y mode for intelligent axis scaling
+- ✅ CSV import/export with progress tracking
+- ✅ Drag-and-drop file loading
+- ✅ Menu system with keyboard shortcuts
+- ✅ Preference persistence for coordinate display settings
+- ✅ Multi-file batch loading support
+
 ### FlowViz Right-Click Context Menu and CSV Export (September 2025)
 
 **Objective**: Add right-click context menu to FlowViz plot area with CSV export functionality and refactor code for better organization.
