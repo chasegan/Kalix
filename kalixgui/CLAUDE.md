@@ -311,6 +311,77 @@ Sessions are kept alive after model completion to preserve results in kalixcli m
 - Progress update intervals
 - Communication logging levels
 
+### Custom Theme Development (September 2025)
+
+**Objective**: Expand theme variety with custom properties-based themes and enhance theme system with custom component theming.
+
+#### Key Themes Implemented:
+
+1. **Obsidian Theme** (Dark)
+   - **Deep blacks**: `#1e1e1e`, `#1a1a1a`, `#0d1117` for maximum contrast
+   - **Purple accents**: `#8b5cf6`, `#7c3aed` for focus states and buttons
+   - **High contrast text**: `#e6e6e6`, `#f0f6fc` for excellent readability
+   - **Selection colors**: `#3d2a5c` for subtle purple selection
+   - **Split pane dividers**: `#30363d` properly themed for dark backgrounds
+
+2. **Keylime Theme** (Light)
+   - **Clean whites**: `#ffffff`, `#fafafa` with subtle light grays
+   - **Lime green accents**: `#65a30d`, `#84cc16` for fresh, energetic feel
+   - **Selection colors**: `#d4ff8f`, `#ecfccb` in lime green tones
+   - **Professional appearance**: Clean and bright for productivity
+
+3. **Lapland Theme** (Light)
+   - **Nordic blue base**: `#f1f5f9`, `#f8fafc` for crisp, cool appearance
+   - **Custom backgrounds**: Subtle pale blue editor (`#f8fbff`), very pale pink map (`#fefbfa`)
+   - **Arctic blue accents**: `#2563eb`, `#3b82f6` for Scandinavian aesthetic
+   - **Ultra-subtle colors**: Barely perceptible but distinctive
+
+4. **Nemo Theme** (Light)
+   - **Ocean blues**: `#e6f3ff`, `#cce7ff`, `#b3e5fc` for underwater atmosphere
+   - **Clownfish orange**: `#ff6f00`, `#ffcc80` for vibrant coral reef accents
+   - **Sandy backgrounds**: `#fff8e1` editor, `#fff3e0` map for ocean floor feel
+   - **Deep sea text**: `#0d3d56`, `#1a4a5c` for excellent readability
+   - **Custom gridlines**: `#d0d0d0` for better visibility in ocean theme
+
+#### Technical Implementation:
+
+1. **FlatPropertiesLaf Integration**
+   - Used `FlatPropertiesLaf` for clean, maintainable custom theme implementation
+   - Properties files in `/src/main/resources/themes/` directory
+   - Proper error handling with fallback to standard themes
+   - Theme-specific comments and organization
+
+2. **Custom Component Properties**
+   - **MapPanel.background**: Custom map background colors per theme
+   - **MapPanel.gridlineColor**: Theme-specific gridline colors
+   - **Component.splitPaneDividerColor**: Proper split pane divider theming
+   - Enhanced MapPanel to check UIManager for custom properties first
+
+3. **Theme Organization**
+   - **Light themes**: Light → Keylime → Lapland → Nemo (grouped together)
+   - **Dark themes**: Dracula → One Dark → Obsidian (streamlined selection)
+   - **Removed themes**: "Dark" and "Carbon" for cleaner, more distinctive options
+
+#### Files Modified:
+- **Theme Properties**: `obsidian-theme.properties`, `keylime-theme.properties`, `lapland-theme.properties`, `finding-nemo-theme.properties`
+- **ThemeManager.java**: Added FlatPropertiesLaf support and custom theme loading
+- **MapPanel.java**: Enhanced to support custom background and gridline colors
+- **AppConstants.java**: Updated AVAILABLE_THEMES array with new themes
+
+#### Current Theme Features:
+- ✅ **7 distinctive themes**: 4 light themes, 3 dark themes
+- ✅ **Properties-based custom themes**: Clean, maintainable approach
+- ✅ **Custom component theming**: Map backgrounds, gridlines, split panes
+- ✅ **Error handling**: Graceful fallback to standard themes
+- ✅ **Theme integration**: Works with existing theme-aware components
+- ✅ **Streamlined selection**: Removed redundant themes for better UX
+
+#### Theme Color Palettes:
+- **Obsidian**: Deep blacks with purple highlights
+- **Keylime**: Clean whites with lime green energy
+- **Lapland**: Nordic blues with subtle warm/cool background contrast
+- **Nemo**: Underwater ocean blues with coral orange accents
+
 ## Interactive Map Implementation (September 2025)
 
 **Objective**: Implement complete interactive map functionality with node selection, dragging, and bidirectional text synchronization.
