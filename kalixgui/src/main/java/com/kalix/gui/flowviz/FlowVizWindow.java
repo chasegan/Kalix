@@ -1,5 +1,6 @@
 package com.kalix.gui.flowviz;
 
+import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.io.TimeSeriesCsvImporter;
 import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.data.TimeSeriesData;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.prefs.Preferences;
 
 public class FlowVizWindow extends JFrame {
     private static final List<FlowVizWindow> openWindows = new ArrayList<>();
@@ -34,6 +36,12 @@ public class FlowVizWindow extends JFrame {
     // Data management
     private DataSet dataSet;
     private File currentFile;
+
+    // Preferences
+    private final Preferences prefs;
+
+    // Menu items
+    private JCheckBoxMenuItem coordinateToggle;
     
     public FlowVizWindow() {
         windowCounter++;
@@ -41,10 +49,13 @@ public class FlowVizWindow extends JFrame {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(1000, 700);
         setLocationRelativeTo(null);
-        
+
+        // Initialize preferences
+        this.prefs = Preferences.userNodeForPackage(FlowVizWindow.class);
+
         // Track this window
         openWindows.add(this);
-        
+
         // Handle window closing
         addWindowListener(new WindowAdapter() {
             @Override
@@ -52,12 +63,13 @@ public class FlowVizWindow extends JFrame {
                 openWindows.remove(FlowVizWindow.this);
             }
         });
-        
+
         initializeComponents();
         setupLayout();
         setupMenuBar();
         setupDataModel();
-        
+        loadPreferences();
+
         setVisible(true);
     }
     
@@ -115,6 +127,10 @@ public class FlowVizWindow extends JFrame {
         JCheckBoxMenuItem dataToggle = new JCheckBoxMenuItem("Show Data", dataVisible);
         dataToggle.addActionListener(e -> toggleData());
         viewMenu.add(dataToggle);
+
+        coordinateToggle = new JCheckBoxMenuItem("Show Coordinates", false);
+        coordinateToggle.addActionListener(e -> toggleCoordinateDisplay());
+        viewMenu.add(coordinateToggle);
         
         // Zoom menu
         JMenu zoomMenu = new JMenu("Zoom");
@@ -622,6 +638,17 @@ public class FlowVizWindow extends JFrame {
         plotPanel.setAutoYMode(autoYMode);
         updateStatus(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
     }
+
+    private void toggleCoordinateDisplay() {
+        boolean currentState = plotPanel.isShowCoordinates();
+        boolean newState = !currentState;
+        plotPanel.setShowCoordinates(newState);
+
+        // Save preference
+        prefs.putBoolean(AppConstants.PREF_FLOWVIZ_SHOW_COORDINATES, newState);
+
+        updateStatus("Coordinate display " + (newState ? "enabled" : "disabled"));
+    }
     
     private void resetView() {
         plotPanel.resetView();
@@ -760,7 +787,23 @@ public class FlowVizWindow extends JFrame {
     private void updateStatus(String message) {
         statusLabel.setText(message);
     }
-    
+
+    /**
+     * Loads preferences and applies them to the interface.
+     */
+    private void loadPreferences() {
+        // Load coordinate display preference (default: false)
+        boolean showCoordinates = prefs.getBoolean(AppConstants.PREF_FLOWVIZ_SHOW_COORDINATES, false);
+
+        // Apply the setting to the plot panel
+        plotPanel.setShowCoordinates(showCoordinates);
+
+        // Update the menu checkbox to match
+        if (coordinateToggle != null) {
+            coordinateToggle.setSelected(showCoordinates);
+        }
+    }
+
     public static void createNewWindow() {
         SwingUtilities.invokeLater(() -> new FlowVizWindow());
     }

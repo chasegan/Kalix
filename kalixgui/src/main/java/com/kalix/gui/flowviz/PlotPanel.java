@@ -14,6 +14,11 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +48,12 @@ public class PlotPanel extends JPanel {
     private boolean autoYMode = false;
     private JPopupMenu contextMenu;
 
+    // Coordinate display features
+    private boolean showCoordinates = false;
+    private Point lastMousePosition;
+    private List<CoordinateInfo> currentCoordinates = new ArrayList<>();
+    private javax.swing.Timer coordinateUpdateTimer;
+
     public PlotPanel() {
         setBackground(Color.WHITE);
         setBorder(BorderFactory.createTitledBorder("Time Series Plot"));
@@ -54,6 +65,7 @@ public class PlotPanel extends JPanel {
 
         setupContextMenu();
         setupMouseListeners();
+        setupCoordinateDisplay();
     }
     
     public void setDataSet(DataSet dataSet) {
@@ -245,7 +257,13 @@ public class PlotPanel extends JPanel {
             
             @Override
             public void mouseMoved(MouseEvent e) {
-                // Update cursor coordinates in status bar (future implementation)
+                if (showCoordinates && isInPlotArea(e.getPoint())) {
+                    lastMousePosition = e.getPoint();
+                    startCoordinateUpdate();
+                } else if (showCoordinates && !isInPlotArea(e.getPoint())) {
+                    // Clear coordinates when mouse leaves plot area
+                    clearCoordinates();
+                }
             }
             
             @Override
@@ -362,15 +380,20 @@ public class PlotPanel extends JPanel {
             // Fallback to empty state
             g2d.setColor(Color.LIGHT_GRAY);
             g2d.setFont(new Font("Arial", Font.PLAIN, 16));
-            
+
             String message = "No data loaded";
             FontMetrics fm = g2d.getFontMetrics();
             int messageX = plotArea.x + (plotArea.width - fm.stringWidth(message)) / 2;
             int messageY = plotArea.y + plotArea.height / 2;
-            
+
             g2d.drawString(message, messageX, messageY);
         }
-        
+
+        // Draw coordinate overlays if enabled
+        if (showCoordinates) {
+            drawCoordinateOverlays(g2d);
+        }
+
         g2d.dispose();
     }
     
@@ -442,6 +465,18 @@ public class PlotPanel extends JPanel {
     
     public void setAutoYMode(boolean autoYMode) {
         this.autoYMode = autoYMode;
+    }
+
+    public void setShowCoordinates(boolean showCoordinates) {
+        this.showCoordinates = showCoordinates;
+        if (!showCoordinates) {
+            clearCoordinates();
+        }
+        repaint();
+    }
+
+    public boolean isShowCoordinates() {
+        return showCoordinates;
     }
     
     private double[] calculateVisibleYRange(long startTime, long endTime) {
@@ -541,6 +576,336 @@ public class PlotPanel extends JPanel {
                     "Save Error",
                     JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    // Coordinate display implementation
+
+    /**
+     * Sets up the coordinate display system with throttled updates.
+     */
+    private void setupCoordinateDisplay() {
+        // Set up a timer for throttled coordinate updates (60 FPS max)
+        coordinateUpdateTimer = new javax.swing.Timer(16, e -> updateCoordinatesAtMousePosition());
+        coordinateUpdateTimer.setRepeats(false);
+    }
+
+    /**
+     * Starts a throttled coordinate update.
+     */
+    private void startCoordinateUpdate() {
+        if (coordinateUpdateTimer != null && !coordinateUpdateTimer.isRunning()) {
+            coordinateUpdateTimer.start();
+        }
+    }
+
+    /**
+     * Updates the coordinate display for the current mouse position.
+     */
+    private void updateCoordinatesAtMousePosition() {
+        if (lastMousePosition == null || currentViewport == null || dataSet == null) {
+            clearCoordinates();
+            return;
+        }
+
+        // Convert mouse X position to time
+        long mouseTime = currentViewport.screenXToTime(lastMousePosition.x);
+
+        // Find closest points for all visible series
+        List<CoordinateInfo> newCoordinates = new ArrayList<>();
+        for (String seriesName : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(seriesName);
+            if (series != null) {
+                CoordinateInfo coord = findNearestPoint(series, mouseTime, seriesName);
+                if (coord != null) {
+                    newCoordinates.add(coord);
+                }
+            }
+        }
+
+        // Update coordinates if they changed
+        if (!newCoordinates.equals(currentCoordinates)) {
+            currentCoordinates = newCoordinates;
+            repaint();
+        }
+    }
+
+    /**
+     * Finds the nearest valid data point to the given time using binary search.
+     */
+    private CoordinateInfo findNearestPoint(TimeSeriesData series, long targetTime, String seriesName) {
+        long[] timestamps = series.getTimestamps();
+        double[] values = series.getValues();
+        boolean[] validPoints = series.getValidPoints();
+
+        if (timestamps.length == 0) return null;
+
+        // Binary search for closest time
+        int index = binarySearchNearest(timestamps, targetTime);
+
+        // Find the closest valid point around the found index
+        int bestIndex = -1;
+        long bestDistance = Long.MAX_VALUE;
+
+        // Check a few points around the binary search result
+        for (int i = Math.max(0, index - 2); i < Math.min(timestamps.length, index + 3); i++) {
+            if (validPoints[i]) {
+                long distance = Math.abs(timestamps[i] - targetTime);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+        }
+
+        if (bestIndex == -1) return null;
+
+        return new CoordinateInfo(
+            seriesName,
+            timestamps[bestIndex],
+            values[bestIndex],
+            seriesColors.get(seriesName)
+        );
+    }
+
+    /**
+     * Binary search to find the index of the closest timestamp.
+     */
+    private int binarySearchNearest(long[] timestamps, long target) {
+        if (timestamps.length == 0) return 0;
+        if (target <= timestamps[0]) return 0;
+        if (target >= timestamps[timestamps.length - 1]) return timestamps.length - 1;
+
+        int left = 0;
+        int right = timestamps.length - 1;
+
+        while (left < right) {
+            int mid = (left + right) / 2;
+            if (timestamps[mid] < target) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+
+        // Check if the previous point is closer
+        if (left > 0 && Math.abs(timestamps[left - 1] - target) < Math.abs(timestamps[left] - target)) {
+            return left - 1;
+        }
+        return left;
+    }
+
+    /**
+     * Draws coordinate overlay rectangles for all current coordinates.
+     */
+    private void drawCoordinateOverlays(Graphics2D g2d) {
+        if (currentCoordinates.isEmpty() || currentViewport == null) return;
+
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Calculate positions and handle stacking
+        List<Rectangle> usedAreas = new ArrayList<>();
+
+        for (CoordinateInfo coord : currentCoordinates) {
+            if (!currentViewport.isTimeVisible(coord.timestamp)) continue;
+
+            int screenX = currentViewport.timeToScreenX(coord.timestamp);
+            int screenY = currentViewport.valueToScreenY(coord.value);
+
+            // Create coordinate text (single line with comma)
+            String timeText = formatTimeForDisplay(coord.timestamp);
+            String valueText = formatValueForDisplay(coord.value);
+            String displayText = timeText + ", " + valueText;
+
+            // Calculate rectangle bounds (single line)
+            FontMetrics fm = g2d.getFontMetrics(new Font("Arial", Font.PLAIN, 10));
+            int textWidth = fm.stringWidth(displayText);
+            int textHeight = fm.getHeight();
+
+            // Add padding
+            int rectWidth = textWidth + 8;
+            int rectHeight = textHeight + 6;
+
+            // Calculate optimal position with stacking
+            Rectangle optimalRect = calculateOptimalPosition(screenX, screenY, rectWidth, rectHeight, usedAreas);
+            usedAreas.add(optimalRect);
+
+            // Draw the coordinate box and point
+            drawCoordinateBox(g2d, optimalRect, coord.color, displayText, fm);
+            drawDataPoint(g2d, screenX, screenY, coord.color);
+        }
+    }
+
+    /**
+     * Calculates the optimal position for a coordinate rectangle, avoiding overlaps.
+     */
+    private Rectangle calculateOptimalPosition(int pointX, int pointY, int width, int height, List<Rectangle> usedAreas) {
+        Rectangle plotArea = getPlotArea();
+
+        // Try positions in order of preference: right, left, above, below
+        int[] xOffsets = {10, -width - 10, -width / 2, -width / 2};
+        int[] yOffsets = {-height / 2, -height / 2, -height - 10, 10};
+
+        for (int i = 0; i < xOffsets.length; i++) {
+            int x = pointX + xOffsets[i];
+            int y = pointY + yOffsets[i];
+
+            // Clamp to plot area
+            x = Math.max(plotArea.x, Math.min(x, plotArea.x + plotArea.width - width));
+            y = Math.max(plotArea.y, Math.min(y, plotArea.y + plotArea.height - height));
+
+            Rectangle candidate = new Rectangle(x, y, width, height);
+
+            // Check for overlaps and stack if needed
+            boolean overlaps = false;
+            for (Rectangle used : usedAreas) {
+                if (candidate.intersects(used)) {
+                    overlaps = true;
+                    // Try stacking below
+                    candidate.y = used.y + used.height + 2;
+                    if (candidate.y + candidate.height > plotArea.y + plotArea.height) {
+                        // Stack above instead
+                        candidate.y = used.y - candidate.height - 2;
+                    }
+                    break;
+                }
+            }
+
+            if (!overlaps || !intersectsAny(candidate, usedAreas)) {
+                return candidate;
+            }
+        }
+
+        // Fallback: place at default position even if it overlaps
+        int x = Math.max(plotArea.x, Math.min(pointX + 10, plotArea.x + plotArea.width - width));
+        int y = Math.max(plotArea.y, Math.min(pointY - height / 2, plotArea.y + plotArea.height - height));
+        return new Rectangle(x, y, width, height);
+    }
+
+    /**
+     * Checks if a rectangle intersects with any rectangle in the list.
+     */
+    private boolean intersectsAny(Rectangle rect, List<Rectangle> rects) {
+        return rects.stream().anyMatch(rect::intersects);
+    }
+
+    /**
+     * Draws a coordinate display box with translucent background and border.
+     */
+    private void drawCoordinateBox(Graphics2D g2d, Rectangle bounds, Color seriesColor, String text, FontMetrics fm) {
+        // Draw more transparent background
+        Color bgColor = new Color(255, 255, 255, 160);
+        g2d.setColor(bgColor);
+        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+
+        // Draw thin border
+        Color borderColor = seriesColor != null ?
+            new Color(seriesColor.getRed(), seriesColor.getGreen(), seriesColor.getBlue(), 120) :
+            new Color(128, 128, 128, 120);
+        g2d.setColor(borderColor);
+        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
+
+        // Draw text
+        g2d.setColor(Color.BLACK);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 10));
+
+        int textX = bounds.x + 4;
+        int textY = bounds.y + fm.getAscent() + 2;
+
+        g2d.drawString(text, textX, textY);
+    }
+
+    /**
+     * Draws a small circle at the data point location.
+     */
+    private void drawDataPoint(Graphics2D g2d, int screenX, int screenY, Color seriesColor) {
+        if (seriesColor == null) return;
+
+        g2d.setColor(seriesColor);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Draw filled circle (4px diameter)
+        int radius = 2;
+        g2d.fillOval(screenX - radius, screenY - radius, radius * 2, radius * 2);
+
+        // Draw slightly darker border
+        Color borderColor = new Color(
+            Math.max(0, seriesColor.getRed() - 40),
+            Math.max(0, seriesColor.getGreen() - 40),
+            Math.max(0, seriesColor.getBlue() - 40)
+        );
+        g2d.setColor(borderColor);
+        g2d.drawOval(screenX - radius, screenY - radius, radius * 2, radius * 2);
+    }
+
+    /**
+     * Formats timestamp for display based on precision requirements.
+     */
+    private String formatTimeForDisplay(long timestampMs) {
+        LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneOffset.UTC);
+
+        // Check if it's a whole day (midnight UTC)
+        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 && dateTime.getSecond() == 0 &&
+            timestampMs % 1000 == 0) {
+            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        } else {
+            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+        }
+    }
+
+    /**
+     * Formats value for display with appropriate precision.
+     */
+    private String formatValueForDisplay(double value) {
+        if (value == Math.floor(value) && !Double.isInfinite(value)) {
+            return String.format("%.0f", value);
+        } else if (Math.abs(value) >= 1) {
+            return String.format("%.3g", value);
+        } else {
+            return String.format("%.4g", value);
+        }
+    }
+
+    /**
+     * Clears all coordinate displays and triggers a repaint.
+     */
+    private void clearCoordinates() {
+        if (!currentCoordinates.isEmpty()) {
+            currentCoordinates.clear();
+            repaint();
+        }
+    }
+
+    /**
+     * Data class to hold coordinate information for display.
+     */
+    private static class CoordinateInfo {
+        final String seriesName;
+        final long timestamp;
+        final double value;
+        final Color color;
+
+        CoordinateInfo(String seriesName, long timestamp, double value, Color color) {
+            this.seriesName = seriesName;
+            this.timestamp = timestamp;
+            this.value = value;
+            this.color = color;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof CoordinateInfo)) return false;
+            CoordinateInfo other = (CoordinateInfo) obj;
+            return seriesName.equals(other.seriesName) &&
+                   timestamp == other.timestamp &&
+                   Double.compare(value, other.value) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return seriesName.hashCode() + Long.hashCode(timestamp) + Double.hashCode(value);
         }
     }
 }

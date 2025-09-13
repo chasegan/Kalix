@@ -53,6 +53,7 @@ public final class AppConstants {
     public static final String PREF_EDITOR_THEME = "editor.theme";
     public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
     public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
+    public static final String PREF_FLOWVIZ_SHOW_COORDINATES = "flowviz.show.coordinates";
     
     
     // Status messages
