@@ -25,10 +25,10 @@ public class FlowVizWindow extends JFrame {
     private static int windowCounter = 0;
     
     private PlotPanel plotPanel;
-    private LegendPanel legendPanel;
+    private DataPanel dataPanel;
     private JLabel statusLabel;
     private JSplitPane splitPane;
-    private boolean legendVisible = true;
+    private boolean dataVisible = true;
     private boolean autoYMode = true;
     
     // Data management
@@ -64,8 +64,8 @@ public class FlowVizWindow extends JFrame {
     private void initializeComponents() {
         plotPanel = new PlotPanel();
         plotPanel.setAutoYMode(autoYMode);  // Initialize Auto-Y mode
-        legendPanel = new LegendPanel();
-        legendPanel.setPreferredSize(new Dimension(250, 0));
+        dataPanel = new DataPanel();
+        dataPanel.setPreferredSize(new Dimension(250, 0));
         
         statusLabel = new JLabel("Ready - No data loaded");
         statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -74,14 +74,14 @@ public class FlowVizWindow extends JFrame {
     private void setupLayout() {
         setLayout(new BorderLayout());
         
-        // Create split pane with legend on left, plot on right
+        // Create split pane with data panel on left, plot on right
         splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
-            legendPanel,
+            dataPanel,
             plotPanel
         );
         splitPane.setDividerLocation(250);
-        splitPane.setResizeWeight(0.0); // Keep legend fixed width
+        splitPane.setResizeWeight(0.0); // Keep data panel fixed width
         
         add(splitPane, BorderLayout.CENTER);
         
@@ -91,8 +91,8 @@ public class FlowVizWindow extends JFrame {
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         add(statusPanel, BorderLayout.SOUTH);
         
-        // Set up visibility change listener for legend
-        legendPanel.setVisibilityChangeListener(this::updatePlotVisibility);
+        // Set up visibility change listener for data panel
+        dataPanel.setVisibilityChangeListener(this::updatePlotVisibility);
         
         // Set up drag-and-drop file loading
         setupDragAndDrop();
@@ -112,9 +112,9 @@ public class FlowVizWindow extends JFrame {
         
         // View menu
         JMenu viewMenu = new JMenu("View");
-        JCheckBoxMenuItem legendToggle = new JCheckBoxMenuItem("Show Legend", legendVisible);
-        legendToggle.addActionListener(e -> toggleLegend());
-        viewMenu.add(legendToggle);
+        JCheckBoxMenuItem dataToggle = new JCheckBoxMenuItem("Show Data", dataVisible);
+        dataToggle.addActionListener(e -> toggleData());
+        viewMenu.add(dataToggle);
         
         // Zoom menu
         JMenu zoomMenu = new JMenu("Zoom");
@@ -182,13 +182,13 @@ public class FlowVizWindow extends JFrame {
             }
         });
         
-        // L for toggle legend
+        // L for toggle data panel
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
-            KeyStroke.getKeyStroke("L"), "toggleLegend");
-        getRootPane().getActionMap().put("toggleLegend", new AbstractAction() {
+            KeyStroke.getKeyStroke("L"), "toggleData");
+        getRootPane().getActionMap().put("toggleData", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                toggleLegend();
+                toggleData();
             }
         });
         
@@ -227,8 +227,8 @@ public class FlowVizWindow extends JFrame {
             public void onSeriesAdded(TimeSeriesData series) {
                 // Generate color for the series (cycle through predefined colors)
                 Color seriesColor = generateSeriesColor(dataSet.getSeriesCount() - 1);
-                
-                legendPanel.addSeries(series.getName(), seriesColor, series.getPointCount());
+
+                dataPanel.addSeries(series.getName(), seriesColor, series.getPointCount());
                 
                 // Update plot panel with new data
                 updatePlotPanel();
@@ -240,7 +240,7 @@ public class FlowVizWindow extends JFrame {
             
             @Override
             public void onSeriesRemoved(String seriesName) {
-                legendPanel.removeSeries(seriesName);
+                dataPanel.removeSeries(seriesName);
                 updatePlotPanel();
                 updateTitle();
                 updateStatus("Removed series: " + seriesName);
@@ -295,9 +295,9 @@ public class FlowVizWindow extends JFrame {
         
         // Build color map for all series
         Map<String, Color> colorMap = new HashMap<>();
-        List<String> visibleSeriesList = legendPanel.getVisibleSeries();
-        
-        // If no series are marked as visible in legend (initial state), show all series
+        List<String> visibleSeriesList = dataPanel.getVisibleSeries();
+
+        // If no series are marked as visible in data panel (initial state), show all series
         if (visibleSeriesList.isEmpty() && !dataSet.isEmpty()) {
             visibleSeriesList = new ArrayList<>(dataSet.getSeriesNames());
         }
@@ -313,13 +313,13 @@ public class FlowVizWindow extends JFrame {
     
     private void updatePlotVisibility() {
         // Update only visibility without resetting viewport
-        List<String> visibleSeriesList = legendPanel.getVisibleSeries();
-        
-        // If no series are marked as visible in legend (initial state), show all series
+        List<String> visibleSeriesList = dataPanel.getVisibleSeries();
+
+        // If no series are marked as visible in data panel (initial state), show all series
         if (visibleSeriesList.isEmpty() && !dataSet.isEmpty()) {
             visibleSeriesList = new ArrayList<>(dataSet.getSeriesNames());
         }
-        
+
         plotPanel.setVisibleSeries(visibleSeriesList);
     }
 
@@ -327,7 +327,7 @@ public class FlowVizWindow extends JFrame {
     private void newSession() {
         // Clear all existing data
         dataSet.removeAllSeries();
-        legendPanel.clearSeries();
+        dataPanel.clearSeries();
         currentFile = null;
         updateTitle();
         updateStatus("Started new session - all data cleared");
@@ -590,16 +590,16 @@ public class FlowVizWindow extends JFrame {
         updateStatus("Export plot - Not yet implemented");
     }
     
-    private void toggleLegend() {
-        legendVisible = !legendVisible;
-        if (legendVisible) {
-            splitPane.setLeftComponent(legendPanel);
+    private void toggleData() {
+        dataVisible = !dataVisible;
+        if (dataVisible) {
+            splitPane.setLeftComponent(dataPanel);
             splitPane.setDividerLocation(250);
         } else {
             splitPane.setLeftComponent(null);
             splitPane.setDividerLocation(0);
         }
-        updateStatus("Legend " + (legendVisible ? "shown" : "hidden"));
+        updateStatus("Data panel " + (dataVisible ? "shown" : "hidden"));
     }
     
     private void zoomIn() {
@@ -652,14 +652,14 @@ public class FlowVizWindow extends JFrame {
             "Ctrl+N - New session (clear all data)\n" +
             "Ctrl+O - Add CSV file to current session\n" +
             "Ctrl+W - Close window\n" +
-            "L - Toggle legend\n" +
+            "L - Toggle data panel\n" +
             "+ - Zoom in\n" +
             "- - Zoom out\n" +
             "Mouse wheel - Zoom at cursor\n" +
             "Mouse drag - Pan view\n" +
             "Double-click plot - Reset zoom to fit data\n\n" +
-            "Legend Reordering:\n" +
-            "Click legend item - Select item\n" +
+            "Data Reordering:\n" +
+            "Click data item - Select item\n" +
             "Cmd+↑/Ctrl+↑ - Move selected item up (toward background)\n" +
             "Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)\n\n" +
             "File Loading:\n" +

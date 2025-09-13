@@ -39,6 +39,59 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
+### FlowViz Right-Click Context Menu and CSV Export (September 2025)
+
+**Objective**: Add right-click context menu to FlowViz plot area with CSV export functionality and refactor code for better organization.
+
+#### Key Changes Made:
+
+1. **Right-Click Context Menu Implementation**
+   - **PlotPanel.setupContextMenu()** - Creates popup menu with zoom and export options
+   - **Context Menu Items**: Zoom In, Zoom Out, Zoom to Fit, Save Data...
+   - **Smart Activation**: Menu only appears when right-clicking within plot area
+   - **Integrated with Existing Functions**: Reuses existing zoom functionality
+
+2. **CSV Export Functionality**
+   - **TimeSeriesCsvExporter Class** - New utility class in `com.kalix.gui.io` package
+   - **Multi-column Format**: "Datetime" column + one column per time series
+   - **Adaptive DateTime Formatting**:
+     - Whole days (midnight): `YYYY-MM-DD` format
+     - With time components: `YYYY-MM-DDThh:mm:ss` format
+   - **Missing Value Handling**: NaN values represented as empty CSV cells
+   - **Proper CSV Escaping**: Handles special characters in series names
+
+3. **Code Refactoring and Organization**
+   - **Separated Concerns**: Moved CSV logic from PlotPanel to dedicated exporter class
+   - **Improved Maintainability**: ~80 lines of CSV code moved to reusable utility
+   - **Better Error Handling**: Enhanced validation and user feedback
+   - **Thread-Safe Design**: Stateless utility class suitable for concurrent use
+
+4. **Comprehensive Documentation**
+   - **Extensive Javadoc**: Class and method documentation with usage examples
+   - **Future Extensibility**: ExportOptions class for potential customization
+   - **Code Examples**: Documented CSV format and usage patterns
+
+#### Files Modified:
+- `PlotPanel.java` - Added context menu, refactored to use new exporter, enhanced Javadoc
+- `TimeSeriesCsvExporter.java` - **New file** - Dedicated CSV export utility class
+
+#### Current Features:
+- ✅ Right-click context menu in plot area
+- ✅ CSV export with proper datetime formatting
+- ✅ All unique timestamps across multiple time series
+- ✅ Missing value handling (empty cells for NaN)
+- ✅ Proper CSV field escaping
+- ✅ File save dialog with CSV filter
+- ✅ Success/error user feedback
+- ✅ Clean code separation and documentation
+
+#### Technical Implementation:
+- **Context Menu**: JPopupMenu triggered on right-click within plot bounds
+- **CSV Structure**: Chronologically sorted timestamps with aligned series data
+- **Data Collection**: TreeSet for automatic timestamp sorting and deduplication
+- **Export Process**: FileWriter with proper resource management
+- **Error Handling**: IOException and IllegalArgumentException handling
+
 ### Node Text Styling and Click Navigation (September 2025)
 
 **Objective**: Enhance node visualization with themed text styling and implement click-to-navigate functionality between map and editor.
