@@ -39,6 +39,97 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
+### Kalix Compressed Timeseries Format Implementation (September 2025)
+
+**Objective**: Implement a bespoke compressed timeseries file format using Gorilla compression algorithm to provide efficient storage and fast loading of large timeseries datasets.
+
+#### Format Specification:
+
+**Binary File Format (.kts):**
+```
+[Series Block 1]
+[Series Block 2]
+...
+[Series Block N]
+```
+
+Where each Series Block contains:
+```
+[Codec ID - 2 bytes] (0=Gorilla Double, 1=Gorilla Float)
+[Compressed Data Length - 4 bytes]
+[Gorilla Compressed Data]
+```
+
+**Metadata File Format (.ktm):**
+Human-readable CSV format with aligned columns:
+```csv
+index,offset,start_time,end_time,timestep,length,series_name
+1    ,0     ,2020-01-01,2020-12-31,86400   ,365   ,daily_flow
+2    ,1234  ,2020-01-01T00:00:00,2020-01-01T23:00:00,3600,24,hourly_temp
+```
+
+#### Key Features Implemented:
+
+1. **KalixTimeSeriesWriter.java**
+   - Converts TimeSeriesData objects to Gorilla-compressed blocks
+   - Auto-detects timesteps (regular intervals or averages)
+   - Creates aligned CSV metadata for human readability
+   - Tracks byte offsets for random access
+
+2. **KalixTimeSeriesReader.java**
+   - `readAllSeries()` - Sequential read of all series
+   - `readSeries(name)` - Random access to specific series by name
+   - `getSeriesInfo()` - Metadata-only read for file browsing
+   - Handles both Gorilla Double and Float codecs
+
+3. **FlowViz Integration**
+   - **File Chooser Support**: Updated to support both CSV and KTM files with multiple format filters
+   - **Drag-and-Drop Support**: Extended to accept .ktm files in addition to .csv files
+   - **Right-Click Context Menu**: Single "Save Data..." option with format selection via file extension
+   - **Progress Dialogs**: Full progress tracking and cancellation support for both loading and saving
+
+#### Gorilla Compression Bug Fixes:
+
+**Critical Fix**: The original GorillaCompressor implementation had a fundamental bug in the decompression logic:
+- **Issue**: Decompression relied on EOF detection, causing "Unexpected end of data" errors and phantom data generation
+- **Root Cause**: Mismatch in `prevDelta` initialization (compression: `0`, decompression: `timestep`) and missing data point count
+- **Solution**: Added data point count to compression header and implemented counted decompression loops
+
+**Updated Gorilla Format:**
+```
+[timestep(64)] [count(32)] [first_timestamp(64)] [first_value(64/32)] [compressed_data...]
+```
+
+#### User Experience:
+
+**Loading Workflow:**
+1. User drags .ktm files onto FlowViz or uses File → Open
+2. System automatically finds corresponding .kts binary file
+3. Series loaded with descriptive names: "filename.ktm: SeriesName"
+
+**Saving Workflow:**
+1. Right-click in plot → "Save Data..."
+2. File chooser shows format options: "CSV Files (*.csv)" and "Kalix Timeseries Files (*.ktm)"
+3. Format automatically determined by selected filter or file extension
+4. Creates both metadata (.ktm) and binary (.kts) files for Kalix format
+
+#### Files Created/Modified:
+- `KalixTimeSeriesWriter.java` - Writer implementation with CSV metadata generation
+- `KalixTimeSeriesReader.java` - Reader with random access and metadata parsing
+- `FlowVizDataManager.java` - Enhanced with KTM file support and multi-format loading
+- `PlotInteractionManager.java` - Updated save dialog with format auto-detection
+- `GorillaCompressor.java` - Fixed compression/decompression bugs with counted format
+
+#### Current Features:
+- ✅ Gorilla compression with proper data point counting
+- ✅ Human-readable CSV metadata with aligned columns
+- ✅ Random access loading by series name
+- ✅ Batch file loading with progress tracking
+- ✅ Drag-and-drop support for .ktm files
+- ✅ Unified save dialog with format auto-detection
+- ✅ Error handling and validation
+- ✅ Compression ratio reporting and statistics
+
 ### FlowViz Manager-Based Architecture Refactoring (September 2025)
 
 **Objective**: Comprehensive refactoring of large FlowViz classes using manager pattern for improved maintainability, code organization, and separation of concerns.
