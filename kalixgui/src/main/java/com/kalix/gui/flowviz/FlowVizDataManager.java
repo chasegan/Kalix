@@ -1,6 +1,7 @@
 package com.kalix.gui.flowviz;
 
 import com.kalix.gui.io.TimeSeriesCsvImporter;
+import com.kalix.gui.io.KalixTimeSeriesReader;
 import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.data.TimeSeriesData;
 
@@ -83,16 +84,26 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Opens a file chooser dialog and loads selected CSV files with support for multiple selection.
+     * Opens a file chooser dialog and loads selected files with support for multiple selection.
+     * Supports both CSV files and Kalix compressed timeseries files (.ktm).
      *
-     * <p>This method presents a standard file chooser dialog filtered for CSV files, allowing
-     * users to select one or multiple files for import. The method automatically detects whether
-     * single or multiple files were selected and delegates to the appropriate loading method
-     * for optimal user experience and progress tracking.
+     * <p>This method presents a standard file chooser dialog filtered for supported file types, allowing
+     * users to select one or multiple files for import. The method automatically detects file types and
+     * delegates to the appropriate loading method for optimal user experience and progress tracking.
      */
     public void openCsvFiles() {
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+
+        // Add file filters for different formats
+        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
+        FileNameExtensionFilter ktmFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.ktm)", "ktm");
+        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.ktm)", "csv", "ktm");
+
+        fileChooser.addChoosableFileFilter(csvFilter);
+        fileChooser.addChoosableFileFilter(ktmFilter);
+        fileChooser.addChoosableFileFilter(allFilter);
+        fileChooser.setFileFilter(allFilter); // Default to all supported
+
         fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
         fileChooser.setMultiSelectionEnabled(true);  // Enable multi-select
 
@@ -101,13 +112,114 @@ public class FlowVizDataManager {
             File[] selectedFiles = fileChooser.getSelectedFiles();
 
             if (selectedFiles.length == 1) {
-                // Single file - use existing method
-                loadCsvFile(selectedFiles[0]);
+                // Single file - use appropriate method based on type
+                loadFile(selectedFiles[0]);
             } else if (selectedFiles.length > 1) {
                 // Multiple files - load them sequentially
-                loadMultipleCsvFiles(selectedFiles);
+                loadMultipleFiles(selectedFiles);
             }
         }
+    }
+
+    /**
+     * Loads a single file with progress dialog. Automatically detects file type.
+     *
+     * @param file The file to load (CSV or KTM)
+     */
+    public void loadFile(File file) {
+        String fileName = file.getName().toLowerCase();
+        if (fileName.endsWith(".csv")) {
+            loadCsvFile(file);
+        } else if (fileName.endsWith(".ktm")) {
+            loadKtmFile(file);
+        } else {
+            JOptionPane.showMessageDialog(parentFrame,
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .ktm",
+                "Load Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Loads multiple files with batch progress dialog. Automatically detects file types.
+     *
+     * @param files Array of files to load (CSV or KTM)
+     */
+    public void loadMultipleFiles(File[] files) {
+        statusUpdater.accept("Loading " + files.length + " files...");
+
+        // Create progress dialog for multiple files
+        JProgressBar progressBar = new JProgressBar(0, files.length);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Loading files: 0 of " + files.length);
+
+        JDialog progressDialog = new JDialog(parentFrame, "Loading Multiple Files", true);
+        progressDialog.setLayout(new BorderLayout());
+        progressDialog.add(new JLabel("Loading files...", JLabel.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(parentFrame);
+
+        // Load files sequentially in background thread
+        SwingWorker<Void, Integer> multiLoadTask = new SwingWorker<Void, Integer>() {
+            private volatile boolean cancelled = false;
+
+            @Override
+            protected Void doInBackground() throws Exception {
+                for (int i = 0; i < files.length && !cancelled && !isCancelled(); i++) {
+                    final int fileIndex = i;
+                    final File file = files[i];
+
+                    publish(fileIndex);
+
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            loadFile(file);
+                        } catch (Exception e) {
+                            JOptionPane.showMessageDialog(parentFrame,
+                                "Failed to load " + file.getName() + ": " + e.getMessage(),
+                                "Load Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    });
+
+                    // Small delay between files to prevent overwhelming the UI
+                    Thread.sleep(100);
+                }
+                return null;
+            }
+
+            @Override
+            protected void process(java.util.List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int fileIndex = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(fileIndex);
+                    progressBar.setString("Loading files: " + (fileIndex + 1) + " of " + files.length);
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+                statusUpdater.accept("Loaded " + files.length + " files");
+            }
+
+            public void cancel() {
+                cancelled = true;
+                cancel(true);
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            multiLoadTask.cancel(true);
+            progressDialog.dispose();
+            statusUpdater.accept("File loading cancelled");
+        });
+
+        multiLoadTask.execute();
+        progressDialog.setVisible(true);
     }
 
     /**
@@ -170,6 +282,140 @@ public class FlowVizDataManager {
 
         importTask.execute();
         progressDialog.setVisible(true);
+    }
+
+    /**
+     * Loads a single Kalix timeseries file (.ktm + .kts) with progress dialog.
+     *
+     * @param ktmFile The KTM metadata file to load
+     */
+    public void loadKtmFile(File ktmFile) {
+        statusUpdater.accept("Loading Kalix timeseries file...");
+
+        // Verify the corresponding .kts file exists
+        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.ktm$", "");
+        File ktsFile = new File(basePath + ".kts");
+
+        if (!ktsFile.exists()) {
+            JOptionPane.showMessageDialog(parentFrame,
+                "Binary data file not found: " + ktsFile.getName() + "\nBoth .ktm and .kts files are required.",
+                "Load Error",
+                JOptionPane.ERROR_MESSAGE);
+            statusUpdater.accept("Failed to load Kalix timeseries file");
+            return;
+        }
+
+        // Create progress dialog
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Loading Kalix timeseries...");
+
+        JDialog progressDialog = new JDialog(parentFrame, "Loading Data", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.add(new JLabel("Loading: " + ktmFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(parentFrame);
+
+        // Create background loading task
+        SwingWorker<List<TimeSeriesData>, Integer> loadTask = new SwingWorker<List<TimeSeriesData>, Integer>() {
+            @Override
+            protected List<TimeSeriesData> doInBackground() throws Exception {
+                publish(25);
+                KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+                publish(50);
+                List<TimeSeriesData> seriesList = reader.readAllSeries(basePath);
+                publish(100);
+                return seriesList;
+            }
+
+            @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int progress = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(progress);
+                    progressBar.setString(String.format("Loading Kalix timeseries... %d%%", progress));
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                try {
+                    List<TimeSeriesData> seriesList = get();
+                    handleKtmImportResult(ktmFile, seriesList);
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(parentFrame,
+                        "Error loading Kalix timeseries file:\n" + e.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE);
+                    statusUpdater.accept("Error loading Kalix timeseries file");
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            loadTask.cancel(true);
+            progressDialog.dispose();
+            statusUpdater.accept("Kalix timeseries import cancelled");
+        });
+
+        loadTask.execute();
+        progressDialog.setVisible(true);
+    }
+
+    /**
+     * Processes the result of a Kalix timeseries import operation.
+     *
+     * @param ktmFile The source KTM file
+     * @param seriesList The loaded time series data
+     */
+    private void handleKtmImportResult(File ktmFile, List<TimeSeriesData> seriesList) {
+        if (seriesList == null || seriesList.isEmpty()) {
+            JOptionPane.showMessageDialog(parentFrame,
+                "No time series data found in file: " + ktmFile.getName(),
+                "Load Warning",
+                JOptionPane.WARNING_MESSAGE);
+            statusUpdater.accept("No data loaded");
+            return;
+        }
+
+        // Add new data (don't clear existing data)
+        String fileName = ktmFile.getName();
+        int addedCount = 0;
+
+        for (TimeSeriesData series : seriesList) {
+            // Create display name: "filename.ktm: SeriesName"
+            String originalName = series.getName();
+            String displayName = fileName + ": " + originalName;
+            String uniqueName = getUniqueSeriesName(displayName);
+
+            // Create new series with the display name
+            TimeSeriesData namedSeries = new TimeSeriesData(
+                uniqueName,
+                convertTimestampsToLocalDateTime(series.getTimestamps()),
+                series.getValues()
+            );
+            dataSet.addSeries(namedSeries);
+            addedCount++;
+        }
+
+        currentFileUpdater.accept(ktmFile);
+        titleUpdater.run();
+
+        // Update status with statistics
+        statusUpdater.accept(String.format("Added %d series from Kalix timeseries file (%,d total series, %,d total points)",
+            addedCount, dataSet.getSeriesCount(), dataSet.getTotalPointCount()));
+
+        // Zoom to fit all data (including existing + new)
+        if (zoomToFitAction != null) {
+            zoomToFitAction.run();
+        }
     }
 
     /**
@@ -397,7 +643,7 @@ public class FlowVizDataManager {
             public void dragEnter(DropTargetDragEvent dtde) {
                 if (isDragAcceptable(dtde)) {
                     dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                    statusUpdater.accept("Drop CSV files to load them...");
+                    statusUpdater.accept("Drop CSV or KTM files to load them...");
                 } else {
                     dtde.rejectDrag();
                 }
@@ -436,23 +682,26 @@ public class FlowVizDataManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for CSV files
-                        List<File> csvFiles = files.stream()
-                            .filter(file -> file.getName().toLowerCase().endsWith(".csv"))
+                        // Filter for supported files (CSV and KTM)
+                        List<File> supportedFiles = files.stream()
+                            .filter(file -> {
+                                String name = file.getName().toLowerCase();
+                                return name.endsWith(".csv") || name.endsWith(".ktm");
+                            })
                             .toList();
 
-                        if (csvFiles.isEmpty()) {
-                            statusUpdater.accept("No CSV files found in drop");
+                        if (supportedFiles.isEmpty()) {
+                            statusUpdater.accept("No supported files found in drop");
                             JOptionPane.showMessageDialog(parentFrame,
-                                "Please drop CSV files only.",
+                                "Please drop CSV or KTM files only.",
                                 "Invalid File Type",
                                 JOptionPane.WARNING_MESSAGE);
-                        } else if (csvFiles.size() == 1) {
-                            // Single file - use existing method
-                            loadCsvFile(csvFiles.get(0));
+                        } else if (supportedFiles.size() == 1) {
+                            // Single file - use file-type detection method
+                            loadFile(supportedFiles.get(0));
                         } else {
                             // Multiple files - use batch loading method
-                            loadMultipleCsvFiles(csvFiles.toArray(new File[0]));
+                            loadMultipleFiles(supportedFiles.toArray(new File[0]));
                         }
 
                         dtde.dropComplete(true);

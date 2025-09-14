@@ -49,12 +49,12 @@ public class KalixTimeSeriesWriter {
         List<SeriesMetadata> metadataList = new ArrayList<>();
 
         // Write binary file and collect metadata
-        try (FileOutputStream fos = new FileOutputStream(binaryPath);
-             BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+        try (FileOutputStream fos = new FileOutputStream(binaryPath)) {
+            long currentOffset = 0;
 
             for (int i = 0; i < seriesList.size(); i++) {
                 TimeSeriesData series = seriesList.get(i);
-                long offset = bos.size(); // Current byte position
+                long offset = currentOffset; // Current byte position
 
                 // Determine codec (always use double for now)
                 int codec = CODEC_GORILLA_DOUBLE;
@@ -70,9 +70,12 @@ public class KalixTimeSeriesWriter {
                 byte[] compressed = compressor.compressDouble(gorillaData);
 
                 // Write block: codec(2) + length(4) + data
-                writeUInt16(bos, codec);
-                writeUInt32(bos, compressed.length);
-                bos.write(compressed);
+                writeUInt16(fos, codec);
+                writeUInt32(fos, compressed.length);
+                fos.write(compressed);
+
+                // Update current offset
+                currentOffset += 2 + 4 + compressed.length;
 
                 // Store metadata
                 SeriesMetadata metadata = new SeriesMetadata();

@@ -175,8 +175,9 @@ public class GorillaCompressor {
 
         BitWriter writer = new BitWriter();
 
-        // Write header: timestep and first timestamp/value
+        // Write header: timestep, count, and first timestamp/value
         writer.writeBits(timestep, 64);
+        writer.writeBits(series.size(), 32);
         writer.writeBits(series.get(0).timestamp, 64);
         writer.writeBits(Double.doubleToLongBits(series.get(0).value), 64);
 
@@ -206,8 +207,9 @@ public class GorillaCompressor {
 
         BitWriter writer = new BitWriter();
 
-        // Write header: timestep and first timestamp/value
+        // Write header: timestep, count, and first timestamp/value
         writer.writeBits(timestep, 64);
+        writer.writeBits(series.size(), 32);
         writer.writeBits(series.get(0).timestamp, 64);
         writer.writeBits(Float.floatToIntBits(series.get(0).value) & 0xFFFFFFFFL, 32);
 
@@ -334,10 +336,11 @@ public class GorillaCompressor {
 
         // Read header
         Long timestep = reader.readBits(64);
+        Long count = reader.readBits(32);
         Long firstTimestamp = reader.readBits(64);
         Long firstValueBits = reader.readBits(64);
 
-        if (timestep == null || firstTimestamp == null || firstValueBits == null) {
+        if (timestep == null || count == null || firstTimestamp == null || firstValueBits == null) {
             throw new IOException("Invalid header");
         }
 
@@ -346,10 +349,14 @@ public class GorillaCompressor {
 
         long prevTimestamp = firstTimestamp;
         long prevValueBits = firstValueBits;
-        long prevDelta = timestep;
+        long prevDelta = 0;
 
-        Boolean controlBit;
-        while ((controlBit = reader.readBit()) != null) {
+        // Read remaining data points (count - 1 since we already have the first)
+        for (int i = 1; i < count; i++) {
+            Boolean controlBit = reader.readBit();
+            if (controlBit == null) {
+                throw new IOException("Unexpected end of data");
+            }
             // Decompress timestamp
             long timestamp;
             if (!controlBit) {
@@ -435,10 +442,11 @@ public class GorillaCompressor {
 
         // Read header
         Long timestep = reader.readBits(64);
+        Long count = reader.readBits(32);
         Long firstTimestamp = reader.readBits(64);
         Long firstValueBits = reader.readBits(32);
 
-        if (timestep == null || firstTimestamp == null || firstValueBits == null) {
+        if (timestep == null || count == null || firstTimestamp == null || firstValueBits == null) {
             throw new IOException("Invalid header");
         }
 
@@ -447,10 +455,14 @@ public class GorillaCompressor {
 
         long prevTimestamp = firstTimestamp;
         int prevValueBits = firstValueBits.intValue();
-        long prevDelta = timestep;
+        long prevDelta = 0;
 
-        Boolean controlBit;
-        while ((controlBit = reader.readBit()) != null) {
+        // Read remaining data points (count - 1 since we already have the first)
+        for (int i = 1; i < count; i++) {
+            Boolean controlBit = reader.readBit();
+            if (controlBit == null) {
+                throw new IOException("Unexpected end of data");
+            }
             // Decompress timestamp (same logic as double)
             long timestamp;
             if (!controlBit) {

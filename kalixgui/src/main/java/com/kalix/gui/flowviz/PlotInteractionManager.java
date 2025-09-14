@@ -3,6 +3,7 @@ package com.kalix.gui.flowviz;
 import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.rendering.ViewPort;
 import com.kalix.gui.io.TimeSeriesCsvExporter;
+import com.kalix.gui.io.KalixTimeSeriesWriter;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -442,15 +443,24 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        JMenuItem saveDataItem = new JMenuItem("Save Data...");
-        saveDataItem.addActionListener(e -> saveData());
-        contextMenu.add(saveDataItem);
+        // Create submenu for save options
+        JMenu saveDataMenu = new JMenu("Save Data...");
+
+        JMenuItem saveCsvItem = new JMenuItem("Save as CSV...");
+        saveCsvItem.addActionListener(e -> saveDataCsv());
+        saveDataMenu.add(saveCsvItem);
+
+        JMenuItem saveKalixItem = new JMenuItem("Save as Kalix Format...");
+        saveKalixItem.addActionListener(e -> saveDataKalix());
+        saveDataMenu.add(saveKalixItem);
+
+        contextMenu.add(saveDataMenu);
     }
 
     /**
      * Displays a file save dialog and exports the current dataset to CSV format.
      */
-    private void saveData() {
+    private void saveDataCsv() {
         DataSet dataSet = dataSetSupplier.get();
         if (dataSet == null || dataSet.isEmpty()) {
             JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
@@ -482,6 +492,59 @@ public class PlotInteractionManager {
             } catch (IllegalArgumentException e) {
                 JOptionPane.showMessageDialog(parentComponent,
                     "Invalid data: " + e.getMessage(),
+                    "Save Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    /**
+     * Displays a file save dialog and exports the current dataset to Kalix compressed format.
+     */
+    private void saveDataKalix() {
+        DataSet dataSet = dataSetSupplier.get();
+        if (dataSet == null || dataSet.isEmpty()) {
+            JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Kalix Timeseries Files (*.ktm)", "ktm"));
+        fileChooser.setSelectedFile(new File("timeseries_data.ktm"));
+
+        int result = fileChooser.showSaveDialog(parentComponent);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            String filePath = file.getAbsolutePath();
+
+            // Remove .ktm extension if present to get base path
+            if (filePath.toLowerCase().endsWith(".ktm")) {
+                filePath = filePath.substring(0, filePath.length() - 4);
+            }
+
+            try {
+                // Convert DataSet to List<TimeSeriesData>
+                java.util.List<com.kalix.gui.flowviz.data.TimeSeriesData> seriesList =
+                    new java.util.ArrayList<>();
+
+                for (String seriesName : dataSet.getSeriesNames()) {
+                    com.kalix.gui.flowviz.data.TimeSeriesData series = dataSet.getSeries(seriesName);
+                    if (series != null) {
+                        seriesList.add(series);
+                    }
+                }
+
+                // Write to Kalix format
+                KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
+                writer.writeToFile(filePath, seriesList);
+
+                JOptionPane.showMessageDialog(parentComponent,
+                    "Data saved successfully to " + new File(filePath + ".ktm").getName() + " and " + new File(filePath + ".kts").getName(),
+                    "Save Data",
+                    JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(parentComponent,
+                    "Error saving data: " + e.getMessage(),
                     "Save Error",
                     JOptionPane.ERROR_MESSAGE);
             }
