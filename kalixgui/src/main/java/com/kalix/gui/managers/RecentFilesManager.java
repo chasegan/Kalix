@@ -20,6 +20,7 @@ public class RecentFilesManager {
     private final List<String> recentFiles;
     private final Consumer<String> fileOpenCallback;
     private final Runnable statusUpdateCallback;
+    private JMenu recentFilesMenu;
     
     /**
      * Creates a new RecentFilesManager instance.
@@ -65,42 +66,60 @@ public class RecentFilesManager {
     }
     
     /**
-     * Adds a file to the recent files list.
-     * 
+     * Adds a file to the recent files list and updates the menu immediately.
+     *
      * @param filePath The absolute path of the file to add
      */
     public void addRecentFile(String filePath) {
         // Remove if already exists to avoid duplicates
         recentFiles.remove(filePath);
-        
+
         // Add to front of list
         recentFiles.add(0, filePath);
-        
+
         // Limit size to maximum allowed
         while (recentFiles.size() > AppConstants.MAX_RECENT_FILES) {
             recentFiles.remove(recentFiles.size() - 1);
         }
-        
+
         saveRecentFiles();
+
+        // Update menu immediately
+        updateMenuContents();
     }
     
     /**
-     * Clears all recent files.
+     * Clears all recent files and updates the menu immediately.
      */
     public void clearRecentFiles() {
         recentFiles.clear();
         saveRecentFiles();
+        updateMenuContents();
         statusUpdateCallback.run();
     }
     
     /**
      * Updates the given menu with current recent files.
-     * 
+     *
      * @param recentFilesMenu The menu to update
      */
     public void updateRecentFilesMenu(JMenu recentFilesMenu) {
+        // Store reference to menu for future updates
+        this.recentFilesMenu = recentFilesMenu;
+        updateMenuContents();
+    }
+
+    /**
+     * Updates the menu contents with current recent files.
+     * Uses the stored menu reference if available.
+     */
+    private void updateMenuContents() {
+        if (recentFilesMenu == null) {
+            return;
+        }
+
         recentFilesMenu.removeAll();
-        
+
         if (recentFiles.isEmpty()) {
             JMenuItem emptyItem = new JMenuItem(AppConstants.MENU_NO_RECENT_FILES);
             emptyItem.setEnabled(false);
@@ -111,22 +130,22 @@ public class RecentFilesManager {
                 String filePath = recentFiles.get(i);
                 String fileName = new File(filePath).getName();
                 String displayText = String.format("%d. %s", i + 1, fileName);
-                
+
                 JMenuItem item = new JMenuItem(displayText);
                 item.setToolTipText(filePath);
-                
+
                 // Create action listener for opening this file
                 item.addActionListener(e -> openRecentFile(filePath, recentFilesMenu));
-                
+
                 recentFilesMenu.add(item);
             }
-            
+
             // Add separator and clear option
             recentFilesMenu.addSeparator();
             JMenuItem clearItem = new JMenuItem(AppConstants.MENU_CLEAR_RECENT_FILES);
             clearItem.addActionListener(e -> {
                 clearRecentFiles();
-                updateRecentFilesMenu(recentFilesMenu);
+                updateMenuContents();
             });
             recentFilesMenu.add(clearItem);
         }
@@ -134,9 +153,9 @@ public class RecentFilesManager {
     
     /**
      * Attempts to open a recent file.
-     * 
+     *
      * @param filePath The path of the file to open
-     * @param recentFilesMenu The recent files menu to update if file is missing
+     * @param recentFilesMenu The recent files menu (unused, kept for compatibility)
      */
     private void openRecentFile(String filePath, JMenu recentFilesMenu) {
         File file = new File(filePath);
@@ -146,11 +165,11 @@ public class RecentFilesManager {
             // File no longer exists, remove from recent files
             recentFiles.remove(filePath);
             saveRecentFiles();
-            updateRecentFilesMenu(recentFilesMenu);
-            
+            updateMenuContents();
+
             // Show error dialog
             JOptionPane.showMessageDialog(
-                recentFilesMenu.getParent(),
+                this.recentFilesMenu != null ? this.recentFilesMenu.getParent() : null,
                 AppConstants.ERROR_FILE_NOT_EXISTS + filePath,
                 AppConstants.ERROR_FILE_NOT_FOUND_TITLE,
                 JOptionPane.WARNING_MESSAGE
