@@ -142,12 +142,12 @@ public class RecentFilesManager {
 
             // Add separator and clear option
             recentFilesMenu.addSeparator();
-            JMenuItem clearItem = new JMenuItem(AppConstants.MENU_CLEAR_RECENT_FILES);
-            clearItem.addActionListener(e -> {
-                clearRecentFiles();
-                updateMenuContents();
-            });
-            recentFilesMenu.add(clearItem);
+//            JMenuItem clearItem = new JMenuItem(AppConstants.MENU_CLEAR_RECENT_FILES);
+//            clearItem.addActionListener(e -> {
+//                clearRecentFiles();
+//                updateMenuContents();
+//            });
+//            recentFilesMenu.add(clearItem);
         }
     }
     

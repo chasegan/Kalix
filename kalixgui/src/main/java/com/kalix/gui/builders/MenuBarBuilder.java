@@ -181,7 +181,7 @@ public class MenuBarBuilder {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
-        runMenu.add(createMenuItem("Sessions Window", e -> callbacks.showSessionsWindow()));
+        runMenu.add(createMenuItem("View CLI Sessions", e -> callbacks.showSessionsWindow()));
         return runMenu;
     }
     
@@ -200,6 +200,12 @@ public class MenuBarBuilder {
     private JMenu createAIMenu() {
         JMenu aiMenu = new JMenu("AI");
 
+        // Launch terminal
+        aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
+        aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
+        aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));
+        aiMenu.addSeparator();
+
         // Auto-reload toggle
         JCheckBoxMenuItem autoReloadItem = new JCheckBoxMenuItem("Auto-reload Clean Files", callbacks.isAutoReloadEnabled());
         autoReloadItem.addActionListener(e -> {
@@ -208,9 +214,6 @@ public class MenuBarBuilder {
             callbacks.updateStatus(newState ? "Auto-reload enabled" : "Auto-reload disabled");
         });
         aiMenu.add(autoReloadItem);
-
-        aiMenu.addSeparator();
-        aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
 
         return aiMenu;
     }
