@@ -67,7 +67,7 @@ public class PreferenceKeys {
     /** Default recent files list */
     public static final List<String> DEFAULT_RECENT_FILES = Arrays.asList();
 
-    /** Maximum number of recent files to track */
+    /** Maximum number of recent files to track - unified with AppConstants.Files.MAX_RECENT_FILES */
     public static final int MAX_RECENT_FILES = 10;
 
     // Private constructor to prevent instantiation

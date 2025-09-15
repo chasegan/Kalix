@@ -1,13 +1,19 @@
 package com.kalix.gui;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
-import java.awt.geom.AffineTransform;
 import java.util.HashMap;
 import java.util.Map;
 import com.kalix.gui.model.HydrologicalModel;
@@ -17,6 +23,7 @@ import com.kalix.gui.interaction.MapInteractionManager;
 import com.kalix.gui.interaction.TextCoordinateUpdater;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.themes.NodeTheme;
+import com.kalix.gui.rendering.MapRenderer;
 
 public class MapPanel extends JPanel implements KeyListener {
     private double zoomLevel = 1.0;
@@ -42,14 +49,17 @@ public class MapPanel extends JPanel implements KeyListener {
     
     // Node rendering constants
     private static final int NODE_SIZE = 20; // Constant screen size in pixels
-    
+
     // Model integration
     private HydrologicalModel model = null;
     private NodeTheme nodeTheme = new NodeTheme();
-    
+
     // Interaction management
     private MapInteractionManager interactionManager;
-    
+
+    // Rendering
+    private MapRenderer mapRenderer = new MapRenderer();
+
     // Display settings
     private boolean showGridlines = true;
 
@@ -226,168 +236,17 @@ public class MapPanel extends JPanel implements KeyListener {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2d = (Graphics2D) g.create();
-        
-        // Enable antialiasing for smoother graphics
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        
-        // Apply pan and zoom transformations
-        AffineTransform originalTransform = g2d.getTransform();
-        g2d.translate(panX, panY);
-        g2d.scale(zoomLevel, zoomLevel);
-        
-        // Draw grid and model content
-        if (showGridlines) {
-            drawGrid(g2d);
-        }
-        drawPlaceholderContent(g2d);
-        
-        g2d.setTransform(originalTransform);
-        
-        // Draw nodes in screen space (constant size)
-        drawNodes(g2d);
-        
-        // Draw rectangle selection if active
-        if (isRectangleSelecting && rectangleStartPoint != null && rectangleCurrentPoint != null) {
-            drawSelectionRectangle(g2d);
-        }
-        
-        // Draw zoom level and pan indicators
-        g2d.setColor(Color.GRAY);
-        g2d.drawString(String.format("Zoom: %.1f%%", zoomLevel * 100), 10, getHeight() - 25);
-        g2d.drawString(String.format("Pan: (%.0f, %.0f)", panX, panY), 10, getHeight() - 10);
-        
+
+        // Delegate all rendering to MapRenderer
+        Point selectionStart = isRectangleSelecting ? rectangleStartPoint : null;
+        Point selectionCurrent = isRectangleSelecting ? rectangleCurrentPoint : null;
+
+        mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
+                             showGridlines, model, nodeTheme, selectionStart, selectionCurrent);
+
         g2d.dispose();
     }
 
-    private void drawGrid(Graphics2D g2d) {
-        g2d.setColor(getGridlineColor());
-        g2d.setStroke(new BasicStroke(1));
-        
-        int gridSize = 50;
-        
-        // Calculate the visible world bounds (accounting for pan and zoom transforms)
-        int viewWidth = (int) (getWidth() / zoomLevel);
-        int viewHeight = (int) (getHeight() / zoomLevel);
-        int worldLeft = (int) (-panX / zoomLevel);
-        int worldTop = (int) (-panY / zoomLevel);
-        int worldRight = worldLeft + viewWidth;
-        int worldBottom = worldTop + viewHeight;
-        
-        // Draw vertical lines - aligned to world grid
-        int startX = (worldLeft / gridSize) * gridSize;  // Snap to grid
-        for (int x = startX; x <= worldRight + gridSize; x += gridSize) {
-            g2d.drawLine(x, worldTop - gridSize, x, worldBottom + gridSize);
-        }
-        
-        // Draw horizontal lines - aligned to world grid  
-        int startY = (worldTop / gridSize) * gridSize;  // Snap to grid
-        for (int y = startY; y <= worldBottom + gridSize; y += gridSize) {
-            g2d.drawLine(worldLeft - gridSize, y, worldRight + gridSize, y);
-        }
-        
-    }
-
-    private void drawPlaceholderContent(Graphics2D g2d) {
-        // Placeholder method for future model content
-    }
-    
-    private void drawNodes(Graphics2D g2d) {
-        if (model == null) return;
-        
-        // Save the current transform
-        AffineTransform originalTransform = g2d.getTransform();
-        
-        // Draw each node
-        for (ModelNode node : model.getAllNodes()) {
-            // Get or assign color for this node type
-            Color nodeColor = getColorForNodeType(node.getType());
-            g2d.setColor(nodeColor);
-            
-            // Transform node coordinates to screen space
-            double screenX = node.getX();
-            double screenY = node.getY();
-            
-            // Reset transform to screen space for constant size rendering
-            g2d.setTransform(originalTransform);
-            
-            // Convert world coordinates to screen coordinates
-            double transformedX = screenX * zoomLevel + panX;
-            double transformedY = screenY * zoomLevel + panY;
-            
-            // Draw node as filled circle with constant screen size
-            int nodeRadius = NODE_SIZE / 2;
-            g2d.fillOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
-                        NODE_SIZE, NODE_SIZE);
-            
-            // Draw node border - blue for selected nodes, black for unselected
-            boolean isSelected = model.isNodeSelected(node.getName());
-            g2d.setColor(isSelected ? Color.BLUE : Color.BLACK);
-            g2d.setStroke(isSelected ? new BasicStroke(3.0f) : new BasicStroke(1.0f));
-            g2d.drawOval((int)(transformedX - nodeRadius), (int)(transformedY - nodeRadius), 
-                        NODE_SIZE, NODE_SIZE);
-            
-            // Reset stroke for next node
-            g2d.setStroke(new BasicStroke(1.0f));
-            
-            // Draw node name text below the node
-            drawNodeText(g2d, node.getName(), transformedX, transformedY);
-        }
-        
-        // Restore the original transform
-        g2d.setTransform(originalTransform);
-    }
-    
-    private Color getColorForNodeType(String nodeType) {
-        return nodeTheme.getColorForNodeType(nodeType);
-    }
-    
-    /**
-     * Draws the node name text centered below the node using the current theme's text styling.
-     * @param g2d Graphics context
-     * @param nodeName Name of the node to draw
-     * @param nodeScreenX Screen X coordinate of the node center
-     * @param nodeScreenY Screen Y coordinate of the node center
-     */
-    private void drawNodeText(Graphics2D g2d, String nodeName, double nodeScreenX, double nodeScreenY) {
-        if (nodeName == null || nodeName.trim().isEmpty()) {
-            return;
-        }
-        
-        // Get theme text styling
-        NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
-        
-        // Set text properties from theme
-        Font originalFont = g2d.getFont();
-        Font themeFont = textStyle.createFont();
-        g2d.setFont(themeFont);
-        
-        // Get text metrics for centering
-        FontMetrics fm = g2d.getFontMetrics();
-        int textWidth = fm.stringWidth(nodeName);
-        int textHeight = fm.getHeight();
-        
-        // Calculate text position (centered horizontally, below node using theme offset)
-        double textX = nodeScreenX - (textWidth / 2.0);
-        double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
-        
-        // Draw background with theme colors and alpha
-        Color backgroundColor = textStyle.createBackgroundColorWithAlpha();
-        g2d.setColor(backgroundColor);
-        int bgPadding = 2;
-        g2d.fillRect(
-            (int)(textX - bgPadding), 
-            (int)(textY - fm.getAscent() - bgPadding),
-            textWidth + (bgPadding * 2),
-            textHeight + bgPadding
-        );
-        
-        // Draw the text with theme color
-        g2d.setColor(textStyle.getTextColor());
-        g2d.drawString(nodeName, (int)textX, (int)textY);
-        
-        // Restore original font
-        g2d.setFont(originalFont);
-    }
     
     /**
      * Sets the node color theme and triggers a repaint.
@@ -450,26 +309,6 @@ public class MapPanel extends JPanel implements KeyListener {
         return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= 384;
     }
     
-    /**
-     * Gets the appropriate gridline color based on the current theme.
-     * @return Color for gridlines that provides subtle contrast with the current background
-     */
-    private Color getGridlineColor() {
-        // First check for custom gridline color from theme
-        Color customGridlineColor = UIManager.getColor("MapPanel.gridlineColor");
-        if (customGridlineColor != null) {
-            return customGridlineColor;
-        }
-        
-        // Fallback to original logic
-        if (isLightTheme()) {
-            // Light theme: use light gray gridlines (original behavior)
-            return new Color(240, 240, 240);
-        } else {
-            // Dark theme: use subtle dark gridlines that are visible but not overwhelming
-            return new Color(80, 80, 80);
-        }
-    }
     
     /**
      * Sets whether gridlines should be shown on the map.
@@ -701,38 +540,6 @@ public class MapPanel extends JPanel implements KeyListener {
         // Not used but required by KeyListener interface
     }
     
-    /**
-     * Draws the selection rectangle during rectangle selection.
-     * @param g2d Graphics context
-     */
-    private void drawSelectionRectangle(Graphics2D g2d) {
-        if (rectangleStartPoint == null || rectangleCurrentPoint == null) {
-            return;
-        }
-        
-        // Calculate rectangle bounds
-        int x1 = rectangleStartPoint.x;
-        int y1 = rectangleStartPoint.y;
-        int x2 = rectangleCurrentPoint.x;
-        int y2 = rectangleCurrentPoint.y;
-        
-        int rectX = Math.min(x1, x2);
-        int rectY = Math.min(y1, y2);
-        int rectWidth = Math.abs(x2 - x1);
-        int rectHeight = Math.abs(y2 - y1);
-        
-        // Draw selection rectangle with semi-transparent fill and dashed border
-        g2d.setColor(new Color(0, 120, 255, 50)); // Light blue with transparency
-        g2d.fillRect(rectX, rectY, rectWidth, rectHeight);
-        
-        g2d.setColor(new Color(0, 120, 255, 180)); // Darker blue for border
-        g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 
-                                     10.0f, new float[]{5.0f, 3.0f}, 0.0f)); // Dashed line
-        g2d.drawRect(rectX, rectY, rectWidth, rectHeight);
-        
-        // Reset stroke
-        g2d.setStroke(new BasicStroke(1.0f));
-    }
     
     /**
      * Completes the rectangle selection by selecting all nodes within the rectangle.

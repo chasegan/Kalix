@@ -25,8 +25,8 @@ public final class AppConstants {
     public static final int DEFAULT_SPLIT_PANE_DIVIDER_LOCATION = 600;
     public static final double DEFAULT_SPLIT_PANE_RESIZE_WEIGHT = 0.5;
     
-    // Recent files
-    public static final int MAX_RECENT_FILES = 5;
+    // Recent files (Note: MAX_RECENT_FILES also defined in PreferenceKeys - should be unified)
+    public static final int MAX_RECENT_FILES = 10; // Unified with PreferenceKeys value
     public static final String RECENT_FILE_PREF_PREFIX = "recentFile";
     
     // File types
@@ -47,13 +47,14 @@ public final class AppConstants {
     public static final String DEFAULT_THEME = "Light";
     public static final String DEFAULT_NODE_THEME = "Vibrant";
     
-    // Preferences keys
-    public static final String PREF_THEME = "theme";
-    public static final String PREF_NODE_THEME = "node.theme";
-    public static final String PREF_EDITOR_THEME = "editor.theme";
+    // Preferences keys (DEPRECATED - use PreferenceKeys class for better organization)
+    // TODO: Remove these constants and use PreferenceKeys class throughout codebase
+    @Deprecated public static final String PREF_THEME = "theme";
+    @Deprecated public static final String PREF_NODE_THEME = "node.theme";
+    @Deprecated public static final String PREF_EDITOR_THEME = "editor.theme";
     public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
-    public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
-    public static final String PREF_FLOWVIZ_SHOW_COORDINATES = "flowviz.show.coordinates";
+    @Deprecated public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
+    @Deprecated public static final String PREF_FLOWVIZ_SHOW_COORDINATES = "flowviz.show.coordinates";
     
     
     // Status messages
