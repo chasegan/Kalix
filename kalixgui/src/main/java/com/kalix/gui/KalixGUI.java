@@ -18,6 +18,7 @@ import com.kalix.gui.managers.FileOperationsManager;
 import com.kalix.gui.managers.VersionChecker;
 import com.kalix.gui.managers.TitleBarManager;
 import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.managers.FileWatcherManager;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelChangeEvent;
 import com.kalix.gui.model.ModelChangeListener;
@@ -25,6 +26,7 @@ import com.kalix.gui.preferences.PreferenceManager;
 import com.kalix.gui.preferences.PreferenceKeys;
 import com.kalix.gui.themes.NodeTheme;
 import com.kalix.gui.utils.DialogUtils;
+import com.kalix.gui.utils.TerminalLauncher;
 
 import javax.swing.*;
 import java.awt.*;
@@ -79,6 +81,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private TitleBarManager titleBarManager;
     private ProcessExecutor processExecutor;
     private CliTaskManager cliTaskManager;
+    private FileWatcherManager fileWatcherManager;
     
     // Data model
     private HydrologicalModel hydrologicalModel;
@@ -146,7 +149,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Process executor for CLI operations
         processExecutor = new ProcessExecutor();
-        
+
+        // File watcher manager
+        fileWatcherManager = new FileWatcherManager(this::handleFileReload);
+
         // Initialize data model with change listener
         hydrologicalModel = new HydrologicalModel();
         hydrologicalModel.addChangeListener(this::onModelChanged);
@@ -192,7 +198,12 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             this, textEditor, mapPanel,
             this::updateStatus,
             recentFilesManager::addRecentFile,
-            () -> titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile), // File change callback for title bar updates
+            () -> {
+                // Update title bar
+                titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
+                // Update file watcher
+                fileWatcherManager.watchFile(fileOperations.getCurrentFile());
+            },
             this::updateModelFromText // Model update callback for when files are loaded
         );
         
@@ -502,6 +513,13 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void exitApplication() {
+        // Clean up resources before exiting
+        if (fileWatcherManager != null) {
+            fileWatcherManager.shutdown();
+        }
+        if (processExecutor != null) {
+            processExecutor.shutdown();
+        }
         System.exit(0);
     }
 
@@ -811,7 +829,71 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public boolean isGridlinesVisible() {
         return mapPanel.isShowGridlines();
     }
-    
+
+    @Override
+    public void toggleAutoReload(boolean enabled) {
+        fileWatcherManager.setAutoReloadEnabled(enabled);
+    }
+
+    @Override
+    public boolean isAutoReloadEnabled() {
+        return fileWatcherManager.isAutoReloadEnabled();
+    }
+
+    @Override
+    public void openTerminalHere() {
+        File targetDirectory = null;
+
+        // Get the directory of the currently loaded file
+        File currentFile = fileOperations.getCurrentFile();
+        if (currentFile != null) {
+            targetDirectory = currentFile.getParentFile();
+        }
+
+        try {
+            TerminalLauncher.openTerminalAt(targetDirectory);
+
+            // Show success message
+            String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
+            updateStatus("Terminal opened at: " + dirPath);
+
+        } catch (Exception e) {
+            String message = "Failed to open terminal: " + e.getMessage();
+            updateStatus(message);
+            logger.error("Error opening terminal", e);
+
+            // Show error dialog
+            JOptionPane.showMessageDialog(
+                this,
+                message,
+                "Terminal Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Handles file reload when external changes are detected.
+     * Only reloads if the file is clean (no unsaved changes).
+     *
+     * @param file The file that has changed
+     */
+    private void handleFileReload(File file) {
+        // Only reload if the file is clean (not dirty)
+        if (!textEditor.isDirty()) {
+            try {
+                fileOperations.loadModelFile(file);
+                updateStatus("File reloaded: " + file.getName());
+            } catch (Exception e) {
+                updateStatus("Failed to reload file: " + e.getMessage());
+                logger.error("Error reloading file: {}", file, e);
+            }
+        } else {
+            // File is dirty, don't auto-reload but notify user
+            updateStatus("File changed externally, but has unsaved changes - not reloaded");
+        }
+    }
+
     /**
      * Updates the toolbar with theme-appropriate icon colors.
      * Called when the theme changes.

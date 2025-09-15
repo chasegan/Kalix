@@ -41,6 +41,9 @@ public class PreferenceKeys {
     /** KalixCLI binary path (string, default: "") */
     public static final String CLI_BINARY_PATH = "cli.binaryPath";
 
+    /** Auto-reload clean files when they change externally (boolean, default: false) */
+    public static final String FILE_AUTO_RELOAD = "file.autoReload";
+
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
     // These preferences are machine-specific and handle transient UI state
 

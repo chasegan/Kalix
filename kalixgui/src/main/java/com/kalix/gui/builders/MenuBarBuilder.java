@@ -67,6 +67,11 @@ public class MenuBarBuilder {
         // Appearance menu
         void toggleGridlines(boolean showGridlines);
         boolean isGridlinesVisible();
+        void toggleAutoReload(boolean enabled);
+        boolean isAutoReloadEnabled();
+
+        // System menu
+        void openTerminalHere();
     }
     
     /**
@@ -235,7 +240,16 @@ public class MenuBarBuilder {
             callbacks.updateStatus(newState ? "Gridlines enabled" : "Gridlines disabled");
         });
         appearanceMenu.add(gridlinesItem);
-        
+
+        // Auto-reload toggle
+        JCheckBoxMenuItem autoReloadItem = new JCheckBoxMenuItem("Auto-reload Clean Files", callbacks.isAutoReloadEnabled());
+        autoReloadItem.addActionListener(e -> {
+            boolean newState = autoReloadItem.isSelected();
+            callbacks.toggleAutoReload(newState);
+            callbacks.updateStatus(newState ? "Auto-reload enabled" : "Auto-reload disabled");
+        });
+        appearanceMenu.add(autoReloadItem);
+
         return appearanceMenu;
     }
     
@@ -264,6 +278,8 @@ public class MenuBarBuilder {
      */
     private JMenu createSystemMenu() {
         JMenu systemMenu = new JMenu("System");
+        systemMenu.add(createMenuItem("Launch Terminal", e -> callbacks.openTerminalHere()));
+        systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Locate Preference File", e -> callbacks.locatePreferenceFile()));
         systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Clear App Data...", e -> callbacks.clearAppData()));
