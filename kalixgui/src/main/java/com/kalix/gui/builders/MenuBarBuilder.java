@@ -100,7 +100,7 @@ public class MenuBarBuilder {
         menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
         menuBar.add(createAppearanceMenu(currentTheme, currentNodeTheme));
         menuBar.add(createRunMenu());
-        menuBar.add(createGraphMenu());
+        menuBar.add(createToolsMenu());
         menuBar.add(createSystemMenu());
         menuBar.add(createHelpMenu());
         
@@ -265,12 +265,14 @@ public class MenuBarBuilder {
     }
     
     /**
-     * Creates the Graph menu.
+     * Creates the Tools menu.
      */
-    private JMenu createGraphMenu() {
-        JMenu graphMenu = new JMenu("Graph");
-        graphMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
-        return graphMenu;
+    private JMenu createToolsMenu() {
+        JMenu toolsMenu = new JMenu("Tools");
+        toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
+        toolsMenu.addSeparator();
+        toolsMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
+        return toolsMenu;
     }
     
     /**
@@ -278,8 +280,6 @@ public class MenuBarBuilder {
      */
     private JMenu createSystemMenu() {
         JMenu systemMenu = new JMenu("System");
-        systemMenu.add(createMenuItem("Launch Terminal", e -> callbacks.openTerminalHere()));
-        systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Locate Preference File", e -> callbacks.locatePreferenceFile()));
         systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Clear App Data...", e -> callbacks.clearAppData()));
