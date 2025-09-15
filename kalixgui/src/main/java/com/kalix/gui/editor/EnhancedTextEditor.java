@@ -1,5 +1,8 @@
 package com.kalix.gui.editor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -25,6 +28,7 @@ import org.fife.ui.rtextarea.SearchEngine;
  * - File drag and drop (via FileDropManager)
  */
 public class EnhancedTextEditor extends JPanel {
+    private static final Logger logger = LoggerFactory.getLogger(EnhancedTextEditor.class);
     
     private RSyntaxTextArea textArea;
     private RTextScrollPane scrollPane;
@@ -306,7 +310,7 @@ public class EnhancedTextEditor extends JPanel {
             try {
                 method.accept(listener, e);
             } catch (Exception ex) {
-                System.err.println("Error in document listener: " + ex.getMessage());
+                logger.warn("Error in document listener: {}", ex.getMessage());
             }
         }
     }

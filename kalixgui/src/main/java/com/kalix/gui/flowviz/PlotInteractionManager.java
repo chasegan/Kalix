@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import com.kalix.gui.constants.UIConstants;
 
 /**
  * Manages all plot interaction functionality including mouse handling, zooming,
@@ -31,7 +32,7 @@ import java.util.function.Supplier;
 public class PlotInteractionManager {
 
     // Zoom and pan constants
-    private static final double ZOOM_FACTOR = 1.2;
+    private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
     private static final double MIN_ZOOM = 0.001;
     private static final double MAX_ZOOM = 1000.0;
 

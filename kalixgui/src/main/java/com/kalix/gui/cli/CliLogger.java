@@ -1,5 +1,8 @@
 package com.kalix.gui.cli;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -11,6 +14,7 @@ import java.util.function.Consumer;
  * Provides structured logging with different levels and optional GUI integration.
  */
 public class CliLogger {
+    private static final Logger logger = LoggerFactory.getLogger(CliLogger.class);
     
     public enum LogLevel {
         DEBUG(0, "DEBUG"),
@@ -191,7 +195,7 @@ public class CliLogger {
                 guiLogCallback.accept(formattedMessage);
             } catch (Exception e) {
                 // Don't let GUI callback failures affect logging
-                System.err.println("Error in GUI log callback: " + e.getMessage());
+                logger.warn("Error in GUI log callback: {}", e.getMessage());
             }
         }
     }

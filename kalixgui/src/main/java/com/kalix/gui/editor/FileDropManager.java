@@ -1,5 +1,8 @@
 package com.kalix.gui.editor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
@@ -13,6 +16,7 @@ import java.util.List;
  * Extracted from EnhancedTextEditor to eliminate code duplication and improve maintainability.
  */
 public class FileDropManager {
+    private static final Logger logger = LoggerFactory.getLogger(FileDropManager.class);
     
     public interface FileDropHandler {
         void onFileDropped(File file);
@@ -99,7 +103,7 @@ public class FileDropManager {
                         }
                         dtde.dropComplete(true);
                     } else {
-                        System.out.println("Rejected file: " + fileName + " (only .ini and .toml files are accepted)");
+                        logger.info("Rejected file: {} (only .ini and .toml files are accepted)", fileName);
                         dtde.dropComplete(false);
                     }
                 } else {
@@ -109,7 +113,7 @@ public class FileDropManager {
                 dtde.dropComplete(false);
             }
         } catch (Exception e) {
-            System.err.println("Error handling file drop: " + e.getMessage());
+            logger.error("Error handling file drop: {}", e.getMessage());
             dtde.dropComplete(false);
         }
     }

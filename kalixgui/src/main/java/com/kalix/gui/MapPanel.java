@@ -24,12 +24,14 @@ import com.kalix.gui.interaction.TextCoordinateUpdater;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.themes.NodeTheme;
 import com.kalix.gui.rendering.MapRenderer;
+import com.kalix.gui.constants.UIConstants;
 
 public class MapPanel extends JPanel implements KeyListener {
     private double zoomLevel = 1.0;
-    private static final double ZOOM_FACTOR = 1.2;
-    private static final double MIN_ZOOM = 0.1;
-    private static final double MAX_ZOOM = 5.0;
+    // Use centralized UI constants
+    private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
+    private static final double MIN_ZOOM = UIConstants.Zoom.MIN_ZOOM;
+    private static final double MAX_ZOOM = UIConstants.Zoom.MAX_ZOOM;
     
     // Panning variables
     private double panX = 0.0;
@@ -40,15 +42,15 @@ public class MapPanel extends JPanel implements KeyListener {
     // Click tracking for node navigation
     private Point clickStartPoint = null;
     private String clickedNodeName = null;
-    private static final int CLICK_TOLERANCE = 5; // pixels
+    private static final int CLICK_TOLERANCE = UIConstants.Map.CLICK_TOLERANCE;
     
     // Rectangle selection state
     private boolean isRectangleSelecting = false;
     private Point rectangleStartPoint = null;
     private Point rectangleCurrentPoint = null;
     
-    // Node rendering constants
-    private static final int NODE_SIZE = 20; // Constant screen size in pixels
+    // Node rendering constants (centralized in UIConstants)
+    private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
 
     // Model integration
     private HydrologicalModel model = null;

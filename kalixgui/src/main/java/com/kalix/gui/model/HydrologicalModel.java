@@ -1,5 +1,8 @@
 package com.kalix.gui.model;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -9,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Optimized for thousands of nodes with fast lookup and change tracking.
  */
 public class HydrologicalModel {
+    private static final Logger logger = LoggerFactory.getLogger(HydrologicalModel.class);
     
     // Core data structures optimized for performance
     private final Map<String, ModelNode> nodes;
@@ -355,7 +359,7 @@ public class HydrologicalModel {
                 listener.onModelChanged(event);
             } catch (Exception e) {
                 // Log error but don't break other listeners
-                System.err.println("Error in model change listener: " + e.getMessage());
+                logger.warn("Error in model change listener: {}", e.getMessage());
             }
         }
     }

@@ -1,10 +1,11 @@
 package com.kalix.gui.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Centralized error handling utility for the Kalix GUI application.
@@ -12,7 +13,7 @@ import java.util.logging.Logger;
  */
 public class ErrorHandler {
     
-    private static final Logger logger = Logger.getLogger(ErrorHandler.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(ErrorHandler.class);
     
     /**
      * Handles an exception with logging and user notification.
@@ -24,7 +25,7 @@ public class ErrorHandler {
      */
     public static void handleError(Component parent, Exception exception, String userMessage, String context) {
         // Log the technical details
-        logger.log(Level.SEVERE, "Error in " + context + ": " + exception.getMessage(), exception);
+        logger.error("Error in {}: {}", context, exception.getMessage(), exception);
         
         // Show user-friendly message
         if (SwingUtilities.isEventDispatchThread()) {
@@ -46,7 +47,7 @@ public class ErrorHandler {
     public static void handleError(Component parent, Exception exception, String userMessage, 
                                  String context, Consumer<String> statusUpdater) {
         // Log the technical details
-        logger.log(Level.SEVERE, "Error in " + context + ": " + exception.getMessage(), exception);
+        logger.error("Error in {}: {}", context, exception.getMessage(), exception);
         
         // Update status
         if (statusUpdater != null) {
@@ -68,7 +69,7 @@ public class ErrorHandler {
      * @param context description of the situation
      */
     public static void logWarning(String message, String context) {
-        logger.warning("Warning in " + context + ": " + message);
+        logger.warn("Warning in {}: {}", context, message);
     }
     
     /**
@@ -78,7 +79,7 @@ public class ErrorHandler {
      * @param context description of the operation
      */
     public static void logInfo(String message, String context) {
-        logger.info(context + ": " + message);
+        logger.info("{}: {}", context, message);
     }
     
     /**
@@ -90,7 +91,7 @@ public class ErrorHandler {
      * @param statusUpdater optional callback to update application status
      */
     public static void handleRecoverableError(Exception exception, String context, Consumer<String> statusUpdater) {
-        logger.log(Level.WARNING, "Recoverable error in " + context + ": " + exception.getMessage(), exception);
+        logger.warn("Recoverable error in {}: {}", context, exception.getMessage(), exception);
         
         if (statusUpdater != null) {
             statusUpdater.accept("Warning: " + exception.getMessage());

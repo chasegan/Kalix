@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import com.kalix.gui.constants.UIConstants;
 
 public class PlotPanel extends JPanel {
     
@@ -28,7 +29,7 @@ public class PlotPanel extends JPanel {
     private static final int MARGIN_BOTTOM = 60;
     
     // Zoom and pan state
-    private static final double ZOOM_FACTOR = 1.2;
+    private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
     private static final double MIN_ZOOM = 0.001;
     private static final double MAX_ZOOM = 1000.0;
     

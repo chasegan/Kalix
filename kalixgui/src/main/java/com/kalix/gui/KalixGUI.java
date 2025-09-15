@@ -1,5 +1,8 @@
 package com.kalix.gui;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.cli.ProcessExecutor;
@@ -57,6 +60,8 @@ import java.util.prefs.Preferences;
  * @version 1.0
  */
 public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks {
+    private static final Logger logger = LoggerFactory.getLogger(KalixGUI.class);
+
     // Core UI components
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
@@ -412,7 +417,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 }
             } catch (Exception e) {
                 // Log parsing errors but don't disrupt the UI
-                System.err.println("Error parsing model from text: " + e.getMessage());
+                logger.warn("Error parsing model from text: {}", e.getMessage());
             }
         });
     }
@@ -455,31 +460,55 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // MenuBarCallbacks interface implementation
     //
     
+    /**
+     * Creates a new model by clearing the current content.
+     * This action will prompt the user to save any unsaved changes.
+     */
     @Override
     public void newModel() {
         fileOperations.newModel();
     }
 
+    /**
+     * Opens a model file using a file chooser dialog.
+     * Supported formats include .ini and .toml files.
+     */
     @Override
     public void openModel() {
         fileOperations.openModel();
     }
     
+    /**
+     * Saves the current model to its existing file location.
+     * If no file is associated, prompts for a save location.
+     */
     @Override
     public void saveModel() {
         fileOperations.saveModel();
     }
 
+    /**
+     * Saves the current model to a new file location.
+     * Always prompts the user to choose a save location.
+     */
     @Override
     public void saveAsModel() {
         fileOperations.saveAsModel();
     }
 
+    /**
+     * Exits the application gracefully.
+     * This will terminate the Java Virtual Machine.
+     */
     @Override
     public void exitApplication() {
         System.exit(0);
     }
 
+    /**
+     * Performs an undo operation in the text editor.
+     * Updates the status bar with the result of the operation.
+     */
     @Override
     public void undoAction() {
         if (textEditor.canUndo()) {
@@ -490,6 +519,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
     }
 
+    /**
+     * Performs a redo operation in the text editor.
+     * Updates the status bar with the result of the operation.
+     */
     @Override
     public void redoAction() {
         if (textEditor.canRedo()) {
@@ -775,7 +808,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
-    public boolean getGridlinesVisible() {
+    public boolean isGridlinesVisible() {
         return mapPanel.isShowGridlines();
     }
     
@@ -816,8 +849,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 tempThemeManager.initializeLookAndFeel();
                 
             } catch (UnsupportedLookAndFeelException e) {
-                System.err.println(AppConstants.ERROR_FAILED_FLATLAF_INIT + e.getMessage());
-                e.printStackTrace();
+                logger.error("Failed to initialize FlatLaf look and feel: {}", e.getMessage(), e);
             }
             
             // Create the main application window

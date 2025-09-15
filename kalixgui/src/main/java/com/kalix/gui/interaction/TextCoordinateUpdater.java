@@ -1,5 +1,8 @@
 package com.kalix.gui.interaction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.kalix.gui.editor.EnhancedTextEditor;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
@@ -15,6 +18,7 @@ import javax.swing.undo.CompoundEdit;
  * Uses regex-based coordinate replacement to preserve INI formatting and comments.
  */
 public class TextCoordinateUpdater {
+    private static final Logger logger = LoggerFactory.getLogger(TextCoordinateUpdater.class);
     
     private final EnhancedTextEditor textEditor;
     private boolean updatingFromModel = false; // Prevent infinite update loops
@@ -73,16 +77,16 @@ public class TextCoordinateUpdater {
                 doc.remove(coordStart, coordEnd - coordStart);
                 doc.insertString(coordStart, coordReplacement, null);
                 
-                System.out.println("TextCoordinateUpdater: Updated " + nodeName + " to (" + formattedX + ", " + formattedY + ")");
+                logger.debug("Updated {} to ({}, {})", nodeName, formattedX, formattedY);
             } else {
-                System.err.println("TextCoordinateUpdater: Could not find node section for: " + nodeName);
+                logger.warn("Could not find node section for: {}", nodeName);
             }
             
         } catch (BadLocationException e) {
-            System.err.println("TextCoordinateUpdater: Bad location error updating coordinates for " + nodeName + ": " + e.getMessage());
+            logger.error("Bad location error updating coordinates for {}: {}", nodeName, e.getMessage());
             e.printStackTrace();
         } catch (Exception e) {
-            System.err.println("TextCoordinateUpdater: Error updating coordinates for " + nodeName + ": " + e.getMessage());
+            logger.error("Error updating coordinates for {}: {}", nodeName, e.getMessage());
             e.printStackTrace();
         } finally {
             // Clear the flag
@@ -133,15 +137,15 @@ public class TextCoordinateUpdater {
                 // Successfully scrolled to node
                 return true;
             } else {
-                System.err.println("TextCoordinateUpdater: Could not find node section to scroll to: " + nodeName);
+                logger.warn("Could not find node section to scroll to: {}", nodeName);
                 return false;
             }
             
         } catch (BadLocationException e) {
-            System.err.println("TextCoordinateUpdater: Bad location error scrolling to node " + nodeName + ": " + e.getMessage());
+            logger.error("Bad location error scrolling to node {}: {}", nodeName, e.getMessage());
             return false;
         } catch (Exception e) {
-            System.err.println("TextCoordinateUpdater: Error scrolling to node " + nodeName + ": " + e.getMessage());
+            logger.error("Error scrolling to node {}: {}", nodeName, e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -185,18 +189,18 @@ public class TextCoordinateUpdater {
             // Delete each section using document operations
             for (NodeSection section : sectionsToDelete) {
                 doc.remove(section.start, section.length);
-                System.out.println("TextCoordinateUpdater: Removed section for node: " + section.nodeName);
+                logger.debug("Removed section for node: {}", section.nodeName);
             }
             
             if (!sectionsToDelete.isEmpty()) {
-                System.out.println("TextCoordinateUpdater: Deleted " + sectionsToDelete.size() + " node sections from text");
+                logger.debug("Deleted {} node sections from text", sectionsToDelete.size());
             }
             
         } catch (BadLocationException e) {
-            System.err.println("TextCoordinateUpdater: Bad location error deleting nodes from text: " + e.getMessage());
+            logger.error("Bad location error deleting nodes from text: {}", e.getMessage());
             e.printStackTrace();
         } catch (Exception e) {
-            System.err.println("TextCoordinateUpdater: Error deleting nodes from text: " + e.getMessage());
+            logger.error("Error deleting nodes from text: {}", e.getMessage());
             e.printStackTrace();
         } finally {
             // Clear the flag
@@ -240,7 +244,7 @@ public class TextCoordinateUpdater {
         if (matcher.find()) {
             return new NodeSection(nodeName, matcher.start(), matcher.end() - matcher.start());
         } else {
-            System.err.println("TextCoordinateUpdater: Could not find section for node: " + nodeName);
+            logger.warn("Could not find section for node: {}", nodeName);
             return null;
         }
     }

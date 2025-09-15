@@ -1,5 +1,8 @@
 package com.kalix.gui.model;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -12,6 +15,7 @@ import java.util.regex.Pattern;
  * Focused on extracting nodes and links for visualization purposes.
  */
 public class ModelParser {
+    private static final Logger logger = LoggerFactory.getLogger(ModelParser.class);
 
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
     private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+)$");
@@ -87,7 +91,7 @@ public class ModelParser {
 
         } catch (Exception e) {
             // For now, return partial results on parse errors
-            System.err.println("Error parsing model: " + e.getMessage());
+            logger.error("Error parsing model: {}", e.getMessage());
         }
 
         return new ParseResult(nodes, links);

@@ -31,9 +31,7 @@ public class FlowVizWindow extends JFrame {
     private DataPanel dataPanel;
     private JLabel statusLabel;
     private JSplitPane splitPane;
-    private boolean dataVisible = true;
-    private boolean autoYMode = true;
-    private boolean precision64 = true; // Default to 64-bit precision
+    // State variables have been moved to FlowVizActionManager
     
     // Data management
     private DataSet dataSet;
@@ -42,6 +40,7 @@ public class FlowVizWindow extends JFrame {
     // Managers
     private FlowVizMenuManager menuManager;
     private FlowVizDataManager dataManager;
+    private FlowVizActionManager actionManager;
     
     public FlowVizWindow() {
         windowCounter++;
@@ -66,9 +65,10 @@ public class FlowVizWindow extends JFrame {
 
         initializeComponents();
         setupLayout();
-        setupMenuBar();
         setupDataModel();
         setupDataManager();
+        setupActionManager();
+        setupMenuBar();
         loadPreferences();
 
         setVisible(true);
@@ -76,8 +76,9 @@ public class FlowVizWindow extends JFrame {
     
     private void initializeComponents() {
         plotPanel = new PlotPanel();
-        plotPanel.setAutoYMode(autoYMode);  // Initialize Auto-Y mode
-        plotPanel.setPrecision64Supplier(() -> precision64);  // Set precision supplier for export
+        // Auto-Y mode and precision will be initialized by action manager
+        plotPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
+        plotPanel.setPrecision64Supplier(() -> actionManager != null ? actionManager.isPrecision64() : true);
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
         
@@ -112,31 +113,31 @@ public class FlowVizWindow extends JFrame {
     }
     
     private void setupMenuBar() {
-        // Setup action callbacks
+        // Setup action callbacks (delegated to action manager)
         menuManager.setupActionCallbacks(
-            this::newSession,
-            this::openCsvFile,
-            this::exportPlot,
-            this::toggleData,
-            this::toggleCoordinateDisplay,
-            this::zoomIn,
-            this::zoomOut,
-            this::zoomToFit,
-            this::resetView,
-            this::toggleAutoYMode,
-            this::showStatistics,
-            this::showDataInfo,
-            this::showAbout,
-            this::showShortcuts,
-            this::togglePrecision64
+            actionManager::newSession,
+            actionManager::openCsvFile,
+            actionManager::exportPlot,
+            actionManager::toggleData,
+            actionManager::toggleCoordinateDisplay,
+            actionManager::zoomIn,
+            actionManager::zoomOut,
+            actionManager::zoomToFit,
+            actionManager::resetView,
+            actionManager::toggleAutoYMode,
+            actionManager::showStatistics,
+            actionManager::showDataInfo,
+            actionManager::showAbout,
+            actionManager::showShortcuts,
+            actionManager::togglePrecision64
         );
 
-        // Setup state suppliers
+        // Setup state suppliers (delegated to action manager)
         menuManager.setupStateSuppliers(
-            () -> dataVisible,
-            () -> autoYMode,
+            actionManager::isDataVisible,
+            actionManager::isAutoYMode,
             () -> plotPanel.isShowCoordinates(),
-            () -> precision64
+            actionManager::isPrecision64
         );
 
         // Create and set the menu bar
@@ -262,138 +263,29 @@ public class FlowVizWindow extends JFrame {
             this::updateStatus,
             file -> currentFile = file,
             this::updateTitle,
-            this::zoomToFit
+            () -> actionManager.zoomToFit()
         );
         dataManager.setupDragAndDrop();
     }
 
-    // Menu action methods
-    private void newSession() {
-        // Clear all existing data
-        dataManager.clearAllData();
-        dataPanel.clearSeries();
-        currentFile = null;
-        updateTitle();
-        updateStatus("Started new session - all data cleared");
-    }
-    
-    private void openCsvFile() {
-        dataManager.openCsvFiles();
-    }
-    
-    
-    
-    
-    
-    
-    private void exportPlot() {
-        updateStatus("Export plot - Not yet implemented");
-    }
-    
-    private void toggleData() {
-        dataVisible = !dataVisible;
-        if (dataVisible) {
-            splitPane.setLeftComponent(dataPanel);
-            splitPane.setDividerLocation(250);
-        } else {
-            splitPane.setLeftComponent(null);
-            splitPane.setDividerLocation(0);
-        }
-        menuManager.updateMenuStates();
-        updateStatus("Data panel " + (dataVisible ? "shown" : "hidden"));
-    }
-    
-    private void zoomIn() {
-        plotPanel.zoomIn();
-        updateStatus("Zoomed in");
-    }
-    
-    private void zoomOut() {
-        plotPanel.zoomOut();
-        updateStatus("Zoomed out");
-    }
-    
-    private void zoomToFit() {
-        plotPanel.zoomToFit();
-        updateStatus("Zoomed to fit data");
-    }
-    
-    private void toggleAutoYMode() {
-        autoYMode = !autoYMode;
-        plotPanel.setAutoYMode(autoYMode);
-
-        // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYMode);
-
-        menuManager.updateMenuStates();
-        updateStatus(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
+    private void setupActionManager() {
+        // Create action manager with callbacks for parent communication
+        actionManager = new FlowVizActionManager(
+            plotPanel,
+            dataPanel,
+            splitPane,
+            menuManager,
+            dataManager,
+            this::updateStatus,
+            this::updateTitle,
+            file -> currentFile = file
+        );
     }
 
-    private void toggleCoordinateDisplay() {
-        boolean currentState = plotPanel.isShowCoordinates();
-        boolean newState = !currentState;
-        plotPanel.setShowCoordinates(newState);
-
-        // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, newState);
-
-        updateStatus("Coordinate display " + (newState ? "enabled" : "disabled"));
-    }
-
-    private void togglePrecision64() {
-        precision64 = !precision64;
-
-        // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64);
-
-        menuManager.updateMenuStates();
-        updateStatus(precision64 ? "64-bit precision enabled" : "32-bit precision enabled");
-    }
-
-    private void resetView() {
-        plotPanel.resetView();
-        updateStatus("View reset");
-    }
+    // Action methods have been moved to FlowVizActionManager
     
-    private void showStatistics() {
-        updateStatus("Statistics panel - Not yet implemented");
-    }
     
-    private void showDataInfo() {
-        updateStatus("Data information - Not yet implemented");
-    }
-    
-    private void showAbout() {
-        JOptionPane.showMessageDialog(this,
-            "FlowViz - Time Series Visualization Tool\n" +
-            "Version 1.0\n\n" +
-            "High-performance visualization for large datasets\n" +
-            "Part of the Kalix Hydrologic Modeling Platform",
-            "About FlowViz",
-            JOptionPane.INFORMATION_MESSAGE);
-    }
-    
-    private void showShortcuts() {
-        JOptionPane.showMessageDialog(this,
-            "FlowViz Keyboard & Mouse Shortcuts:\n\n" +
-            "Ctrl+N - New session (clear all data)\n" +
-            "Ctrl+O - Add CSV file to current session\n" +
-            "Ctrl+W - Close window\n" +
-            "L - Toggle data panel\n" +
-            "+ - Zoom in\n" +
-            "- - Zoom out\n" +
-            "Mouse wheel - Zoom at cursor\n" +
-            "Mouse drag - Pan view\n" +
-            "Double-click plot - Reset zoom to fit data\n\n" +
-            "Data Reordering:\n" +
-            "Click data item - Select item\n" +
-            "Cmd+↑/Ctrl+↑ - Move selected item up (toward background)\n" +
-            "Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)\n\n" +
-            "File Loading:\n" +
-            "Drag & drop CSV files onto window - Load multiple files at once",
-            "Keyboard & Mouse Shortcuts",
-            JOptionPane.INFORMATION_MESSAGE);
-    }
+
     
     
     private void updateStatus(String message) {
@@ -406,16 +298,9 @@ public class FlowVizWindow extends JFrame {
     private void loadPreferences() {
         // Load coordinate display preference (default: false)
         boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
-
-        // Apply the setting to the plot panel
         plotPanel.setShowCoordinates(showCoordinates);
 
-        // Load precision preference (default: true for 64-bit)
-        precision64 = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true);
-
-        // Load auto-Y mode preference (default: true)
-        autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
-        plotPanel.setAutoYMode(autoYMode);
+        // Other preferences are loaded by the action manager
 
         // Load menu preferences
         menuManager.loadMenuPreferences();
@@ -433,7 +318,7 @@ public class FlowVizWindow extends JFrame {
      * @return true if 64-bit precision is enabled, false for 32-bit
      */
     public boolean isPrecision64() {
-        return precision64;
+        return actionManager != null ? actionManager.isPrecision64() : true;
     }
     
     public static List<FlowVizWindow> getOpenWindows() {

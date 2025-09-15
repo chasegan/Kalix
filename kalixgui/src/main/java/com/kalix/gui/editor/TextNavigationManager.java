@@ -1,5 +1,7 @@
 package com.kalix.gui.editor;
 
+import com.kalix.gui.utils.ErrorHandler;
+
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
@@ -99,7 +101,8 @@ public class TextNavigationManager {
             textComponent.requestFocusInWindow();
             
         } catch (Exception e) {
-            // Fallback - just set caret to start
+            // Log the error and provide fallback behavior
+            ErrorHandler.logWarning("Failed to navigate to line " + lineNumber + ", using fallback position", "text navigation");
             textComponent.setCaretPosition(0);
         }
     }
@@ -141,6 +144,7 @@ public class TextNavigationManager {
             }
             return lines;
         } catch (Exception e) {
+            ErrorHandler.logWarning("Failed to get current line number", "text navigation");
             return 1;
         }
     }

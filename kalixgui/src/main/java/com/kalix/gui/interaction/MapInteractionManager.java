@@ -1,5 +1,8 @@
 package com.kalix.gui.interaction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.kalix.gui.MapPanel;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelNode;
@@ -16,6 +19,7 @@ import java.util.Set;
  * and synchronizing changes back to the text editor.
  */
 public class MapInteractionManager {
+    private static final Logger logger = LoggerFactory.getLogger(MapInteractionManager.class);
     
     private final MapPanel mapPanel;
     private final HydrologicalModel model;
@@ -204,7 +208,7 @@ public class MapInteractionManager {
             return; // Nothing to delete
         }
         
-        System.out.println("MapInteractionManager: Deleting " + nodesToDelete.size() + " selected nodes");
+        logger.debug("Deleting {} selected nodes", nodesToDelete.size());
         
         // Delete from the data model first
         model.deleteSelectedNodes();
@@ -214,6 +218,6 @@ public class MapInteractionManager {
             textUpdater.deleteNodesFromText(nodesToDelete);
         }
         
-        System.out.println("MapInteractionManager: Node deletion completed");
+        logger.debug("Node deletion completed");
     }
 }

@@ -6,6 +6,7 @@ import java.awt.geom.AffineTransform;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelNode;
 import com.kalix.gui.themes.NodeTheme;
+import com.kalix.gui.constants.UIConstants;
 
 /**
  * Dedicated renderer class for map visualization in the KalixGUI application.
@@ -25,19 +26,21 @@ import com.kalix.gui.themes.NodeTheme;
  */
 public class MapRenderer {
 
-    // Rendering constants
-    private static final int GRID_SIZE = 50;
-    private static final int NODE_SIZE = 20; // Constant screen size in pixels
-    private static final int TEXT_BACKGROUND_PADDING = 2;
+    // Rendering constants (centralized in UIConstants)
+    private static final int GRID_SIZE = UIConstants.Map.GRID_SIZE;
+    private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
+    private static final int NODE_RADIUS = UIConstants.Map.NODE_RADIUS;
+    private static final int TEXT_BACKGROUND_PADDING = UIConstants.Text.BACKGROUND_PADDING;
 
-    // Selection rectangle styling
-    private static final Color SELECTION_FILL_COLOR = new Color(0, 120, 255, 50);
-    private static final Color SELECTION_BORDER_COLOR = new Color(0, 120, 255, 180);
-    private static final float[] SELECTION_DASH_PATTERN = {5.0f, 3.0f};
+    // Selection rectangle styling (centralized in UIConstants)
+    private static final Color SELECTION_FILL_COLOR = UIConstants.Selection.RECTANGLE_FILL;
+    private static final Color SELECTION_BORDER_COLOR = UIConstants.Selection.RECTANGLE_BORDER;
+    private static final float[] SELECTION_DASH_PATTERN = UIConstants.Selection.RECTANGLE_DASH_PATTERN;
+    private static final float SELECTION_DASH_MITER_LIMIT = UIConstants.Selection.RECTANGLE_DASH_MITER_LIMIT;
 
     // Debug info styling
     private static final Color DEBUG_TEXT_COLOR = Color.GRAY;
-    private static final int DEBUG_TEXT_MARGIN = 10;
+    private static final int DEBUG_TEXT_MARGIN = UIConstants.Text.DEBUG_MARGIN;
 
     /**
      * Renders the complete map view including grid, nodes, selection, and debug info.
@@ -191,14 +194,14 @@ public class MapRenderer {
         g2d.setTransform(originalTransform);
 
         // Render node circle
-        int nodeRadius = NODE_SIZE / 2;
+        int nodeRadius = NODE_RADIUS;
         g2d.fillOval((int)(screenX - nodeRadius), (int)(screenY - nodeRadius),
                     NODE_SIZE, NODE_SIZE);
 
         // Render node border with selection highlighting
         boolean isSelected = model.isNodeSelected(node.getName());
-        g2d.setColor(isSelected ? Color.BLUE : Color.BLACK);
-        g2d.setStroke(isSelected ? new BasicStroke(3.0f) : new BasicStroke(1.0f));
+        g2d.setColor(isSelected ? UIConstants.Selection.NODE_SELECTED_BORDER : UIConstants.Selection.NODE_UNSELECTED_BORDER);
+        g2d.setStroke(isSelected ? new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH) : new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH));
         g2d.drawOval((int)(screenX - nodeRadius), (int)(screenY - nodeRadius),
                     NODE_SIZE, NODE_SIZE);
 
@@ -286,7 +289,7 @@ public class MapRenderer {
         // Render dashed border
         g2d.setColor(SELECTION_BORDER_COLOR);
         g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
-                                     10.0f, SELECTION_DASH_PATTERN, 0.0f));
+                                     SELECTION_DASH_MITER_LIMIT, SELECTION_DASH_PATTERN, 0.0f));
         g2d.drawRect(rectX, rectY, rectWidth, rectHeight);
 
         // Reset stroke
@@ -327,9 +330,9 @@ public class MapRenderer {
 
         // Fallback based on theme brightness
         if (isLightTheme()) {
-            return new Color(240, 240, 240); // Light gray for light themes
+            return UIConstants.Theme.LIGHT_GRID_COLOR;
         } else {
-            return new Color(80, 80, 80); // Dark gray for dark themes
+            return UIConstants.Theme.DARK_GRID_COLOR;
         }
     }
 
@@ -343,7 +346,7 @@ public class MapRenderer {
         if (bg == null) {
             return true; // Default to light theme
         }
-        // Consider theme light if the sum of RGB values is >= 384 (128 * 3)
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= 384;
+        // Consider theme light if the sum of RGB values exceeds threshold
+        return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= UIConstants.Theme.LIGHT_THEME_RGB_THRESHOLD;
     }
 }

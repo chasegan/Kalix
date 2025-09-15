@@ -66,7 +66,7 @@ public class MenuBarBuilder {
         
         // Appearance menu
         void toggleGridlines(boolean showGridlines);
-        boolean getGridlinesVisible();
+        boolean isGridlinesVisible();
     }
     
     /**
@@ -228,7 +228,7 @@ public class MenuBarBuilder {
         appearanceMenu.addSeparator();
         
         // Gridlines toggle
-        JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Gridlines", callbacks.getGridlinesVisible());
+        JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Gridlines", callbacks.isGridlinesVisible());
         gridlinesItem.addActionListener(e -> {
             boolean newState = gridlinesItem.isSelected();
             callbacks.toggleGridlines(newState);

@@ -14,6 +14,10 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.15.2")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
     implementation("org.ini4j:ini4j:0.5.4")
+
+    // Logging framework
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    implementation("ch.qos.logback:logback-classic:1.4.11")
     
     // FlatLaf modern look and feel
     implementation("com.formdev:flatlaf:3.2.5")

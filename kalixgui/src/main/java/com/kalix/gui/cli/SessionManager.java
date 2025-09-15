@@ -1,5 +1,8 @@
 package com.kalix.gui.cli;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -16,6 +19,7 @@ import java.util.function.Consumer;
  * Handles both long-running model sessions and short-lived command executions.
  */
 public class SessionManager {
+    private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
     
     private static final AtomicLong SESSION_COUNTER = new AtomicLong(0);
     
@@ -554,7 +558,7 @@ public class SessionManager {
                 eventCallback.accept(new SessionEvent(sessionId, oldState, newState, message));
             } catch (Exception e) {
                 // Don't let callback exceptions break session management
-                System.err.println("Error in session event callback: " + e.getMessage());
+                logger.warn("Error in session event callback: {}", e.getMessage());
             }
         }
     }
@@ -568,7 +572,7 @@ public class SessionManager {
                 statusUpdater.accept(message);
             } catch (Exception e) {
                 // Don't let callback exceptions break session management
-                System.err.println("Error in status update callback: " + e.getMessage());
+                logger.warn("Error in status update callback: {}", e.getMessage());
             }
         }
     }
@@ -622,7 +626,7 @@ public class SessionManager {
             try {
                 session.getProcess().close();
             } catch (Exception e) {
-                System.err.println("Error closing session " + session.getSessionId() + ": " + e.getMessage());
+                logger.error("Error closing session {}: {}", session.getSessionId(), e.getMessage());
             }
         });
         
