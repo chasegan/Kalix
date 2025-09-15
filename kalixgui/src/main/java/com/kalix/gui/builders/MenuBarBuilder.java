@@ -45,8 +45,6 @@ public class MenuBarBuilder {
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
-        void locatePreferenceFile();
-        void clearAppData();
         void updateStatus(String message);
         
         // New toolbar-specific actions
@@ -98,10 +96,9 @@ public class MenuBarBuilder {
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
-        menuBar.add(createAppearanceMenu(currentTheme, currentNodeTheme));
         menuBar.add(createRunMenu());
         menuBar.add(createToolsMenu());
-        menuBar.add(createSystemMenu());
+        menuBar.add(createAIMenu());
         menuBar.add(createHelpMenu());
         
         return menuBar;
@@ -176,83 +173,7 @@ public class MenuBarBuilder {
         
         return viewMenu;
     }
-    
-    /**
-     * Creates the theme submenu.
-     */
-    private JMenu createThemeMenu(String currentTheme) {
-        JMenu themeMenu = new JMenu("Theme");
-        ButtonGroup themeGroup = new ButtonGroup();
-        
-        for (String theme : AppConstants.AVAILABLE_THEMES) {
-            JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(theme, theme.equals(currentTheme));
-            themeItem.addActionListener(e -> {
-                String statusMessage = callbacks.switchTheme(theme);
-                callbacks.updateStatus(statusMessage);
-            });
-            themeGroup.add(themeItem);
-            themeMenu.add(themeItem);
-        }
-        
-        return themeMenu;
-    }
-    
-    /**
-     * Creates the node theme submenu.
-     */
-    private JMenu createNodeThemeMenu(NodeTheme.Theme currentNodeTheme) {
-        JMenu nodeThemeMenu = new JMenu("Node Theme");
-        ButtonGroup nodeThemeGroup = new ButtonGroup();
-        
-        for (NodeTheme.Theme theme : NodeTheme.getAllThemes()) {
-            JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(theme.getDisplayName(), theme.equals(currentNodeTheme));
-            themeItem.addActionListener(e -> {
-                callbacks.setNodeTheme(theme);
-                callbacks.updateStatus("Node theme changed to " + theme.getDisplayName());
-            });
-            nodeThemeGroup.add(themeItem);
-            nodeThemeMenu.add(themeItem);
-        }
-        
-        return nodeThemeMenu;
-    }
-    
-    /**
-     * Creates the Appearance menu.
-     */
-    private JMenu createAppearanceMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
-        JMenu appearanceMenu = new JMenu("Appearance");
-        
-        // Theme submenus
-        JMenu themeMenu = createThemeMenu(currentTheme);
-        appearanceMenu.add(themeMenu);
-        
-        JMenu nodeThemeMenu = createNodeThemeMenu(currentNodeTheme);
-        appearanceMenu.add(nodeThemeMenu);
-        
-        appearanceMenu.addSeparator();
-        
-        // Gridlines toggle
-        JCheckBoxMenuItem gridlinesItem = new JCheckBoxMenuItem("Gridlines", callbacks.isGridlinesVisible());
-        gridlinesItem.addActionListener(e -> {
-            boolean newState = gridlinesItem.isSelected();
-            callbacks.toggleGridlines(newState);
-            callbacks.updateStatus(newState ? "Gridlines enabled" : "Gridlines disabled");
-        });
-        appearanceMenu.add(gridlinesItem);
 
-        // Auto-reload toggle
-        JCheckBoxMenuItem autoReloadItem = new JCheckBoxMenuItem("Auto-reload Clean Files", callbacks.isAutoReloadEnabled());
-        autoReloadItem.addActionListener(e -> {
-            boolean newState = autoReloadItem.isSelected();
-            callbacks.toggleAutoReload(newState);
-            callbacks.updateStatus(newState ? "Auto-reload enabled" : "Auto-reload disabled");
-        });
-        appearanceMenu.add(autoReloadItem);
-
-        return appearanceMenu;
-    }
-    
     /**
      * Creates the Run menu.
      */
@@ -265,26 +186,35 @@ public class MenuBarBuilder {
     }
     
     /**
-     * Creates the Tools menu.
+     * Creates the Data Tools menu.
      */
     private JMenu createToolsMenu() {
-        JMenu toolsMenu = new JMenu("Tools");
+        JMenu toolsMenu = new JMenu("Data Tools");
         toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
-        toolsMenu.addSeparator();
-        toolsMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
         return toolsMenu;
     }
-    
+
     /**
-     * Creates the System menu.
+     * Creates the AI menu.
      */
-    private JMenu createSystemMenu() {
-        JMenu systemMenu = new JMenu("System");
-        systemMenu.add(createMenuItem("Locate Preference File", e -> callbacks.locatePreferenceFile()));
-        systemMenu.addSeparator();
-        systemMenu.add(createMenuItem("Clear App Data...", e -> callbacks.clearAppData()));
-        return systemMenu;
+    private JMenu createAIMenu() {
+        JMenu aiMenu = new JMenu("AI");
+
+        // Auto-reload toggle
+        JCheckBoxMenuItem autoReloadItem = new JCheckBoxMenuItem("Auto-reload Clean Files", callbacks.isAutoReloadEnabled());
+        autoReloadItem.addActionListener(e -> {
+            boolean newState = autoReloadItem.isSelected();
+            callbacks.toggleAutoReload(newState);
+            callbacks.updateStatus(newState ? "Auto-reload enabled" : "Auto-reload disabled");
+        });
+        aiMenu.add(autoReloadItem);
+
+        aiMenu.addSeparator();
+        aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
+
+        return aiMenu;
     }
+
     
     /**
      * Creates the Help menu.

@@ -296,9 +296,16 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         MenuBarBuilder menuBuilder = new MenuBarBuilder(this, textEditor);
         JMenuBar menuBar = menuBuilder.buildMenuBar(themeManager.getCurrentTheme(), mapPanel.getCurrentNodeTheme());
         setJMenuBar(menuBar);
-        
+
         // Update recent files menu
         recentFilesManager.updateRecentFilesMenu(menuBuilder.getRecentFilesMenu());
+    }
+
+    /**
+     * Updates the menu bar to reflect current state changes.
+     */
+    private void updateMenuBar() {
+        setupMenuBar();
     }
     
     /**
@@ -629,9 +636,48 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showPreferences() {
-        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor);
+        // Create callback to handle preference changes
+        PreferencesDialog.PreferenceChangeCallback callback = new PreferencesDialog.PreferenceChangeCallback() {
+            @Override
+            public void onAutoReloadChanged(boolean enabled) {
+                // Use the existing method to properly update file watching
+                toggleAutoReload(enabled);
+
+                // Update menu bar to reflect the change
+                updateMenuBar();
+            }
+
+            @Override
+            public void onFlowVizPreferencesChanged() {
+                // Update all open FlowViz windows with new preferences
+                for (com.kalix.gui.flowviz.FlowVizWindow window : com.kalix.gui.flowviz.FlowVizWindow.getOpenWindows()) {
+                    window.reloadPreferences();
+                }
+            }
+
+            @Override
+            public void onMapPreferencesChanged() {
+                // Update map display with new preferences
+                boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
+                toggleGridlines(showGridlines);
+
+                // Update node theme
+                String nodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
+                com.kalix.gui.themes.NodeTheme.Theme nodeTheme = com.kalix.gui.themes.NodeTheme.themeFromString(nodeThemeName);
+                setNodeTheme(nodeTheme);
+            }
+
+            @Override
+            public void onSystemActionRequested(String action) {
+                if ("clearAppData".equals(action)) {
+                    clearAppData();
+                }
+            }
+        };
+
+        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, callback);
         boolean preferencesChanged = preferencesDialog.showDialog();
-        
+
         if (preferencesChanged) {
             updateStatus("Preferences updated");
         }
@@ -649,7 +695,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
     
-    @Override
     public void clearAppData() {
         // Show confirmation dialog
         int result = JOptionPane.showConfirmDialog(
@@ -712,7 +757,6 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
     }
 
-    @Override
     public void locatePreferenceFile() {
         try {
             String prefsPath = PreferenceManager.getPreferenceFilePath();

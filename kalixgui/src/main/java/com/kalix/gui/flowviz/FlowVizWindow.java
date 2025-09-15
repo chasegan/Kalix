@@ -309,6 +309,19 @@ public class FlowVizWindow extends JFrame {
         menuManager.updateMenuStates();
     }
 
+    /**
+     * Reloads all preferences and updates the UI accordingly.
+     * This method is called when preferences change externally.
+     */
+    public void reloadPreferences() {
+        loadPreferences();
+
+        // Also reload action manager preferences
+        if (actionManager != null) {
+            actionManager.reloadPreferences();
+        }
+    }
+
     public static void createNewWindow() {
         SwingUtilities.invokeLater(() -> new FlowVizWindow());
     }

@@ -97,8 +97,9 @@ public class KalixCliLocator {
      */
     public static Optional<CliLocation> findKalixCliWithPreferences() {
         try {
-            Preferences prefs = Preferences.userNodeForPackage(com.kalix.gui.dialogs.PreferencesDialog.class);
-            String configuredPath = prefs.get("kalixcli.binary.path", "");
+            // Use the file-based preference system instead of OS preferences
+            String configuredPath = com.kalix.gui.preferences.PreferenceManager.getFileString(
+                com.kalix.gui.preferences.PreferenceKeys.CLI_BINARY_PATH, "");
             return findKalixCli(configuredPath);
         } catch (Exception e) {
             // Fall back to standard discovery if preferences fail

@@ -248,6 +248,15 @@ public class FlowVizActionManager {
         plotPanel.setAutoYMode(autoYMode);
     }
 
+    /**
+     * Reloads preferences from the preference store and updates the UI.
+     * Called when preferences change externally.
+     */
+    public void reloadPreferences() {
+        loadPreferences();
+        menuManager.updateMenuStates();
+    }
+
     // State getters for menu manager
 
     /**
