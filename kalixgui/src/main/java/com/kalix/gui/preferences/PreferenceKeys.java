@@ -44,6 +44,9 @@ public class PreferenceKeys {
     /** Auto-reload clean files when they change externally (boolean, default: false) */
     public static final String FILE_AUTO_RELOAD = "file.autoReload";
 
+    /** Editor font size (int, default: 12) */
+    public static final String EDITOR_FONT_SIZE = "editor.fontSize";
+
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
     // These preferences are machine-specific and handle transient UI state
 

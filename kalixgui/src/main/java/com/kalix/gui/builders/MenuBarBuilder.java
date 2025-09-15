@@ -98,7 +98,7 @@ public class MenuBarBuilder {
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
-        menuBar.add(createAppearanceMenu(currentTheme, currentNodeTheme));
+        menuBar.add(createAppearanceMenu(currentTheme));
         menuBar.add(createRunMenu());
         menuBar.add(createToolsMenu());
         menuBar.add(createSystemMenu());
@@ -197,38 +197,17 @@ public class MenuBarBuilder {
         return themeMenu;
     }
     
-    /**
-     * Creates the node theme submenu.
-     */
-    private JMenu createNodeThemeMenu(NodeTheme.Theme currentNodeTheme) {
-        JMenu nodeThemeMenu = new JMenu("Node Theme");
-        ButtonGroup nodeThemeGroup = new ButtonGroup();
-        
-        for (NodeTheme.Theme theme : NodeTheme.getAllThemes()) {
-            JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(theme.getDisplayName(), theme.equals(currentNodeTheme));
-            themeItem.addActionListener(e -> {
-                callbacks.setNodeTheme(theme);
-                callbacks.updateStatus("Node theme changed to " + theme.getDisplayName());
-            });
-            nodeThemeGroup.add(themeItem);
-            nodeThemeMenu.add(themeItem);
-        }
-        
-        return nodeThemeMenu;
-    }
     
     /**
      * Creates the Appearance menu.
      */
-    private JMenu createAppearanceMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
+    private JMenu createAppearanceMenu(String currentTheme) {
         JMenu appearanceMenu = new JMenu("Appearance");
         
         // Theme submenus
         JMenu themeMenu = createThemeMenu(currentTheme);
         appearanceMenu.add(themeMenu);
         
-        JMenu nodeThemeMenu = createNodeThemeMenu(currentNodeTheme);
-        appearanceMenu.add(nodeThemeMenu);
         
         appearanceMenu.addSeparator();
         

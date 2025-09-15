@@ -285,6 +285,22 @@ public class EnhancedTextEditor extends JPanel {
     public void setFileDropHandler(FileDropManager.FileDropHandler handler) {
         this.fileDropHandler = handler;
     }
+
+    /**
+     * Sets the font size of the text editor.
+     */
+    public void setFontSize(int fontSize) {
+        Font currentFont = textArea.getFont();
+        Font newFont = new Font(currentFont.getName(), currentFont.getStyle(), fontSize);
+        textArea.setFont(newFont);
+    }
+
+    /**
+     * Gets the current font size of the text editor.
+     */
+    public int getFontSize() {
+        return textArea.getFont().getSize();
+    }
     
     // Manager access methods (if needed)
     

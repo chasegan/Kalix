@@ -648,6 +648,13 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Save the preference
         PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
+
+    /**
+     * Sets the auto-reload setting for clean files.
+     */
+    public void setAutoReloadEnabled(boolean enabled) {
+        fileWatcherManager.setAutoReloadEnabled(enabled);
+    }
     
     @Override
     public void clearAppData() {
