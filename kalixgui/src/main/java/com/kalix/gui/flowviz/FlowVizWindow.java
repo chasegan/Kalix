@@ -32,6 +32,7 @@ public class FlowVizWindow extends JFrame {
     private JSplitPane splitPane;
     private boolean dataVisible = true;
     private boolean autoYMode = true;
+    private boolean precision64 = true; // Default to 64-bit precision
     
     // Data management
     private DataSet dataSet;
@@ -81,6 +82,7 @@ public class FlowVizWindow extends JFrame {
     private void initializeComponents() {
         plotPanel = new PlotPanel();
         plotPanel.setAutoYMode(autoYMode);  // Initialize Auto-Y mode
+        plotPanel.setPrecision64Supplier(() -> precision64);  // Set precision supplier for export
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
         
@@ -130,14 +132,16 @@ public class FlowVizWindow extends JFrame {
             this::showStatistics,
             this::showDataInfo,
             this::showAbout,
-            this::showShortcuts
+            this::showShortcuts,
+            this::togglePrecision64
         );
 
         // Setup state suppliers
         menuManager.setupStateSuppliers(
             () -> dataVisible,
             () -> autoYMode,
-            () -> plotPanel.isShowCoordinates()
+            () -> plotPanel.isShowCoordinates(),
+            () -> precision64
         );
 
         // Create and set the menu bar
@@ -336,7 +340,17 @@ public class FlowVizWindow extends JFrame {
 
         updateStatus("Coordinate display " + (newState ? "enabled" : "disabled"));
     }
-    
+
+    private void togglePrecision64() {
+        precision64 = !precision64;
+
+        // Save preference
+        prefs.putBoolean("flowviz.precision64", precision64);
+
+        menuManager.updateMenuStates();
+        updateStatus(precision64 ? "64-bit precision enabled" : "32-bit precision enabled");
+    }
+
     private void resetView() {
         plotPanel.resetView();
         updateStatus("View reset");
@@ -397,12 +411,23 @@ public class FlowVizWindow extends JFrame {
         // Apply the setting to the plot panel
         plotPanel.setShowCoordinates(showCoordinates);
 
+        // Load precision preference (default: true for 64-bit)
+        precision64 = prefs.getBoolean("flowviz.precision64", true);
+
         // Load menu preferences
         menuManager.loadMenuPreferences();
     }
 
     public static void createNewWindow() {
         SwingUtilities.invokeLater(() -> new FlowVizWindow());
+    }
+
+    /**
+     * Gets the current 64-bit precision preference setting.
+     * @return true if 64-bit precision is enabled, false for 32-bit
+     */
+    public boolean isPrecision64() {
+        return precision64;
     }
     
     public static List<FlowVizWindow> getOpenWindows() {

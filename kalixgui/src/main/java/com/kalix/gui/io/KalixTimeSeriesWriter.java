@@ -35,10 +35,22 @@ public class KalixTimeSeriesWriter {
     private static final int CODEC_GORILLA_FLOAT = 1;
 
     /**
-     * Write timeseries data to files with the given base path.
+     * Write timeseries data to files with the given base path using default 32-bit precision.
      * Creates basePath.kts (binary) and basePath.ktm (metadata)
      */
     public void writeToFile(String basePath, List<TimeSeriesData> seriesList) throws IOException {
+        writeToFile(basePath, seriesList, false); // Default to 32-bit precision
+    }
+
+    /**
+     * Write timeseries data to files with the given base path and specified precision.
+     * Creates basePath.kts (binary) and basePath.ktm (metadata)
+     *
+     * @param basePath Base file path (without extension)
+     * @param seriesList List of time series data to write
+     * @param use64BitPrecision true for 64-bit double precision, false for 32-bit float precision
+     */
+    public void writeToFile(String basePath, List<TimeSeriesData> seriesList, boolean use64BitPrecision) throws IOException {
         if (seriesList == null || seriesList.isEmpty()) {
             throw new IllegalArgumentException("No series data to write");
         }
@@ -56,18 +68,24 @@ public class KalixTimeSeriesWriter {
                 TimeSeriesData series = seriesList.get(i);
                 long offset = currentOffset; // Current byte position
 
-                // Determine codec (always use double for now)
-                int codec = CODEC_GORILLA_DOUBLE;
-
-                // Convert to Gorilla format
-                List<GorillaCompressor.TimeValueDouble> gorillaData = convertToGorillaDouble(series);
+                // Determine codec based on precision preference
+                int codec = use64BitPrecision ? CODEC_GORILLA_DOUBLE : CODEC_GORILLA_FLOAT;
 
                 // Detect timestep
                 long timestepMs = detectTimestep(series);
                 GorillaCompressor compressor = new GorillaCompressor(timestepMs);
 
-                // Compress data
-                byte[] compressed = compressor.compressDouble(gorillaData);
+                // Compress data based on codec choice
+                byte[] compressed;
+                if (codec == CODEC_GORILLA_DOUBLE) {
+                    // Convert to Gorilla double format
+                    List<GorillaCompressor.TimeValueDouble> gorillaData = convertToGorillaDouble(series);
+                    compressed = compressor.compressDouble(gorillaData);
+                } else {
+                    // Convert to Gorilla float format
+                    List<GorillaCompressor.TimeValueFloat> gorillaData = convertToGorillaFloat(series);
+                    compressed = compressor.compressFloat(gorillaData);
+                }
 
                 // Write block: codec(2) + length(4) + data
                 writeUInt16(fos, codec);
@@ -101,6 +119,18 @@ public class KalixTimeSeriesWriter {
 
         for (int i = 0; i < series.getPointCount(); i++) {
             result.add(new GorillaCompressor.TimeValueDouble(timestamps[i], values[i]));
+        }
+
+        return result;
+    }
+
+    private List<GorillaCompressor.TimeValueFloat> convertToGorillaFloat(TimeSeriesData series) {
+        List<GorillaCompressor.TimeValueFloat> result = new ArrayList<>();
+        long[] timestamps = series.getTimestamps();
+        double[] values = series.getValues();
+
+        for (int i = 0; i < series.getPointCount(); i++) {
+            result.add(new GorillaCompressor.TimeValueFloat(timestamps[i], (float) values[i]));
         }
 
         return result;

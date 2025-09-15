@@ -30,6 +30,7 @@ public class FlowVizMenuManager {
     private JCheckBoxMenuItem coordinateToggle;
     private JCheckBoxMenuItem dataToggle;
     private JCheckBoxMenuItem autoYToggle;
+    private JCheckBoxMenuItem precision64Toggle;
 
     // Action callbacks - will be set by the parent window
     private Runnable newSessionAction;
@@ -46,11 +47,13 @@ public class FlowVizMenuManager {
     private Runnable showDataInfoAction;
     private Runnable showAboutAction;
     private Runnable showShortcutsAction;
+    private Runnable togglePrecision64Action;
 
     // State suppliers
     private Supplier<Boolean> dataVisibleSupplier;
     private Supplier<Boolean> autoYModeSupplier;
     private Supplier<Boolean> coordinateDisplaySupplier;
+    private Supplier<Boolean> precision64Supplier;
 
     /**
      * Creates a new FlowViz menu manager for comprehensive menu system management.
@@ -94,6 +97,7 @@ public class FlowVizMenuManager {
      * @param showDataInfoAction Callback for showing detailed data information
      * @param showAboutAction Callback for displaying application information
      * @param showShortcutsAction Callback for showing keyboard shortcuts help
+     * @param togglePrecision64Action Callback for toggling 64-bit precision preference
      */
     public void setupActionCallbacks(Runnable newSessionAction,
                                    Runnable openCsvFileAction,
@@ -108,7 +112,8 @@ public class FlowVizMenuManager {
                                    Runnable showStatisticsAction,
                                    Runnable showDataInfoAction,
                                    Runnable showAboutAction,
-                                   Runnable showShortcutsAction) {
+                                   Runnable showShortcutsAction,
+                                   Runnable togglePrecision64Action) {
         this.newSessionAction = newSessionAction;
         this.openCsvFileAction = openCsvFileAction;
         this.exportPlotAction = exportPlotAction;
@@ -123,6 +128,7 @@ public class FlowVizMenuManager {
         this.showDataInfoAction = showDataInfoAction;
         this.showAboutAction = showAboutAction;
         this.showShortcutsAction = showShortcutsAction;
+        this.togglePrecision64Action = togglePrecision64Action;
     }
 
     /**
@@ -130,10 +136,12 @@ public class FlowVizMenuManager {
      */
     public void setupStateSuppliers(Supplier<Boolean> dataVisibleSupplier,
                                   Supplier<Boolean> autoYModeSupplier,
-                                  Supplier<Boolean> coordinateDisplaySupplier) {
+                                  Supplier<Boolean> coordinateDisplaySupplier,
+                                  Supplier<Boolean> precision64Supplier) {
         this.dataVisibleSupplier = dataVisibleSupplier;
         this.autoYModeSupplier = autoYModeSupplier;
         this.coordinateDisplaySupplier = coordinateDisplaySupplier;
+        this.precision64Supplier = precision64Supplier;
     }
 
     /**
@@ -181,6 +189,12 @@ public class FlowVizMenuManager {
         toolsMenu.add(createMenuItem("Statistics", e -> showStatisticsAction.run()));
         toolsMenu.add(createMenuItem("Data Info", e -> showDataInfoAction.run()));
 
+        // Preferences menu
+        JMenu preferencesMenu = new JMenu("Preferences");
+        precision64Toggle = new JCheckBoxMenuItem("64bit Precision", precision64Supplier.get());
+        precision64Toggle.addActionListener(e -> togglePrecision64Action.run());
+        preferencesMenu.add(precision64Toggle);
+
         // Help menu
         JMenu helpMenu = new JMenu("Help");
         helpMenu.add(createMenuItem("About FlowViz", e -> showAboutAction.run()));
@@ -190,6 +204,7 @@ public class FlowVizMenuManager {
         menuBar.add(viewMenu);
         menuBar.add(zoomMenu);
         menuBar.add(toolsMenu);
+        menuBar.add(preferencesMenu);
         menuBar.add(helpMenu);
 
         return menuBar;
@@ -272,6 +287,10 @@ public class FlowVizMenuManager {
 
         if (coordinateToggle != null && coordinateDisplaySupplier != null) {
             coordinateToggle.setSelected(coordinateDisplaySupplier.get());
+        }
+
+        if (precision64Toggle != null && precision64Supplier != null) {
+            precision64Toggle.setSelected(precision64Supplier.get());
         }
     }
 

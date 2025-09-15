@@ -50,6 +50,7 @@ public class PlotInteractionManager {
     private Consumer<ViewPort> viewportUpdater;
     private Supplier<List<String>> visibleSeriesSupplier;
     private Supplier<Rectangle> plotAreaSupplier;
+    private Supplier<Boolean> precision64Supplier;
 
     /**
      * Creates a new plot interaction manager for handling all user interactions with the plot.
@@ -97,6 +98,14 @@ public class PlotInteractionManager {
         this.viewportUpdater = viewportUpdater;
         this.visibleSeriesSupplier = visibleSeriesSupplier;
         this.plotAreaSupplier = plotAreaSupplier;
+    }
+
+    /**
+     * Sets the precision preference supplier for export operations.
+     * This only affects data export format, not plotting functionality.
+     */
+    public void setPrecision64Supplier(Supplier<Boolean> precision64Supplier) {
+        this.precision64Supplier = precision64Supplier;
     }
 
     /**
@@ -544,7 +553,8 @@ public class PlotInteractionManager {
 
             // Write to Kalix format
             KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
-            writer.writeToFile(filePath, seriesList);
+            boolean use64BitPrecision = precision64Supplier != null ? precision64Supplier.get() : true;
+            writer.writeToFile(filePath, seriesList, use64BitPrecision);
 
             JOptionPane.showMessageDialog(parentComponent,
                 "Data saved successfully to " + new File(filePath + ".ktm").getName() + " and " + new File(filePath + ".kts").getName(),

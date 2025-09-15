@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class PlotPanel extends JPanel {
     
@@ -243,5 +244,15 @@ public class PlotPanel extends JPanel {
 
     public boolean isShowCoordinates() {
         return coordinateDisplayManager != null && coordinateDisplayManager.isShowCoordinates();
+    }
+
+    /**
+     * Sets the precision preference supplier for export operations.
+     * This only affects data export format, not plotting functionality.
+     */
+    public void setPrecision64Supplier(Supplier<Boolean> precision64Supplier) {
+        if (plotInteractionManager != null) {
+            plotInteractionManager.setPrecision64Supplier(precision64Supplier);
+        }
     }
 }
