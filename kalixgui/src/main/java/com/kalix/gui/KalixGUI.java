@@ -13,6 +13,8 @@ import com.kalix.gui.managers.*;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelChangeEvent;
 import com.kalix.gui.model.ModelChangeListener;
+import com.kalix.gui.preferences.PreferenceManager;
+import com.kalix.gui.preferences.PreferenceKeys;
 import com.kalix.gui.themes.NodeTheme;
 import com.kalix.gui.utils.DialogUtils;
 
@@ -157,12 +159,12 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         mapPanel = new MapPanel();
         
         // Load saved node theme
-        String savedNodeTheme = prefs.get(AppConstants.PREF_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
+        String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
         NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
         mapPanel.setNodeTheme(nodeTheme);
         
         // Load saved gridlines preference
-        boolean showGridlines = prefs.getBoolean(AppConstants.PREF_SHOW_GRIDLINES, true); // Default to true
+        boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true); // Default to true
         mapPanel.setShowGridlines(showGridlines);
         textEditor = new EnhancedTextEditor();
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
@@ -588,7 +590,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void setNodeTheme(NodeTheme.Theme theme) {
         mapPanel.setNodeTheme(theme);
         // Save the preference
-        prefs.put(AppConstants.PREF_NODE_THEME, NodeTheme.themeToString(theme));
+        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
     
     @Override
@@ -653,6 +655,55 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         }
     }
+
+    @Override
+    public void locatePreferenceFile() {
+        try {
+            String prefsPath = PreferenceManager.getPreferenceFilePath();
+            File prefsFile = new File(prefsPath);
+            File parentDir = prefsFile.getParentFile();
+
+            // Use the directory containing the preference file (or would contain it)
+            File targetDir = parentDir != null ? parentDir : new File(".");
+
+            if (Desktop.isDesktopSupported()) {
+                Desktop desktop = Desktop.getDesktop();
+                if (desktop.isSupported(Desktop.Action.OPEN)) {
+                    desktop.open(targetDir);
+                    updateStatus("Opened folder: " + targetDir.getAbsolutePath());
+                } else {
+                    showLocationFallback(targetDir);
+                }
+            } else {
+                showLocationFallback(targetDir);
+            }
+        } catch (Exception e) {
+            updateStatus("Error locating preference file: " + e.getMessage());
+            JOptionPane.showMessageDialog(
+                this,
+                "Could not open the folder containing the preference file.\n" +
+                "Preference file location: " + PreferenceManager.getPreferenceFilePath(),
+                "Cannot Open Folder",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Fallback method to show preference file location when desktop operations aren't supported.
+     */
+    private void showLocationFallback(File targetDir) {
+        JOptionPane.showMessageDialog(
+            this,
+            "Preference file is located in:\n" + targetDir.getAbsolutePath() + "\n\n" +
+            "File name: kalix_prefs.json\n\n" +
+            "Your system doesn't support automatically opening folders.\n" +
+            "Please navigate to this location manually.",
+            "Preference File Location",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+        updateStatus("Preference file location: " + targetDir.getAbsolutePath());
+    }
     
     
     @Override
@@ -715,7 +766,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void toggleGridlines(boolean showGridlines) {
         mapPanel.setShowGridlines(showGridlines);
         // Save preference
-        prefs.putBoolean(AppConstants.PREF_SHOW_GRIDLINES, showGridlines);
+        PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, showGridlines);
     }
     
     @Override

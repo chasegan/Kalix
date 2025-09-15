@@ -4,6 +4,8 @@ import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.io.TimeSeriesCsvImporter;
 import com.kalix.gui.flowviz.data.DataSet;
 import com.kalix.gui.flowviz.data.TimeSeriesData;
+import com.kalix.gui.preferences.PreferenceManager;
+import com.kalix.gui.preferences.PreferenceKeys;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -20,7 +22,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.prefs.Preferences;
 
 public class FlowVizWindow extends JFrame {
     private static final List<FlowVizWindow> openWindows = new ArrayList<>();
@@ -38,9 +39,6 @@ public class FlowVizWindow extends JFrame {
     private DataSet dataSet;
     private File currentFile;
 
-    // Preferences
-    private final Preferences prefs;
-
     // Managers
     private FlowVizMenuManager menuManager;
     private FlowVizDataManager dataManager;
@@ -52,11 +50,8 @@ public class FlowVizWindow extends JFrame {
         setSize(1000, 700);
         setLocationRelativeTo(null);
 
-        // Initialize preferences
-        this.prefs = Preferences.userNodeForPackage(FlowVizWindow.class);
-
         // Initialize menu manager
-        menuManager = new FlowVizMenuManager(this, prefs);
+        menuManager = new FlowVizMenuManager(this);
 
         // Track this window
         openWindows.add(this);
@@ -326,6 +321,10 @@ public class FlowVizWindow extends JFrame {
     private void toggleAutoYMode() {
         autoYMode = !autoYMode;
         plotPanel.setAutoYMode(autoYMode);
+
+        // Save preference
+        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYMode);
+
         menuManager.updateMenuStates();
         updateStatus(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
     }
@@ -336,7 +335,7 @@ public class FlowVizWindow extends JFrame {
         plotPanel.setShowCoordinates(newState);
 
         // Save preference
-        prefs.putBoolean(AppConstants.PREF_FLOWVIZ_SHOW_COORDINATES, newState);
+        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, newState);
 
         updateStatus("Coordinate display " + (newState ? "enabled" : "disabled"));
     }
@@ -345,7 +344,7 @@ public class FlowVizWindow extends JFrame {
         precision64 = !precision64;
 
         // Save preference
-        prefs.putBoolean("flowviz.precision64", precision64);
+        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64);
 
         menuManager.updateMenuStates();
         updateStatus(precision64 ? "64-bit precision enabled" : "32-bit precision enabled");
@@ -406,16 +405,23 @@ public class FlowVizWindow extends JFrame {
      */
     private void loadPreferences() {
         // Load coordinate display preference (default: false)
-        boolean showCoordinates = prefs.getBoolean(AppConstants.PREF_FLOWVIZ_SHOW_COORDINATES, false);
+        boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
 
         // Apply the setting to the plot panel
         plotPanel.setShowCoordinates(showCoordinates);
 
         // Load precision preference (default: true for 64-bit)
-        precision64 = prefs.getBoolean("flowviz.precision64", true);
+        precision64 = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true);
+
+        // Load auto-Y mode preference (default: true)
+        autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+        plotPanel.setAutoYMode(autoYMode);
 
         // Load menu preferences
         menuManager.loadMenuPreferences();
+
+        // Update all menu states to reflect loaded preferences
+        menuManager.updateMenuStates();
     }
 
     public static void createNewWindow() {

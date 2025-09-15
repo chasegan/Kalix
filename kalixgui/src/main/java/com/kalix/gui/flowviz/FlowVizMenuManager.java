@@ -2,13 +2,14 @@ package com.kalix.gui.flowviz;
 
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.flowviz.data.DataSet;
+import com.kalix.gui.preferences.PreferenceManager;
+import com.kalix.gui.preferences.PreferenceKeys;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.prefs.Preferences;
 
 /**
  * Manages all menu bar functionality for the FlowViz window including menu creation,
@@ -24,7 +25,6 @@ import java.util.prefs.Preferences;
 public class FlowVizMenuManager {
 
     private final JFrame parentFrame;
-    private final Preferences prefs;
 
     // Menu items that need state management
     private JCheckBoxMenuItem coordinateToggle;
@@ -68,11 +68,9 @@ public class FlowVizMenuManager {
      * </ul>
      *
      * @param parentFrame The parent JFrame window for menu attachment and keyboard shortcut scope
-     * @param prefs Java Preferences instance for persistent menu state storage
      */
-    public FlowVizMenuManager(JFrame parentFrame, Preferences prefs) {
+    public FlowVizMenuManager(JFrame parentFrame) {
         this.parentFrame = parentFrame;
-        this.prefs = prefs;
     }
 
     /**
@@ -299,7 +297,7 @@ public class FlowVizMenuManager {
      */
     public void loadMenuPreferences() {
         // Load coordinate display preference (default: false)
-        boolean showCoordinates = prefs.getBoolean(AppConstants.PREF_FLOWVIZ_SHOW_COORDINATES, false);
+        boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
 
         // Update the menu checkbox to match
         if (coordinateToggle != null) {

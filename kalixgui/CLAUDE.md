@@ -39,6 +39,99 @@ To democratize high-performance hydrological modeling by providing an open, fast
 
 ## Recent Major Changes
 
+### Local File-Based Preference System Implementation (September 2025)
+
+**Objective**: Implement a hybrid preference system that stores user-configurable preferences in a portable JSON file (`kalix_prefs.json`) for team collaboration while maintaining OS-based preferences for machine-specific settings.
+
+#### Key Features Implemented:
+
+**1. Hybrid Preference Architecture:**
+- **File-Based Preferences** (`kalix_prefs.json`): Portable, shareable user configuration
+- **OS-Based Preferences** (Java Preferences): Machine-specific, transient UI state
+- **Cross-Platform**: Works identically on Windows, macOS, and Linux
+
+**2. Core Components Created:**
+- **`PreferenceManager`** (422 lines) - Central API with type-safe getters/setters and simple JSON implementation
+- **`PreferenceKeys`** (58 lines) - Centralized constants for all preference keys
+- **Simple JSON Parser/Generator** - No external dependencies, pure Java implementation
+
+**3. Preference Classification:**
+
+**File-Based Preferences (Portable/Shareable):**
+- `ui.theme` - Application theme (Obsidian, Light, etc.)
+- `ui.nodeTheme` - Node appearance theme (Vibrant, Earth, Ocean, Sunset)
+- `map.showGridlines` - Map gridlines visibility toggle
+- `cli.binaryPath` - KalixCLI executable path
+- `flowviz.showCoordinates` - FlowViz coordinate display toggle
+- `flowviz.precision64` - 64-bit precision for data export
+- `flowviz.autoYMode` - Auto Y-axis scaling mode
+- `data.lastDirectory` - Last directory used for file operations
+- `data.recentFiles` - Recent file list (when implemented)
+
+**OS-Based Preferences (Machine-Specific):**
+- Window size, position, maximized state
+- Split pane divider positions
+- Other rapidly-changing UI state
+
+**4. Integration Complete:**
+- ✅ **FlowViz Window**: All preferences migrated to new system
+- ✅ **FlowViz Menu Manager**: Updated to use file-based preferences
+- ✅ **Theme Manager**: Theme selection now portable
+- ✅ **Preferences Dialog**: KalixCLI path now shareable
+- ✅ **Main Application**: Node theme and gridlines preferences migrated
+
+**5. "Locate Preference File" Menu Feature:**
+- Added **System → Locate Preference File** menu item
+- Cross-platform folder opening (Finder/Explorer/File Manager)
+- Graceful fallback with file location dialog for unsupported systems
+- Helps users easily find, edit, backup, and share preference files
+
+#### Technical Implementation:
+
+**Simple JSON Implementation:**
+```java
+// Generates clean, readable JSON:
+{
+  "ui.theme": "Obsidian",
+  "ui.nodeTheme": "EARTH",
+  "map.showGridlines": true,
+  "cli.binaryPath": "/usr/local/bin/kalixcli",
+  "flowviz.showCoordinates": false,
+  "flowviz.precision64": false,
+  "flowviz.autoYMode": true
+}
+```
+
+**Key Architecture Benefits:**
+- **Team Collaboration**: Share `kalix_prefs.json` files between team members
+- **Portability**: Preferences travel with application deployment
+- **Version Control**: Teams can track shared preferences in git
+- **Backup/Recovery**: Easy preference backup and restore
+- **No Dependencies**: Pure Java implementation, no external libraries
+
+#### Files Created/Modified:
+- **`PreferenceManager.java`** - Core preference API with JSON handling
+- **`PreferenceKeys.java`** - Centralized preference key constants
+- **`FlowVizWindow.java`** - Updated to use file-based preferences
+- **`FlowVizMenuManager.java`** - Migrated to new preference system
+- **`ThemeManager.java`** - Theme selection now portable
+- **`PreferencesDialog.java`** - CLI path now file-based
+- **`KalixGUI.java`** - Node theme and gridlines migrated, added "Locate Preference File" feature
+- **`MenuBarBuilder.java`** - Added new menu item with cross-platform folder opening
+
+#### Bug Fixes:
+- **FlowViz Menu State Sync**: Fixed initialization sequence issue where 64-bit precision menu item always showed as checked on restart despite having `false` in JSON file. Added `updateMenuStates()` call after preference loading to ensure menu items reflect loaded values.
+
+#### Current Features:
+- ✅ **Portable Configuration**: All user preferences shareable via JSON file
+- ✅ **Cross-Platform Compatibility**: Identical behavior on all operating systems
+- ✅ **Team Collaboration**: Standardized preference sharing
+- ✅ **Easy Access**: System menu integration for preference file location
+- ✅ **Robust Error Handling**: Graceful fallback for corrupted/missing files
+- ✅ **No External Dependencies**: Pure Java implementation
+- ✅ **Immediate Persistence**: File preferences save instantly on change
+- ✅ **Menu State Synchronization**: Proper loading and display of all preference states
+
 ### Kalix Compressed Timeseries Format Implementation (September 2025)
 
 **Objective**: Implement a bespoke compressed timeseries file format using Gorilla compression algorithm to provide efficient storage and fast loading of large timeseries datasets.

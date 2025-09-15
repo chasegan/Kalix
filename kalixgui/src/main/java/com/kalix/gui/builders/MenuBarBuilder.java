@@ -45,6 +45,7 @@ public class MenuBarBuilder {
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
+        void locatePreferenceFile();
         void clearAppData();
         void updateStatus(String message);
         
@@ -263,6 +264,8 @@ public class MenuBarBuilder {
      */
     private JMenu createSystemMenu() {
         JMenu systemMenu = new JMenu("System");
+        systemMenu.add(createMenuItem("Locate Preference File", e -> callbacks.locatePreferenceFile()));
+        systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Clear App Data...", e -> callbacks.clearAppData()));
         return systemMenu;
     }

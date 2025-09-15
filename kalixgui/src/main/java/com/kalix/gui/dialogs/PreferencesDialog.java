@@ -3,6 +3,8 @@ package com.kalix.gui.dialogs;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.editor.EnhancedTextEditor;
 import com.kalix.gui.managers.ThemeManager;
+import com.kalix.gui.preferences.PreferenceManager;
+import com.kalix.gui.preferences.PreferenceKeys;
 
 import javax.swing.*;
 import java.awt.*;
@@ -368,7 +370,7 @@ public class PreferencesDialog extends JDialog {
         
         @Override
         public void loadSettings() {
-            String savedPath = prefs.get(PREF_CLI_PATH, "");
+            String savedPath = PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, "");
             binaryPathField.setText(savedPath);
             statusLabel.setText("Status: Not tested");
             statusLabel.setForeground(Color.GRAY);
@@ -377,13 +379,13 @@ public class PreferencesDialog extends JDialog {
         @Override
         public boolean applySettings() {
             String newPath = binaryPathField.getText().trim();
-            String currentPath = prefs.get(PREF_CLI_PATH, "");
-            
+            String currentPath = PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, "");
+
             if (!newPath.equals(currentPath)) {
-                prefs.put(PREF_CLI_PATH, newPath);
+                PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, newPath);
                 return true;
             }
-            
+
             return false;
         }
         
@@ -391,7 +393,7 @@ public class PreferencesDialog extends JDialog {
          * Gets the configured CLI path.
          */
         public String getConfiguredCliPath() {
-            return prefs.get(PREF_CLI_PATH, "");
+            return PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, "");
         }
     }
     

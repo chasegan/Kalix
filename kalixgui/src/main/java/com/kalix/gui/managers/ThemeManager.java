@@ -10,6 +10,8 @@ import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.MapPanel;
 import com.kalix.gui.editor.EnhancedTextEditor;
+import com.kalix.gui.preferences.PreferenceManager;
+import com.kalix.gui.preferences.PreferenceKeys;
 
 import javax.swing.*;
 import java.awt.*;
@@ -31,14 +33,15 @@ public class ThemeManager {
     
     /**
      * Creates a new ThemeManager instance.
-     * 
-     * @param prefs The preferences object for storing theme settings
+     *
+     * @param prefs The preferences object for storing theme settings (legacy OS preferences)
      * @param parentComponent The parent component for UI updates
      */
     public ThemeManager(Preferences prefs, Component parentComponent) {
         this.prefs = prefs;
         this.parentComponent = parentComponent;
-        this.currentTheme = prefs.get(AppConstants.PREF_THEME, AppConstants.DEFAULT_THEME);
+        // Load theme from new file-based preference system
+        this.currentTheme = PreferenceManager.getFileString(PreferenceKeys.UI_THEME, AppConstants.DEFAULT_THEME);
     }
     
     /**
@@ -73,7 +76,8 @@ public class ThemeManager {
         }
         
         this.currentTheme = theme;
-        prefs.put(AppConstants.PREF_THEME, theme);
+        // Save theme to new file-based preference system
+        PreferenceManager.setFileString(PreferenceKeys.UI_THEME, theme);
         
         // Apply the new theme with animation
         FlatAnimatedLafChange.showSnapshot();
