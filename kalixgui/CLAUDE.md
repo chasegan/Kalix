@@ -517,6 +517,145 @@ The editor uses a manager pattern to separate concerns:
 
 Each manager is initialized in `EnhancedTextEditor.initializeManagers()` and accessible via getter methods.
 
+## Refactoring Roadmap
+
+### Code Quality Analysis (September 2025)
+
+**Objective**: Systematic analysis and improvement of code quality, addressing code smells and architectural issues identified during codebase review.
+
+#### Code Smells Identified:
+1. **Large Classes (God Objects)**
+   - KalixGUI.java (822 lines) - too many responsibilities
+   - MapPanel.java (775 lines) - combines rendering, interaction, and state management
+
+2. **Long Methods**
+   - KalixGUI.initializeApplication() - orchestrates too many initialization tasks
+   - MapPanel.paintComponent() - complex rendering logic mixed with coordinate transformations
+
+3. **Redundant Constants**
+   - Duplicate constants between AppConstants.java and PreferenceKeys.java
+   - String literals and magic numbers scattered throughout codebase
+
+4. **Inconsistent Error Handling**
+   - Mix of System.err.println() and proper logging
+   - Some methods silently ignore exceptions
+
+5. **Style Inconsistencies**
+   - Method naming patterns vary across classes
+   - Documentation gaps in public APIs
+   - Mixed import organization patterns
+
+### Phase 1: Architectural Improvements (High Priority)
+
+#### 1. Extract MapRenderer Class
+- **Current Issue**: MapPanel.java (775 lines) mixes rendering logic with interaction handling
+- **Goal**: Separate rendering concerns into dedicated renderer class
+- **Files**: `MapPanel.java` → `MapRenderer.java` + reduced `MapPanel.java`
+- **Expected Reduction**: ~300 lines from MapPanel
+- **Status**: Pending
+
+#### 2. Split KalixGUI into Controllers
+- **Current Issue**: KalixGUI.java (822 lines) has too many responsibilities
+- **Goal**: Follow the manager pattern already established
+- **New Classes**:
+  - `WindowController.java` - window management, layout, sizing
+  - `ModelController.java` - model loading, parsing, coordination
+  - `MenuController.java` - menu bar, actions, shortcuts
+- **Expected Reduction**: ~400 lines from KalixGUI
+- **Status**: Pending
+
+#### 3. Consolidate Constants System
+- **Current Issue**: Duplicate constants in AppConstants and PreferenceKeys
+- **Goal**: Unified constants management with clear organization
+- **Approach**:
+  - Merge into `AppConstants.java` with nested classes
+  - Use enums for related constant groups (Themes, FileTypes, etc.)
+  - Remove duplication between files
+- **Status**: Pending
+
+### Phase 2: Code Quality (Medium Priority)
+
+#### 4. Implement Proper Logging
+- **Current Issue**: Mix of System.out/err throughout codebase
+- **Goal**: Structured logging with levels and proper error handling
+- **Implementation**:
+  - Add SLF4J + Logback dependencies
+  - Create Logger instances in each class
+  - Replace all System.out/err calls
+  - Add log levels (DEBUG, INFO, WARN, ERROR)
+- **Status**: Pending
+
+#### 5. Extract Magic Numbers
+- **Current Issue**: Hard-coded values like NODE_SIZE=20, CLICK_TOLERANCE=5
+- **Goal**: Named constants with documentation explaining values
+- **Target Areas**:
+  - UI dimensions and spacing
+  - Performance thresholds
+  - Tolerance values for interactions
+- **Status**: Pending
+
+#### 6. Standardize Method Naming
+- **Current Issue**: Inconsistent naming patterns
+- **Goal**: Follow Java conventions consistently
+- **Rules**:
+  - `isX()` for boolean getters
+  - `getX()` for property access
+  - `setX()` for property mutation
+  - `handleX()` for event processing
+- **Status**: Pending
+
+### Phase 3: Documentation & Polish (Low Priority)
+
+#### 7. Add Comprehensive Javadoc
+- **Current Issue**: Missing documentation on public APIs
+- **Goal**: Professional-level documentation for all public methods
+- **Focus Areas**:
+  - Public methods in core classes
+  - Manager class interfaces
+  - Complex algorithms (coordinate transforms, etc.)
+- **Status**: Pending
+
+#### 8. Implement Consistent Error Handling
+- **Current Issue**: Silent failures and inconsistent user feedback
+- **Goal**: Structured error handling with user-friendly messages
+- **Approach**:
+  - Create ErrorHandler utility class
+  - Standardize error dialog patterns
+  - Log technical details, show user-friendly messages
+- **Status**: Pending
+
+### Phase 4: FlowViz Improvements
+
+#### 9. Refactor FlowVizWindow
+- **Current Issue**: FlowVizWindow still substantial despite manager extraction
+- **Goal**: Further reduce size and improve organization
+- **Approach**:
+  - Extract window state management
+  - Separate data coordination logic
+  - Follow patterns established in main app
+- **Status**: Pending
+
+#### 10. Clean Up Imports
+- **Current Issue**: Wildcard imports and unused imports
+- **Goal**: Clean, organized import statements
+- **Rules**:
+  - Specific imports only
+  - Organize by: java.*, javax.*, third-party, com.kalix.*
+  - Remove unused imports
+- **Status**: Pending
+
+### Implementation Strategy
+**Start with Phase 1** - these changes will have the biggest impact on maintainability and provide foundation for other improvements.
+
+**Recommended Order**:
+1. Extract MapRenderer (standalone, won't break existing functionality)
+2. Consolidate constants (affects multiple files, better to do early)
+3. Split KalixGUI (major change, but builds on manager pattern)
+4. Add logging framework (foundational for better error handling)
+5. Continue with remaining items based on immediate needs
+
+Each task is designed to improve the codebase incrementally while maintaining the existing functionality and architectural patterns already established in the project.
+
 ## Pending Tasks
 
 1. **Bracket Matching Investigation** - RSyntaxTextArea's bracket matching was enabled but doesn't seem to work as expected. May need:
