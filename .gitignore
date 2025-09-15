@@ -87,3 +87,6 @@ Thumbs.db
 *.bak
 *.swp
 *~
+
+# Ignored folder for large test data
+ignored/
