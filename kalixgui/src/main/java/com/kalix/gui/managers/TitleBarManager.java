@@ -27,27 +27,27 @@ public class TitleBarManager {
     
     /**
      * Updates the window title with current file and dirty state.
-     * Shows "Kalix" when no file is loaded, "Kalix - .../path/to/file.ini" when file is loaded.
-     * 
+     * Shows "Kalix" when no file is loaded, "Kalix - .../path/to/file.ini **" when file is dirty.
+     *
      * @param isDirty true if the file has unsaved changes
      * @param currentFile the currently loaded file, or null if none
      */
     public void updateTitle(boolean isDirty, File currentFile) {
         String baseTitle = AppConstants.APP_NAME;
         String title = baseTitle;
-        
+
         // Add file path if a file is loaded
         if (currentFile != null) {
             String filePath = currentFile.getAbsolutePath();
-            String truncatedPath = truncatePathForTitle(filePath, baseTitle);
+            String truncatedPath = truncatePathForTitle(filePath, baseTitle, isDirty);
             title = baseTitle + " - " + truncatedPath;
+
+            // Add dirty indicator after filename
+            if (isDirty) {
+                title += " **";
+            }
         }
-        
-        // Add dirty indicator
-        if (isDirty) {
-            title = "*" + title;
-        }
-        
+
         window.setTitle(title);
     }
     
@@ -64,25 +64,28 @@ public class TitleBarManager {
     /**
      * Truncates a file path to fit within the title bar width constraints.
      * Uses progressive truncation, removing directories one at a time from the left.
-     * 
+     *
      * @param fullPath the complete file path
      * @param baseTitle the base title (e.g., "Kalix")
+     * @param isDirty whether the file is dirty (affects space calculation)
      * @return truncated path that fits within title bar constraints
      */
-    private String truncatePathForTitle(String fullPath, String baseTitle) {
+    private String truncatePathForTitle(String fullPath, String baseTitle, boolean isDirty) {
         // Calculate available width
         FontMetrics fm = window.getFontMetrics(window.getFont());
         int titleBarWidth = window.getWidth();
         int maxWidth = (int) (titleBarWidth * TITLE_BAR_WIDTH_RATIO);
-        
+
         // Account for base title, separator, and potential dirty indicator
-        String baseWithSeparator = "*" + baseTitle + " - ";
+        String baseWithSeparator = baseTitle + " - ";
+        String dirtyIndicator = isDirty ? " **" : "";
         int baseWidth = fm.stringWidth(baseWithSeparator);
-        int availablePathWidth = maxWidth - baseWidth;
+        int dirtyWidth = fm.stringWidth(dirtyIndicator);
+        int availablePathWidth = maxWidth - baseWidth - dirtyWidth;
         
         // If title bar width is not yet available (during initialization), use a reasonable default
         if (titleBarWidth <= 0) {
-            availablePathWidth = 400; // Conservative default
+            availablePathWidth = isDirty ? 380 : 400; // Account for dirty indicator space
         }
         
         // If the full path fits, use it
