@@ -1,6 +1,8 @@
 use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
-use super::{make_result_name, InputDataDefinition, Link, Node};
+use super::{Link, Node};
 use uuid::Uuid;
+use crate::misc::misc_functions::make_result_name;
+use crate::misc::input_data_definition::InputDataDefinition;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 

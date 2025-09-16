@@ -1,5 +1,6 @@
-use super::{make_result_name, Link, Node};
+use super::{Link, Node};
 use uuid::Uuid;
+use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 
@@ -80,7 +81,7 @@ impl Node for ConfluenceNode {
             data_cache.add_value_at_index(idx, self.ds_flow)
         }
     }
-    
+
     #[allow(unused_variables)]
     // TODO: remove unused index i?
     fn add_inflow(&mut self, v: f64, i: i32) {

@@ -1,6 +1,7 @@
 use std::i32;
-use super::{make_result_name, Link, Node};
+use super::{Link, Node};
 use uuid::Uuid;
+use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
