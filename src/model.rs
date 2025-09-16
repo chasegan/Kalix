@@ -26,6 +26,8 @@ pub struct Model {
     // Vector of tuples defining the execution order (node uuid, node index).
     // The node index is just the index of the node in "nodes" which is handy for quick access.
     pub execution_order: Vec<(Uuid, usize)>,
+
+    // Node dictionary maps from the node uuid to the node index.
     pub node_dictionary: HashMap<Uuid, usize>,
 }
 
@@ -263,9 +265,9 @@ impl Model {
 
             //TODO: here is where I need to pass water from the node into the next one
             if let Some(ds_id) = self.find_ds_node(id) {
-                let dsflow = self.nodes[i].remove_all(0); //take it from outlet 0.
+                let dsflow = self.nodes[i].remove_outflow(0); //take it from outlet 0.
                 let ds_no = self.node_dictionary[&ds_id];
-                self.nodes[ds_no].add(dsflow, 0); //add it to inlet 0
+                self.nodes[ds_no].add_inflow(dsflow, 0); //add it to inlet 0
             }
         }
     }

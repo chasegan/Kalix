@@ -13,11 +13,11 @@ pub trait Node: DynClone + Sync + Send {
     //Gets the unique id of the node
     fn get_id(&self) -> Uuid;
 
-    //Adds water to inlet i of the node
-    fn add(&mut self, v: f64, i: i32);
+    //Adds inflow to inlet i of the node
+    fn add_inflow(&mut self, v: f64, i: i32);
 
     //Removes water from outlet i of the node
-    fn remove_all(&mut self, i: i32) -> f64;
+    fn remove_outflow(&mut self, i: i32) -> f64;
 }
 
 clone_trait_object!(Node);

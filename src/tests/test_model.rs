@@ -31,7 +31,7 @@ fn test_create_and_run_model_with_storage_node() {
     for i in 0..10 {
         let mut flow = 0_f64;
         if i < 4 { flow = 100_f64 }
-        st1.add(flow, 0);
+        st1.add_inflow(flow, 0);
         st1.run_flow_phase(&mut data_cache);
         spill.push(i as u64, st1.spill);
         volume.push(i as u64, st1.v);

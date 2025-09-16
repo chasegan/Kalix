@@ -38,3 +38,36 @@ impl InputDataDefinition {
     }
 }
 
+
+/// Nodes have primary and secondary downstream links. The purpose of links is to store the
+/// volume of water to be transported downstream, and the id of the downstream node where the
+/// water is going.
+#[derive(Clone, Default)]
+pub struct Link {
+    pub flow: f64,
+    pub node_identification: Identification,
+}
+
+impl Link {
+    /// Function returns the volume of water in a link, and resets the volume of water on the
+    /// link to zero.
+    pub fn remove_flow(&mut self) -> f64{
+        let answer = self.flow;
+        self.flow = 0_f64;
+        answer
+    }
+}
+
+
+
+/// Identification holds an optional reference (by name or index) to a model element such as a
+/// node. During model initialization we can find and the index of the component in the containing
+/// vector and populate the idx value for faster subsequent lookup.
+#[derive(Clone, Default)]
+pub enum Identification {
+    #[default]
+    None,
+    Named { name: String },
+    Indexed { idx: usize },
+}
+

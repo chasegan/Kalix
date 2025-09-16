@@ -1,4 +1,4 @@
-use super::{make_result_name, InputDataDefinition, Node};
+use super::{make_result_name, InputDataDefinition, Link, Node};
 use uuid::Uuid;
 use crate::numerical::table::Table;
 use crate::data_cache::DataCache;
@@ -19,9 +19,10 @@ pub struct StorageNode {
     pub id: Uuid,
     pub location: Location,
 
-    //Vars for receiving and transmitting water
-    q_rx_0: f64,
-    q_tx_0: f64,
+    //Links
+    us_link: Link,
+    ds_link_primary: Link,
+    ds_link_secondary: Link,
 
     //Storage vars including for calculations and reporting
     us_flow: f64,
@@ -75,8 +76,8 @@ impl Node for StorageNode {
     fn initialise(&mut self, data_cache: &mut DataCache) {
         // Reset initial state values
         // (note some state variables will get overridden each timestep and maybe dont need resetting)
-        self.q_rx_0 = 0_f64;
-        self.q_tx_0 = 0_f64;
+        self.us_link.flow = 0_f64;
+        self.ds_link_primary.flow = 0_f64;
         self.us_flow = 0_f64;
         self.ds_flow = 0_f64;
         self.storage = self.v_initial;
@@ -120,9 +121,9 @@ impl Node for StorageNode {
          * that a large demand will leave volume = 0 at the end of the day
      */
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-        //Get flow from the upstream terminal
-        self.us_flow = self.q_rx_0;
-        self.q_rx_0 = 0_f64;
+
+        //Get flow from the upstream link
+        self.us_flow = self.us_link.remove_flow();
 
         // Get the driving data
         let mut rain_mm = 0_f64;
@@ -246,7 +247,8 @@ impl Node for StorageNode {
         self.ds_flow = self.spill;
 
         // Give all the ds_flow water to the downstream terminal
-        self.q_tx_0 = self.ds_flow;
+        self.ds_link_primary.flow = self.ds_flow;
+        // self.ds_link_secondary.flow = 0_f64;
 
         //Record results
         if let Some(idx) = self.recorder_idx_dsflow {
@@ -260,15 +262,18 @@ impl Node for StorageNode {
         }
     }
 
-    fn add(&mut self, v: f64, i: i32) {
-        if i != 0 { panic!("This node only has q_rx_0, but i = {}", i) }
-        self.q_rx_0 += v;
+
+    #[allow(unused_variables)]
+    // TODO: remove unused index i?
+    fn add_inflow(&mut self, v: f64, i: i32) {
+        self.us_link.flow += v;
     }
 
     #[allow(unused_variables)]
-    fn remove_all(&mut self, i: i32) -> f64 {
-        let answer = self.q_tx_0;
-        self.q_tx_0 = 0_f64;
-        answer
+    // TODO: remove unused index i?
+    fn remove_outflow(&mut self, i: i32) -> f64 {
+        self.ds_link_primary.remove_flow() +
+            self.ds_link_secondary.remove_flow()
     }
+
 }

@@ -41,54 +41,54 @@ impl Node for NodeEnum {
         }
     }
 
-    fn remove_all(&mut self, i: i32) -> f64 {
+    fn remove_outflow(&mut self, i: i32) -> f64 {
         match self {
             NodeEnum::ConfluenceNode(ref mut confluence_node) => {
-                confluence_node.remove_all(i)
+                confluence_node.remove_outflow(i)
             }
             NodeEnum::Gr4jNode(ref mut gr4j_node) => {
-                gr4j_node.remove_all(i)
+                gr4j_node.remove_outflow(i)
             }
             NodeEnum::InflowNode(ref mut inflow_node) => {
-                inflow_node.remove_all(i)
+                inflow_node.remove_outflow(i)
             }
             NodeEnum::RoutingNode(ref mut routing_node) => {
-                routing_node.remove_all(i)
+                routing_node.remove_outflow(i)
             }
             NodeEnum::StorageNode(ref mut storage_node) => {
-                storage_node.remove_all(i)
+                storage_node.remove_outflow(i)
             }
             NodeEnum::DiversionNode(ref mut diversion_node) => {
-                diversion_node.remove_all(i)
+                diversion_node.remove_outflow(i)
             }
             NodeEnum::SacramentoNode(ref mut sacramento_node) => {
-                sacramento_node.remove_all(i)
+                sacramento_node.remove_outflow(i)
             }
         }
     }
 
-    fn add(&mut self, v: f64, i: i32) {
+    fn add_inflow(&mut self, v: f64, i: i32) {
         match self {
             NodeEnum::ConfluenceNode(ref mut confluence_node) => {
-                confluence_node.add(v, i);
+                confluence_node.add_inflow(v, i);
             }
             NodeEnum::Gr4jNode(ref mut gr4j_node) => {
-                gr4j_node.add(v, i);
+                gr4j_node.add_inflow(v, i);
             }
             NodeEnum::InflowNode(ref mut inflow_node) => {
-                inflow_node.add(v, i);
+                inflow_node.add_inflow(v, i);
             }
             NodeEnum::RoutingNode(ref mut routing_node) => {
-                routing_node.add(v, i);
+                routing_node.add_inflow(v, i);
             }
             NodeEnum::StorageNode(ref mut storage_node) => {
-                storage_node.add(v, i);
+                storage_node.add_inflow(v, i);
             }
             NodeEnum::DiversionNode(ref mut diversion_node) => {
-                diversion_node.add(v, i);
+                diversion_node.add_inflow(v, i);
             }
             NodeEnum::SacramentoNode(ref mut sacramento_node) => {
-                sacramento_node.add(v, i);
+                sacramento_node.add_inflow(v, i);
             }
         }
     }
