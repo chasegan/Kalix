@@ -384,6 +384,7 @@ public class PreferencesDialog extends JDialog {
      */
     private class FilePreferencePanel extends PreferencePanel {
         private JCheckBox autoReloadCheckBox;
+        private JTextField externalEditorField;
 
         public FilePreferencePanel() {
             super("File Settings");
@@ -411,13 +412,36 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(autoReloadCheckBox, gbc);
 
+            // External editor command
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            formPanel.add(new JLabel("External Editor Command:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            externalEditorField = new JTextField(PreferenceManager.getFileString(
+                PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, "code <folder_path> <file_path>"));
+            externalEditorField.setToolTipText("Use <folder_path> and <file_path> as placeholders");
+            externalEditorField.addActionListener(e -> saveExternalEditorCommand());
+            externalEditorField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
+            });
+            formPanel.add(externalEditorField, gbc);
+
             // Description
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             JTextArea description = new JTextArea();
-            description.setText("When enabled, clean (unchanged) files will automatically reload if modified " +
+            description.setText("Auto-reload: When enabled, clean (unchanged) files will automatically reload if modified " +
                 "by external programs. Files with unsaved changes will not be automatically reloaded to " +
-                "prevent data loss.");
+                "prevent data loss.\n\n" +
+                "External Editor: Command to launch an external editor. Use <folder_path> as placeholder for " +
+                "the folder containing the current file and <file_path> for the full path to the current file.\n\n" +
+                "Examples:\n" +
+                "• Visual Studio Code: code <folder_path> <file_path>\n" +
+                "• Sublime Text: subl <file_path>\n" +
+                "• Vim: vim <file_path>\n" +
+                "• Notepad++: notepad++ <file_path>");
             description.setEditable(false);
             description.setOpaque(false);
             description.setWrapStyleWord(true);
@@ -425,6 +449,11 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(description, gbc);
 
             add(formPanel, BorderLayout.CENTER);
+        }
+
+        private void saveExternalEditorCommand() {
+            String command = externalEditorField.getText().trim();
+            PreferenceManager.setFileString(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, command);
         }
     }
 

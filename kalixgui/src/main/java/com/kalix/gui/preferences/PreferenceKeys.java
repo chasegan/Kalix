@@ -44,6 +44,9 @@ public class PreferenceKeys {
     /** Auto-reload clean files when they change externally (boolean, default: false) */
     public static final String FILE_AUTO_RELOAD = "file.autoReload";
 
+    /** External editor command template (string, default: "code <folder_path> <file_path>") */
+    public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
+
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
     // These preferences are machine-specific and handle transient UI state
 

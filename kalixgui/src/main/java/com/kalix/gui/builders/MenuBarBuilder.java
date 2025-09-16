@@ -70,6 +70,9 @@ public class MenuBarBuilder {
 
         // System menu
         void openTerminalHere();
+
+        // External editor
+        void openExternalEditor();
     }
     
     /**
@@ -202,6 +205,8 @@ public class MenuBarBuilder {
 
         // Launch terminal
         aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
+        aiMenu.add(createMenuItem("External Editor", e -> callbacks.openExternalEditor()));
+        aiMenu.addSeparator();
         aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
         aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));
         aiMenu.addSeparator();

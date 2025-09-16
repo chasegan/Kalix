@@ -916,6 +916,63 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
     }
 
+    @Override
+    public void openExternalEditor() {
+        File currentFile = fileOperations.getCurrentFile();
+
+        if (currentFile == null) {
+            updateStatus("No file currently open to edit externally");
+            return;
+        }
+
+        // Get the external editor command from preferences
+        String commandTemplate = PreferenceManager.getFileString(
+            PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND,
+            "code <folder_path> <file_path>"
+        );
+
+        if (commandTemplate.trim().isEmpty()) {
+            updateStatus("External editor command not configured in preferences");
+            return;
+        }
+
+        try {
+            // Replace placeholders with actual paths
+            String folderPath = currentFile.getParentFile().getAbsolutePath();
+            String filePath = currentFile.getAbsolutePath();
+
+            String command = commandTemplate
+                .replace("<folder_path>", folderPath)
+                .replace("<file_path>", filePath);
+
+            // Split command into parts for ProcessBuilder
+            String[] commandParts = command.split("\\s+");
+
+            ProcessBuilder processBuilder = new ProcessBuilder(commandParts);
+            processBuilder.directory(currentFile.getParentFile());
+
+            Process process = processBuilder.start();
+
+            updateStatus("External editor launched: " + currentFile.getName());
+            logger.info("External editor command executed: {}", command);
+
+        } catch (Exception e) {
+            String message = "Failed to launch external editor: " + e.getMessage();
+            updateStatus(message);
+            logger.error("Error launching external editor", e);
+
+            // Show error dialog with helpful information
+            JOptionPane.showMessageDialog(
+                this,
+                message + "\n\n" +
+                "Please check your external editor command in File → Preferences → File.\n" +
+                "Current command: " + commandTemplate,
+                "External Editor Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
     /**
      * Handles file reload when external changes are detected.
      * Only reloads if the file is clean (no unsaved changes).
