@@ -1,6 +1,6 @@
-use uuid::Uuid;
+use std::collections::HashMap;
 use crate::data_cache::DataCache;
-use crate::nodes::{Node, confluence_node::ConfluenceNode, diversion_node::DiversionNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode};
+use crate::nodes::{Node, confluence_node::ConfluenceNode, diversion_node::DiversionNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, Link};
 
 #[derive(Clone)]
 pub enum NodeEnum {
@@ -93,54 +93,80 @@ impl Node for NodeEnum {
         }
     }
 
-    fn get_id(&self) -> Uuid {
+    fn get_name(&self) -> String {
         match &self {
             NodeEnum::ConfluenceNode(confluence_node) => {
-                confluence_node.get_id()
+                confluence_node.get_name()
             }
             NodeEnum::Gr4jNode(gr4j_node) => {
-                gr4j_node.get_id()
+                gr4j_node.get_name()
             }
             NodeEnum::InflowNode(inflow_node) => {
-                inflow_node.get_id()
+                inflow_node.get_name()
             }
             NodeEnum::RoutingNode(routing_node) => {
-                routing_node.get_id()
+                routing_node.get_name()
             }
             NodeEnum::StorageNode(storage_node) => {
-                storage_node.get_id()
+                storage_node.get_name()
             }
             NodeEnum::DiversionNode(diversion_node) => {
-                diversion_node.get_id()
+                diversion_node.get_name()
             }
             NodeEnum::SacramentoNode(sacramento_node) => {
-                sacramento_node.get_id()
+                sacramento_node.get_name()
             }
         }
     }
 
-    fn initialise(&mut self, result_manager: &mut DataCache) {
+    fn initialise(&mut self, result_manager: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
         match self {
             NodeEnum::ConfluenceNode(ref mut confluence_node) => {
-                confluence_node.initialise(result_manager);
+                confluence_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::Gr4jNode(ref mut gr4j_node) => {
-                gr4j_node.initialise(result_manager);
+                gr4j_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::InflowNode(ref mut inflow_node) => {
-                inflow_node.initialise(result_manager);
+                inflow_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::RoutingNode(ref mut routing_node) => {
-                routing_node.initialise(result_manager);
+                routing_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::StorageNode(ref mut storage_node) => {
-                storage_node.initialise(result_manager);
+                storage_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::DiversionNode(ref mut diversion_node) => {
-                diversion_node.initialise(result_manager);
+                diversion_node.initialise(result_manager, node_dictionary);
             }
             NodeEnum::SacramentoNode(ref mut sacramento_node) => {
-                sacramento_node.initialise(result_manager);
+                sacramento_node.initialise(result_manager, node_dictionary);
+            }
+        }
+    }
+
+    fn get_ds_links(&self) -> [Link; 2] {
+        match &self {
+            NodeEnum::ConfluenceNode(confluence_node) => {
+                confluence_node.get_ds_links()
+            }
+            NodeEnum::Gr4jNode(gr4j_node) => {
+                gr4j_node.get_ds_links()
+            }
+            NodeEnum::InflowNode(inflow_node) => {
+                inflow_node.get_ds_links()
+            }
+            NodeEnum::RoutingNode(routing_node) => {
+                routing_node.get_ds_links()
+            }
+            NodeEnum::StorageNode(storage_node) => {
+                storage_node.get_ds_links()
+            }
+            NodeEnum::DiversionNode(diversion_node) => {
+                diversion_node.get_ds_links()
+            }
+            NodeEnum::SacramentoNode(sacramento_node) => {
+                sacramento_node.get_ds_links()
             }
         }
     }

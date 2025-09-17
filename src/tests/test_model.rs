@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use crate::model::Model;
 use crate::nodes::inflow_node::InflowNode;
 use crate::nodes::storage_node::StorageNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
-use crate::nodes::{Node, NodeEnum};
+use crate::nodes::{Link, Node, NodeEnum};
 use crate::data_cache::DataCache;
 
 
@@ -22,7 +23,10 @@ fn test_create_and_run_model_with_storage_node() {
     st1.d = Table::from_csv("./src/tests/example_tables/test_4_dim_table.csv");
     //t1.d.print();
     let mut data_cache = DataCache::new();
-    st1.initialise(&mut data_cache);
+    let mut node_dictionary: HashMap<String, usize> = HashMap::new();
+    node_dictionary.insert(st1.name.to_string(), 0);
+
+    st1.initialise(&mut data_cache, &node_dictionary);
     println!("Initial vol = {}", st1.v_initial);
     println!("Area 0 = {}", st1.area0);
 
@@ -55,11 +59,13 @@ fn test_create_and_run_model_with_nodes() {
     inflow_ts2.push(2, 20.0);
 
     // Create two inflow nodes
-    let in1 = InflowNode::new();
-    let in2 = InflowNode::new();
+    let mut in1 = InflowNode::new();
+    in1.name = "inflow_node_1".to_string();
+    let mut in2 = InflowNode::new();
+    in2.name = "inflow_node_2".to_string();
 
-    let id1 = in1.get_id();
-    let id2 = in2.get_id();
+    // Add a link from in1 to in2
+    in1.ds_link_primary = Link::new_named_link("inflow_node_2");
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
@@ -67,8 +73,8 @@ fn test_create_and_run_model_with_nodes() {
     m.nodes.push(NodeEnum::InflowNode(in2));
 
     // Link the nodes
-    println!("Upstream={id1}, Downstream={id2}");
-    m.add_link(id1, id2);
+    //println!("Upstream={id1}, Downstream={id2}");
+    //m.add_link(id1, id2);
 
     // Now run the model
     m.run();
@@ -89,20 +95,19 @@ fn test_create_and_run_model_with_nodes_reverse_order() {
     inflow_ts2.push(2, 20.0);
 
     // Create two inflow nodes
-    let in1 = InflowNode::new();
-    let in2 = InflowNode::new();
+    let mut in1 = InflowNode::new();
+    in1.name = "Node1".to_string();
 
-    let id1 = in1.get_id();
-    let id2 = in2.get_id();
+    let mut in2 = InflowNode::new();
+    in2.name = "Node2".to_string();
+
+    // Link the nodes
+    in1.ds_link_primary = Link::new_named_link("Node2");
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
     m.nodes.push(NodeEnum::InflowNode(in2));
     m.nodes.push(NodeEnum::InflowNode(in1));
-
-    // Link the nodes
-    println!("Upstream={id1}, Downstream={id2}");
-    m.add_link(id1, id2);
 
     // Now run the model
     m.run();

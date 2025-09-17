@@ -1,7 +1,7 @@
 use crate::model::Model;
 use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::inflow_node::InflowNode;
-use crate::nodes::{Node, NodeEnum};
+use crate::nodes::{Link, Node, NodeEnum};
 
 
 /// Create an inflow node, add it to a model, and drive the inflow
@@ -10,8 +10,8 @@ use crate::nodes::{Node, NodeEnum};
 fn test_inflow_node_with_timeseries() {
 
     //Creat a new inflow node
-    let n = InflowNode::new();
-    let n_id = n.get_id();
+    let mut n = InflowNode::new();
+    n.name = "Node_inflow".to_string();
 
     //Create a new routing node
     let mut r = RoutingNode::new();
@@ -20,7 +20,11 @@ fn test_inflow_node_with_timeseries() {
     r.set_divs(10);
     r.set_x(0.5);
     r.set_lag(2);
-    let r_id = r.get_id();
+    r.name = "Node_routing".to_string();
+
+    // Link the nodes
+    println!("Inflow={}, Routing={}", n.name, r.name);
+    n.ds_link_primary = Link::new_named_link(&r.name);
 
     // Now create a model and put the nodes into the model
     let mut m = Model::new();
@@ -32,10 +36,7 @@ fn test_inflow_node_with_timeseries() {
     // let inflow_ts = timeseries_vec[0].clone();
     // m <---- add data here and tell the inflow node how to find it.
 
-    // Link the nodes
-    println!("Inflow={n_id}, Routing={r_id}");
-    m.add_link(n_id, r_id);
-    
+
     // Now run the model
     m.run();
 

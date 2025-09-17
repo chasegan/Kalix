@@ -1,8 +1,8 @@
-use std::i32;
+use std::collections::HashMap;
 use super::{Link, Node};
-use uuid::Uuid;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
+use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
 
@@ -10,12 +10,11 @@ use super::super::numerical::mathfn::quadratic_plus;
 #[derive(Clone)]
 pub struct RoutingNode {
     pub name: String,
-    pub id: Uuid,
     pub location: Location,
 
     //Links
-    us_link: Link,
-    ds_link_primary: Link,
+    pub us_link: Link,
+    pub ds_link_primary: Link,
 
     //Vars for reporting
     us_flow: f64,
@@ -66,7 +65,6 @@ impl RoutingNode {
     pub fn new() -> RoutingNode {
         RoutingNode {
             name: "".to_string(),
-            id: Uuid::new_v4(),
             pwl_divs: 1,
             x: 0.0,
             ..Default::default()
@@ -130,7 +128,7 @@ impl Node for RoutingNode {
     Initialise node before model run.
     Here I can pre-compute all the PWL segment parameters.
     */
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
         
         //Basic node reporting parameters
         //===============================
@@ -186,15 +184,22 @@ impl Node for RoutingNode {
         self.recorder_idx_dsflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "dsflow").as_str(), false);
         self.recorder_idx_usflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "usflow").as_str(), false);
         self.recorder_idx_storage = data_cache.get_series_idx(make_result_name(node_name.as_str(), "storage").as_str(), false);
+
+        //Initialize the links by converting any named links to indexed links.
+        match &self.ds_link_primary.node_identification {
+            ComponentIdentification::Named {name: n } => {
+                let idx = node_dictionary[n];
+                self.ds_link_primary = Link::new_indexed_link(idx);
+            },
+            _ => {}
+        }
     }
 
 
     /*
-    Get the id of the node
+    Get the name of the node
      */
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
+    fn get_name(&self) -> String { self.name.to_string() }
     
 
     /*
@@ -260,7 +265,7 @@ impl Node for RoutingNode {
 
         //Clean up reporting vars
         self.ds_flow = qout;
-        println!("Node {} dsflow={}", self.id, self.ds_flow);
+        //println!("Node {} dsflow={}", self.name, self.ds_flow);
         
         //Give all the ds_flow water to the downstream terminal if one has been defined
         self.ds_link_primary.flow = self.ds_flow;
@@ -289,5 +294,9 @@ impl Node for RoutingNode {
     // TODO: remove unused index i?
     fn remove_outflow(&mut self, i: i32) -> f64 {
         self.ds_link_primary.remove_flow()
+    }
+
+    fn get_ds_links(&self) -> [Link; 2] {
+        [self.ds_link_primary.clone(), Link::new_unconnected_link()]
     }
 }

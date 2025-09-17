@@ -3,6 +3,7 @@ use uuid::Uuid;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
+use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::configuration::{Configuration};
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
@@ -20,15 +21,13 @@ pub struct Model {
     // dynamic dispatch --> Vec<Box<dyn Node>>.
     pub nodes: Vec<NodeEnum>,
 
-    // Vector of tuples defining the links (upstream node uuid, downstream node uuid).
-    pub links: Vec<(Uuid, Uuid)>,
+    // Vector of tuples defining the execution order (node name, node index).
+    // The node index is just the index of the node in "self.nodes" which is handy for quick
+    // access.
+    pub execution_order: Vec<(String, usize)>,
 
-    // Vector of tuples defining the execution order (node uuid, node index).
-    // The node index is just the index of the node in "nodes" which is handy for quick access.
-    pub execution_order: Vec<(Uuid, usize)>,
-
-    // Node dictionary maps from the node uuid to the node index.
-    pub node_dictionary: HashMap<Uuid, usize>,
+    // Node dictionary maps from the node name to the node index.
+    pub node_dictionary: HashMap<String, usize>,
 }
 
 
@@ -91,6 +90,14 @@ impl Model {
 
 
     pub fn run(&mut self) {
+
+        // Initialise the node dictionary
+        self.node_dictionary = HashMap::new();
+        for i in 0..self.nodes.len() {
+            let node_name = self.nodes[i].get_name();
+            self.node_dictionary.insert(node_name, i);
+        }
+
         //Initialise the node network
         //TODO: We shouldn't do a full initialisation again here! Maybe we need an "initialize()" and a "reset()" on each node?
         self.initialize_network();
@@ -252,22 +259,22 @@ impl Model {
 
     #[allow(unused_variables)] //TODO: remove this and make use of unused variable t
     pub fn run_timestep(&mut self, t: u64) {
-        for ex_tuple in self.execution_order.iter() {
-            let id = ex_tuple.0;
-            let i = ex_tuple.1;
+        for (name, i_ref) in self.execution_order.iter() {
+            let i = i_ref.clone();
 
-            //Get a reference to node i
-            //let mut n = &self.nodes[i];
-
-            //Run node i
+            //  Run node i
             self.nodes[i].run_flow_phase(&mut self.data_cache);
-            //self.nodes[i].run_flow_phase(&mut self.data_cache);
 
-            //TODO: here is where I need to pass water from the node into the next one
-            if let Some(ds_id) = self.find_ds_node(id) {
-                let dsflow = self.nodes[i].remove_outflow(0); //take it from outlet 0.
-                let ds_no = self.node_dictionary[&ds_id];
-                self.nodes[ds_no].add_inflow(dsflow, 0); //add it to inlet 0
+            // Move water on all the links of node i
+            for link in self.nodes[i].get_ds_links() {
+                match link.node_identification {
+                    ComponentIdentification::Indexed { idx: ds_node_idx } => {
+                        let dsflow = self.nodes[i].remove_outflow(0);
+                        self.nodes[ds_node_idx].add_inflow(dsflow, 0);
+                    },
+                    ComponentIdentification::None => { },
+                    _ => { panic!("This should have been converted to indexed type during initialization."); }
+                }
             }
         }
     }
@@ -275,11 +282,12 @@ impl Model {
 
     
     pub fn initialize_network(&mut self) {
-        // Initialize the execution order
-        self.initialize_execution_order();
 
         // Initialize all the nodes
         self.initialize_nodes();
+
+        // Initialize the execution order
+        self.initialize_execution_order();
     }
 
 
@@ -296,17 +304,8 @@ impl Model {
 
 
     fn initialize_execution_order(&mut self) {
-        // TASK 1
-        // Make a hash table that maps from node id (guid), to node index (their index in
-        // self.nodes).
-        self.node_dictionary = HashMap::new();
-        for i in 0..self.nodes.len() {
-            let node_id = self.nodes[i].get_id();
-            self.node_dictionary.insert(node_id, i);
-        }
-
         // TASK 2
-        // Use links to build a vector of tuples (node ID & node index) indicating suitable
+        // Use links to build a vector of tuples (node name & node index) indicating suitable
         // execution order. This order should preserve the order of "node index" wherever
         // possible. Having the node index in the tuple lets us step through the execution order
         // during a run without having to search for the node ID every time.
@@ -324,11 +323,11 @@ impl Model {
                 break;
             }
 
-            let idx_next = self.find_next_node(&unsorted_node_idxs);
+            let idx_next = self.find_next_node_idx(&unsorted_node_idxs);
             match idx_next {
                 None => { panic!("Is the model cyclic?!"); },
                 Some(idx) => {
-                    let guid_idx = (self.nodes[idx].get_id(), idx);
+                    let guid_idx = (self.nodes[idx].get_name(), idx);
                     //println!("Execution order {:#?}, {:#?}", 1 + self.execution_order.len(), guid_idx);
                     self.execution_order.push(guid_idx);
                     unsorted_node_idxs.retain(|x| *x != idx);
@@ -340,111 +339,49 @@ impl Model {
     // TODO: Keep in mind this is done in order of definition. Hopefully order will never matter.
     fn initialize_nodes(&mut self) {
         for i in 0..self.nodes.len() {
-            self.nodes[i].initialise(&mut self.data_cache);
+            self.nodes[i].initialise(&mut self.data_cache, &self.node_dictionary);
         }
     }
     
     // Add a node to the model.
     // DONE BUT NOT TESTED
     pub fn add_node(&mut self, node_enum: NodeEnum) {
-        //TODO: Maybe it's a good idea for the uuid to be an Option<Uuid> so it can be
-        //   None to start with and it can receive a unique id when it gets added to a
-        //   model.
-        let id= node_enum.get_id();
-        if self.get_node(id).is_some() {
-            panic!("A node with that Uuid already exists!")
+        let name= node_enum.get_name();
+        if self.get_node(&name).is_some() {
+            panic!("A node with that name already exists!")
         }
         self.nodes.push(node_enum);
     }
 
 
-    /// Add a link between two nodes.
-    /// DONE BUT NOT TESTED
-    pub fn add_link(&mut self, upstream_node_id: Uuid, downstream_node_id: Uuid) {
-        //TODO: maybe I want to panic if the link already exists
-        self.links.push((upstream_node_id, downstream_node_id));
-    }
+    /// This function decides which node to execute next.
+    /// For now the logic is: return the first node we find which is not
+    /// downstream of any other node in the list. If the model is cyclic,
+    /// None will be returned. Otherwise Some(usize) containing the idx
+    /// of the answer node.
+    fn find_next_node_idx(&self, node_indexes: &Vec<usize>) -> Option<usize> {
 
+        for &prospect_node_idx in node_indexes.iter() {
+            let mut found_link_ending_at_node = false;
 
-    /// Remove a link between two nodes.
-    /// DONE BUT NOT TESTED
-    pub fn remove_link(&mut self, upstream_node_id: Uuid, downstream_node_id: Uuid) {
-        let mut link_found  = true;
-        while link_found {
-            link_found = false;
-            for i in 0..self.links.len() {
-                if (self.links[i].0 == upstream_node_id) && (self.links[i].1 == downstream_node_id) {
-                    self.links.remove(i);
-                    link_found = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    ///What node is downstream of this one?
-    ///TODO: this method just finds the first one, whereas nodes might have multiple. Maybe I need to rethink the purpose for this function, which is to move the water between nodes.
-    pub fn find_ds_node(&self, node_id: Uuid) -> Option<Uuid> {
-        for i in 0..self.links.len() {
-            if self.links[i].0 == node_id {
-                return Some(self.links[i].1)
-            }
-        }
-        None
-    }
-
-    /// Removes all downstream links from given node
-    /// DONE BUT NOT TESTED
-    pub fn remove_ds_links(&mut self, node_id: Uuid) {
-        let mut link_found  = true;
-        while link_found {
-            link_found = false;
-            for i in 0..self.links.len() {
-                if self.links[i].0 == node_id {
-                    self.links.remove(i);
-                    link_found = true;
-                    break;
-                }
-            }
-        }
-    }
-
-
-    /// Removes all upstream links from given node
-    /// DONE BUT NOT TESTED
-    pub fn remove_us_links(&mut self, node_id: Uuid) {
-        let mut link_found  = true;
-        while link_found {
-            link_found = false;
-            for i in 0..self.links.len() {
-                if self.links[i].1 == node_id {
-                    self.links.remove(i);
-                    link_found = true;
-                    break;
-                }
-            }
-        }
-    }
-
-
-    /// Given the provided nodes, which one is not downstream of any other one?
-    /// If the model is cyclic, None will be returned. Otherwise Some(usize)
-    /// containing the idx of the node.
-    fn find_next_node(&self, node_indexes: &Vec<usize>) -> Option<usize> {
-        for idx in node_indexes {
-            let guid = self.nodes[*idx].get_id();
-            let mut can_be_next = true;
-            for (us_guid, ds_guid) in &self.links {
-                if guid == *ds_guid {
-                    let us_idx = self.node_dictionary[&us_guid];
-                    if node_indexes.contains(&us_idx) {
-                        can_be_next = false;
-                        break;
+            // Check all the other nodes for ds links ending at prospect_node.
+            for &i in node_indexes.iter() {
+                let links = self.nodes[i].get_ds_links();
+                for link in links {
+                    match link.node_identification {
+                        ComponentIdentification::Indexed { idx} => {
+                            if idx == prospect_node_idx {
+                                found_link_ending_at_node = true;
+                            }
+                        },
+                        ComponentIdentification::None => continue,
+                        ComponentIdentification::Named { name: _ } =>
+                            panic!("Software bug: this link should have been converted to an indexed type during initialization.")
                     }
                 }
             }
-            if can_be_next {
-                return Some(*idx);
+            if !found_link_ending_at_node {
+                return Some(prospect_node_idx);
             }
         }
         None
@@ -452,9 +389,9 @@ impl Model {
 
 
     /// Returns a reference to the node with a given ID
-    pub fn get_node(&self, id: Uuid) -> Option<&NodeEnum> {
+    pub fn get_node(&self, name: &str) -> Option<&NodeEnum> {
         for x in &self.nodes {
-            if x.get_id() == id {
+            if x.get_name() == name {
                 return Some(x);
             }
         }
@@ -462,6 +399,7 @@ impl Model {
     }
 
 
+    /// Prints all the inputs to the console, one on each line.
     pub fn print_inputs(&self) {
         let mut i = 0;
         for input in &self.inputs {

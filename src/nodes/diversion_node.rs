@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use super::{Link, Node};
-use uuid::Uuid;
 use crate::misc::misc_functions::make_result_name;
 use crate::misc::input_data_definition::InputDataDefinition;
 use crate::data_cache::DataCache;
+use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::location::Location;
 //------- IDEAS FOR ORDERING IN KALIX ----------//
 // A couple of thoughts are:
@@ -53,12 +54,11 @@ use crate::misc::location::Location;
 pub struct DiversionNode {
     //Generic Node stuff
     pub name: String,
-    pub id: Uuid,
     pub location: Location,
 
     //Links
-    us_link: Link,
-    ds_link_primary: Link,
+    pub us_link: Link,
+    pub ds_link_primary: Link,
 
     //Inputs
     pub demand_def: InputDataDefinition,
@@ -85,7 +85,6 @@ impl DiversionNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            id: Uuid::new_v4(),
             ..Default::default()
         }
     }
@@ -95,7 +94,7 @@ impl Node for DiversionNode {
     /*
     Initialise node before model run
     */
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
         self.us_link.flow = 0_f64;
         self.ds_link_primary.flow = 0_f64;
         self.us_flow = 0_f64;
@@ -110,15 +109,21 @@ impl Node for DiversionNode {
         self.recorder_idx_usflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "dsflow").as_str(), false);
         self.recorder_idx_diversion = data_cache.get_series_idx(make_result_name(node_name.as_str(), "diversion").as_str(), false);
         self.recorder_idx_demand = data_cache.get_series_idx(make_result_name(node_name.as_str(), "demand").as_str(), false);
-    }
+
+        //Initialize the links by converting any named links to indexed links.
+        match &self.ds_link_primary.node_identification {
+            ComponentIdentification::Named {name: n } => {
+                let idx = node_dictionary[n];
+                self.ds_link_primary = Link::new_indexed_link(idx);
+            },
+            _ => {}
+        }    }
 
 
     /*
-    Get the id of the node
-    */
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
+    Get the name of the node
+     */
+    fn get_name(&self) -> String { self.name.to_string() }
 
 
     /*
@@ -168,5 +173,9 @@ impl Node for DiversionNode {
     // TODO: remove unused index i?
     fn remove_outflow(&mut self, i: i32) -> f64 {
         self.ds_link_primary.remove_flow()
+    }
+
+    fn get_ds_links(&self) -> [Link; 2] {
+        [self.ds_link_primary.clone(), Link::new_unconnected_link()]
     }
 }

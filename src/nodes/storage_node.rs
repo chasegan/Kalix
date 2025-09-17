@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use super::{Link, Node};
-use uuid::Uuid;
 use crate::misc::misc_functions::make_result_name;
 use crate::misc::input_data_definition::InputDataDefinition;
 use crate::numerical::table::Table;
 use crate::data_cache::DataCache;
+use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::location::Location;
 
 const LEVL: usize = 0;
@@ -18,13 +19,12 @@ const EPSILON: f64 = 1e-9;
 pub struct StorageNode {
     //Generic Node stuff
     pub name: String,
-    pub id: Uuid,
     pub location: Location,
 
     //Links
-    us_link: Link,
-    ds_link_primary: Link,
-    ds_link_secondary: Link,
+    pub us_link: Link,
+    pub ds_link_primary: Link,
+    pub ds_link_secondary: Link,
 
     //Storage vars including for calculations and reporting
     us_flow: f64,
@@ -63,7 +63,6 @@ impl StorageNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            id: Uuid::new_v4(),
             d: Table::new(4),
             area0: -1.0,
             ..Default::default()
@@ -75,7 +74,7 @@ impl Node for StorageNode {
     /*
     Initialise node before model run
     */
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
         // Reset initial state values
         // (note some state variables will get overridden each timestep and maybe dont need resetting)
         self.us_link.flow = 0_f64;
@@ -103,15 +102,29 @@ impl Node for StorageNode {
         self.recorder_idx_dsflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "dsflow").as_str(), false);
         self.recorder_idx_usflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "usflow").as_str(), false);
         self.recorder_idx_storage = data_cache.get_series_idx(make_result_name(node_name.as_str(), "storage").as_str(), false);
+
+        //Initialize the links by converting any named links to indexed links.
+        match &self.ds_link_primary.node_identification {
+            ComponentIdentification::Named {name: n } => {
+                let idx = node_dictionary[n];
+                self.ds_link_primary = Link::new_indexed_link(idx);
+            },
+            _ => {}
+        }
+        match &self.ds_link_secondary.node_identification {
+            ComponentIdentification::Named {name: n } => {
+                let idx = node_dictionary[n];
+                self.ds_link_secondary = Link::new_indexed_link(idx);
+            },
+            _ => {}
+        }
     }
 
 
     /*
-    Get the id of the node
+    Get the name of the node
      */
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
+    fn get_name(&self) -> String { self.name.to_string() }
 
 
     /*
@@ -278,4 +291,7 @@ impl Node for StorageNode {
             self.ds_link_secondary.remove_flow()
     }
 
+    fn get_ds_links(&self) -> [Link; 2] {
+        [self.ds_link_primary.clone(), self.ds_link_secondary.clone()]
+    }
 }

@@ -16,4 +16,33 @@ impl Link {
         self.flow = 0_f64;
         answer
     }
+
+    /// Returns a new link that is not connected to any nodes, and has a flow of zero.
+    /// Probably the same as a default link, but spelling it out for clarity.
+    pub fn new_unconnected_link() -> Link {
+        Link {
+            flow: 0_f64,
+            node_identification: ComponentIdentification::None,
+        }
+    }
+
+    /// Constructor for indexed links
+    pub fn new_indexed_link(idx_of_linked_node: usize) -> Link {
+        Link {
+            flow: 0_f64,
+            node_identification: ComponentIdentification::Indexed {
+                idx: idx_of_linked_node,
+            }
+        }
+    }
+
+    /// Constructor for named links
+    pub fn new_named_link(name_of_linked_node: &str) -> Link {
+        Link {
+            flow: 0_f64,
+            node_identification: ComponentIdentification::Named {
+                name: name_of_linked_node.to_string(),
+            }
+        }
+    }
 }
