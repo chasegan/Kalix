@@ -3,8 +3,8 @@ pub struct Link {
     pub flow: f64,
     pub from_node: usize,
     pub to_node: usize,
-    pub from_outlet: u8,  // 0 = primary, 1 = secondary
-    pub to_inlet: u8,     // 0 = primary, 1 = secondary
+    pub from_outlet: u8,  // 0 = primary, 1 = secondary, etc. u8::MAX=255
+    pub to_inlet: u8,     // 0 = primary, 1 = secondary, etc. u8::MAX=255
 }
 
 impl Link {
@@ -28,7 +28,5 @@ impl Link {
         self.flow += flow;
     }
 
-    pub fn has_flow(&self) -> bool {
-        self.flow > 0.0
-    }
+    pub fn has_flow(&self) -> bool { self.flow > 0.0 }
 }

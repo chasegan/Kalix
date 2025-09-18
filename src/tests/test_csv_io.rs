@@ -50,7 +50,8 @@ fn test_csv_writer() {
     let r = read_ts(filename);
     match r {
         Ok(vec_of_ts) => {
-            write_ts("./src/tests/example_data/output_31d6f6b4_EXPORT.csv", vec_of_ts).expect("Something went wrong.");
+            let vec_of_refs = vec_of_ts.iter().collect();
+            write_ts("./src/tests/example_data/output_31d6f6b4_EXPORT.csv", vec_of_refs).expect("Something went wrong.");
         },
         Err(e) => panic!("Something went wrong: {:?}", e)
     }

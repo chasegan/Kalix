@@ -101,7 +101,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
 }
 
 
-pub fn write_ts(filename: &str, timeseries_vector: Vec<Timeseries>) -> Result<(), CsvError> {
+pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(), CsvError> {
 
     // Check that all timeseries in the vector have the same length
     let data_length = match timeseries_vector.len() {

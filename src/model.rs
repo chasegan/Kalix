@@ -14,24 +14,22 @@ pub struct Model {
     pub outputs: Vec<String>,
     pub data_cache: DataCache,
 
-    // Node storage
+    // Nodes
     pub nodes: Vec<NodeEnum>,
 
-    // Centralized link management
+    // Links
     pub links: Vec<Link>,
 
     // Adjacency lists for O(1) link lookup
     pub outgoing_links: Vec<Vec<usize>>,  // outgoing_links[node_idx] = vec of link indices
     pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
 
-    // Pre-computed execution order (topologically sorted)
+    // Pre-computed execution order
+    // (topologically sorted using Kahn's Algorithm)
     pub execution_order: Vec<usize>,
 
     // Fast node name lookup
-    pub node_lookup: FxHashMap<String, usize>,
-
-    // Legacy node dictionary for compatibility
-    pub node_dictionary: HashMap<String, usize>,
+    pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name] = node index
 
     // Performance optimization: track active links
     pub active_links: Vec<usize>,
@@ -57,7 +55,6 @@ impl Model {
         self.outgoing_links.push(Vec::new());
         self.incoming_links.push(Vec::new());
         self.node_lookup.insert(name.clone(), idx);
-        self.node_dictionary.insert(name, idx);
 
         idx
     }
@@ -84,20 +81,26 @@ impl Model {
     Model configuration needs to be done once, after loading the model, but not for every run.
      */
     pub fn configure(&mut self) {
+
         //TASKS
         //1) Define output series
         for series_name in self.outputs.iter() {
             self.data_cache.get_or_add_new_series(series_name, false);
         }
+
         //2) Nodes ask data_cache for idx of relevant data series for input
         self.initialize_nodes();
+
         //3) Read the input data from file
         // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
         // TODO: E.g. if we were doing reload on run with a subset of the data, or
+
         //4) Automatically determining the maximum simulation period
         self.configuration = self.auto_determine_simulation_period();
+
         //5) Allow the user to override the sim period
         // TODO: provide this functionality later
+
         //6) Load input data into the data_cache
         // TODO: Fix this. Currently it just jams data into the cache irrespective of the simulation period.
         //self.data_cache.start_timestamp = self.configuration.sim_start_timestamp; //TODO: can I delete the property "data_cache.start_timestamp"?
@@ -121,6 +124,7 @@ impl Model {
         }
         self.data_cache.set_start_and_stepsize(self.configuration.sim_start_timestamp,
                                                self.configuration.sim_stepsize);
+
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
     }
@@ -128,15 +132,9 @@ impl Model {
 
     pub fn run(&mut self) {
 
-        // Initialise the node dictionary
-        self.node_dictionary = HashMap::new();
-        for i in 0..self.nodes.len() {
-            let node_name = self.nodes[i].get_name().to_string();
-            self.node_dictionary.insert(node_name, i);
-        }
-
         //Initialise the node network
-        //TODO: We shouldn't do a full initialisation again here! Maybe we need an "initialize()" and a "reset()" on each node?
+        //TODO: We shouldn't do a full initialisation again here!
+        // Maybe we need an "initialize()" and a "reset()" on each node?
         self.initialize_network();
 
         //Run all timesteps
@@ -145,7 +143,6 @@ impl Model {
         while time <= self.configuration.sim_end_timestamp {
 
             //Run the network
-            //println!("Step: {}, Timestamp: {} ({})", step, time, crate::tid::utils::u64_to_date_string(time as u64));
             self.run_timestep(time);
 
             //Increment time
@@ -193,37 +190,26 @@ impl Model {
         Ok(true) // Simulation completed successfully
     }
 
-    /*
-    Determine the simulation period on the basis of the available input data
-     */
+    /// Determine the simulation period on the basis of the available input data
     pub fn auto_determine_simulation_period(&self) -> Configuration {
 
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
-        // println!("Number of critical inputs: {}", civ.len());
-        // for i in 0..civ.len() {
-        //     println!("Critical input [{}]: {}", i, civ[i]);
-        // }
 
         // If there is no critical input data, return a default configuration.
-        if civ.len() == 0 {
-            return Configuration::new();
-        }
+        if civ.len() == 0 { return Configuration::new(); }
 
         // Go through all the critical inputs and make sure they are all in the model.
         // As you find them, you can go ahead and update the mask of data availability.
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         for ci in civ {
 
-            // println!("Searching for timeseries that matches ci: {}", ci);
+            // Searching for timeseries that matches ci
             let mut found : bool = false;
-
             for ts in self.inputs.iter() {
-                // println!("Timeseries: {} {}", ts.full_colindex_path, ts.full_colname_path);
                 if (ci == ts.full_colindex_path) || (ci == ts.full_colname_path) {
-
-                    // println!("Got it!");
                     found = true;
+
                     // This timeseries appears to be the one we're looking for!
                     // If it is a critical input AND THE SOURCE IS A FILE then the model run
                     // will be limited by the data available in the file.
@@ -231,12 +217,12 @@ impl Model {
                         match critical_data_availability_mask {
                             None => {
                                 //This is the first critical data file
-                                critical_data_availability_mask = Some(ts.timeseries.clone());
                                 // println!("Initial mask based on {}", ts.source_path);
+                                critical_data_availability_mask = Some(ts.timeseries.clone());
                             }
                             Some(ref mut mask) => {
-                                mask.mask_with(&ts.timeseries);
                                 // println!("Mask updated based on {}", ts.source_path);
+                                mask.mask_with(&ts.timeseries);
                             }
                         }
                     } else {
@@ -246,21 +232,18 @@ impl Model {
             }
 
             if !found {
-                // If we reach this code, it means ci is a critical input which was not matched by any
-                // timeseries in self.inputs
                 // TODO: improve error response by returning a Result rather than panicking
                 panic!("Input data has nothing matching this critical input: {}", ci);
             }
         }
 
-        // Now in principle the model could run for any sequence where critical_data_availability_mask
-        // has values. Like Fors, we are going to default to the first period.
+        // The model could run for any sequence where critical_data_availability_mask has values.
+        // Like Fors, we are going to default to the first period.
         let mask = critical_data_availability_mask.unwrap();
-        let mut start_index = 0;          //start at here
-        let mut end_index = mask.len();   //end at here (exclusive)
 
-        //Look for the start_index
+        //Look for the start.
         //Start and 0 and break when we find the first non-nan value.
+        let mut start_index = 0;
         for i in 0..mask.len() {
             if !mask.values[i].is_nan() {
                 start_index = i;
@@ -268,8 +251,9 @@ impl Model {
             }
         }
 
-        //Look for the end_index
+        //Look for the end (exclusive)
         //Start at start_index and then break when we find the first nan value.
+        let mut end_index = mask.len();
         for i in start_index..mask.len() {
             if mask.values[i].is_nan() {
                 end_index = i;
@@ -282,22 +266,24 @@ impl Model {
         // println!("Mask start_timestamp: {}", mask.start_timestamp);
         // println!("Mask start_index: {}", start_index);
         // println!("Mask end_index: {}", end_index);
-        let nsteps = (end_index - start_index) as u64;
+        let n_steps = (end_index - start_index) as u64;
         let start_timestamp = mask.start_timestamp + (start_index as u64 * mask.step_size);
         let end_timestamp = mask.start_timestamp + ((end_index - 1) as u64 * mask.step_size);
         Configuration {
             sim_stepsize: mask.step_size,
             sim_start_timestamp: start_timestamp,
             sim_end_timestamp: end_timestamp,
-            sim_nsteps: nsteps,
+            sim_nsteps: n_steps,
         }
     }
 
 
     pub fn run_timestep(&mut self, _t: u64) {
-        // Execute nodes in topological order
+
+        // Execute nodes
         for &node_idx in &self.execution_order {
-            // Run the node's flow computation
+
+            // Run the node's flow phase
             self.nodes[node_idx].run_flow_phase(&mut self.data_cache);
 
             // Collect outflows and add to corresponding links
@@ -323,7 +309,7 @@ impl Model {
         self.initialize_nodes();
 
         // Initialize the execution order
-        self.compute_execution_order();
+        self.determine_execution_order();
     }
 
 
@@ -339,8 +325,8 @@ impl Model {
     }
 
 
-    /// Computes execution order using Kahn's algorithm (O(V+E) complexity)
-    fn compute_execution_order(&mut self) {
+    /// Determine execution order using Kahn's algorithm (O(V+E) complexity)
+    fn determine_execution_order(&mut self) {
         let num_nodes = self.nodes.len();
         let mut in_degree = vec![0; num_nodes];
 
@@ -379,6 +365,7 @@ impl Model {
         }
     }
 
+
     /// Efficiently move water along links to downstream nodes
     fn move_water(&mut self) {
         self.active_links.clear();
@@ -401,15 +388,14 @@ impl Model {
         }
     }
 
+
+    // Initialize all the nodes
     // TODO: Keep in mind this is done in order of definition. Hopefully order will never matter.
     fn initialize_nodes(&mut self) {
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache);
         }
     }
-
-
-
 
     /// Returns a reference to the node with a given ID
     pub fn get_node(&self, name: &str) -> Option<&NodeEnum> {
@@ -433,19 +419,14 @@ impl Model {
 
 
     pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
-        //TODO: I feel like I should be able to borrow references and temporarily create a
-        //TODO: Vec<&Timeseries> for the purposes of writing before returning the borrow and
-        //TODO: leaving ownership of the series in the data cache.
-        let mut vec_ts: Vec<Timeseries> = vec![];
+
+        let mut vec_ts: Vec<&Timeseries> = Vec::new();
         for output_name in &self.outputs {
             let idx = self.data_cache.get_existing_series_idx(output_name).unwrap();
-            let ts = self.data_cache.series[idx].clone();
-            vec_ts.push(ts);
+            vec_ts.push(&self.data_cache.series[idx]);
         }
-        let result = write_ts(filename, vec_ts);
-        if result.is_err() {
-            return Err(format!("Could not write file {}", filename));
-        }
-        Ok(())
+
+        write_ts(filename, vec_ts)
+            .map_err(|_| format!("Could not write file {}", filename))
     }
 }
