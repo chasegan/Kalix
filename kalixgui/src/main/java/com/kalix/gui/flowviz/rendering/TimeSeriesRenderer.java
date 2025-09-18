@@ -14,15 +14,66 @@ import java.util.List;
 import java.util.Map;
 
 public class TimeSeriesRenderer {
-    
+
+    // Constants for rendering
+    private static final Color GRID_COLOR = new Color(240, 240, 240);
+    private static final float GRID_STROKE_WIDTH = 0.5f;
+    private static final float AXIS_STROKE_WIDTH = 1.0f;
+    private static final int MIN_TARGET_TICKS = 3;
+    private static final int MAX_TARGET_TICKS = 8;
+    private static final int PIXELS_PER_TICK = 120;
+    private static final int VALUE_AXIS_MIN_SPACING = 40;
+    private static final int TICK_MARK_LENGTH = 5;
+    private static final int TIME_LABEL_OFFSET = 18;
+    private static final int VALUE_LABEL_OFFSET = 8;
+
     private final LODManager lodManager;
     private final Map<String, Color> seriesColors;
     private final List<String> visibleSeries;
-    
+
     // Rendering options
     private boolean showDataPoints = false;
     private boolean showGrid = true;
     private boolean antiAliasing = true;
+
+    // Pre-computed temporal intervals to avoid recreation
+    private static final TemporalInterval[] TEMPORAL_INTERVALS = {
+        new TemporalInterval("hour", 3600000L),
+        new TemporalInterval("6hour", 6 * 3600000L),
+        new TemporalInterval("12hour", 12 * 3600000L),
+        new TemporalInterval("day", 86400000L),
+        new TemporalInterval("week", 7 * 86400000L),
+        new TemporalInterval("month", 30L * 86400000L),
+        new TemporalInterval("quarter", 90L * 86400000L),
+        new TemporalInterval("year", 365L * 86400000L),
+        new TemporalInterval("5year", 5 * 365L * 86400000L),
+        new TemporalInterval("decade", 10 * 365L * 86400000L),
+        new TemporalInterval("25year", 25 * 365L * 86400000L),
+        new TemporalInterval("50year", 50 * 365L * 86400000L),
+        new TemporalInterval("century", 100 * 365L * 86400000L),
+        new TemporalInterval("250year", 250 * 365L * 86400000L),
+        new TemporalInterval("500year", 500 * 365L * 86400000L),
+        new TemporalInterval("millennium", 1000 * 365L * 86400000L),
+        new TemporalInterval("2500year", 2500 * 365L * 86400000L),
+        new TemporalInterval("5millennium", 5000 * 365L * 86400000L),
+        new TemporalInterval("10millennium", 10000 * 365L * 86400000L),
+        new TemporalInterval("25millennium", 25000 * 365L * 86400000L),
+        new TemporalInterval("50millennium", 50000 * 365L * 86400000L),
+        new TemporalInterval("100millennium", 100000 * 365L * 86400000L)
+    };
+
+    // Cached axis information to avoid duplicate calculations
+    private static class AxisInfo {
+        final List<Long> timeTicks;
+        final List<Double> valueTicks;
+        final long timeRangeMs;
+
+        AxisInfo(List<Long> timeTicks, List<Double> valueTicks, long timeRangeMs) {
+            this.timeTicks = timeTicks;
+            this.valueTicks = valueTicks;
+            this.timeRangeMs = timeRangeMs;
+        }
+    }
     
     public TimeSeriesRenderer(Map<String, Color> seriesColors, List<String> visibleSeries) {
         this.lodManager = new LODManager();
@@ -47,13 +98,16 @@ public class TimeSeriesRenderer {
         g2d.fillRect(viewport.getPlotX(), viewport.getPlotY(), 
                     viewport.getPlotWidth(), viewport.getPlotHeight());
         
+        // Calculate axis information once for both grid and axis drawing
+        AxisInfo axisInfo = calculateAxisInfo(viewport);
+
         // Draw grid
         if (showGrid) {
-            drawGrid(g2d, viewport);
+            drawGrid(g2d, viewport, axisInfo);
         }
-        
+
         // Draw axes
-        drawAxes(g2d, dataSet, viewport);
+        drawAxes(g2d, dataSet, viewport, axisInfo);
         
         // Draw time series data in legend order (visibleSeries list order)
         for (String seriesName : visibleSeries) {
@@ -339,9 +393,42 @@ public class TimeSeriesRenderer {
         }
     }
     
-    private void drawGrid(Graphics2D g2d, ViewPort viewport) {
-        g2d.setColor(new Color(240, 240, 240));
-        g2d.setStroke(new BasicStroke(0.5f));
+    private AxisInfo calculateAxisInfo(ViewPort viewport) {
+        // Calculate time ticks using temporal boundaries
+        List<Long> timeTicks = calculateTemporalBoundaryTicks(
+            viewport.getStartTimeMs(), viewport.getEndTimeMs(), viewport.getPlotWidth());
+
+        // Calculate value ticks using nice intervals
+        List<Double> valueTicks = calculateValueTicks(viewport);
+
+        long timeRangeMs = viewport.getTimeRangeMs();
+
+        return new AxisInfo(timeTicks, valueTicks, timeRangeMs);
+    }
+
+    private List<Double> calculateValueTicks(ViewPort viewport) {
+        List<Double> ticks = new ArrayList<>();
+        double valueRange = viewport.getValueRange();
+        if (valueRange <= 0) return ticks;
+
+        // Calculate appropriate value tick interval
+        int numTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotHeight() / VALUE_AXIS_MIN_SPACING));
+        double tickInterval = valueRange / (numTicks - 1);
+        tickInterval = roundToNiceValueInterval(tickInterval);
+
+        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
+
+        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
+            ticks.add(currentValue);
+            currentValue += tickInterval;
+        }
+
+        return ticks;
+    }
+
+    private void drawGrid(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
+        g2d.setColor(GRID_COLOR);
+        g2d.setStroke(new BasicStroke(GRID_STROKE_WIDTH));
 
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
@@ -349,81 +436,51 @@ public class TimeSeriesRenderer {
         int plotHeight = viewport.getPlotHeight();
 
         // Draw vertical grid lines aligned with time axis ticks
-        drawVerticalGridLines(g2d, viewport, plotX, plotY, plotWidth, plotHeight);
-
-        // Draw horizontal grid lines aligned with value axis ticks
-        drawHorizontalGridLines(g2d, viewport, plotX, plotY, plotWidth, plotHeight);
-    }
-
-    private void drawVerticalGridLines(Graphics2D g2d, ViewPort viewport, int plotX, int plotY, int plotWidth, int plotHeight) {
-        // Use the same tick calculation as the time axis
-        List<Long> tickTimes = calculateTemporalBoundaryTicks(
-            viewport.getStartTimeMs(), viewport.getEndTimeMs(), plotWidth);
-
-        for (Long tickTime : tickTimes) {
+        for (Long tickTime : axisInfo.timeTicks) {
             int screenX = viewport.timeToScreenX(tickTime);
             if (screenX >= plotX && screenX <= plotX + plotWidth) {
                 g2d.drawLine(screenX, plotY, screenX, plotY + plotHeight);
             }
         }
-    }
 
-    private void drawHorizontalGridLines(Graphics2D g2d, ViewPort viewport, int plotX, int plotY, int plotWidth, int plotHeight) {
-        double valueRange = viewport.getValueRange();
-        if (valueRange <= 0) return;
-
-        // Calculate appropriate value tick interval (same logic as value axis)
-        int numTicks = Math.max(3, Math.min(10, plotHeight / 40));
-        double tickInterval = valueRange / (numTicks - 1);
-        tickInterval = roundToNiceValueInterval(tickInterval);
-
-        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
-
-        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
-            int screenY = viewport.valueToScreenY(currentValue);
-
+        // Draw horizontal grid lines aligned with value axis ticks
+        for (Double tickValue : axisInfo.valueTicks) {
+            int screenY = viewport.valueToScreenY(tickValue);
             if (screenY >= plotY && screenY <= plotY + plotHeight) {
                 g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
             }
-
-            currentValue += tickInterval;
         }
     }
     
-    private void drawAxes(Graphics2D g2d, DataSet dataSet, ViewPort viewport) {
+    private void drawAxes(Graphics2D g2d, DataSet dataSet, ViewPort viewport, AxisInfo axisInfo) {
         g2d.setColor(Color.BLACK);
-        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setStroke(new BasicStroke(AXIS_STROKE_WIDTH));
         g2d.setFont(new Font("Arial", Font.PLAIN, 10));
-        
-        drawTimeAxis(g2d, viewport);
-        drawValueAxis(g2d, dataSet, viewport);
+
+        drawTimeAxis(g2d, viewport, axisInfo);
+        drawValueAxis(g2d, viewport, axisInfo);
     }
     
-    private void drawTimeAxis(Graphics2D g2d, ViewPort viewport) {
+    private void drawTimeAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
         int plotWidth = viewport.getPlotWidth();
         int plotHeight = viewport.getPlotHeight();
 
-        // Calculate appropriate time tick interval using temporal boundaries
-        long timeRangeMs = viewport.getTimeRangeMs();
-        List<Long> tickTimes = calculateTemporalBoundaryTicks(
-            viewport.getStartTimeMs(), viewport.getEndTimeMs(), plotWidth);
-
         FontMetrics fm = g2d.getFontMetrics();
 
-        for (Long tickTime : tickTimes) {
+        for (Long tickTime : axisInfo.timeTicks) {
             int screenX = viewport.timeToScreenX(tickTime);
 
             if (screenX >= plotX && screenX <= plotX + plotWidth) {
                 // Draw tick mark
-                g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + 5);
+                g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + TICK_MARK_LENGTH);
 
                 // Draw label
-                String timeLabel = formatTime(tickTime, timeRangeMs);
+                String timeLabel = formatTime(tickTime, axisInfo.timeRangeMs);
                 int labelWidth = fm.stringWidth(timeLabel);
                 g2d.drawString(timeLabel, screenX - labelWidth / 2,
-                             plotY + plotHeight + 18);
+                             plotY + plotHeight + TIME_LABEL_OFFSET);
             }
         }
     }
@@ -432,38 +489,12 @@ public class TimeSeriesRenderer {
         List<Long> ticks = new ArrayList<>();
         long timeRangeMs = endTimeMs - startTimeMs;
 
-        // Target 3-8 labels depending on plot width
-        int targetTicks = Math.max(3, Math.min(8, plotWidth / 120));
-
-        // Define temporal intervals in milliseconds (approximate)
-        TemporalInterval[] intervals = {
-            new TemporalInterval("hour", 3600000L),
-            new TemporalInterval("6hour", 6 * 3600000L),
-            new TemporalInterval("12hour", 12 * 3600000L),
-            new TemporalInterval("day", 86400000L),
-            new TemporalInterval("week", 7 * 86400000L),
-            new TemporalInterval("month", 30L * 86400000L),
-            new TemporalInterval("quarter", 90L * 86400000L),
-            new TemporalInterval("year", 365L * 86400000L),
-            new TemporalInterval("5year", 5 * 365L * 86400000L),
-            new TemporalInterval("decade", 10 * 365L * 86400000L),
-            new TemporalInterval("25year", 25 * 365L * 86400000L),
-            new TemporalInterval("50year", 50 * 365L * 86400000L),
-            new TemporalInterval("century", 100 * 365L * 86400000L),
-            new TemporalInterval("250year", 250 * 365L * 86400000L),
-            new TemporalInterval("500year", 500 * 365L * 86400000L),
-            new TemporalInterval("millennium", 1000 * 365L * 86400000L),
-            new TemporalInterval("2500year", 2500 * 365L * 86400000L),
-            new TemporalInterval("5millennium", 5000 * 365L * 86400000L),
-            new TemporalInterval("10millennium", 10000 * 365L * 86400000L),
-            new TemporalInterval("25millennium", 25000 * 365L * 86400000L),
-            new TemporalInterval("50millennium", 50000 * 365L * 86400000L),
-            new TemporalInterval("100millennium", 100000 * 365L * 86400000L)
-        };
+        // Target labels depending on plot width
+        int targetTicks = Math.max(MIN_TARGET_TICKS, Math.min(MAX_TARGET_TICKS, plotWidth / PIXELS_PER_TICK));
 
         // Find the best interval that gives us the right number of ticks
-        TemporalInterval bestInterval = intervals[intervals.length - 1]; // Default to decade
-        for (TemporalInterval interval : intervals) {
+        TemporalInterval bestInterval = TEMPORAL_INTERVALS[TEMPORAL_INTERVALS.length - 1]; // Default to longest interval
+        for (TemporalInterval interval : TEMPORAL_INTERVALS) {
             long expectedTicks = timeRangeMs / interval.durationMs;
             if (expectedTicks >= targetTicks / 2 && expectedTicks <= targetTicks * 2) {
                 bestInterval = interval;
@@ -655,38 +686,26 @@ public class TimeSeriesRenderer {
         }
     }
     
-    private void drawValueAxis(Graphics2D g2d, DataSet dataSet, ViewPort viewport) {
+    private void drawValueAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
         int plotHeight = viewport.getPlotHeight();
-        
-        double valueRange = viewport.getValueRange();
-        if (valueRange <= 0) return;
-        
-        // Calculate appropriate value tick interval
-        int numTicks = Math.max(3, Math.min(10, plotHeight / 40));
-        double tickInterval = valueRange / (numTicks - 1);
-        tickInterval = roundToNiceValueInterval(tickInterval);
-        
-        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
-        
+
         FontMetrics fm = g2d.getFontMetrics();
-        
-        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
-            int screenY = viewport.valueToScreenY(currentValue);
-            
+
+        for (Double tickValue : axisInfo.valueTicks) {
+            int screenY = viewport.valueToScreenY(tickValue);
+
             if (screenY >= plotY && screenY <= plotY + plotHeight) {
                 // Draw tick mark
-                g2d.drawLine(plotX - 5, screenY, plotX, screenY);
-                
+                g2d.drawLine(plotX - TICK_MARK_LENGTH, screenY, plotX, screenY);
+
                 // Draw label
-                String valueLabel = formatValue(currentValue);
+                String valueLabel = formatValue(tickValue);
                 int labelHeight = fm.getAscent();
-                g2d.drawString(valueLabel, plotX - 8 - fm.stringWidth(valueLabel), 
+                g2d.drawString(valueLabel, plotX - VALUE_LABEL_OFFSET - fm.stringWidth(valueLabel),
                              screenY + labelHeight / 2);
             }
-            
-            currentValue += tickInterval;
         }
     }
     
