@@ -11,9 +11,9 @@ pub struct InflowNode {
     pub inflow_def: InputDataDefinition,
 
     // Internal state only
-    upstream_inflow: f64,
+    usflow: f64,
     lateral_inflow: f64,
-    outflow_primary: f64,
+    dsflow_primary: f64,
     storage: f64,
 
     // Recorders
@@ -23,12 +23,19 @@ pub struct InflowNode {
 }
 
 impl InflowNode {
-    /*
-    Constructor
-    */
+
+    /// Base constructor
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Base constructor with node name
+    pub fn new_named(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
             ..Default::default()
         }
     }
@@ -37,9 +44,9 @@ impl InflowNode {
 impl Node for InflowNode {
     fn initialise(&mut self, data_cache: &mut DataCache) {
         // Initialize only internal state
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
         self.lateral_inflow = 0.0;
-        self.outflow_primary = 0.0;
+        self.dsflow_primary = 0.0;
         self.storage = 0.0;
 
         // Initialize inflow series
@@ -61,21 +68,6 @@ impl Node for InflowNode {
         &self.name  // Return reference, not owned String
     }
 
-    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
-        self.upstream_inflow += flow;
-    }
-
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.outflow_primary;
-                self.outflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
-
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get lateral inflow from input data
         if let Some(idx) = self.inflow_def.idx {
@@ -83,20 +75,35 @@ impl Node for InflowNode {
         }
 
         // Compute outflow based on inflow
-        self.outflow_primary = self.upstream_inflow + self.lateral_inflow;
+        self.dsflow_primary = self.usflow + self.lateral_inflow;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.outflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
         if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.upstream_inflow);
+            data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_inflow {
             data_cache.add_value_at_index(idx, self.lateral_inflow);
         }
 
         // Reset upstream inflow for next timestep
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
+    }
+
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
+
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
     }
 }

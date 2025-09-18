@@ -9,8 +9,8 @@ pub struct ConfluenceNode {
     pub location: Location,
 
     // Internal state only
-    upstream_inflow: f64,
-    outflow_primary: f64,
+    usflow: f64,
+    dsflow_primary: f64,
     storage: f64,
 
     // Recorders
@@ -18,12 +18,19 @@ pub struct ConfluenceNode {
 }
 
 impl ConfluenceNode {
-    /*
-    Constructor
-    */
-    pub fn new() -> ConfluenceNode {
-        ConfluenceNode {
+
+    /// Base constructor
+    pub fn new() -> Self {
+        Self {
             name: "".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Base constructor with node name
+    pub fn new_named(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
             ..Default::default()
         }
     }
@@ -32,8 +39,8 @@ impl ConfluenceNode {
 impl Node for ConfluenceNode {
     fn initialise(&mut self, data_cache: &mut DataCache) {
         // Initialize only internal state
-        self.upstream_inflow = 0.0;
-        self.outflow_primary = 0.0;
+        self.usflow = 0.0;
+        self.dsflow_primary = 0.0;
         self.storage = 0.0;
 
         // Initialize result recorders
@@ -43,35 +50,35 @@ impl Node for ConfluenceNode {
     }
 
     fn get_name(&self) -> &str {
-        &self.name  // Return reference, not owned String
-    }
-
-    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
-        self.upstream_inflow += flow;
-    }
-
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.outflow_primary;
-                self.outflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
+        &self.name
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // For confluence nodes, outflow equals upstream inflow
-        self.outflow_primary = self.upstream_inflow;
+        self.dsflow_primary = self.usflow;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.outflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 
         // Reset upstream inflow for next timestep
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
+    }
+
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
+
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
     }
 }
 

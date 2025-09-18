@@ -49,27 +49,27 @@ impl Node for NodeEnum {
         }
     }
 
-    fn add_inflow(&mut self, flow: f64, inlet: u8) {
+    fn add_usflow(&mut self, flow: f64, inlet: u8) {
         match self {
-            NodeEnum::ConfluenceNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::DiversionNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::Gr4jNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::InflowNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::RoutingNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::SacramentoNode(node) => node.add_inflow(flow, inlet),
-            NodeEnum::StorageNode(node) => node.add_inflow(flow, inlet),
+            NodeEnum::ConfluenceNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::DiversionNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::Gr4jNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::InflowNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::RoutingNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::SacramentoNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::StorageNode(node) => node.add_usflow(flow, inlet),
         }
     }
 
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match self {
-            NodeEnum::ConfluenceNode(node) => node.get_outflow(outlet),
-            NodeEnum::DiversionNode(node) => node.get_outflow(outlet),
-            NodeEnum::Gr4jNode(node) => node.get_outflow(outlet),
-            NodeEnum::InflowNode(node) => node.get_outflow(outlet),
-            NodeEnum::RoutingNode(node) => node.get_outflow(outlet),
-            NodeEnum::SacramentoNode(node) => node.get_outflow(outlet),
-            NodeEnum::StorageNode(node) => node.get_outflow(outlet),
+            NodeEnum::ConfluenceNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::DiversionNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::Gr4jNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::InflowNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::RoutingNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::SacramentoNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::StorageNode(node) => node.remove_dsflow(outlet),
         }
     }
 }

@@ -26,9 +26,9 @@ pub struct StorageNode {
     pub demand_def: InputDataDefinition,
 
     // Internal state only
-    upstream_inflow: f64,
-    outflow_primary: f64,
-    outflow_secondary: f64,
+    usflow: f64,
+    dsflow_primary: f64,
+    dsflow_secondary: f64,
     storage: f64,
     level: f64,
     rain: f64,
@@ -44,9 +44,8 @@ pub struct StorageNode {
 }
 
 impl StorageNode {
-    /*
-    Constructor
-    */
+
+    /// Base constructor
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
@@ -55,17 +54,25 @@ impl StorageNode {
             ..Default::default()
         }
     }
+
+    /// Base constructor with node name
+    pub fn new_named(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            d: Table::new(4),
+            area0: -1.0,
+            ..Default::default()
+        }
+    }
 }
 
 impl Node for StorageNode {
-    /*
-    Initialise node before model run
-    */
+
     fn initialise(&mut self, data_cache: &mut DataCache) {
         // Initialize only internal state
-        self.upstream_inflow = 0.0;
-        self.outflow_primary = 0.0;
-        self.outflow_secondary = 0.0;
+        self.usflow = 0.0;
+        self.dsflow_primary = 0.0;
+        self.dsflow_secondary = 0.0;
         self.storage = self.v_initial;
         self.v = self.v_initial;
         self.level = 0.0;
@@ -101,43 +108,9 @@ impl Node for StorageNode {
         );
     }
 
+    fn get_name(&self) -> &str { &self.name }
 
-    fn get_name(&self) -> &str {
-        &self.name  // Return reference, not owned String
-    }
-
-    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
-        self.upstream_inflow += flow;
-    }
-
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.outflow_primary;
-                self.outflow_primary = 0.0;
-                outflow
-            }
-            1 => {
-                let outflow = self.outflow_secondary;
-                self.outflow_secondary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
-
-
-    /*
-    Storage node processing follows BackwardEuler with a variation that
-    diversion takes precedence over other fluxes. This means we can rely on:
-         * being able to extract the full start-of-day storage volume (at least)
-         * plus inflow if we know it
-         * plus rainfall in excess of seep and evap
-         * that a large demand will leave volume = 0 at the end of the day
-     */
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-
-        // Use upstream inflow from internal state
 
         // Get the driving data
         let mut rain_mm = 0_f64;
@@ -157,13 +130,13 @@ impl Node for StorageNode {
             demand = data_cache.get_current_value(idx);
         }
 
-        // TODO: Spill is zero when the volume is zero. MAKE THIS A REQUIREMENT of the storage table for consistency with the results.
-        //  Also the table must start with volume = 0.
+        // TODO: Spill is zero when the volume is zero. MAKE THIS A REQUIREMENT of the storage
+        //  table for consistency with the results. Also the table must start with volume = 0.
 
         // We already know what the upstream flows are, and by looking at the
         // net rainfall at dead storage, we can already know what the maximum
         // diversion could be.
-        self.v += self.upstream_inflow;
+        self.v += self.usflow;
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
         let net_rain_at_dead_storage = 0.01 * self.area0 * net_rain_mm;
         let max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
@@ -214,7 +187,7 @@ impl Node for StorageNode {
             error_prev = 0_f64;
             error_i = 1_f64; //any positive value should work here
         }
-        // Now interpolate between i and i-1
+        // Now interpolate between row i and i-1
 
         // Volume
         let x = error_prev / (error_prev - error_i);
@@ -248,36 +221,61 @@ impl Node for StorageNode {
         self.v = self.v - self.seep - self.evap;
 
         // Check the answer
+        // TODO: Can we get rid of this?
         if (self.v - v).abs() > EPSILON {
             println!("About to panic");
             println!("v = {}, self.v = {}", v, self.v);
             println!("self.spill = {}", self.spill);
             println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep, self.evap, self.rain);
-            println!("self.upstream_inflow = {}, self.diversion = {}", self.upstream_inflow, self.diversion);
+            println!("self.upstream_inflow = {}, self.diversion = {}", self.usflow, self.diversion);
             panic!("Error in storage node. Mass balance was wrong. Solution should be {} but vol={}", v, self.v);
         }
 
         // Only spills go downstream via primary outlet
-        self.outflow_primary = self.spill;
-        self.outflow_secondary = 0.0;  // No secondary flow for storage nodes
+        self.dsflow_primary = self.spill;
+        self.dsflow_secondary = 0.0;  // Not implemented yet
 
         // Update storage state
         self.storage = self.v;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.outflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
         if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.upstream_inflow);
+            data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_storage {
             data_cache.add_value_at_index(idx, self.storage);
         }
 
         // Reset upstream inflow for next timestep
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
     }
 
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
 
+    /// Storage node processing follows BackwardEuler with a variation that
+    /// diversion takes precedence over other fluxes. This means we can rely on:
+    ///      * being able to extract the full start-of-day storage volume (at least)
+    ///      * plus inflow if we know it
+    ///      * plus rainfall in excess of seep and evap
+    ///      * that a large demand will leave volume = 0 at the end of the day
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            1 => {
+                let outflow = self.dsflow_secondary;
+                self.dsflow_secondary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
+    }
 }

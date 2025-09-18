@@ -30,7 +30,7 @@ fn test_create_and_run_model_with_storage_node() {
     for i in 0..10 {
         let mut flow = 0_f64;
         if i < 4 { flow = 100_f64 }
-        st1.add_inflow(flow, 0);
+        st1.add_usflow(flow, 0);
         st1.run_flow_phase(&mut data_cache);
         // Note: spill and v are now private - we need public getter methods or to make them public for testing
         // For now, let's comment out these lines and test basic functionality

@@ -10,8 +10,8 @@ pub struct RoutingNode {
     pub location: Location,
 
     // Internal state only
-    upstream_inflow: f64,
-    outflow_primary: f64,
+    usflow: f64,
+    dsflow_primary: f64,
     storage: f64,
 
     //Parameters
@@ -52,9 +52,8 @@ pub struct RoutingNode {
 }
 
 impl RoutingNode {
-    /*
-    Constructor
-    */
+
+    /// Base constructor
     pub fn new() -> RoutingNode {
         RoutingNode {
             name: "".to_string(),
@@ -63,7 +62,17 @@ impl RoutingNode {
             ..Default::default()
         }
     }
-    
+
+    /// Base constructor with name
+    pub fn new_named(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            pwl_divs: 1,
+            x: 0.0,
+            ..Default::default()
+        }
+    }
+
     pub fn set_x(&mut self, value: f64) {
         self.x = value;
     }
@@ -76,21 +85,6 @@ impl RoutingNode {
         self.lag = value;
     }
 
-    // pub  fn print_abc_table(&self) {
-    //     for i in 0..self.pwl_segs {
-    //         let v1 = self.seg_par_v1[i];
-    //         let v2 = self.seg_par_v2[i];
-    //         let q1 = self.seg_par_q1[i];
-    //         let q2 = self.seg_par_q2[i];
-    //         let t1 = self.seg_par_t1[i];
-    //         let t2 = self.seg_par_t2[i];
-    //         let a = self.seg_par_aa[i];
-    //         let b = self.seg_par_bb[i];
-    //         let c = self.seg_par_cc[i];
-    //         println!("{} {} {} {} {} {} {} {} {}", v1, v2, q1, q2, t1, t2, a, b, c);
-    //     }
-    // }
-
     pub  fn set_routing_table(&mut self, index_flows: Vec<f64>, travel_times: Vec<f64>) {
         self.pwl_segs = index_flows.len() - 1;
         for i in 0..=self.pwl_segs {
@@ -99,11 +93,9 @@ impl RoutingNode {
         }
     }
 
-    /*
-    Calculate the node storage by adding up all water volumes in the
-    lag array and pwl arrays.
-     */
-    fn calulate_storage(&mut self) -> f64 {
+    /// Calculate the node storage by adding up all water volumes in the
+    /// lag array and pwl arrays.
+    fn calculate_storage(&mut self) -> f64 {
         let mut answer = 0f64;
         for i in 0..self.lag_sto_used {
             answer += self.lag_sto_array[i];
@@ -117,26 +109,21 @@ impl RoutingNode {
 
 
 impl Node for RoutingNode {
-    /*
-    Initialise node before model run.
-    Here I can pre-compute all the PWL segment parameters.
-    */
     fn initialise(&mut self, data_cache: &mut DataCache) {
+
         // Initialize only internal state
-        self.upstream_inflow = 0.0;
-        self.outflow_primary = 0.0;
+        self.usflow = 0.0;
+        self.dsflow_primary = 0.0;
         self.storage = 0.0;
 
-        //Init for lag routing
-        //====================
+        // Init for lag routing
         for i in 0..self.lag_sto_array.len(){
             self.lag_sto_array[i] = 0_f64;
         }
         self.lag_sto_used = (self.lag + 1) as usize;
         self.lag_iter_index = 0;
-        
-        //Init for pwl routing
-        //====================
+
+        // Here I can pre-compute all the PWL segment parameters
         let d = self.pwl_divs as f64;
         let mut temp_v = 0_f64;
         for i in 0..self.pwl_tt.len() - 1 {
@@ -180,42 +167,23 @@ impl Node for RoutingNode {
         );
     }
 
-
     fn get_name(&self) -> &str {
         &self.name  // Return reference, not owned String
     }
 
-    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
-        self.upstream_inflow += flow;
-    }
-
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.outflow_primary;
-                self.outflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
-    
-
-    /*
-    Runs the node for the current timestep and updates the node state
-     */
+    /// Runs the node for the current timestep and updates the node state
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
         // Lag routing first
         // Put the new inflow into the lag array
-        self.lag_sto_array[self.lag_iter_index] = self.upstream_inflow;
-        //Now copy the oldest element out of the lag storage array
+        self.lag_sto_array[self.lag_iter_index] = self.usflow;
+        // Now copy the oldest element out of the lag storage array
         let oldest_index = (self.lag_iter_index + 1) % self.lag_sto_used;
         let flow_out_of_lag_reach = self.lag_sto_array[oldest_index];
         self.lag_sto_array[oldest_index] = 0_f64; //set the element to zero
         self.lag_iter_index=oldest_index;
-        
-        //Pwl routing second
-        //==================
+
+        // Pwl routing second
         let mut qout = flow_out_of_lag_reach; //define so it gets ingested into the first division
         for i in 0..self.pwl_divs {
             let qin = qout;                   //inflow to this division
@@ -238,44 +206,57 @@ impl Node for RoutingNode {
                     let b = self.seg_par_bb[j] + (1.0/(1.0 - self.x));
                     let c = self.seg_par_cc[j] - vi - qin/(1.0 - self.x);
                     let qr = quadratic_plus(a, b, c);
-                    
+
                     //Check if qr is within the segment and if so finalise solution
                     if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
                         qout = (qr - qin * self.x) / (1.0 - self.x);
                         vf = vi + qin - qout;
                         break;
                     }
-                } 
+                }
             }
-            
+
             //Do not allow water to flow upstream.
             if qout < 0f64 {
                 qout = 0f64;
                 vf = vi + qin;
             }
-            
+
             //The new storage volume for this division is vf.
             self.pwl_sto_array[i] = vf;
         }
 
         // Store outflow
-        self.outflow_primary = qout;
+        self.dsflow_primary = qout;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.outflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
         if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.upstream_inflow);
+            data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_storage {
-            self.storage = self.calulate_storage();
+            self.storage = self.calculate_storage();
             data_cache.add_value_at_index(idx, self.storage);
         }
 
         // Reset upstream inflow for next timestep
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
     }
 
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
 
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
+    }
 }

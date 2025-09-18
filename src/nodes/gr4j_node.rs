@@ -1,5 +1,5 @@
-use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
 use super::Node;
+use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
 use crate::misc::misc_functions::make_result_name;
 use crate::misc::input_data_definition::InputDataDefinition;
 use crate::data_cache::DataCache;
@@ -15,8 +15,8 @@ pub struct Gr4jNode {
     pub gr4j_model: Gr4j,
 
     // Internal state only
-    upstream_inflow: f64,
-    outflow_primary: f64,
+    usflow: f64,
+    dsflow_primary: f64,
     storage: f64,
     rain: f64,
     pet: f64,
@@ -30,12 +30,21 @@ pub struct Gr4jNode {
 }
 
 impl Gr4jNode {
-    /*
-    Constructor
-    */
+
+    /// Base constructor
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
+            area_km2: 1.0,
+            gr4j_model: Gr4j::new(),
+            ..Default::default()
+        }
+    }
+
+    /// Base constructor with name
+    pub fn new_named(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
             area_km2: 1.0,
             gr4j_model: Gr4j::new(),
             ..Default::default()
@@ -46,8 +55,8 @@ impl Gr4jNode {
 impl Node for Gr4jNode {
     fn initialise(&mut self, data_cache: &mut DataCache) {
         // Initialize only internal state
-        self.upstream_inflow = 0.0;
-        self.outflow_primary = 0.0;
+        self.usflow = 0.0;
+        self.dsflow_primary = 0.0;
         self.storage = 0.0;
         self.rain = 0.0;
         self.pet = 0.0;
@@ -74,21 +83,6 @@ impl Node for Gr4jNode {
         &self.name  // Return reference, not owned String
     }
 
-    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
-        self.upstream_inflow += flow;
-    }
-
-    fn get_outflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.outflow_primary;
-                self.outflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
-
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get driving data
         if let Some(idx) = self.rain_mm_def.idx {
@@ -101,11 +95,11 @@ impl Node for Gr4jNode {
         // Run GR4J model to get runoff
         self.runoff_depth_mm = self.gr4j_model.run_step(self.rain, self.pet);
         self.runoff_volume_megs = self.runoff_depth_mm * self.area_km2;
-        self.outflow_primary = self.upstream_inflow + self.runoff_volume_megs;
+        self.dsflow_primary = self.usflow + self.runoff_volume_megs;
 
         // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.outflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {
             data_cache.add_value_at_index(idx, self.runoff_volume_megs);
@@ -115,6 +109,21 @@ impl Node for Gr4jNode {
         }
 
         // Reset upstream inflow for next timestep
-        self.upstream_inflow = 0.0;
+        self.usflow = 0.0;
+    }
+
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
+
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
     }
 }

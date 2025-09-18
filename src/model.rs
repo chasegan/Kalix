@@ -303,7 +303,7 @@ impl Model {
             // Collect outflows and add to corresponding links
             for &link_idx in &self.outgoing_links[node_idx] {
                 let link = &self.links[link_idx];
-                let outflow = self.nodes[node_idx].get_outflow(link.from_outlet);
+                let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
 
                 if outflow > 0.0 {
                     self.links[link_idx].add_flow(outflow);
@@ -396,7 +396,7 @@ impl Model {
             let flow = link.remove_flow();
 
             if flow > 0.0 {
-                self.nodes[link.to_node].add_inflow(flow, link.to_inlet);
+                self.nodes[link.to_node].add_usflow(flow, link.to_inlet);
             }
         }
     }
