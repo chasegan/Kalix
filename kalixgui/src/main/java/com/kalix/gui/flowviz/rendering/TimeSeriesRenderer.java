@@ -342,24 +342,51 @@ public class TimeSeriesRenderer {
     private void drawGrid(Graphics2D g2d, ViewPort viewport) {
         g2d.setColor(new Color(240, 240, 240));
         g2d.setStroke(new BasicStroke(0.5f));
-        
+
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
         int plotWidth = viewport.getPlotWidth();
         int plotHeight = viewport.getPlotHeight();
-        
-        // Vertical grid lines (time axis)
-        int numVerticalLines = Math.max(5, Math.min(20, plotWidth / 50));
-        for (int i = 0; i <= numVerticalLines; i++) {
-            int x = plotX + (plotWidth * i) / numVerticalLines;
-            g2d.drawLine(x, plotY, x, plotY + plotHeight);
+
+        // Draw vertical grid lines aligned with time axis ticks
+        drawVerticalGridLines(g2d, viewport, plotX, plotY, plotWidth, plotHeight);
+
+        // Draw horizontal grid lines aligned with value axis ticks
+        drawHorizontalGridLines(g2d, viewport, plotX, plotY, plotWidth, plotHeight);
+    }
+
+    private void drawVerticalGridLines(Graphics2D g2d, ViewPort viewport, int plotX, int plotY, int plotWidth, int plotHeight) {
+        // Use the same tick calculation as the time axis
+        List<Long> tickTimes = calculateTemporalBoundaryTicks(
+            viewport.getStartTimeMs(), viewport.getEndTimeMs(), plotWidth);
+
+        for (Long tickTime : tickTimes) {
+            int screenX = viewport.timeToScreenX(tickTime);
+            if (screenX >= plotX && screenX <= plotX + plotWidth) {
+                g2d.drawLine(screenX, plotY, screenX, plotY + plotHeight);
+            }
         }
-        
-        // Horizontal grid lines (value axis)
-        int numHorizontalLines = Math.max(5, Math.min(15, plotHeight / 40));
-        for (int i = 0; i <= numHorizontalLines; i++) {
-            int y = plotY + (plotHeight * i) / numHorizontalLines;
-            g2d.drawLine(plotX, y, plotX + plotWidth, y);
+    }
+
+    private void drawHorizontalGridLines(Graphics2D g2d, ViewPort viewport, int plotX, int plotY, int plotWidth, int plotHeight) {
+        double valueRange = viewport.getValueRange();
+        if (valueRange <= 0) return;
+
+        // Calculate appropriate value tick interval (same logic as value axis)
+        int numTicks = Math.max(3, Math.min(10, plotHeight / 40));
+        double tickInterval = valueRange / (numTicks - 1);
+        tickInterval = roundToNiceValueInterval(tickInterval);
+
+        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
+
+        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
+            int screenY = viewport.valueToScreenY(currentValue);
+
+            if (screenY >= plotY && screenY <= plotY + plotHeight) {
+                g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
+            }
+
+            currentValue += tickInterval;
         }
     }
     
