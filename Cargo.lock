@@ -294,6 +294,7 @@ dependencies = [
  "numpy",
  "pyo3",
  "rand",
+ "rustc-hash",
  "serde",
  "serde_derive",
  "serde_json",

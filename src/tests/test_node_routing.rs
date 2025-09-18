@@ -1,7 +1,7 @@
 use crate::model::Model;
 use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::inflow_node::InflowNode;
-use crate::nodes::{Link, Node, NodeEnum};
+use crate::nodes::NodeEnum;
 
 
 /// Create an inflow node, add it to a model, and drive the inflow
@@ -22,14 +22,14 @@ fn test_inflow_node_with_timeseries() {
     r.set_lag(2);
     r.name = "Node_routing".to_string();
 
-    // Link the nodes
-    println!("Inflow={}, Routing={}", n.name, r.name);
-    n.ds_link_primary = Link::new_named_link(&r.name);
-
-    // Now create a model and put the nodes into the model
+    // Create a model and add the nodes
     let mut m = Model::new();
-    m.nodes.push(NodeEnum::InflowNode(n));
-    m.nodes.push(NodeEnum::RoutingNode(r));
+    let n_idx = m.add_node(NodeEnum::InflowNode(n));
+    let r_idx = m.add_node(NodeEnum::RoutingNode(r));
+
+    // Link the nodes using the new centralized link management
+    println!("Linking inflow node (idx {}) to routing node (idx {})", n_idx, r_idx);
+    m.add_link(n_idx, r_idx, 0, 0);
 
     // TODO: Configure inflow data
     // let timeseries_vec = crate::io::csv_io::read_ts("./src/tests/example_data/test3.csv").expect("Error");

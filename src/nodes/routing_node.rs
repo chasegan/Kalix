@@ -1,24 +1,17 @@
-use std::collections::HashMap;
-use super::{Link, Node};
+use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
-use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
 
-#[derive(Default)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct RoutingNode {
     pub name: String,
     pub location: Location,
 
-    //Links
-    pub us_link: Link,
-    pub ds_link_primary: Link,
-
-    //Vars for reporting
-    us_flow: f64,
-    ds_flow: f64,
+    // Internal state only
+    upstream_inflow: f64,
+    outflow_primary: f64,
     storage: f64,
 
     //Parameters
@@ -128,15 +121,11 @@ impl Node for RoutingNode {
     Initialise node before model run.
     Here I can pre-compute all the PWL segment parameters.
     */
-    fn initialise(&mut self, data_cache: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
-        
-        //Basic node reporting parameters
-        //===============================
-        self.us_link.flow = 0_f64;
-        self.ds_link_primary.flow = 0_f64;
-        self.us_flow = 0_f64;
-        self.ds_flow = 0_f64;
-        self.storage = 0_f64;
+    fn initialise(&mut self, data_cache: &mut DataCache) {
+        // Initialize only internal state
+        self.upstream_inflow = 0.0;
+        self.outflow_primary = 0.0;
+        self.storage = 0.0;
 
         //Init for lag routing
         //====================
@@ -179,40 +168,46 @@ impl Node for RoutingNode {
             self.pwl_sto_array[i] = 0_f64;
         }
 
-        //Initialize result recorders
-        let node_name = self.name.clone();
-        self.recorder_idx_dsflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "dsflow").as_str(), false);
-        self.recorder_idx_usflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "usflow").as_str(), false);
-        self.recorder_idx_storage = data_cache.get_series_idx(make_result_name(node_name.as_str(), "storage").as_str(), false);
-
-        //Initialize the links by converting any named links to indexed links.
-        match &self.ds_link_primary.node_identification {
-            ComponentIdentification::Named {name: n } => {
-                let idx = node_dictionary[n];
-                self.ds_link_primary = Link::new_indexed_link(idx);
-            },
-            _ => {}
-        }
+        // Initialize result recorders
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_usflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "usflow").as_str(), false
+        );
+        self.recorder_idx_storage = data_cache.get_series_idx(
+            make_result_name(&self.name, "storage").as_str(), false
+        );
     }
 
 
-    /*
-    Get the name of the node
-     */
-    fn get_name(&self) -> String { self.name.to_string() }
+    fn get_name(&self) -> &str {
+        &self.name  // Return reference, not owned String
+    }
+
+    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
+        self.upstream_inflow += flow;
+    }
+
+    fn get_outflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.outflow_primary;
+                self.outflow_primary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
+    }
     
 
     /*
     Runs the node for the current timestep and updates the node state
      */
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-        //Get flow from the upstream terminal if one has been defined
-        self.us_flow = self.us_link.remove_flow();
-
-        //Lag routing first
-        //=================
-        //Put the new inflow into the lag array
-        self.lag_sto_array[self.lag_iter_index] = self.us_flow;
+        // Lag routing first
+        // Put the new inflow into the lag array
+        self.lag_sto_array[self.lag_iter_index] = self.upstream_inflow;
         //Now copy the oldest element out of the lag storage array
         let oldest_index = (self.lag_iter_index + 1) % self.lag_sto_used;
         let flow_out_of_lag_reach = self.lag_sto_array[oldest_index];
@@ -263,40 +258,24 @@ impl Node for RoutingNode {
             self.pwl_sto_array[i] = vf;
         }
 
-        //Clean up reporting vars
-        self.ds_flow = qout;
-        //println!("Node {} dsflow={}", self.name, self.ds_flow);
-        
-        //Give all the ds_flow water to the downstream terminal if one has been defined
-        self.ds_link_primary.flow = self.ds_flow;
+        // Store outflow
+        self.outflow_primary = qout;
 
-        //Record results
+        // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.ds_flow)
+            data_cache.add_value_at_index(idx, self.outflow_primary);
         }
         if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.us_flow)
+            data_cache.add_value_at_index(idx, self.upstream_inflow);
         }
         if let Some(idx) = self.recorder_idx_storage {
             self.storage = self.calulate_storage();
-            data_cache.add_value_at_index(idx, self.storage)
+            data_cache.add_value_at_index(idx, self.storage);
         }
+
+        // Reset upstream inflow for next timestep
+        self.upstream_inflow = 0.0;
     }
 
 
-    #[allow(unused_variables)]
-    // TODO: remove unused index i?
-    fn add_inflow(&mut self, v: f64, i: i32) {
-        self.us_link.flow += v;
-    }
-
-    #[allow(unused_variables)]
-    // TODO: remove unused index i?
-    fn remove_outflow(&mut self, i: i32) -> f64 {
-        self.ds_link_primary.remove_flow()
-    }
-
-    fn get_ds_links(&self) -> [Link; 2] {
-        [self.ds_link_primary.clone(), Link::new_unconnected_link()]
-    }
 }

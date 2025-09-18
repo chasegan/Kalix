@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-use super::{Link, Node};
+use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::misc::input_data_definition::InputDataDefinition;
 use crate::numerical::table::Table;
 use crate::data_cache::DataCache;
-use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::location::Location;
 
 const LEVL: usize = 0;
@@ -14,43 +12,32 @@ const SPIL: usize = 3;
 const EPSILON: f64 = 1e-9;
 
 
-#[derive(Default)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct StorageNode {
-    //Generic Node stuff
     pub name: String,
     pub location: Location,
-
-    //Links
-    pub us_link: Link,
-    pub ds_link_primary: Link,
-    pub ds_link_secondary: Link,
-
-    //Storage vars including for calculations and reporting
-    us_flow: f64,
-    ds_flow: f64,
-    storage: f64, //TODO: what is this? It looks like all nodes have "storage". Maybe i should use this instead of 'v'
-    level: f64,
-    pub d: Table,       //Level m, Volume ML, Area ha, Spill ML
-    //d_delta: Table,     //d_Level m, d_Volume_ML, d_Area ha, d_Spill ML
+    pub d: Table,       // Level m, Volume ML, Area ha, Spill ML
     pub v: f64,
     pub v_initial: f64,
     pub area0: f64,
-
-    //Daily inputs
     pub rain_mm_def: InputDataDefinition,
     pub evap_mm_def: InputDataDefinition,
     pub seep_mm_def: InputDataDefinition,
     pub demand_def: InputDataDefinition,
 
-    //Daily outputs
-    pub rain: f64,
-    pub evap: f64,
-    pub seep: f64,
-    pub diversion: f64,
-    pub spill: f64,
+    // Internal state only
+    upstream_inflow: f64,
+    outflow_primary: f64,
+    outflow_secondary: f64,
+    storage: f64,
+    level: f64,
+    rain: f64,
+    evap: f64,
+    seep: f64,
+    diversion: f64,
+    spill: f64,
 
-    //Recorders
+    // Recorders
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_storage: Option<usize>,
@@ -74,14 +61,19 @@ impl Node for StorageNode {
     /*
     Initialise node before model run
     */
-    fn initialise(&mut self, data_cache: &mut DataCache, node_dictionary: &HashMap<String, usize>) {
-        // Reset initial state values
-        // (note some state variables will get overridden each timestep and maybe dont need resetting)
-        self.us_link.flow = 0_f64;
-        self.ds_link_primary.flow = 0_f64;
-        self.us_flow = 0_f64;
-        self.ds_flow = 0_f64;
+    fn initialise(&mut self, data_cache: &mut DataCache) {
+        // Initialize only internal state
+        self.upstream_inflow = 0.0;
+        self.outflow_primary = 0.0;
+        self.outflow_secondary = 0.0;
         self.storage = self.v_initial;
+        self.v = self.v_initial;
+        self.level = 0.0;
+        self.rain = 0.0;
+        self.evap = 0.0;
+        self.seep = 0.0;
+        self.diversion = 0.0;
+        self.spill = 0.0;
 
         //Initialize inflow series
         self.rain_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
@@ -97,34 +89,42 @@ impl Node for StorageNode {
         // Initial values and pre-calculations
         self.area0 = self.d.interpolate(VOLU, AREA, 0_f64);
 
-        //Initialize result recorders
-        let node_name = self.name.clone();
-        self.recorder_idx_dsflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "dsflow").as_str(), false);
-        self.recorder_idx_usflow = data_cache.get_series_idx(make_result_name(node_name.as_str(), "usflow").as_str(), false);
-        self.recorder_idx_storage = data_cache.get_series_idx(make_result_name(node_name.as_str(), "storage").as_str(), false);
-
-        //Initialize the links by converting any named links to indexed links.
-        match &self.ds_link_primary.node_identification {
-            ComponentIdentification::Named {name: n } => {
-                let idx = node_dictionary[n];
-                self.ds_link_primary = Link::new_indexed_link(idx);
-            },
-            _ => {}
-        }
-        match &self.ds_link_secondary.node_identification {
-            ComponentIdentification::Named {name: n } => {
-                let idx = node_dictionary[n];
-                self.ds_link_secondary = Link::new_indexed_link(idx);
-            },
-            _ => {}
-        }
+        // Initialize result recorders
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_usflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "usflow").as_str(), false
+        );
+        self.recorder_idx_storage = data_cache.get_series_idx(
+            make_result_name(&self.name, "storage").as_str(), false
+        );
     }
 
 
-    /*
-    Get the name of the node
-     */
-    fn get_name(&self) -> String { self.name.to_string() }
+    fn get_name(&self) -> &str {
+        &self.name  // Return reference, not owned String
+    }
+
+    fn add_inflow(&mut self, flow: f64, _inlet: u8) {
+        self.upstream_inflow += flow;
+    }
+
+    fn get_outflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            0 => {
+                let outflow = self.outflow_primary;
+                self.outflow_primary = 0.0;
+                outflow
+            }
+            1 => {
+                let outflow = self.outflow_secondary;
+                self.outflow_secondary = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
+    }
 
 
     /*
@@ -137,8 +137,7 @@ impl Node for StorageNode {
      */
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
-        //Get flow from the upstream link
-        self.us_flow = self.us_link.remove_flow();
+        // Use upstream inflow from internal state
 
         // Get the driving data
         let mut rain_mm = 0_f64;
@@ -164,7 +163,7 @@ impl Node for StorageNode {
         // We already know what the upstream flows are, and by looking at the
         // net rainfall at dead storage, we can already know what the maximum
         // diversion could be.
-        self.v += self.us_flow;
+        self.v += self.upstream_inflow;
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
         let net_rain_at_dead_storage = 0.01 * self.area0 * net_rain_mm;
         let max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
@@ -254,44 +253,31 @@ impl Node for StorageNode {
             println!("v = {}, self.v = {}", v, self.v);
             println!("self.spill = {}", self.spill);
             println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep, self.evap, self.rain);
-            println!("self.us_flow = {}, self.diversion = {}", self.us_flow, self.diversion);
+            println!("self.upstream_inflow = {}, self.diversion = {}", self.upstream_inflow, self.diversion);
             panic!("Error in storage node. Mass balance was wrong. Solution should be {} but vol={}", v, self.v);
         }
 
-        // Only spills go downstream
-        self.ds_flow = self.spill;
+        // Only spills go downstream via primary outlet
+        self.outflow_primary = self.spill;
+        self.outflow_secondary = 0.0;  // No secondary flow for storage nodes
 
-        // Give all the ds_flow water to the downstream terminal
-        self.ds_link_primary.flow = self.ds_flow;
-        // self.ds_link_secondary.flow = 0_f64;
+        // Update storage state
+        self.storage = self.v;
 
-        //Record results
+        // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.ds_flow)
+            data_cache.add_value_at_index(idx, self.outflow_primary);
         }
         if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.us_flow)
+            data_cache.add_value_at_index(idx, self.upstream_inflow);
         }
         if let Some(idx) = self.recorder_idx_storage {
-            data_cache.add_value_at_index(idx, self.storage)
+            data_cache.add_value_at_index(idx, self.storage);
         }
+
+        // Reset upstream inflow for next timestep
+        self.upstream_inflow = 0.0;
     }
 
 
-    #[allow(unused_variables)]
-    // TODO: remove unused index i?
-    fn add_inflow(&mut self, v: f64, i: i32) {
-        self.us_link.flow += v;
-    }
-
-    #[allow(unused_variables)]
-    // TODO: remove unused index i?
-    fn remove_outflow(&mut self, i: i32) -> f64 {
-        self.ds_link_primary.remove_flow() +
-            self.ds_link_secondary.remove_flow()
-    }
-
-    fn get_ds_links(&self) -> [Link; 2] {
-        [self.ds_link_primary.clone(), self.ds_link_secondary.clone()]
-    }
 }

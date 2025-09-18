@@ -1,45 +1,82 @@
-use std::collections::HashMap;
-use uuid::Uuid;
-use crate::nodes::{Node, NodeEnum};
+use std::collections::{HashMap, VecDeque};
+use rustc_hash::FxHashMap;
+use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
-use crate::misc::componenet_identification::ComponentIdentification;
 use crate::misc::configuration::{Configuration};
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
 
-#[derive(Default)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Model {
     pub configuration: Configuration,
-    pub inputs: Vec<TimeseriesInput>,   //For now: a vec of all the input files loaded
-    pub outputs: Vec<String>,           //For now: a vec of all the data series paths we want to output
+    pub inputs: Vec<TimeseriesInput>,
+    pub outputs: Vec<String>,
     pub data_cache: DataCache,
 
-    // "nodes" - this is a Vec of NodeEnums. Note Vec<Node> doesn't work because Node is a
-    // trait and not all Nodes have same length. The other standard method would be to use
-    // dynamic dispatch --> Vec<Box<dyn Node>>.
+    // Node storage
     pub nodes: Vec<NodeEnum>,
 
-    // Vector of tuples defining the execution order (node name, node index).
-    // The node index is just the index of the node in "self.nodes" which is handy for quick
-    // access.
-    pub execution_order: Vec<(String, usize)>,
+    // Centralized link management
+    pub links: Vec<Link>,
 
-    // Node dictionary maps from the node name to the node index.
+    // Adjacency lists for O(1) link lookup
+    pub outgoing_links: Vec<Vec<usize>>,  // outgoing_links[node_idx] = vec of link indices
+    pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
+
+    // Pre-computed execution order (topologically sorted)
+    pub execution_order: Vec<usize>,
+
+    // Fast node name lookup
+    pub node_lookup: FxHashMap<String, usize>,
+
+    // Legacy node dictionary for compatibility
     pub node_dictionary: HashMap<String, usize>,
+
+    // Performance optimization: track active links
+    pub active_links: Vec<usize>,
 }
 
 
 impl Model {
     pub fn new() -> Model {
-
         Model {
             configuration: Configuration::new(),
             inputs: vec![],
             outputs: vec![],
             ..Default::default()
         }
+    }
+
+    /// Adds a node to the model and returns its index
+    pub fn add_node(&mut self, node: NodeEnum) -> usize {
+        let idx = self.nodes.len();
+        let name = node.get_name().to_string();
+
+        self.nodes.push(node);
+        self.outgoing_links.push(Vec::new());
+        self.incoming_links.push(Vec::new());
+        self.node_lookup.insert(name.clone(), idx);
+        self.node_dictionary.insert(name, idx);
+
+        idx
+    }
+
+    /// Adds a link between two nodes
+    pub fn add_link(&mut self, from_node: usize, to_node: usize, from_outlet: u8, to_inlet: u8) -> usize {
+        let link_idx = self.links.len();
+        let link = Link::new(from_node, to_node, from_outlet, to_inlet);
+
+        self.links.push(link);
+        self.outgoing_links[from_node].push(link_idx);
+        self.incoming_links[to_node].push(link_idx);
+
+        link_idx
+    }
+
+    /// Gets a node index by name
+    pub fn get_node_idx(&self, name: &str) -> Option<usize> {
+        self.node_lookup.get(name).copied()
     }
 
 
@@ -94,7 +131,7 @@ impl Model {
         // Initialise the node dictionary
         self.node_dictionary = HashMap::new();
         for i in 0..self.nodes.len() {
-            let node_name = self.nodes[i].get_name();
+            let node_name = self.nodes[i].get_name().to_string();
             self.node_dictionary.insert(node_name, i);
         }
 
@@ -257,26 +294,25 @@ impl Model {
     }
 
 
-    #[allow(unused_variables)] //TODO: remove this and make use of unused variable t
-    pub fn run_timestep(&mut self, t: u64) {
-        for (name, i_ref) in self.execution_order.iter() {
-            let i = i_ref.clone();
+    pub fn run_timestep(&mut self, _t: u64) {
+        // Execute nodes in topological order
+        for &node_idx in &self.execution_order {
+            // Run the node's flow computation
+            self.nodes[node_idx].run_flow_phase(&mut self.data_cache);
 
-            //  Run node i
-            self.nodes[i].run_flow_phase(&mut self.data_cache);
+            // Collect outflows and add to corresponding links
+            for &link_idx in &self.outgoing_links[node_idx] {
+                let link = &self.links[link_idx];
+                let outflow = self.nodes[node_idx].get_outflow(link.from_outlet);
 
-            // Move water on all the links of node i
-            for link in self.nodes[i].get_ds_links() {
-                match link.node_identification {
-                    ComponentIdentification::Indexed { idx: ds_node_idx } => {
-                        let dsflow = self.nodes[i].remove_outflow(0);
-                        self.nodes[ds_node_idx].add_inflow(dsflow, 0);
-                    },
-                    ComponentIdentification::None => { },
-                    _ => { panic!("This should have been converted to indexed type during initialization."); }
+                if outflow > 0.0 {
+                    self.links[link_idx].add_flow(outflow);
                 }
             }
         }
+
+        // Move water along all active links
+        self.move_water();
     }
 
 
@@ -287,7 +323,7 @@ impl Model {
         self.initialize_nodes();
 
         // Initialize the execution order
-        self.initialize_execution_order();
+        self.compute_execution_order();
     }
 
 
@@ -303,35 +339,64 @@ impl Model {
     }
 
 
-    fn initialize_execution_order(&mut self) {
-        // TASK 2
-        // Use links to build a vector of tuples (node name & node index) indicating suitable
-        // execution order. This order should preserve the order of "node index" wherever
-        // possible. Having the node index in the tuple lets us step through the execution order
-        // during a run without having to search for the node ID every time.
-        //
-        // One way to do this is to have a list "unsorted_node_idxs" initially containing
-        // all the nodes, and then find the first one which is not downstream of any other one.
-        // Place it in execution order, and remove it from our list. Repeat until there are
-        // no more nodes in our list.
-        self.execution_order = vec![];
-        let mut unsorted_node_idxs: Vec<usize> = (0..self.nodes.len()).collect();
+    /// Computes execution order using Kahn's algorithm (O(V+E) complexity)
+    fn compute_execution_order(&mut self) {
+        let num_nodes = self.nodes.len();
+        let mut in_degree = vec![0; num_nodes];
 
-        loop {
-            // Check if we are done!
-            if unsorted_node_idxs.len() == 0 {
-                break;
+        // Calculate in-degrees for all nodes
+        for link in &self.links {
+            in_degree[link.to_node] += 1;
+        }
+
+        // Initialize queue with nodes that have no incoming edges
+        let mut queue: VecDeque<usize> = in_degree
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, &degree)| if degree == 0 { Some(idx) } else { None })
+            .collect();
+
+        self.execution_order.clear();
+
+        // Process nodes in topological order
+        while let Some(node_idx) = queue.pop_front() {
+            self.execution_order.push(node_idx);
+
+            // Reduce in-degree for all downstream nodes
+            for &link_idx in &self.outgoing_links[node_idx] {
+                let to_node = self.links[link_idx].to_node;
+                in_degree[to_node] -= 1;
+
+                if in_degree[to_node] == 0 {
+                    queue.push_back(to_node);
+                }
             }
+        }
 
-            let idx_next = self.find_next_node_idx(&unsorted_node_idxs);
-            match idx_next {
-                None => { panic!("Is the model cyclic?!"); },
-                Some(idx) => {
-                    let guid_idx = (self.nodes[idx].get_name(), idx);
-                    //println!("Execution order {:#?}, {:#?}", 1 + self.execution_order.len(), guid_idx);
-                    self.execution_order.push(guid_idx);
-                    unsorted_node_idxs.retain(|x| *x != idx);
-                },
+        // Check for cycles
+        if self.execution_order.len() != num_nodes {
+            panic!("Cycle detected in the model network!");
+        }
+    }
+
+    /// Efficiently move water along links to downstream nodes
+    fn move_water(&mut self) {
+        self.active_links.clear();
+
+        // Collect all links with flow
+        for (idx, link) in self.links.iter().enumerate() {
+            if link.has_flow() {
+                self.active_links.push(idx);
+            }
+        }
+
+        // Move water for each active link
+        for &link_idx in &self.active_links {
+            let link = &mut self.links[link_idx];
+            let flow = link.remove_flow();
+
+            if flow > 0.0 {
+                self.nodes[link.to_node].add_inflow(flow, link.to_inlet);
             }
         }
     }
@@ -339,53 +404,11 @@ impl Model {
     // TODO: Keep in mind this is done in order of definition. Hopefully order will never matter.
     fn initialize_nodes(&mut self) {
         for i in 0..self.nodes.len() {
-            self.nodes[i].initialise(&mut self.data_cache, &self.node_dictionary);
+            self.nodes[i].initialise(&mut self.data_cache);
         }
     }
-    
-    // Add a node to the model.
-    // DONE BUT NOT TESTED
-    pub fn add_node(&mut self, node_enum: NodeEnum) {
-        let name= node_enum.get_name();
-        if self.get_node(&name).is_some() {
-            panic!("A node with that name already exists!")
-        }
-        self.nodes.push(node_enum);
-    }
 
 
-    /// This function decides which node to execute next.
-    /// For now the logic is: return the first node we find which is not
-    /// downstream of any other node in the list. If the model is cyclic,
-    /// None will be returned. Otherwise Some(usize) containing the idx
-    /// of the answer node.
-    fn find_next_node_idx(&self, node_indexes: &Vec<usize>) -> Option<usize> {
-
-        for &prospect_node_idx in node_indexes.iter() {
-            let mut found_link_ending_at_node = false;
-
-            // Check all the other nodes for ds links ending at prospect_node.
-            for &i in node_indexes.iter() {
-                let links = self.nodes[i].get_ds_links();
-                for link in links {
-                    match link.node_identification {
-                        ComponentIdentification::Indexed { idx} => {
-                            if idx == prospect_node_idx {
-                                found_link_ending_at_node = true;
-                            }
-                        },
-                        ComponentIdentification::None => continue,
-                        ComponentIdentification::Named { name: _ } =>
-                            panic!("Software bug: this link should have been converted to an indexed type during initialization.")
-                    }
-                }
-            }
-            if !found_link_ending_at_node {
-                return Some(prospect_node_idx);
-            }
-        }
-        None
-    }
 
 
     /// Returns a reference to the node with a given ID

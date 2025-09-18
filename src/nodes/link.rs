@@ -1,48 +1,34 @@
-use crate::misc::componenet_identification::ComponentIdentification;
-
-/// Nodes have primary and secondary downstream links. The purpose of links is to store the
-/// volume of water to be transported downstream, and the id of the downstream node where the
-/// water is going.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Link {
     pub flow: f64,
-    pub node_identification: ComponentIdentification,
+    pub from_node: usize,
+    pub to_node: usize,
+    pub from_outlet: u8,  // 0 = primary, 1 = secondary
+    pub to_inlet: u8,     // 0 = primary, 1 = secondary
 }
 
 impl Link {
-    /// Returns the volume of water in a link, and resets the volume of water on the link to zero.
-    pub fn remove_flow(&mut self) -> f64{
-        let answer = self.flow;
-        self.flow = 0_f64;
-        answer
-    }
-
-    /// Returns a new link that is not connected to any nodes, and has a flow of zero.
-    /// Probably the same as a default link, but spelling it out for clarity.
-    pub fn new_unconnected_link() -> Link {
-        Link {
-            flow: 0_f64,
-            node_identification: ComponentIdentification::None,
+    pub fn new(from_node: usize, to_node: usize, from_outlet: u8, to_inlet: u8) -> Self {
+        Self {
+            flow: 0.0,
+            from_node,
+            to_node,
+            from_outlet,
+            to_inlet
         }
     }
 
-    /// Constructor for indexed links
-    pub fn new_indexed_link(idx_of_linked_node: usize) -> Link {
-        Link {
-            flow: 0_f64,
-            node_identification: ComponentIdentification::Indexed {
-                idx: idx_of_linked_node,
-            }
-        }
+    pub fn remove_flow(&mut self) -> f64 {
+        let flow = self.flow;
+        self.flow = 0.0;
+        flow
     }
 
-    /// Constructor for named links
-    pub fn new_named_link(name_of_linked_node: &str) -> Link {
-        Link {
-            flow: 0_f64,
-            node_identification: ComponentIdentification::Named {
-                name: name_of_linked_node.to_string(),
-            }
-        }
+    pub fn add_flow(&mut self, flow: f64) {
+        self.flow += flow;
+    }
+
+    pub fn has_flow(&self) -> bool {
+        self.flow > 0.0
     }
 }
