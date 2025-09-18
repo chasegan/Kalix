@@ -5,80 +5,26 @@ import com.kalix.gui.flowviz.data.TimeSeriesData;
 
 import java.awt.*;
 import java.awt.geom.Path2D;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class TimeSeriesRenderer {
 
-    // Constants for rendering
-    private static final Color GRID_COLOR = new Color(240, 240, 240);
-    private static final float GRID_STROKE_WIDTH = 0.5f;
-    private static final float AXIS_STROKE_WIDTH = 1.0f;
-    private static final int MIN_TARGET_TICKS = 3;
-    private static final int MAX_TARGET_TICKS = 8;
-    private static final int PIXELS_PER_TICK = 120;
-    private static final int VALUE_AXIS_MIN_SPACING = 40;
-    private static final int TICK_MARK_LENGTH = 5;
-    private static final int TIME_LABEL_OFFSET = 18;
-    private static final int VALUE_LABEL_OFFSET = 8;
-
     private final LODManager lodManager;
     private final Map<String, Color> seriesColors;
     private final List<String> visibleSeries;
+    private final AxisRenderer axisRenderer;
 
     // Rendering options
     private boolean showDataPoints = false;
     private boolean showGrid = true;
     private boolean antiAliasing = true;
-
-    // Pre-computed temporal intervals to avoid recreation
-    private static final TemporalInterval[] TEMPORAL_INTERVALS = {
-        new TemporalInterval("hour", 3600000L),
-        new TemporalInterval("6hour", 6 * 3600000L),
-        new TemporalInterval("12hour", 12 * 3600000L),
-        new TemporalInterval("day", 86400000L),
-        new TemporalInterval("week", 7 * 86400000L),
-        new TemporalInterval("month", 30L * 86400000L),
-        new TemporalInterval("quarter", 90L * 86400000L),
-        new TemporalInterval("year", 365L * 86400000L),
-        new TemporalInterval("5year", 5 * 365L * 86400000L),
-        new TemporalInterval("decade", 10 * 365L * 86400000L),
-        new TemporalInterval("25year", 25 * 365L * 86400000L),
-        new TemporalInterval("50year", 50 * 365L * 86400000L),
-        new TemporalInterval("century", 100 * 365L * 86400000L),
-        new TemporalInterval("250year", 250 * 365L * 86400000L),
-        new TemporalInterval("500year", 500 * 365L * 86400000L),
-        new TemporalInterval("millennium", 1000 * 365L * 86400000L),
-        new TemporalInterval("2500year", 2500 * 365L * 86400000L),
-        new TemporalInterval("5millennium", 5000 * 365L * 86400000L),
-        new TemporalInterval("10millennium", 10000 * 365L * 86400000L),
-        new TemporalInterval("25millennium", 25000 * 365L * 86400000L),
-        new TemporalInterval("50millennium", 50000 * 365L * 86400000L),
-        new TemporalInterval("100millennium", 100000 * 365L * 86400000L)
-    };
-
-    // Cached axis information to avoid duplicate calculations
-    private static class AxisInfo {
-        final List<Long> timeTicks;
-        final List<Double> valueTicks;
-        final long timeRangeMs;
-
-        AxisInfo(List<Long> timeTicks, List<Double> valueTicks, long timeRangeMs) {
-            this.timeTicks = timeTicks;
-            this.valueTicks = valueTicks;
-            this.timeRangeMs = timeRangeMs;
-        }
-    }
     
     public TimeSeriesRenderer(Map<String, Color> seriesColors, List<String> visibleSeries) {
         this.lodManager = new LODManager();
         this.seriesColors = seriesColors;
         this.visibleSeries = visibleSeries;
+        this.axisRenderer = new AxisRenderer();
     }
     
     public void render(Graphics2D g2d, DataSet dataSet, ViewPort viewport) {
@@ -99,15 +45,15 @@ public class TimeSeriesRenderer {
                     viewport.getPlotWidth(), viewport.getPlotHeight());
         
         // Calculate axis information once for both grid and axis drawing
-        AxisInfo axisInfo = calculateAxisInfo(viewport);
+        AxisRenderer.AxisInfo axisInfo = axisRenderer.calculateAxisInfo(viewport);
 
         // Draw grid
         if (showGrid) {
-            drawGrid(g2d, viewport, axisInfo);
+            axisRenderer.drawGrid(g2d, viewport, axisInfo);
         }
 
         // Draw axes
-        drawAxes(g2d, dataSet, viewport, axisInfo);
+        axisRenderer.drawAxes(g2d, viewport, axisInfo);
         
         // Draw time series data in legend order (visibleSeries list order)
         for (String seriesName : visibleSeries) {
@@ -392,393 +338,7 @@ public class TimeSeriesRenderer {
             }
         }
     }
-    
-    private AxisInfo calculateAxisInfo(ViewPort viewport) {
-        // Calculate time ticks using temporal boundaries
-        List<Long> timeTicks = calculateTemporalBoundaryTicks(
-            viewport.getStartTimeMs(), viewport.getEndTimeMs(), viewport.getPlotWidth());
 
-        // Calculate value ticks using nice intervals
-        List<Double> valueTicks = calculateValueTicks(viewport);
-
-        long timeRangeMs = viewport.getTimeRangeMs();
-
-        return new AxisInfo(timeTicks, valueTicks, timeRangeMs);
-    }
-
-    private List<Double> calculateValueTicks(ViewPort viewport) {
-        List<Double> ticks = new ArrayList<>();
-        double valueRange = viewport.getValueRange();
-        if (valueRange <= 0) return ticks;
-
-        // Calculate appropriate value tick interval
-        int numTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotHeight() / VALUE_AXIS_MIN_SPACING));
-        double tickInterval = valueRange / (numTicks - 1);
-        tickInterval = roundToNiceValueInterval(tickInterval);
-
-        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
-
-        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
-            ticks.add(currentValue);
-            currentValue += tickInterval;
-        }
-
-        return ticks;
-    }
-
-    private void drawGrid(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        g2d.setColor(GRID_COLOR);
-        g2d.setStroke(new BasicStroke(GRID_STROKE_WIDTH));
-
-        int plotX = viewport.getPlotX();
-        int plotY = viewport.getPlotY();
-        int plotWidth = viewport.getPlotWidth();
-        int plotHeight = viewport.getPlotHeight();
-
-        // Draw vertical grid lines aligned with time axis ticks
-        for (Long tickTime : axisInfo.timeTicks) {
-            int screenX = viewport.timeToScreenX(tickTime);
-            if (screenX >= plotX && screenX <= plotX + plotWidth) {
-                g2d.drawLine(screenX, plotY, screenX, plotY + plotHeight);
-            }
-        }
-
-        // Draw horizontal grid lines aligned with value axis ticks
-        for (Double tickValue : axisInfo.valueTicks) {
-            int screenY = viewport.valueToScreenY(tickValue);
-            if (screenY >= plotY && screenY <= plotY + plotHeight) {
-                g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
-            }
-        }
-    }
-    
-    private void drawAxes(Graphics2D g2d, DataSet dataSet, ViewPort viewport, AxisInfo axisInfo) {
-        g2d.setColor(Color.BLACK);
-        g2d.setStroke(new BasicStroke(AXIS_STROKE_WIDTH));
-        g2d.setFont(new Font("Arial", Font.PLAIN, 10));
-
-        drawTimeAxis(g2d, viewport, axisInfo);
-        drawValueAxis(g2d, viewport, axisInfo);
-    }
-    
-    private void drawTimeAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        int plotX = viewport.getPlotX();
-        int plotY = viewport.getPlotY();
-        int plotWidth = viewport.getPlotWidth();
-        int plotHeight = viewport.getPlotHeight();
-
-        FontMetrics fm = g2d.getFontMetrics();
-
-        for (Long tickTime : axisInfo.timeTicks) {
-            int screenX = viewport.timeToScreenX(tickTime);
-
-            if (screenX >= plotX && screenX <= plotX + plotWidth) {
-                // Draw tick mark
-                g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + TICK_MARK_LENGTH);
-
-                // Draw label
-                String timeLabel = formatTime(tickTime, axisInfo.timeRangeMs);
-                int labelWidth = fm.stringWidth(timeLabel);
-                g2d.drawString(timeLabel, screenX - labelWidth / 2,
-                             plotY + plotHeight + TIME_LABEL_OFFSET);
-            }
-        }
-    }
-
-    private List<Long> calculateTemporalBoundaryTicks(long startTimeMs, long endTimeMs, int plotWidth) {
-        List<Long> ticks = new ArrayList<>();
-        long timeRangeMs = endTimeMs - startTimeMs;
-
-        // Target labels depending on plot width
-        int targetTicks = Math.max(MIN_TARGET_TICKS, Math.min(MAX_TARGET_TICKS, plotWidth / PIXELS_PER_TICK));
-
-        // Find the best interval that gives us the right number of ticks
-        TemporalInterval bestInterval = TEMPORAL_INTERVALS[TEMPORAL_INTERVALS.length - 1]; // Default to longest interval
-        for (TemporalInterval interval : TEMPORAL_INTERVALS) {
-            long expectedTicks = timeRangeMs / interval.durationMs;
-            if (expectedTicks >= targetTicks / 2 && expectedTicks <= targetTicks * 2) {
-                bestInterval = interval;
-                break;
-            }
-        }
-
-        // Generate ticks at temporal boundaries
-        LocalDateTime startDateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(startTimeMs), ZoneOffset.UTC);
-        LocalDateTime endDateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(endTimeMs), ZoneOffset.UTC);
-
-        LocalDateTime current = findNextBoundary(startDateTime, bestInterval);
-
-        while (current.isBefore(endDateTime) || current.isEqual(endDateTime)) {
-            long tickTimeMs = current.toInstant(ZoneOffset.UTC).toEpochMilli();
-            if (tickTimeMs >= startTimeMs && tickTimeMs <= endTimeMs) {
-                ticks.add(tickTimeMs);
-            }
-            current = advanceToBoundary(current, bestInterval);
-
-            // Safety check to prevent infinite loops
-            if (ticks.size() > 20) break;
-        }
-
-        // Ensure we have at least 2 ticks - add start/end if needed
-        if (ticks.size() < 2) {
-            ticks.clear();
-            ticks.add(startTimeMs);
-            if (timeRangeMs > 3600000) { // If range > 1 hour, add middle point
-                ticks.add(startTimeMs + timeRangeMs / 2);
-            }
-            ticks.add(endTimeMs);
-        }
-
-        return ticks;
-    }
-
-    private static class TemporalInterval {
-        final String type;
-        final long durationMs;
-
-        TemporalInterval(String type, long durationMs) {
-            this.type = type;
-            this.durationMs = durationMs;
-        }
-    }
-
-    private LocalDateTime findNextBoundary(LocalDateTime dateTime, TemporalInterval interval) {
-        switch (interval.type) {
-            case "hour":
-                return dateTime.withMinute(0).withSecond(0).withNano(0).plusHours(1);
-            case "6hour":
-                int hour6 = (dateTime.getHour() / 6) * 6;
-                LocalDateTime next6h = dateTime.withHour(hour6).withMinute(0).withSecond(0).withNano(0);
-                return next6h.isAfter(dateTime) ? next6h : next6h.plusHours(6);
-            case "12hour":
-                int hour12 = (dateTime.getHour() / 12) * 12;
-                LocalDateTime next12h = dateTime.withHour(hour12).withMinute(0).withSecond(0).withNano(0);
-                return next12h.isAfter(dateTime) ? next12h : next12h.plusHours(12);
-            case "day":
-                return dateTime.withHour(0).withMinute(0).withSecond(0).withNano(0).plusDays(1);
-            case "week":
-                // Find next Monday
-                LocalDateTime nextWeek = dateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                while (nextWeek.getDayOfWeek().getValue() != 1) { // Monday = 1
-                    nextWeek = nextWeek.plusDays(1);
-                }
-                return nextWeek.isAfter(dateTime) ? nextWeek : nextWeek.plusWeeks(1);
-            case "month":
-                return dateTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0).plusMonths(1);
-            case "quarter":
-                int quarter = ((dateTime.getMonthValue() - 1) / 3) * 3 + 1;
-                LocalDateTime nextQuarter = dateTime.withMonth(quarter).withDayOfMonth(1)
-                    .withHour(0).withMinute(0).withSecond(0).withNano(0);
-                return nextQuarter.isAfter(dateTime) ? nextQuarter : nextQuarter.plusMonths(3);
-            case "year":
-                return dateTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0).plusYears(1);
-            case "5year":
-                int year5 = (dateTime.getYear() / 5) * 5;
-                LocalDateTime next5y = LocalDateTime.of(year5, 1, 1, 0, 0, 0);
-                return next5y.isAfter(dateTime) ? next5y : next5y.plusYears(5);
-            case "decade":
-                int decade = (dateTime.getYear() / 10) * 10;
-                LocalDateTime nextDecade = LocalDateTime.of(decade, 1, 1, 0, 0, 0);
-                return nextDecade.isAfter(dateTime) ? nextDecade : nextDecade.plusYears(10);
-            case "25year":
-                int year25 = (dateTime.getYear() / 25) * 25;
-                LocalDateTime next25y = LocalDateTime.of(year25, 1, 1, 0, 0, 0);
-                return next25y.isAfter(dateTime) ? next25y : next25y.plusYears(25);
-            case "50year":
-                int year50 = (dateTime.getYear() / 50) * 50;
-                LocalDateTime next50y = LocalDateTime.of(year50, 1, 1, 0, 0, 0);
-                return next50y.isAfter(dateTime) ? next50y : next50y.plusYears(50);
-            case "century":
-                int century = (dateTime.getYear() / 100) * 100;
-                LocalDateTime nextCentury = LocalDateTime.of(century, 1, 1, 0, 0, 0);
-                return nextCentury.isAfter(dateTime) ? nextCentury : nextCentury.plusYears(100);
-            case "250year":
-                int year250 = (dateTime.getYear() / 250) * 250;
-                LocalDateTime next250y = LocalDateTime.of(year250, 1, 1, 0, 0, 0);
-                return next250y.isAfter(dateTime) ? next250y : next250y.plusYears(250);
-            case "500year":
-                int year500 = (dateTime.getYear() / 500) * 500;
-                LocalDateTime next500y = LocalDateTime.of(year500, 1, 1, 0, 0, 0);
-                return next500y.isAfter(dateTime) ? next500y : next500y.plusYears(500);
-            case "millennium":
-                int millennium = (dateTime.getYear() / 1000) * 1000;
-                LocalDateTime nextMillennium = LocalDateTime.of(millennium, 1, 1, 0, 0, 0);
-                return nextMillennium.isAfter(dateTime) ? nextMillennium : nextMillennium.plusYears(1000);
-            case "2500year":
-                int year2500 = (dateTime.getYear() / 2500) * 2500;
-                LocalDateTime next2500y = LocalDateTime.of(year2500, 1, 1, 0, 0, 0);
-                return next2500y.isAfter(dateTime) ? next2500y : next2500y.plusYears(2500);
-            case "5millennium":
-                int millennium5 = (dateTime.getYear() / 5000) * 5000;
-                LocalDateTime next5millennium = LocalDateTime.of(millennium5, 1, 1, 0, 0, 0);
-                return next5millennium.isAfter(dateTime) ? next5millennium : next5millennium.plusYears(5000);
-            case "10millennium":
-                int millennium10 = (dateTime.getYear() / 10000) * 10000;
-                LocalDateTime next10millennium = LocalDateTime.of(millennium10, 1, 1, 0, 0, 0);
-                return next10millennium.isAfter(dateTime) ? next10millennium : next10millennium.plusYears(10000);
-            case "25millennium":
-                int millennium25 = (dateTime.getYear() / 25000) * 25000;
-                LocalDateTime next25millennium = LocalDateTime.of(millennium25, 1, 1, 0, 0, 0);
-                return next25millennium.isAfter(dateTime) ? next25millennium : next25millennium.plusYears(25000);
-            case "50millennium":
-                int millennium50 = (dateTime.getYear() / 50000) * 50000;
-                LocalDateTime next50millennium = LocalDateTime.of(millennium50, 1, 1, 0, 0, 0);
-                return next50millennium.isAfter(dateTime) ? next50millennium : next50millennium.plusYears(50000);
-            case "100millennium":
-                int millennium100 = (dateTime.getYear() / 100000) * 100000;
-                LocalDateTime next100millennium = LocalDateTime.of(millennium100, 1, 1, 0, 0, 0);
-                return next100millennium.isAfter(dateTime) ? next100millennium : next100millennium.plusYears(100000);
-            default:
-                return dateTime.plusHours(1);
-        }
-    }
-
-    private LocalDateTime advanceToBoundary(LocalDateTime dateTime, TemporalInterval interval) {
-        switch (interval.type) {
-            case "hour":
-                return dateTime.plusHours(1);
-            case "6hour":
-                return dateTime.plusHours(6);
-            case "12hour":
-                return dateTime.plusHours(12);
-            case "day":
-                return dateTime.plusDays(1);
-            case "week":
-                return dateTime.plusWeeks(1);
-            case "month":
-                return dateTime.plusMonths(1);
-            case "quarter":
-                return dateTime.plusMonths(3);
-            case "year":
-                return dateTime.plusYears(1);
-            case "5year":
-                return dateTime.plusYears(5);
-            case "decade":
-                return dateTime.plusYears(10);
-            case "25year":
-                return dateTime.plusYears(25);
-            case "50year":
-                return dateTime.plusYears(50);
-            case "century":
-                return dateTime.plusYears(100);
-            case "250year":
-                return dateTime.plusYears(250);
-            case "500year":
-                return dateTime.plusYears(500);
-            case "millennium":
-                return dateTime.plusYears(1000);
-            case "2500year":
-                return dateTime.plusYears(2500);
-            case "5millennium":
-                return dateTime.plusYears(5000);
-            case "10millennium":
-                return dateTime.plusYears(10000);
-            case "25millennium":
-                return dateTime.plusYears(25000);
-            case "50millennium":
-                return dateTime.plusYears(50000);
-            case "100millennium":
-                return dateTime.plusYears(100000);
-            default:
-                return dateTime.plusHours(1);
-        }
-    }
-    
-    private void drawValueAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        int plotX = viewport.getPlotX();
-        int plotY = viewport.getPlotY();
-        int plotHeight = viewport.getPlotHeight();
-
-        FontMetrics fm = g2d.getFontMetrics();
-
-        for (Double tickValue : axisInfo.valueTicks) {
-            int screenY = viewport.valueToScreenY(tickValue);
-
-            if (screenY >= plotY && screenY <= plotY + plotHeight) {
-                // Draw tick mark
-                g2d.drawLine(plotX - TICK_MARK_LENGTH, screenY, plotX, screenY);
-
-                // Draw label
-                String valueLabel = formatValue(tickValue);
-                int labelHeight = fm.getAscent();
-                g2d.drawString(valueLabel, plotX - VALUE_LABEL_OFFSET - fm.stringWidth(valueLabel),
-                             screenY + labelHeight / 2);
-            }
-        }
-    }
-    
-    private long roundToNiceInterval(long intervalMs) {
-        // Common time intervals in milliseconds
-        long[] niceIntervals = {
-            1000,           // 1 second
-            5000,           // 5 seconds
-            10000,          // 10 seconds
-            30000,          // 30 seconds
-            60000,          // 1 minute
-            300000,         // 5 minutes
-            600000,         // 10 minutes
-            1800000,        // 30 minutes
-            3600000,        // 1 hour
-            7200000,        // 2 hours
-            21600000,       // 6 hours
-            43200000,       // 12 hours
-            86400000,       // 1 day
-            604800000,      // 1 week
-            2592000000L,    // 30 days
-            31536000000L    // 1 year
-        };
-        
-        for (long niceInterval : niceIntervals) {
-            if (intervalMs <= niceInterval) {
-                return niceInterval;
-            }
-        }
-        
-        return intervalMs;
-    }
-    
-    private double roundToNiceValueInterval(double interval) {
-        double magnitude = Math.pow(10, Math.floor(Math.log10(interval)));
-        double normalizedInterval = interval / magnitude;
-        
-        if (normalizedInterval <= 1) return magnitude;
-        if (normalizedInterval <= 2) return 2 * magnitude;
-        if (normalizedInterval <= 5) return 5 * magnitude;
-        return 10 * magnitude;
-    }
-    
-    private String formatTime(long timeMs, long timeRangeMs) {
-        LocalDateTime dateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(timeMs), ZoneOffset.UTC);
-
-        if (timeRangeMs < 86400000) {  // Less than 1 day - show time
-            return dateTime.format(DateTimeFormatter.ofPattern("HH:mm"));
-        } else {  // 1 day or more - always show year with date
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        }
-    }
-    
-    private String formatValue(double value) {
-        // Always show full numbers, omit decimals if not needed
-        if (value == Math.floor(value)) {
-            // Integer value - no decimal places
-            return String.format("%.0f", value);
-        } else if (Math.abs(value) >= 1) {
-            // Values >= 1 - show 1-3 decimal places as needed
-            String formatted = String.format("%.3f", value);
-            // Remove trailing zeros and decimal point if not needed
-            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
-            return formatted;
-        } else {
-            // Small values < 1 - show up to 6 decimal places, remove trailing zeros
-            String formatted = String.format("%.6f", value);
-            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
-            return formatted;
-        }
-    }
-    
     private void drawPlotBorder(Graphics2D g2d, ViewPort viewport) {
         g2d.setColor(Color.BLACK);
         g2d.setStroke(new BasicStroke(1.0f));
