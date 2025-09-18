@@ -31,6 +31,7 @@ public class FlowVizWindow extends JFrame {
     private DataPanel dataPanel;
     private JLabel statusLabel;
     private JSplitPane splitPane;
+    private JToolBar toolBar;
     // State variables have been moved to FlowVizActionManager
     
     // Data management
@@ -69,6 +70,7 @@ public class FlowVizWindow extends JFrame {
         setupDataManager();
         setupActionManager();
         setupMenuBar();
+        setupToolBar();
         loadPreferences();
 
         setVisible(true);
@@ -88,7 +90,7 @@ public class FlowVizWindow extends JFrame {
     
     private void setupLayout() {
         setLayout(new BorderLayout());
-        
+
         // Create split pane with data panel on left, plot on right
         splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
@@ -97,18 +99,18 @@ public class FlowVizWindow extends JFrame {
         );
         splitPane.setDividerLocation(250);
         splitPane.setResizeWeight(0.0); // Keep data panel fixed width
-        
+
         add(splitPane, BorderLayout.CENTER);
-        
+
         // Status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusPanel.add(statusLabel, BorderLayout.WEST);
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         add(statusPanel, BorderLayout.SOUTH);
-        
+
         // Set up visibility change listener for data panel
         dataPanel.setVisibilityChangeListener(this::updatePlotVisibility);
-        
+
         // Data manager will handle drag-and-drop
     }
     
@@ -147,9 +149,81 @@ public class FlowVizWindow extends JFrame {
         // Setup keyboard shortcuts
         menuManager.setupKeyboardShortcuts();
     }
-    
-    
-    
+
+    private void setupToolBar() {
+        toolBar = new JToolBar("FlowViz Tools");
+        toolBar.setFloatable(false);
+        toolBar.setRollover(true);
+
+        // Open file button
+        JButton openButton = new JButton("Open");
+        openButton.setToolTipText("Open CSV file (Ctrl+O)");
+        openButton.addActionListener(e -> actionManager.openCsvFile());
+        toolBar.add(openButton);
+
+        toolBar.addSeparator();
+
+        // Zoom controls
+        JButton zoomInButton = new JButton("Zoom In");
+        zoomInButton.setToolTipText("Zoom in (+)");
+        zoomInButton.addActionListener(e -> actionManager.zoomIn());
+        toolBar.add(zoomInButton);
+
+        JButton zoomOutButton = new JButton("Zoom Out");
+        zoomOutButton.setToolTipText("Zoom out (-)");
+        zoomOutButton.addActionListener(e -> actionManager.zoomOut());
+        toolBar.add(zoomOutButton);
+
+        JButton zoomFitButton = new JButton("Fit");
+        zoomFitButton.setToolTipText("Zoom to fit all data (F)");
+        zoomFitButton.addActionListener(e -> actionManager.zoomToFit());
+        toolBar.add(zoomFitButton);
+
+        JButton resetButton = new JButton("Reset");
+        resetButton.setToolTipText("Reset view (R)");
+        resetButton.addActionListener(e -> actionManager.resetView());
+        toolBar.add(resetButton);
+
+        toolBar.addSeparator();
+
+        // Toggle buttons
+        JToggleButton autoYButton = new JToggleButton("Auto Y");
+        autoYButton.setToolTipText("Auto-scale Y axis during zoom (Y)");
+        autoYButton.addActionListener(e -> actionManager.toggleAutoYMode());
+        toolBar.add(autoYButton);
+
+        JToggleButton coordButton = new JToggleButton("Coordinates");
+        coordButton.setToolTipText("Show coordinates (C)");
+        coordButton.addActionListener(e -> actionManager.toggleCoordinateDisplay());
+        toolBar.add(coordButton);
+
+        JToggleButton dataButton = new JToggleButton("Data Panel");
+        dataButton.setToolTipText("Toggle data panel visibility (D)");
+        dataButton.addActionListener(e -> actionManager.toggleData());
+        toolBar.add(dataButton);
+
+        toolBar.addSeparator();
+
+        // Export button
+        JButton exportButton = new JButton("Export");
+        exportButton.setToolTipText("Export plot data (Ctrl+E)");
+        exportButton.addActionListener(e -> actionManager.exportPlot());
+        toolBar.add(exportButton);
+
+        // Update toggle button states based on current settings
+        // This will be called after loadPreferences()
+        SwingUtilities.invokeLater(() -> {
+            if (actionManager != null) {
+                autoYButton.setSelected(actionManager.isAutoYMode());
+                coordButton.setSelected(plotPanel.isShowCoordinates());
+                dataButton.setSelected(actionManager.isDataVisible());
+            }
+        });
+
+        // Add toolbar to the top of the window
+        add(toolBar, BorderLayout.NORTH);
+    }
+
     private void setupDataModel() {
         dataSet = new DataSet();
         

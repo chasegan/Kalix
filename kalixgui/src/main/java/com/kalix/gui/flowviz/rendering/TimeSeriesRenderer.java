@@ -488,12 +488,10 @@ public class TimeSeriesRenderer {
     private String formatTime(long timeMs, long timeRangeMs) {
         LocalDateTime dateTime = LocalDateTime.ofInstant(
             Instant.ofEpochMilli(timeMs), ZoneOffset.UTC);
-        
+
         if (timeRangeMs < 86400000) {  // Less than 1 day - show time
             return dateTime.format(DateTimeFormatter.ofPattern("HH:mm"));
-        } else if (timeRangeMs < 2592000000L) {  // Less than 30 days - show date
-            return dateTime.format(DateTimeFormatter.ofPattern("MM-dd"));
-        } else {  // Show year, month, and day
+        } else {  // 1 day or more - always show year with date
             return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         }
     }

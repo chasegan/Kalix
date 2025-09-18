@@ -48,7 +48,6 @@ public class PlotPanel extends JPanel {
 
     public PlotPanel() {
         setBackground(Color.WHITE);
-        setBorder(BorderFactory.createTitledBorder("Time Series Plot"));
         
         // Initialize data structures
         seriesColors = new HashMap<>();
