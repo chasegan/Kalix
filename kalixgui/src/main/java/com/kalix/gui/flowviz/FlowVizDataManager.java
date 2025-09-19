@@ -85,7 +85,7 @@ public class FlowVizDataManager {
 
     /**
      * Opens a file chooser dialog and loads selected files with support for multiple selection.
-     * Supports both CSV files and Kalix compressed timeseries files (.ktm).
+     * Supports both CSV files and Kalix compressed timeseries files (.tsh).
      *
      * <p>This method presents a standard file chooser dialog filtered for supported file types, allowing
      * users to select one or multiple files for import. The method automatically detects file types and
@@ -96,8 +96,8 @@ public class FlowVizDataManager {
 
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter ktmFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.ktm)", "ktm");
-        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.ktm)", "csv", "ktm");
+        FileNameExtensionFilter ktmFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.tsh)", "tsh");
+        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.tsh)", "csv", "tsh");
 
         fileChooser.addChoosableFileFilter(csvFilter);
         fileChooser.addChoosableFileFilter(ktmFilter);
@@ -130,11 +130,11 @@ public class FlowVizDataManager {
         String fileName = file.getName().toLowerCase();
         if (fileName.endsWith(".csv")) {
             loadCsvFile(file);
-        } else if (fileName.endsWith(".ktm")) {
+        } else if (fileName.endsWith(".tsh")) {
             loadKtmFile(file);
         } else {
             JOptionPane.showMessageDialog(parentFrame,
-                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .ktm",
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .tsh",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
         }
@@ -143,7 +143,7 @@ public class FlowVizDataManager {
     /**
      * Loads multiple files with batch progress dialog. Automatically detects file types.
      *
-     * @param files Array of files to load (CSV or KTM)
+     * @param files Array of files to load (CSV or TSH)
      */
     public void loadMultipleFiles(File[] files) {
         statusUpdater.accept("Loading " + files.length + " files...");
@@ -285,20 +285,20 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Loads a single Kalix timeseries file (.ktm + .kts) with progress dialog.
+     * Loads a single Kalix timeseries file (.tsh + .tsv) with progress dialog.
      *
-     * @param ktmFile The KTM metadata file to load
+     * @param ktmFile The TSH metadata file to load
      */
     public void loadKtmFile(File ktmFile) {
         statusUpdater.accept("Loading Kalix timeseries file...");
 
-        // Verify the corresponding .kts file exists
-        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.ktm$", "");
-        File ktsFile = new File(basePath + ".kts");
+        // Verify the corresponding .tsv file exists
+        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.tsh$", "");
+        File tsvFile = new File(basePath + ".tsv");
 
-        if (!ktsFile.exists()) {
+        if (!tsvFile.exists()) {
             JOptionPane.showMessageDialog(parentFrame,
-                "Binary data file not found: " + ktsFile.getName() + "\nBoth .ktm and .kts files are required.",
+                "Binary data file not found: " + tsvFile.getName() + "\nBoth .tsh and .tsv files are required.",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
             statusUpdater.accept("Failed to load Kalix timeseries file");
@@ -372,7 +372,7 @@ public class FlowVizDataManager {
     /**
      * Processes the result of a Kalix timeseries import operation.
      *
-     * @param ktmFile The source KTM file
+     * @param ktmFile The source TSH file
      * @param seriesList The loaded time series data
      */
     private void handleKtmImportResult(File ktmFile, List<TimeSeriesData> seriesList) {
@@ -390,7 +390,7 @@ public class FlowVizDataManager {
         int addedCount = 0;
 
         for (TimeSeriesData series : seriesList) {
-            // Create display name: "filename.ktm: SeriesName"
+            // Create display name: "filename.tsh: SeriesName"
             String originalName = series.getName();
             String displayName = fileName + ": " + originalName;
             String uniqueName = getUniqueSeriesName(displayName);
@@ -643,7 +643,7 @@ public class FlowVizDataManager {
             public void dragEnter(DropTargetDragEvent dtde) {
                 if (isDragAcceptable(dtde)) {
                     dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                    statusUpdater.accept("Drop CSV or KTM files to load them...");
+                    statusUpdater.accept("Drop CSV or TSH files to load them...");
                 } else {
                     dtde.rejectDrag();
                 }
@@ -682,18 +682,18 @@ public class FlowVizDataManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV and KTM)
+                        // Filter for supported files (CSV and TSH)
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".ktm");
+                                return name.endsWith(".csv") || name.endsWith(".tsh");
                             })
                             .toList();
 
                         if (supportedFiles.isEmpty()) {
                             statusUpdater.accept("No supported files found in drop");
                             JOptionPane.showMessageDialog(parentFrame,
-                                "Please drop CSV or KTM files only.",
+                                "Please drop CSV or TSH files only.",
                                 "Invalid File Type",
                                 JOptionPane.WARNING_MESSAGE);
                         } else if (supportedFiles.size() == 1) {
