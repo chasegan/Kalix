@@ -29,10 +29,10 @@ Hybrid preference system with portable configuration:
 
 Key files: `PreferenceManager.java`, `PreferenceKeys.java`
 
-### Compressed Timeseries Format (.tsv/.tsh)
+### Compressed Timeseries Format (.kaz/.kai)
 Custom binary format using Gorilla compression:
-- **Binary format (.tsv)**: Gorilla-compressed time series data
-- **Metadata format (.tsh)**: Human-readable CSV with series info
+- **Binary format (.kaz)**: Gorilla-compressed time series data
+- **Metadata format (.kai)**: Human-readable CSV with series info
 - **FlowViz integration**: Drag-and-drop support, format auto-detection
 - **Critical fix**: Fixed decompression bugs with proper data point counting
 
@@ -49,7 +49,7 @@ Comprehensive refactoring using manager pattern:
 - `CoordinateDisplayManager` - Mouse hover display with binary search optimization
 - `PlotInteractionManager` - Mouse interactions, zooming, panning, context menus
 - `FlowVizMenuManager` - Menu system and keyboard shortcuts
-- `FlowVizDataManager` - CSV/TSH import/export with progress tracking
+- `FlowVizDataManager` - CSV/KAI import/export with progress tracking
 
 **Architecture Benefits:**
 - Callback-based communication for loose coupling

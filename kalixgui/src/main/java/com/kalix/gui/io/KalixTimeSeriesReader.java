@@ -15,8 +15,8 @@ import java.util.*;
  * Reader for Kalix compressed timeseries file format.
  *
  * Reads a pair of files:
- * - Binary file (.tsv) containing Gorilla-compressed timeseries data
- * - Metadata file (.tsh) containing series metadata in CSV format
+ * - Binary file (.kaz) containing Gorilla-compressed timeseries data
+ * - Metadata file (.kai) containing series metadata in CSV format
  *
  * Supports both sequential reading of all series and random access to specific series.
  *
@@ -36,8 +36,8 @@ public class KalixTimeSeriesReader {
      * Read all timeseries from the file pair
      */
     public List<TimeSeriesData> readAllSeries(String basePath) throws IOException {
-        String metadataPath = basePath + ".tsh";
-        String binaryPath = basePath + ".tsv";
+        String metadataPath = basePath + ".kai";
+        String binaryPath = basePath + ".kaz";
 
         // Read metadata
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
@@ -58,8 +58,8 @@ public class KalixTimeSeriesReader {
      * Read a specific timeseries by name
      */
     public TimeSeriesData readSeries(String basePath, String seriesName) throws IOException {
-        String metadataPath = basePath + ".tsh";
-        String binaryPath = basePath + ".tsv";
+        String metadataPath = basePath + ".kai";
+        String binaryPath = basePath + ".kaz";
 
         // Read metadata to find the series
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);

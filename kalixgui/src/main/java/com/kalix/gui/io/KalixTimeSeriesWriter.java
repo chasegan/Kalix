@@ -15,8 +15,8 @@ import java.util.*;
  * Writer for Kalix compressed timeseries file format.
  *
  * Creates a pair of files:
- * - Binary file (.tsv) containing Gorilla-compressed timeseries data
- * - Metadata file (.tsh) containing series metadata in CSV format
+ * - Binary file (.kaz) containing Gorilla-compressed timeseries data
+ * - Metadata file (.kai) containing series metadata in CSV format
  *
  * File Format:
  * Binary file: Sequential blocks of [codec_id(2), length(4), compressed_data]
@@ -26,7 +26,7 @@ import java.util.*;
  * <pre>
  * KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
  * List&lt;TimeSeriesData&gt; series = Arrays.asList(flowData, tempData);
- * writer.writeToFile("/path/to/data", series); // creates data.tsv and data.tsh
+ * writer.writeToFile("/path/to/data", series); // creates data.kaz and data.kai
  * </pre>
  */
 public class KalixTimeSeriesWriter {
@@ -36,7 +36,7 @@ public class KalixTimeSeriesWriter {
 
     /**
      * Write timeseries data to files with the given base path using default 32-bit precision.
-     * Creates basePath.tsv (binary) and basePath.tsh (metadata)
+     * Creates basePath.kaz (binary) and basePath.kai (metadata)
      */
     public void writeToFile(String basePath, List<TimeSeriesData> seriesList) throws IOException {
         writeToFile(basePath, seriesList, false); // Default to 32-bit precision
@@ -44,7 +44,7 @@ public class KalixTimeSeriesWriter {
 
     /**
      * Write timeseries data to files with the given base path and specified precision.
-     * Creates basePath.tsv (binary) and basePath.tsh (metadata)
+     * Creates basePath.kaz (binary) and basePath.kai (metadata)
      *
      * @param basePath Base file path (without extension)
      * @param seriesList List of time series data to write
@@ -55,8 +55,8 @@ public class KalixTimeSeriesWriter {
             throw new IllegalArgumentException("No series data to write");
         }
 
-        String binaryPath = basePath + ".tsv";
-        String metadataPath = basePath + ".tsh";
+        String binaryPath = basePath + ".kaz";
+        String metadataPath = basePath + ".kai";
 
         List<SeriesMetadata> metadataList = new ArrayList<>();
 

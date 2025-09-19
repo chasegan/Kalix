@@ -472,7 +472,7 @@ public class PlotInteractionManager {
 
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter kalixFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.tsh)", "tsh");
+        FileNameExtensionFilter kalixFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.kai)", "kai");
 
         fileChooser.addChoosableFileFilter(csvFilter);
         fileChooser.addChoosableFileFilter(kalixFilter);
@@ -488,7 +488,7 @@ public class PlotInteractionManager {
             // Determine format based on selected filter or file extension
             FileNameExtensionFilter selectedFilter = (FileNameExtensionFilter) fileChooser.getFileFilter();
 
-            if (selectedFilter == kalixFilter || fileName.endsWith(".tsh")) {
+            if (selectedFilter == kalixFilter || fileName.endsWith(".kai")) {
                 // Save as Kalix format
                 saveAsKalixFormat(file);
             } else {
@@ -533,8 +533,8 @@ public class PlotInteractionManager {
     private void saveAsKalixFormat(File file) {
         String filePath = file.getAbsolutePath();
 
-        // Remove .tsh extension if present to get base path
-        if (filePath.toLowerCase().endsWith(".tsh")) {
+        // Remove .kai extension if present to get base path
+        if (filePath.toLowerCase().endsWith(".kai")) {
             filePath = filePath.substring(0, filePath.length() - 4);
         }
 
@@ -558,7 +558,7 @@ public class PlotInteractionManager {
             writer.writeToFile(filePath, seriesList, use64BitPrecision);
 
             JOptionPane.showMessageDialog(parentComponent,
-                "Data saved successfully to " + new File(filePath + ".tsh").getName() + " and " + new File(filePath + ".tsv").getName(),
+                "Data saved successfully to " + new File(filePath + ".kai").getName() + " and " + new File(filePath + ".kaz").getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
