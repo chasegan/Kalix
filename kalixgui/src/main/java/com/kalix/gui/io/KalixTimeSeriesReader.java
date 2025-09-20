@@ -86,7 +86,7 @@ public class KalixTimeSeriesReader {
      * Get series names and metadata without reading the binary data
      */
     public List<SeriesInfo> getSeriesInfo(String basePath) throws IOException {
-        String metadataPath = basePath + ".ktm";
+        String metadataPath = basePath + ".kai";
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
 
         List<SeriesInfo> result = new ArrayList<>();
