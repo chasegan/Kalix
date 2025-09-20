@@ -30,6 +30,7 @@ public class TextSearchManager {
     private JCheckBox matchCaseCheckBox;
     private JCheckBox wholeWordCheckBox;
     private JCheckBox regexCheckBox;
+    private JCheckBox wrapAroundCheckBox;
     
     /**
      * Creates a new TextSearchManager for the specified text area.
@@ -118,7 +119,12 @@ public class TextSearchManager {
         regexCheckBox = new JCheckBox("Regular expression");
         gbc.gridy = 3;
         panel.add(regexCheckBox, gbc);
-        
+
+        wrapAroundCheckBox = new JCheckBox("Wrap around");
+        wrapAroundCheckBox.setSelected(true); // Default to true
+        gbc.gridy = 4;
+        panel.add(wrapAroundCheckBox, gbc);
+
         // Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout());
         
@@ -134,7 +140,7 @@ public class TextSearchManager {
         closeButton.addActionListener(e -> findDialog.setVisible(false));
         buttonPanel.add(closeButton);
         
-        gbc.gridx = 0; gbc.gridy = 4;
+        gbc.gridx = 0; gbc.gridy = 5;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(buttonPanel, gbc);
@@ -204,7 +210,12 @@ public class TextSearchManager {
         regexCheckBox = new JCheckBox("Regular expression");
         gbc.gridy = 4;
         panel.add(regexCheckBox, gbc);
-        
+
+        wrapAroundCheckBox = new JCheckBox("Wrap around");
+        wrapAroundCheckBox.setSelected(true); // Default to true
+        gbc.gridy = 5;
+        panel.add(wrapAroundCheckBox, gbc);
+
         // Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout());
         
@@ -223,8 +234,8 @@ public class TextSearchManager {
         JButton closeButton = new JButton("Close");
         closeButton.addActionListener(e -> replaceDialog.setVisible(false));
         buttonPanel.add(closeButton);
-        
-        gbc.gridx = 0; gbc.gridy = 5;
+
+        gbc.gridx = 0; gbc.gridy = 6;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(buttonPanel, gbc);
@@ -330,6 +341,7 @@ public class TextSearchManager {
         context.setRegularExpression(regexCheckBox.isSelected());
         context.setSearchForward(searchForward);
         context.setWholeWord(wholeWordCheckBox.isSelected());
+        context.setSearchWrap(wrapAroundCheckBox.isSelected());
         return context;
     }
     
