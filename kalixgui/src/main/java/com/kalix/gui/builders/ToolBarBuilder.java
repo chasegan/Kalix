@@ -73,9 +73,9 @@ public class ToolBarBuilder {
         ));
         
         toolBar.add(createToolBarButton(
-            "FlowViz", 
+            "FlowViz",
             AppConstants.TOOLBAR_FLOWVIZ_TOOLTIP,
-            FontIcon.of(FontAwesomeSolid.CHART_BAR, AppConstants.TOOLBAR_ICON_SIZE),
+            FontIcon.of(FontAwesomeSolid.CHART_LINE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.flowViz()
         ));
         
