@@ -220,11 +220,11 @@ pub fn write_series_with_precision(
                 CODEC_GORILLA_FLOAT
             };
 
-            // Detect timestep in milliseconds
-            let timestep_ms = detect_timestep(series);
+            // Detect timestep in seconds
+            let timestep_seconds = detect_timestep(series);
 
             // Compress data
-            let compressed = compress_series(series, timestep_ms, codec)?;
+            let compressed = compress_series(series, timestep_seconds, codec)?;
 
             // Write block: codec(2) + length(4) + data
             write_u16(&mut file, codec)?;
@@ -244,7 +244,7 @@ pub fn write_series_with_precision(
                 } else {
                     series.timestamps[series.timestamps.len() - 1]
                 },
-                timestep: timestep_ms / 1000, // Convert to seconds
+                timestep: timestep_seconds, // Already in seconds
                 length: series.timestamps.len(),
                 series_name: series.name.clone(),
             };
@@ -386,24 +386,22 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
     // Decompress based on codec
     let points: Vec<(u64, f64)> = match codec {
         CODEC_GORILLA_DOUBLE => {
-            let compressor = GorillaCompressor::new(meta.timestep * 1000); // Convert to milliseconds
+            let compressor = GorillaCompressor::new(meta.timestep); // Already in seconds
             let double_points = compressor.decompress_double(&compressed_data)
                 .map_err(|e| KazError::CompressionError(format!("Failed to decompress double data: {}", e)))?;
             double_points.into_iter().map(|p| {
-                // Convert back from Unix milliseconds to wrapped u64
-                let unix_seconds = (p.timestamp as i64) / 1000;
-                let wrapped_timestamp = wrap_to_u64(unix_seconds);
+                // Convert back from Unix seconds to wrapped u64
+                let wrapped_timestamp = wrap_to_u64(p.timestamp as i64);
                 (wrapped_timestamp, p.value)
             }).collect()
         },
         CODEC_GORILLA_FLOAT => {
-            let compressor = GorillaCompressor::new(meta.timestep * 1000); // Convert to milliseconds
+            let compressor = GorillaCompressor::new(meta.timestep); // Already in seconds
             let float_points = compressor.decompress_float(&compressed_data)
                 .map_err(|e| KazError::CompressionError(format!("Failed to decompress float data: {}", e)))?;
             float_points.into_iter().map(|p| {
-                // Convert back from Unix milliseconds to wrapped u64
-                let unix_seconds = (p.timestamp as i64) / 1000;
-                let wrapped_timestamp = wrap_to_u64(unix_seconds);
+                // Convert back from Unix seconds to wrapped u64
+                let wrapped_timestamp = wrap_to_u64(p.timestamp as i64);
                 (wrapped_timestamp, p.value as f64)
             }).collect()
         },
@@ -426,27 +424,21 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
     Ok(timeseries)
 }
 
-fn compress_series(series: &Timeseries, timestep_ms: u64, codec: u16) -> Result<Vec<u8>, KazError> {
+fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Result<Vec<u8>, KazError> {
     if series.timestamps.is_empty() {
         return Ok(Vec::new());
     }
 
-    let compressor = GorillaCompressor::new(timestep_ms);
+    let compressor = GorillaCompressor::new(timestep_seconds);
 
     match codec {
         CODEC_GORILLA_DOUBLE => {
-            // Convert to TimeValueDouble format, unwrapping timestamps to i64 then to u64 for gorilla
+            // Convert to TimeValueDouble format, unwrapping timestamps to i64 for gorilla
             let points: Vec<TimeValueDouble> = series.timestamps.iter()
                 .zip(series.values.iter())
                 .map(|(&timestamp, &value)| {
                     let unix_timestamp = wrap_to_i64(timestamp);
-                    // Convert to milliseconds if it's in seconds
-                    let timestamp_ms = if unix_timestamp.abs() < 1_000_000_000_000 {
-                        unix_timestamp * 1000
-                    } else {
-                        unix_timestamp
-                    };
-                    TimeValueDouble::new(timestamp_ms as u64, value)
+                    TimeValueDouble::new(unix_timestamp as u64, value)
                 })
                 .collect();
 
@@ -454,18 +446,12 @@ fn compress_series(series: &Timeseries, timestep_ms: u64, codec: u16) -> Result<
                 .map_err(|e| KazError::CompressionError(format!("Failed to compress double data: {}", e)))
         },
         CODEC_GORILLA_FLOAT => {
-            // Convert to TimeValueFloat format, unwrapping timestamps to i64 then to u64 for gorilla
+            // Convert to TimeValueFloat format, unwrapping timestamps to i64 for gorilla
             let points: Vec<TimeValueFloat> = series.timestamps.iter()
                 .zip(series.values.iter())
                 .map(|(&timestamp, &value)| {
                     let unix_timestamp = wrap_to_i64(timestamp);
-                    // Convert to milliseconds if it's in seconds
-                    let timestamp_ms = if unix_timestamp.abs() < 1_000_000_000_000 {
-                        unix_timestamp * 1000
-                    } else {
-                        unix_timestamp
-                    };
-                    TimeValueFloat::new(timestamp_ms as u64, value as f32)
+                    TimeValueFloat::new(unix_timestamp as u64, value as f32)
                 })
                 .collect();
 
@@ -478,27 +464,18 @@ fn compress_series(series: &Timeseries, timestep_ms: u64, codec: u16) -> Result<
 
 fn detect_timestep(series: &Timeseries) -> u64 {
     if series.timestamps.len() < 2 {
-        return 1000; // Default 1 second in milliseconds
+        return 86400; // Default 86400 seconds (1 day)
     }
 
     // Use the step_size if it's reasonable, otherwise calculate from data
     if series.step_size > 0 && series.step_size < 1_000_000 {
-        // step_size looks like it's in seconds, convert to milliseconds
-        series.step_size * 1000
-    } else if series.step_size >= 1_000_000 {
-        // step_size looks like it's already in milliseconds
+        // step_size is in seconds
         series.step_size
     } else {
-        // Calculate average interval
+        // Calculate average interval from timestamps
         let total_interval = series.timestamps[series.timestamps.len() - 1] - series.timestamps[0];
         let avg_interval = total_interval / (series.timestamps.len() - 1) as u64;
-
-        // Convert to milliseconds if it looks like it's in seconds
-        if avg_interval < 1_000_000 {
-            avg_interval * 1000
-        } else {
-            avg_interval
-        }
+        avg_interval
     }
 }
 

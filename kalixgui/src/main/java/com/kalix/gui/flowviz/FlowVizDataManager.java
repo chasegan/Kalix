@@ -604,16 +604,16 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Converts millisecond timestamps to LocalDateTime objects.
+     * Converts second timestamps to LocalDateTime objects.
      *
-     * @param timestamps Array of millisecond timestamps
+     * @param timestamps Array of second timestamps
      * @return Array of LocalDateTime objects
      */
     private java.time.LocalDateTime[] convertTimestampsToLocalDateTime(long[] timestamps) {
         java.time.LocalDateTime[] result = new java.time.LocalDateTime[timestamps.length];
         for (int i = 0; i < timestamps.length; i++) {
             result[i] = java.time.LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamps[i]),
+                java.time.Instant.ofEpochSecond(timestamps[i]),
                 java.time.ZoneOffset.UTC);
         }
         return result;

@@ -72,8 +72,8 @@ public class KalixTimeSeriesWriter {
                 int codec = use64BitPrecision ? CODEC_GORILLA_DOUBLE : CODEC_GORILLA_FLOAT;
 
                 // Detect timestep
-                long timestepMs = detectTimestep(series);
-                GorillaCompressor compressor = new GorillaCompressor(timestepMs);
+                long timestepSeconds = detectTimestep(series);
+                GorillaCompressor compressor = new GorillaCompressor(timestepSeconds);
 
                 // Compress data based on codec choice
                 byte[] compressed;
@@ -101,7 +101,7 @@ public class KalixTimeSeriesWriter {
                 metadata.offset = offset;
                 metadata.startTime = series.getFirstTimestamp();
                 metadata.endTime = series.getLastTimestamp();
-                metadata.timestep = timestepMs / 1000; // Convert to seconds
+                metadata.timestep = timestepSeconds; // Already in seconds
                 metadata.length = series.getPointCount();
                 metadata.seriesName = series.getName();
                 metadataList.add(metadata);
@@ -138,12 +138,12 @@ public class KalixTimeSeriesWriter {
 
     private long detectTimestep(TimeSeriesData series) {
         if (series.hasRegularInterval()) {
-            return series.getIntervalMs();
+            return series.getIntervalSeconds();
         }
 
         // For irregular intervals, calculate average interval
         if (series.getPointCount() < 2) {
-            return 1000; // Default 1 second
+            return 1; // Default 1 second
         }
 
         long totalInterval = series.getLastTimestamp() - series.getFirstTimestamp();
@@ -177,9 +177,9 @@ public class KalixTimeSeriesWriter {
         }
     }
 
-    private String formatTimestamp(long timestampMs) {
+    private String formatTimestamp(long timestampSeconds) {
         LocalDateTime dateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(timestampMs), ZoneOffset.UTC);
+            Instant.ofEpochSecond(timestampSeconds), ZoneOffset.UTC);
 
         // Check if it's a whole day (midnight)
         if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 &&

@@ -95,9 +95,9 @@ public class KalixTimeSeriesReader {
             info.name = meta.seriesName;
             info.pointCount = meta.length;
             info.startTime = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(meta.startTime), ZoneOffset.UTC);
+                java.time.Instant.ofEpochSecond(meta.startTime), ZoneOffset.UTC);
             info.endTime = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(meta.endTime), ZoneOffset.UTC);
+                java.time.Instant.ofEpochSecond(meta.endTime), ZoneOffset.UTC);
             info.timestepSeconds = meta.timestep;
             result.add(info);
         }
@@ -189,7 +189,7 @@ public class KalixTimeSeriesReader {
             dateTime = LocalDateTime.parse(timestampStr + "T00:00:00", DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
         }
 
-        return dateTime.toInstant(ZoneOffset.UTC).toEpochMilli();
+        return dateTime.toInstant(ZoneOffset.UTC).getEpochSecond();
     }
 
     private TimeSeriesData readSeriesFromBinary(RandomAccessFile binaryFile, SeriesMetadata meta) throws IOException {
@@ -206,16 +206,16 @@ public class KalixTimeSeriesReader {
 
         // Decompress based on codec
         List<GorillaCompressor.TimeValueDouble> gorillaData;
-        long timestepMs = meta.timestep * 1000; // Convert to milliseconds
+        long timestepSeconds = meta.timestep; // Already in seconds
 
         switch (codec) {
             case CODEC_GORILLA_DOUBLE:
-                GorillaCompressor compressor = new GorillaCompressor(timestepMs);
+                GorillaCompressor compressor = new GorillaCompressor(timestepSeconds);
                 gorillaData = compressor.decompressDouble(compressedData);
                 break;
             case CODEC_GORILLA_FLOAT:
                 // For now, convert float to double
-                GorillaCompressor floatCompressor = new GorillaCompressor(timestepMs);
+                GorillaCompressor floatCompressor = new GorillaCompressor(timestepSeconds);
                 List<GorillaCompressor.TimeValueFloat> floatData = floatCompressor.decompressFloat(compressedData);
                 gorillaData = new ArrayList<>();
                 for (GorillaCompressor.TimeValueFloat point : floatData) {
@@ -237,7 +237,7 @@ public class KalixTimeSeriesReader {
         for (int i = 0; i < gorillaData.size(); i++) {
             GorillaCompressor.TimeValueDouble point = gorillaData.get(i);
             dateTimes[i] = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(point.timestamp), ZoneOffset.UTC);
+                java.time.Instant.ofEpochSecond(point.timestamp), ZoneOffset.UTC);
             values[i] = point.value;
         }
 
