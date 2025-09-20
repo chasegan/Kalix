@@ -140,7 +140,7 @@ public class AxisRenderer {
 
         drawTimeAxis(g2d, viewport, axisInfo);
         drawValueAxis(g2d, viewport, axisInfo);
-        drawAxisTitles(g2d, viewport);
+        drawAxisTitles(g2d, viewport, axisInfo);
     }
 
     /**
@@ -248,10 +248,10 @@ public class AxisRenderer {
     /**
      * Draws axis titles for both time and value axes.
      */
-    private void drawAxisTitles(Graphics2D g2d, ViewPort viewport) {
+    private void drawAxisTitles(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
         g2d.setColor(Color.BLACK);
         g2d.setFont(new Font("Arial", Font.BOLD, 12));
-        FontMetrics fm = g2d.getFontMetrics();
+        FontMetrics titleFm = g2d.getFontMetrics();
 
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
@@ -260,18 +260,33 @@ public class AxisRenderer {
 
         // Draw X-axis title "Time"
         String xTitle = "Time";
-        int xTitleWidth = fm.stringWidth(xTitle);
+        int xTitleWidth = titleFm.stringWidth(xTitle);
         int xTitleX = plotX + (plotWidth - xTitleWidth) / 2;
         int xTitleY = plotY + plotHeight + TIME_TITLE_OFFSET;
         g2d.drawString(xTitle, xTitleX, xTitleY);
 
+        // Calculate dynamic Y-axis title offset based on maximum label width
+        g2d.setFont(new Font("Arial", Font.PLAIN, 10)); // Use same font as axis labels
+        FontMetrics labelFm = g2d.getFontMetrics();
+        int maxLabelWidth = 0;
+
+        for (Double tickValue : axisInfo.valueTicks) {
+            String valueLabel = formatValue(tickValue);
+            int labelWidth = labelFm.stringWidth(valueLabel);
+            maxLabelWidth = Math.max(maxLabelWidth, labelWidth);
+        }
+
+        // Dynamic offset: base spacing + max label width + small padding
+        int dynamicOffset = VALUE_LABEL_OFFSET + maxLabelWidth + 15;
+
         // Draw Y-axis title "Value" (rotated 90 degrees counter-clockwise)
+        g2d.setFont(new Font("Arial", Font.BOLD, 12)); // Restore title font
         String yTitle = "Value";
         Graphics2D g2dRotated = (Graphics2D) g2d.create();
         g2dRotated.rotate(-Math.PI / 2);
-        int yTitleWidth = fm.stringWidth(yTitle);
+        int yTitleWidth = titleFm.stringWidth(yTitle);
         int yTitleX = -(plotY + (plotHeight + yTitleWidth) / 2);
-        int yTitleY = plotX - VALUE_TITLE_OFFSET;
+        int yTitleY = plotX - dynamicOffset;
         g2dRotated.drawString(yTitle, yTitleX, yTitleY);
         g2dRotated.dispose();
     }
