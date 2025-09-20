@@ -4,7 +4,7 @@ import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelChangeEvent;
 
 /**
- * Test to verify the simplified status reporting shows affected node/link counts.
+ * Test to verify the simplified status reporting shows modified node/link counts.
  */
 public class StatusReportingTest {
     
@@ -23,7 +23,7 @@ public class StatusReportingTest {
             
             // Add affected counts if there were changes
             if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
-                String changeMessage = String.format(" (%d nodes, %d links affected)", 
+                String changeMessage = String.format(" (%d nodes, %d links modified)",
                     event.getAffectedNodeCount(), event.getAffectedLinkCount());
                 System.out.println("Status: " + baseMessage + changeMessage);
             } else {
@@ -84,7 +84,7 @@ public class StatusReportingTest {
         
         model.parseFromIniTextIncremental(reducedModel);
         
-        // Test 5: No change (should not show affected counts)
+        // Test 5: No change (should not show modified counts)
         System.out.println("\n5. No changes:");
         model.parseFromIniTextIncremental(reducedModel);
         

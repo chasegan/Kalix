@@ -236,15 +236,12 @@ public class FileOperationsManager {
         
         // Set file filters for supported model formats
         FileNameExtensionFilter allModelsFilter = new FileNameExtensionFilter(
-            AppConstants.MODEL_FILES_DESCRIPTION, "ini", "toml");
+            AppConstants.MODEL_FILES_DESCRIPTION, "ini");
         FileNameExtensionFilter iniFilter = new FileNameExtensionFilter(
             AppConstants.INI_FILES_DESCRIPTION, "ini");
-        FileNameExtensionFilter tomlFilter = new FileNameExtensionFilter(
-            AppConstants.TOML_FILES_DESCRIPTION, "toml");
-        
+
         fileChooser.setFileFilter(allModelsFilter);
         fileChooser.addChoosableFileFilter(iniFilter);
-        fileChooser.addChoosableFileFilter(tomlFilter);
         
         return fileChooser;
     }
@@ -259,8 +256,6 @@ public class FileOperationsManager {
         String lowerName = fileName.toLowerCase();
         if (lowerName.endsWith(AppConstants.INI_EXTENSION)) {
             return "INI";
-        } else if (lowerName.endsWith(AppConstants.TOML_EXTENSION)) {
-            return "TOML";
         } else {
             return "unknown";
         }

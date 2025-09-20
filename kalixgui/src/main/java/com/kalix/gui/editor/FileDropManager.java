@@ -96,14 +96,14 @@ public class FileDropManager {
                     File file = files.get(0); // Take the first file
                     String fileName = file.getName().toLowerCase();
                     
-                    // Only accept .ini and .toml files
+                    // Only accept .ini files
                     if (isAcceptedFileType(fileName)) {
                         if (fileDropHandler != null) {
                             fileDropHandler.onFileDropped(file);
                         }
                         dtde.dropComplete(true);
                     } else {
-                        logger.info("Rejected file: {} (only .ini and .toml files are accepted)", fileName);
+                        logger.info("Rejected file: {} (only .ini files are accepted)", fileName);
                         dtde.dropComplete(false);
                     }
                 } else {
@@ -125,6 +125,6 @@ public class FileDropManager {
      * @return true if the file type is accepted
      */
     private boolean isAcceptedFileType(String fileName) {
-        return fileName.endsWith(".ini") || fileName.endsWith(".toml");
+        return fileName.endsWith(".ini");
     }
 }

@@ -409,7 +409,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             
             // Add affected counts if there were changes
             if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
-                String changeMessage = String.format(" (%d nodes, %d links affected)", 
+                String changeMessage = String.format(" (%d nodes, %d links modified)",
                     event.getAffectedNodeCount(), event.getAffectedLinkCount());
                 updateStatus(baseMessage + changeMessage);
             } else {
@@ -489,7 +489,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     /**
      * Opens a model file using a file chooser dialog.
-     * Supported formats include .ini and .toml files.
+     * Supported formats include .ini files.
      */
     @Override
     public void openModel() {

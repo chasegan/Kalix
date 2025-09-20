@@ -1,0 +1,4 @@
+index,offset,start_time,end_time,timestep,length,series_name
+1    ,0     ,1889-01-01,2022-09-04,86400   ,48824 ,three_rex_rain.csv: rex_rain.csv: value
+2    ,117175,1889-01-01,2022-09-04,86400   ,48824 ,three_rex_rain.csv: rex_rain.csv: value (2)
+3    ,234350,1889-01-01,2022-09-04,86400   ,48824 ,three_rex_rain.csv: rex_rain.csv: value (3)

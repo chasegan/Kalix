@@ -31,13 +31,11 @@ public final class AppConstants {
     
     // File types
     public static final String INI_EXTENSION = ".ini";
-    public static final String TOML_EXTENSION = ".toml";
-    public static final String[] SUPPORTED_MODEL_EXTENSIONS = {INI_EXTENSION, TOML_EXTENSION};
-    
+    public static final String[] SUPPORTED_MODEL_EXTENSIONS = {INI_EXTENSION};
+
     // File dialog descriptions
-    public static final String MODEL_FILES_DESCRIPTION = "Kalix Model Files (*.ini, *.toml)";
+    public static final String MODEL_FILES_DESCRIPTION = "Kalix Model Files (*.ini)";
     public static final String INI_FILES_DESCRIPTION = "INI Files (*.ini)";
-    public static final String TOML_FILES_DESCRIPTION = "TOML Files (*.toml)";
     
     
     // Themes
@@ -72,7 +70,7 @@ public final class AppConstants {
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
     public static final String STATUS_FLOWVIZ_OPENED = "FlowViz window opened";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
-    public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini or .toml)";
+    public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini)";
     
     // Error messages
     public static final String ERROR_FILE_OPEN = "File Open Error";

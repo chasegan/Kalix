@@ -69,7 +69,7 @@ public class CommandExecutionTest {
         logger.info("Test 2: Building calibration command with parameters");
         CommandBuilder calibBuilder = CommandBuilder.forCalibration(apiSpec);
         CommandBuilder.BuildResult calibResult = calibBuilder
-            .withParameter("config", "test-config.toml")
+            .withParameter("config", "test-config.ini")
             .withParameter("iterations", "100")
             .build();
         
