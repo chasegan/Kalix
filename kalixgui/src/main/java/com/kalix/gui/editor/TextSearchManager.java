@@ -6,10 +6,14 @@ import org.fife.ui.rtextarea.SearchEngine;
 import org.fife.ui.rtextarea.SearchResult;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 /**
  * Manages search and replace functionality for RSyntaxTextArea using the SearchEngine API.
@@ -31,6 +35,9 @@ public class TextSearchManager {
     private JCheckBox wholeWordCheckBox;
     private JCheckBox regexCheckBox;
     private JCheckBox wrapAroundCheckBox;
+
+    // State tracking
+    private boolean highlightsActive = false;
     
     /**
      * Creates a new TextSearchManager for the specified text area.
@@ -41,6 +48,24 @@ public class TextSearchManager {
     public TextSearchManager(RSyntaxTextArea textArea, JComponent parentComponent) {
         this.textArea = textArea;
         this.parentComponent = parentComponent;
+
+        // Add document listener to clear highlights when text changes
+        textArea.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                clearHighlights();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                clearHighlights();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                clearHighlights();
+            }
+        });
     }
     
     /**
@@ -137,7 +162,10 @@ public class TextSearchManager {
         buttonPanel.add(findPrevButton);
         
         JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> findDialog.setVisible(false));
+        closeButton.addActionListener(e -> {
+            clearHighlights();
+            findDialog.setVisible(false);
+        });
         buttonPanel.add(closeButton);
         
         gbc.gridx = 0; gbc.gridy = 5;
@@ -150,10 +178,21 @@ public class TextSearchManager {
         
         // Escape key support
         findDialog.getRootPane().registerKeyboardAction(
-            e -> findDialog.setVisible(false),
+            e -> {
+                clearHighlights();
+                findDialog.setVisible(false);
+            },
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+
+        // Window close listener
+        findDialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                clearHighlights();
+            }
+        });
         
         findDialog.add(panel);
         findDialog.pack();
@@ -232,7 +271,10 @@ public class TextSearchManager {
         buttonPanel.add(replaceAllButton);
         
         JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> replaceDialog.setVisible(false));
+        closeButton.addActionListener(e -> {
+            clearHighlights();
+            replaceDialog.setVisible(false);
+        });
         buttonPanel.add(closeButton);
 
         gbc.gridx = 0; gbc.gridy = 6;
@@ -246,10 +288,21 @@ public class TextSearchManager {
         
         // Escape key support
         replaceDialog.getRootPane().registerKeyboardAction(
-            e -> replaceDialog.setVisible(false),
+            e -> {
+                clearHighlights();
+                replaceDialog.setVisible(false);
+            },
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+
+        // Window close listener
+        replaceDialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                clearHighlights();
+            }
+        });
         
         replaceDialog.add(panel);
         replaceDialog.pack();
@@ -267,8 +320,10 @@ public class TextSearchManager {
         
         SearchContext context = createSearchContext(searchText, true);
         SearchResult result = SearchEngine.find(textArea, context);
-        
-        if (!result.wasFound()) {
+
+        if (result.wasFound()) {
+            highlightsActive = true;
+        } else {
             showNotFoundMessage();
         }
     }
@@ -284,8 +339,10 @@ public class TextSearchManager {
         
         SearchContext context = createSearchContext(searchText, false);
         SearchResult result = SearchEngine.find(textArea, context);
-        
-        if (!result.wasFound()) {
+
+        if (result.wasFound()) {
+            highlightsActive = true;
+        } else {
             showNotFoundMessage();
         }
     }
@@ -355,5 +412,15 @@ public class TextSearchManager {
             "Not Found",
             JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    /**
+     * Clears all search highlights in the text area.
+     */
+    private void clearHighlights() {
+        if (highlightsActive) {
+            textArea.clearMarkAllHighlights();
+            highlightsActive = false;
+        }
     }
 }
