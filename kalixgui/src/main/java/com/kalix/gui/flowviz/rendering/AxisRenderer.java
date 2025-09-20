@@ -24,6 +24,8 @@ public class AxisRenderer {
     private static final int TICK_MARK_LENGTH = 5;
     private static final int TIME_LABEL_OFFSET = 18;
     private static final int VALUE_LABEL_OFFSET = 8;
+    private static final int TIME_TITLE_OFFSET = 40;
+    private static final int VALUE_TITLE_OFFSET = 55;
 
     private final TemporalAxisCalculator temporalCalculator;
 
@@ -138,6 +140,7 @@ public class AxisRenderer {
 
         drawTimeAxis(g2d, viewport, axisInfo);
         drawValueAxis(g2d, viewport, axisInfo);
+        drawAxisTitles(g2d, viewport);
     }
 
     /**
@@ -240,5 +243,36 @@ public class AxisRenderer {
             formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
             return formatted;
         }
+    }
+
+    /**
+     * Draws axis titles for both time and value axes.
+     */
+    private void drawAxisTitles(Graphics2D g2d, ViewPort viewport) {
+        g2d.setColor(Color.BLACK);
+        g2d.setFont(new Font("Arial", Font.BOLD, 12));
+        FontMetrics fm = g2d.getFontMetrics();
+
+        int plotX = viewport.getPlotX();
+        int plotY = viewport.getPlotY();
+        int plotWidth = viewport.getPlotWidth();
+        int plotHeight = viewport.getPlotHeight();
+
+        // Draw X-axis title "Time"
+        String xTitle = "Time";
+        int xTitleWidth = fm.stringWidth(xTitle);
+        int xTitleX = plotX + (plotWidth - xTitleWidth) / 2;
+        int xTitleY = plotY + plotHeight + TIME_TITLE_OFFSET;
+        g2d.drawString(xTitle, xTitleX, xTitleY);
+
+        // Draw Y-axis title "Value" (rotated 90 degrees counter-clockwise)
+        String yTitle = "Value";
+        Graphics2D g2dRotated = (Graphics2D) g2d.create();
+        g2dRotated.rotate(-Math.PI / 2);
+        int yTitleWidth = fm.stringWidth(yTitle);
+        int yTitleX = -(plotY + (plotHeight + yTitleWidth) / 2);
+        int yTitleY = plotX - VALUE_TITLE_OFFSET;
+        g2dRotated.drawString(yTitle, yTitleX, yTitleY);
+        g2dRotated.dispose();
     }
 }
