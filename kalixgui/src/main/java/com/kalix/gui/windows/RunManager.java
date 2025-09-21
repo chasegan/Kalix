@@ -38,13 +38,6 @@ public class RunManager extends JFrame {
     // Details panel components
     private JPanel detailsPanel;
     private CardLayout detailsCardLayout;
-    private JLabel runNameLabel;
-    private JLabel runStatusLabel;
-    private JLabel sessionStatusLabel;
-    private JLabel runStartTimeLabel;
-    private JLabel runDurationLabel;
-    private JProgressBar runProgressBar;
-    private JTextArea runLogArea;
 
     // Run tracking
     private Map<String, String> sessionToRunName = new HashMap<>();
@@ -132,8 +125,7 @@ public class RunManager extends JFrame {
         runTree.expandPath(new TreePath(currentRunsNode.getPath()));
         runTree.expandPath(new TreePath(libraryNode.getPath()));
 
-        // Add selection listener
-        runTree.addTreeSelectionListener(e -> updateDetailsPanel());
+        // Selection listener no longer needed - details moved to CLI Log window
 
         // Add context menu
         setupContextMenu();
@@ -147,85 +139,19 @@ public class RunManager extends JFrame {
     }
 
     private void createDetailsComponents() {
-        runNameLabel = new JLabel();
-        runStatusLabel = new JLabel();
-        sessionStatusLabel = new JLabel();
-        runStartTimeLabel = new JLabel();
-        runDurationLabel = new JLabel();
-
-
-        runProgressBar = new JProgressBar();
-        runProgressBar.setStringPainted(true);
-
-        runLogArea = new JTextArea();
-        runLogArea.setEditable(false);
-        runLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        runLogArea.setBackground(Color.WHITE);
+        // No longer needed - details moved to CLI Log window
     }
 
     private void createDetailsLayouts() {
-        // Create "no selection" panel
-        JPanel noSelectionPanel = new JPanel(new BorderLayout());
-        JLabel noSelectionLabel = new JLabel("Select a run to view details", SwingConstants.CENTER);
-        noSelectionLabel.setForeground(Color.GRAY);
-        noSelectionPanel.add(noSelectionLabel, BorderLayout.CENTER);
+        // Create simple message panel
+        JPanel messagePanel = new JPanel(new BorderLayout());
+        JLabel messageLabel = new JLabel("<html><center>Right-click on a run to:<br>• View CLI Log<br>• Remove run</center></html>", SwingConstants.CENTER);
+        messageLabel.setForeground(Color.GRAY);
+        messagePanel.add(messageLabel, BorderLayout.CENTER);
+        messagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Create "run selected" panel
-        JPanel runSelectedPanel = new JPanel(new BorderLayout());
-
-        // Run info panel
-        JPanel infoPanel = new JPanel(new GridBagLayout());
-        infoPanel.setBorder(BorderFactory.createTitledBorder("Run Information"));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 10, 5, 10);
-        gbc.anchor = GridBagConstraints.WEST;
-
-        // Add info fields
-        gbc.gridx = 0; gbc.gridy = 0;
-        infoPanel.add(new JLabel("Name:"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(runNameLabel, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
-        infoPanel.add(new JLabel("Run Status:"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(runStatusLabel, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
-        infoPanel.add(new JLabel("Session Status:"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(sessionStatusLabel, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
-        infoPanel.add(new JLabel("Start Time:"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(runStartTimeLabel, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
-        infoPanel.add(new JLabel("Duration:"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(runDurationLabel, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(runProgressBar, gbc);
-
-        // Log panel
-        JPanel logPanel = new JPanel(new BorderLayout());
-        logPanel.setBorder(BorderFactory.createTitledBorder("Run Log"));
-        JScrollPane logScrollPane = new JScrollPane(runLogArea);
-        logScrollPane.setPreferredSize(new Dimension(400, 200));
-        logPanel.add(logScrollPane, BorderLayout.CENTER);
-
-        // Assemble run selected panel
-        runSelectedPanel.add(infoPanel, BorderLayout.NORTH);
-        runSelectedPanel.add(logPanel, BorderLayout.CENTER);
-
-        // Add panels to card layout
-        detailsPanel.add(noSelectionPanel, "NO_SELECTION");
-        detailsPanel.add(runSelectedPanel, "RUN_SELECTED");
-
-        // Initially show no selection
-        detailsCardLayout.show(detailsPanel, "NO_SELECTION");
+        // Add to details panel
+        detailsPanel.add(messagePanel, BorderLayout.CENTER);
     }
 
     private void setupLayout() {
@@ -309,6 +235,12 @@ public class RunManager extends JFrame {
     private void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
+        JMenuItem cliLogItem = new JMenuItem("CLI Log");
+        cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
+        contextMenu.add(cliLogItem);
+
+        contextMenu.addSeparator();
+
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> removeRunFromContextMenu());
         contextMenu.add(removeItem);
@@ -391,8 +323,6 @@ public class RunManager extends JFrame {
             if (selectedRunName != null) {
                 restoreSelection(selectedRunName);
             }
-
-            updateDetailsPanel();
         });
     }
 
@@ -410,85 +340,19 @@ public class RunManager extends JFrame {
         }
     }
 
-    private void updateDetailsPanel() {
-        TreePath selectedPath = runTree.getSelectionPath();
 
-        if (selectedPath == null || !(selectedPath.getLastPathComponent() instanceof DefaultMutableTreeNode)) {
-            detailsCardLayout.show(detailsPanel, "NO_SELECTION");
-            return;
-        }
+    /**
+     * Shows the CLI log window for the selected run.
+     */
+    private void showCliLogFromContextMenu() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) {
-            detailsCardLayout.show(detailsPanel, "NO_SELECTION");
-            return;
-        }
+        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        SessionManager.KalixSession session = runInfo.session;
-
-        // Update details
-        runNameLabel.setText(runInfo.runName);
-        RunStatus runStatus = runInfo.getRunStatus();
-        runStatusLabel.setText(runStatus.getDisplayName());
-        sessionStatusLabel.setText(session.getState().toString());
-        runStartTimeLabel.setText(session.getStartTime().toString());
-
-        // Calculate duration
-        long durationMs = System.currentTimeMillis() - session.getStartTime().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long seconds = durationMs / 1000;
-        long minutes = seconds / 60;
-        long hours = minutes / 60;
-        String duration = String.format("%02d:%02d:%02d", hours, minutes % 60, seconds % 60);
-        runDurationLabel.setText(duration);
-
-        // Update progress bar based on run status
-        switch (runStatus) {
-            case STARTING:
-                runProgressBar.setIndeterminate(true);
-                runProgressBar.setString("Starting...");
-                break;
-            case LOADING:
-                runProgressBar.setIndeterminate(true);
-                runProgressBar.setString("Loading Model...");
-                break;
-            case RUNNING:
-                runProgressBar.setIndeterminate(true);
-                runProgressBar.setString("Running Simulation...");
-                break;
-            case DONE:
-                runProgressBar.setIndeterminate(false);
-                runProgressBar.setValue(100);
-                runProgressBar.setString("Done");
-                break;
-            case ERROR:
-                runProgressBar.setIndeterminate(false);
-                runProgressBar.setValue(0);
-                runProgressBar.setString("Error");
-                break;
-            case STOPPED:
-                runProgressBar.setIndeterminate(false);
-                runProgressBar.setValue(0);
-                runProgressBar.setString("Stopped");
-                break;
-            default:
-                runProgressBar.setIndeterminate(false);
-                runProgressBar.setValue(0);
-                runProgressBar.setString("Unknown");
-                break;
-        }
-
-
-        // Update log
-        if (session.getCommunicationLog() != null) {
-            runLogArea.setText(session.getCommunicationLog().getFormattedLog());
-            runLogArea.setCaretPosition(runLogArea.getDocument().getLength());
-        } else {
-            runLogArea.setText("No log available");
-        }
-
-        detailsCardLayout.show(detailsPanel, "RUN_SELECTED");
+        CliLogWindow.showCliLogWindow(runInfo.runName, runInfo.session, this);
     }
 
     /**
