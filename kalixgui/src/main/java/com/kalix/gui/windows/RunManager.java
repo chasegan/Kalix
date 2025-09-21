@@ -12,8 +12,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.*;
 import javax.swing.tree.*;
 import java.awt.*;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.event.*;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Consumer;
@@ -44,8 +43,6 @@ public class RunManager extends JFrame {
     private JLabel sessionStatusLabel;
     private JLabel runStartTimeLabel;
     private JLabel runDurationLabel;
-    private JButton terminateButton;
-    private JButton removeButton;
     private JProgressBar runProgressBar;
     private JTextArea runLogArea;
 
@@ -138,6 +135,9 @@ public class RunManager extends JFrame {
         // Add selection listener
         runTree.addTreeSelectionListener(e -> updateDetailsPanel());
 
+        // Add context menu
+        setupContextMenu();
+
         // Initialize details panel components
         detailsCardLayout = new CardLayout();
         detailsPanel = new JPanel(detailsCardLayout);
@@ -153,11 +153,6 @@ public class RunManager extends JFrame {
         runStartTimeLabel = new JLabel();
         runDurationLabel = new JLabel();
 
-        terminateButton = new JButton("Stop Run");
-        terminateButton.addActionListener(e -> terminateSelectedRun());
-
-        removeButton = new JButton("Remove");
-        removeButton.addActionListener(e -> removeSelectedRun());
 
         runProgressBar = new JProgressBar();
         runProgressBar.setStringPainted(true);
@@ -214,11 +209,6 @@ public class RunManager extends JFrame {
         gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
         infoPanel.add(runProgressBar, gbc);
 
-        // Button panel
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        buttonPanel.add(terminateButton);
-        buttonPanel.add(removeButton);
-
         // Log panel
         JPanel logPanel = new JPanel(new BorderLayout());
         logPanel.setBorder(BorderFactory.createTitledBorder("Run Log"));
@@ -229,7 +219,6 @@ public class RunManager extends JFrame {
         // Assemble run selected panel
         runSelectedPanel.add(infoPanel, BorderLayout.NORTH);
         runSelectedPanel.add(logPanel, BorderLayout.CENTER);
-        runSelectedPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         // Add panels to card layout
         detailsPanel.add(noSelectionPanel, "NO_SELECTION");
@@ -312,6 +301,49 @@ public class RunManager extends JFrame {
     private void setupUpdateTimer() {
         sessionUpdateTimer = new Timer(2000, e -> refreshRuns());
         sessionUpdateTimer.setRepeats(true);
+    }
+
+    /**
+     * Sets up the context menu for the run tree.
+     */
+    private void setupContextMenu() {
+        JPopupMenu contextMenu = new JPopupMenu();
+
+        JMenuItem removeItem = new JMenuItem("Remove");
+        removeItem.addActionListener(e -> removeRunFromContextMenu());
+        contextMenu.add(removeItem);
+
+        // Add mouse listener for right-click
+        runTree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            private void showContextMenu(MouseEvent e) {
+                // Get the path at the mouse location
+                TreePath path = runTree.getPathForLocation(e.getX(), e.getY());
+                if (path != null) {
+                    // Select the node that was right-clicked
+                    runTree.setSelectionPath(path);
+
+                    // Check if it's a run item (not a folder)
+                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                    if (node.getUserObject() instanceof RunInfo) {
+                        contextMenu.show(runTree, e.getX(), e.getY());
+                    }
+                }
+            }
+        });
     }
 
     public void refreshRuns() {
@@ -447,9 +479,6 @@ public class RunManager extends JFrame {
                 break;
         }
 
-        // Update buttons
-        terminateButton.setEnabled(session.isActive());
-        removeButton.setEnabled(!session.isActive());
 
         // Update log
         if (session.getCommunicationLog() != null) {
@@ -462,7 +491,10 @@ public class RunManager extends JFrame {
         detailsCardLayout.show(detailsPanel, "RUN_SELECTED");
     }
 
-    private void terminateSelectedRun() {
+    /**
+     * Removes a run from the context menu - terminates if active and removes from list.
+     */
+    private void removeRunFromContextMenu() {
         TreePath selectedPath = runTree.getSelectionPath();
         if (selectedPath == null) return;
 
@@ -471,57 +503,56 @@ public class RunManager extends JFrame {
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String sessionId = runInfo.session.getSessionId();
+        boolean isActive = runInfo.session.isActive();
 
-        if (DialogUtils.showConfirmation(this,
-                "Are you sure you want to stop " + runInfo.runName + "?",
-                "Stop Run")) {
-            cliTaskManager.terminateSession(sessionId)
-                .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                    statusUpdater.accept("Stopped run: " + runInfo.runName);
-                    refreshRuns();
-                }))
-                .exceptionally(throwable -> {
-                    SwingUtilities.invokeLater(() -> {
-                        statusUpdater.accept("Failed to stop run: " + throwable.getMessage());
-                        DialogUtils.showError(this,
-                            "Failed to stop run: " + throwable.getMessage(),
-                            "Stop Run Error");
+        String message = isActive
+            ? "Are you sure you want to stop and remove " + runInfo.runName + "?\n\nThis will terminate the running session and remove it from the list."
+            : "Are you sure you want to remove " + runInfo.runName + " from the list?";
+
+        if (DialogUtils.showConfirmation(this, message, "Remove Run")) {
+            if (isActive) {
+                // First terminate the session, then remove it
+                cliTaskManager.terminateSession(sessionId)
+                    .thenCompose(v -> {
+                        // After termination, remove from list
+                        return cliTaskManager.removeSession(sessionId);
+                    })
+                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                        statusUpdater.accept("Stopped and removed run: " + runInfo.runName);
+                        sessionToRunName.remove(sessionId);
+                        refreshRuns();
+                    }))
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            statusUpdater.accept("Failed to stop/remove run: " + throwable.getMessage());
+                            DialogUtils.showError(this,
+                                "Failed to stop/remove run: " + throwable.getMessage(),
+                                "Remove Run Error");
+                        });
+                        return null;
                     });
-                    return null;
-                });
+            } else {
+                // Just remove from list (session already terminated)
+                cliTaskManager.removeSession(sessionId)
+                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                        statusUpdater.accept("Removed run: " + runInfo.runName);
+                        sessionToRunName.remove(sessionId);
+                        refreshRuns();
+                    }))
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
+                            DialogUtils.showError(this,
+                                "Failed to remove run: " + throwable.getMessage(),
+                                "Remove Run Error");
+                        });
+                        return null;
+                    });
+            }
         }
     }
 
-    private void removeSelectedRun() {
-        TreePath selectedPath = runTree.getSelectionPath();
-        if (selectedPath == null) return;
 
-        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
-
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        String sessionId = runInfo.session.getSessionId();
-
-        if (DialogUtils.showConfirmation(this,
-                "Are you sure you want to remove " + runInfo.runName + " from the list?",
-                "Remove Run")) {
-            cliTaskManager.removeSession(sessionId)
-                .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                    statusUpdater.accept("Removed run: " + runInfo.runName);
-                    sessionToRunName.remove(sessionId);
-                    refreshRuns();
-                }))
-                .exceptionally(throwable -> {
-                    SwingUtilities.invokeLater(() -> {
-                        statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
-                        DialogUtils.showError(this,
-                            "Failed to remove run: " + throwable.getMessage(),
-                            "Remove Run Error");
-                    });
-                    return null;
-                });
-        }
-    }
 
     /**
      * Enum representing the status of a simulation run.
