@@ -2,6 +2,7 @@ package com.kalix.gui.managers;
 
 import com.kalix.gui.cli.*;
 import com.kalix.gui.components.StatusProgressBar;
+import com.kalix.gui.windows.RunManager;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -247,6 +248,9 @@ public class CliTaskManager {
                     statusUpdater.accept("Session ended: " + event.getSessionId());
                     break;
             }
+
+            // Refresh Run Manager if it's open
+            RunManager.refreshRunManagerIfOpen();
         });
     }
     

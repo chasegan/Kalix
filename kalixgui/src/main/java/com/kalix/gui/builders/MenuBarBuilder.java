@@ -53,7 +53,7 @@ public class MenuBarBuilder {
         void showFindReplaceDialog();
         void getCliVersion();
         
-        // Sessions window
+        // Run Manager window
         void showSessionsWindow();
         
         // Website launch
@@ -184,7 +184,7 @@ public class MenuBarBuilder {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
-        runMenu.add(createMenuItem("View CLI Sessions", e -> callbacks.showSessionsWindow()));
+        runMenu.add(createMenuItem("Run Manager", e -> callbacks.showSessionsWindow()));
         return runMenu;
     }
     

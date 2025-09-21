@@ -109,7 +109,7 @@ public final class AppConstants {
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
     public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
     public static final String TOOLBAR_RUN_MODEL_TOOLTIP = "Run Model (Ctrl+R)";
-    public static final String TOOLBAR_SESSIONS_TOOLTIP = "Show Sessions Window";
+    public static final String TOOLBAR_SESSIONS_TOOLTIP = "Show Run Manager";
     
     // Branding
     public static final String KALIX_LOGO_PATH = "/images/kalix_landscape_1024_241.png";

@@ -7,7 +7,7 @@ import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.cli.ProcessExecutor;
 import com.kalix.gui.components.StatusProgressBar;
-import com.kalix.gui.windows.SessionsWindow;
+import com.kalix.gui.windows.RunManager;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.dialogs.PreferencesDialog;
 import com.kalix.gui.editor.EnhancedTextEditor;
@@ -826,8 +826,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showSessionsWindow() {
-        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
-        updateStatus("Sessions window opened");
+        RunManager.showRunManager(this, cliTaskManager, this::updateStatus);
+        updateStatus("Run Manager opened");
     }
     
     
@@ -847,10 +847,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 SwingUtilities.invokeLater(() -> {
                     updateStatus("Model session started: " + sessionId);
                     
-                    // Automatically open Sessions window if not already open
-                    if (!SessionsWindow.isWindowOpen()) {
-                        SessionsWindow.showSessionsWindow(this, cliTaskManager, this::updateStatus);
-                        updateStatus("Sessions window opened to monitor progress");
+                    // Automatically open Run Manager if not already open
+                    if (!RunManager.isWindowOpen()) {
+                        RunManager.showRunManager(this, cliTaskManager, this::updateStatus);
+                        updateStatus("Run Manager opened to monitor progress");
                     }
                 });
             })

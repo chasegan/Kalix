@@ -90,7 +90,7 @@ public class ToolBarBuilder {
         ));
         
         toolBar.add(createToolBarButton(
-            "Sessions", 
+            "Run Manager",
             AppConstants.TOOLBAR_SESSIONS_TOOLTIP,
             FontIcon.of(FontAwesomeSolid.TASKS, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.showSessionsWindow()
