@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::apis::stdio::messages::{CommandSpec, ParameterSpec, ProgressInfo};
 use crate::apis::stdio::session::Session;
 use crate::io::ini_model_io::IniModelIO;
+use chrono;
 
 pub trait Command: Send + Sync {
     fn name(&self) -> &str;
@@ -45,6 +46,9 @@ pub enum CommandError {
     
     #[error("IO error: {0}")]
     IoError(String),
+
+    #[error("Result not found: {0}")]
+    ResultNotFound(String),
 }
 
 pub struct CommandRegistry {
@@ -64,6 +68,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelFileCommand));
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
+        registry.register(Arc::new(GetResultCommand));
         
         registry
     }
@@ -396,6 +401,97 @@ impl Command for LoadModelStringCommand {
     }
 }
 
+pub struct GetResultCommand;
+
+impl Command for GetResultCommand {
+    fn name(&self) -> &str {
+        "get_result"
+    }
+
+    fn description(&self) -> &str {
+        "Retrieve timeseries result data from the model"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![
+            ParameterSpec {
+                name: "series_name".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                default: None,
+            },
+            ParameterSpec {
+                name: "format".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                default: Some(serde_json::Value::String("csv".to_string())),
+            },
+        ]
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        // Extract parameters
+        let series_name = params.get("series_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CommandError::InvalidParameters("series_name is required".to_string()))?;
+
+        let format = params.get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("csv");
+
+        if format != "csv" {
+            return Err(CommandError::InvalidParameters("Only csv format is currently supported".to_string()));
+        }
+
+        // Get model and check if it exists
+        let model = session.get_model()
+            .ok_or(CommandError::ModelNotLoaded)?;
+
+        // Find the series in the data cache
+        let series_idx = model.data_cache.get_existing_series_idx(series_name)
+            .ok_or_else(|| CommandError::ResultNotFound(format!("Timeseries '{}' not found in model results", series_name)))?;
+
+        let timeseries = &model.data_cache.series[series_idx];
+
+        // Build CSV data string
+        let mut csv_data = String::new();
+
+        // Add start timestamp and timestep
+        let start_timestamp = chrono::DateTime::from_timestamp(timeseries.start_timestamp as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now())
+            .to_rfc3339();
+
+        csv_data.push_str(&format!("{},{}", start_timestamp, timeseries.step_size));
+
+        // Add values
+        for value in &timeseries.values {
+            csv_data.push_str(&format!(",{}", value));
+        }
+
+        // Build response
+        Ok(serde_json::json!({
+            "series_name": series_name,
+            "format": format,
+            "metadata": {
+                "start_timestamp": start_timestamp,
+                "timestep_seconds": timeseries.step_size,
+                "total_points": timeseries.values.len(),
+                "units": "unknown" // TODO: Add units to timeseries struct
+            },
+            "data": csv_data
+        }))
+    }
+}
+
 pub struct RunSimulationCommand;
 
 impl Command for RunSimulationCommand {
@@ -581,6 +677,7 @@ mod tests {
         assert!(commands.contains(&"load_model_file"));
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
+        assert!(commands.contains(&"get_result"));
     }
 
     #[test]
