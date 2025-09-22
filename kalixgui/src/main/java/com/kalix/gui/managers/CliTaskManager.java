@@ -203,12 +203,23 @@ public class CliTaskManager {
     /**
      * Removes a terminated session from the session list for cleanup.
      * Only works on terminated or error sessions.
-     * 
+     *
      * @param sessionId the session to remove
      * @return CompletableFuture that completes when session is removed
      */
     public CompletableFuture<Void> removeSession(String sessionId) {
         return sessionManager.removeSession(sessionId);
+    }
+
+    /**
+     * Sends a command to an active session.
+     *
+     * @param sessionId the session to send command to
+     * @param command the command to send
+     * @return CompletableFuture that completes when command is sent
+     */
+    public CompletableFuture<Void> sendCommand(String sessionId, String command) {
+        return sessionManager.sendCommand(sessionId, command);
     }
     
     /**

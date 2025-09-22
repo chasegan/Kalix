@@ -386,7 +386,7 @@ public class RunManager extends JFrame {
         if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        CliLogWindow.showCliLogWindow(runInfo.runName, runInfo.session, this);
+        CliLogWindow.showCliLogWindow(runInfo.runName, runInfo.session, cliTaskManager, this);
     }
 
     /**

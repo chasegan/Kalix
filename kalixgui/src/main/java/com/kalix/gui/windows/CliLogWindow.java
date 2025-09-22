@@ -1,11 +1,14 @@
 package com.kalix.gui.windows;
 
 import com.kalix.gui.cli.SessionManager;
+import com.kalix.gui.cli.JsonStdioProtocol;
+import com.kalix.gui.managers.CliTaskManager;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +25,7 @@ public class CliLogWindow extends JFrame {
 
     private final String runName;
     private final SessionManager.KalixSession session;
+    private final CliTaskManager cliTaskManager;
     private RSyntaxTextArea logArea;
     private RTextScrollPane logScrollPane;
     private Timer updateTimer;
@@ -36,9 +40,10 @@ public class CliLogWindow extends JFrame {
     /**
      * Creates a new CLI Log window for the specified run.
      */
-    private CliLogWindow(String runName, SessionManager.KalixSession session, JFrame parentFrame) {
+    private CliLogWindow(String runName, SessionManager.KalixSession session, CliTaskManager cliTaskManager, JFrame parentFrame) {
         this.runName = runName;
         this.session = session;
+        this.cliTaskManager = cliTaskManager;
 
         setupWindow(parentFrame);
         initializeComponents();
@@ -54,7 +59,7 @@ public class CliLogWindow extends JFrame {
      * Shows the CLI Log window for the specified run.
      * Uses one window per run (singleton per run).
      */
-    public static void showCliLogWindow(String runName, SessionManager.KalixSession session, JFrame parentFrame) {
+    public static void showCliLogWindow(String runName, SessionManager.KalixSession session, CliTaskManager cliTaskManager, JFrame parentFrame) {
         String sessionId = session.getSessionId();
 
         CliLogWindow existingWindow = openWindows.get(sessionId);
@@ -65,7 +70,7 @@ public class CliLogWindow extends JFrame {
             existingWindow.requestFocus();
         } else {
             // Create new window
-            CliLogWindow newWindow = new CliLogWindow(runName, session, parentFrame);
+            CliLogWindow newWindow = new CliLogWindow(runName, session, cliTaskManager, parentFrame);
             openWindows.put(sessionId, newWindow);
             newWindow.setVisible(true);
         }
@@ -143,6 +148,10 @@ public class CliLogWindow extends JFrame {
 
         // Footer
         JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        JButton pingButton = new JButton("Ping");
+        pingButton.addActionListener(e -> sendPingCommand());
+        footerPanel.add(pingButton);
 
         JButton refreshButton = new JButton("Refresh");
         refreshButton.addActionListener(e -> forceUpdateLog());
@@ -338,6 +347,24 @@ public class CliLogWindow extends JFrame {
         SwingUtilities.invokeLater(() -> {
             logArea.setCaretPosition(logArea.getDocument().getLength());
         });
+    }
+
+    /**
+     * Sends a ping command (echo) to the kalixcli session.
+     */
+    private void sendPingCommand() {
+        try {
+            Map<String, Object> parameters = Map.of("string", "Ping from GUI at " + java.time.LocalDateTime.now());
+            String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters);
+
+            // Use CliTaskManager to send command, which handles proper logging
+            cliTaskManager.sendCommand(session.getSessionId(), jsonCommand);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Failed to send ping command: " + e.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
     }
 
 }
