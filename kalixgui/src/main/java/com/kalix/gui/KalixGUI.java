@@ -204,7 +204,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 // Update file watcher
                 fileWatcherManager.watchFile(fileOperations.getCurrentFile());
             },
-            this::updateModelFromText // Model update callback for when files are loaded
+            () -> updateModelFromText(true) // Model update callback for when files are loaded with auto-zoom
         );
         
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
@@ -424,6 +424,10 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * Called whenever the text changes.
      */
     private void updateModelFromText() {
+        updateModelFromText(false);
+    }
+
+    private void updateModelFromText(boolean autoZoomToFit) {
         SwingUtilities.invokeLater(() -> {
             try {
                 String text = textEditor.getText();
@@ -432,6 +436,11 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     // We need to access the TextCoordinateUpdater to check this flag
                     // For now, we'll always parse - the TextCoordinateUpdater uses programmatic update flag
                     hydrologicalModel.parseFromIniTextIncremental(text);
+
+                    // Auto-zoom to fit after parsing if requested (for file loads)
+                    if (autoZoomToFit) {
+                        mapPanel.zoomToFit();
+                    }
                 }
             } catch (Exception e) {
                 // Log parsing errors but don't disrupt the UI

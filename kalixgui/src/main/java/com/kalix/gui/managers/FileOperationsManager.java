@@ -125,10 +125,8 @@ public class FileOperationsManager {
             fileChangedCallback.run();
             
             // Trigger model parsing since setText() suppresses document listeners
+            // Model update callback will handle zoom-to-fit after parsing is complete
             modelUpdateCallback.run();
-            
-            // Auto-zoom to fit the loaded model
-            mapPanel.zoomToFit();
             
         } catch (IOException e) {
             showFileOpenError(file, e);
