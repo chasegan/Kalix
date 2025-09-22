@@ -69,6 +69,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
         registry.register(Arc::new(GetResultCommand));
+        registry.register(Arc::new(EchoCommand));
         
         registry
     }
@@ -401,6 +402,50 @@ impl Command for LoadModelStringCommand {
     }
 }
 
+pub struct EchoCommand;
+
+impl Command for EchoCommand {
+    fn name(&self) -> &str {
+        "echo"
+    }
+
+    fn description(&self) -> &str {
+        "Echo back the provided string"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![
+            ParameterSpec {
+                name: "string".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                default: None,
+            },
+        ]
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        _session: &mut Session,
+        params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        // Extract parameters
+        let string = params.get("string")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CommandError::InvalidParameters("string is required".to_string()))?;
+
+        // Return the echoed string
+        Ok(serde_json::json!({
+            "echoed": string
+        }))
+    }
+}
+
 pub struct GetResultCommand;
 
 impl Command for GetResultCommand {
@@ -678,6 +723,7 @@ mod tests {
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
         assert!(commands.contains(&"get_result"));
+        assert!(commands.contains(&"echo"));
     }
 
     #[test]
