@@ -93,7 +93,7 @@ public class ToolBarBuilder {
             "Run Manager",
             AppConstants.TOOLBAR_SESSIONS_TOOLTIP,
             FontIcon.of(FontAwesomeSolid.TASKS, AppConstants.TOOLBAR_ICON_SIZE),
-            e -> callbacks.showSessionsWindow()
+            e -> callbacks.showRunManager()
         ));
         
         toolBar.addSeparator();

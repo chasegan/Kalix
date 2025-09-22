@@ -825,7 +825,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     
     @Override
-    public void showSessionsWindow() {
+    public void showRunManager() {
         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
         updateStatus("Run Manager opened");
     }

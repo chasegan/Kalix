@@ -58,7 +58,7 @@ public class SessionManager {
             this.message = message;
             this.timestamp = LocalDateTime.now();
         }
-        
+
         public String getSessionId() { return sessionId; }
         public SessionState getOldState() { return oldState; }
         public SessionState getNewState() { return newState; }

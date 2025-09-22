@@ -54,7 +54,7 @@ public class MenuBarBuilder {
         void getCliVersion();
         
         // Run Manager window
-        void showSessionsWindow();
+        void showRunManager();
         
         // Website launch
         void openWebsite();
@@ -184,7 +184,7 @@ public class MenuBarBuilder {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
-        runMenu.add(createMenuItem("Run Manager", e -> callbacks.showSessionsWindow()));
+        runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));
         return runMenu;
     }
     

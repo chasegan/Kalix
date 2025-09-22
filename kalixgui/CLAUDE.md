@@ -123,32 +123,13 @@ Key architectural pattern throughout the application:
 ## KalixCLI Communication
 
 ### Overview
-JSON-based STDIO protocol for communicating with Rust backend:
-- **Stateful sessions**: kalixcli maintains model state and results in memory
-- **Interruptible operations**: Long-running tasks can be cancelled
-- **Multi-session support**: Multiple models can run simultaneously
+JSON-based STDIO protocol for communicating with Rust backend. For detailed protocol specifications, message formats, and examples, see `KALIXCLI_DOCUMENTATION.md`.
 
 ### Key Components
 - `SessionManager.java` - Core session lifecycle management
 - `JsonSessionManager.java` - JSON protocol implementation
 - `ProcessExecutor.java` - Process spawning and management
-- `SessionsWindow.java` - Multi-session GUI management
-
-### Protocol Messages
-**System Messages (kalixcli → GUI):**
-- `ready`, `busy`, `progress`, `result`, `stopped`, `error`, `log`
-
-**Command Messages (GUI → kalixcli):**
-- `command`, `stop`, `query`, `terminate`
-
-### Core Features
-- Model loading from editor text (`load_model_string`)
-- Simulation execution with progress tracking (`run_simulation`)
-- Session interruption and multi-session management
-- Dedicated thread pool (fixed thread exhaustion issues)
-
-### Session States
-1. **STARTING** → 2. **RUNNING** → 3. **READY** → 4. **ERROR/TERMINATED**
+- `RunManager.java` - Multi-session GUI management
 
 ## Custom Themes
 
