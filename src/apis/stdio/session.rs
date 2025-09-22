@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use crate::model::Model;
 use crate::apis::stdio::messages::StateInfo;
+use rand::RngCore;
+use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Debug, Clone)]
 pub enum SessionState {
@@ -35,9 +37,13 @@ impl Session {
     }
 
     fn generate_session_id() -> String {
-        let now = Utc::now();
-        let random_suffix = uuid::Uuid::new_v4().to_string()[0..4].to_string();
-        format!("sess_{}_{}", now.format("%Y%m%d_%H%M%S"), random_suffix)
+        // Generate 9 random bytes
+        let mut bytes = [0u8; 9];
+        rand::thread_rng().fill_bytes(&mut bytes);
+
+        // Encode to base64url and take first 12 characters
+        let encoded = general_purpose::URL_SAFE_NO_PAD.encode(&bytes);
+        encoded[..12].to_string()
     }
 
     pub fn is_ready(&self) -> bool {
@@ -165,7 +171,15 @@ mod tests {
         let session = Session::new();
         assert!(session.is_ready());
         assert!(!session.is_busy());
-        assert!(session.id.starts_with("sess_"));
+        assert_eq!(session.id.len(), 12);
+        assert!(session.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+
+        // Test that session IDs are unique
+        let session2 = Session::new();
+        let session3 = Session::new();
+        assert_ne!(session.id, session2.id);
+        assert_ne!(session.id, session3.id);
+        assert_ne!(session2.id, session3.id);
     }
 
     #[test]
