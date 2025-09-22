@@ -225,11 +225,7 @@ public class InteractiveStreamMonitor {
                 lineCallback.accept(line);
             }
             
-            // Check for progress if enabled
-            if (progressCallback != null) {
-                KalixStdioSession kalixProcess = new KalixStdioSession(null); // Temporary for parsing
-                kalixProcess.parseProgress(line).ifPresent(progressCallback);
-            }
+            // Progress updates are now handled only through JSON protocol messages
             
             // Check for prompts if enabled
             if (promptCallback != null) {

@@ -18,13 +18,13 @@ public class StatusProgressBar extends JComponent {
     private String progressText = "";
     private boolean visible = false;
     private boolean indeterminate = false;
-    
-    // Colors
+
+    // Simple colors without command-specific logic
     private Color backgroundColor = new Color(230, 230, 230);
-    private Color progressColor = new Color(76, 175, 80);  // Material Green
+    private Color progressColor = new Color(76, 175, 80);  // Simple green
     private Color borderColor = new Color(200, 200, 200);
     private Color textColor = Color.BLACK;
-    
+
     // Animation support
     private Timer animationTimer;
     private double targetProgress = 0.0;
@@ -95,15 +95,27 @@ public class StatusProgressBar extends JComponent {
     
     /**
      * Shows the progress bar with initial progress.
-     * 
+     *
      * @param initialProgress initial progress value (0.0-1.0)
      * @param text initial text to display
      */
     public void showProgress(double initialProgress, String text) {
+        showProgress(initialProgress, text, null);
+    }
+
+    /**
+     * Shows the progress bar with initial progress.
+     *
+     * @param initialProgress initial progress value (0.0-1.0)
+     * @param text initial text to display
+     * @param command the command (ignored)
+     */
+    public void showProgress(double initialProgress, String text, String command) {
         this.progress = initialProgress;
         this.targetProgress = initialProgress;
         this.progressText = text != null ? text : "";
         this.visible = true;
+
         setVisible(true);
         repaint();
     }
@@ -167,7 +179,7 @@ public class StatusProgressBar extends JComponent {
         RoundRectangle2D background = new RoundRectangle2D.Float(
             0, 0, width - 1, height - 1, CORNER_RADIUS, CORNER_RADIUS);
         g2d.fill(background);
-        
+
         // Draw progress
         if (progress > 0) {
             int progressWidth = (int) (progress * (width - 2));
@@ -178,11 +190,11 @@ public class StatusProgressBar extends JComponent {
                 g2d.fill(progressRect);
             }
         }
-        
+
         // Draw border
         g2d.setColor(borderColor);
         g2d.draw(background);
-        
+
         // Draw text if present
         if (!progressText.isEmpty()) {
             g2d.setColor(textColor);
@@ -230,17 +242,4 @@ public class StatusProgressBar extends JComponent {
         repaint();
     }
     
-    /**
-     * Sets custom colors for the progress bar.
-     * 
-     * @param backgroundColor background color
-     * @param progressColor progress fill color
-     * @param borderColor border color
-     */
-    public void setColors(Color backgroundColor, Color progressColor, Color borderColor) {
-        this.backgroundColor = backgroundColor;
-        this.progressColor = progressColor;
-        this.borderColor = borderColor;
-        repaint();
-    }
 }

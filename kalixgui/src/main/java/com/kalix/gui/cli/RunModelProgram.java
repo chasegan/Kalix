@@ -166,11 +166,10 @@ public class RunModelProgram {
                     JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
                     JsonMessage.ProgressInfo progress = progressData.getProgress();
                     if (progress != null && progressCallback != null) {
-                        ProgressParser.ProgressInfo progressInfo = new ProgressParser.ProgressInfo(
+                        ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
                             progress.getPercentComplete(),
-                            progress.getCurrentStep() != null ? progress.getCurrentStep() : "Running simulation...",
-                            "JSON Progress",
-                            ProgressParser.ProgressInfo.ProgressType.PERCENTAGE
+                            progress.getCurrentStep(),
+                            progressData.getCommand()
                         );
                         progressCallback.accept(progressInfo);
                     }

@@ -343,7 +343,7 @@ public class SessionManager {
                         session.getCommunicationLog().logCliToGuiStdout(line);
                         processSessionOutput(session, line, config);
                     }
-                    Thread.sleep(50); // Small delay to avoid busy waiting
+                    Thread.sleep(16); // ~60 FPS polling rate for responsive progress updates
                 }
             } catch (IOException | InterruptedException e) {
                 handleSessionError(sessionKey, e, "stdout monitoring");
@@ -362,7 +362,7 @@ public class SessionManager {
                         session.getCommunicationLog().logCliToGuiStderr(line);
                         processSessionError(session, line, config);
                     }
-                    Thread.sleep(50); // Small delay to avoid busy waiting
+                    Thread.sleep(16); // ~60 FPS polling rate for responsive progress updates
                 }
             } catch (IOException | InterruptedException e) {
                 handleSessionError(sessionKey, e, "stderr monitoring");
@@ -394,13 +394,7 @@ public class SessionManager {
             }
         }
         
-        // Check for progress updates in non-JSON format (legacy support)
-        if (config.getProgressCallback() != null) {
-            Optional<ProgressParser.ProgressInfo> progress = ProgressParser.parseProgress(line);
-            if (progress.isPresent()) {
-                config.getProgressCallback().accept(progress.get());
-            }
-        }
+        // Progress updates are now handled only through JSON protocol messages
         
         // Log stdout for debugging (only if verbose)
         // updateStatus("Session " + sessionKey + " stdout: " + line);
@@ -433,13 +427,7 @@ public class SessionManager {
             }
         }
         
-        // Check for progress updates on stderr (some CLIs send progress there)
-        if (config.getProgressCallback() != null) {
-            Optional<ProgressParser.ProgressInfo> progress = ProgressParser.parseProgress(errorLine);
-            if (progress.isPresent()) {
-                config.getProgressCallback().accept(progress.get());
-            }
-        }
+        // Progress updates are now handled only through JSON protocol messages on stdout
     }
     
     /**

@@ -19,7 +19,6 @@ import java.util.function.Consumer;
 public class StdioTaskManager {
     
     // Constants for configuration
-    private static final int PROGRESS_HIDE_DELAY_MS = 2000;
     
     private final ProcessExecutor processExecutor;
     private final Consumer<String> statusUpdater;
@@ -237,17 +236,9 @@ public class StdioTaskManager {
                     break;
                     
                 case READY:
-                    progressBar.setProgressPercentage(100);
-                    progressBar.setProgressText("Ready");
                     statusUpdater.accept("Model session ready - " + event.getSessionKey());
-                    
-                    // Hide progress bar after delay but show session is ready
-                    Timer readyTimer = new Timer(PROGRESS_HIDE_DELAY_MS, e -> {
-                        progressBar.hideProgress();
-                        statusUpdater.accept("Session ready for queries: " + event.getSessionKey());
-                    });
-                    readyTimer.setRepeats(false);
-                    readyTimer.start();
+                    // Progress bar already at 100% from CLI progress updates
+                    // AutoHidingProgressBar will automatically hide after delay
                     break;
                     
                 case ERROR:
@@ -270,8 +261,12 @@ public class StdioTaskManager {
      */
     private void updateProgressFromSession(ProgressParser.ProgressInfo progressInfo) {
         SwingUtilities.invokeLater(() -> {
-            progressBar.setProgressPercentage(progressInfo.getPercentage());
-            progressBar.setProgressText(String.format("%.0f%%", progressInfo.getPercentage()));
+            // Use showProgress with command to set both progress and color
+            progressBar.showProgress(
+                progressInfo.getPercentage() / 100.0,
+                String.format("%.0f%%", progressInfo.getPercentage()),
+                progressInfo.getRawLine() // Contains the command
+            );
             statusUpdater.accept(progressInfo.getDescription());
         });
     }

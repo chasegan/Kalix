@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import com.kalix.gui.builders.MenuBarBuilder;
 import com.kalix.gui.builders.ToolBarBuilder;
 import com.kalix.gui.cli.ProcessExecutor;
-import com.kalix.gui.components.StatusProgressBar;
+import com.kalix.gui.components.AutoHidingProgressBar;
 import com.kalix.gui.windows.RunManager;
 import com.kalix.gui.constants.AppConstants;
 import com.kalix.gui.dialogs.PreferencesDialog;
@@ -68,7 +68,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private JLabel statusLabel;
-    private StatusProgressBar progressBar;
+    private AutoHidingProgressBar progressBar;
     private JSplitPane splitPane;
     private JToolBar toolBar;
     
@@ -191,7 +191,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H
         ));
         
-        progressBar = new StatusProgressBar();
+        progressBar = new AutoHidingProgressBar();
         
         // Complete manager initialization now that components exist
         fileOperations = new FileOperationsManager(

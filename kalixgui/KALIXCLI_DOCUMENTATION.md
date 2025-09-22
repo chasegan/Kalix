@@ -219,8 +219,12 @@ Sent during long-running operations.
     "command": "run_simulation",
     "progress": {
       "percent_complete": 45.2,
-      "current_step": "Processing timestep 2023-01-15",
-      "estimated_remaining": "00:02:30"
+      "current_step": "Running simulation - Processing timestep 452 of 1000",
+      "details": {
+        "current_timestep": 452,
+        "total_timesteps": 1000,
+        "simulation_progress": "45.2%"
+      }
     }
   }
 }
@@ -392,8 +396,15 @@ Execute model simulation (interruptible).
 
 **Behavior:**
 - Long-running operation with progress updates
+- Sends initial progress message (0%) before starting simulation
 - Can be interrupted with `stop` message
 - Stores results in session for later retrieval
+
+**Progress Updates:**
+- Initial: 0% progress, timestep 1 of N
+- During simulation: 0-100% progress based on timestep completion
+- Final: 100% progress, timestep N of N
+- Details include current_timestep (0-based), total_timesteps, and simulation_progress
 
 #### Result Retrieval Commands
 

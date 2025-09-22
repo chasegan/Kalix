@@ -251,22 +251,7 @@ public class KalixStdioSession {
         return Optional.empty();
     }
     
-    /**
-     * Parses progress information from a line of output using the centralized parser.
-     * 
-     * @param line the line to parse
-     * @return progress information if found, empty otherwise
-     */
-    public Optional<ProgressInfo> parseProgress(String line) {
-        Optional<ProgressParser.ProgressInfo> parsed = ProgressParser.parseProgress(line);
-        
-        if (parsed.isPresent()) {
-            ProgressParser.ProgressInfo p = parsed.get();
-            return Optional.of(new ProgressInfo(p.getPercentage(), p.getDescription(), p.getRawLine()));
-        }
-        
-        return Optional.empty();
-    }
+    // Progress parsing is now handled only through JSON protocol messages
     
     /**
      * Responds to a prompt with the given answer.

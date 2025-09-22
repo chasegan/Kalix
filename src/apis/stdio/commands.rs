@@ -15,7 +15,7 @@ pub trait Command: Send + Sync {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
     ) -> Result<serde_json::Value, CommandError>;
 
     fn get_spec(&self) -> CommandSpec {
@@ -264,43 +264,20 @@ impl Command for LoadModelFileCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let model_path = params.get("model_path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_path is required".to_string()))?;
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 10.0,
-            current_step: format!("Loading model from file: {}", model_path),
-            estimated_remaining: None,
-            details: Some(serde_json::json!({
-                "file_path": model_path
-            })),
-        });
-        
+
         // Load the model
         let ini_reader = IniModelIO::new();
         let model = ini_reader.read_model_file(model_path)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to load model: {}", e)))?;
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 80.0,
-            current_step: "Validating model structure".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
-        
+
         // Store the model in the session
         session.set_model(model);
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 100.0,
-            current_step: "Model loaded successfully".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
         
         let model_info = session.get_model()
             .map(|m| serde_json::json!({
@@ -348,43 +325,20 @@ impl Command for LoadModelStringCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let model_ini = params.get("model_ini")
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_ini is required".to_string()))?;
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 10.0,
-            current_step: format!("Parsing INI model ({} bytes)", model_ini.len()),
-            estimated_remaining: None,
-            details: Some(serde_json::json!({
-                "ini_length": model_ini.len()
-            })),
-        });
-        
+
         // Load the model from string
         let ini_reader = IniModelIO::new();
         let model = ini_reader.read_model_string(model_ini)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to parse model: {}", e)))?;
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 80.0,
-            current_step: "Validating model structure".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
-        
+
         // Store the model in the session
         session.set_model(model);
-        
-        progress_sender(ProgressInfo {
-            percent_complete: 100.0,
-            current_step: "Model loaded successfully".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
         
         let model_info = session.get_model()
             .map(|m| serde_json::json!({
@@ -566,34 +520,18 @@ impl Command for RunSimulationCommand {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicU64, Ordering};
         
-        // Validation phase - 10%
-        progress_sender(ProgressInfo {
-            percent_complete: 10.0,
-            current_step: "Validating model and data".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
-        
         // Get interrupt flag before getting mutable model reference
         let interrupt_flag = Arc::clone(&session.interrupt_flag);
-        
+
         // Check if model is loaded
         let model = session.get_model_mut()
             .ok_or(CommandError::ModelNotLoaded)?;
-        
+
         // Check if model has input data
         if model.inputs.is_empty() {
             return Err(CommandError::DataNotLoaded);
         }
-        
-        // Configuration phase - 20%
-        progress_sender(ProgressInfo {
-            percent_complete: 20.0,
-            current_step: "Configuring model for simulation".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
-        
+
         model.configure();
         
         // Get simulation info for result
@@ -604,7 +542,7 @@ impl Command for RunSimulationCommand {
         
         // Track progress timing for rate limiting (max 1 update per second, 1 per percentage)
         let last_progress_time = Arc::new(std::sync::Mutex::new(Instant::now()));
-        let last_progress_percent = Arc::new(AtomicU64::new(20));
+        let last_progress_percent = Arc::new(AtomicU64::new(0));
         
         // Create progress callback for the model
         let progress_sender_clone = Arc::new(progress_sender);
@@ -614,9 +552,9 @@ impl Command for RunSimulationCommand {
             let sender = Arc::clone(&progress_sender_clone);
             
             Box::new(move |current_step: u64, total_steps: u64| {
-                // Calculate percentage (20% to 90% range for simulation phase)
-                let sim_progress = (current_step as f64 / total_steps as f64) * 70.0;
-                let overall_progress = 20.0 + sim_progress;
+                // Calculate percentage (0% to 100% range for simulation)
+                let sim_progress = (current_step as f64 / total_steps as f64) * 100.0;
+                let overall_progress = sim_progress;
                 let overall_percent = overall_progress as u64;
                 
                 // Check rate limiting conditions
@@ -643,16 +581,29 @@ impl Command for RunSimulationCommand {
                         details: Some(serde_json::json!({
                             "current_timestep": current_step + 1,
                             "total_timesteps": total_steps,
-                            "simulation_progress": format!("{:.1}%", sim_progress + (20.0/70.0)*100.0)
+                            "simulation_progress": format!("{:.1}%", sim_progress)
                         })),
                     });
                 }
             })
         };
         
+        // Send initial progress message
+        let progress_sender_clone = Arc::clone(&progress_sender_clone);
+        progress_sender_clone(ProgressInfo {
+            percent_complete: 0.0,
+            current_step: format!("Running simulation - Processing timestep 1 of {}", total_timesteps),
+            estimated_remaining: None,
+            details: Some(serde_json::json!({
+                "current_timestep": 0,
+                "total_timesteps": total_timesteps,
+                "simulation_progress": "0.0%"
+            })),
+        });
+
         // Simulation phase - 20% to 90%
         let simulation_start = Instant::now();
-        
+
         // Run the simulation with interrupt checking
         let completed = model.run_with_interrupt(
             move || interrupt_flag.load(Ordering::Relaxed),
@@ -665,24 +616,21 @@ impl Command for RunSimulationCommand {
             // Simulation was interrupted
             return Err(CommandError::Interrupted);
         }
-        
-        // Results phase - 90% to 100%
-        progress_sender_clone(ProgressInfo {
-            percent_complete: 90.0,
-            current_step: "Finalizing results".to_string(),
-            estimated_remaining: None,
-            details: None,
-        });
-        
-        // Collect output information
-        let outputs_generated: Vec<String> = model.outputs.clone();
-        
+
+        // Send final progress message for 100% completion
         progress_sender_clone(ProgressInfo {
             percent_complete: 100.0,
-            current_step: "Simulation completed".to_string(),
+            current_step: format!("Running simulation - Processing timestep {} of {}", total_timesteps, total_timesteps),
             estimated_remaining: None,
-            details: None,
+            details: Some(serde_json::json!({
+                "current_timestep": total_timesteps - 1,
+                "total_timesteps": total_timesteps,
+                "simulation_progress": "100.0%"
+            })),
         });
+
+        // Collect output information
+        let outputs_generated: Vec<String> = model.outputs.clone();
         
         // Store simulation metadata in session results
         let simulation_metadata = serde_json::json!({
