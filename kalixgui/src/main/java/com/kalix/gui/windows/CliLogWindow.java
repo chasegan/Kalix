@@ -355,7 +355,11 @@ public class CliLogWindow extends JFrame {
     private void sendPingCommand() {
         try {
             Map<String, Object> parameters = Map.of("string", "Ping from GUI at " + java.time.LocalDateTime.now());
-            String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters);
+
+            // Get CLI session ID if available
+            String cliSessionId = session.getCliSessionId() != null ? session.getCliSessionId() : "";
+
+            String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
 
             // Use CliTaskManager to send command, which handles proper logging
             cliTaskManager.sendCommand(session.getSessionId(), jsonCommand);

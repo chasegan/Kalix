@@ -83,6 +83,7 @@ public class SessionManager {
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
         private volatile RunModelProgram activeProgram;
+        private volatile String cliSessionId; // Session ID from kalixcli
         
         public KalixSession(String sessionId, InteractiveKalixProcess process) {
             this.sessionId = sessionId;
@@ -100,6 +101,8 @@ public class SessionManager {
         public SessionState getState() { return state; }
         public String getLastMessage() { return lastMessage; }
         public LocalDateTime getLastActivity() { return lastActivity; }
+        public String getCliSessionId() { return cliSessionId; }
+        public void setCliSessionId(String cliSessionId) { this.cliSessionId = cliSessionId; }
         
         public void setState(SessionState newState, String message) {
             this.state = newState;
@@ -457,6 +460,11 @@ public class SessionManager {
      */
     private void handleJsonProtocolMessage(KalixSession session, JsonMessage.SystemMessage message, SessionConfig config) {
         String sessionId = session.getSessionId();
+
+        // Store CLI session ID from the first message we receive
+        if (session.getCliSessionId() == null && message.getSessionId() != null) {
+            session.setCliSessionId(message.getSessionId());
+        }
         
         // First try to delegate to any active program
         if (session.getActiveProgram() != null && session.getActiveProgram().isActive()) {

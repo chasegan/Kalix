@@ -43,15 +43,21 @@ public class JsonStdioProtocol {
     
     /**
      * Creates a command message to send to kalixcli.
-     * 
+     *
      * @param command the command name
      * @param parameters the command parameters
+     * @param sessionId the CLI session ID (use empty string if unknown)
      * @return JSON string representation
      */
-    public static String createCommandMessage(String command, Map<String, Object> parameters) {
+    public static String createCommandMessage(String command, Map<String, Object> parameters, String sessionId) {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.COMMAND);
-            
+
+            // Set the session ID if provided (non-empty)
+            if (sessionId != null && !sessionId.isEmpty()) {
+                message.setSessionId(sessionId);
+            }
+
             ObjectNode dataNode = objectMapper.createObjectNode();
             dataNode.put("command", command);
             
@@ -197,20 +203,20 @@ public class JsonStdioProtocol {
      * Utility methods for common commands.
      */
     public static class Commands {
-        public static String loadModelFile(String modelPath) {
-            return createCommandMessage("load_model_file", Map.of("model_path", modelPath));
+        public static String loadModelFile(String modelPath, String sessionId) {
+            return createCommandMessage("load_model_file", Map.of("model_path", modelPath), sessionId);
+        }
+
+        public static String loadModelString(String modelIni, String sessionId) {
+            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni), sessionId);
         }
         
-        public static String loadModelString(String modelIni) {
-            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni));
+        public static String runSimulation(String sessionId) {
+            return createCommandMessage("run_simulation", Map.of(), sessionId);
         }
         
-        public static String runSimulation() {
-            return createCommandMessage("run_simulation", Map.of());
-        }
-        
-        public static String testProgress() {
-            return createCommandMessage("test_progress", null);
+        public static String testProgress(String sessionId) {
+            return createCommandMessage("test_progress", null, sessionId);
         }
     }
 }

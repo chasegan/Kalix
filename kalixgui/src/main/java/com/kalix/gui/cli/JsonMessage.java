@@ -2,6 +2,7 @@ package com.kalix.gui.cli;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Instant;
@@ -64,10 +65,13 @@ public class JsonMessage {
     }
     
     /**
-     * Message sent from frontend to kalixcli (no session_id needed).
+     * Message sent from frontend to kalixcli (includes session_id).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonPropertyOrder({"type", "timestamp", "session_id", "data"})
     public static class CommandMessage extends BaseMessage {
+        @JsonProperty("session_id")
+        private String sessionId;
         
         public CommandMessage() {
             setCurrentTimestamp();
@@ -77,6 +81,9 @@ public class JsonMessage {
             this();
             setType(type.getValue());
         }
+
+        public String getSessionId() { return sessionId; }
+        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
         
         public JsonStdioTypes.CommandMessageType commandMessageType() {
             for (JsonStdioTypes.CommandMessageType type : JsonStdioTypes.CommandMessageType.values()) {

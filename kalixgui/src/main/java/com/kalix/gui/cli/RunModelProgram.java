@@ -2,6 +2,7 @@ package com.kalix.gui.cli;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -56,7 +57,14 @@ public class RunModelProgram {
         this.currentState = ProgramState.MODEL_LOADING;
         
         // Step 1: Send load_model_string command via SessionManager
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
+        // Get CLI session ID if available
+        String cliSessionId = "";
+        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
+        if (session.isPresent() && session.get().getCliSessionId() != null) {
+            cliSessionId = session.get().getCliSessionId();
+        }
+
+        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText, cliSessionId);
         sessionManager.sendCommand(sessionId, loadCommand)
             .thenRun(() -> {
                 statusUpdater.accept("Loading model in session: " + sessionId);
@@ -108,7 +116,15 @@ public class RunModelProgram {
             case READY:
                 // Model loaded successfully, now start simulation
                 currentState = ProgramState.SIMULATION_RUNNING;
-                String runCommand = JsonStdioProtocol.Commands.runSimulation();
+
+                // Get CLI session ID if available
+                String cliSessionId = "";
+                Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
+                if (session.isPresent() && session.get().getCliSessionId() != null) {
+                    cliSessionId = session.get().getCliSessionId();
+                }
+
+                String runCommand = JsonStdioProtocol.Commands.runSimulation(cliSessionId);
                 sessionManager.sendCommand(sessionId, runCommand)
                     .thenRun(() -> {
                         statusUpdater.accept("Model loaded, starting simulation in session: " + sessionId);
