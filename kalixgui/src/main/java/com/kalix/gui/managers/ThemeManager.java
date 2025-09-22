@@ -198,6 +198,12 @@ public class ThemeManager {
         for (com.kalix.gui.flowviz.FlowVizWindow window : com.kalix.gui.flowviz.FlowVizWindow.getOpenWindows()) {
             SwingUtilities.updateComponentTreeUI(window);
         }
+
+        // Update Run Manager if open
+        com.kalix.gui.windows.RunManager runManager = com.kalix.gui.windows.RunManager.getOpenInstance();
+        if (runManager != null) {
+            SwingUtilities.updateComponentTreeUI(runManager);
+        }
         
         // Update all open dialogs (iterate through all windows to find dialogs)
         for (Window window : Window.getWindows()) {

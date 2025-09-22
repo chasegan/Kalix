@@ -107,6 +107,14 @@ public class RunManager extends JFrame {
         }
     }
 
+    /**
+     * Gets the Run Manager instance if it exists and is open.
+     * Used by ThemeManager for theme updates.
+     */
+    public static RunManager getOpenInstance() {
+        return (instance != null && instance.isVisible()) ? instance : null;
+    }
+
     private void setupWindow(JFrame parentFrame) {
         setTitle("Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
