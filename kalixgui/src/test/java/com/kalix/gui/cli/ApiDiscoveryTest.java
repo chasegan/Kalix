@@ -9,8 +9,8 @@ import java.util.concurrent.CompletableFuture;
 public class ApiDiscoveryTest {
     
     public static void main(String[] args) {
-        CliLogger logger = CliLogger.getInstance();
-        logger.setLogLevel(CliLogger.LogLevel.DEBUG);
+        StdioLogger logger = StdioLogger.getInstance();
+        logger.setLogLevel(StdioLogger.LogLevel.DEBUG);
         
         logger.info("Starting Phase 2 API Discovery test");
         
@@ -23,7 +23,7 @@ public class ApiDiscoveryTest {
         logger.info("Phase 2 API Discovery test completed");
     }
     
-    private static void testVersionCompatibility(CliLogger logger) {
+    private static void testVersionCompatibility(StdioLogger logger) {
         logger.info("Testing version compatibility...");
         
         try {
@@ -63,7 +63,7 @@ public class ApiDiscoveryTest {
         }
     }
     
-    private static void testApiDiscovery(CliLogger logger) {
+    private static void testApiDiscovery(StdioLogger logger) {
         logger.info("Testing API discovery...");
         
         try {

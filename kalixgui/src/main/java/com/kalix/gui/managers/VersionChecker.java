@@ -2,7 +2,7 @@ package com.kalix.gui.managers;
 
 import com.kalix.gui.cli.KalixCliLocator;
 import com.kalix.gui.cli.ProcessExecutor;
-import com.kalix.gui.cli.CliLogger;
+import com.kalix.gui.cli.StdioLogger;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +17,7 @@ public class VersionChecker {
     
     private final Consumer<String> statusUpdateCallback;
     private final ProcessExecutor processExecutor;
-    private final CliLogger logger;
+    private final StdioLogger logger;
     
     /**
      * Result of a version check operation.
@@ -57,7 +57,7 @@ public class VersionChecker {
     public VersionChecker(Consumer<String> statusUpdateCallback) {
         this.statusUpdateCallback = statusUpdateCallback;
         this.processExecutor = new ProcessExecutor();
-        this.logger = CliLogger.getInstance();
+        this.logger = StdioLogger.getInstance();
     }
     
     /**

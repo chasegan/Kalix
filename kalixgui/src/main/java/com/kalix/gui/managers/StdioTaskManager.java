@@ -13,10 +13,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Manager class for handling CLI session execution with progress monitoring.
+ * Manager class for handling STDIO session execution with progress monitoring.
  * Manages persistent kalixcli sessions for model execution and result querying.
  */
-public class CliTaskManager {
+public class StdioTaskManager {
     
     // Constants for configuration
     private static final int PROGRESS_HIDE_DELAY_MS = 2000;
@@ -28,14 +28,14 @@ public class CliTaskManager {
     private final SessionManager sessionManager;
     
     /**
-     * Creates a new CliTaskManager.
-     * 
+     * Creates a new StdioTaskManager.
+     *
      * @param processExecutor the process executor for running CLI commands
      * @param statusUpdater callback for status updates
      * @param progressBar the progress bar component
      * @param parentFrame parent frame for dialogs
      */
-    public CliTaskManager(ProcessExecutor processExecutor, 
+    public StdioTaskManager(ProcessExecutor processExecutor, 
                          Consumer<String> statusUpdater,
                          StatusProgressBar progressBar,
                          JFrame parentFrame) {
@@ -148,7 +148,7 @@ public class CliTaskManager {
      * @return CompletableFuture with flows data
      */
     public CompletableFuture<String> requestFlowsData(String sessionId) {
-        return requestResults(sessionId, KalixCliProtocol.ResultRequests.FLOWS);
+        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.FLOWS);
     }
     
     /**
@@ -158,7 +158,7 @@ public class CliTaskManager {
      * @return CompletableFuture with water balance data
      */
     public CompletableFuture<String> requestWaterBalanceData(String sessionId) {
-        return requestResults(sessionId, KalixCliProtocol.ResultRequests.WATER_BALANCE);
+        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.WATER_BALANCE);
     }
     
     /**
@@ -168,7 +168,7 @@ public class CliTaskManager {
      * @return CompletableFuture with convergence data
      */
     public CompletableFuture<String> requestConvergenceData(String sessionId) {
-        return requestResults(sessionId, KalixCliProtocol.ResultRequests.CONVERGENCE);
+        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.CONVERGENCE);
     }
     
     /**

@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * Protocol handler for kalixcli STDIO communication.
  * Parses standardized termination messages and handles interactive prompts.
  */
-public class KalixCliProtocol {
+public class KalixStdioProtocol {
     
     // Protocol message patterns
     private static final Pattern PROTOCOL_MESSAGE = Pattern.compile("KALIX_([A-Z]+)_([A-Z]+)(?:\\s*:\\s*(.*))?");

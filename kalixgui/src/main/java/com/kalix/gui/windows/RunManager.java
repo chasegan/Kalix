@@ -1,6 +1,6 @@
 package com.kalix.gui.windows;
 
-import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.managers.StdioTaskManager;
 import com.kalix.gui.cli.SessionManager;
 import com.kalix.gui.cli.RunModelProgram;
 import com.kalix.gui.utils.DialogUtils;
@@ -26,7 +26,7 @@ import java.util.function.Consumer;
  */
 public class RunManager extends JFrame {
 
-    private final CliTaskManager cliTaskManager;
+    private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
     private Timer sessionUpdateTimer;
     private static RunManager instance;
@@ -57,8 +57,8 @@ public class RunManager extends JFrame {
     /**
      * Private constructor for singleton pattern.
      */
-    private RunManager(JFrame parentFrame, CliTaskManager cliTaskManager, Consumer<String> statusUpdater) {
-        this.cliTaskManager = cliTaskManager;
+    private RunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+        this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
 
         setupWindow(parentFrame);
@@ -71,9 +71,9 @@ public class RunManager extends JFrame {
     /**
      * Shows the Run Manager window using singleton pattern.
      */
-    public static void showRunManager(JFrame parentFrame, CliTaskManager cliTaskManager, Consumer<String> statusUpdater) {
+    public static void showRunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
         if (instance == null) {
-            instance = new RunManager(parentFrame, cliTaskManager, statusUpdater);
+            instance = new RunManager(parentFrame, stdioTaskManager, statusUpdater);
         }
 
         instance.setVisible(true);
@@ -163,7 +163,7 @@ public class RunManager extends JFrame {
     private void createDetailsLayouts() {
         // Create message panel for when no run is selected
         JPanel messagePanel = new JPanel(new BorderLayout());
-        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View CLI Log<br>• Remove run</center></html>", SwingConstants.CENTER);
+        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View STDIO Log<br>• Remove run</center></html>", SwingConstants.CENTER);
         messageLabel.setForeground(Color.GRAY);
         messagePanel.add(messageLabel, BorderLayout.CENTER);
         messagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -263,7 +263,7 @@ public class RunManager extends JFrame {
     private void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        JMenuItem cliLogItem = new JMenuItem("CLI Log");
+        JMenuItem cliLogItem = new JMenuItem("STDIO Log");
         cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
         contextMenu.add(cliLogItem);
 
@@ -307,10 +307,10 @@ public class RunManager extends JFrame {
     }
 
     public void refreshRuns() {
-        if (cliTaskManager == null) return;
+        if (stdioTaskManager == null) return;
 
         SwingUtilities.invokeLater(() -> {
-            Map<String, SessionManager.KalixSession> activeSessions = cliTaskManager.getActiveSessions();
+            Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
             boolean[] treeStructureChanged = {false};
 
             // Check for new sessions
@@ -386,7 +386,7 @@ public class RunManager extends JFrame {
         if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        CliLogWindow.showCliLogWindow(runInfo.runName, runInfo.session, cliTaskManager, this);
+        StdioLogWindow.showStdioLogWindow(runInfo.runName, runInfo.session, stdioTaskManager, this);
     }
 
     /**
@@ -410,10 +410,10 @@ public class RunManager extends JFrame {
         if (DialogUtils.showConfirmation(this, message, "Remove Run")) {
             if (isActive) {
                 // First terminate the session, then remove it
-                cliTaskManager.terminateSession(sessionId)
+                stdioTaskManager.terminateSession(sessionId)
                     .thenCompose(v -> {
                         // After termination, remove from list
-                        return cliTaskManager.removeSession(sessionId);
+                        return stdioTaskManager.removeSession(sessionId);
                     })
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Stopped and removed run: " + runInfo.runName);
@@ -431,7 +431,7 @@ public class RunManager extends JFrame {
                     });
             } else {
                 // Just remove from list (session already terminated)
-                cliTaskManager.removeSession(sessionId)
+                stdioTaskManager.removeSession(sessionId)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Removed run: " + runInfo.runName);
                         sessionToRunName.remove(sessionId);

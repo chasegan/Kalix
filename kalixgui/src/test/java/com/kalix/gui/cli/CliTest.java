@@ -10,8 +10,8 @@ import java.util.Optional;
 public class CliTest {
     
     public static void main(String[] args) {
-        CliLogger logger = CliLogger.getInstance();
-        logger.setLogLevel(CliLogger.LogLevel.DEBUG);
+        StdioLogger logger = StdioLogger.getInstance();
+        logger.setLogLevel(StdioLogger.LogLevel.DEBUG);
         
         logger.info("Starting CLI integration test");
         
@@ -24,7 +24,7 @@ public class CliTest {
         logger.info("CLI integration test completed");
     }
     
-    private static void testCliLocation(CliLogger logger) {
+    private static void testCliLocation(StdioLogger logger) {
         logger.info("Testing CLI location detection...");
         
         try {
@@ -52,7 +52,7 @@ public class CliTest {
         }
     }
     
-    private static void testProcessExecution(CliLogger logger) {
+    private static void testProcessExecution(StdioLogger logger) {
         logger.info("Testing process execution...");
         
         try {

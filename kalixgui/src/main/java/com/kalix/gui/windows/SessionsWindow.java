@@ -1,6 +1,6 @@
 package com.kalix.gui.windows;
 
-import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.managers.StdioTaskManager;
 import com.kalix.gui.cli.SessionManager;
 import com.kalix.gui.cli.SessionCommunicationLog;
 import com.kalix.gui.utils.DialogUtils;
@@ -23,7 +23,7 @@ import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
  */
 public class SessionsWindow extends JFrame {
     
-    private final CliTaskManager cliTaskManager;
+    private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
     private Timer sessionUpdateTimer;
     private static SessionsWindow instance;
@@ -46,11 +46,11 @@ public class SessionsWindow extends JFrame {
      * Private constructor for singleton pattern.
      * 
      * @param parentFrame parent frame for positioning
-     * @param cliTaskManager CLI task manager for session operations
+     * @param stdioTaskManager CLI task manager for session operations
      * @param statusUpdater callback for status updates
      */
-    private SessionsWindow(JFrame parentFrame, CliTaskManager cliTaskManager, Consumer<String> statusUpdater) {
-        this.cliTaskManager = cliTaskManager;
+    private SessionsWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+        this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         
         setupWindow(parentFrame);
@@ -64,12 +64,12 @@ public class SessionsWindow extends JFrame {
      * Uses singleton pattern to ensure only one window exists.
      * 
      * @param parentFrame parent frame for positioning
-     * @param cliTaskManager CLI task manager for session operations
+     * @param stdioTaskManager CLI task manager for session operations
      * @param statusUpdater callback for status updates
      */
-    public static void showSessionsWindow(JFrame parentFrame, CliTaskManager cliTaskManager, Consumer<String> statusUpdater) {
+    public static void showSessionsWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
         if (instance == null) {
-            instance = new SessionsWindow(parentFrame, cliTaskManager, statusUpdater);
+            instance = new SessionsWindow(parentFrame, stdioTaskManager, statusUpdater);
         }
         
         // Bring window to front and make visible
@@ -333,7 +333,7 @@ public class SessionsWindow extends JFrame {
             @Override
             public void windowActivated(WindowEvent e) {
                 // Immediate update when window becomes active
-                if (cliTaskManager != null) {
+                if (stdioTaskManager != null) {
                     updateSessionsList();
                 }
             }
@@ -346,8 +346,8 @@ public class SessionsWindow extends JFrame {
      * @return number of active sessions, or 0 if no CLI task manager
      */
     public int getActiveSessionCount() {
-        if (cliTaskManager != null) {
-            return cliTaskManager.getActiveSessions().size();
+        if (stdioTaskManager != null) {
+            return stdioTaskManager.getActiveSessions().size();
         }
         return 0;
     }
@@ -357,7 +357,7 @@ public class SessionsWindow extends JFrame {
      * Useful for immediate updates when sessions change.
      */
     public void refreshSessions() {
-        if (cliTaskManager != null) {
+        if (stdioTaskManager != null) {
             SwingUtilities.invokeLater(this::updateSessionsList);
         }
     }
@@ -380,7 +380,7 @@ public class SessionsWindow extends JFrame {
      * Updates the sessions list with current active sessions.
      */
     private void updateSessionsList() {
-        Map<String, SessionManager.KalixSession> activeSessions = cliTaskManager.getActiveSessions();
+        Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
         
         // Remember currently selected session
         SessionManager.KalixSession selectedSession = sessionList.getSelectedValue();
@@ -452,7 +452,7 @@ public class SessionsWindow extends JFrame {
             if (DialogUtils.showConfirmation(this, 
                     "Are you sure you want to terminate session " + sessionId + "?\n\nThe session will remain visible in the list but the kalixcli process will be closed.", 
                     "Terminate Session")) {
-                cliTaskManager.terminateSession(sessionId)
+                stdioTaskManager.terminateSession(sessionId)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Session terminated: " + sessionId);
                         updateSessionsList();
@@ -482,7 +482,7 @@ public class SessionsWindow extends JFrame {
             if (DialogUtils.showConfirmation(this, 
                     "Are you sure you want to remove session " + sessionId + " from the list?\n\nThis will permanently remove it from the Sessions window.", 
                     "Remove Session")) {
-                cliTaskManager.removeSession(sessionId)
+                stdioTaskManager.removeSession(sessionId)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Session removed from list: " + sessionId);
                         updateSessionsList();

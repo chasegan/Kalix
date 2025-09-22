@@ -16,7 +16,7 @@ public class ApiDiscovery {
     
     private final ProcessExecutor processExecutor;
     private final ObjectMapper objectMapper;
-    private final CliLogger logger;
+    private final StdioLogger logger;
     
     // Cache for API specifications
     private final Map<String, CachedApiSpec> apiCache = new ConcurrentHashMap<>();
@@ -93,7 +93,7 @@ public class ApiDiscovery {
     public ApiDiscovery() {
         this.processExecutor = new ProcessExecutor();
         this.objectMapper = new ObjectMapper();
-        this.logger = CliLogger.getInstance();
+        this.logger = StdioLogger.getInstance();
     }
     
     /**
@@ -102,7 +102,7 @@ public class ApiDiscovery {
     public ApiDiscovery(ProcessExecutor processExecutor) {
         this.processExecutor = processExecutor;
         this.objectMapper = new ObjectMapper();
-        this.logger = CliLogger.getInstance();
+        this.logger = StdioLogger.getInstance();
     }
     
     /**

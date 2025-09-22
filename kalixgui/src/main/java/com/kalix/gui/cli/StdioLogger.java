@@ -10,11 +10,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 /**
- * Simple logging utility for CLI operations.
+ * Simple logging utility for STDIO protocol operations.
  * Provides structured logging with different levels and optional GUI integration.
  */
-public class CliLogger {
-    private static final Logger logger = LoggerFactory.getLogger(CliLogger.class);
+public class StdioLogger {
+    private static final Logger logger = LoggerFactory.getLogger(StdioLogger.class);
     
     public enum LogLevel {
         DEBUG(0, "DEBUG"),
@@ -250,12 +250,12 @@ public class CliLogger {
     }
     
     // Singleton instance for global use
-    private static final CliLogger INSTANCE = new CliLogger();
+    private static final StdioLogger INSTANCE = new StdioLogger();
     
     /**
      * Gets the global logger instance.
      */
-    public static CliLogger getInstance() {
+    public static StdioLogger getInstance() {
         return INSTANCE;
     }
     

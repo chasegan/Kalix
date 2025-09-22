@@ -17,7 +17,7 @@ import com.kalix.gui.managers.RecentFilesManager;
 import com.kalix.gui.managers.FileOperationsManager;
 import com.kalix.gui.managers.VersionChecker;
 import com.kalix.gui.managers.TitleBarManager;
-import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.managers.StdioTaskManager;
 import com.kalix.gui.managers.FileWatcherManager;
 import com.kalix.gui.model.HydrologicalModel;
 import com.kalix.gui.model.ModelChangeEvent;
@@ -80,7 +80,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private VersionChecker versionChecker;
     private TitleBarManager titleBarManager;
     private ProcessExecutor processExecutor;
-    private CliTaskManager cliTaskManager;
+    private StdioTaskManager stdioTaskManager;
     private FileWatcherManager fileWatcherManager;
     
     // Data model
@@ -210,8 +210,8 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
         versionChecker = new VersionChecker(this::updateStatus);
         
-        // Initialize CLI task manager
-        cliTaskManager = new CliTaskManager(
+        // Initialize STDIO task manager
+        stdioTaskManager = new StdioTaskManager(
             processExecutor,
             this::updateStatus,
             progressBar,
@@ -826,7 +826,7 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showSessionsWindow() {
-        RunManager.showRunManager(this, cliTaskManager, this::updateStatus);
+        RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
         updateStatus("Run Manager opened");
     }
     
@@ -842,14 +842,14 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         updateStatus("Starting model run...");
         
         // Run model from memory and handle the session
-        cliTaskManager.runModelFromMemory(modelText)
+        stdioTaskManager.runModelFromMemory(modelText)
             .thenAccept(sessionId -> {
                 SwingUtilities.invokeLater(() -> {
                     updateStatus("Model session started: " + sessionId);
                     
                     // Automatically open Run Manager if not already open
                     if (!RunManager.isWindowOpen()) {
-                        RunManager.showRunManager(this, cliTaskManager, this::updateStatus);
+                        RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
                         updateStatus("Run Manager opened to monitor progress");
                     }
                 });

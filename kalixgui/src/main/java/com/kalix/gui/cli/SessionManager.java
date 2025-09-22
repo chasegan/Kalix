@@ -76,7 +76,7 @@ public class SessionManager {
      */
     public static class KalixSession {
         private final String sessionId;
-        private final InteractiveKalixProcess process;
+        private final KalixStdioSession process;
         private final LocalDateTime startTime;
         private final SessionCommunicationLog communicationLog;
         private volatile SessionState state;
@@ -85,7 +85,7 @@ public class SessionManager {
         private volatile RunModelProgram activeProgram;
         private volatile String cliSessionId; // Session ID from kalixcli
         
-        public KalixSession(String sessionId, InteractiveKalixProcess process) {
+        public KalixSession(String sessionId, KalixStdioSession process) {
             this.sessionId = sessionId;
             this.process = process;
             this.startTime = LocalDateTime.now();
@@ -95,7 +95,7 @@ public class SessionManager {
         }
         
         public String getSessionId() { return sessionId; }
-        public InteractiveKalixProcess getProcess() { return process; }
+        public KalixStdioSession getProcess() { return process; }
         public LocalDateTime getStartTime() { return startTime; }
         public SessionCommunicationLog getCommunicationLog() { return communicationLog; }
         public SessionState getState() { return state; }
@@ -183,7 +183,7 @@ public class SessionManager {
                 String sessionId = generateSessionId(config.getCustomSessionId());
                 
                 // Start interactive process
-                InteractiveKalixProcess process = InteractiveKalixProcess.start(
+                KalixStdioSession process = KalixStdioSession.start(
                     cliPath, processExecutor, config.getArgs());
                 
                 // Create session
@@ -248,7 +248,7 @@ public class SessionManager {
             }
             
             try {
-                String command = KalixCliProtocol.formatResultRequest(resultType, null);
+                String command = KalixStdioProtocol.formatResultRequest(resultType, null);
                 session.getProcess().sendCommand(command);
                 
                 // Wait for response (this is a simplified implementation)
@@ -510,7 +510,7 @@ public class SessionManager {
     /**
      * Handles legacy protocol messages and updates session state.
      */
-    private void handleProtocolMessage(KalixSession session, KalixCliProtocol.ProtocolMessage message) {
+    private void handleProtocolMessage(KalixSession session, KalixStdioProtocol.ProtocolMessage message) {
         String sessionId = session.getSessionId();
         SessionState oldState = session.getState();
         

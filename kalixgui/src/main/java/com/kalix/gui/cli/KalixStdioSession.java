@@ -12,13 +12,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * High-level wrapper for interactive communication with kalixcli processes.
- * Provides structured methods for common kalixcli interaction patterns.
+ * High-level wrapper for STDIO communication with kalixcli sessions.
+ * Provides structured methods for common kalixcli STDIO protocol interactions.
  */
-public class InteractiveKalixProcess {
+public class KalixStdioSession {
     
     private final ProcessExecutor.RunningProcess runningProcess;
-    private final CliLogger logger;
+    private final StdioLogger logger;
     private final AtomicBoolean closed = new AtomicBoolean(false);
     
     // Common kalixcli prompt patterns
@@ -84,17 +84,17 @@ public class InteractiveKalixProcess {
     }
     
     /**
-     * Creates a new InteractiveKalixProcess wrapping a running process.
+     * Creates a new KalixStdioSession wrapping a running process.
      * 
      * @param runningProcess the interactive process to wrap
      */
-    public InteractiveKalixProcess(ProcessExecutor.RunningProcess runningProcess) {
+    public KalixStdioSession(ProcessExecutor.RunningProcess runningProcess) {
         if (!runningProcess.isInteractive()) {
             throw new IllegalArgumentException("Process must be in interactive mode");
         }
         
         this.runningProcess = runningProcess;
-        this.logger = CliLogger.getInstance();
+        this.logger = StdioLogger.getInstance();
     }
     
     /**
@@ -103,12 +103,12 @@ public class InteractiveKalixProcess {
      * @param cliPath path to kalixcli executable
      * @param processExecutor the process executor to use
      * @param args additional command line arguments
-     * @return a new InteractiveKalixProcess
+     * @return a new KalixStdioSession
      * @throws IOException if the process cannot be started
      */
-    public static InteractiveKalixProcess start(Path cliPath, ProcessExecutor processExecutor, String... args) throws IOException {
+    public static KalixStdioSession start(Path cliPath, ProcessExecutor processExecutor, String... args) throws IOException {
         ProcessExecutor.RunningProcess process = processExecutor.startInteractive(cliPath.toString(), args);
-        return new InteractiveKalixProcess(process);
+        return new KalixStdioSession(process);
     }
     
     /**

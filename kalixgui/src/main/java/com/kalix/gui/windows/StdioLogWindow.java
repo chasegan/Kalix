@@ -2,7 +2,7 @@ package com.kalix.gui.windows;
 
 import com.kalix.gui.cli.SessionManager;
 import com.kalix.gui.cli.JsonStdioProtocol;
-import com.kalix.gui.managers.CliTaskManager;
+import com.kalix.gui.managers.StdioTaskManager;
 
 import javax.swing.*;
 import java.awt.*;
@@ -17,15 +17,15 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 
 /**
- * Separate window for displaying CLI communication logs for a specific run.
+ * Separate window for displaying STDIO communication logs for a specific run.
  */
-public class CliLogWindow extends JFrame {
+public class StdioLogWindow extends JFrame {
 
-    private static Map<String, CliLogWindow> openWindows = new HashMap<>();
+    private static Map<String, StdioLogWindow> openWindows = new HashMap<>();
 
     private final String runName;
     private final SessionManager.KalixSession session;
-    private final CliTaskManager cliTaskManager;
+    private final StdioTaskManager stdioTaskManager;
     private RSyntaxTextArea logArea;
     private RTextScrollPane logScrollPane;
     private Timer updateTimer;
@@ -38,12 +38,12 @@ public class CliLogWindow extends JFrame {
     private JLabel sessionDurationLabel;
 
     /**
-     * Creates a new CLI Log window for the specified run.
+     * Creates a new STDIO Log window for the specified run.
      */
-    private CliLogWindow(String runName, SessionManager.KalixSession session, CliTaskManager cliTaskManager, JFrame parentFrame) {
+    private StdioLogWindow(String runName, SessionManager.KalixSession session, StdioTaskManager stdioTaskManager, JFrame parentFrame) {
         this.runName = runName;
         this.session = session;
-        this.cliTaskManager = cliTaskManager;
+        this.stdioTaskManager = stdioTaskManager;
 
         setupWindow(parentFrame);
         initializeComponents();
@@ -56,13 +56,13 @@ public class CliLogWindow extends JFrame {
     }
 
     /**
-     * Shows the CLI Log window for the specified run.
+     * Shows the STDIO Log window for the specified run.
      * Uses one window per run (singleton per run).
      */
-    public static void showCliLogWindow(String runName, SessionManager.KalixSession session, CliTaskManager cliTaskManager, JFrame parentFrame) {
+    public static void showStdioLogWindow(String runName, SessionManager.KalixSession session, StdioTaskManager stdioTaskManager, JFrame parentFrame) {
         String sessionId = session.getSessionId();
 
-        CliLogWindow existingWindow = openWindows.get(sessionId);
+        StdioLogWindow existingWindow = openWindows.get(sessionId);
         if (existingWindow != null) {
             // Bring existing window to front
             existingWindow.setVisible(true);
@@ -70,24 +70,24 @@ public class CliLogWindow extends JFrame {
             existingWindow.requestFocus();
         } else {
             // Create new window
-            CliLogWindow newWindow = new CliLogWindow(runName, session, cliTaskManager, parentFrame);
+            StdioLogWindow newWindow = new StdioLogWindow(runName, session, stdioTaskManager, parentFrame);
             openWindows.put(sessionId, newWindow);
             newWindow.setVisible(true);
         }
     }
 
     /**
-     * Closes the CLI Log window for the specified session.
+     * Closes the STDIO Log window for the specified session.
      */
-    public static void closeCliLogWindow(String sessionId) {
-        CliLogWindow window = openWindows.get(sessionId);
+    public static void closeStdioLogWindow(String sessionId) {
+        StdioLogWindow window = openWindows.get(sessionId);
         if (window != null) {
             window.dispose();
         }
     }
 
     private void setupWindow(JFrame parentFrame) {
-        setTitle("CLI Log - " + runName);
+        setTitle("STDIO Log - " + runName);
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setSize(800, 600);
 
@@ -130,7 +130,7 @@ public class CliLogWindow extends JFrame {
 
         // Header panel
         JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JLabel headerLabel = new JLabel("CLI Communication Log for " + runName);
+        JLabel headerLabel = new JLabel("STDIO Communication Log for " + runName);
         headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 14f));
         headerPanel.add(headerLabel);
         headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
@@ -167,11 +167,11 @@ public class CliLogWindow extends JFrame {
     }
 
     /**
-     * Creates the CLI Session Details panel.
+     * Creates the STDIO Session Details panel.
      */
     private JPanel createSessionDetailsPanel() {
         JPanel detailsPanel = new JPanel(new GridBagLayout());
-        detailsPanel.setBorder(BorderFactory.createTitledBorder("CLI Session Details"));
+        detailsPanel.setBorder(BorderFactory.createTitledBorder("STDIO Session Details"));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 10, 5, 10);
         gbc.anchor = GridBagConstraints.WEST;
@@ -246,7 +246,7 @@ public class CliLogWindow extends JFrame {
     }
 
     /**
-     * Updates the CLI Session Details information.
+     * Updates the STDIO Session Details information.
      */
     private void updateSessionDetails() {
         // Update session details
@@ -361,8 +361,8 @@ public class CliLogWindow extends JFrame {
 
             String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
 
-            // Use CliTaskManager to send command, which handles proper logging
-            cliTaskManager.sendCommand(session.getSessionId(), jsonCommand);
+            // Use StdioTaskManager to send command, which handles proper logging
+            stdioTaskManager.sendCommand(session.getSessionId(), jsonCommand);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                 "Failed to send ping command: " + e.getMessage(),

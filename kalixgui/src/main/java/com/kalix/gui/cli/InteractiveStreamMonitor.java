@@ -20,8 +20,8 @@ public class InteractiveStreamMonitor {
     
     private final InputStream inputStream;
     private final Consumer<String> lineCallback;
-    private final Consumer<InteractiveKalixProcess.ProgressInfo> progressCallback;
-    private final Consumer<InteractiveKalixProcess.Prompt> promptCallback;
+    private final Consumer<KalixStdioSession.ProgressInfo> progressCallback;
+    private final Consumer<KalixStdioSession.Prompt> promptCallback;
     private final AtomicBoolean monitoring = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
     
@@ -30,8 +30,8 @@ public class InteractiveStreamMonitor {
      */
     public static class MonitorConfig {
         private Consumer<String> lineCallback;
-        private Consumer<InteractiveKalixProcess.ProgressInfo> progressCallback;
-        private Consumer<InteractiveKalixProcess.Prompt> promptCallback;
+        private Consumer<KalixStdioSession.ProgressInfo> progressCallback;
+        private Consumer<KalixStdioSession.Prompt> promptCallback;
         private Consumer<String> errorCallback;
         private boolean autoParseProgress = true;
         private boolean autoDetectPrompts = true;
@@ -41,12 +41,12 @@ public class InteractiveStreamMonitor {
             return this;
         }
         
-        public MonitorConfig onProgress(Consumer<InteractiveKalixProcess.ProgressInfo> callback) {
+        public MonitorConfig onProgress(Consumer<KalixStdioSession.ProgressInfo> callback) {
             this.progressCallback = callback;
             return this;
         }
         
-        public MonitorConfig onPrompt(Consumer<InteractiveKalixProcess.Prompt> callback) {
+        public MonitorConfig onPrompt(Consumer<KalixStdioSession.Prompt> callback) {
             this.promptCallback = callback;
             return this;
         }
@@ -68,8 +68,8 @@ public class InteractiveStreamMonitor {
         
         // Getters
         public Consumer<String> getLineCallback() { return lineCallback; }
-        public Consumer<InteractiveKalixProcess.ProgressInfo> getProgressCallback() { return progressCallback; }
-        public Consumer<InteractiveKalixProcess.Prompt> getPromptCallback() { return promptCallback; }
+        public Consumer<KalixStdioSession.ProgressInfo> getProgressCallback() { return progressCallback; }
+        public Consumer<KalixStdioSession.Prompt> getPromptCallback() { return promptCallback; }
         public Consumer<String> getErrorCallback() { return errorCallback; }
         public boolean isAutoParseProgress() { return autoParseProgress; }
         public boolean isAutoDetectPrompts() { return autoDetectPrompts; }
@@ -85,8 +85,8 @@ public class InteractiveStreamMonitor {
      */
     public InteractiveStreamMonitor(InputStream inputStream, 
                                    Consumer<String> lineCallback,
-                                   Consumer<InteractiveKalixProcess.ProgressInfo> progressCallback,
-                                   Consumer<InteractiveKalixProcess.Prompt> promptCallback) {
+                                   Consumer<KalixStdioSession.ProgressInfo> progressCallback,
+                                   Consumer<KalixStdioSession.Prompt> promptCallback) {
         this.inputStream = inputStream;
         this.lineCallback = lineCallback;
         this.progressCallback = progressCallback;
@@ -175,7 +175,7 @@ public class InteractiveStreamMonitor {
      * @param executorService executor for the waiting task
      * @return CompletableFuture with the prompt, or null if timeout
      */
-    public CompletableFuture<InteractiveKalixProcess.Prompt> waitForPrompt(int timeoutSeconds, ExecutorService executorService) {
+    public CompletableFuture<KalixStdioSession.Prompt> waitForPrompt(int timeoutSeconds, ExecutorService executorService) {
         return CompletableFuture.supplyAsync(() -> {
             long startTime = System.currentTimeMillis();
             long timeoutMillis = timeoutSeconds * 1000L;
@@ -187,8 +187,8 @@ public class InteractiveStreamMonitor {
                 while ((line = reader.readLine()) != null && 
                        (System.currentTimeMillis() - startTime) < timeoutMillis) {
                     
-                    InteractiveKalixProcess.Prompt prompt = parsePrompt(line);
-                    if (prompt.getType() != InteractiveKalixProcess.PromptType.UNKNOWN) {
+                    KalixStdioSession.Prompt prompt = parsePrompt(line);
+                    if (prompt.getType() != KalixStdioSession.PromptType.UNKNOWN) {
                         return prompt;
                     }
                 }
@@ -227,14 +227,14 @@ public class InteractiveStreamMonitor {
             
             // Check for progress if enabled
             if (progressCallback != null) {
-                InteractiveKalixProcess kalixProcess = new InteractiveKalixProcess(null); // Temporary for parsing
+                KalixStdioSession kalixProcess = new KalixStdioSession(null); // Temporary for parsing
                 kalixProcess.parseProgress(line).ifPresent(progressCallback);
             }
             
             // Check for prompts if enabled
             if (promptCallback != null) {
-                InteractiveKalixProcess.Prompt prompt = parsePrompt(line);
-                if (prompt.getType() != InteractiveKalixProcess.PromptType.UNKNOWN) {
+                KalixStdioSession.Prompt prompt = parsePrompt(line);
+                if (prompt.getType() != KalixStdioSession.PromptType.UNKNOWN) {
                     promptCallback.accept(prompt);
                 }
             }
@@ -246,38 +246,38 @@ public class InteractiveStreamMonitor {
     }
     
     /**
-     * Parses a line to detect prompts (simplified version of InteractiveKalixProcess logic).
+     * Parses a line to detect prompts (simplified version of KalixStdioSession logic).
      */
-    private InteractiveKalixProcess.Prompt parsePrompt(String line) {
+    private KalixStdioSession.Prompt parsePrompt(String line) {
         if (line == null || line.trim().isEmpty()) {
-            return new InteractiveKalixProcess.Prompt(line, InteractiveKalixProcess.PromptType.UNKNOWN);
+            return new KalixStdioSession.Prompt(line, KalixStdioSession.PromptType.UNKNOWN);
         }
         
         String trimmed = line.trim();
         
         // Common prompt patterns
         if (trimmed.toLowerCase().contains("enter") && trimmed.toLowerCase().contains("filename")) {
-            return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.MODEL_FILENAME);
+            return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.MODEL_FILENAME);
         }
         
         if (trimmed.toLowerCase().contains("enter") && trimmed.toLowerCase().contains("model")) {
-            return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.MODEL_DEFINITION);
+            return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.MODEL_DEFINITION);
         }
         
         if (trimmed.toLowerCase().contains("enter") && (trimmed.toLowerCase().contains("parameter") || trimmed.toLowerCase().contains("value"))) {
-            return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.PARAMETER_VALUE);
+            return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.PARAMETER_VALUE);
         }
         
         if (trimmed.toLowerCase().matches(".*\\b(yes|no|y/n|continue|proceed)\\b.*\\?.*")) {
-            return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.CONFIRMATION);
+            return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.CONFIRMATION);
         }
         
         // Generic prompt indicators
         if (trimmed.endsWith(":") || trimmed.endsWith("?") || trimmed.contains(">")) {
-            return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.UNKNOWN);
+            return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.UNKNOWN);
         }
         
-        return new InteractiveKalixProcess.Prompt(trimmed, InteractiveKalixProcess.PromptType.UNKNOWN);
+        return new KalixStdioSession.Prompt(trimmed, KalixStdioSession.PromptType.UNKNOWN);
     }
     
     /**
