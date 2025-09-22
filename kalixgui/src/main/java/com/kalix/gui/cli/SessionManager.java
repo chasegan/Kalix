@@ -45,21 +45,21 @@ public class SessionManager {
      * Events that can occur during session lifecycle.
      */
     public static class SessionEvent {
-        private final String sessionId;
+        private final String sessionKey;
         private final SessionState oldState;
         private final SessionState newState;
         private final String message;
         private final LocalDateTime timestamp;
         
-        public SessionEvent(String sessionId, SessionState oldState, SessionState newState, String message) {
-            this.sessionId = sessionId;
+        public SessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
+            this.sessionKey = sessionKey;
             this.oldState = oldState;
             this.newState = newState;
             this.message = message;
             this.timestamp = LocalDateTime.now();
         }
 
-        public String getSessionId() { return sessionId; }
+        public String getSessionKey() { return sessionKey; }
         public SessionState getOldState() { return oldState; }
         public SessionState getNewState() { return newState; }
         public String getMessage() { return message; }
@@ -67,7 +67,7 @@ public class SessionManager {
         
         @Override
         public String toString() {
-            return String.format("SessionEvent[%s: %s -> %s, %s]", sessionId, oldState, newState, message);
+            return String.format("SessionEvent[%s: %s -> %s, %s]", sessionKey, oldState, newState, message);
         }
     }
     
@@ -139,8 +139,8 @@ public class SessionManager {
             this.args = args;
         }
         
-        public SessionConfig withSessionId(String sessionId) {
-            this.customSessionId = sessionId;
+        public SessionConfig withSessionKey(String sessionKey) {
+            this.customSessionId = sessionKey;
             return this;
         }
         
@@ -180,24 +180,24 @@ public class SessionManager {
     public CompletableFuture<String> startSession(Path cliPath, SessionConfig config) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String sessionId = generateSessionId(config.getCustomSessionId());
+                String sessionKey = generateSessionId(config.getCustomSessionId());
                 
                 // Start interactive process
                 KalixStdioSession process = KalixStdioSession.start(
                     cliPath, processExecutor, config.getArgs());
                 
                 // Create session
-                KalixSession session = new KalixSession(sessionId, process);
-                activeSessions.put(sessionId, session);
+                KalixSession session = new KalixSession(sessionKey, process);
+                activeSessions.put(sessionKey, session);
                 
                 // Start monitoring the session
                 monitorSession(session, config);
                 
                 // Notify session started
-                fireSessionEvent(sessionId, null, SessionState.STARTING, "Session started");
-                updateStatus("Started session: " + sessionId);
+                fireSessionEvent(sessionKey, null, SessionState.STARTING, "Session started");
+                updateStatus("Started session: " + sessionKey);
                 
-                return sessionId;
+                return sessionKey;
                 
             } catch (IOException e) {
                 throw new RuntimeException("Failed to start session: " + e.getMessage(), e);
@@ -212,18 +212,18 @@ public class SessionManager {
      * @param command the command to send
      * @return CompletableFuture that completes when command is sent
      */
-    public CompletableFuture<Void> sendCommand(String sessionId, String command) {
+    public CompletableFuture<Void> sendCommand(String sessionKey, String command) {
         return CompletableFuture.runAsync(() -> {
             try {
-                KalixSession session = validateActiveSession(sessionId, "Send command");
+                KalixSession session = validateActiveSession(sessionKey, "Send command");
                 // Log outgoing command first
                 session.getCommunicationLog().logGuiToCli(command);
                 session.getProcess().sendCommand(command);
                 session.setState(SessionState.RUNNING, "Executing command: " + command);
-                updateStatus("Sent command to session " + sessionId + ": " + command);
+                updateStatus("Sent command to session " + sessionKey + ": " + command);
             } catch (IOException e) {
-                handleSessionError(sessionId, e, "Send command");
-                throw new RuntimeException("Failed to send command to session " + sessionId, e);
+                handleSessionError(sessionKey, e, "Send command");
+                throw new RuntimeException("Failed to send command to session " + sessionKey, e);
             }
         }, processExecutor.getExecutorService());
     }
@@ -236,15 +236,15 @@ public class SessionManager {
      * @param resultType the type of results to request
      * @return CompletableFuture with the results
      */
-    public CompletableFuture<String> requestResults(String sessionId, String resultType) {
+    public CompletableFuture<String> requestResults(String sessionKey, String resultType) {
         return CompletableFuture.supplyAsync(() -> {
-            KalixSession session = activeSessions.get(sessionId);
+            KalixSession session = activeSessions.get(sessionKey);
             if (session == null) {
-                throw new IllegalArgumentException("Session not found: " + sessionId);
+                throw new IllegalArgumentException("Session not found: " + sessionKey);
             }
             
             if (!session.isReady()) {
-                throw new IllegalStateException("Session not ready for queries: " + sessionId + " (state: " + session.getState() + ")");
+                throw new IllegalStateException("Session not ready for queries: " + sessionKey + " (state: " + session.getState() + ")");
             }
             
             try {
@@ -258,7 +258,7 @@ public class SessionManager {
                 
             } catch (IOException e) {
                 session.setState(SessionState.ERROR, "Failed to request results: " + e.getMessage());
-                throw new RuntimeException("Failed to request results from session " + sessionId, e);
+                throw new RuntimeException("Failed to request results from session " + sessionKey, e);
             }
         });
     }
@@ -269,17 +269,17 @@ public class SessionManager {
      * @param sessionId the session to terminate
      * @return CompletableFuture that completes when session is terminated
      */
-    public CompletableFuture<Void> terminateSession(String sessionId) {
+    public CompletableFuture<Void> terminateSession(String sessionKey) {
         return CompletableFuture.runAsync(() -> {
-            KalixSession session = activeSessions.get(sessionId);
+            KalixSession session = activeSessions.get(sessionKey);
             if (session != null) {
                 SessionState oldState = session.getState();
                 session.setState(SessionState.TERMINATED, "Session terminated by user");
                 session.getProcess().close();
                 // Keep session in activeSessions map for visibility, don't remove it
                 
-                fireSessionEvent(sessionId, oldState, SessionState.TERMINATED, "Session terminated");
-                updateStatus("Terminated session: " + sessionId);
+                fireSessionEvent(sessionKey, oldState, SessionState.TERMINATED, "Session terminated");
+                updateStatus("Terminated session: " + sessionKey);
             }
         });
     }
@@ -290,8 +290,8 @@ public class SessionManager {
      * @param sessionId the session ID
      * @return session information if found
      */
-    public Optional<KalixSession> getSession(String sessionId) {
-        return Optional.ofNullable(activeSessions.get(sessionId));
+    public Optional<KalixSession> getSession(String sessionKey) {
+        return Optional.ofNullable(activeSessions.get(sessionKey));
     }
     
     /**
@@ -310,16 +310,16 @@ public class SessionManager {
      * @param sessionId the session to remove
      * @return CompletableFuture that completes when session is removed
      */
-    public CompletableFuture<Void> removeSession(String sessionId) {
+    public CompletableFuture<Void> removeSession(String sessionKey) {
         return CompletableFuture.runAsync(() -> {
-            KalixSession session = activeSessions.get(sessionId);
+            KalixSession session = activeSessions.get(sessionKey);
             if (session != null) {
                 // Only allow removal of terminated or error sessions
                 if (session.getState() == SessionState.TERMINATED || session.getState() == SessionState.ERROR) {
-                    activeSessions.remove(sessionId);
-                    updateStatus("Removed session from list: " + sessionId);
+                    activeSessions.remove(sessionKey);
+                    updateStatus("Removed session from list: " + sessionKey);
                 } else {
-                    throw new IllegalStateException("Cannot remove active session: " + sessionId + " (state: " + session.getState() + ")");
+                    throw new IllegalStateException("Cannot remove active session: " + sessionKey + " (state: " + session.getState() + ")");
                 }
             }
         });
@@ -544,15 +544,15 @@ public class SessionManager {
     /**
      * Schedules cleanup of a session after a delay.
      */
-    private void scheduleSessionCleanup(String sessionId, int delayMs) {
+    private void scheduleSessionCleanup(String sessionKey, int delayMs) {
         CompletableFuture.delayedExecutor(delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             .execute(() -> {
-                KalixSession session = activeSessions.get(sessionId);
+                KalixSession session = activeSessions.get(sessionKey);
                 if (session != null) {
                     session.setState(SessionState.TERMINATED, "Session cleanup completed");
                     session.getProcess().close();
                     // Keep session in activeSessions map for visibility, don't remove it
-                    fireSessionEvent(sessionId, SessionState.COMPLETING, SessionState.TERMINATED, "Session cleaned up");
+                    fireSessionEvent(sessionKey, SessionState.COMPLETING, SessionState.TERMINATED, "Session cleaned up");
                 }
             });
     }
@@ -560,10 +560,10 @@ public class SessionManager {
     /**
      * Fires a session event to registered callbacks.
      */
-    private void fireSessionEvent(String sessionId, SessionState oldState, SessionState newState, String message) {
+    private void fireSessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
         if (eventCallback != null) {
             try {
-                eventCallback.accept(new SessionEvent(sessionId, oldState, newState, message));
+                eventCallback.accept(new SessionEvent(sessionKey, oldState, newState, message));
             } catch (Exception e) {
                 // Don't let callback exceptions break session management
                 logger.warn("Error in session event callback: {}", e.getMessage());
@@ -588,26 +588,26 @@ public class SessionManager {
     /**
      * Handles session errors consistently.
      */
-    private void handleSessionError(String sessionId, Exception e, String operation) {
-        KalixSession session = activeSessions.get(sessionId);
+    private void handleSessionError(String sessionKey, Exception e, String operation) {
+        KalixSession session = activeSessions.get(sessionKey);
         if (session != null) {
             SessionState oldState = session.getState();
             session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
-            fireSessionEvent(sessionId, oldState, SessionState.ERROR, e.getMessage());
+            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
         }
-        updateStatus("Session " + sessionId + " error: " + operation + " failed");
+        updateStatus("Session " + sessionKey + " error: " + operation + " failed");
     }
     
     /**
      * Validates session exists and is active.
      */
-    private KalixSession validateActiveSession(String sessionId, String operation) {
-        KalixSession session = activeSessions.get(sessionId);
+    private KalixSession validateActiveSession(String sessionKey, String operation) {
+        KalixSession session = activeSessions.get(sessionKey);
         if (session == null) {
-            throw new IllegalArgumentException("Session not found: " + sessionId);
+            throw new IllegalArgumentException("Session not found: " + sessionKey);
         }
         if (!session.isActive()) {
-            throw new IllegalStateException(operation + " failed: Session not active: " + sessionId + " (state: " + session.getState() + ")");
+            throw new IllegalStateException(operation + " failed: Session not active: " + sessionKey + " (state: " + session.getState() + ")");
         }
         return session;
     }

@@ -239,12 +239,12 @@ public class StdioTaskManager {
                 case READY:
                     progressBar.setProgressPercentage(100);
                     progressBar.setProgressText("Ready");
-                    statusUpdater.accept("Model session ready - " + event.getSessionId());
+                    statusUpdater.accept("Model session ready - " + event.getSessionKey());
                     
                     // Hide progress bar after delay but show session is ready
                     Timer readyTimer = new Timer(PROGRESS_HIDE_DELAY_MS, e -> {
                         progressBar.hideProgress();
-                        statusUpdater.accept("Session ready for queries: " + event.getSessionId());
+                        statusUpdater.accept("Session ready for queries: " + event.getSessionKey());
                     });
                     readyTimer.setRepeats(false);
                     readyTimer.start();
@@ -256,7 +256,7 @@ public class StdioTaskManager {
                     break;
                     
                 case TERMINATED:
-                    statusUpdater.accept("Session ended: " + event.getSessionId());
+                    statusUpdater.accept("Session ended: " + event.getSessionKey());
                     break;
             }
 
