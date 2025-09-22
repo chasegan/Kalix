@@ -16,17 +16,17 @@ public class SessionCommunicationLog {
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
     
     private final List<LogEntry> entries = new CopyOnWriteArrayList<>();
-    private final String sessionId;
+    private final String sessionKey;
     
     /**
      * Creates a new communication log for a session.
      * 
-     * @param sessionId the session identifier
+     * @param sessionKey the internal session key
      */
-    public SessionCommunicationLog(String sessionId) {
-        this.sessionId = sessionId;
+    public SessionCommunicationLog(String sessionKey) {
+        this.sessionKey = sessionKey;
         // Log session start
-        logSystemMessage("Session created: " + sessionId);
+        logSystemMessage("Session created: " + sessionKey);
     }
     
     /**
@@ -153,12 +153,12 @@ public class SessionCommunicationLog {
     }
     
     /**
-     * Gets the session ID this log belongs to.
-     * 
-     * @return the session ID
+     * Gets the internal session key this log belongs to.
+     *
+     * @return the session key
      */
-    public String getSessionId() {
-        return sessionId;
+    public String getSessionKey() {
+        return sessionKey;
     }
     
     /**
@@ -175,7 +175,7 @@ public class SessionCommunicationLog {
      */
     public void clear() {
         entries.clear();
-        logSystemMessage("Log cleared for session: " + sessionId);
+        logSystemMessage("Log cleared for session: " + sessionKey);
     }
     
     /**
@@ -185,7 +185,7 @@ public class SessionCommunicationLog {
      */
     public String getFormattedLog() {
         StringBuilder sb = new StringBuilder();
-        sb.append("=== Communication Log for Session: ").append(sessionId).append(" ===\n");
+        sb.append("=== Communication Log for Session: ").append(sessionKey).append(" ===\n");
         for (LogEntry entry : entries) {
             sb.append(entry.getFormattedEntry()).append("\n");
         }

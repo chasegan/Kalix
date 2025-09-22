@@ -75,7 +75,7 @@ public class SessionManager {
      * Represents an active kalixcli session.
      */
     public static class KalixSession {
-        private final String sessionId;
+        private final String sessionKey; // Internal GUI identifier
         private final KalixStdioSession process;
         private final LocalDateTime startTime;
         private final SessionCommunicationLog communicationLog;
@@ -85,16 +85,16 @@ public class SessionManager {
         private volatile RunModelProgram activeProgram;
         private volatile String cliSessionId; // Session ID from kalixcli
         
-        public KalixSession(String sessionId, KalixStdioSession process) {
-            this.sessionId = sessionId;
+        public KalixSession(String sessionKey, KalixStdioSession process) {
+            this.sessionKey = sessionKey;
             this.process = process;
             this.startTime = LocalDateTime.now();
-            this.communicationLog = new SessionCommunicationLog(sessionId);
+            this.communicationLog = new SessionCommunicationLog(sessionKey);
             this.state = SessionState.STARTING;
             this.lastActivity = LocalDateTime.now();
         }
-        
-        public String getSessionId() { return sessionId; }
+
+        public String getSessionKey() { return sessionKey; } // Internal GUI identifier
         public KalixStdioSession getProcess() { return process; }
         public LocalDateTime getStartTime() { return startTime; }
         public SessionCommunicationLog getCommunicationLog() { return communicationLog; }
@@ -123,7 +123,7 @@ public class SessionManager {
         
         @Override
         public String toString() {
-            return String.format("KalixSession[id=%s, state=%s]", sessionId, state);
+            return String.format("KalixSession[key=%s, state=%s]", sessionKey, state);
         }
     }
     
@@ -329,7 +329,7 @@ public class SessionManager {
      * Monitors a session for output and state changes on both stdout and stderr.
      */
     private void monitorSession(KalixSession session, SessionConfig config) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
         
         // Monitor stdout
         CompletableFuture<Void> stdoutMonitor = CompletableFuture.runAsync(() -> {
@@ -346,7 +346,7 @@ public class SessionManager {
                     Thread.sleep(50); // Small delay to avoid busy waiting
                 }
             } catch (IOException | InterruptedException e) {
-                handleSessionError(sessionId, e, "stdout monitoring");
+                handleSessionError(sessionKey, e, "stdout monitoring");
             }
         }, processExecutor.getExecutorService());
         
@@ -365,7 +365,7 @@ public class SessionManager {
                     Thread.sleep(50); // Small delay to avoid busy waiting
                 }
             } catch (IOException | InterruptedException e) {
-                handleSessionError(sessionId, e, "stderr monitoring");
+                handleSessionError(sessionKey, e, "stderr monitoring");
             }
         }, processExecutor.getExecutorService());
         
@@ -373,7 +373,7 @@ public class SessionManager {
         CompletableFuture.allOf(stdoutMonitor, stderrMonitor)
             .whenComplete((result, throwable) -> {
                 if (throwable != null) {
-                    handleSessionError(sessionId, new RuntimeException(throwable), "session monitoring");
+                    handleSessionError(sessionKey, new RuntimeException(throwable), "session monitoring");
                 }
             });
     }
@@ -383,7 +383,7 @@ public class SessionManager {
      * Handles JSON protocol messages from kalixcli.
      */
     private void processSessionOutput(KalixSession session, String line, SessionConfig config) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
         
         // Check for JSON protocol messages
         if (JsonStdioProtocol.looksLikeJson(line)) {
@@ -403,7 +403,7 @@ public class SessionManager {
         }
         
         // Log stdout for debugging (only if verbose)
-        // updateStatus("Session " + sessionId + " stdout: " + line);
+        // updateStatus("Session " + sessionKey + " stdout: " + line);
     }
     
     /**
@@ -411,16 +411,16 @@ public class SessionManager {
      * Handles stderr messages which may contain important error information or diagnostics.
      */
     private void processSessionError(KalixSession session, String errorLine, SessionConfig config) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
         
         // Always log stderr as it contains important error information
-        updateStatus("Session " + sessionId + " stderr: " + errorLine);
+        updateStatus("Session " + sessionKey + " stderr: " + errorLine);
         
         // Check if this is a critical error that should terminate the session
         if (isCriticalError(errorLine)) {
             SessionState oldState = session.getState();
             session.setState(SessionState.ERROR, "Critical error: " + errorLine);
-            fireSessionEvent(sessionId, oldState, SessionState.ERROR, "Critical error from kalixcli: " + errorLine);
+            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, "Critical error from kalixcli: " + errorLine);
             return;
         }
         
@@ -459,7 +459,7 @@ public class SessionManager {
      * Handles JSON protocol messages by delegating to active programs or handling generically.
      */
     private void handleJsonProtocolMessage(KalixSession session, JsonMessage.SystemMessage message, SessionConfig config) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
 
         // Store CLI session ID from the first message we receive
         if (session.getCliSessionId() == null && message.getSessionId() != null) {
@@ -477,7 +477,7 @@ public class SessionManager {
         // Handle generic messages that aren't part of a specific program
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
-            updateStatus("Unknown JSON message type from session " + sessionId);
+            updateStatus("Unknown JSON message type from session " + sessionKey);
             return;
         }
         
@@ -486,9 +486,9 @@ public class SessionManager {
                 // Generic log message
                 try {
                     String logMsg = message.getData().asText();
-                    updateStatus("Session " + sessionId + " log: " + logMsg);
+                    updateStatus("Session " + sessionKey + " log: " + logMsg);
                 } catch (Exception e) {
-                    updateStatus("Session " + sessionId + " log message received");
+                    updateStatus("Session " + sessionKey + " log message received");
                 }
                 break;
                 
@@ -496,13 +496,13 @@ public class SessionManager {
                 // Session is ready for commands (generic session state)
                 SessionState oldState = session.getState();
                 session.setState(SessionState.READY, "Session ready for commands");
-                fireSessionEvent(sessionId, oldState, SessionState.READY, "Session ready");
-                updateStatus("Session ready: " + sessionId);
+                fireSessionEvent(sessionKey, oldState, SessionState.READY, "Session ready");
+                updateStatus("Session ready: " + sessionKey);
                 break;
                 
             default:
                 // Other message types should be handled by programs
-                updateStatus("Unhandled JSON message type from session " + sessionId + ": " + msgType);
+                updateStatus("Unhandled JSON message type from session " + sessionKey + ": " + msgType);
                 break;
         }
     }
@@ -511,33 +511,33 @@ public class SessionManager {
      * Handles legacy protocol messages and updates session state.
      */
     private void handleProtocolMessage(KalixSession session, KalixStdioProtocol.ProtocolMessage message) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
         SessionState oldState = session.getState();
         
         if (message.isSessionReady()) {
             session.setState(SessionState.READY, message.getAdditionalInfo());
-            fireSessionEvent(sessionId, oldState, SessionState.READY, "Session ready for queries");
-            updateStatus("Session ready: " + sessionId);
+            fireSessionEvent(sessionKey, oldState, SessionState.READY, "Session ready for queries");
+            updateStatus("Session ready: " + sessionKey);
             
         } else if (message.isCommandComplete()) {
             session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
-            fireSessionEvent(sessionId, oldState, SessionState.COMPLETING, "Command completed");
+            fireSessionEvent(sessionKey, oldState, SessionState.COMPLETING, "Command completed");
             
             
         } else if (message.isSessionEnding()) {
             session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
-            fireSessionEvent(sessionId, oldState, SessionState.COMPLETING, "Session ending");
-            scheduleSessionCleanup(sessionId, 5000);
+            fireSessionEvent(sessionKey, oldState, SessionState.COMPLETING, "Session ending");
+            scheduleSessionCleanup(sessionKey, 5000);
             
         } else if (message.isFatalError()) {
             session.setState(SessionState.ERROR, message.getAdditionalInfo());
-            fireSessionEvent(sessionId, oldState, SessionState.ERROR, "Fatal error: " + message.getAdditionalInfo());
-            updateStatus("Session error: " + sessionId + " - " + message.getAdditionalInfo());
+            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, "Fatal error: " + message.getAdditionalInfo());
+            updateStatus("Session error: " + sessionKey + " - " + message.getAdditionalInfo());
             
         } else if (message.isRecoverableError()) {
             // Don't change state for recoverable errors, just log
-            fireSessionEvent(sessionId, oldState, oldState, "Recoverable error: " + message.getAdditionalInfo());
-            updateStatus("Session warning: " + sessionId + " - " + message.getAdditionalInfo());
+            fireSessionEvent(sessionKey, oldState, oldState, "Recoverable error: " + message.getAdditionalInfo());
+            updateStatus("Session warning: " + sessionKey + " - " + message.getAdditionalInfo());
         }
     }
     
@@ -634,7 +634,7 @@ public class SessionManager {
             try {
                 session.getProcess().close();
             } catch (Exception e) {
-                logger.error("Error closing session {}: {}", session.getSessionId(), e.getMessage());
+                logger.error("Error closing session {}: {}", session.getSessionKey(), e.getMessage());
             }
         });
         

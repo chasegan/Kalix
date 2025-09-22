@@ -60,9 +60,9 @@ public class StdioLogWindow extends JFrame {
      * Uses one window per run (singleton per run).
      */
     public static void showStdioLogWindow(String runName, SessionManager.KalixSession session, StdioTaskManager stdioTaskManager, JFrame parentFrame) {
-        String sessionId = session.getSessionId();
+        String sessionKey = session.getSessionKey();
 
-        StdioLogWindow existingWindow = openWindows.get(sessionId);
+        StdioLogWindow existingWindow = openWindows.get(sessionKey);
         if (existingWindow != null) {
             // Bring existing window to front
             existingWindow.setVisible(true);
@@ -71,7 +71,7 @@ public class StdioLogWindow extends JFrame {
         } else {
             // Create new window
             StdioLogWindow newWindow = new StdioLogWindow(runName, session, stdioTaskManager, parentFrame);
-            openWindows.put(sessionId, newWindow);
+            openWindows.put(sessionKey, newWindow);
             newWindow.setVisible(true);
         }
     }
@@ -128,14 +128,7 @@ public class StdioLogWindow extends JFrame {
     private void setupLayout() {
         setLayout(new BorderLayout());
 
-        // Header panel
-        JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JLabel headerLabel = new JLabel("STDIO Communication Log for " + runName);
-        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 14f));
-        headerPanel.add(headerLabel);
-        headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
-
-        // Create CLI Session Details panel
+        // Create STDIO Session Details panel
         JPanel detailsPanel = createSessionDetailsPanel();
 
         // Create main content panel with details and log
@@ -143,7 +136,6 @@ public class StdioLogWindow extends JFrame {
         mainPanel.add(detailsPanel, BorderLayout.NORTH);
         mainPanel.add(logScrollPane, BorderLayout.CENTER);
 
-        add(headerPanel, BorderLayout.NORTH);
         add(mainPanel, BorderLayout.CENTER);
 
         // Footer
@@ -215,7 +207,7 @@ public class StdioLogWindow extends JFrame {
                     updateTimer.stop();
                 }
                 // Remove from tracking
-                openWindows.remove(session.getSessionId());
+                openWindows.remove(session.getSessionKey());
             }
 
             @Override
@@ -249,8 +241,9 @@ public class StdioLogWindow extends JFrame {
      * Updates the STDIO Session Details information.
      */
     private void updateSessionDetails() {
-        // Update session details
-        sessionNameLabel.setText(session.getSessionId());
+        // Update session details - show CLI session ID if available, otherwise "unknown"
+        String displayId = session.getCliSessionId() != null ? session.getCliSessionId() : "unknown";
+        sessionNameLabel.setText(displayId);
         sessionStatusLabel.setText(session.getState().toString());
         sessionStartTimeLabel.setText(session.getStartTime().toString());
 
@@ -362,7 +355,7 @@ public class StdioLogWindow extends JFrame {
             String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
 
             // Use StdioTaskManager to send command, which handles proper logging
-            stdioTaskManager.sendCommand(session.getSessionId(), jsonCommand);
+            stdioTaskManager.sendCommand(session.getSessionKey(), jsonCommand);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                 "Failed to send ping command: " + e.getMessage(),

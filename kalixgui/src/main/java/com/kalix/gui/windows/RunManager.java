@@ -315,31 +315,31 @@ public class RunManager extends JFrame {
 
             // Check for new sessions
             for (SessionManager.KalixSession session : activeSessions.values()) {
-                String sessionId = session.getSessionId();
+                String sessionKey = session.getSessionKey();
 
-                if (!sessionToTreeNode.containsKey(sessionId)) {
+                if (!sessionToTreeNode.containsKey(sessionKey)) {
                     // New session - add to tree
                     String runName = "Run_" + runCounter++;
-                    sessionToRunName.put(sessionId, runName);
+                    sessionToRunName.put(sessionKey, runName);
 
                     RunInfo runInfo = new RunInfo(runName, session);
                     DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
                     currentRunsNode.add(runNode);
-                    sessionToTreeNode.put(sessionId, runNode);
-                    lastKnownStatus.put(sessionId, runInfo.getRunStatus());
+                    sessionToTreeNode.put(sessionKey, runNode);
+                    lastKnownStatus.put(sessionKey, runInfo.getRunStatus());
 
                     treeStructureChanged[0] = true;
                 } else {
                     // Existing session - check for status changes
-                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionId);
+                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionKey);
                     RunInfo runInfo = (RunInfo) existingNode.getUserObject();
                     RunStatus currentStatus = runInfo.getRunStatus();
-                    RunStatus lastStatus = lastKnownStatus.get(sessionId);
+                    RunStatus lastStatus = lastKnownStatus.get(sessionKey);
 
                     if (lastStatus != currentStatus) {
                         // Status changed - refresh this node's display
                         treeModel.nodeChanged(existingNode);
-                        lastKnownStatus.put(sessionId, currentStatus);
+                        lastKnownStatus.put(sessionKey, currentStatus);
 
                         // Update outputs if this run is currently selected
                         TreePath selectedPath = runTree.getSelectionPath();
@@ -400,7 +400,7 @@ public class RunManager extends JFrame {
         if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        String sessionId = runInfo.session.getSessionId();
+        String sessionKey = runInfo.session.getSessionKey();
         boolean isActive = runInfo.session.isActive();
 
         String message = isActive
@@ -410,14 +410,14 @@ public class RunManager extends JFrame {
         if (DialogUtils.showConfirmation(this, message, "Remove Run")) {
             if (isActive) {
                 // First terminate the session, then remove it
-                stdioTaskManager.terminateSession(sessionId)
+                stdioTaskManager.terminateSession(sessionKey)
                     .thenCompose(v -> {
                         // After termination, remove from list
-                        return stdioTaskManager.removeSession(sessionId);
+                        return stdioTaskManager.removeSession(sessionKey);
                     })
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Stopped and removed run: " + runInfo.runName);
-                        sessionToRunName.remove(sessionId);
+                        sessionToRunName.remove(sessionKey);
                         refreshRuns();
                     }))
                     .exceptionally(throwable -> {
@@ -431,10 +431,10 @@ public class RunManager extends JFrame {
                     });
             } else {
                 // Just remove from list (session already terminated)
-                stdioTaskManager.removeSession(sessionId)
+                stdioTaskManager.removeSession(sessionKey)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Removed run: " + runInfo.runName);
-                        sessionToRunName.remove(sessionId);
+                        sessionToRunName.remove(sessionKey);
                         refreshRuns();
                     }))
                     .exceptionally(throwable -> {

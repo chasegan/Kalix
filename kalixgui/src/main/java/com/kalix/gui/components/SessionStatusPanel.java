@@ -97,7 +97,7 @@ public class SessionStatusPanel extends JPanel {
         
         // Session info panel
         JPanel infoPanel = new JPanel(new GridLayout(0, 1));
-        infoPanel.add(new JLabel("ID: " + session.getSessionId()));
+        infoPanel.add(new JLabel("ID: " + session.getSessionKey()));
         infoPanel.add(new JLabel("Type: Model Run"));
         infoPanel.add(new JLabel("State: " + session.getState()));
         
@@ -109,7 +109,7 @@ public class SessionStatusPanel extends JPanel {
         JButton terminateButton = new JButton("Terminate");
         terminateButton.setFont(terminateButton.getFont().deriveFont(10f));
         terminateButton.setForeground(Color.RED);
-        terminateButton.addActionListener(e -> terminateSession(session.getSessionId()));
+        terminateButton.addActionListener(e -> terminateSession(session.getSessionKey()));
         controlsPanel.add(terminateButton);
         
         sessionPanel.add(infoPanel, BorderLayout.CENTER);

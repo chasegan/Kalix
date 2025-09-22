@@ -32,7 +32,7 @@ public class SessionsWindow extends JFrame {
     private DefaultListModel<SessionManager.KalixSession> sessionListModel;
     private JList<SessionManager.KalixSession> sessionList;
     private JPanel detailsPanel;
-    private JLabel sessionIdLabel;
+    private JLabel sessionKeyLabel;
     private JLabel sessionTypeLabel;
     private JLabel sessionStateLabel;
     private JLabel sessionStartTimeLabel;
@@ -131,7 +131,7 @@ public class SessionsWindow extends JFrame {
         });
         
         // Initialize details panel components
-        sessionIdLabel = new JLabel();
+        sessionKeyLabel = new JLabel();
         sessionTypeLabel = new JLabel();
         sessionStateLabel = new JLabel();
         sessionStartTimeLabel = new JLabel();
@@ -186,7 +186,7 @@ public class SessionsWindow extends JFrame {
         gbc.gridx = 0; gbc.gridy = 0;
         infoPanel.add(new JLabel("Session ID:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        infoPanel.add(sessionIdLabel, gbc);
+        infoPanel.add(sessionKeyLabel, gbc);
         
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
         infoPanel.add(new JLabel("Type:"), gbc);
@@ -395,7 +395,7 @@ public class SessionsWindow extends JFrame {
         if (selectedSession != null) {
             for (int i = 0; i < sessionListModel.size(); i++) {
                 SessionManager.KalixSession session = sessionListModel.getElementAt(i);
-                if (session.getSessionId().equals(selectedSession.getSessionId())) {
+                if (session.getSessionKey().equals(selectedSession.getSessionKey())) {
                     sessionList.setSelectedIndex(i);
                     break;
                 }
@@ -424,7 +424,7 @@ public class SessionsWindow extends JFrame {
             cl.show(detailsPanel, "SESSION_SELECTED");
             
             // Update labels
-            sessionIdLabel.setText(selected.getSessionId());
+            sessionKeyLabel.setText(selected.getSessionKey());
             sessionTypeLabel.setText("Model Run");
             sessionStateLabel.setText(selected.getState().toString());
             sessionStartTimeLabel.setText(selected.getStartTime().toString());
@@ -447,14 +447,14 @@ public class SessionsWindow extends JFrame {
     private void terminateSelectedSession(java.awt.event.ActionEvent e) {
         SessionManager.KalixSession selected = sessionList.getSelectedValue();
         if (selected != null) {
-            String sessionId = selected.getSessionId();
+            String sessionKey = selected.getSessionKey();
             
             if (DialogUtils.showConfirmation(this, 
-                    "Are you sure you want to terminate session " + sessionId + "?\n\nThe session will remain visible in the list but the kalixcli process will be closed.", 
+                    "Are you sure you want to terminate session " + sessionKey + "?\n\nThe session will remain visible in the list but the kalixcli process will be closed.", 
                     "Terminate Session")) {
-                stdioTaskManager.terminateSession(sessionId)
+                stdioTaskManager.terminateSession(sessionKey)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                        statusUpdater.accept("Session terminated: " + sessionId);
+                        statusUpdater.accept("Session terminated: " + sessionKey);
                         updateSessionsList();
                     }))
                     .exceptionally(throwable -> {
@@ -477,14 +477,14 @@ public class SessionsWindow extends JFrame {
     private void removeSelectedSession(java.awt.event.ActionEvent e) {
         SessionManager.KalixSession selected = sessionList.getSelectedValue();
         if (selected != null) {
-            String sessionId = selected.getSessionId();
+            String sessionKey = selected.getSessionKey();
             
             if (DialogUtils.showConfirmation(this, 
-                    "Are you sure you want to remove session " + sessionId + " from the list?\n\nThis will permanently remove it from the Sessions window.", 
+                    "Are you sure you want to remove session " + sessionKey + " from the list?\n\nThis will permanently remove it from the Sessions window.", 
                     "Remove Session")) {
-                stdioTaskManager.removeSession(sessionId)
+                stdioTaskManager.removeSession(sessionKey)
                     .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                        statusUpdater.accept("Session removed from list: " + sessionId);
+                        statusUpdater.accept("Session removed from list: " + sessionKey);
                         updateSessionsList();
                     }))
                     .exceptionally(throwable -> {
@@ -516,7 +516,7 @@ public class SessionsWindow extends JFrame {
             if (value instanceof SessionManager.KalixSession) {
                 SessionManager.KalixSession session = (SessionManager.KalixSession) value;
                 String displayText = String.format("%s (%s)", 
-                    session.getSessionId(), 
+                    session.getSessionKey(), 
                     session.getState().toString());
                 setText(displayText);
                 
@@ -633,11 +633,11 @@ public class SessionsWindow extends JFrame {
         SessionManager.KalixSession selected = sessionList.getSelectedValue();
         if (selected != null && selected.getCommunicationLog() != null) {
             if (DialogUtils.showConfirmation(this, 
-                    "Are you sure you want to clear the communication log for session " + selected.getSessionId() + "?", 
+                    "Are you sure you want to clear the communication log for session " + selected.getSessionKey() + "?", 
                     "Clear Communication Log")) {
                 selected.getCommunicationLog().clear();
                 forceUpdateCommunicationLog();
-                statusUpdater.accept("Communication log cleared for session: " + selected.getSessionId());
+                statusUpdater.accept("Communication log cleared for session: " + selected.getSessionKey());
             }
         }
     }
