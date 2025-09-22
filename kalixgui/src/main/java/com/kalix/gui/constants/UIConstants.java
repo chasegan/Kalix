@@ -165,4 +165,41 @@ public final class UIConstants {
 
         private FlowViz() { throw new UnsupportedOperationException("Constants class"); }
     }
+
+    /**
+     * STDIO Log window constants
+     */
+    public static final class StdioLog {
+        /** Default window width for STDIO Log windows */
+        public static final int WINDOW_WIDTH = 800;
+
+        /** Default window height for STDIO Log windows */
+        public static final int WINDOW_HEIGHT = 600;
+
+        /** Window position offset from parent window */
+        public static final int WINDOW_OFFSET = 100;
+
+        /** Log update interval in milliseconds */
+        public static final int UPDATE_INTERVAL_MS = 2000;
+
+        /** Scroll threshold in pixels for auto-scroll detection */
+        public static final int SCROLL_THRESHOLD_PIXELS = 10;
+
+        /** Text area rows for JSON edit dialog */
+        public static final int DIALOG_ROWS = 10;
+
+        /** Text area columns for JSON edit dialog */
+        public static final int DIALOG_COLS = 50;
+
+        /** Font size for log text area */
+        public static final int FONT_SIZE = 12;
+
+        /** Message displayed when no log is available */
+        public static final String NO_LOG_MESSAGE = "No communication log available for this session.";
+
+        /** Text displayed for unknown session ID */
+        public static final String UNKNOWN_SESSION = "unknown";
+
+        private StdioLog() { throw new UnsupportedOperationException("Constants class"); }
+    }
 }

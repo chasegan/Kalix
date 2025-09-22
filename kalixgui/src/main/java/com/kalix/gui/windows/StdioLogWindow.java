@@ -3,6 +3,8 @@ package com.kalix.gui.windows;
 import com.kalix.gui.cli.SessionManager;
 import com.kalix.gui.cli.JsonStdioProtocol;
 import com.kalix.gui.managers.StdioTaskManager;
+import com.kalix.gui.constants.UIConstants;
+import com.kalix.gui.utils.JsonUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -20,6 +22,7 @@ import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
  * Separate window for displaying STDIO communication logs for a specific run.
  */
 public class StdioLogWindow extends JFrame {
+
 
     private static Map<String, StdioLogWindow> openWindows = new HashMap<>();
 
@@ -89,13 +92,13 @@ public class StdioLogWindow extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("STDIO Log - " + runName);
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(800, 600);
+        setSize(UIConstants.StdioLog.WINDOW_WIDTH, UIConstants.StdioLog.WINDOW_HEIGHT);
 
         // Position relative to parent window
         if (parentFrame != null) {
             setLocationRelativeTo(parentFrame);
             Point parentLocation = parentFrame.getLocation();
-            setLocation(parentLocation.x + 100, parentLocation.y + 100);
+            setLocation(parentLocation.x + UIConstants.StdioLog.WINDOW_OFFSET, parentLocation.y + UIConstants.StdioLog.WINDOW_OFFSET);
 
             if (parentFrame.getIconImage() != null) {
                 setIconImage(parentFrame.getIconImage());
@@ -116,7 +119,7 @@ public class StdioLogWindow extends JFrame {
         logArea = new RSyntaxTextArea();
         logArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE); // Plain text
         logArea.setEditable(false);
-        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
         logArea.setBackground(Color.WHITE);
         logArea.setCodeFoldingEnabled(false);
 
@@ -163,14 +166,14 @@ public class StdioLogWindow extends JFrame {
      */
     private JPanel createSessionDetailsPanel() {
         JPanel detailsPanel = new JPanel(new GridBagLayout());
-        detailsPanel.setBorder(BorderFactory.createTitledBorder("STDIO Session Details"));
+        detailsPanel.setBorder(BorderFactory.createTitledBorder("Info"));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 10, 5, 10);
         gbc.anchor = GridBagConstraints.WEST;
 
         // Add info fields
         gbc.gridx = 0; gbc.gridy = 0;
-        detailsPanel.add(new JLabel("Name:"), gbc);
+        detailsPanel.add(new JLabel("Session ID:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
         detailsPanel.add(sessionNameLabel, gbc);
 
@@ -185,7 +188,7 @@ public class StdioLogWindow extends JFrame {
         detailsPanel.add(sessionStartTimeLabel, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
-        detailsPanel.add(new JLabel("Duration:"), gbc);
+        detailsPanel.add(new JLabel("Uptime:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
         detailsPanel.add(sessionDurationLabel, gbc);
 
@@ -233,7 +236,7 @@ public class StdioLogWindow extends JFrame {
     }
 
     private void setupUpdateTimer() {
-        updateTimer = new Timer(2000, e -> updateLog());
+        updateTimer = new Timer(UIConstants.StdioLog.UPDATE_INTERVAL_MS, e -> updateLog());
         updateTimer.setRepeats(true);
     }
 
@@ -241,57 +244,47 @@ public class StdioLogWindow extends JFrame {
      * Updates the STDIO Session Details information.
      */
     private void updateSessionDetails() {
-        // Update session details - show CLI session ID if available, otherwise "unknown"
-        String displayId = session.getCliSessionId() != null ? session.getCliSessionId() : "unknown";
-        sessionNameLabel.setText(displayId);
-        sessionStatusLabel.setText(session.getState().toString());
-        sessionStartTimeLabel.setText(session.getStartTime().toString());
+        if (session == null) return;
 
-        // Calculate duration
-        long durationMs = System.currentTimeMillis() - session.getStartTime().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long seconds = durationMs / 1000;
-        long minutes = seconds / 60;
-        long hours = minutes / 60;
-        String duration = String.format("%02d:%02d:%02d", hours, minutes % 60, seconds % 60);
-        sessionDurationLabel.setText(duration);
+        // Update session details - show CLI session ID if available, otherwise "unknown"
+        String displayId = session.getCliSessionId() != null ? session.getCliSessionId() : UIConstants.StdioLog.UNKNOWN_SESSION;
+        sessionNameLabel.setText(displayId);
+
+        sessionStatusLabel.setText(session.getState() != null ? session.getState().toString() : "Unknown");
+        sessionStartTimeLabel.setText(session.getStartTime() != null ? session.getStartTime().toString() : "Unknown");
+
+        // Calculate and display uptime
+        sessionDurationLabel.setText(formatUptime(session.getStartTime()));
     }
 
     /**
      * Updates the log and session details.
      */
     private void updateLog() {
-        // Update session details
-        updateSessionDetails();
-
-        // Update log content
-        if (session.getCommunicationLog() != null) {
-            String logContent = session.getCommunicationLog().getFormattedLog();
-
-            // Only update if content has actually changed
-            if (!logContent.equals(lastLogContent)) {
-                updateLogWithContent(logContent);
-            }
-        } else {
-            String noLogMessage = "No communication log available for this session.";
-            if (!noLogMessage.equals(lastLogContent)) {
-                updateLogWithContent(noLogMessage);
-            }
-        }
+        updateLog(false);
     }
 
     /**
      * Forces an update of the log and session details regardless of content changes.
      */
     private void forceUpdateLog() {
+        updateLog(true);
+    }
+
+    /**
+     * Updates the log and session details with option to force update.
+     *
+     * @param forceUpdate if true, updates regardless of content changes
+     */
+    private void updateLog(boolean forceUpdate) {
         // Update session details
         updateSessionDetails();
 
         // Update log content
-        if (session.getCommunicationLog() != null) {
-            String logContent = session.getCommunicationLog().getFormattedLog();
+        String logContent = getLogContent();
+
+        if (forceUpdate || !logContent.equals(lastLogContent)) {
             updateLogWithContent(logContent);
-        } else {
-            updateLogWithContent("No communication log available for this session.");
         }
     }
 
@@ -328,7 +321,7 @@ public class StdioLogWindow extends JFrame {
         int currentValue = verticalScrollBar.getValue();
         int maximum = verticalScrollBar.getMaximum();
         int extent = verticalScrollBar.getVisibleAmount();
-        int threshold = 10; // pixels of tolerance
+        int threshold = UIConstants.StdioLog.SCROLL_THRESHOLD_PIXELS;
 
         return (currentValue + extent + threshold) >= maximum;
     }
@@ -344,24 +337,77 @@ public class StdioLogWindow extends JFrame {
 
     /**
      * Sends a ping command (echo) to the kalixcli session.
+     * Shows a dialog allowing the user to edit the JSON before sending.
      */
     private void sendPingCommand() {
         try {
+            // Generate initial JSON command
             Map<String, Object> parameters = Map.of("string", "Ping from GUI at " + java.time.LocalDateTime.now());
-
-            // Get CLI session ID if available
             String cliSessionId = session.getCliSessionId() != null ? session.getCliSessionId() : "";
+            String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
 
-            String jsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
+            // Show dialog with editable JSON
+            JTextArea textArea = new JTextArea(UIConstants.StdioLog.DIALOG_ROWS, UIConstants.StdioLog.DIALOG_COLS);
+            textArea.setText(initialJsonCommand);
+            textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(true);
 
-            // Use StdioTaskManager to send command, which handles proper logging
-            stdioTaskManager.sendCommand(session.getSessionKey(), jsonCommand);
+            JScrollPane scrollPane = new JScrollPane(textArea);
+            scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+            int result = JOptionPane.showConfirmDialog(this,
+                scrollPane,
+                "Edit JSON Command",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION) {
+                // Get edited JSON and flatten to single line
+                String editedJson = textArea.getText().trim();
+                String flattenedJson = JsonUtils.flattenJson(editedJson);
+
+                // Send the flattened JSON command
+                stdioTaskManager.sendCommand(session.getSessionKey(), flattenedJson);
+            }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                 "Failed to send ping command: " + e.getMessage(),
                 "Error",
                 JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    // Utility Methods
+
+    /**
+     * Formats the uptime duration from a start time to a readable HH:MM:SS format.
+     *
+     * @param startTime the session start time
+     * @return formatted uptime string
+     */
+    private static String formatUptime(java.time.LocalDateTime startTime) {
+        if (startTime == null) return "00:00:00";
+
+        long durationMs = System.currentTimeMillis() -
+            startTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long seconds = durationMs / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+
+        return String.format("%02d:%02d:%02d", hours, minutes % 60, seconds % 60);
+    }
+
+
+    /**
+     * Gets the appropriate log content, handling null communication logs.
+     *
+     * @return the log content or fallback message
+     */
+    private String getLogContent() {
+        return session.getCommunicationLog() != null
+            ? session.getCommunicationLog().getFormattedLog()
+            : UIConstants.StdioLog.NO_LOG_MESSAGE;
     }
 
 }
