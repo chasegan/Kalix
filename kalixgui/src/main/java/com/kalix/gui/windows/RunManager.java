@@ -10,9 +10,12 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
+import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Consumer;
@@ -38,10 +41,18 @@ public class RunManager extends JFrame {
     // Details panel components
     private JPanel detailsPanel;
     private CardLayout detailsCardLayout;
+    private JTree outputsTree;
+    private DefaultTreeModel outputsTreeModel;
+    private JScrollPane outputsScrollPane;
 
     // Run tracking
     private Map<String, String> sessionToRunName = new HashMap<>();
+    private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
+    private Map<String, RunStatus> lastKnownStatus = new HashMap<>();
     private int runCounter = 1;
+
+    // Flag to prevent selection listener from firing during programmatic updates
+    private boolean isUpdatingSelection = false;
 
     /**
      * Private constructor for singleton pattern.
@@ -90,7 +101,7 @@ public class RunManager extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(800, 600);
+        setSize(1000, 600); // Increased width by 25% (800 -> 1000) for better outputs viewing
 
         if (parentFrame != null) {
             setLocationRelativeTo(parentFrame);
@@ -125,7 +136,8 @@ public class RunManager extends JFrame {
         runTree.expandPath(new TreePath(currentRunsNode.getPath()));
         runTree.expandPath(new TreePath(libraryNode.getPath()));
 
-        // Selection listener no longer needed - details moved to CLI Log window
+        // Add tree selection listener to update details panel with outputs
+        runTree.addTreeSelectionListener(this::onRunTreeSelectionChanged);
 
         // Add context menu
         setupContextMenu();
@@ -139,19 +151,35 @@ public class RunManager extends JFrame {
     }
 
     private void createDetailsComponents() {
-        // No longer needed - details moved to CLI Log window
+        // Create outputs tree
+        DefaultMutableTreeNode outputsRootNode = new DefaultMutableTreeNode("Outputs");
+        outputsTreeModel = new DefaultTreeModel(outputsRootNode);
+        outputsTree = new JTree(outputsTreeModel);
+        outputsTree.setRootVisible(false);
+        outputsTree.setShowsRootHandles(true);
+        outputsScrollPane = new JScrollPane(outputsTree);
     }
 
     private void createDetailsLayouts() {
-        // Create simple message panel
+        // Create message panel for when no run is selected
         JPanel messagePanel = new JPanel(new BorderLayout());
-        JLabel messageLabel = new JLabel("<html><center>Right-click on a run to:<br>• View CLI Log<br>• Remove run</center></html>", SwingConstants.CENTER);
+        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View CLI Log<br>• Remove run</center></html>", SwingConstants.CENTER);
         messageLabel.setForeground(Color.GRAY);
         messagePanel.add(messageLabel, BorderLayout.CENTER);
         messagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Add to details panel
-        detailsPanel.add(messagePanel, BorderLayout.CENTER);
+        // Create outputs panel for when a run is selected
+        JPanel outputsPanel = new JPanel(new BorderLayout());
+        outputsPanel.add(new JLabel("Model Outputs:"), BorderLayout.NORTH);
+        outputsPanel.add(outputsScrollPane, BorderLayout.CENTER);
+        outputsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Add both panels to details panel
+        detailsPanel.add(messagePanel, "MESSAGE_PANEL");
+        detailsPanel.add(outputsPanel, "OUTPUTS_PANEL");
+
+        // Show message panel by default
+        detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
     }
 
     private void setupLayout() {
@@ -159,8 +187,8 @@ public class RunManager extends JFrame {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(300);
-        splitPane.setResizeWeight(0.3);
+        splitPane.setDividerLocation(150); // Reduced to 150px for more outputs space
+        splitPane.setResizeWeight(0.15);   // Adjusted to match new proportions
 
         // Left side: tree
         JPanel leftPanel = new JPanel(new BorderLayout());
@@ -283,62 +311,68 @@ public class RunManager extends JFrame {
 
         SwingUtilities.invokeLater(() -> {
             Map<String, SessionManager.KalixSession> activeSessions = cliTaskManager.getActiveSessions();
+            boolean[] treeStructureChanged = {false};
 
-            // Remember current selection
-            TreePath selectedPath = runTree.getSelectionPath();
-            String selectedRunName = null;
-            if (selectedPath != null && selectedPath.getLastPathComponent() instanceof DefaultMutableTreeNode) {
-                DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-                if (selectedNode.getUserObject() instanceof RunInfo) {
-                    selectedRunName = ((RunInfo) selectedNode.getUserObject()).runName;
-                }
-            }
-
-            // Clear current runs
-            currentRunsNode.removeAllChildren();
-
-            // Add sessions as runs
+            // Check for new sessions
             for (SessionManager.KalixSession session : activeSessions.values()) {
                 String sessionId = session.getSessionId();
-                String runName = sessionToRunName.get(sessionId);
 
-                if (runName == null) {
-                    runName = "Run_" + runCounter++;
+                if (!sessionToTreeNode.containsKey(sessionId)) {
+                    // New session - add to tree
+                    String runName = "Run_" + runCounter++;
                     sessionToRunName.put(sessionId, runName);
-                }
 
-                RunInfo runInfo = new RunInfo(runName, session);
-                DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
-                currentRunsNode.add(runNode);
+                    RunInfo runInfo = new RunInfo(runName, session);
+                    DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
+                    currentRunsNode.add(runNode);
+                    sessionToTreeNode.put(sessionId, runNode);
+                    lastKnownStatus.put(sessionId, runInfo.getRunStatus());
+
+                    treeStructureChanged[0] = true;
+                } else {
+                    // Existing session - check for status changes
+                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionId);
+                    RunInfo runInfo = (RunInfo) existingNode.getUserObject();
+                    RunStatus currentStatus = runInfo.getRunStatus();
+                    RunStatus lastStatus = lastKnownStatus.get(sessionId);
+
+                    if (lastStatus != currentStatus) {
+                        // Status changed - refresh this node's display
+                        treeModel.nodeChanged(existingNode);
+                        lastKnownStatus.put(sessionId, currentStatus);
+
+                        // Update outputs if this run is currently selected
+                        TreePath selectedPath = runTree.getSelectionPath();
+                        if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
+                            updateOutputsTree(runInfo);
+                        }
+                    }
+                }
             }
 
-            // Remove mappings for sessions that no longer exist
-            sessionToRunName.entrySet().removeIf(entry -> !activeSessions.containsKey(entry.getKey()));
+            // Check for removed sessions
+            sessionToTreeNode.entrySet().removeIf(entry -> {
+                String sessionId = entry.getKey();
+                if (!activeSessions.containsKey(sessionId)) {
+                    // Session removed - remove from tree
+                    DefaultMutableTreeNode nodeToRemove = entry.getValue();
+                    currentRunsNode.remove(nodeToRemove);
+                    sessionToRunName.remove(sessionId);
+                    lastKnownStatus.remove(sessionId);
+                    treeStructureChanged[0] = true;
+                    return true;
+                }
+                return false;
+            });
 
-            // Refresh tree
-            treeModel.nodeStructureChanged(currentRunsNode);
-            runTree.expandPath(new TreePath(currentRunsNode.getPath()));
-
-            // Restore selection if possible
-            if (selectedRunName != null) {
-                restoreSelection(selectedRunName);
+            // Only notify of structure changes if something actually changed
+            if (treeStructureChanged[0]) {
+                treeModel.nodeStructureChanged(currentRunsNode);
+                runTree.expandPath(new TreePath(currentRunsNode.getPath()));
             }
         });
     }
 
-    private void restoreSelection(String runName) {
-        for (int i = 0; i < currentRunsNode.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) currentRunsNode.getChildAt(i);
-            if (child.getUserObject() instanceof RunInfo) {
-                RunInfo runInfo = (RunInfo) child.getUserObject();
-                if (runInfo.runName.equals(runName)) {
-                    TreePath path = new TreePath(child.getPath());
-                    runTree.setSelectionPath(path);
-                    break;
-                }
-            }
-        }
-    }
 
 
     /**
@@ -416,7 +450,172 @@ public class RunManager extends JFrame {
         }
     }
 
+    /**
+     * Handles tree selection changes to update the details panel.
+     */
+    private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
+        // Ignore selection changes during programmatic updates
+        if (isUpdatingSelection) {
+            return;
+        }
 
+        updateDetailsPanel();
+    }
+
+    /**
+     * Updates the details panel based on current tree selection.
+     */
+    private void updateDetailsPanel() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) {
+            detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
+            return;
+        }
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+
+        // Check if the selected node is a run (has RunInfo as user object)
+        if (selectedNode.getUserObject() instanceof RunInfo) {
+            RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+            updateOutputsTree(runInfo);
+            detailsCardLayout.show(detailsPanel, "OUTPUTS_PANEL");
+        } else {
+            // Selection is on a parent node (Current runs, Library)
+            detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
+        }
+    }
+
+    /**
+     * Updates the outputs tree based on the selected run.
+     */
+    private void updateOutputsTree(RunInfo runInfo) {
+        // Remember current expansion state
+        List<TreePath> expandedPaths = new ArrayList<>();
+        for (int i = 0; i < outputsTree.getRowCount(); i++) {
+            TreePath path = outputsTree.getPathForRow(i);
+            if (outputsTree.isExpanded(path)) {
+                expandedPaths.add(path);
+            }
+        }
+
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        root.removeAllChildren();
+
+        // Get outputs from the run's program
+        List<String> outputs = null;
+        if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+            RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+            outputs = program.getOutputsGenerated();
+        }
+
+        if (outputs != null && !outputs.isEmpty()) {
+            // Sort outputs alphabetically for consistent tree organization
+            outputs.sort(String::compareTo);
+
+            // Parse dot-delimited strings into tree structure
+            for (String output : outputs) {
+                addOutputToTree(root, output);
+            }
+        } else {
+            // Add a message indicating no outputs are available
+            String message = runInfo.getRunStatus() == RunStatus.DONE ?
+                "No outputs available" :
+                "Outputs will appear when simulation completes";
+            root.add(new DefaultMutableTreeNode(message));
+        }
+
+        outputsTreeModel.reload();
+
+        // Restore expansion state or expand all if first time
+        if (expandedPaths.isEmpty()) {
+            // First time - expand all nodes
+            for (int i = 0; i < outputsTree.getRowCount(); i++) {
+                outputsTree.expandRow(i);
+            }
+        } else {
+            // Restore previous expansion state
+            for (TreePath expandedPath : expandedPaths) {
+                // Try to find equivalent path in new tree
+                TreePath newPath = findEquivalentPath(expandedPath);
+                if (newPath != null) {
+                    outputsTree.expandPath(newPath);
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a dot-delimited output string to the tree structure.
+     * For example: "hydrology.streamflow.daily" becomes a tree:
+     *   hydrology
+     *     └── streamflow
+     *           └── daily
+     */
+    private void addOutputToTree(DefaultMutableTreeNode root, String dotDelimitedOutput) {
+        String[] parts = dotDelimitedOutput.split("\\.");
+        DefaultMutableTreeNode currentNode = root;
+
+        for (String part : parts) {
+            // Look for existing child with this name
+            DefaultMutableTreeNode childNode = null;
+            for (int i = 0; i < currentNode.getChildCount(); i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) currentNode.getChildAt(i);
+                if (child.getUserObject().toString().equals(part)) {
+                    childNode = child;
+                    break;
+                }
+            }
+
+            // If child doesn't exist, create it
+            if (childNode == null) {
+                childNode = new DefaultMutableTreeNode(part);
+                currentNode.add(childNode);
+            }
+
+            currentNode = childNode;
+        }
+    }
+
+    /**
+     * Finds an equivalent path in the current tree based on node names.
+     */
+    private TreePath findEquivalentPath(TreePath oldPath) {
+        if (oldPath == null || oldPath.getPathCount() <= 1) {
+            return null;
+        }
+
+        // Build path of node names
+        String[] pathNames = new String[oldPath.getPathCount() - 1]; // Skip root
+        for (int i = 1; i < oldPath.getPathCount(); i++) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) oldPath.getPathComponent(i);
+            pathNames[i - 1] = node.getUserObject().toString();
+        }
+
+        // Try to find equivalent path in current tree
+        DefaultMutableTreeNode currentNode = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        List<Object> newPathComponents = new ArrayList<>();
+        newPathComponents.add(currentNode);
+
+        for (String pathName : pathNames) {
+            DefaultMutableTreeNode foundChild = null;
+            for (int i = 0; i < currentNode.getChildCount(); i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) currentNode.getChildAt(i);
+                if (child.getUserObject().toString().equals(pathName)) {
+                    foundChild = child;
+                    break;
+                }
+            }
+
+            if (foundChild == null) {
+                return null; // Path doesn't exist in new tree
+            }
+
+            newPathComponents.add(foundChild);
+            currentNode = foundChild;
+        }
+
+        return new TreePath(newPathComponents.toArray());
+    }
 
     /**
      * Enum representing the status of a simulation run.
@@ -549,23 +748,24 @@ public class RunManager extends JFrame {
                         }
                     }
 
-                    // Set appropriate FontAwesome icon based on run status
+                    // Set appropriate FontAwesome icon based on run status (25% smaller than toolbar icons)
+                    int treeIconSize = 12; // 75% of AppConstants.TOOLBAR_ICON_SIZE (16px)
                     switch (runStatus) {
                         case STARTING:
                         case LOADING:
-                            setIcon(FontIcon.of(FontAwesomeSolid.SUN, AppConstants.TOOLBAR_ICON_SIZE));
+                            setIcon(FontIcon.of(FontAwesomeSolid.SUN, treeIconSize));
                             break;
                         case RUNNING:
-                            setIcon(FontIcon.of(FontAwesomeSolid.HIKING, AppConstants.TOOLBAR_ICON_SIZE));
+                            setIcon(FontIcon.of(FontAwesomeSolid.HIKING, treeIconSize));
                             break;
                         case DONE:
-                            setIcon(FontIcon.of(FontAwesomeSolid.CAMPGROUND, AppConstants.TOOLBAR_ICON_SIZE));
+                            setIcon(FontIcon.of(FontAwesomeSolid.CAMPGROUND, treeIconSize));
                             break;
                         case ERROR:
-                            setIcon(FontIcon.of(FontAwesomeSolid.BUG, AppConstants.TOOLBAR_ICON_SIZE));
+                            setIcon(FontIcon.of(FontAwesomeSolid.BUG, treeIconSize));
                             break;
                         case STOPPED:
-                            setIcon(FontIcon.of(FontAwesomeSolid.STOP_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE));
+                            setIcon(FontIcon.of(FontAwesomeSolid.STOP_CIRCLE, treeIconSize));
                             break;
                         default:
                             setIcon(null);

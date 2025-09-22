@@ -244,26 +244,80 @@ public class JsonMessage {
     public static class ProgressInfo {
         @JsonProperty("percent_complete")
         private double percentComplete;
-        
+
         @JsonProperty("current_step")
         private String currentStep;
-        
+
         @JsonProperty("estimated_remaining")
         private String estimatedRemaining;
-        
+
         @JsonProperty("details")
         private JsonNode details;
-        
+
         public double getPercentComplete() { return percentComplete; }
         public void setPercentComplete(double percentComplete) { this.percentComplete = percentComplete; }
-        
+
         public String getCurrentStep() { return currentStep; }
         public void setCurrentStep(String currentStep) { this.currentStep = currentStep; }
-        
+
         public String getEstimatedRemaining() { return estimatedRemaining; }
         public void setEstimatedRemaining(String estimatedRemaining) { this.estimatedRemaining = estimatedRemaining; }
-        
+
         public JsonNode getDetails() { return details; }
         public void setDetails(JsonNode details) { this.details = details; }
+    }
+
+    /**
+     * Result message data structure.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ResultData {
+        @JsonProperty("command")
+        private String command;
+
+        @JsonProperty("status")
+        private String status;
+
+        @JsonProperty("execution_time")
+        private String executionTime;
+
+        @JsonProperty("result")
+        private ResultInfo result;
+
+        public String getCommand() { return command; }
+        public void setCommand(String command) { this.command = command; }
+
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+
+        public String getExecutionTime() { return executionTime; }
+        public void setExecutionTime(String executionTime) { this.executionTime = executionTime; }
+
+        public ResultInfo getResult() { return result; }
+        public void setResult(ResultInfo result) { this.result = result; }
+    }
+
+    /**
+     * Result information structure.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ResultInfo {
+        @JsonProperty("summary")
+        private JsonNode summary;
+
+        @JsonProperty("data_available")
+        private List<String> dataAvailable;
+
+        @JsonProperty("outputs_generated")
+        private List<String> outputsGenerated;
+
+        public JsonNode getSummary() { return summary; }
+        public void setSummary(JsonNode summary) { this.summary = summary; }
+
+        public List<String> getDataAvailable() { return dataAvailable; }
+        public void setDataAvailable(List<String> dataAvailable) { this.dataAvailable = dataAvailable; }
+
+        public List<String> getOutputsGenerated() { return outputsGenerated; }
+        public void setOutputsGenerated(List<String> outputsGenerated) { this.outputsGenerated = outputsGenerated; }
     }
 }
