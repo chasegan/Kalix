@@ -98,6 +98,15 @@ public class RunManager extends JFrame {
         }
     }
 
+    /**
+     * Selects the run associated with the given session ID if the Run Manager is open.
+     */
+    public static void selectRunIfOpen(String sessionId) {
+        if (instance != null && instance.isVisible()) {
+            instance.selectRun(sessionId);
+        }
+    }
+
     private void setupWindow(JFrame parentFrame) {
         setTitle("Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
@@ -615,6 +624,33 @@ public class RunManager extends JFrame {
         }
 
         return new TreePath(newPathComponents.toArray());
+    }
+
+    /**
+     * Selects the run associated with the given session ID.
+     * This will expand the tree and select the run node if found.
+     */
+    private void selectRun(String sessionId) {
+        SwingUtilities.invokeLater(() -> {
+            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionId);
+            if (runNode != null) {
+                TreePath pathToRun = new TreePath(runNode.getPath());
+
+                // Expand parent nodes to make the run visible
+                runTree.expandPath(new TreePath(currentRunsNode.getPath()));
+
+                // Select the run
+                isUpdatingSelection = true;
+                runTree.setSelectionPath(pathToRun);
+                isUpdatingSelection = false;
+
+                // Scroll to make the selection visible
+                runTree.scrollPathToVisible(pathToRun);
+
+                // Update details panel
+                updateDetailsPanel();
+            }
+        });
     }
 
     /**

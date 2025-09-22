@@ -855,12 +855,20 @@ public class KalixGUI extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             .thenAccept(sessionId -> {
                 SwingUtilities.invokeLater(() -> {
                     updateStatus("Model session started: " + sessionId);
-                    
+
                     // Automatically open Run Manager if not already open
                     if (!RunManager.isWindowOpen()) {
                         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
                         updateStatus("Run Manager opened to monitor progress");
                     }
+
+                    // Select the newly created run after a brief delay to allow Run Manager to refresh
+                    Timer selectionTimer = new Timer(500, e -> {
+                        RunManager.selectRunIfOpen(sessionId);
+                        ((Timer) e.getSource()).stop();
+                    });
+                    selectionTimer.setRepeats(false);
+                    selectionTimer.start();
                 });
             })
             .exceptionally(throwable -> {
