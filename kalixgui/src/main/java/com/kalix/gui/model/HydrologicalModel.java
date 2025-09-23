@@ -36,6 +36,7 @@ public class HydrologicalModel {
     
     // Selection tracking
     private final Set<String> selectedNodes;
+    private final Set<String> selectedLinks;
     
     public HydrologicalModel() {
         // Use concurrent collections for thread safety
@@ -54,6 +55,7 @@ public class HydrologicalModel {
         
         // Selection
         this.selectedNodes = ConcurrentHashMap.newKeySet();
+        this.selectedLinks = ConcurrentHashMap.newKeySet();
     }
     
     /**
@@ -377,7 +379,8 @@ public class HydrologicalModel {
         removedNodes.clear();
         removedLinks.clear();
         selectedNodes.clear();
-        
+        selectedLinks.clear();
+
         incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_CLEARED, null));
     }
@@ -415,11 +418,13 @@ public class HydrologicalModel {
     }
     
     /**
-     * Clear all selections
+     * Clear all selections (nodes and links)
      */
     public void clearSelection() {
-        if (!selectedNodes.isEmpty()) {
+        boolean hadSelection = !selectedNodes.isEmpty() || !selectedLinks.isEmpty();
+        if (hadSelection) {
             selectedNodes.clear();
+            selectedLinks.clear();
             incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
         }
@@ -448,6 +453,90 @@ public class HydrologicalModel {
      */
     public int getSelectedNodeCount() {
         return selectedNodes.size();
+    }
+
+    // Link selection management
+
+    /**
+     * Create a unique ID for a link based on its upstream and downstream nodes
+     * @param link The link to create an ID for
+     * @return String ID for the link
+     */
+    private String getLinkId(ModelLink link) {
+        return link.getUpstreamTerminus() + "->" + link.getDownstreamTerminus();
+    }
+
+    /**
+     * Select a link, optionally adding to current selection
+     * @param link Link to select
+     * @param addToSelection If true, add to selection; if false, replace selection
+     */
+    public void selectLink(ModelLink link, boolean addToSelection) {
+        if (link == null || !links.contains(link)) {
+            return; // Link doesn't exist
+        }
+
+        if (!addToSelection) {
+            selectedNodes.clear();
+            selectedLinks.clear();
+        }
+
+        String linkId = getLinkId(link);
+        selectedLinks.add(linkId);
+        incrementVersion();
+        notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_SELECTED, linkId));
+    }
+
+    /**
+     * Deselect a specific link
+     * @param link Link to deselect
+     */
+    public void deselectLink(ModelLink link) {
+        if (link == null) {
+            return;
+        }
+
+        String linkId = getLinkId(link);
+        if (selectedLinks.remove(linkId)) {
+            incrementVersion();
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_DESELECTED, linkId));
+        }
+    }
+
+    /**
+     * Check if a link is selected
+     * @param link Link to check
+     * @return true if link is selected
+     */
+    public boolean isLinkSelected(ModelLink link) {
+        if (link == null) {
+            return false;
+        }
+        return selectedLinks.contains(getLinkId(link));
+    }
+
+    /**
+     * Get all selected link IDs
+     * @return Set of selected link IDs (defensive copy)
+     */
+    public Set<String> getSelectedLinks() {
+        return new HashSet<>(selectedLinks);
+    }
+
+    /**
+     * Get count of selected links
+     * @return Number of selected links
+     */
+    public int getSelectedLinkCount() {
+        return selectedLinks.size();
+    }
+
+    /**
+     * Get total count of selected items (nodes + links)
+     * @return Total number of selected items
+     */
+    public int getTotalSelectedCount() {
+        return selectedNodes.size() + selectedLinks.size();
     }
     
     // Node coordinate updates for dragging

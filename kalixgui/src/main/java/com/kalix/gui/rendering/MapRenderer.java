@@ -42,6 +42,15 @@ public class MapRenderer {
     private static final Color DEBUG_TEXT_COLOR = Color.GRAY;
     private static final int DEBUG_TEXT_MARGIN = UIConstants.Text.DEBUG_MARGIN;
 
+    // Link styling constants
+    private static final Color LINK_COLOR = new Color(100, 100, 100); // Dark gray
+    private static final float LINK_STROKE_WIDTH = 2.0f;
+    private static final BasicStroke LINK_STROKE = new BasicStroke(LINK_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+
+    // Chevron arrow constants
+    private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
+    private static final double CHEVRON_ANGLE = Math.PI / 6; // 30 degrees
+
     /**
      * Renders the complete map view including grid, nodes, selection, and debug info.
      *
@@ -81,8 +90,9 @@ public class MapRenderer {
         // Reset to screen space for screen-space elements
         g2d.setTransform(originalTransform);
 
-        // Render screen-space elements (nodes, selection, debug)
+        // Render screen-space elements (links first, then nodes, then selection, debug)
         if (model != null) {
+            renderLinks(g2d, model, zoomLevel, panX, panY);
             renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY);
         }
 
@@ -140,6 +150,121 @@ public class MapRenderer {
      */
     private void renderPlaceholderContent(Graphics2D g2d) {
         // Placeholder method for future model content
+    }
+
+    /**
+     * Renders all model links in screen-space coordinates.
+     * Links are drawn as solid lines from upstream to downstream node centers.
+     *
+     * @param g2d Graphics context (in screen space)
+     * @param model Hydrological model containing links
+     * @param zoomLevel Current zoom level for coordinate transformation
+     * @param panX Horizontal pan offset
+     * @param panY Vertical pan offset
+     */
+    private void renderLinks(Graphics2D g2d, HydrologicalModel model,
+                            double zoomLevel, double panX, double panY) {
+
+        // Render each link (color and stroke set individually based on selection state)
+        for (com.kalix.gui.model.ModelLink link : model.getAllLinks()) {
+            renderSingleLink(g2d, link, model, zoomLevel, panX, panY);
+        }
+
+        // Reset stroke and color for subsequent rendering
+        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setColor(Color.BLACK);
+    }
+
+    /**
+     * Renders a single link between two nodes.
+     *
+     * @param g2d Graphics context
+     * @param link Link to render
+     * @param model Model for node lookups
+     * @param zoomLevel Current zoom level
+     * @param panX Horizontal pan offset
+     * @param panY Vertical pan offset
+     */
+    private void renderSingleLink(Graphics2D g2d, com.kalix.gui.model.ModelLink link,
+                                 HydrologicalModel model, double zoomLevel,
+                                 double panX, double panY) {
+
+        // Get upstream and downstream nodes
+        com.kalix.gui.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
+        com.kalix.gui.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+
+        // Skip link if either node is missing
+        if (upstreamNode == null || downstreamNode == null) {
+            return;
+        }
+
+        // Check if link is selected and set appropriate color and stroke
+        boolean isSelected = model.isLinkSelected(link);
+        if (isSelected) {
+            g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
+            g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        } else {
+            g2d.setColor(LINK_COLOR);
+            g2d.setStroke(LINK_STROKE);
+        }
+
+        // Transform node world coordinates to screen coordinates
+        double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
+        double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
+        double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
+        double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+
+        // Draw the link line
+        g2d.drawLine((int) upstreamScreenX, (int) upstreamScreenY,
+                    (int) downstreamScreenX, (int) downstreamScreenY);
+
+        // Draw chevron arrow at midpoint
+        renderChevronArrow(g2d, upstreamScreenX, upstreamScreenY,
+                          downstreamScreenX, downstreamScreenY);
+    }
+
+    /**
+     * Renders a chevron arrow at the midpoint of a link to indicate flow direction.
+     *
+     * @param g2d Graphics context
+     * @param upstreamX X coordinate of upstream node
+     * @param upstreamY Y coordinate of upstream node
+     * @param downstreamX X coordinate of downstream node
+     * @param downstreamY Y coordinate of downstream node
+     */
+    private void renderChevronArrow(Graphics2D g2d, double upstreamX, double upstreamY,
+                                   double downstreamX, double downstreamY) {
+
+        // Calculate midpoint
+        double midX = (upstreamX + downstreamX) / 2.0;
+        double midY = (upstreamY + downstreamY) / 2.0;
+
+        // Calculate direction vector (from upstream to downstream)
+        double deltaX = downstreamX - upstreamX;
+        double deltaY = downstreamY - upstreamY;
+        double linkLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Skip chevron for very short links
+        if (linkLength < CHEVRON_SIZE * 2) {
+            return;
+        }
+
+        // Normalize direction vector
+        double dirX = deltaX / linkLength;
+        double dirY = deltaY / linkLength;
+
+        // Calculate chevron arrow points
+        // Left arm of chevron
+        double leftArmX = midX - CHEVRON_SIZE * (dirX * Math.cos(CHEVRON_ANGLE) + dirY * Math.sin(CHEVRON_ANGLE));
+        double leftArmY = midY - CHEVRON_SIZE * (dirY * Math.cos(CHEVRON_ANGLE) - dirX * Math.sin(CHEVRON_ANGLE));
+
+        // Right arm of chevron
+        double rightArmX = midX - CHEVRON_SIZE * (dirX * Math.cos(-CHEVRON_ANGLE) + dirY * Math.sin(-CHEVRON_ANGLE));
+        double rightArmY = midY - CHEVRON_SIZE * (dirY * Math.cos(-CHEVRON_ANGLE) - dirX * Math.sin(-CHEVRON_ANGLE));
+
+        // Draw chevron arms
+        g2d.drawLine((int) leftArmX, (int) leftArmY, (int) midX, (int) midY);
+        g2d.drawLine((int) rightArmX, (int) rightArmY, (int) midX, (int) midY);
     }
 
     /**

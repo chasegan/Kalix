@@ -20,6 +20,7 @@ public class ModelParser {
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
     private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+)$");
     private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.-]+)\\s*,\\s*([0-9.-]+)$");
+    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+)$");
 
     /**
      * Parse INI model text and extract nodes and links.
@@ -34,6 +35,7 @@ public class ModelParser {
             String currentNodeType = null;
             Double currentNodeX = null;
             Double currentNodeY = null;
+            List<String> currentNodeLinks = new ArrayList<>();
 
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -47,9 +49,14 @@ public class ModelParser {
                 Matcher nodeMatcher = NODE_SECTION_PATTERN.matcher(line);
                 if (nodeMatcher.matches()) {
                     // Save previous node if complete
-                    if (currentNodeName != null && currentNodeType != null && 
+                    if (currentNodeName != null && currentNodeType != null &&
                         currentNodeX != null && currentNodeY != null) {
                         nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+
+                        // Create links for this node
+                        for (String downstreamNode : currentNodeLinks) {
+                            links.add(new ModelLink(currentNodeName, downstreamNode.trim()));
+                        }
                     }
 
                     // Start new node
@@ -57,6 +64,7 @@ public class ModelParser {
                     currentNodeType = null;
                     currentNodeX = null;
                     currentNodeY = null;
+                    currentNodeLinks.clear();
                     continue;
                 }
 
@@ -80,13 +88,26 @@ public class ModelParser {
                         }
                         continue;
                     }
+
+                    // Parse downstream links (ds_1, ds_2, etc.)
+                    Matcher linkMatcher = DOWNSTREAM_LINK_PATTERN.matcher(line);
+                    if (linkMatcher.matches()) {
+                        String downstreamNode = linkMatcher.group(2).trim();
+                        currentNodeLinks.add(downstreamNode);
+                        continue;
+                    }
                 }
             }
 
             // Save final node if complete
-            if (currentNodeName != null && currentNodeType != null && 
+            if (currentNodeName != null && currentNodeType != null &&
                 currentNodeX != null && currentNodeY != null) {
                 nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+
+                // Create links for the final node
+                for (String downstreamNode : currentNodeLinks) {
+                    links.add(new ModelLink(currentNodeName, downstreamNode.trim()));
+                }
             }
 
         } catch (Exception e) {

@@ -16,6 +16,8 @@ public class ModelChangeEvent {
         MODEL_RELOADED,
         NODE_SELECTED,
         NODE_DESELECTED,
+        LINK_SELECTED,
+        LINK_DESELECTED,
         SELECTION_CLEARED
     }
     

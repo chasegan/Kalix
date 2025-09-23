@@ -104,21 +104,29 @@ public class MapPanel extends JPanel implements KeyListener {
                             // Don't start drag here - wait for mouseDragged event  
                         }
                     } else {
-                        // Not clicking on a node - start rectangle selection if Shift held, otherwise clear selection and start panning
-                        if (e.isShiftDown()) {
-                            // Start rectangle selection
-                            isRectangleSelecting = true;
-                            rectangleStartPoint = new Point(e.getPoint());
-                            rectangleCurrentPoint = new Point(e.getPoint());
-                            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                        // Not clicking on a node - check for links
+                        com.kalix.gui.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
+
+                        if (linkAtPoint != null) {
+                            // Clicking on a link - handle link selection
+                            handleLinkSelection(linkAtPoint, e.isShiftDown());
                         } else {
-                            // Clear selection and start panning
-                            if (model != null) {
-                                model.clearSelection();
+                            // Not clicking on node or link - start rectangle selection if Shift held, otherwise clear selection and start panning
+                            if (e.isShiftDown()) {
+                                // Start rectangle selection
+                                isRectangleSelecting = true;
+                                rectangleStartPoint = new Point(e.getPoint());
+                                rectangleCurrentPoint = new Point(e.getPoint());
+                                setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                            } else {
+                                // Clear selection and start panning
+                                if (model != null) {
+                                    model.clearSelection();
+                                }
+                                lastPanPoint = e.getPoint();
+                                isPanning = true;
+                                setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                             }
-                            lastPanPoint = e.getPoint();
-                            isPanning = true;
-                            setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                         }
                     }
                 }
@@ -470,7 +478,82 @@ public class MapPanel extends JPanel implements KeyListener {
         
         return null;
     }
-    
+
+    /**
+     * Find the link at the given screen coordinates.
+     * @param screenPoint Screen coordinates (mouse position)
+     * @return ModelLink if found, null if no link at that position
+     */
+    public com.kalix.gui.model.ModelLink getLinkAtPoint(Point screenPoint) {
+        if (model == null) {
+            return null;
+        }
+
+        final double LINK_HIT_TOLERANCE = 8.0; // pixels
+
+        // Check each link to see if the screen point is near the line
+        for (com.kalix.gui.model.ModelLink link : model.getAllLinks()) {
+            // Get upstream and downstream nodes
+            com.kalix.gui.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
+            com.kalix.gui.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+
+            // Skip link if either node is missing
+            if (upstreamNode == null || downstreamNode == null) {
+                continue;
+            }
+
+            // Transform node world coordinates to screen coordinates
+            double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
+            double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
+            double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
+            double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+
+            // Calculate distance from point to line segment
+            double distance = pointToLineDistance(screenPoint.x, screenPoint.y,
+                                                 upstreamScreenX, upstreamScreenY,
+                                                 downstreamScreenX, downstreamScreenY);
+
+            if (distance <= LINK_HIT_TOLERANCE) {
+                return link;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Calculate the shortest distance from a point to a line segment.
+     * @param px Point X coordinate
+     * @param py Point Y coordinate
+     * @param x1 Line start X coordinate
+     * @param y1 Line start Y coordinate
+     * @param x2 Line end X coordinate
+     * @param y2 Line end Y coordinate
+     * @return Distance from point to line segment
+     */
+    private double pointToLineDistance(double px, double py, double x1, double y1, double x2, double y2) {
+        // Vector from line start to line end
+        double lineLength = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+
+        // Handle degenerate case where line has zero length
+        if (lineLength == 0) {
+            return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+        }
+
+        // Calculate the t parameter that represents the projection of point onto the line
+        double t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (lineLength * lineLength);
+
+        // Clamp t to [0,1] to stay within the line segment
+        t = Math.max(0, Math.min(1, t));
+
+        // Calculate the closest point on the line segment
+        double closestX = x1 + t * (x2 - x1);
+        double closestY = y1 + t * (y2 - y1);
+
+        // Return distance from point to closest point on line segment
+        return Math.sqrt((px - closestX) * (px - closestX) + (py - closestY) * (py - closestY));
+    }
+
     /**
      * Handle node selection logic.
      * @param nodeName Name of the node to select
@@ -493,7 +576,30 @@ public class MapPanel extends JPanel implements KeyListener {
             model.selectNode(nodeName, false); // Replace selection
         }
     }
-    
+
+    /**
+     * Handle link selection logic.
+     * @param link Link to select
+     * @param addToSelection If true (Shift+click), add to selection; if false, replace selection
+     */
+    private void handleLinkSelection(com.kalix.gui.model.ModelLink link, boolean addToSelection) {
+        if (model == null || link == null) {
+            return;
+        }
+
+        if (addToSelection) {
+            // Shift+click: toggle selection of this link
+            if (model.isLinkSelected(link)) {
+                model.deselectLink(link);
+            } else {
+                model.selectLink(link, true); // Add to selection
+            }
+        } else {
+            // Regular click: select only this link
+            model.selectLink(link, false); // Replace selection
+        }
+    }
+
     // Getters for MapInteractionManager
     
     public double getZoomLevel() {
@@ -544,41 +650,133 @@ public class MapPanel extends JPanel implements KeyListener {
     
     
     /**
-     * Completes the rectangle selection by selecting all nodes within the rectangle.
+     * Completes the rectangle selection by selecting all nodes and links within the rectangle.
      */
     private void completeRectangleSelection() {
         if (model == null || rectangleStartPoint == null || rectangleCurrentPoint == null) {
             return;
         }
-        
+
         // Calculate rectangle bounds in screen coordinates
         int x1 = rectangleStartPoint.x;
         int y1 = rectangleStartPoint.y;
         int x2 = rectangleCurrentPoint.x;
         int y2 = rectangleCurrentPoint.y;
-        
+
         int rectX = Math.min(x1, x2);
         int rectY = Math.min(y1, y2);
         int rectWidth = Math.abs(x2 - x1);
         int rectHeight = Math.abs(y2 - y1);
-        
+
         // Only proceed if rectangle has meaningful size
         if (rectWidth < 5 && rectHeight < 5) {
             return; // Too small to be a meaningful selection
         }
-        
+
         // Find all nodes within the rectangle
         for (ModelNode node : model.getAllNodes()) {
             // Transform node world coordinates to screen coordinates
             double screenX = node.getX() * zoomLevel + panX;
             double screenY = node.getY() * zoomLevel + panY;
-            
+
             // Check if node center is within the rectangle
-            if (screenX >= rectX && screenX <= rectX + rectWidth && 
+            if (screenX >= rectX && screenX <= rectX + rectWidth &&
                 screenY >= rectY && screenY <= rectY + rectHeight) {
                 // Add to selection
                 model.selectNode(node.getName(), true); // Add to selection
             }
         }
+
+        // Find all links within the rectangle (check if link midpoint or any part intersects)
+        for (com.kalix.gui.model.ModelLink link : model.getAllLinks()) {
+            // Get upstream and downstream nodes
+            com.kalix.gui.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
+            com.kalix.gui.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+
+            // Skip link if either node is missing
+            if (upstreamNode == null || downstreamNode == null) {
+                continue;
+            }
+
+            // Transform node world coordinates to screen coordinates
+            double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
+            double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
+            double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
+            double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+
+            // Check if link intersects with the rectangle
+            if (lineIntersectsRectangle(upstreamScreenX, upstreamScreenY,
+                                     downstreamScreenX, downstreamScreenY,
+                                     rectX, rectY, rectWidth, rectHeight)) {
+                // Add to selection
+                model.selectLink(link, true); // Add to selection
+            }
+        }
+    }
+
+    /**
+     * Check if a line segment intersects with a rectangle.
+     * @param x1 Line start X
+     * @param y1 Line start Y
+     * @param x2 Line end X
+     * @param y2 Line end Y
+     * @param rectX Rectangle X
+     * @param rectY Rectangle Y
+     * @param rectWidth Rectangle width
+     * @param rectHeight Rectangle height
+     * @return true if line intersects rectangle
+     */
+    private boolean lineIntersectsRectangle(double x1, double y1, double x2, double y2,
+                                          int rectX, int rectY, int rectWidth, int rectHeight) {
+        // Check if either endpoint is inside the rectangle
+        if ((x1 >= rectX && x1 <= rectX + rectWidth && y1 >= rectY && y1 <= rectY + rectHeight) ||
+            (x2 >= rectX && x2 <= rectX + rectWidth && y2 >= rectY && y2 <= rectY + rectHeight)) {
+            return true;
+        }
+
+        // Check if line intersects any of the rectangle edges
+        // Top edge
+        if (lineSegmentsIntersect(x1, y1, x2, y2, rectX, rectY, rectX + rectWidth, rectY)) {
+            return true;
+        }
+        // Bottom edge
+        if (lineSegmentsIntersect(x1, y1, x2, y2, rectX, rectY + rectHeight, rectX + rectWidth, rectY + rectHeight)) {
+            return true;
+        }
+        // Left edge
+        if (lineSegmentsIntersect(x1, y1, x2, y2, rectX, rectY, rectX, rectY + rectHeight)) {
+            return true;
+        }
+        // Right edge
+        if (lineSegmentsIntersect(x1, y1, x2, y2, rectX + rectWidth, rectY, rectX + rectWidth, rectY + rectHeight)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if two line segments intersect.
+     * @param x1 First line start X
+     * @param y1 First line start Y
+     * @param x2 First line end X
+     * @param y2 First line end Y
+     * @param x3 Second line start X
+     * @param y3 Second line start Y
+     * @param x4 Second line end X
+     * @param y4 Second line end Y
+     * @return true if segments intersect
+     */
+    private boolean lineSegmentsIntersect(double x1, double y1, double x2, double y2,
+                                        double x3, double y3, double x4, double y4) {
+        double denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(denom) < 1e-10) {
+            return false; // Lines are parallel
+        }
+
+        double t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+        double u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+
+        return t >= 0 && t <= 1 && u >= 0 && u <= 1;
     }
 }
