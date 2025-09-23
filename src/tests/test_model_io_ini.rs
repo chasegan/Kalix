@@ -1,5 +1,6 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
+use crate::nodes::Node;
 
 #[test]
 fn test_model_1_io_ini_read() {
@@ -158,6 +159,14 @@ fn test_model_4() {
             assert!(false);
         },
         Ok(model) => {
+
+            println!("Execution order: {:?}", model.execution_order);
+            for i in 0..model.execution_order.len() {
+                let node_idx = model.execution_order[i];
+                println!("Execution order[{}]: {:?} {}", i, node_idx, model.nodes[node_idx].get_name());
+            }
+
+            //
             let sim_len = model.configuration.sim_nsteps;
 
             let node3_dsflow = model.data_cache.series[model.data_cache.get_existing_series_idx("node.node3.dsflow").unwrap()].clone();

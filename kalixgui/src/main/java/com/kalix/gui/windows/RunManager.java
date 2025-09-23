@@ -16,12 +16,11 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.*;
+import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 import java.util.function.Consumer;
 
 /**
@@ -33,7 +32,7 @@ public class RunManager extends JFrame {
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
-    private Timer sessionUpdateTimer;
+    private javax.swing.Timer sessionUpdateTimer;
     private static RunManager instance;
 
     // Tree components
@@ -53,11 +52,17 @@ public class RunManager extends JFrame {
     // Plot and stats components
     private PlotPanel plotPanel;
     private DataSet plotDataSet;
-    private JPanel statsPanel;
-    private JLabel minValueLabel;
-    private JLabel maxValueLabel;
-    private JLabel meanValueLabel;
-    private JLabel pointCountLabel;
+    private JScrollPane statsScrollPane;
+    private JTable statsTable;
+    private StatsTableModel statsTableModel;
+
+    // Series color management
+    private static final Color[] SERIES_COLORS = {
+        Color.BLUE, Color.RED, Color.GREEN, Color.ORANGE,
+        Color.MAGENTA, Color.CYAN, Color.PINK, Color.YELLOW
+    };
+    private Map<String, Color> seriesColorMap = new HashMap<>();
+    private Set<String> selectedSeries = new HashSet<>();
 
     // Run tracking
     private Map<String, String> sessionToRunName = new HashMap<>();
@@ -195,8 +200,8 @@ public class RunManager extends JFrame {
         outputsTree.setRootVisible(false);
         outputsTree.setShowsRootHandles(true);
 
-        // Enable single selection for the outputs tree (changed from multi-selection for plotting)
-        outputsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        // Enable multiple selection for the outputs tree to allow plotting multiple series
+        outputsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
 
         // Add selection listener to fetch timeseries data for leaf nodes and update plot
         outputsTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
@@ -208,34 +213,22 @@ public class RunManager extends JFrame {
         plotDataSet = new DataSet();
         plotPanel.setDataSet(plotDataSet);
 
+        // Enable coordinate display for mouse hover
+        plotPanel.setShowCoordinates(true);
+
         // Create stats panel
         createStatsPanel();
     }
 
     private void createStatsPanel() {
-        statsPanel = new JPanel();
-        statsPanel.setLayout(new BoxLayout(statsPanel, BoxLayout.Y_AXIS));
-        statsPanel.setBorder(BorderFactory.createTitledBorder("Statistics"));
+        statsTableModel = new StatsTableModel();
+        statsTable = new JTable(statsTableModel);
+        statsTable.setFillsViewportHeight(true);
+        statsTable.setRowSelectionAllowed(false);
 
-        // Create labels for statistics
-        minValueLabel = new JLabel("Min: -");
-        maxValueLabel = new JLabel("Max: -");
-        meanValueLabel = new JLabel("Mean: -");
-        pointCountLabel = new JLabel("Points: -");
-
-        // Add some padding around labels
-        minValueLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        maxValueLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        meanValueLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        pointCountLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-
-        statsPanel.add(minValueLabel);
-        statsPanel.add(maxValueLabel);
-        statsPanel.add(meanValueLabel);
-        statsPanel.add(pointCountLabel);
-
-        // Add some extra padding at the bottom
-        statsPanel.add(Box.createVerticalGlue());
+        statsScrollPane = new JScrollPane(statsTable);
+        statsScrollPane.setBorder(BorderFactory.createTitledBorder("Statistics"));
+        statsScrollPane.setPreferredSize(new Dimension(0, 150));
     }
 
     private void createDetailsLayouts() {
@@ -262,28 +255,25 @@ public class RunManager extends JFrame {
 
         // Create horizontal split pane for outputs tree and visualization
         JSplitPane horizontalSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        horizontalSplit.setDividerLocation(300); // 300px for outputs tree
-        horizontalSplit.setResizeWeight(0.5); // Give equal weight initially
+        horizontalSplit.setDividerLocation(150); // 200px for outputs tree
+        horizontalSplit.setResizeWeight(0); // Give equal weight initially
 
         // Left side: outputs tree panel
         JPanel outputsTreePanel = new JPanel(new BorderLayout());
-        outputsTreePanel.add(new JLabel("Model Outputs:"), BorderLayout.NORTH);
         outputsTreePanel.add(outputsScrollPane, BorderLayout.CENTER);
-        outputsTreePanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // Right side: vertical split pane for plot and stats
         JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        verticalSplit.setDividerLocation(300); // 300px for plot
+        verticalSplit.setDividerLocation(350); // 350px for plot
         verticalSplit.setResizeWeight(0.75); // Give more space to plot
 
         // Top of right side: plot panel
         JPanel plotWrapperPanel = new JPanel(new BorderLayout());
-        plotWrapperPanel.setBorder(BorderFactory.createTitledBorder("Time Series Plot"));
         plotWrapperPanel.add(plotPanel, BorderLayout.CENTER);
 
-        // Bottom of right side: stats panel
+        // Bottom of right side: stats table
         verticalSplit.setTopComponent(plotWrapperPanel);
-        verticalSplit.setBottomComponent(statsPanel);
+        verticalSplit.setBottomComponent(statsScrollPane);
 
         // Assemble the layout
         horizontalSplit.setLeftComponent(outputsTreePanel);
@@ -299,8 +289,8 @@ public class RunManager extends JFrame {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(200); // Give more space to details for plotting
-        splitPane.setResizeWeight(0.2);    // 20% for runs tree, 80% for details/plot
+        splitPane.setDividerLocation(150); // Give more space to details for plotting
+        splitPane.setResizeWeight(0);    // 20% for runs tree, 80% for details/plot
 
         // Left side: tree
         JPanel leftPanel = new JPanel(new BorderLayout());
@@ -309,7 +299,7 @@ public class RunManager extends JFrame {
         leftPanel.add(treeScrollPane, BorderLayout.CENTER);
 
         // Right side: details
-        detailsPanel.setBorder(BorderFactory.createTitledBorder("Details"));
+        detailsPanel.setBorder(BorderFactory.createTitledBorder("Available timeseries"));
 
         splitPane.setLeftComponent(leftPanel);
         splitPane.setRightComponent(detailsPanel);
@@ -365,7 +355,7 @@ public class RunManager extends JFrame {
     }
 
     private void setupUpdateTimer() {
-        sessionUpdateTimer = new Timer(2000, e -> refreshRuns());
+        sessionUpdateTimer = new javax.swing.Timer(2000, e -> refreshRuns());
         sessionUpdateTimer.setRepeats(true);
     }
 
@@ -661,18 +651,11 @@ public class RunManager extends JFrame {
      * Fetches timeseries data for leaf nodes and updates plot and stats.
      */
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        TreePath selectedPath = outputsTree.getSelectionPath();
-        if (selectedPath == null) {
+        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        if (selectedPaths == null || selectedPaths.length == 0) {
             // Clear plot and stats when nothing is selected
             clearPlotAndStats();
-            return;
-        }
-
-        DefaultMutableTreeNode node = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-
-        // Only process leaf nodes (actual timeseries outputs)
-        if (!node.isLeaf() || isSpecialMessageNode(node)) {
-            clearPlotAndStats();
+            selectedSeries.clear();
             return;
         }
 
@@ -680,51 +663,96 @@ public class RunManager extends JFrame {
         RunInfo selectedRun = getSelectedRunInfo();
         if (selectedRun == null) {
             clearPlotAndStats();
+            selectedSeries.clear();
             return;
         }
 
         String sessionId = selectedRun.session.getSessionKey();
-        String seriesName = getFullSeriesName(node);
-        if (seriesName == null) {
+        Set<String> newSelectedSeries = new HashSet<>();
+
+        // Collect all valid leaf node series names
+        for (TreePath path : selectedPaths) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+
+            // Only process leaf nodes (actual timeseries outputs)
+            if (node.isLeaf() && !isSpecialMessageNode(node)) {
+                String seriesName = getFullSeriesName(node);
+                if (seriesName != null) {
+                    newSelectedSeries.add(seriesName);
+                }
+            }
+        }
+
+        // If no valid series selected, clear everything
+        if (newSelectedSeries.isEmpty()) {
             clearPlotAndStats();
+            selectedSeries.clear();
             return;
         }
 
-        // Check if we already have this data cached
-        TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionId, seriesName);
-        if (cachedData != null) {
-            // Update plot and stats immediately with cached data
-            updatePlotAndStats(cachedData);
-        } else if (!timeSeriesRequestManager.isRequestInProgress(sessionId, seriesName)) {
-            // Clear current plot and show loading state
-            clearPlotAndStats();
-            updateStatsForLoading(seriesName);
+        // Determine which series to add and which to remove
+        Set<String> seriesToAdd = new HashSet<>(newSelectedSeries);
+        seriesToAdd.removeAll(selectedSeries);
 
-            // Request the timeseries data
-            timeSeriesRequestManager.requestTimeSeries(sessionId, seriesName)
-                .thenAccept(timeSeriesData -> {
-                    SwingUtilities.invokeLater(() -> {
-                        // Check if this series is still selected (user might have changed selection)
-                        TreePath currentPath = outputsTree.getSelectionPath();
-                        if (currentPath != null) {
-                            DefaultMutableTreeNode currentNode = (DefaultMutableTreeNode) currentPath.getLastPathComponent();
-                            String currentSeriesName = getFullSeriesName(currentNode);
-                            if (seriesName.equals(currentSeriesName)) {
-                                updatePlotAndStats(timeSeriesData);
+        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
+        seriesToRemove.removeAll(newSelectedSeries);
+
+        // Remove series that are no longer selected
+        for (String seriesName : seriesToRemove) {
+            plotDataSet.removeSeries(seriesName);
+            seriesColorMap.remove(seriesName);
+            statsTableModel.removeSeries(seriesName);
+        }
+
+        // Add new series
+        for (String seriesName : seriesToAdd) {
+            // Assign consistent color to new series
+            Color seriesColor = getColorForSeries(seriesName);
+            seriesColorMap.put(seriesName, seriesColor);
+
+            // Check if we already have this data cached
+            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionId, seriesName);
+            if (cachedData != null) {
+                // Add immediately with cached data
+                addSeriesToPlot(cachedData, seriesColor);
+                statsTableModel.addOrUpdateSeries(cachedData);
+            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionId, seriesName)) {
+                // Show loading state for this series
+                statsTableModel.addLoadingSeries(seriesName);
+
+                // Request the timeseries data
+                timeSeriesRequestManager.requestTimeSeries(sessionId, seriesName)
+                    .thenAccept(timeSeriesData -> {
+                        SwingUtilities.invokeLater(() -> {
+                            // Check if this series is still selected
+                            if (selectedSeries.contains(seriesName)) {
+                                addSeriesToPlot(timeSeriesData, seriesColorMap.get(seriesName));
+                                statsTableModel.addOrUpdateSeries(timeSeriesData);
+                                plotPanel.zoomToFit();
                             }
-                        }
+                        });
+                    })
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            if (selectedSeries.contains(seriesName)) {
+                                statsTableModel.addErrorSeries(seriesName, throwable.getMessage());
+                            }
+                        });
+                        return null;
                     });
-                })
-                .exceptionally(throwable -> {
-                    SwingUtilities.invokeLater(() -> {
-                        updateStatsForError(seriesName, throwable.getMessage());
-                    });
-                    return null;
-                });
-        } else {
-            // Request already in progress, show loading state
-            clearPlotAndStats();
-            updateStatsForLoading(seriesName);
+            } else {
+                // Request already in progress, show loading state
+                statsTableModel.addLoadingSeries(seriesName);
+            }
+        }
+
+        // Update the selected series set
+        selectedSeries = newSelectedSeries;
+
+        // Update plot visibility and auto-zoom if we have any series
+        updatePlotVisibility();
+        if (!plotDataSet.isEmpty()) {
+            plotPanel.zoomToFit();
         }
     }
 
@@ -964,85 +992,41 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Updates the plot and stats panels with timeseries data.
+     * Gets a consistent color for a series based on its name hash.
+     * This ensures the same series always gets the same color.
      */
-    private void updatePlotAndStats(TimeSeriesData timeSeriesData) {
-        // Clear existing data and add new series
-        plotDataSet.removeAllSeries();
-        plotDataSet.addSeries(timeSeriesData);
-
-        // Set up colors for the series (you can customize this)
-        Map<String, Color> seriesColors = new HashMap<>();
-        seriesColors.put(timeSeriesData.getName(), Color.BLUE);
-        plotPanel.setSeriesColors(seriesColors);
-
-        // Make the series visible
-        List<String> visibleSeries = new ArrayList<>();
-        visibleSeries.add(timeSeriesData.getName());
-        plotPanel.setVisibleSeries(visibleSeries);
-
-        // Update statistics
-        updateStatsLabels(timeSeriesData);
+    private Color getColorForSeries(String seriesName) {
+        int hash = Math.abs(seriesName.hashCode());
+        return SERIES_COLORS[hash % SERIES_COLORS.length];
     }
 
     /**
-     * Clears the plot and resets stats labels.
+     * Adds a series to the plot with the specified color.
+     */
+    private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
+        plotDataSet.addSeries(timeSeriesData);
+        seriesColorMap.put(timeSeriesData.getName(), seriesColor);
+        updatePlotVisibility();
+    }
+
+    /**
+     * Updates the plot panel's color map and visible series list.
+     */
+    private void updatePlotVisibility() {
+        plotPanel.setSeriesColors(new HashMap<>(seriesColorMap));
+        plotPanel.setVisibleSeries(new ArrayList<>(selectedSeries));
+    }
+
+    /**
+     * Clears the plot and resets stats table.
      */
     private void clearPlotAndStats() {
         plotDataSet.removeAllSeries();
         plotPanel.setVisibleSeries(new ArrayList<>());
-        resetStatsLabels();
+        seriesColorMap.clear();
+        statsTableModel.clear();
     }
 
-    /**
-     * Updates stats labels with data from timeseries.
-     */
-    private void updateStatsLabels(TimeSeriesData timeSeriesData) {
-        if (timeSeriesData.getPointCount() == 0) {
-            resetStatsLabels();
-            return;
-        }
-
-        double min = timeSeriesData.getMinValue();
-        double max = timeSeriesData.getMaxValue();
-        double mean = timeSeriesData.getMeanValue();
-        int points = timeSeriesData.getPointCount();
-
-        minValueLabel.setText(String.format("Min: %.3f", min));
-        maxValueLabel.setText(String.format("Max: %.3f", max));
-        meanValueLabel.setText(String.format("Mean: %.3f", mean));
-        pointCountLabel.setText(String.format("Points: %d", points));
-    }
-
-    /**
-     * Resets stats labels to default state.
-     */
-    private void resetStatsLabels() {
-        minValueLabel.setText("Min: -");
-        maxValueLabel.setText("Max: -");
-        meanValueLabel.setText("Mean: -");
-        pointCountLabel.setText("Points: -");
-    }
-
-    /**
-     * Updates stats to show loading state.
-     */
-    private void updateStatsForLoading(String seriesName) {
-        minValueLabel.setText("Min: Loading...");
-        maxValueLabel.setText("Max: Loading...");
-        meanValueLabel.setText("Mean: Loading...");
-        pointCountLabel.setText("Points: Loading...");
-    }
-
-    /**
-     * Updates stats to show error state.
-     */
-    private void updateStatsForError(String seriesName, String errorMessage) {
-        minValueLabel.setText("Min: Error");
-        maxValueLabel.setText("Max: Error");
-        meanValueLabel.setText("Mean: Error");
-        pointCountLabel.setText("Points: Error");
-    }
 
     /**
      * Custom tree cell renderer for run tree.
@@ -1115,6 +1099,115 @@ public class RunManager extends JFrame {
             }
 
             return this;
+        }
+    }
+
+    /**
+     * Table model for displaying statistics of multiple time series.
+     */
+    private static class StatsTableModel extends AbstractTableModel {
+        private final String[] columnNames = {"Series", "Min", "Max", "Mean", "Points"};
+        private final List<SeriesStats> seriesData = new ArrayList<>();
+
+        static class SeriesStats {
+            String name;
+            String min;
+            String max;
+            String mean;
+            String points;
+            SeriesStats(String name) {
+                this.name = name;
+                this.min = "";
+                this.max = "";
+                this.mean = "";
+                this.points = "";
+            }
+
+            SeriesStats(String name, TimeSeriesData data) {
+                this.name = name;
+                if (data.getPointCount() == 0) {
+                    this.min = "-";
+                    this.max = "-";
+                    this.mean = "-";
+                    this.points = "0";
+                } else {
+                    this.min = String.format("%.3f", data.getMinValue());
+                    this.max = String.format("%.3f", data.getMaxValue());
+                    this.mean = String.format("%.3f", data.getMeanValue());
+                    this.points = String.valueOf(data.getPointCount());
+                }
+            }
+        }
+
+        @Override
+        public int getRowCount() {
+            return seriesData.size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columnNames.length;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return columnNames[column];
+        }
+
+        @Override
+        public Object getValueAt(int rowIndex, int columnIndex) {
+            if (rowIndex >= seriesData.size()) return "";
+
+            SeriesStats stats = seriesData.get(rowIndex);
+            switch (columnIndex) {
+                case 0: return stats.name;
+                case 1: return stats.min;
+                case 2: return stats.max;
+                case 3: return stats.mean;
+                case 4: return stats.points;
+                default: return "";
+            }
+        }
+
+        @Override
+        public boolean isCellEditable(int rowIndex, int columnIndex) {
+            return false;
+        }
+
+        public void addLoadingSeries(String seriesName) {
+            // Remove existing entry if present
+            seriesData.removeIf(stats -> stats.name.equals(seriesName));
+            seriesData.add(new SeriesStats(seriesName));
+            fireTableDataChanged();
+        }
+
+        public void addOrUpdateSeries(TimeSeriesData data) {
+            // Remove existing entry if present
+            seriesData.removeIf(stats -> stats.name.equals(data.getName()));
+            seriesData.add(new SeriesStats(data.getName(), data));
+            fireTableDataChanged();
+        }
+
+        public void addErrorSeries(String seriesName, String errorMessage) {
+            // Remove existing entry if present
+            seriesData.removeIf(stats -> stats.name.equals(seriesName));
+            SeriesStats errorStats = new SeriesStats(seriesName);
+            errorStats.min = "Error";
+            errorStats.max = "Error";
+            errorStats.mean = "Error";
+            errorStats.points = "Error";
+            seriesData.add(errorStats);
+            fireTableDataChanged();
+        }
+
+        public void removeSeries(String seriesName) {
+            seriesData.removeIf(stats -> stats.name.equals(seriesName));
+            fireTableDataChanged();
+        }
+
+        public void clear() {
+            seriesData.clear();
+            fireTableDataChanged();
         }
     }
 }

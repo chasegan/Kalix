@@ -30,9 +30,6 @@ pub struct Model {
 
     // Fast node name lookup
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name] = node index
-
-    // Performance optimization: track active links
-    pub active_links: Vec<usize>,
 }
 
 
@@ -280,25 +277,22 @@ impl Model {
 
     pub fn run_timestep(&mut self, _t: u64) {
 
-        // Execute nodes
+        // Execute nodes in topological order with immediate flow propagation
         for &node_idx in &self.execution_order {
 
             // Run the node's flow phase
             self.nodes[node_idx].run_flow_phase(&mut self.data_cache);
 
-            // Collect outflows and add to corresponding links
+            // Immediately propagate outflows to downstream nodes
             for &link_idx in &self.outgoing_links[node_idx] {
                 let link = &self.links[link_idx];
                 let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
 
                 if outflow > 0.0 {
-                    self.links[link_idx].add_flow(outflow);
+                    self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
                 }
             }
         }
-
-        // Move water along all active links
-        self.move_water();
     }
 
 
@@ -366,27 +360,6 @@ impl Model {
     }
 
 
-    /// Efficiently move water along links to downstream nodes
-    fn move_water(&mut self) {
-        self.active_links.clear();
-
-        // Collect all links with flow
-        for (idx, link) in self.links.iter().enumerate() {
-            if link.has_flow() {
-                self.active_links.push(idx);
-            }
-        }
-
-        // Move water for each active link
-        for &link_idx in &self.active_links {
-            let link = &mut self.links[link_idx];
-            let flow = link.remove_flow();
-
-            if flow > 0.0 {
-                self.nodes[link.to_node].add_usflow(flow, link.to_inlet);
-            }
-        }
-    }
 
 
     // Initialize all the nodes
