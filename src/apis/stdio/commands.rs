@@ -4,6 +4,7 @@ use crate::apis::stdio::messages::{CommandSpec, ParameterSpec, ProgressInfo};
 use crate::apis::stdio::session::Session;
 use crate::io::ini_model_io::IniModelIO;
 use chrono;
+use crate::tid;
 
 pub trait Command: Send + Sync {
     fn name(&self) -> &str;
@@ -465,9 +466,7 @@ impl Command for GetResultCommand {
         let mut csv_data = String::new();
 
         // Add start timestamp and timestep
-        let start_timestamp = chrono::DateTime::from_timestamp(timeseries.start_timestamp as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now())
-            .to_rfc3339();
+        let start_timestamp = tid::utils::u64_to_iso_datetime_string(timeseries.start_timestamp);
 
         csv_data.push_str(&format!("{},{}", start_timestamp, timeseries.step_size));
 
