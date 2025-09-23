@@ -464,6 +464,7 @@ public class SessionManager {
             session.setCliSessionId(message.getSessionId());
         }
 
+
         // Check if this is a get_result response and route to TimeSeriesRequestManager
         if (isTimeSeriesResponse(message)) {
             if (timeSeriesResponseHandler != null) {
@@ -475,6 +476,8 @@ public class SessionManager {
                 } catch (Exception e) {
                     logger.error("Failed to handle timeseries response", e);
                 }
+            } else {
+                logger.warn("TimeSeriesResponseHandler is null, cannot route response");
             }
         }
 

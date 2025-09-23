@@ -138,7 +138,7 @@ public class KalixTimeSeriesWriter {
 
     private long detectTimestep(TimeSeriesData series) {
         if (series.hasRegularInterval()) {
-            return series.getIntervalSeconds();
+            return series.getIntervalMillis() / 1000;
         }
 
         // For irregular intervals, calculate average interval

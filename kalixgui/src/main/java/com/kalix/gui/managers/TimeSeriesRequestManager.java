@@ -81,9 +81,15 @@ public class TimeSeriesRequestManager {
      * @param seriesName The full series name (e.g., "node.my_gr4j_node.dsflow")
      * @return CompletableFuture that completes with TimeSeriesData or fails with exception
      */
-    public CompletableFuture<TimeSeriesData> requestTimeSeries(String sessionId, String seriesName) {
-        // Create cache key
-        String cacheKey = sessionId + ":" + seriesName;
+    public CompletableFuture<TimeSeriesData> requestTimeSeries(String sessionKey, String seriesName) {
+        // Get the CLI session ID for consistent cache keys
+        String cliSessionId = getCliSessionId(sessionKey);
+        if (cliSessionId == null) {
+            return CompletableFuture.failedFuture(new RuntimeException("Session not found or CLI session ID not available: " + sessionKey));
+        }
+
+        // Create cache key using CLI session ID
+        String cacheKey = cliSessionId + ":" + seriesName;
 
         // Check if already in cache or being processed
         CompletableFuture<TimeSeriesData> existingRequest = cache.get(cacheKey);
@@ -103,7 +109,7 @@ public class TimeSeriesRequestManager {
         CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
         cache.put(cacheKey, future);
 
-        TimeSeriesRequest request = new TimeSeriesRequest(sessionId, seriesName, future);
+        TimeSeriesRequest request = new TimeSeriesRequest(sessionKey, seriesName, future);
 
         try {
             requestQueue.put(request);
@@ -119,35 +125,58 @@ public class TimeSeriesRequestManager {
 
     /**
      * Get timeseries data from cache if available
-     * @param sessionId The session ID
+     * @param sessionKey The session key (GUI identifier)
      * @param seriesName The series name
      * @return TimeSeriesData if cached, null otherwise
      */
-    public TimeSeriesData getTimeSeriesFromCache(String sessionId, String seriesName) {
-        String cacheKey = sessionId + ":" + seriesName;
+    public TimeSeriesData getTimeSeriesFromCache(String sessionKey, String seriesName) {
+        String cliSessionId = getCliSessionId(sessionKey);
+        if (cliSessionId == null) return null;
+
+        String cacheKey = cliSessionId + ":" + seriesName;
         return completedCache.get(cacheKey);
     }
 
     /**
      * Check if a timeseries is currently being fetched
-     * @param sessionId The session ID
+     * @param sessionKey The session key (GUI identifier)
      * @param seriesName The series name
      * @return true if request is in progress
      */
-    public boolean isRequestInProgress(String sessionId, String seriesName) {
-        String cacheKey = sessionId + ":" + seriesName;
+    public boolean isRequestInProgress(String sessionKey, String seriesName) {
+        String cliSessionId = getCliSessionId(sessionKey);
+        if (cliSessionId == null) return false;
+
+        String cacheKey = cliSessionId + ":" + seriesName;
         CompletableFuture<TimeSeriesData> future = cache.get(cacheKey);
         return future != null && !future.isDone();
     }
 
     /**
      * Clear cache for a specific session (useful when session ends)
-     * @param sessionId The session to clear cache for
+     * @param sessionKey The session key (GUI identifier) to clear cache for
      */
-    public void clearCacheForSession(String sessionId) {
-        cache.entrySet().removeIf(entry -> entry.getKey().startsWith(sessionId + ":"));
-        completedCache.entrySet().removeIf(entry -> entry.getKey().startsWith(sessionId + ":"));
-        logger.info("Cleared timeseries cache for session {}", sessionId);
+    public void clearCacheForSession(String sessionKey) {
+        String cliSessionId = getCliSessionId(sessionKey);
+        if (cliSessionId == null) return;
+
+        cache.entrySet().removeIf(entry -> entry.getKey().startsWith(cliSessionId + ":"));
+        completedCache.entrySet().removeIf(entry -> entry.getKey().startsWith(cliSessionId + ":"));
+        logger.info("Cleared timeseries cache for session {}", sessionKey);
+    }
+
+    /**
+     * Helper method to get CLI session ID from GUI session key
+     */
+    private String getCliSessionId(String sessionKey) {
+        try {
+            return sessionManager.getSession(sessionKey)
+                    .map(session -> session.getCliSessionId())
+                    .orElse(null);
+        } catch (Exception e) {
+            logger.warn("Failed to get CLI session ID for session key: {}", sessionKey);
+            return null;
+        }
     }
 
     /**
@@ -188,7 +217,14 @@ public class TimeSeriesRequestManager {
      * Process a single timeseries request
      */
     private void processRequest(TimeSeriesRequest request) {
-        String cacheKey = request.sessionId + ":" + request.seriesName;
+        // Get CLI session ID for consistent cache key
+        String cliSessionId = getCliSessionId(request.sessionId);
+        if (cliSessionId == null) {
+            request.future.completeExceptionally(new RuntimeException("CLI session ID not available for: " + request.sessionId));
+            return;
+        }
+
+        String cacheKey = cliSessionId + ":" + request.seriesName;
 
         try {
             logger.info("Processing timeseries request for {}", request.seriesName);
@@ -226,13 +262,17 @@ public class TimeSeriesRequestManager {
         try {
             JsonNode response = objectMapper.readTree(jsonResponse);
 
-            // Check if this is a result response
-            if (!"result".equals(response.path("type").asText())) {
+            // Check if this is a result response (case-insensitive)
+            String messageType = response.path("type").asText();
+            if (!"result".equalsIgnoreCase(messageType)) {
+                logger.debug("Ignoring non-result message: type={}", messageType);
                 return;
             }
 
             JsonNode data = response.path("data");
-            if (!data.path("command").asText().equals("get_result")) {
+            String command = data.path("command").asText();
+            if (!"get_result".equals(command)) {
+                logger.debug("Ignoring non-get_result command: {}", command);
                 return;
             }
 
@@ -240,6 +280,7 @@ public class TimeSeriesRequestManager {
             String seriesName = result.path("series_name").asText();
             String dataString = result.path("data").asText();
             String sessionId = response.path("session_id").asText();
+
 
             if (seriesName.isEmpty() || dataString.isEmpty()) {
                 logger.warn("Invalid timeseries response: missing series_name or data");
@@ -256,7 +297,8 @@ public class TimeSeriesRequestManager {
             CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
             if (future != null) {
                 future.complete(timeSeriesData);
-                logger.info("Successfully parsed and cached timeseries for {}", seriesName);
+            } else {
+                logger.warn("No pending future found for cacheKey: '{}'", cacheKey);
             }
 
         } catch (Exception e) {

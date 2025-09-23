@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 public class TimeSeriesData {
     private final String name;
-    private final long[] timestamps;      // Unix timestamps in seconds for fast math
+    private final long[] timestamps;      // Unix timestamps in milliseconds for fast math
     private final double[] values;        // Raw values (NaN for missing data)
     private final boolean[] validPoints;  // Quick missing data lookup
     private final int pointCount;
@@ -19,7 +19,7 @@ public class TimeSeriesData {
     
     // Regular interval optimization
     private final boolean hasRegularInterval;
-    private final long intervalSeconds;
+    private final long intervalMillis;
     private final long firstTimestamp;
     
     public TimeSeriesData(String name, LocalDateTime[] dateTimes, double[] values) {
@@ -34,9 +34,9 @@ public class TimeSeriesData {
         this.values = new double[pointCount];
         this.validPoints = new boolean[pointCount];
         
-        // Convert LocalDateTime to Unix timestamps and process values
+        // Convert LocalDateTime to Unix timestamps in milliseconds and process values
         for (int i = 0; i < pointCount; i++) {
-            this.timestamps[i] = dateTimes[i].toInstant(ZoneOffset.UTC).getEpochSecond();
+            this.timestamps[i] = dateTimes[i].toInstant(ZoneOffset.UTC).toEpochMilli();
             this.values[i] = values[i];
             this.validPoints[i] = !Double.isNaN(values[i]) && Double.isFinite(values[i]);
         }
@@ -47,7 +47,7 @@ public class TimeSeriesData {
         // Detect regular intervals
         RegularIntervalInfo intervalInfo = detectRegularInterval();
         this.hasRegularInterval = intervalInfo.isRegular;
-        this.intervalSeconds = intervalInfo.intervalSeconds;
+        this.intervalMillis = intervalInfo.intervalMillis;
         this.firstTimestamp = timestamps.length > 0 ? timestamps[0] : 0;
         
         // Pre-compute statistics
@@ -93,11 +93,11 @@ public class TimeSeriesData {
     
     private static class RegularIntervalInfo {
         final boolean isRegular;
-        final long intervalSeconds;
-        
-        RegularIntervalInfo(boolean isRegular, long intervalSeconds) {
+        final long intervalMillis;
+
+        RegularIntervalInfo(boolean isRegular, long intervalMillis) {
             this.isRegular = isRegular;
-            this.intervalSeconds = intervalSeconds;
+            this.intervalMillis = intervalMillis;
         }
     }
     
@@ -162,8 +162,8 @@ public class TimeSeriesData {
         
         if (hasRegularInterval) {
             // Fast calculation using regular intervals
-            startIndex = (int) Math.max(0, (startTimeMs - firstTimestamp) / intervalSeconds);
-            endIndex = (int) Math.min(pointCount, (endTimeMs - firstTimestamp) / intervalSeconds + 1);
+            startIndex = (int) Math.max(0, (startTimeMs - firstTimestamp) / intervalMillis);
+            endIndex = (int) Math.min(pointCount, (endTimeMs - firstTimestamp) / intervalMillis + 1);
             
             // Clamp to actual bounds
             startIndex = Math.max(0, Math.min(startIndex, pointCount - 1));
@@ -216,7 +216,7 @@ public class TimeSeriesData {
     public long getLastTimestamp() { return pointCount > 0 ? timestamps[pointCount - 1] : 0; }
     
     public boolean hasRegularInterval() { return hasRegularInterval; }
-    public long getIntervalSeconds() { return intervalSeconds; }
+    public long getIntervalMillis() { return intervalMillis; }
     
     // Statistics getters
     public Double getMinValue() { return minValue; }
