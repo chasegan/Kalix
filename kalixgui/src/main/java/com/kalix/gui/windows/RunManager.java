@@ -1,10 +1,12 @@
 package com.kalix.gui.windows;
 
 import com.kalix.gui.managers.StdioTaskManager;
+import com.kalix.gui.managers.TimeSeriesRequestManager;
 import com.kalix.gui.cli.SessionManager;
 import com.kalix.gui.cli.RunModelProgram;
 import com.kalix.gui.utils.DialogUtils;
 import com.kalix.gui.constants.AppConstants;
+import com.kalix.gui.flowviz.data.TimeSeriesData;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -28,6 +30,7 @@ public class RunManager extends JFrame {
 
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
+    private final TimeSeriesRequestManager timeSeriesRequestManager;
     private Timer sessionUpdateTimer;
     private static RunManager instance;
 
@@ -60,6 +63,12 @@ public class RunManager extends JFrame {
     private RunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
+        this.timeSeriesRequestManager = new TimeSeriesRequestManager(stdioTaskManager.getSessionManager());
+
+        // Connect TimeSeriesRequestManager to SessionManager for response handling
+        stdioTaskManager.getSessionManager().setTimeSeriesResponseHandler(
+            timeSeriesRequestManager::handleJsonResponse
+        );
 
         setupWindow(parentFrame);
         initializeComponents();
@@ -174,6 +183,13 @@ public class RunManager extends JFrame {
         outputsTree = new JTree(outputsTreeModel);
         outputsTree.setRootVisible(false);
         outputsTree.setShowsRootHandles(true);
+
+        // Enable multi-selection for the outputs tree
+        outputsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
+
+        // Add selection listener to fetch timeseries data for leaf nodes
+        outputsTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
+
         outputsScrollPane = new JScrollPane(outputsTree);
     }
 
@@ -559,6 +575,108 @@ public class RunManager extends JFrame {
                 }
             }
         }
+    }
+
+    /**
+     * Handles selection changes in the outputs tree.
+     * Fetches timeseries data for leaf nodes that are selected.
+     */
+    private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
+        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        if (selectedPaths == null) {
+            return;
+        }
+
+        // Get the currently selected run to determine session ID
+        RunInfo selectedRun = getSelectedRunInfo();
+        if (selectedRun == null) {
+            return;
+        }
+
+        String sessionId = selectedRun.session.getSessionKey();
+
+        for (TreePath path : selectedPaths) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+
+            // Only process leaf nodes (actual timeseries outputs)
+            if (node.isLeaf() && !isSpecialMessageNode(node)) {
+                String seriesName = getFullSeriesName(node);
+                if (seriesName != null) {
+                    // Check if we already have this data cached
+                    TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionId, seriesName);
+                    if (cachedData != null) {
+                        System.out.println("Found cached timeseries for " + seriesName + " with " + cachedData.getPointCount() + " points");
+                    } else if (!timeSeriesRequestManager.isRequestInProgress(sessionId, seriesName)) {
+                        // Request the timeseries data
+                        System.out.println("Requesting timeseries data for: " + seriesName);
+                        timeSeriesRequestManager.requestTimeSeries(sessionId, seriesName)
+                            .thenAccept(timeSeriesData -> {
+                                SwingUtilities.invokeLater(() -> {
+                                    System.out.println("Received timeseries for " + seriesName + " with " +
+                                                     timeSeriesData.getPointCount() + " data points");
+                                    // TODO: Add to plotting queue or update UI to show data is available
+                                });
+                            })
+                            .exceptionally(throwable -> {
+                                SwingUtilities.invokeLater(() -> {
+                                    System.err.println("Failed to fetch timeseries for " + seriesName + ": " + throwable.getMessage());
+                                });
+                                return null;
+                            });
+                    } else {
+                        System.out.println("Request already in progress for: " + seriesName);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Get the full series name for a tree node by walking up the path
+     */
+    private String getFullSeriesName(DefaultMutableTreeNode node) {
+        if (node == null) return null;
+
+        List<String> pathParts = new ArrayList<>();
+        TreeNode currentNode = node;
+
+        while (currentNode != null && currentNode.getParent() != null) {
+            if (currentNode instanceof DefaultMutableTreeNode) {
+                String part = ((DefaultMutableTreeNode) currentNode).getUserObject().toString();
+                pathParts.add(0, part); // Add to beginning to build path from root to leaf
+            }
+            currentNode = currentNode.getParent();
+        }
+
+        return pathParts.isEmpty() ? null : String.join(".", pathParts);
+    }
+
+    /**
+     * Check if a node represents a special message (like "No outputs available")
+     */
+    private boolean isSpecialMessageNode(DefaultMutableTreeNode node) {
+        String nodeText = node.getUserObject().toString();
+        return nodeText.equals("No outputs available") ||
+               nodeText.equals("Outputs will appear when simulation completes");
+    }
+
+    /**
+     * Get the currently selected run information
+     */
+    private RunInfo getSelectedRunInfo() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) {
+            return null;
+        }
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        Object userObject = selectedNode.getUserObject();
+
+        if (userObject instanceof RunInfo) {
+            return (RunInfo) userObject;
+        }
+
+        return null;
     }
 
     /**

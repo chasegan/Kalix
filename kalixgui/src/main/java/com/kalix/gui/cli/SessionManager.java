@@ -27,6 +27,7 @@ public class SessionManager {
     private final Map<String, KalixSession> activeSessions = new ConcurrentHashMap<>();
     private final Consumer<String> statusUpdater;
     private final Consumer<SessionEvent> eventCallback;
+    private Consumer<String> timeSeriesResponseHandler;
     
     /**
      * States a kalixcli session can be in.
@@ -157,17 +158,26 @@ public class SessionManager {
     
     /**
      * Creates a new SessionManager.
-     * 
+     *
      * @param processExecutor the process executor for CLI operations
      * @param statusUpdater callback for status updates
      * @param eventCallback callback for session events (can be null)
      */
-    public SessionManager(ProcessExecutor processExecutor, 
+    public SessionManager(ProcessExecutor processExecutor,
                          Consumer<String> statusUpdater,
                          Consumer<SessionEvent> eventCallback) {
         this.processExecutor = processExecutor;
         this.statusUpdater = statusUpdater;
         this.eventCallback = eventCallback != null ? eventCallback : event -> {}; // No-op if null
+    }
+
+    /**
+     * Sets the time series response handler for processing get_result JSON responses.
+     *
+     * @param handler callback to handle JSON responses containing time series data
+     */
+    public void setTimeSeriesResponseHandler(Consumer<String> handler) {
+        this.timeSeriesResponseHandler = handler;
     }
     
     /**
@@ -453,7 +463,21 @@ public class SessionManager {
         if (session.getCliSessionId() == null && message.getSessionId() != null) {
             session.setCliSessionId(message.getSessionId());
         }
-        
+
+        // Check if this is a get_result response and route to TimeSeriesRequestManager
+        if (isTimeSeriesResponse(message)) {
+            if (timeSeriesResponseHandler != null) {
+                try {
+                    // Convert the message back to JSON string for the TimeSeriesRequestManager
+                    String jsonResponse = convertMessageToJsonString(message);
+                    timeSeriesResponseHandler.accept(jsonResponse);
+                    return; // Message was handled by TimeSeriesRequestManager
+                } catch (Exception e) {
+                    logger.error("Failed to handle timeseries response", e);
+                }
+            }
+        }
+
         // First try to delegate to any active program
         if (session.getActiveProgram() != null && session.getActiveProgram().isActive()) {
             boolean handled = session.getActiveProgram().handleMessage(message);
@@ -461,14 +485,14 @@ public class SessionManager {
                 return; // Message was handled by the program
             }
         }
-        
+
         // Handle generic messages that aren't part of a specific program
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
             updateStatus("Unknown JSON message type from session " + sessionKey);
             return;
         }
-        
+
         switch (msgType) {
             case LOG:
                 // Generic log message
@@ -479,7 +503,7 @@ public class SessionManager {
                     updateStatus("Session " + sessionKey + " log message received");
                 }
                 break;
-                
+
             case READY:
                 // Session is ready for commands (generic session state)
                 SessionState oldState = session.getState();
@@ -487,11 +511,47 @@ public class SessionManager {
                 fireSessionEvent(sessionKey, oldState, SessionState.READY, "Session ready");
                 updateStatus("Session ready: " + sessionKey);
                 break;
-                
+
             default:
                 // Other message types should be handled by programs
                 updateStatus("Unhandled JSON message type from session " + sessionKey + ": " + msgType);
                 break;
+        }
+    }
+
+    /**
+     * Checks if a JSON message is a get_result response that should be handled by TimeSeriesRequestManager.
+     */
+    private boolean isTimeSeriesResponse(JsonMessage.SystemMessage message) {
+        try {
+            // Check if this is a result message
+            JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
+            if (msgType != JsonStdioTypes.SystemMessageType.RESULT) {
+                return false;
+            }
+
+            // Check if the result is for a get_result command
+            if (message.getData() != null && message.getData().has("command")) {
+                String command = message.getData().path("command").asText();
+                return "get_result".equals(command);
+            }
+
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Converts a JsonMessage.SystemMessage back to a JSON string for processing by TimeSeriesRequestManager.
+     */
+    private String convertMessageToJsonString(JsonMessage.SystemMessage message) {
+        try {
+            // Use Jackson ObjectMapper to convert the message back to JSON string
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.writeValueAsString(message);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to convert message to JSON string", e);
         }
     }
 

@@ -188,10 +188,19 @@ public class StdioTaskManager {
     public Optional<SessionManager.KalixSession> getSession(String sessionId) {
         return sessionManager.getSession(sessionId);
     }
-    
+
+    /**
+     * Gets the underlying SessionManager instance.
+     *
+     * @return the SessionManager instance
+     */
+    public SessionManager getSessionManager() {
+        return sessionManager;
+    }
+
     /**
      * Terminates a specific session.
-     * 
+     *
      * @param sessionId the session to terminate
      * @return CompletableFuture that completes when session is terminated
      */

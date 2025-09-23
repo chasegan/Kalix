@@ -218,5 +218,12 @@ public class JsonStdioProtocol {
         public static String testProgress(String sessionId) {
             return createCommandMessage("test_progress", null, sessionId);
         }
+
+        public static String getResult(String seriesName, String format, String sessionId) {
+            return createCommandMessage("get_result", Map.of(
+                "series_name", seriesName,
+                "format", format
+            ), sessionId);
+        }
     }
 }
