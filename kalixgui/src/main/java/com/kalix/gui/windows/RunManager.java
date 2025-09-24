@@ -199,6 +199,7 @@ public class RunManager extends JFrame {
         outputsTree = new JTree(outputsTreeModel);
         outputsTree.setRootVisible(false);
         outputsTree.setShowsRootHandles(true);
+        outputsTree.setCellRenderer(new OutputsTreeCellRenderer());
 
         // Enable multiple selection for the outputs tree to allow plotting multiple series
         outputsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
@@ -1051,6 +1052,55 @@ public class RunManager extends JFrame {
 
 
     /**
+     * Custom tree cell renderer for outputs tree.
+     */
+    private static class OutputsTreeCellRenderer extends DefaultTreeCellRenderer {
+        @Override
+        public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel,
+                boolean expanded, boolean leaf, int row, boolean hasFocus) {
+            super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+
+            if (value instanceof DefaultMutableTreeNode) {
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+                String nodeText = node.getUserObject().toString();
+
+                // Only add icons to leaf nodes
+                if (leaf && !isSpecialMessageNode(node)) {
+                    int treeIconSize = 12; // Same size as run tree icons
+
+                    // Determine icon based on the leaf node name
+                    if (nodeText.equals("dsflow") || nodeText.equals("usflow")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.WATER, treeIconSize));
+                    } else if (nodeText.equals("storage")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.GLASS_WHISKEY, treeIconSize));
+                    } else if (nodeText.equals("demand")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.QUESTION_CIRCLE, treeIconSize));
+                    } else if (nodeText.equals("diversion")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.PLAY_CIRCLE, treeIconSize));
+                    } else {
+                        // Default icon for any other leaf nodes
+                        setIcon(FontIcon.of(FontAwesomeSolid.WAVE_SQUARE, treeIconSize));
+                    }
+                } else {
+                    // No icon for non-leaf nodes
+                    setIcon(null);
+                }
+            }
+
+            return this;
+        }
+
+        /**
+         * Helper method to check if a node represents a special message (reused from parent class logic)
+         */
+        private boolean isSpecialMessageNode(DefaultMutableTreeNode node) {
+            String nodeText = node.getUserObject().toString();
+            return nodeText.equals("No outputs available") ||
+                   nodeText.equals("Outputs will appear when simulation completes");
+        }
+    }
+
+    /**
      * Custom tree cell renderer for run tree.
      */
     private static class RunTreeCellRenderer extends DefaultTreeCellRenderer {
@@ -1102,10 +1152,10 @@ public class RunManager extends JFrame {
                             setIcon(FontIcon.of(FontAwesomeSolid.SUN, treeIconSize));
                             break;
                         case RUNNING:
-                            setIcon(FontIcon.of(FontAwesomeSolid.HIKING, treeIconSize));
+                            setIcon(FontIcon.of(FontAwesomeSolid.ROCKET, treeIconSize));
                             break;
                         case DONE:
-                            setIcon(FontIcon.of(FontAwesomeSolid.CAMPGROUND, treeIconSize));
+                            setIcon(FontIcon.of(FontAwesomeSolid.GRIP_HORIZONTAL, treeIconSize));
                             break;
                         case ERROR:
                             setIcon(FontIcon.of(FontAwesomeSolid.BUG, treeIconSize));

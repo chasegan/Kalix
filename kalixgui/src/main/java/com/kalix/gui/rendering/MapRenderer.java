@@ -46,6 +46,8 @@ public class MapRenderer {
     private static final Color LINK_COLOR = new Color(100, 100, 100); // Dark gray
     private static final float LINK_STROKE_WIDTH = 2.0f;
     private static final BasicStroke LINK_STROKE = new BasicStroke(LINK_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    private static final BasicStroke LINK_DASHED_STROKE = new BasicStroke(LINK_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
+            10.0f, new float[]{5.0f, 5.0f}, 0.0f);
 
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
@@ -202,10 +204,17 @@ public class MapRenderer {
         boolean isSelected = model.isLinkSelected(link);
         if (isSelected) {
             g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
-            g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            // Use solid or dashed stroke based on link type, but with selected width
+            if (link.isPrimary()) {
+                g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            } else {
+                g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
+                        10.0f, new float[]{5.0f, 5.0f}, 0.0f));
+            }
         } else {
             g2d.setColor(LINK_COLOR);
-            g2d.setStroke(LINK_STROKE);
+            // Use solid stroke for primary links, dashed stroke for alternative links
+            g2d.setStroke(link.isPrimary() ? LINK_STROKE : LINK_DASHED_STROKE);
         }
 
         // Transform node world coordinates to screen coordinates

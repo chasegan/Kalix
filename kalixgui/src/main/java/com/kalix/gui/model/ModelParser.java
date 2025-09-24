@@ -15,6 +15,19 @@ import java.util.regex.Pattern;
  * Focused on extracting nodes and links for visualization purposes.
  */
 public class ModelParser {
+
+    /**
+     * Helper class to store link information during parsing
+     */
+    private static class LinkInfo {
+        final String downstreamNode;
+        final boolean isPrimary;
+
+        LinkInfo(String downstreamNode, boolean isPrimary) {
+            this.downstreamNode = downstreamNode;
+            this.isPrimary = isPrimary;
+        }
+    }
     private static final Logger logger = LoggerFactory.getLogger(ModelParser.class);
 
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
@@ -35,7 +48,7 @@ public class ModelParser {
             String currentNodeType = null;
             Double currentNodeX = null;
             Double currentNodeY = null;
-            List<String> currentNodeLinks = new ArrayList<>();
+            List<LinkInfo> currentNodeLinks = new ArrayList<>();
 
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -54,8 +67,8 @@ public class ModelParser {
                         nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
 
                         // Create links for this node
-                        for (String downstreamNode : currentNodeLinks) {
-                            links.add(new ModelLink(currentNodeName, downstreamNode.trim()));
+                        for (LinkInfo linkInfo : currentNodeLinks) {
+                            links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
                         }
                     }
 
@@ -92,8 +105,10 @@ public class ModelParser {
                     // Parse downstream links (ds_1, ds_2, etc.)
                     Matcher linkMatcher = DOWNSTREAM_LINK_PATTERN.matcher(line);
                     if (linkMatcher.matches()) {
+                        String linkNumber = linkMatcher.group(1);
                         String downstreamNode = linkMatcher.group(2).trim();
-                        currentNodeLinks.add(downstreamNode);
+                        boolean isPrimary = "1".equals(linkNumber); // ds_1 is primary, all others are alternative
+                        currentNodeLinks.add(new LinkInfo(downstreamNode, isPrimary));
                         continue;
                     }
                 }
@@ -105,8 +120,8 @@ public class ModelParser {
                 nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
 
                 // Create links for the final node
-                for (String downstreamNode : currentNodeLinks) {
-                    links.add(new ModelLink(currentNodeName, downstreamNode.trim()));
+                for (LinkInfo linkInfo : currentNodeLinks) {
+                    links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
                 }
             }
 
