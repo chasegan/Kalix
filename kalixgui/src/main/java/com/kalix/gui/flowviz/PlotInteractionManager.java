@@ -6,6 +6,8 @@ import com.kalix.gui.io.TimeSeriesCsvExporter;
 import com.kalix.gui.io.KalixTimeSeriesWriter;
 
 import javax.swing.*;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -44,6 +46,7 @@ public class PlotInteractionManager {
     private boolean isDragging = false;
     private boolean autoYMode = false;
     private JPopupMenu contextMenu;
+    private JCheckBoxMenuItem autoYMenuItem;
 
     // Data access callbacks
     private Supplier<DataSet> dataSetSupplier;
@@ -439,23 +442,44 @@ public class PlotInteractionManager {
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
-        JMenuItem zoomInItem = new JMenuItem("Zoom In");
-        zoomInItem.addActionListener(e -> zoomIn());
-        contextMenu.add(zoomInItem);
-
-        JMenuItem zoomOutItem = new JMenuItem("Zoom Out");
-        zoomOutItem.addActionListener(e -> zoomOut());
-        contextMenu.add(zoomOutItem);
-
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
         contextMenu.add(zoomToFitItem);
+
+        autoYMenuItem = new JCheckBoxMenuItem("Auto-Y");
+        autoYMenuItem.addActionListener(e -> {
+            autoYMode = autoYMenuItem.isSelected();
+            // Update the parent PlotPanel's auto-Y mode if it has the method
+            if (parentComponent instanceof PlotPanel) {
+                ((PlotPanel) parentComponent).setAutoYMode(autoYMode);
+            }
+        });
+        contextMenu.add(autoYMenuItem);
 
         contextMenu.addSeparator();
 
         JMenuItem saveDataItem = new JMenuItem("Save Data...");
         saveDataItem.addActionListener(e -> saveData());
         contextMenu.add(saveDataItem);
+
+        // Add popup menu listener to update checkbox state when menu is shown
+        contextMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                // Sync the checkbox state with the current PlotPanel state
+                if (parentComponent instanceof PlotPanel) {
+                    PlotPanel plotPanel = (PlotPanel) parentComponent;
+                    // Get the current auto-Y state from the PlotPanel
+                    autoYMenuItem.setSelected(plotPanel.isAutoYMode());
+                }
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {}
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {}
+        });
     }
 
     /**

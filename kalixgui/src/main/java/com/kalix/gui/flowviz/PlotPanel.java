@@ -236,6 +236,10 @@ public class PlotPanel extends JPanel {
         }
     }
 
+    public boolean isAutoYMode() {
+        return autoYMode;
+    }
+
     public void setShowCoordinates(boolean showCoordinates) {
         if (coordinateDisplayManager != null) {
             coordinateDisplayManager.setShowCoordinates(showCoordinates);

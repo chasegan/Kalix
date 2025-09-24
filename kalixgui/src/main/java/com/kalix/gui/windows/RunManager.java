@@ -227,7 +227,6 @@ public class RunManager extends JFrame {
         statsTable.setRowSelectionAllowed(false);
 
         statsScrollPane = new JScrollPane(statsTable);
-        statsScrollPane.setBorder(BorderFactory.createTitledBorder("Statistics"));
         statsScrollPane.setPreferredSize(new Dimension(0, 150));
     }
 
@@ -289,20 +288,43 @@ public class RunManager extends JFrame {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(150); // Give more space to details for plotting
-        splitPane.setResizeWeight(0);    // 20% for runs tree, 80% for details/plot
+        splitPane.setDividerLocation(150); // Keep original width
+        splitPane.setResizeWeight(0);
 
-        // Left side: tree
-        JPanel leftPanel = new JPanel(new BorderLayout());
-        leftPanel.setBorder(BorderFactory.createTitledBorder("Runs"));
+        // Left side: vertical split with runs tree and outputs tree
+        JSplitPane leftSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        leftSplitPane.setDividerLocation(200); // 200px for runs tree
+        leftSplitPane.setResizeWeight(0.5); // Equal space for both trees
+
+        // Top of left side: runs tree
+        JPanel runsPanel = new JPanel(new BorderLayout());
+        runsPanel.setBorder(BorderFactory.createTitledBorder("Runs"));
         JScrollPane treeScrollPane = new JScrollPane(runTree);
-        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
+        runsPanel.add(treeScrollPane, BorderLayout.CENTER);
 
-        // Right side: details
-        detailsPanel.setBorder(BorderFactory.createTitledBorder("Available timeseries"));
+        // Bottom of left side: outputs tree
+        JPanel outputsPanel = new JPanel(new BorderLayout());
+        outputsPanel.setBorder(BorderFactory.createTitledBorder("Available timeseries"));
+        outputsPanel.add(outputsScrollPane, BorderLayout.CENTER);
 
-        splitPane.setLeftComponent(leftPanel);
-        splitPane.setRightComponent(detailsPanel);
+        leftSplitPane.setTopComponent(runsPanel);
+        leftSplitPane.setBottomComponent(outputsPanel);
+
+        // Right side: vertical split pane for plot and stats (reusing existing layout)
+        JSplitPane rightVerticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        rightVerticalSplit.setDividerLocation(350); // 350px for plot
+        rightVerticalSplit.setResizeWeight(0.75); // Give more space to plot
+
+        // Top of right side: plot panel
+        JPanel plotWrapperPanel = new JPanel(new BorderLayout());
+        plotWrapperPanel.add(plotPanel, BorderLayout.CENTER);
+
+        // Bottom of right side: stats table
+        rightVerticalSplit.setTopComponent(plotWrapperPanel);
+        rightVerticalSplit.setBottomComponent(statsScrollPane);
+
+        splitPane.setLeftComponent(leftSplitPane);
+        splitPane.setRightComponent(rightVerticalSplit);
 
         add(splitPane, BorderLayout.CENTER);
 
