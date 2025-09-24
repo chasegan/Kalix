@@ -399,6 +399,7 @@ public class HydrologicalModel {
         
         if (!addToSelection) {
             selectedNodes.clear();
+            selectedLinks.clear();
         }
         
         selectedNodes.add(nodeName);
