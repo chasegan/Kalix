@@ -387,6 +387,19 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 }
             }
         });
+
+        // Global Ctrl+S/Cmd+S for save
+        KeyStroke ctrlS = KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdS = KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.META_DOWN_MASK);
+        inputMap.put(ctrlS, "global-save");
+        inputMap.put(cmdS, "global-save");
+        actionMap.put("global-save", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                saveModel();
+                updateStatus("Model saved");
+            }
+        });
     }
     
     /**

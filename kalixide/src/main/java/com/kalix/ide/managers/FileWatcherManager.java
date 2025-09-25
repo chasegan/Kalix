@@ -59,8 +59,13 @@ public class FileWatcherManager {
         // Stop any existing watch
         stopWatching();
 
+        logger.info("watchFile called with: {} (auto-reload enabled: {})",
+            file != null ? file.getName() : "null", isAutoReloadEnabled());
+
         // Don't start watching if disabled or no file
         if (!isAutoReloadEnabled() || file == null || watchService_ == null) {
+            logger.info("Skipping file watch - auto-reload disabled: {}, file null: {}, watchService null: {}",
+                !isAutoReloadEnabled(), file == null, watchService_ == null);
             return;
         }
 
@@ -128,7 +133,7 @@ public class FileWatcherManager {
             watchFile(fileToWatch);
         }
 
-        logger.debug("Auto-reload preference changed to: {}", enabled);
+        logger.info("Auto-reload preference changed to: {}", enabled);
     }
 
     /**
@@ -160,6 +165,7 @@ public class FileWatcherManager {
                             logger.debug("Detected change in watched file: {}", currentWatchedFile);
 
                             // Trigger reload on EDT
+                            logger.info("File change detected, triggering reload callback");
                             javax.swing.SwingUtilities.invokeLater(() -> {
                                 if (currentWatchedFile != null && isWatching) {
                                     fileReloadCallback.accept(currentWatchedFile);

@@ -32,6 +32,11 @@
         <appender-ref ref="FILE" />
     </logger>
 
+    <logger name="com.kalix.ide.managers.FileWatcherManager" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </logger>
+
     <!-- Reduce noise from external libraries -->
     <logger name="com.formdev.flatlaf" level="WARN" />
     <logger name="org.fife.ui" level="WARN" />

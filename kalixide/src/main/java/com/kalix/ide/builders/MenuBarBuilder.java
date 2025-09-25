@@ -1,6 +1,7 @@
 package com.kalix.ide.builders;
 
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.managers.KeyboardShortcutManager;
 import com.kalix.ide.themes.NodeTheme;
 
 import javax.swing.JCheckBoxMenuItem;
@@ -17,6 +18,7 @@ public class MenuBarBuilder {
     
     private final MenuBarCallbacks callbacks;
     private final EnhancedTextEditor textEditor;
+    private final KeyboardShortcutManager shortcutManager;
     private JMenu recentFilesMenu;
     private JMenu fileMenu;
     
@@ -81,6 +83,7 @@ public class MenuBarBuilder {
     public MenuBarBuilder(MenuBarCallbacks callbacks, EnhancedTextEditor textEditor) {
         this.callbacks = callbacks;
         this.textEditor = textEditor;
+        this.shortcutManager = KeyboardShortcutManager.getInstance();
     }
     
     /**
@@ -122,7 +125,7 @@ public class MenuBarBuilder {
         fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Save", e -> callbacks.saveModel()));
+        fileMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Save", "S"), e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
@@ -145,15 +148,15 @@ public class MenuBarBuilder {
     private JMenu createEditMenu() {
         JMenu editMenu = new JMenu("Edit");
         
-        editMenu.add(createMenuItem("Undo\tCtrl+Z", e -> callbacks.undoAction()));
-        editMenu.add(createMenuItem("Redo\tCtrl+Y", e -> callbacks.redoAction()));
+        editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Undo", "Z"), e -> callbacks.undoAction()));
+        editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Redo", "Y"), e -> callbacks.redoAction()));
         editMenu.addSeparator();
         editMenu.add(createMenuItem("Cut", e -> callbacks.cutAction()));
         editMenu.add(createMenuItem("Copy", e -> callbacks.copyAction()));
         editMenu.add(createMenuItem("Paste", e -> callbacks.pasteAction()));
         editMenu.addSeparator();
-        editMenu.add(createMenuItem("Find...\tCtrl+F", e -> callbacks.searchModel()));
-        editMenu.add(createMenuItem("Find and Replace...\tCtrl+H", e -> callbacks.showFindReplaceDialog()));
+        editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Find...", "F"), e -> callbacks.searchModel()));
+        editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Find and Replace...", "H"), e -> callbacks.showFindReplaceDialog()));
         
         return editMenu;
     }

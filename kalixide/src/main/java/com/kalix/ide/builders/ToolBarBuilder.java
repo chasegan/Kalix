@@ -43,21 +43,21 @@ public class ToolBarBuilder {
         // File operations
         toolBar.add(createToolBarButton(
             "New", 
-            AppConstants.TOOLBAR_NEW_TOOLTIP,
+            AppConstants.getToolbarNewTooltip(),
             FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.newModel()
         ));
         
         toolBar.add(createToolBarButton(
             "Open", 
-            AppConstants.TOOLBAR_OPEN_TOOLTIP,
+            AppConstants.getToolbarOpenTooltip(),
             FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openModel()
         ));
         
         toolBar.add(createToolBarButton(
             "Save", 
-            AppConstants.TOOLBAR_SAVE_TOOLTIP,
+            AppConstants.getToolbarSaveTooltip(),
             FontIcon.of(FontAwesomeSolid.SAVE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.saveModel()
         ));
@@ -67,7 +67,7 @@ public class ToolBarBuilder {
         // Utility operations  
         toolBar.add(createToolBarButton(
             "Search", 
-            AppConstants.TOOLBAR_SEARCH_TOOLTIP,
+            AppConstants.getToolbarSearchTooltip(),
             FontIcon.of(FontAwesomeSolid.SEARCH, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.searchModel()
         ));
@@ -84,7 +84,7 @@ public class ToolBarBuilder {
         // Model operations
         toolBar.add(createToolBarButton(
             "Run Model", 
-            AppConstants.TOOLBAR_RUN_MODEL_TOOLTIP,
+            AppConstants.getToolbarRunModelTooltip(),
             FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.runModelFromMemory()
         ));
