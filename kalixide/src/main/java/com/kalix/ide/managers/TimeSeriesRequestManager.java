@@ -279,7 +279,7 @@ public class TimeSeriesRequestManager {
             JsonNode result = data.path("result");
             String seriesName = result.path("series_name").asText();
             String dataString = result.path("data").asText();
-            String sessionId = response.path("session_id").asText();
+            String kalixcliUid = response.path("kalixcli_uid").asText();
 
 
             if (seriesName.isEmpty() || dataString.isEmpty()) {
@@ -291,7 +291,7 @@ public class TimeSeriesRequestManager {
             TimeSeriesData timeSeriesData = parseTimeSeriesData(seriesName, dataString);
 
             // Update cache
-            String cacheKey = sessionId + ":" + seriesName;
+            String cacheKey = kalixcliUid + ":" + seriesName;
             completedCache.put(cacheKey, timeSeriesData);
 
             CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);

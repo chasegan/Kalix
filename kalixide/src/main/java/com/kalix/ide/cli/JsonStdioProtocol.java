@@ -30,7 +30,7 @@ public class JsonStdioProtocol {
             JsonMessage.SystemMessage message = objectMapper.readValue(line.trim(), JsonMessage.SystemMessage.class);
             
             // Validate required fields
-            if (message.getType() == null || message.getSessionId() == null) {
+            if (message.getType() == null || message.getKalixcliUid() == null) {
                 return Optional.empty();
             }
             
@@ -46,16 +46,16 @@ public class JsonStdioProtocol {
      *
      * @param command the command name
      * @param parameters the command parameters
-     * @param sessionId the CLI session ID (use empty string if unknown)
+     * @param kalixcliUid the CLI session ID (use empty string if unknown)
      * @return JSON string representation
      */
-    public static String createCommandMessage(String command, Map<String, Object> parameters, String sessionId) {
+    public static String createCommandMessage(String command, Map<String, Object> parameters, String kalixcliUid) {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.COMMAND);
 
-            // Set the session ID if provided (non-empty)
-            if (sessionId != null && !sessionId.isEmpty()) {
-                message.setSessionId(sessionId);
+            // Set the kalixcli UID if provided (non-empty)
+            if (kalixcliUid != null && !kalixcliUid.isEmpty()) {
+                message.setKalixcliUid(kalixcliUid);
             }
 
             ObjectNode dataNode = objectMapper.createObjectNode();
@@ -203,27 +203,27 @@ public class JsonStdioProtocol {
      * Utility methods for common commands.
      */
     public static class Commands {
-        public static String loadModelFile(String modelPath, String sessionId) {
-            return createCommandMessage("load_model_file", Map.of("model_path", modelPath), sessionId);
+        public static String loadModelFile(String modelPath, String kalixcliUid) {
+            return createCommandMessage("load_model_file", Map.of("model_path", modelPath), kalixcliUid);
         }
 
-        public static String loadModelString(String modelIni, String sessionId) {
-            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni), sessionId);
+        public static String loadModelString(String modelIni, String kalixcliUid) {
+            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni), kalixcliUid);
         }
         
-        public static String runSimulation(String sessionId) {
-            return createCommandMessage("run_simulation", Map.of(), sessionId);
+        public static String runSimulation(String kalixcliUid) {
+            return createCommandMessage("run_simulation", Map.of(), kalixcliUid);
         }
         
-        public static String testProgress(String sessionId) {
-            return createCommandMessage("test_progress", null, sessionId);
+        public static String testProgress(String kalixcliUid) {
+            return createCommandMessage("test_progress", null, kalixcliUid);
         }
 
-        public static String getResult(String seriesName, String format, String sessionId) {
+        public static String getResult(String seriesName, String format, String kalixcliUid) {
             return createCommandMessage("get_result", Map.of(
                 "series_name", seriesName,
                 "format", format
-            ), sessionId);
+            ), kalixcliUid);
         }
     }
 }

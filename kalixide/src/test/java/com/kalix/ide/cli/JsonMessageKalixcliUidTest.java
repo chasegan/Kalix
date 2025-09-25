@@ -1,0 +1,43 @@
+package com.kalix.ide.cli;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class JsonMessageKalixcliUidTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    void testCommandMessageSerialization() throws Exception {
+        JsonMessage.CommandMessage message = new JsonMessage.CommandMessage();
+        message.setType("command");
+        message.setKalixcliUid("test_kalixcli_uid_123");
+        
+        String json = mapper.writeValueAsString(message);
+        
+        // Verify the JSON contains kalixcli_uid field, not session_id
+        assertTrue(json.contains("kalixcli_uid"), "JSON should contain kalixcli_uid field");
+        assertFalse(json.contains("session_id"), "JSON should not contain session_id field");
+        assertTrue(json.contains("test_kalixcli_uid_123"), "JSON should contain the UID value");
+        
+        System.out.println("Command message JSON: " + json);
+    }
+
+    @Test
+    void testSystemMessageDeserialization() throws Exception {
+        String json = "{\n" +
+                "  \"type\": \"ready\",\n" +
+                "  \"timestamp\": \"2024-01-01T00:00:00Z\",\n" +
+                "  \"kalixcli_uid\": \"test_uid_456\",\n" +
+                "  \"data\": {\"status\": \"ready\"}\n" +
+                "}";
+        
+        JsonMessage.SystemMessage message = mapper.readValue(json, JsonMessage.SystemMessage.class);
+        
+        assertEquals("ready", message.getType());
+        assertEquals("test_uid_456", message.getKalixcliUid());
+        
+        System.out.println("Deserialized system message: " + message.toString());
+    }
+}

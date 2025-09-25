@@ -7,16 +7,16 @@ pub struct Message {
     pub msg_type: String,
     pub timestamp: DateTime<Utc>,
     #[serde(default)]
-    pub session_id: String,
+    pub kalixcli_uid: String,
     pub data: serde_json::Value,
 }
 
 impl Message {
-    pub fn new(msg_type: &str, session_id: String, data: serde_json::Value) -> Self {
+    pub fn new(msg_type: &str, kalixcli_uid: String, data: serde_json::Value) -> Self {
         Self {
             msg_type: msg_type.to_string(),
             timestamp: Utc::now(),
-            session_id,
+            kalixcli_uid,
             data,
         }
     }
@@ -151,54 +151,54 @@ pub struct QueryData {
 }
 
 // Helper functions for creating common messages
-pub fn create_ready_message(session_id: String, commands: Vec<CommandSpec>, state: StateInfo) -> Message {
+pub fn create_ready_message(kalixcli_uid: String, commands: Vec<CommandSpec>, state: StateInfo) -> Message {
     let data = ReadyData {
         status: "ready".to_string(),
         available_commands: commands,
         current_state: state,
     };
-    Message::new("ready", session_id, serde_json::to_value(data).unwrap())
+    Message::new("ready", kalixcli_uid, serde_json::to_value(data).unwrap())
 }
 
-pub fn create_busy_message(session_id: String, command: String, interruptible: bool) -> Message {
+pub fn create_busy_message(kalixcli_uid: String, command: String, interruptible: bool) -> Message {
     let data = BusyData {
         status: "busy".to_string(),
         executing_command: command,
         interruptible,
         started_at: Utc::now(),
     };
-    Message::new("busy", session_id, serde_json::to_value(data).unwrap())
+    Message::new("busy", kalixcli_uid, serde_json::to_value(data).unwrap())
 }
 
-pub fn create_progress_message(session_id: String, command: String, progress: ProgressInfo) -> Message {
+pub fn create_progress_message(kalixcli_uid: String, command: String, progress: ProgressInfo) -> Message {
     let data = ProgressData { command, progress };
-    Message::new("progress", session_id, serde_json::to_value(data).unwrap())
+    Message::new("progress", kalixcli_uid, serde_json::to_value(data).unwrap())
 }
 
-pub fn create_result_message(session_id: String, command: String, execution_time: String, result: serde_json::Value) -> Message {
+pub fn create_result_message(kalixcli_uid: String, command: String, execution_time: String, result: serde_json::Value) -> Message {
     let data = ResultData {
         command,
         status: "success".to_string(),
         execution_time,
         result,
     };
-    Message::new("result", session_id, serde_json::to_value(data).unwrap())
+    Message::new("result", kalixcli_uid, serde_json::to_value(data).unwrap())
 }
 
-pub fn create_error_message(session_id: String, command: Option<String>, code: String, message: String, details: Option<serde_json::Value>) -> Message {
+pub fn create_error_message(kalixcli_uid: String, command: Option<String>, code: String, message: String, details: Option<serde_json::Value>) -> Message {
     let data = ErrorData {
         command,
         error: ErrorInfo { code, message, details },
     };
-    Message::new("error", session_id, serde_json::to_value(data).unwrap())
+    Message::new("error", kalixcli_uid, serde_json::to_value(data).unwrap())
 }
 
-pub fn create_stopped_message(session_id: String, command: String, execution_time: String, partial_result: Option<serde_json::Value>) -> Message {
+pub fn create_stopped_message(kalixcli_uid: String, command: String, execution_time: String, partial_result: Option<serde_json::Value>) -> Message {
     let data = StoppedData {
         command,
         status: "stopped".to_string(),
         execution_time,
         partial_result,
     };
-    Message::new("stopped", session_id, serde_json::to_value(data).unwrap())
+    Message::new("stopped", kalixcli_uid, serde_json::to_value(data).unwrap())
 }

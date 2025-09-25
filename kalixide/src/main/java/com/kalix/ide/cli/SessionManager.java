@@ -459,8 +459,8 @@ public class SessionManager {
         String sessionKey = session.getSessionKey();
 
         // Store CLI session ID from the first message we receive
-        if (session.getCliSessionId() == null && message.getSessionId() != null) {
-            session.setCliSessionId(message.getSessionId());
+        if (session.getCliSessionId() == null && message.getKalixcliUid() != null) {
+            session.setCliSessionId(message.getKalixcliUid());
         }
 
 

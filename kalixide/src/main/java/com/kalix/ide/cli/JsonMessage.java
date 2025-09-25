@@ -44,15 +44,15 @@ public class JsonMessage {
     }
     
     /**
-     * Message received from kalixcli (includes session_id).
+     * Message received from kalixcli (includes kalixcli_uid).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SystemMessage extends BaseMessage {
-        @JsonProperty("session_id")
-        private String sessionId;
+        @JsonProperty("kalixcli_uid")
+        private String kalixcliUid;
         
-        public String getSessionId() { return sessionId; }
-        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+        public String getKalixcliUid() { return kalixcliUid; }
+        public void setKalixcliUid(String kalixcliUid) { this.kalixcliUid = kalixcliUid; }
         
         public JsonStdioTypes.SystemMessageType systemMessageType() {
             return JsonStdioTypes.SystemMessageType.fromString(getType()).orElse(null);
@@ -60,18 +60,18 @@ public class JsonMessage {
         
         @Override
         public String toString() {
-            return String.format("SystemMessage[type=%s, session_id=%s]", getType(), sessionId);
+            return String.format("SystemMessage[type=%s, kalixcli_uid=%s]", getType(), kalixcliUid);
         }
     }
     
     /**
-     * Message sent from frontend to kalixcli (includes session_id).
+     * Message sent from frontend to kalixcli (includes kalixcli_uid).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonPropertyOrder({"type", "timestamp", "session_id", "data"})
+    @JsonPropertyOrder({"type", "timestamp", "kalixcli_uid", "data"})
     public static class CommandMessage extends BaseMessage {
-        @JsonProperty("session_id")
-        private String sessionId;
+        @JsonProperty("kalixcli_uid")
+        private String kalixcliUid;
         
         public CommandMessage() {
             setCurrentTimestamp();
@@ -82,8 +82,8 @@ public class JsonMessage {
             setType(type.getValue());
         }
 
-        public String getSessionId() { return sessionId; }
-        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+        public String getKalixcliUid() { return kalixcliUid; }
+        public void setKalixcliUid(String kalixcliUid) { this.kalixcliUid = kalixcliUid; }
         
         public JsonStdioTypes.CommandMessageType commandMessageType() {
             for (JsonStdioTypes.CommandMessageType type : JsonStdioTypes.CommandMessageType.values()) {

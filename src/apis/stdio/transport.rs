@@ -103,7 +103,7 @@ mod tests {
     fn test_message_serialization() {
         let msg = Message::new(
             "test",
-            "session_123".to_string(),
+            "kalixcli_123".to_string(),
             serde_json::json!({"key": "value"})
         );
         
@@ -111,6 +111,22 @@ mod tests {
         let deserialized: Message = serde_json::from_str(&json).unwrap();
         
         assert_eq!(msg.msg_type, deserialized.msg_type);
-        assert_eq!(msg.session_id, deserialized.session_id);
+        assert_eq!(msg.kalixcli_uid, deserialized.kalixcli_uid);
+    }
+    
+    #[test]
+    fn test_json_contains_kalixcli_uid() {
+        let msg = Message::new(
+            "ready",
+            "test_uid_456".to_string(),
+            serde_json::json!({"status": "ready"})
+        );
+        
+        let json = serde_json::to_string(&msg).unwrap();
+        
+        // Verify the JSON contains kalixcli_uid field, not session_id
+        assert!(json.contains("kalixcli_uid"));
+        assert!(!json.contains("session_id"));
+        assert!(json.contains("test_uid_456"));
     }
 }
