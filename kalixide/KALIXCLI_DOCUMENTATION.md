@@ -156,7 +156,7 @@ All messages follow this structure:
 {
   "type": "message_type",
   "timestamp": "2025-09-22T10:30:00Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": { /* message-specific payload */ }
 }
 ```
@@ -170,7 +170,7 @@ Sent when session starts and after each command completes.
 {
   "type": "ready",
   "timestamp": "2025-09-22T10:30:00Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "commands": [
       {
@@ -200,7 +200,7 @@ Sent when command execution starts.
 {
   "type": "busy",
   "timestamp": "2025-09-22T10:30:05Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "command": "run_simulation"
   }
@@ -214,7 +214,7 @@ Sent during long-running operations.
 {
   "type": "progress",
   "timestamp": "2025-09-22T10:30:10Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "command": "run_simulation",
     "progress": {
@@ -237,7 +237,7 @@ Sent when command execution completes successfully.
 {
   "type": "result",
   "timestamp": "2025-09-22T10:30:15Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "command": "echo",
     "status": "success",
@@ -256,7 +256,7 @@ Sent when command execution fails.
 {
   "type": "error",
   "timestamp": "2025-09-22T10:30:15Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "command": "get_result",
     "error": {
@@ -274,7 +274,7 @@ Sent when command execution is interrupted.
 {
   "type": "stopped",
   "timestamp": "2025-09-22T10:30:15Z",
-  "session_id": "sess_20250922_103000_a7b9",
+  "kalixcli_uid": "sess_20250922_103000_a7b9",
   "data": {
     "command": "run_simulation",
     "status": "stopped",
@@ -461,7 +461,7 @@ Retrieve timeseries result data from completed simulation.
 
 1. **Startup**
    - IDE: `kalixcli new-session`
-   - kalixcli: Generates unique session_id
+   - kalixcli: Generates unique kalixcli_uid
    - kalixcli: Sends `ready` message with available commands
 
 2. **Command Execution**
