@@ -387,15 +387,19 @@ public class RunManager extends JFrame {
     private void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        JMenuItem cliLogItem = new JMenuItem("STDIO Log");
-        cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
-        contextMenu.add(cliLogItem);
-
-        contextMenu.addSeparator();
+        JMenuItem renameItem = new JMenuItem("Rename");
+        renameItem.addActionListener(e -> renameRunFromContextMenu());
+        contextMenu.add(renameItem);
 
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> removeRunFromContextMenu());
         contextMenu.add(removeItem);
+
+        contextMenu.addSeparator();
+
+        JMenuItem cliLogItem = new JMenuItem("STDIO Log");
+        cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
+        contextMenu.add(cliLogItem);
 
         // Add mouse listener for right-click
         runTree.addMouseListener(new MouseAdapter() {
@@ -498,6 +502,66 @@ public class RunManager extends JFrame {
     }
 
 
+
+    /**
+     * Shows a dialog to rename the selected run.
+     */
+    private void renameRunFromContextMenu() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+
+        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+        String currentName = runInfo.runName;
+
+        // Show input dialog for new name
+        String newName = (String) JOptionPane.showInputDialog(
+            this,
+            "Enter new name for the run:",
+            "Rename Run",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            currentName
+        );
+
+        if (newName != null) {
+            newName = newName.trim();
+
+            // Validate the new name
+            if (newName.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "Run name cannot be empty.",
+                    "Invalid Name",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Check if name is already in use by another run
+            String sessionKey = runInfo.session.getSessionKey();
+            for (String existingName : sessionToRunName.values()) {
+                if (existingName.equals(newName) && !existingName.equals(currentName)) {
+                    JOptionPane.showMessageDialog(this,
+                        "A run with the name '" + newName + "' already exists.\nPlease choose a different name.",
+                        "Duplicate Name",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+            }
+
+            // Update the run name
+            runInfo.setRunName(newName);
+            sessionToRunName.put(sessionKey, newName);
+
+            // Simple node refresh - just update this one node
+            treeModel.nodeChanged(selectedNode);
+
+            // Update status
+            statusUpdater.accept("Renamed run '" + currentName + "' to '" + newName + "'");
+        }
+    }
 
     /**
      * Shows the CLI log window for the selected run.
@@ -958,12 +1022,19 @@ public class RunManager extends JFrame {
      * Data class to hold run information.
      */
     private static class RunInfo {
-        final String runName;
+        String runName; // Made non-final to allow renaming
         final SessionManager.KalixSession session;
 
         RunInfo(String runName, SessionManager.KalixSession session) {
             this.runName = runName;
             this.session = session;
+        }
+
+        /**
+         * Updates the run name. Used when renaming runs.
+         */
+        public void setRunName(String newName) {
+            this.runName = newName;
         }
 
         /**
