@@ -47,12 +47,12 @@ public class TimeSeriesRequestManager {
      * Represents a timeseries fetch request
      */
     private static class TimeSeriesRequest {
-        final String sessionId;
+        final String sessionKey;
         final String seriesName;
         final CompletableFuture<TimeSeriesData> future;
 
-        TimeSeriesRequest(String sessionId, String seriesName, CompletableFuture<TimeSeriesData> future) {
-            this.sessionId = sessionId;
+        TimeSeriesRequest(String sessionKey, String seriesName, CompletableFuture<TimeSeriesData> future) {
+            this.sessionKey = sessionKey;
             this.seriesName = seriesName;
             this.future = future;
         }
@@ -77,19 +77,19 @@ public class TimeSeriesRequestManager {
      * Request timeseries data for a specific output series.
      * Returns immediately with a CompletableFuture that will complete when data is available.
      *
-     * @param sessionId The session containing the model run
+     * @param sessionKey The session containing the model run
      * @param seriesName The full series name (e.g., "node.my_gr4j_node.dsflow")
      * @return CompletableFuture that completes with TimeSeriesData or fails with exception
      */
     public CompletableFuture<TimeSeriesData> requestTimeSeries(String sessionKey, String seriesName) {
-        // Get the CLI session ID for consistent cache keys
-        String cliSessionId = getCliSessionId(sessionKey);
-        if (cliSessionId == null) {
-            return CompletableFuture.failedFuture(new RuntimeException("Session not found or CLI session ID not available: " + sessionKey));
+        // Get the Kalixcli UID for consistent cache keys
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) {
+            return CompletableFuture.failedFuture(new RuntimeException("Session not found or Kalixcli UID not available: " + sessionKey));
         }
 
-        // Create cache key using CLI session ID
-        String cacheKey = cliSessionId + ":" + seriesName;
+        // Create cache key using Kalixcli UID
+        String cacheKey = kalixcliUid + ":" + seriesName;
 
         // Check if already in cache or being processed
         CompletableFuture<TimeSeriesData> existingRequest = cache.get(cacheKey);
@@ -130,10 +130,10 @@ public class TimeSeriesRequestManager {
      * @return TimeSeriesData if cached, null otherwise
      */
     public TimeSeriesData getTimeSeriesFromCache(String sessionKey, String seriesName) {
-        String cliSessionId = getCliSessionId(sessionKey);
-        if (cliSessionId == null) return null;
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) return null;
 
-        String cacheKey = cliSessionId + ":" + seriesName;
+        String cacheKey = kalixcliUid + ":" + seriesName;
         return completedCache.get(cacheKey);
     }
 
@@ -144,53 +144,25 @@ public class TimeSeriesRequestManager {
      * @return true if request is in progress
      */
     public boolean isRequestInProgress(String sessionKey, String seriesName) {
-        String cliSessionId = getCliSessionId(sessionKey);
-        if (cliSessionId == null) return false;
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) return false;
 
-        String cacheKey = cliSessionId + ":" + seriesName;
+        String cacheKey = kalixcliUid + ":" + seriesName;
         CompletableFuture<TimeSeriesData> future = cache.get(cacheKey);
         return future != null && !future.isDone();
     }
 
     /**
-     * Clear cache for a specific session (useful when session ends)
-     * @param sessionKey The session key (IDE identifier) to clear cache for
+     * Helper method to get Kalixcli UID from sessionKey
      */
-    public void clearCacheForSession(String sessionKey) {
-        String cliSessionId = getCliSessionId(sessionKey);
-        if (cliSessionId == null) return;
-
-        cache.entrySet().removeIf(entry -> entry.getKey().startsWith(cliSessionId + ":"));
-        completedCache.entrySet().removeIf(entry -> entry.getKey().startsWith(cliSessionId + ":"));
-        logger.info("Cleared timeseries cache for session {}", sessionKey);
-    }
-
-    /**
-     * Helper method to get CLI session ID from IDE session key
-     */
-    private String getCliSessionId(String sessionKey) {
+    private String getKalixcliUid(String sessionKey) {
         try {
             return sessionManager.getSession(sessionKey)
-                    .map(session -> session.getCliSessionId())
+                    .map(SessionManager.KalixSession::getKalixcliUid)
                     .orElse(null);
         } catch (Exception e) {
-            logger.warn("Failed to get CLI session ID for session key: {}", sessionKey);
+            logger.warn("Failed to get Kalixcli UID for session key: {}", sessionKey);
             return null;
-        }
-    }
-
-    /**
-     * Shutdown the request manager
-     */
-    public void shutdown() {
-        requestExecutor.shutdown();
-        try {
-            if (!requestExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                requestExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            requestExecutor.shutdownNow();
         }
     }
 
@@ -217,26 +189,25 @@ public class TimeSeriesRequestManager {
      * Process a single timeseries request
      */
     private void processRequest(TimeSeriesRequest request) {
-        // Get CLI session ID for consistent cache key
-        String cliSessionId = getCliSessionId(request.sessionId);
-        if (cliSessionId == null) {
-            request.future.completeExceptionally(new RuntimeException("CLI session ID not available for: " + request.sessionId));
+        // Get Kalixcli UID for consistent cache key
+        String kalixcliUid = getKalixcliUid(request.sessionKey);
+        if (kalixcliUid == null) {
+            request.future.completeExceptionally(new RuntimeException("Kalixcli UID not available for: " + request.sessionKey));
             return;
         }
 
-        String cacheKey = cliSessionId + ":" + request.seriesName;
+        String cacheKey = kalixcliUid + ":" + request.seriesName;
 
         try {
             logger.info("Processing timeseries request for {}", request.seriesName);
 
             // Create the get_result command
-            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv", request.sessionId);
+            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv", request.sessionKey);
 
             // Send command
-            sessionManager.sendCommand(request.sessionId, command)
+            sessionManager.sendCommand(request.sessionKey, command)
                 .thenRun(() -> {
-                    // For now, we need to implement a way to get the response
-                    // This is a simplified version - in practice you'd need to set up response handling
+                    // This is a simplified version. Maybe we want to set up response handling
                     // TODO: Implement proper response handling mechanism
                     logger.info("Sent get_result command for {}, waiting for response...", request.seriesName);
                 })

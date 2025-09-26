@@ -61,7 +61,7 @@ public class SessionStatusPanel extends JPanel {
     /**
      * Updates the panel with current session information.
      * 
-     * @param sessions map of session IDs to session info
+     * @param sessions map of sessionKeys to session info
      */
     public void updateSessions(Map<String, SessionManager.KalixSession> sessions) {
         SwingUtilities.invokeLater(() -> {
@@ -157,17 +157,17 @@ public class SessionStatusPanel extends JPanel {
     /**
      * Terminates a session with confirmation.
      */
-    private void terminateSession(String sessionId) {
+    private void terminateSession(String sessionKey) {
         int result = JOptionPane.showConfirmDialog(this,
-            "Are you sure you want to terminate session " + sessionId + "?",
+            "Are you sure you want to terminate session " + sessionKey + "?",
             "Terminate Session", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         
         if (result == JOptionPane.YES_OPTION) {
-            statusUpdater.accept("Terminating session " + sessionId + "...");
+            statusUpdater.accept("Terminating session " + sessionKey + "...");
             
-            sessionTerminator.apply(sessionId)
+            sessionTerminator.apply(sessionKey)
                 .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                    statusUpdater.accept("Session " + sessionId + " terminated");
+                    statusUpdater.accept("Session " + sessionKey + " terminated");
                     // Immediately refresh the session list to show the termination
                     if (sessionProvider != null) {
                         updateSessions(sessionProvider.get());

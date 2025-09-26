@@ -46,7 +46,7 @@ public class JsonStdioProtocol {
      *
      * @param command the command name
      * @param parameters the command parameters
-     * @param kalixcliUid the CLI session ID (use empty string if unknown)
+     * @param kalixcliUid the kalixcli UID (use empty string if unknown)
      * @return JSON string representation
      */
     public static String createCommandMessage(String command, Map<String, Object> parameters, String kalixcliUid) {

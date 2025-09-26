@@ -876,9 +876,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Run model from memory and handle the session
         stdioTaskManager.runModelFromMemory(modelText)
-            .thenAccept(sessionId -> {
+            .thenAccept(sessionKey -> {
                 SwingUtilities.invokeLater(() -> {
-                    updateStatus("Model session started: " + sessionId);
+                    updateStatus("Model session started: " + sessionKey);
 
                     // Automatically open Run Manager if not already open
                     if (!RunManager.isWindowOpen()) {
@@ -888,7 +888,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
                     // Select the newly created run after a brief delay to allow Run Manager to refresh
                     Timer selectionTimer = new Timer(500, e -> {
-                        RunManager.selectRunIfOpen(sessionId);
+                        RunManager.selectRunIfOpen(sessionKey);
                         ((Timer) e.getSource()).stop();
                     });
                     selectionTimer.setRepeats(false);

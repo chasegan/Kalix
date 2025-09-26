@@ -1,6 +1,5 @@
 package com.kalix.ide.cli;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -22,26 +21,26 @@ public class RunModelProgram {
         FAILED              // Program failed with error
     }
     
-    private final String sessionId;
+    private final String sessionKey;
     private final SessionManager sessionManager;
     private final Consumer<String> statusUpdater;
     private final Consumer<ProgressParser.ProgressInfo> progressCallback;
     private ProgramState currentState = ProgramState.STARTING;
-    private String modelText;
+    private String modelText; //Keeping this here in case I later want to save the model back out.
     private List<String> outputsGenerated;
     
     /**
      * Creates a new Run Model program instance.
      * 
-     * @param sessionId the session ID
+     * @param sessionKey the session key
      * @param sessionManager the session manager to use for sending commands
      * @param statusUpdater callback for status updates
      * @param progressCallback callback for progress updates
      */
-    public RunModelProgram(String sessionId, SessionManager sessionManager, 
+    public RunModelProgram(String sessionKey, SessionManager sessionManager,
                           Consumer<String> statusUpdater, 
                           Consumer<ProgressParser.ProgressInfo> progressCallback) {
-        this.sessionId = sessionId;
+        this.sessionKey = sessionKey;
         this.sessionManager = sessionManager;
         this.statusUpdater = statusUpdater;
         this.progressCallback = progressCallback;
@@ -57,21 +56,21 @@ public class RunModelProgram {
         this.currentState = ProgramState.MODEL_LOADING;
         
         // Step 1: Send load_model_string command via SessionManager
-        // Get CLI session ID if available
-        String cliSessionId = "";
-        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
-        if (session.isPresent() && session.get().getCliSessionId() != null) {
-            cliSessionId = session.get().getCliSessionId();
+        // Get kalixcli_uid if available
+        String kalixcliUid = "";
+        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
+        if (session.isPresent() && session.get().getKalixcliUid() != null) {
+            kalixcliUid = session.get().getKalixcliUid();
         }
 
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText, cliSessionId);
-        sessionManager.sendCommand(sessionId, loadCommand)
+        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText, kalixcliUid);
+        sessionManager.sendCommand(sessionKey, loadCommand)
             .thenRun(() -> {
-                statusUpdater.accept("Loading model in session: " + sessionId);
+                statusUpdater.accept("Loading model in session: " + sessionKey);
             })
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to send model to session " + sessionId + ": " + throwable.getMessage());
+                statusUpdater.accept("Failed to send model to session " + sessionKey + ": " + throwable.getMessage());
                 return null;
             });
     }
@@ -88,23 +87,13 @@ public class RunModelProgram {
         if (msgType == null) {
             return false;
         }
-        
-        switch (currentState) {
-            case MODEL_LOADING:
-                return handleModelLoadingState(msgType, message);
-                
-            case SIMULATION_RUNNING:
-                return handleSimulationRunningState(msgType, message);
-                
-            case STARTING:
-            case COMPLETED:
-            case FAILED:
-                // Don't handle messages in these states
-                return false;
-                
-            default:
-                return false;
-        }
+
+        return switch (currentState) {
+            case MODEL_LOADING -> handleModelLoadingState(msgType, message);
+            case SIMULATION_RUNNING -> handleSimulationRunningState(msgType, message);
+            case STARTING, COMPLETED, FAILED -> false; // Don't handle messages in these states
+            default -> false;
+        };
     }
     
     /**
@@ -117,21 +106,21 @@ public class RunModelProgram {
                 // Model loaded successfully, now start simulation
                 currentState = ProgramState.SIMULATION_RUNNING;
 
-                // Get CLI session ID if available
-                String cliSessionId = "";
-                Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
-                if (session.isPresent() && session.get().getCliSessionId() != null) {
-                    cliSessionId = session.get().getCliSessionId();
+                // Get kalixcli_uid if available
+                String kalixcliUid = "";
+                Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
+                if (session.isPresent() && session.get().getKalixcliUid() != null) {
+                    kalixcliUid = session.get().getKalixcliUid();
                 }
 
-                String runCommand = JsonStdioProtocol.Commands.runSimulation(cliSessionId);
-                sessionManager.sendCommand(sessionId, runCommand)
+                String runCommand = JsonStdioProtocol.Commands.runSimulation(kalixcliUid);
+                sessionManager.sendCommand(sessionKey, runCommand)
                     .thenRun(() -> {
-                        statusUpdater.accept("Model loaded, starting simulation in session: " + sessionId);
+                        statusUpdater.accept("Model loaded, starting simulation in session: " + sessionKey);
                     })
                     .exceptionally(throwable -> {
                         currentState = ProgramState.FAILED;
-                        statusUpdater.accept("Failed to start simulation in session " + sessionId + ": " + throwable.getMessage());
+                        statusUpdater.accept("Failed to start simulation in session " + sessionKey + ": " + throwable.getMessage());
                         return null;
                     });
                 return true;
@@ -140,7 +129,7 @@ public class RunModelProgram {
                 // Model loading failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Model loading failed in session " + sessionId + ": " + errorMsg);
+                statusUpdater.accept("Model loading failed in session " + sessionKey + ": " + errorMsg);
                 return true;
                 
             default:
@@ -157,7 +146,7 @@ public class RunModelProgram {
         switch (msgType) {
             case BUSY:
                 // Simulation started
-                statusUpdater.accept("Simulation running in session: " + sessionId);
+                statusUpdater.accept("Simulation running in session: " + sessionKey);
                 return true;
                 
             case PROGRESS:
@@ -165,19 +154,21 @@ public class RunModelProgram {
                 try {
                     JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
                     JsonMessage.ProgressInfo progress = progressData.getProgress();
-                    if (progress != null && progressCallback != null) {
-                        ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
-                            progress.getPercentComplete(),
-                            progress.getCurrentStep(),
-                            progressData.getCommand()
-                        );
-                        progressCallback.accept(progressInfo);
+                    if (progress != null) {
+                        if (progressCallback != null) {
+                            ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
+                                    progress.getPercentComplete(),
+                                    progress.getCurrentStep(),
+                                    progressData.getCommand()
+                            );
+                            progressCallback.accept(progressInfo);
+                        }
+                        statusUpdater.accept(String.format("Session %s: %.1f%% - %s",
+                                sessionKey, progress.getPercentComplete(), progress.getCurrentStep()));
                     }
-                    statusUpdater.accept(String.format("Session %s: %.1f%% - %s", 
-                        sessionId, progress.getPercentComplete(), progress.getCurrentStep()));
                     return true;
                 } catch (Exception e) {
-                    statusUpdater.accept("Error parsing progress from session " + sessionId + ": " + e.getMessage());
+                    statusUpdater.accept("Error parsing progress from session " + sessionKey + ": " + e.getMessage());
                     return true;
                 }
                 
@@ -193,23 +184,23 @@ public class RunModelProgram {
                     }
                 } catch (Exception e) {
                     // If we can't parse the result data, just continue without outputs
-                    statusUpdater.accept("Warning: Could not parse outputs from result in session " + sessionId + ": " + e.getMessage());
+                    statusUpdater.accept("Warning: Could not parse outputs from result in session " + sessionKey + ": " + e.getMessage());
                 }
 
-                statusUpdater.accept("Model run completed successfully in session: " + sessionId);
+                statusUpdater.accept("Model run completed successfully in session: " + sessionKey);
                 return true;
                 
             case STOPPED:
                 // Simulation was interrupted
                 currentState = ProgramState.COMPLETED; // Still considered completed, just stopped early
-                statusUpdater.accept("Model run stopped in session: " + sessionId);
+                statusUpdater.accept("Model run stopped in session: " + sessionKey);
                 return true;
                 
             case ERROR:
                 // Simulation failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Simulation failed in session " + sessionId + ": " + errorMsg);
+                statusUpdater.accept("Simulation failed in session " + sessionKey + ": " + errorMsg);
                 return true;
                 
             default:
@@ -257,14 +248,14 @@ public class RunModelProgram {
      * Gets a description of the current program state.
      */
     public String getStateDescription() {
-        switch (currentState) {
-            case STARTING: return "Starting Run Model program";
-            case MODEL_LOADING: return "Loading model";
-            case SIMULATION_RUNNING: return "Running simulation";
-            case COMPLETED: return "Run Model completed";
-            case FAILED: return "Run Model failed";
-            default: return "Unknown state";
-        }
+        return switch (currentState) {
+            case STARTING -> "Starting Run Model program";
+            case MODEL_LOADING -> "Loading model";
+            case SIMULATION_RUNNING -> "Running simulation";
+            case COMPLETED -> "Run Model completed";
+            case FAILED -> "Run Model failed";
+            default -> "Unknown state";
+        };
     }
 
     /**

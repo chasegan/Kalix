@@ -78,16 +78,6 @@ public class StdioLogWindow extends JFrame {
         }
     }
 
-    /**
-     * Closes the STDIO Log window for the specified session.
-     */
-    public static void closeStdioLogWindow(String sessionId) {
-        StdioLogWindow window = openWindows.get(sessionId);
-        if (window != null) {
-            window.dispose();
-        }
-    }
-
     private void setupWindow(JFrame parentFrame) {
         setTitle("STDIO Log - " + runName);
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
@@ -172,7 +162,7 @@ public class StdioLogWindow extends JFrame {
 
         // Add info fields
         gbc.gridx = 0; gbc.gridy = 0;
-        detailsPanel.add(new JLabel("Session ID:"), gbc);
+        detailsPanel.add(new JLabel("Kalixcli UID:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
         detailsPanel.add(sessionNameLabel, gbc);
 
@@ -245,8 +235,8 @@ public class StdioLogWindow extends JFrame {
     private void updateSessionDetails() {
         if (session == null) return;
 
-        // Update session details - show CLI session ID if available, otherwise "unknown"
-        String displayId = session.getCliSessionId() != null ? session.getCliSessionId() : UIConstants.StdioLog.UNKNOWN_SESSION;
+        // Update session details - show kalixcli_uid if available, otherwise "unknown"
+        String displayId = session.getKalixcliUid() != null ? session.getKalixcliUid() : UIConstants.StdioLog.UNKNOWN_SESSION;
         sessionNameLabel.setText(displayId);
 
         sessionStatusLabel.setText(session.getState() != null ? session.getState().toString() : "Unknown");
@@ -342,8 +332,8 @@ public class StdioLogWindow extends JFrame {
         try {
             // Generate initial JSON command
             Map<String, Object> parameters = Map.of("string", "Ping from IDE at " + java.time.LocalDateTime.now());
-            String cliSessionId = session.getCliSessionId() != null ? session.getCliSessionId() : "";
-            String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, cliSessionId);
+            String kalixcliUid = session.getKalixcliUid() != null ? session.getKalixcliUid() : "";
+            String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, kalixcliUid);
 
             // Show dialog with editable JSON
             JTextArea textArea = new JTextArea(UIConstants.StdioLog.DIALOG_ROWS, UIConstants.StdioLog.DIALOG_COLS);

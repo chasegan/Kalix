@@ -123,11 +123,11 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Selects the run associated with the given session ID if the Run Manager is open.
+     * Selects the run associated with the given session key if the Run Manager is open.
      */
-    public static void selectRunIfOpen(String sessionId) {
+    public static void selectRunIfOpen(String sessionKey) {
         if (instance != null && instance.isVisible()) {
-            instance.selectRun(sessionId);
+            instance.selectRun(sessionKey);
         }
     }
 
@@ -480,13 +480,13 @@ public class RunManager extends JFrame {
 
             // Check for removed sessions
             sessionToTreeNode.entrySet().removeIf(entry -> {
-                String sessionId = entry.getKey();
-                if (!activeSessions.containsKey(sessionId)) {
+                String sessionKey = entry.getKey();
+                if (!activeSessions.containsKey(sessionKey)) {
                     // Session removed - remove from tree
                     DefaultMutableTreeNode nodeToRemove = entry.getValue();
                     currentRunsNode.remove(nodeToRemove);
-                    sessionToRunName.remove(sessionId);
-                    lastKnownStatus.remove(sessionId);
+                    sessionToRunName.remove(sessionKey);
+                    lastKnownStatus.remove(sessionKey);
                     treeStructureChanged[0] = true;
                     return true;
                 }
@@ -745,7 +745,7 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Get the currently selected run to determine session ID
+        // Get the currently selected run to determine sessionKey
         RunInfo selectedRun = getSelectedRunInfo();
         if (selectedRun == null) {
             clearPlotAndStats();
@@ -753,7 +753,7 @@ public class RunManager extends JFrame {
             return;
         }
 
-        String sessionId = selectedRun.session.getSessionKey();
+        String sessionKey = selectedRun.session.getSessionKey();
         Set<String> newSelectedSeries = new HashSet<>();
 
         // Collect all valid leaf node series names
@@ -797,17 +797,17 @@ public class RunManager extends JFrame {
             seriesColorMap.put(seriesName, seriesColor);
 
             // Check if we already have this data cached
-            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionId, seriesName);
+            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
                 // Add immediately with cached data
                 addSeriesToPlot(cachedData, seriesColor);
                 statsTableModel.addOrUpdateSeries(cachedData);
-            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionId, seriesName)) {
+            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
                 // Show loading state for this series
                 statsTableModel.addLoadingSeries(seriesName);
 
                 // Request the timeseries data
-                timeSeriesRequestManager.requestTimeSeries(sessionId, seriesName)
+                timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
                             // Check if this series is still selected
@@ -964,12 +964,12 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Selects the run associated with the given session ID.
+     * Selects the run associated with the given sessionKey.
      * This will expand the tree and select the run node if found.
      */
-    private void selectRun(String sessionId) {
+    private void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionId);
+            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionKey);
             if (runNode != null) {
                 TreePath pathToRun = new TreePath(runNode.getPath());
 

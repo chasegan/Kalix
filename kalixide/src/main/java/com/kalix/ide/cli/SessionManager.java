@@ -83,7 +83,7 @@ public class SessionManager {
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
         private volatile RunModelProgram activeProgram;
-        private volatile String cliSessionId; // Session ID from kalixcli
+        private volatile String kalixcliUid;
         
         public KalixSession(String sessionKey, KalixStdioSession process) {
             this.sessionKey = sessionKey;
@@ -101,8 +101,8 @@ public class SessionManager {
         public SessionState getState() { return state; }
         public String getLastMessage() { return lastMessage; }
         public LocalDateTime getLastActivity() { return lastActivity; }
-        public String getCliSessionId() { return cliSessionId; }
-        public void setCliSessionId(String cliSessionId) { this.cliSessionId = cliSessionId; }
+        public String getKalixcliUid() { return kalixcliUid; }
+        public void setKalixcliUid(String kalixcliUid) { this.kalixcliUid = kalixcliUid; }
         
         public void setState(SessionState newState, String message) {
             this.state = newState;
@@ -132,27 +132,13 @@ public class SessionManager {
      */
     public static class SessionConfig {
         private final String[] args;
-        private String customSessionId;
-        private Consumer<ProgressParser.ProgressInfo> progressCallback;
-        
+
         public SessionConfig(String... args) {
             this.args = args;
         }
-        
-        public SessionConfig withSessionKey(String sessionKey) {
-            this.customSessionId = sessionKey;
-            return this;
-        }
-        
-        public SessionConfig onProgress(Consumer<ProgressParser.ProgressInfo> callback) {
-            this.progressCallback = callback;
-            return this;
-        }
-        
+
         // Getters
         public String[] getArgs() { return args; }
-        public String getCustomSessionId() { return customSessionId; }
-        public Consumer<ProgressParser.ProgressInfo> getProgressCallback() { return progressCallback; }
     }
     
     /**
@@ -184,12 +170,12 @@ public class SessionManager {
      * 
      * @param cliPath path to kalixcli executable
      * @param config session configuration
-     * @return CompletableFuture with session ID when session is started
+     * @return CompletableFuture with session key when session is started
      */
     public CompletableFuture<String> startSession(Path cliPath, SessionConfig config) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String sessionKey = generateSessionId(config.getCustomSessionId());
+                String sessionKey = generateSessionKey();
                 
                 // Start interactive process
                 KalixStdioSession process = KalixStdioSession.start(
@@ -217,14 +203,14 @@ public class SessionManager {
     /**
      * Sends a command to an active session.
      * 
-     * @param sessionId the session to send command to
+     * @param sessionKey the session to send command to
      * @param command the command to send
      * @return CompletableFuture that completes when command is sent
      */
     public CompletableFuture<Void> sendCommand(String sessionKey, String command) {
         return CompletableFuture.runAsync(() -> {
             try {
-                KalixSession session = validateActiveSession(sessionKey, "Send command");
+                KalixSession session = validateActiveSession(sessionKey);
                 // Log outgoing command first
                 session.getCommunicationLog().logIdeToCli(command);
                 session.getProcess().sendCommand(command);
@@ -241,7 +227,7 @@ public class SessionManager {
     /**
      * Requests results from a ready session.
      * 
-     * @param sessionId the session to request results from
+     * @param sessionKey the session to request results from
      * @param resultType the type of results to request
      * @return CompletableFuture with the results
      */
@@ -275,7 +261,7 @@ public class SessionManager {
     /**
      * Terminates a session gracefully.
      * 
-     * @param sessionId the session to terminate
+     * @param sessionKey the session to terminate
      * @return CompletableFuture that completes when session is terminated
      */
     public CompletableFuture<Void> terminateSession(String sessionKey) {
@@ -296,7 +282,7 @@ public class SessionManager {
     /**
      * Gets information about an active session.
      * 
-     * @param sessionId the session ID
+     * @param sessionKey the session key
      * @return session information if found
      */
     public Optional<KalixSession> getSession(String sessionKey) {
@@ -306,7 +292,7 @@ public class SessionManager {
     /**
      * Gets all active sessions.
      * 
-     * @return map of session ID to session info
+     * @return map of sessionKey to session info
      */
     public Map<String, KalixSession> getActiveSessions() {
         return Map.copyOf(activeSessions);
@@ -316,7 +302,7 @@ public class SessionManager {
      * Removes a terminated session from the session list.
      * This is for cleanup purposes - only works on TERMINATED or ERROR sessions.
      * 
-     * @param sessionId the session to remove
+     * @param sessionKey the session to remove
      * @return CompletableFuture that completes when session is removed
      */
     public CompletableFuture<Void> removeSession(String sessionKey) {
@@ -392,21 +378,13 @@ public class SessionManager {
      * Handles JSON protocol messages from kalixcli.
      */
     private void processSessionOutput(KalixSession session, String line, SessionConfig config) {
-        String sessionKey = session.getSessionKey();
-        
+
         // Check for JSON protocol messages
         if (JsonStdioProtocol.looksLikeJson(line)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
-            if (jsonMsg.isPresent()) {
+            if (jsonMsg.isPresent())
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
-                return;
-            }
         }
-        
-        // Progress updates are now handled only through JSON protocol messages
-        
-        // Log stdout for debugging (only if verbose)
-        // updateStatus("Session " + sessionKey + " stdout: " + line);
     }
     
     /**
@@ -432,11 +410,8 @@ public class SessionManager {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
             if (jsonMsg.isPresent()) {
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
-                return;
             }
         }
-        
-        // Progress updates are now handled only through JSON protocol messages on stdout
     }
     
     /**
@@ -458,11 +433,10 @@ public class SessionManager {
     private void handleJsonProtocolMessage(KalixSession session, JsonMessage.SystemMessage message, SessionConfig config) {
         String sessionKey = session.getSessionKey();
 
-        // Store CLI session ID from the first message we receive
-        if (session.getCliSessionId() == null && message.getKalixcliUid() != null) {
-            session.setCliSessionId(message.getKalixcliUid());
+        // Store kalixcli_uid from the first message we receive
+        if (session.getKalixcliUid() == null && message.getKalixcliUid() != null) {
+            session.setKalixcliUid(message.getKalixcliUid());
         }
-
 
         // Check if this is a get_result response and route to TimeSeriesRequestManager
         if (isTimeSeriesResponse(message)) {
@@ -558,66 +532,14 @@ public class SessionManager {
     }
 
     /**
-     * Handles legacy protocol messages and updates session state.
-     */
-    private void handleProtocolMessage(KalixSession session, KalixStdioProtocol.ProtocolMessage message) {
-        String sessionKey = session.getSessionKey();
-        SessionState oldState = session.getState();
-        
-        if (message.isSessionReady()) {
-            session.setState(SessionState.READY, message.getAdditionalInfo());
-            fireSessionEvent(sessionKey, oldState, SessionState.READY, "Session ready for queries");
-            updateStatus("Session ready: " + sessionKey);
-            
-        } else if (message.isCommandComplete()) {
-            session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
-            fireSessionEvent(sessionKey, oldState, SessionState.COMPLETING, "Command completed");
-            
-            
-        } else if (message.isSessionEnding()) {
-            session.setState(SessionState.COMPLETING, message.getAdditionalInfo());
-            fireSessionEvent(sessionKey, oldState, SessionState.COMPLETING, "Session ending");
-            scheduleSessionCleanup(sessionKey, 5000);
-            
-        } else if (message.isFatalError()) {
-            session.setState(SessionState.ERROR, message.getAdditionalInfo());
-            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, "Fatal error: " + message.getAdditionalInfo());
-            updateStatus("Session error: " + sessionKey + " - " + message.getAdditionalInfo());
-            
-        } else if (message.isRecoverableError()) {
-            // Don't change state for recoverable errors, just log
-            fireSessionEvent(sessionKey, oldState, oldState, "Recoverable error: " + message.getAdditionalInfo());
-            updateStatus("Session warning: " + sessionKey + " - " + message.getAdditionalInfo());
-        }
-    }
-    
-    /**
-     * Schedules cleanup of a session after a delay.
-     */
-    private void scheduleSessionCleanup(String sessionKey, int delayMs) {
-        CompletableFuture.delayedExecutor(delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .execute(() -> {
-                KalixSession session = activeSessions.get(sessionKey);
-                if (session != null) {
-                    session.setState(SessionState.TERMINATED, "Session cleanup completed");
-                    session.getProcess().close();
-                    // Keep session in activeSessions map for visibility, don't remove it
-                    fireSessionEvent(sessionKey, SessionState.COMPLETING, SessionState.TERMINATED, "Session cleaned up");
-                }
-            });
-    }
-    
-    /**
      * Fires a session event to registered callbacks.
      */
     private void fireSessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
-        if (eventCallback != null) {
-            try {
-                eventCallback.accept(new SessionEvent(sessionKey, oldState, newState, message));
-            } catch (Exception e) {
-                // Don't let callback exceptions break session management
-                logger.warn("Error in session event callback: {}", e.getMessage());
-            }
+        try {
+            eventCallback.accept(new SessionEvent(sessionKey, oldState, newState, message));
+        } catch (Exception e) {
+            // Don't let callback exceptions break session management
+            logger.warn("Error in session event callback: {}", e.getMessage());
         }
     }
     
@@ -651,25 +573,21 @@ public class SessionManager {
     /**
      * Validates session exists and is active.
      */
-    private KalixSession validateActiveSession(String sessionKey, String operation) {
+    private KalixSession validateActiveSession(String sessionKey) {
         KalixSession session = activeSessions.get(sessionKey);
         if (session == null) {
             throw new IllegalArgumentException("Session not found: " + sessionKey);
         }
         if (!session.isActive()) {
-            throw new IllegalStateException(operation + " failed: Session not active: " + sessionKey + " (state: " + session.getState() + ")");
+            throw new IllegalStateException("Send command failed. Session not active: " + sessionKey + " (state: " + session.getState() + ")");
         }
         return session;
     }
     
     /**
-     * Generates a unique session ID.
+     * Generates a unique sessionKey.
      */
-    private String generateSessionId(String customId) {
-        if (customId != null && !customId.trim().isEmpty()) {
-            return customId.trim();
-        }
-        
+    private String generateSessionKey() {
         return "session-" + SESSION_COUNTER.incrementAndGet();
     }
     

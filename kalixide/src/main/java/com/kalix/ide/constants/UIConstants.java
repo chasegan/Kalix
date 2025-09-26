@@ -197,7 +197,7 @@ public final class UIConstants {
         /** Message displayed when no log is available */
         public static final String NO_LOG_MESSAGE = "No communication log available for this session.";
 
-        /** Text displayed for unknown session ID */
+        /** Text displayed for unknown session key */
         public static final String UNKNOWN_SESSION = "unknown";
 
         private StdioLog() { throw new UnsupportedOperationException("Constants class"); }

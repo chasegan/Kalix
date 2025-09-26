@@ -17,8 +17,7 @@ import java.util.function.Consumer;
 public class StdioTaskManager {
     
     // Constants for configuration
-    
-    private final ProcessExecutor processExecutor;
+
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
     private final JFrame parentFrame;
@@ -36,7 +35,6 @@ public class StdioTaskManager {
                          Consumer<String> statusUpdater,
                          StatusProgressBar progressBar,
                          JFrame parentFrame) {
-        this.processExecutor = processExecutor;
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.parentFrame = parentFrame;
@@ -62,16 +60,12 @@ public class StdioTaskManager {
         });
     }
     
-    // ======================
-    // SESSION-BASED METHODS 
-    // ======================
-    
     /**
      * Runs a model from the text editor without saving to disk.
      * This creates a persistent session and starts the Run Model program.
      * 
      * @param modelText the model definition from the editor
-     * @return CompletableFuture with the session ID
+     * @return CompletableFuture with the session key
      */
     public CompletableFuture<String> runModelFromMemory(String modelText) {
         // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
@@ -79,18 +73,17 @@ public class StdioTaskManager {
             try {
                 // Locate kalixcli
                 Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCli();
-                if (!cliLocation.isPresent()) {
+                if (cliLocation.isEmpty()) {
                     handleCliNotFound();
                     throw new RuntimeException("kalixcli not found");
                 }
                 
                 // Configure session for model run (let SessionManager auto-generate unique ID)
-                SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session")
-                    .onProgress(this::updateProgressFromSession);
+                SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
                 
                 // Start session and wait for it to be ready
                 CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
-                String sessionId = sessionFuture.get(); // Wait for session to start
+                String sessionKey = sessionFuture.get(); // Wait for session to start
                 
                 // Now set up the Run Model program synchronously
                 try {
@@ -98,94 +91,45 @@ public class StdioTaskManager {
                     
                     // Create and start the Run Model program
                     RunModelProgram runModelProgram = new RunModelProgram(
-                        sessionId,
+                        sessionKey,
                         sessionManager,
                         statusUpdater,
                         this::updateProgressFromSession
                     );
                     
                     // Attach program to session
-                    Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionId);
+                    Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
                     if (session.isPresent()) {
                         session.get().setActiveProgram(runModelProgram);
                         runModelProgram.start(modelText);
                     } else {
-                        throw new RuntimeException("Session not found: " + sessionId);
+                        throw new RuntimeException("Session not found: " + sessionKey);
                     }
                     
                 } catch (Exception e) {
                     // Clean up session if RunModelProgram setup fails
-                    sessionManager.terminateSession(sessionId);
+                    sessionManager.terminateSession(sessionKey);
                     throw new RuntimeException("Error starting Run Model program: " + e.getMessage(), e);
                 }
                 
-                return sessionId;
+                return sessionKey;
                 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to run model from memory", e);
             }
         });
     }
-    
-    /**
-     * Requests specific results from a model session.
-     * 
-     * @param sessionId the session to query
-     * @param resultType the type of results (flows, water_balance, etc.)
-     * @return CompletableFuture with the results
-     */
-    public CompletableFuture<String> requestResults(String sessionId, String resultType) {
-        return sessionManager.requestResults(sessionId, resultType);
-    }
-    
-    /**
-     * Requests flows data from a model session.
-     * 
-     * @param sessionId the session to query
-     * @return CompletableFuture with flows data
-     */
-    public CompletableFuture<String> requestFlowsData(String sessionId) {
-        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.FLOWS);
-    }
-    
-    /**
-     * Requests water balance data from a model session.
-     * 
-     * @param sessionId the session to query
-     * @return CompletableFuture with water balance data
-     */
-    public CompletableFuture<String> requestWaterBalanceData(String sessionId) {
-        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.WATER_BALANCE);
-    }
-    
-    /**
-     * Requests convergence metrics from a model session.
-     * 
-     * @param sessionId the session to query
-     * @return CompletableFuture with convergence data
-     */
-    public CompletableFuture<String> requestConvergenceData(String sessionId) {
-        return requestResults(sessionId, KalixStdioProtocol.ResultRequests.CONVERGENCE);
-    }
-    
+
+
     /**
      * Gets all active sessions.
      * 
-     * @return map of session IDs to session information
+     * @return map of session key to session information
      */
     public Map<String, SessionManager.KalixSession> getActiveSessions() {
         return sessionManager.getActiveSessions();
     }
-    
-    /**
-     * Gets information about a specific session.
-     * 
-     * @param sessionId the session ID
-     * @return session information if found
-     */
-    public Optional<SessionManager.KalixSession> getSession(String sessionId) {
-        return sessionManager.getSession(sessionId);
-    }
+
 
     /**
      * Gets the underlying SessionManager instance.
@@ -199,33 +143,32 @@ public class StdioTaskManager {
     /**
      * Terminates a specific session.
      *
-     * @param sessionId the session to terminate
+     * @param sessionKey the session to terminate
      * @return CompletableFuture that completes when session is terminated
      */
-    public CompletableFuture<Void> terminateSession(String sessionId) {
-        return sessionManager.terminateSession(sessionId);
+    public CompletableFuture<Void> terminateSession(String sessionKey) {
+        return sessionManager.terminateSession(sessionKey);
     }
     
     /**
      * Removes a terminated session from the session list for cleanup.
      * Only works on terminated or error sessions.
      *
-     * @param sessionId the session to remove
+     * @param sessionKey the session to remove
      * @return CompletableFuture that completes when session is removed
      */
-    public CompletableFuture<Void> removeSession(String sessionId) {
-        return sessionManager.removeSession(sessionId);
+    public CompletableFuture<Void> removeSession(String sessionKey) {
+        return sessionManager.removeSession(sessionKey);
     }
 
     /**
      * Sends a command to an active session.
      *
-     * @param sessionId the session to send command to
-     * @param command the command to send
-     * @return CompletableFuture that completes when command is sent
+     * @param sessionKey the session to send command to
+     * @param command    the command to send
      */
-    public CompletableFuture<Void> sendCommand(String sessionId, String command) {
-        return sessionManager.sendCommand(sessionId, command);
+    public void sendCommand(String sessionKey, String command) {
+        sessionManager.sendCommand(sessionKey, command);
     }
     
     /**
@@ -243,7 +186,7 @@ public class StdioTaskManager {
                     break;
                     
                 case READY:
-                    statusUpdater.accept("Model session ready - " + event.getSessionKey());
+                    statusUpdater.accept("Session ready - " + event.getSessionKey());
                     // Progress bar already at 100% from CLI progress updates
                     // AutoHidingProgressBar will automatically hide after delay
                     break;
@@ -276,17 +219,5 @@ public class StdioTaskManager {
             );
             statusUpdater.accept(progressInfo.getDescription());
         });
-    }
-    
-    /**
-     * Shuts down the task manager and cleans up resources.
-     */
-    public void shutdown() {
-        if (sessionManager != null) {
-            sessionManager.shutdown();
-        }
-        if (processExecutor != null) {
-            processExecutor.shutdown();
-        }
     }
 }
