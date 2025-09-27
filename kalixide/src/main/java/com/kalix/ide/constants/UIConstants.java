@@ -106,6 +106,46 @@ public final class UIConstants {
     }
 
     /**
+     * Docking system constants
+     */
+    public static final class Docking {
+        /** Function key used to trigger docking mode (F4) */
+        public static final int TRIGGER_KEY = java.awt.event.KeyEvent.VK_F4;
+        
+        /** Highlight color for dockable panel outline (translucent blue) */
+        public static final Color HIGHLIGHT_COLOR = new Color(0, 120, 255, 100);
+        
+        /** Grip color (darker blue than highlight) */
+        public static final Color GRIP_COLOR = new Color(0, 80, 180, 200);
+        
+        /** Dot color for grip pattern (using highlight color) */
+        public static final Color GRIP_DOT_COLOR = new Color(0, 120, 255, 150);
+        
+        /** Grip width in pixels */
+        public static final int GRIP_WIDTH = 30;
+        
+        /** Grip height in pixels */
+        public static final int GRIP_HEIGHT = 20;
+        
+        /** Grip margin from panel edge */
+        public static final int GRIP_MARGIN = 4;
+        
+        /** Size of grip dots in pixels */
+        public static final int GRIP_DOT_SIZE = 3;
+        
+        /** Spacing between grip dots */
+        public static final int GRIP_DOT_SPACING = 5;
+        
+        /** Highlight border thickness */
+        public static final int HIGHLIGHT_BORDER_WIDTH = 2;
+        
+        /** Minimum drag distance to start docking operation */
+        public static final int MIN_DRAG_DISTANCE = 5;
+        
+        private Docking() { throw new UnsupportedOperationException("Constants class"); }
+    }
+
+    /**
      * Theme detection constants
      */
     public static final class Theme {
