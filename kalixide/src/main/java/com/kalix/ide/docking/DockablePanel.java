@@ -97,7 +97,7 @@ public class DockablePanel extends JPanel {
 
     /**
      * Activates docking mode, showing the grip if hovered.
-     * Mode stays active until manually toggled off.
+     * Mode automatically times out after 6 seconds unless user interacts with it.
      */
     private void activateDockingMode() {
         if (dockingModeActive) {
@@ -107,7 +107,8 @@ public class DockablePanel extends JPanel {
         dockingModeActive = true;
         updateHighlight();
 
-        // No timer needed - stays on until manually toggled off
+        // Start timeout timer (6 seconds)
+        startDockingModeTimer();
     }
 
     /**
@@ -201,5 +202,39 @@ public class DockablePanel extends JPanel {
      */
     public void requestDockingFocus() {
         requestFocusInWindow();
+    }
+
+    /**
+     * Starts the docking mode timeout timer.
+     */
+    private void startDockingModeTimer() {
+        // Stop any existing timer
+        if (dockingModeTimer != null) {
+            dockingModeTimer.stop();
+        }
+
+        // Create new timer that deactivates docking mode after timeout
+        dockingModeTimer = new Timer(Timing.DOCKING_MODE_TIMEOUT, e -> {
+            deactivateDockingMode();
+        });
+        dockingModeTimer.setRepeats(false); // Only fire once
+        dockingModeTimer.start();
+    }
+
+    /**
+     * Cancels docking mode due to user interaction.
+     * Called when user starts dragging or completes a docking operation.
+     */
+    public void cancelDockingMode() {
+        if (dockingModeActive) {
+            deactivateDockingMode();
+        }
+    }
+
+    /**
+     * Returns whether docking mode is currently active.
+     */
+    public boolean isDockingModeActive() {
+        return dockingModeActive;
     }
 }

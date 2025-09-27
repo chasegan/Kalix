@@ -294,6 +294,9 @@ public final class DockingConstants {
 
         /** Drag preview opacity (0.0 to 1.0) */
         public static final float DRAG_PREVIEW_OPACITY = 0.5f;
+
+        /** Docking mode timeout in milliseconds (6 seconds) */
+        public static final int DOCKING_MODE_TIMEOUT = 6000;
     }
 
     /**

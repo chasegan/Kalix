@@ -195,6 +195,8 @@ public class DockingGrip extends JComponent {
      * Initiates the drag operation for undocking the panel.
      */
     private void startDragOperation(Point screenLocation) {
+        // Cancel docking mode timeout when user starts dragging
+        parentPanel.cancelDockingMode();
         DockingManager.getInstance().startDragOperation(parentPanel, screenLocation);
     }
 

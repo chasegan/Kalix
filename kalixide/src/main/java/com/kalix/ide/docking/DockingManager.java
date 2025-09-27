@@ -144,6 +144,11 @@ public class DockingManager {
                 createFloatingWindow(currentDragPanel, screenLocation);
             }
 
+            // Cancel docking mode on the panel after successful operation
+            if (currentDragPanel != null) {
+                currentDragPanel.cancelDockingMode();
+            }
+
             // Clear drop target highlighting
             if (currentDropTarget != null) {
                 currentDropTarget.setHighlighted(false);
