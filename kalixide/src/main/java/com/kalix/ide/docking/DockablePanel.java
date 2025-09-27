@@ -118,14 +118,27 @@ public class DockablePanel extends JPanel implements KeyListener {
         if (this.dockingMode != enabled) {
             this.dockingMode = enabled;
             
-            if (enabled) {
-                requestFocusInWindow();
-                highlighter.setVisible(true);
-                grip.setVisible(true);
-                grip.setLocation(UIConstants.Docking.GRIP_MARGIN, UIConstants.Docking.GRIP_MARGIN);
-            } else {
-                highlighter.setVisible(false);
-                grip.setVisible(false);
+            try {
+                if (enabled) {
+                    requestFocusInWindow();
+                    highlighter.setVisible(true);
+                    grip.setVisible(true);
+                    grip.setLocation(UIConstants.Docking.GRIP_MARGIN, UIConstants.Docking.GRIP_MARGIN);
+                } else {
+                    highlighter.setVisible(false);
+                    grip.setVisible(false);
+                    
+                    // Reset any drag state
+                    if (isDragging) {
+                        dockingManager.cancelDrag();
+                        isDragging = false;
+                        dragStartPoint = null;
+                        setCursor(Cursor.getDefaultCursor());
+                    }
+                }
+            } catch (Exception e) {
+                // Log error but don't break the UI
+                System.err.println("Error setting docking mode: " + e.getMessage());
             }
             
             repaint();
@@ -159,6 +172,10 @@ public class DockablePanel extends JPanel implements KeyListener {
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == UIConstants.Docking.TRIGGER_KEY) {
             setDockingMode(!dockingMode);
+            e.consume();
+        } else if (e.getKeyCode() == KeyEvent.VK_ESCAPE && dockingMode) {
+            // Escape key cancels docking mode
+            setDockingMode(false);
             e.consume();
         }
     }
