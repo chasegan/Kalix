@@ -87,6 +87,46 @@ public class DockingGrip extends JComponent {
 
         addMouseListener(dragHandler);
         addMouseMotionListener(dragHandler);
+
+        // Add hover event forwarding to prevent flickering
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                // Forward enter event to parent panel
+                forwardHoverEvent(e, true);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                // Forward exit event to parent panel
+                forwardHoverEvent(e, false);
+            }
+        });
+    }
+
+    /**
+     * Forwards hover events to the parent panel to prevent grip flickering.
+     */
+    private void forwardHoverEvent(MouseEvent e, boolean isEnter) {
+        if (parentPanel != null) {
+            // Convert mouse coordinates to parent panel coordinates
+            Point parentPoint = SwingUtilities.convertPoint(this, e.getPoint(), parentPanel);
+
+            // Create new event with parent panel coordinates
+            MouseEvent parentEvent = new MouseEvent(
+                parentPanel,
+                isEnter ? MouseEvent.MOUSE_ENTERED : MouseEvent.MOUSE_EXITED,
+                e.getWhen(),
+                e.getModifiers(),
+                parentPoint.x,
+                parentPoint.y,
+                e.getClickCount(),
+                e.isPopupTrigger()
+            );
+
+            // Dispatch to parent panel
+            parentPanel.dispatchEvent(parentEvent);
+        }
     }
 
     @Override
