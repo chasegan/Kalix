@@ -106,7 +106,7 @@ public class CoordinateDisplayManager {
         List<Rectangle> usedAreas = new ArrayList<>();
 
         for (CoordinateInfo coord : currentCoordinates) {
-            if (!viewport.isTimeVisible(coord.timestamp)) continue;
+            if (!viewport.isPointVisible(coord.timestamp, coord.value)) continue;
 
             int screenX = viewport.timeToScreenX(coord.timestamp);
             int screenY = viewport.valueToScreenY(coord.value);

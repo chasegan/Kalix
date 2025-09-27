@@ -34,7 +34,7 @@ class TimestepBugTest {
 
         // Verify the interval detection
         assertTrue(dailySeries.hasRegularInterval(), "Daily data should be detected as regular interval");
-        assertEquals(86400, dailySeries.getIntervalSeconds(), "Daily interval should be 86400 seconds");
+        assertEquals(86400 * 1000, dailySeries.getIntervalMillis(), "Daily interval should be 86400 seconds (86400000 ms)");
 
         // Write to file
         String basePath = tempDir.resolve("daily_test").toString();
@@ -71,7 +71,7 @@ class TimestepBugTest {
 
         // Verify the interval detection
         assertTrue(hourlySeries.hasRegularInterval(), "Hourly data should be detected as regular interval");
-        assertEquals(3600, hourlySeries.getIntervalSeconds(), "Hourly interval should be 3600 seconds");
+        assertEquals(3600 * 1000, hourlySeries.getIntervalMillis(), "Hourly interval should be 3600 seconds (3600000 ms)");
 
         // Write to file
         String basePath = tempDir.resolve("hourly_test").toString();
