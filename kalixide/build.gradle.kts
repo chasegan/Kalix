@@ -81,3 +81,35 @@ tasks.register<JavaExec>("quickTest") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.kalix.ide.cli.QuickExecutionTest")
 }
+
+// Task to test docking system
+tasks.register<JavaExec>("testDocking") {
+    group = "verification"
+    description = "Test docking system implementation"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.kalix.ide.docking.DockingTest")
+}
+
+// Task to run docking demo
+tasks.register<JavaExec>("dockingDemo") {
+    group = "verification"
+    description = "Run docking system demo"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.kalix.ide.docking.DockingDemo")
+}
+
+// Task to run simple working docking test
+tasks.register<JavaExec>("simpleDockingTest") {
+    group = "verification"
+    description = "Run simple working docking test"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.kalix.ide.docking.SimpleDockingTest")
+}
+
+// Task to run empty docking test
+tasks.register<JavaExec>("emptyDockingTest") {
+    group = "verification"
+    description = "Run empty docking test with pure DockablePanel"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.kalix.ide.docking.EmptyDockingTest")
+}
