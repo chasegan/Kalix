@@ -17,6 +17,10 @@ public class DockingArea extends JPanel {
     private String areaName;
     private PlaceholderComponent emptyLabel;
 
+    // Hybrid docking zone support
+    private DropZoneDetector.DropZone currentDropZone = DropZoneDetector.DropZone.NONE;
+    private Point lastCursorPosition;
+
     public DockingArea() {
         this("Docking Area");
     }
@@ -118,8 +122,48 @@ public class DockingArea extends JPanel {
     public void setHighlighted(boolean highlighted) {
         if (this.isHighlighted != highlighted) {
             this.isHighlighted = highlighted;
+            if (!highlighted) {
+                currentDropZone = DropZoneDetector.DropZone.NONE;
+            }
             repaint();
         }
+    }
+
+    /**
+     * Updates the current drop zone based on cursor position.
+     * This enables zone-specific highlighting for hybrid docking.
+     */
+    public void updateDropZone(Point screenPoint) {
+        if (!isHighlighted || !isValidDropTarget) {
+            return;
+        }
+
+        try {
+            // Convert screen point to component coordinates
+            Point componentPoint = new Point(screenPoint);
+            SwingUtilities.convertPointFromScreen(componentPoint, this);
+
+            // Only update if cursor is still within this area
+            if (contains(componentPoint)) {
+                Rectangle bounds = new Rectangle(0, 0, getWidth(), getHeight());
+                DropZoneDetector.DropZone newZone = DropZoneDetector.detectZone(componentPoint, bounds);
+
+                if (newZone != currentDropZone) {
+                    currentDropZone = newZone;
+                    lastCursorPosition = new Point(componentPoint);
+                    repaint();
+                }
+            }
+        } catch (Exception e) {
+            // If coordinate conversion fails, ignore the update
+        }
+    }
+
+    /**
+     * Returns the current drop zone.
+     */
+    public DropZoneDetector.DropZone getCurrentDropZone() {
+        return currentDropZone;
     }
 
     /**
@@ -186,49 +230,113 @@ public class DockingArea extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+        // Highlighting is now done in paintChildren() to appear on top
+    }
 
-        if (isHighlighted) {
-            Graphics2D g2d = (Graphics2D) g.create();
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    /**
+     * Draws general highlighting for empty areas (full area highlight).
+     */
+    private void drawGeneralHighlight(Graphics2D g2d) {
+        // Draw highlight background
+        g2d.setColor(Colors.DROP_ZONE_HIGHLIGHT);
+        g2d.fillRect(0, 0, getWidth(), getHeight());
 
-            // Draw highlight background
+        // Draw highlight border
+        g2d.setColor(Colors.DROP_ZONE_BORDER);
+        g2d.setStroke(new BasicStroke(Dimensions.DROP_ZONE_BORDER_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
+                0, Layout.DROP_ZONE_DASH_PATTERN, 0));
+        g2d.drawRect(2, 2, getWidth() - 4, getHeight() - 4);
+    }
+
+    /**
+     * Draws zone-specific highlighting for occupied areas.
+     */
+    private void drawZoneSpecificHighlight(Graphics2D g2d) {
+        Rectangle bounds = new Rectangle(0, 0, getWidth(), getHeight());
+        Rectangle zoneBounds = DropZoneDetector.getZoneBounds(currentDropZone, bounds);
+
+        if (zoneBounds != null) {
+            // Fill the specific zone with highlight
             g2d.setColor(Colors.DROP_ZONE_HIGHLIGHT);
-            g2d.fillRect(0, 0, getWidth(), getHeight());
+            g2d.fillRect(zoneBounds.x, zoneBounds.y, zoneBounds.width, zoneBounds.height);
 
-            // Draw highlight border
+            // Draw border around the specific zone
             g2d.setColor(Colors.DROP_ZONE_BORDER);
-            g2d.setStroke(new BasicStroke(Dimensions.DROP_ZONE_BORDER_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
-                    0, Layout.DROP_ZONE_DASH_PATTERN, 0));
-            g2d.drawRect(2, 2, getWidth() - 4, getHeight() - 4);
+            g2d.setStroke(new BasicStroke(Dimensions.DROP_ZONE_BORDER_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.drawRect(zoneBounds.x + 1, zoneBounds.y + 1, zoneBounds.width - 2, zoneBounds.height - 2);
 
-            g2d.dispose();
+            // Draw zone description
+            drawZoneDescription(g2d, zoneBounds);
         }
+    }
+
+    /**
+     * Draws the zone description text.
+     */
+    private void drawZoneDescription(Graphics2D g2d, Rectangle zoneBounds) {
+        String description = DropZoneDetector.getZoneDescription(currentDropZone);
+        if (description.isEmpty()) {
+            return;
+        }
+
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(g2d.getFont().deriveFont(Font.BOLD, Dimensions.PLACEHOLDER_FONT_SIZE));
+
+        FontMetrics fm = g2d.getFontMetrics();
+        int textWidth = fm.stringWidth(description);
+        int textHeight = fm.getHeight();
+
+        int x = zoneBounds.x + (zoneBounds.width - textWidth) / 2;
+        int y = zoneBounds.y + (zoneBounds.height + textHeight) / 2 - fm.getDescent();
+
+        g2d.drawString(description, x, y);
     }
 
     @Override
     protected void paintChildren(Graphics g) {
         super.paintChildren(g);
 
-        // If empty and highlighted, show drop hint
-        if (isHighlighted && getComponentCount() == 0) {
+        // Draw highlights on top of children so they're visible
+        if (isHighlighted) {
             Graphics2D g2d = (Graphics2D) g.create();
-            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                    RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            String message = Text.DROP_HINT;
-            FontMetrics fm = g2d.getFontMetrics();
-            int messageWidth = fm.stringWidth(message);
-            int messageHeight = fm.getHeight();
+            if (currentDropZone != DropZoneDetector.DropZone.NONE && !isEmpty()) {
+                // Show zone-specific highlighting for occupied areas
+                drawZoneSpecificHighlight(g2d);
+            } else {
+                // Show general highlighting for empty areas
+                drawGeneralHighlight(g2d);
 
-            int x = (getWidth() - messageWidth) / 2;
-            int y = (getHeight() + messageHeight) / 2 - fm.getDescent();
-
-            g2d.setColor(Color.WHITE);
-            g2d.setFont(g2d.getFont().deriveFont(Font.BOLD));
-            g2d.drawString(message, x, y);
+                // If empty and highlighted, show drop hint
+                if (isEmpty()) {
+                    drawDropHint(g2d);
+                }
+            }
 
             g2d.dispose();
         }
+    }
+
+    /**
+     * Draws the drop hint text for empty areas.
+     */
+    private void drawDropHint(Graphics2D g2d) {
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        String message = Text.DROP_HINT;
+        FontMetrics fm = g2d.getFontMetrics();
+        int messageWidth = fm.stringWidth(message);
+        int messageHeight = fm.getHeight();
+
+        int x = (getWidth() - messageWidth) / 2;
+        int y = (getHeight() + messageHeight) / 2 - fm.getDescent();
+
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(g2d.getFont().deriveFont(Font.BOLD));
+        g2d.drawString(message, x, y);
     }
 
     @Override

@@ -122,6 +122,11 @@ public class DockingManager {
                 currentDropTarget.setHighlighted(true);
             }
         }
+
+        // Update drop zone for hybrid docking
+        if (currentDropTarget != null) {
+            currentDropTarget.updateDropZone(screenLocation);
+        }
     }
 
     /**
@@ -137,8 +142,8 @@ public class DockingManager {
             DockingArea dropTarget = findDropTargetAt(screenLocation);
 
             if (dropTarget != null) {
-                // Drop into existing docking area
-                dropIntoArea(currentDragPanel, dropTarget);
+                // Drop into existing docking area with hybrid logic
+                dropIntoAreaHybrid(currentDragPanel, dropTarget);
             } else {
                 // Create new floating window
                 createFloatingWindow(currentDragPanel, screenLocation);
@@ -211,6 +216,201 @@ public class DockingManager {
     }
 
     /**
+     * Drops the panel into the specified docking area using hybrid logic.
+     * Supports both simple drops (empty areas) and zone-based drops (occupied areas).
+     */
+    private void dropIntoAreaHybrid(DockablePanel panel, DockingArea area) {
+        // Get the current parent before moving the panel
+        Container oldParent = panel.getParent();
+
+        if (area.isEmpty()) {
+            // Simple drop into empty area
+            area.addDockablePanel(panel);
+        } else {
+            // Hybrid drop into occupied area based on current drop zone
+            DropZoneDetector.DropZone dropZone = area.getCurrentDropZone();
+            handleZoneDrop(panel, area, dropZone);
+        }
+
+        // Check if old parent was a DockingWindow that should auto-close
+        checkForAutoClose(oldParent);
+    }
+
+    /**
+     * Handles dropping a panel into a specific zone of an occupied docking area.
+     */
+    private void handleZoneDrop(DockablePanel newPanel, DockingArea area, DropZoneDetector.DropZone zone) {
+        // Get the existing content from the area (could be panel, tabbed container, or split pane)
+        Component existingContent = getMainContent(area);
+        if (existingContent == null) {
+            // Fallback to simple drop if no existing content found
+            area.addDockablePanel(newPanel);
+            return;
+        }
+
+        switch (zone) {
+            case CENTER:
+                // Handle center drop based on existing content type
+                handleCenterDrop(area, existingContent, newPanel);
+                break;
+            case TOP:
+                createSplitPaneWithExistingContent(area, newPanel, existingContent, JSplitPane.VERTICAL_SPLIT);
+                break;
+            case BOTTOM:
+                createSplitPaneWithExistingContent(area, existingContent, newPanel, JSplitPane.VERTICAL_SPLIT);
+                break;
+            case LEFT:
+                createSplitPaneWithExistingContent(area, newPanel, existingContent, JSplitPane.HORIZONTAL_SPLIT);
+                break;
+            case RIGHT:
+                createSplitPaneWithExistingContent(area, existingContent, newPanel, JSplitPane.HORIZONTAL_SPLIT);
+                break;
+            default:
+                // Fallback to simple drop
+                area.addDockablePanel(newPanel);
+                break;
+        }
+    }
+
+    /**
+     * Handles center drops based on the type of existing content.
+     */
+    private void handleCenterDrop(DockingArea area, Component existingContent, DockablePanel newPanel) {
+        if (existingContent instanceof DockablePanel) {
+            // Simple case: create tabbed container with two panels
+            createTabbedContainer(area, (DockablePanel) existingContent, newPanel);
+        } else if (existingContent instanceof TabbedDockingContainer) {
+            // Add to existing tabbed container
+            TabbedDockingContainer tabbed = (TabbedDockingContainer) existingContent;
+            tabbed.addDockablePanel(newPanel);
+        } else {
+            // For split panes or other complex content, wrap in tabbed container
+            wrapInTabbedContainer(area, existingContent, newPanel);
+        }
+    }
+
+    /**
+     * Wraps existing complex content and new panel in a tabbed container.
+     */
+    private void wrapInTabbedContainer(DockingArea area, Component existingContent, DockablePanel newPanel) {
+        // Remove existing content
+        area.remove(existingContent);
+
+        // Create tabbed container
+        TabbedDockingContainer tabbedContainer = new TabbedDockingContainer();
+
+        // Add existing content as a wrapper panel
+        DockablePanel wrapperPanel = new DockablePanel(new BorderLayout());
+        wrapperPanel.add(existingContent, BorderLayout.CENTER);
+        tabbedContainer.addDockablePanel(wrapperPanel);
+
+        // Add new panel
+        tabbedContainer.addDockablePanel(newPanel);
+
+        // Add tabbed container to area
+        area.add(tabbedContainer, BorderLayout.CENTER);
+        area.revalidate();
+        area.repaint();
+    }
+
+    /**
+     * Gets the main content component from the docking area (not placeholders).
+     */
+    private Component getMainContent(DockingArea area) {
+        for (Component comp : area.getComponents()) {
+            // Skip placeholder components
+            if (comp instanceof PlaceholderComponent) {
+                continue;
+            }
+            // Return the first non-placeholder component
+            return comp;
+        }
+        return null;
+    }
+
+    /**
+     * Finds the existing DockablePanel in the area.
+     * @deprecated Use getMainContent instead for better complex container handling
+     */
+    private DockablePanel findExistingPanel(DockingArea area) {
+        for (Component comp : area.getComponents()) {
+            if (comp instanceof DockablePanel) {
+                return (DockablePanel) comp;
+            }
+            // Also check inside tabbed containers or split panes
+            if (comp instanceof TabbedDockingContainer) {
+                TabbedDockingContainer tabbed = (TabbedDockingContainer) comp;
+                if (!tabbed.isEmpty()) {
+                    return tabbed.getSelectedPanel();
+                }
+            }
+            if (comp instanceof DockingSplitPane) {
+                DockingSplitPane split = (DockingSplitPane) comp;
+                if (split.getLeftComponent() instanceof DockablePanel) {
+                    return (DockablePanel) split.getLeftComponent();
+                }
+                if (split.getRightComponent() instanceof DockablePanel) {
+                    return (DockablePanel) split.getRightComponent();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Creates a tabbed container with the existing and new panels.
+     */
+    private void createTabbedContainer(DockingArea area, DockablePanel existingPanel, DockablePanel newPanel) {
+        // Remove existing panel from area
+        area.remove(existingPanel);
+
+        // Create tabbed container with both panels
+        TabbedDockingContainer tabbedContainer = TabbedDockingContainer.createWithTwoPanels(existingPanel, newPanel);
+
+        // Add tabbed container to area
+        area.add(tabbedContainer, BorderLayout.CENTER);
+        area.revalidate();
+        area.repaint();
+    }
+
+    /**
+     * Creates a split pane with existing content and a new panel.
+     * For vertical splits: firstComponent goes on top, secondComponent on bottom
+     * For horizontal splits: firstComponent goes on left, secondComponent on right
+     */
+    private void createSplitPaneWithExistingContent(DockingArea area, Component firstComponent, Component secondComponent,
+                                                   int orientation) {
+        // Remove existing content from area
+        area.removeAll();
+
+        // Create docking split pane (auto-cleanup enabled)
+        DockingSplitPane splitPane = new DockingSplitPane(orientation);
+
+        // Set components based on orientation
+        if (orientation == JSplitPane.VERTICAL_SPLIT) {
+            splitPane.setTopComponent(firstComponent);
+            splitPane.setBottomComponent(secondComponent);
+        } else { // HORIZONTAL_SPLIT
+            splitPane.setLeftComponent(firstComponent);
+            splitPane.setRightComponent(secondComponent);
+        }
+
+        // Add split pane to area
+        area.add(splitPane, BorderLayout.CENTER);
+        area.revalidate();
+        area.repaint();
+    }
+
+    /**
+     * Creates a split pane with the two panels.
+     * @deprecated Use createSplitPaneWithExistingContent for better flexibility
+     */
+    private void createSplitPane(DockingArea area, DockablePanel firstPanel, DockablePanel secondPanel,
+                                int orientation, boolean firstOnTop) {
+        createSplitPaneWithExistingContent(area, firstPanel, secondPanel, orientation);
+    }
+
+    /**
      * Creates a new floating window for the panel.
      */
     private void createFloatingWindow(DockablePanel panel, Point screenLocation) {
@@ -244,22 +444,34 @@ public class DockingManager {
     }
 
     /**
-     * Checks if the given container is a DockingWindow that should auto-close.
+     * Checks if the given container is a DockingWindow that should auto-close,
+     * or if any intermediate containers (tabs/splits) need cleanup.
      * This is called after a panel is moved to prevent freezing during auto-close.
      */
     private void checkForAutoClose(Container oldParent) {
         // Use SwingUtilities.invokeLater to avoid issues with event handling
         SwingUtilities.invokeLater(() -> {
-            // Walk up the container hierarchy to find a DockingWindow
+            // Walk up the container hierarchy and check each level for cleanup needs
             Container parent = oldParent;
             while (parent != null) {
-                if (parent instanceof DockingWindow) {
+                // Check for tab container cleanup
+                if (parent instanceof TabbedDockingContainer) {
+                    TabbedDockingContainer tabContainer = (TabbedDockingContainer) parent;
+                    tabContainer.checkForCleanup();
+                }
+                // Check for split pane cleanup
+                else if (parent instanceof DockingSplitPane) {
+                    DockingSplitPane splitPane = (DockingSplitPane) parent;
+                    splitPane.scheduleCleanupCheck();
+                }
+                // Check for window auto-close
+                else if (parent instanceof DockingWindow) {
                     DockingWindow window = (DockingWindow) parent;
                     if (window.isAutoClose() && window.isEmpty()) {
                         window.closeWindow();
                         unregisterDockingWindow(window);
                     }
-                    break;
+                    break; // Stop at window level
                 }
                 parent = parent.getParent();
             }
