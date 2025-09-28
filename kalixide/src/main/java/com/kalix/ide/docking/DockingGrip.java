@@ -1,6 +1,8 @@
 package com.kalix.ide.docking;
 
 import javax.swing.JComponent;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;

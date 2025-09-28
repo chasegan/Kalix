@@ -1,5 +1,8 @@
 package com.kalix.ide.docking;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.kalix.ide.MapPanel;
 import java.awt.BorderLayout;
 
@@ -9,6 +12,7 @@ import java.awt.BorderLayout;
  * maintaining all the original MapPanel features.
  */
 public class DockableMapPanel extends DockablePanel {
+    private static final Logger logger = LoggerFactory.getLogger(DockableMapPanel.class);
 
     private MapPanel mapPanel;
 
@@ -34,19 +38,43 @@ public class DockableMapPanel extends DockablePanel {
     }
 
     /**
-     * Sets up key event forwarding from the child MapPanel to this DockablePanel.
-     * This ensures F9 events reach the docking system even when the child has focus.
+     * Sets up key and mouse event forwarding from the child MapPanel to this DockablePanel.
+     * This ensures F9 events and mouse hover events reach the docking system even when the child has focus.
      */
     private void setupKeyEventForwarding() {
+        // Set up mouse event forwarding for hover detection
+        mapPanel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                logger.info("Mouse entered MapPanel, forwarding to DockablePanel");
+                // Forward to parent's mouse listeners
+                for (java.awt.event.MouseListener listener : getMouseListeners()) {
+                    listener.mouseEntered(e);
+                }
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                logger.info("Mouse exited MapPanel, forwarding to DockablePanel");
+                // Forward to parent's mouse listeners
+                for (java.awt.event.MouseListener listener : getMouseListeners()) {
+                    listener.mouseExited(e);
+                }
+            }
+        });
         mapPanel.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
             public void keyPressed(java.awt.event.KeyEvent e) {
+                logger.info("Key pressed in MapPanel: {} (code: {})", java.awt.event.KeyEvent.getKeyText(e.getKeyCode()), e.getKeyCode());
                 // Forward F9 events to the parent DockablePanel
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_F9) {
+                    logger.info("F9 pressed in MapPanel, forwarding to DockablePanel listeners");
                     // Dispatch the event to this DockablePanel's key listeners
                     for (java.awt.event.KeyListener listener : getKeyListeners()) {
                         listener.keyPressed(e);
                     }
+                } else {
+                    logger.info("Non-F9 key in MapPanel: {}", java.awt.event.KeyEvent.getKeyText(e.getKeyCode()));
                 }
             }
 
@@ -54,6 +82,7 @@ public class DockableMapPanel extends DockablePanel {
             public void keyReleased(java.awt.event.KeyEvent e) {
                 // Forward F9 events to the parent DockablePanel
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_F9) {
+                    logger.info("F9 released in MapPanel, forwarding to DockablePanel listeners");
                     // Dispatch the event to this DockablePanel's key listeners
                     for (java.awt.event.KeyListener listener : getKeyListeners()) {
                         listener.keyReleased(e);

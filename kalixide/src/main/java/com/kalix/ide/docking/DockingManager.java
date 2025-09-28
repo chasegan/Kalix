@@ -1,8 +1,8 @@
 package com.kalix.ide.docking;
 
-import javax.swing.BorderLayout;
 import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;

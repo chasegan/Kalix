@@ -1,5 +1,8 @@
 package com.kalix.ide.docking;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.JPanel;
 import javax.swing.Timer;
 import java.awt.BasicStroke;
@@ -54,6 +57,7 @@ import static com.kalix.ide.docking.DockingConstants.*;
  * @since 2025-09-27
  */
 public class DockablePanel extends JPanel {
+    private static final Logger logger = LoggerFactory.getLogger(DockablePanel.class);
 
     // State management
     private boolean isHighlighted = false;
@@ -99,6 +103,7 @@ public class DockablePanel extends JPanel {
             @Override
             public void mouseEntered(MouseEvent e) {
                 isHovered = true;
+                logger.info("Mouse entered DockablePanel");
                 updateHighlight();
                 // Request focus when mouse enters to ensure key events work
                 requestFocusInWindow();
@@ -107,6 +112,7 @@ public class DockablePanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 isHovered = false;
+                logger.info("Mouse exited DockablePanel");
                 updateHighlight();
             }
         };
@@ -116,8 +122,12 @@ public class DockablePanel extends JPanel {
         keyListener = new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                logger.info("Key pressed in DockablePanel: {} (code: {})", KeyEvent.getKeyText(e.getKeyCode()), e.getKeyCode());
                 if (e.getKeyCode() == KeyEvent.VK_F9) {
+                    logger.info("F9 detected! Toggling docking mode");
                     toggleDockingMode();
+                } else {
+                    logger.info("Key {} ignored", KeyEvent.getKeyText(e.getKeyCode()));
                 }
             }
         };
@@ -139,6 +149,7 @@ public class DockablePanel extends JPanel {
      * Toggles docking mode on/off with F9.
      */
     private void toggleDockingMode() {
+        logger.info("toggleDockingMode called. Current state: active={}, hovered={}", dockingModeActive, isHovered);
         if (dockingModeActive) {
             deactivateDockingMode();
         } else {
@@ -152,9 +163,11 @@ public class DockablePanel extends JPanel {
      */
     private void activateDockingMode() {
         if (dockingModeActive) {
+            logger.info("Docking mode already active, ignoring");
             return; // Already active
         }
 
+        logger.info("Activating docking mode");
         dockingModeActive = true;
         updateHighlight();
 
@@ -188,9 +201,13 @@ public class DockablePanel extends JPanel {
     private void updateHighlight() {
         boolean shouldHighlight = isHovered && dockingModeActive;
 
+        logger.info("updateHighlight: hovered={}, dockingActive={}, shouldHighlight={}, wasHighlighted={}",
+                   isHovered, dockingModeActive, shouldHighlight, isHighlighted);
+
         if (shouldHighlight != isHighlighted) {
             isHighlighted = shouldHighlight;
             grip.setVisible(isHighlighted);
+            logger.info("Highlight state changed to: {}, grip visible: {}", isHighlighted, grip.isVisible());
             repaint();
 
             if (isHighlighted) {
