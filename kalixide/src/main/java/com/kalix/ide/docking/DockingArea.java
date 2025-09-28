@@ -255,7 +255,6 @@ public class DockingArea extends JPanel {
             return contains(componentPoint);
         } catch (Exception e) {
             // If coordinate conversion fails, return false to avoid hanging
-            System.err.println("Warning: Failed to convert screen coordinates for drop target check: " + e.getMessage());
             return false;
         }
     }

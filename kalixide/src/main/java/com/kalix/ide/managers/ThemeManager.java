@@ -166,8 +166,23 @@ public class ThemeManager {
         UIManager.put("Button.arc", 6);
         UIManager.put("Component.focusWidth", 1);
         UIManager.put("ScrollBar.width", 12);
-        UIManager.put("TabbedPane.tabHeight", 32);
         UIManager.put("Table.rowHeight", 24);
+
+        // Modern Windows-like tab styling
+        UIManager.put("TabbedPane.tabType", "card");
+        UIManager.put("TabbedPane.tabsOpaque", false);
+        UIManager.put("TabbedPane.tabHeight", 32);
+        UIManager.put("TabbedPane.tabInsets", new java.awt.Insets(4, 12, 4, 12));
+        UIManager.put("TabbedPane.tabAreaInsets", new java.awt.Insets(0, 0, 0, 0));
+        UIManager.put("TabbedPane.cardTabInsets", new java.awt.Insets(4, 12, 4, 12));
+        UIManager.put("TabbedPane.selectedBackground", UIManager.getColor("Panel.background"));
+        UIManager.put("TabbedPane.hoverColor", UIManager.getColor("Button.hoverBackground"));
+        UIManager.put("TabbedPane.focusColor", UIManager.getColor("Component.focusColor"));
+        UIManager.put("TabbedPane.closeArc", 4);
+        UIManager.put("TabbedPane.closeCrossPlainSize", 5.5f);
+        UIManager.put("TabbedPane.showTabSeparators", true);
+        UIManager.put("TabbedPane.tabSeparatorsFullHeight", false);
+        UIManager.put("TabbedPane.hasFullBorder", false);
     }
     
     /**

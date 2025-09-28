@@ -4,6 +4,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Color;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -65,13 +66,29 @@ public class MapPanel extends JPanel implements KeyListener {
 
     public MapPanel() {
         updateThemeColors();
-        setPreferredSize(new Dimension(600, 600));
-        
+
         // Enable keyboard focus for delete key handling
         setFocusable(true);
         addKeyListener(this);
-        
+
         setupMouseListeners();
+        setupResizeListener();
+    }
+
+
+    /**
+     * Sets up a component listener to auto-fit content when the component is resized.
+     */
+    private void setupResizeListener() {
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                // Auto-fit content when component size changes and we have a model
+                if (model != null && getWidth() > 0 && getHeight() > 0) {
+                    zoomToFit();
+                }
+            }
+        });
     }
     
     private void setupMouseListeners() {
@@ -245,6 +262,7 @@ public class MapPanel extends JPanel implements KeyListener {
         super.paintComponent(g);
         Graphics2D g2d = (Graphics2D) g.create();
 
+
         // Delegate all rendering to MapRenderer
         Point selectionStart = isRectangleSelecting ? rectangleStartPoint : null;
         Point selectionCurrent = isRectangleSelecting ? rectangleCurrentPoint : null;
@@ -342,11 +360,16 @@ public class MapPanel extends JPanel implements KeyListener {
         }
         
         this.model = model;
-        
+
         // Initialize interaction manager
         if (this.model != null) {
             this.model.addChangeListener(event -> repaint());
             this.interactionManager = new MapInteractionManager(this, this.model);
+
+            // Auto-fit the model content to the current component size
+            if (getWidth() > 0 && getHeight() > 0) {
+                zoomToFit();
+            }
         } else {
             this.interactionManager = null;
         }
@@ -390,60 +413,62 @@ public class MapPanel extends JPanel implements KeyListener {
         if (model == null || model.getAllNodes().isEmpty()) {
             return; // No nodes to fit
         }
-        
+
         // Calculate bounding box of all nodes
         double minX = Double.MAX_VALUE;
         double minY = Double.MAX_VALUE;
         double maxX = Double.MIN_VALUE;
         double maxY = Double.MIN_VALUE;
-        
+
         for (ModelNode node : model.getAllNodes()) {
             minX = Math.min(minX, node.getX());
             minY = Math.min(minY, node.getY());
             maxX = Math.max(maxX, node.getX());
             maxY = Math.max(maxY, node.getY());
         }
-        
+
         // Calculate center point
         double centerX = (minX + maxX) / 2.0;
         double centerY = (minY + maxY) / 2.0;
-        
+
         // Calculate required dimensions with buffer
         double nodeSpanX = maxX - minX;
         double nodeSpanY = maxY - minY;
-        
+
         // Add buffer (5% on each side = 10% total)
         double bufferFactor = 0.1;
         double bufferedSpanX = nodeSpanX * (1.0 + bufferFactor);
         double bufferedSpanY = nodeSpanY * (1.0 + bufferFactor);
-        
+
         // Handle case where all nodes are at the same location
         if (bufferedSpanX == 0) bufferedSpanX = 200; // Default span
         if (bufferedSpanY == 0) bufferedSpanY = 200; // Default span
-        
+
         // Calculate zoom level to fit the content
         double scaleX = getWidth() / bufferedSpanX;
         double scaleY = getHeight() / bufferedSpanY;
         double newZoom = Math.min(scaleX, scaleY);
-        
+
         // Clamp zoom to valid range
         newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
-        
+
         // Calculate pan to center the content
         double newPanX = getWidth() / 2.0 - centerX * newZoom;
         double newPanY = getHeight() / 2.0 - centerY * newZoom;
-        
+
         // Apply the new view settings
         zoomLevel = newZoom;
         panX = newPanX;
         panY = newPanY;
-        
+
         repaint();
     }
 
     public void clearModel() {
         repaint();
     }
+
+
     
     // Hit testing for node interaction
     

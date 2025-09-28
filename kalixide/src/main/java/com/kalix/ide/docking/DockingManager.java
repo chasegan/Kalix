@@ -385,21 +385,17 @@ public class DockingManager {
         // Get the current parent before moving the panel
         Container oldParent = panel.getParent();
 
-        // Get the current size of the panel to size the new window appropriately
+        // Get the current size and preferred size of the panel for debugging
         Dimension panelSize = panel.getSize();
+        Dimension preferredSize = panel.getPreferredSize();
 
         // Create auto-closing window for drag-created floating windows
         DockingWindow window = DockingWindow.createAutoClosingWithPanel(panel);
 
-        // Size the window based on the panel size, adding some padding for window decorations
-        if (panelSize.width > 0 && panelSize.height > 0) {
-            // Add padding for window borders and title bar
-            window.setSize(panelSize.width + Dimensions.WINDOW_PADDING_WIDTH,
-                          panelSize.height + Dimensions.WINDOW_PADDING_HEIGHT);
-        } else {
-            // Fallback to pack if panel size is not available
-            window.pack();
-        }
+        // Use a reasonable default size instead of the constrained current size
+        // This ensures floating windows are properly sized even when the panel was constrained
+        Dimension windowSize = calculateFloatingWindowSize(panelSize, preferredSize);
+        window.setSize(windowSize.width, windowSize.height);
 
         // Position the window near the drop location
         window.setLocation(screenLocation.x - 50, screenLocation.y - 30);
@@ -409,6 +405,32 @@ public class DockingManager {
 
         // Check if old parent was a DockingWindow that should auto-close
         checkForAutoClose(oldParent);
+    }
+
+    /**
+     * Calculates an appropriate size for a floating window based on panel dimensions.
+     */
+    private Dimension calculateFloatingWindowSize(Dimension currentSize, Dimension preferredSize) {
+        // Start with preferred size if available and reasonable
+        int width = preferredSize.width;
+        int height = preferredSize.height;
+
+        // If preferred size is not available or too small, fall back to current size
+        if (width <= 0 || height <= 0) {
+            width = currentSize.width;
+            height = currentSize.height;
+        }
+
+        // Apply reasonable minimums to ensure usability
+        // Use larger defaults for map panels since they benefit from more space
+        width = Math.max(width, 600);  // Minimum 600px wide (good for map viewing)
+        height = Math.max(height, 400); // Minimum 400px tall
+
+        // Add padding for window decorations
+        width += Dimensions.WINDOW_PADDING_WIDTH;
+        height += Dimensions.WINDOW_PADDING_HEIGHT;
+
+        return new Dimension(width, height);
     }
 
     /**

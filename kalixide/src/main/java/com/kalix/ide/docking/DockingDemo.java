@@ -80,8 +80,9 @@ public class DockingDemo extends JFrame {
         });
 
         // Register status update service
-        context.registerService("statusUpdater", (Runnable) () ->
-            System.out.println("Status updated from docked panel"));
+        context.registerService("statusUpdater", (Runnable) () -> {
+            // Status updated from docked panel
+        });
     }
 
     /**

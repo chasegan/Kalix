@@ -10,10 +10,14 @@ import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.docking.DockableMapPanel;
+import com.kalix.ide.docking.DockablePanel;
 import com.kalix.ide.docking.DockableTextEditor;
 import com.kalix.ide.docking.DockingArea;
 import com.kalix.ide.docking.DockingContext;
 import com.kalix.ide.docking.DockingManager;
+import com.kalix.ide.docking.DockingSplitPane;
+import com.kalix.ide.docking.DropZoneDetector;
+import com.kalix.ide.docking.PlaceholderComponent;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
@@ -522,25 +526,59 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     
     /**
-     * Initializes the docking layout with both panels in a split arrangement.
+     * Initializes the docking layout by starting with the text editor and programmatically
+     * docking the map panel to the left using the zone-based docking system.
      */
     private void initializeDockingLayout() {
-        // Remove the empty state from the docking area
-        mainDockingArea.removeAll();
+        // Start with the text editor in the docking area
+        mainDockingArea.addDockablePanel(dockableTextEditor);
 
-        // Create a split pane with both dockable panels
-        JSplitPane splitPane = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            dockableMapPanel,
-            dockableTextEditor
-        );
-        splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
-        splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
+        // Programmatically dock the map panel to the left zone
+        // This uses the existing docking system logic to create a proper split pane
+        DockingManager dockingManager = DockingManager.getInstance();
 
-        // Add the split pane to the docking area
-        mainDockingArea.add(splitPane, BorderLayout.CENTER);
-        mainDockingArea.revalidate();
-        mainDockingArea.repaint();
+        // Simulate dropping the map panel into the LEFT zone of the text editor area
+        // This will trigger the zone-based docking logic to create a horizontal split
+        simulateZoneDrop(dockingManager, dockableMapPanel, mainDockingArea,
+                        DropZoneDetector.DropZone.LEFT);
+    }
+
+    /**
+     * Simulates a zone-based drop operation using the existing docking system logic.
+     */
+    private void simulateZoneDrop(DockingManager dockingManager, DockablePanel panel,
+                                 DockingArea area, DropZoneDetector.DropZone zone) {
+        // We need to access the private handleZoneDrop method
+        // For now, let's implement the LEFT zone logic directly
+        if (zone == DropZoneDetector.DropZone.LEFT) {
+            // Get the existing content (should be the text editor)
+            Component existingContent = null;
+            for (Component comp : area.getComponents()) {
+                if (!(comp instanceof PlaceholderComponent)) {
+                    existingContent = comp;
+                    break;
+                }
+            }
+
+            if (existingContent != null) {
+                // Remove existing content
+                area.removeAll();
+
+                // Create horizontal split pane with map panel on left, existing content on right
+                DockingSplitPane splitPane = new DockingSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+                splitPane.setLeftComponent(panel);
+                splitPane.setRightComponent(existingContent);
+
+                // Set the standard divider location and resize weight
+                splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
+                splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
+
+                // Add split pane to area
+                area.add(splitPane, BorderLayout.CENTER);
+                area.revalidate();
+                area.repaint();
+            }
+        }
     }
 
     //
