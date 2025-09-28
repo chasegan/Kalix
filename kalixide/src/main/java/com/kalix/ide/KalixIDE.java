@@ -561,8 +561,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
 
             if (existingContent != null) {
-                // Remove existing content
-                area.removeAll();
+                // Remove all components without triggering empty state check (avoids placeholder re-addition)
+                area.removeAllQuietly();
 
                 // Create horizontal split pane with map panel on left, existing content on right
                 DockingSplitPane splitPane = new DockingSplitPane(JSplitPane.HORIZONTAL_SPLIT);

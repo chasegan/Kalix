@@ -235,6 +235,14 @@ public class DockingArea extends JPanel {
     }
 
     /**
+     * Removes all components without triggering the empty state check.
+     * Used during programmatic layout setup to avoid placeholder interference.
+     */
+    public void removeAllQuietly() {
+        super.removeAll();
+    }
+
+    /**
      * Checks if the given screen point is within this area's bounds.
      */
     public boolean containsScreenPoint(Point screenPoint) {
