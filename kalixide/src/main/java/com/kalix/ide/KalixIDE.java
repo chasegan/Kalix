@@ -7,9 +7,13 @@ import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.builders.ToolBarBuilder;
 import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.components.AutoHidingProgressBar;
-import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
+import com.kalix.ide.docking.DockableMapPanel;
+import com.kalix.ide.docking.DockableTextEditor;
+import com.kalix.ide.docking.DockingArea;
+import com.kalix.ide.docking.DockingContext;
+import com.kalix.ide.docking.DockingManager;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
@@ -26,6 +30,7 @@ import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalLauncher;
+import com.kalix.ide.windows.RunManager;
 
 import javax.swing.*;
 import java.awt.*;
@@ -66,9 +71,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Core UI components
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
+    private DockableMapPanel dockableMapPanel;
+    private DockableTextEditor dockableTextEditor;
+    private DockingArea mainDockingArea;
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
-    private JSplitPane splitPane;
     private JToolBar toolBar;
     
     // Manager classes for specialized functionality
@@ -120,8 +127,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupWindowListeners();
         setupGlobalKeyBindings();
         
-        // Load saved preferences
-        loadSplitPaneDividerPosition();
+        // Note: Split pane divider position loading removed - using simple grid layout now
         
         setVisible(true);
     }
@@ -167,21 +173,61 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Initializes the docking context with common services and actions.
+     */
+    private void initializeDockingContext() {
+        DockingContext context = DockingContext.getInstance();
+
+        // Register common actions that docked panels might want to access
+        context.registerAction("zoom_in", new AbstractAction("Zoom In") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                zoomIn();
+            }
+        });
+
+        context.registerAction("zoom_out", new AbstractAction("Zoom Out") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                zoomOut();
+            }
+        });
+
+        context.registerAction("save", new AbstractAction("Save") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                saveModel();
+            }
+        });
+
+        // Register status update service
+        context.registerService("statusUpdater", (Runnable) () ->
+            updateStatus("Status updated from docked panel"));
+    }
+
+    /**
      * Initializes all UI components.
      */
     private void initializeComponents() {
-        // Initialize core components
-        mapPanel = new MapPanel();
-        
+        // Initialize docking context for panel communication
+        initializeDockingContext();
+
+        // Initialize dockable components
+        dockableMapPanel = new DockableMapPanel();
+        dockableTextEditor = new DockableTextEditor();
+
+        // Get references to the underlying components for existing functionality
+        mapPanel = dockableMapPanel.getMapPanel();
+        textEditor = dockableTextEditor.getTextEditor();
+
         // Load saved node theme
         String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
         NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
         mapPanel.setNodeTheme(nodeTheme);
-        
+
         // Load saved gridlines preference
         boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true); // Default to true
         mapPanel.setShowGridlines(showGridlines);
-        textEditor = new EnhancedTextEditor();
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
         
         statusLabel = new JLabel(AppConstants.STATUS_READY);
@@ -254,32 +300,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Sets up the main application layout.
+     * Sets up the main application layout using a single docking area.
      */
     private void setupLayout() {
         setLayout(new BorderLayout());
-        
+
         // Add toolbar at top
         ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
         toolBar = toolBarBuilder.buildToolBar();
         add(toolBar, BorderLayout.NORTH);
-        
-        // Create split pane with map panel on left, text editor on right
-        splitPane = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(mapPanel),
-            textEditor  // Enhanced text editor already includes scroll pane
-        );
-        splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
-        splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
-        
-        // Add property change listener to save divider position when it changes
-        splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            saveSplitPaneDividerPosition();
+
+        // Create a single main docking area
+        mainDockingArea = new DockingArea("Main Workspace");
+
+        // Initialize with both panels using a custom split layout
+        SwingUtilities.invokeLater(() -> {
+            initializeDockingLayout();
         });
-        
-        add(splitPane, BorderLayout.CENTER);
-        
+
+        add(mainDockingArea, BorderLayout.CENTER);
+
         // Add status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusPanel.add(statusLabel, BorderLayout.WEST);
@@ -482,25 +522,25 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     
     /**
-     * Loads the saved split pane divider position and applies it to the split pane.
-     * Uses the default location if no saved preference exists.
+     * Initializes the docking layout with both panels in a split arrangement.
      */
-    private void loadSplitPaneDividerPosition() {
-        int savedPosition = prefs.getInt(AppConstants.PREF_SPLIT_PANE_DIVIDER, AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
-        // Set the position after the window is visible to ensure proper calculation
-        SwingUtilities.invokeLater(() -> {
-            splitPane.setDividerLocation(savedPosition);
-        });
-    }
-    
-    /**
-     * Saves the current split pane divider position to preferences.
-     */
-    private void saveSplitPaneDividerPosition() {
-        if (splitPane != null) {
-            int currentPosition = splitPane.getDividerLocation();
-            prefs.putInt(AppConstants.PREF_SPLIT_PANE_DIVIDER, currentPosition);
-        }
+    private void initializeDockingLayout() {
+        // Remove the empty state from the docking area
+        mainDockingArea.removeAll();
+
+        // Create a split pane with both dockable panels
+        JSplitPane splitPane = new JSplitPane(
+            JSplitPane.HORIZONTAL_SPLIT,
+            dockableMapPanel,
+            dockableTextEditor
+        );
+        splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
+        splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
+
+        // Add the split pane to the docking area
+        mainDockingArea.add(splitPane, BorderLayout.CENTER);
+        mainDockingArea.revalidate();
+        mainDockingArea.repaint();
     }
 
     //
