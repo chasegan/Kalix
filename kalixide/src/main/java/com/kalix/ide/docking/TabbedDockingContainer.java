@@ -12,7 +12,7 @@ import java.util.List;
 public class TabbedDockingContainer extends JPanel {
 
     private JTabbedPane tabbedPane;
-    private List<DockablePanel> dockablePanels = new ArrayList<>();
+    private final List<DockablePanel> dockablePanels = new ArrayList<>();
 
     public TabbedDockingContainer() {
         initializeContainer();
@@ -116,8 +116,7 @@ public class TabbedDockingContainer extends JPanel {
     @Override
     public void remove(Component comp) {
         // If it's a dockable panel being removed, sync our list
-        if (comp instanceof DockablePanel) {
-            DockablePanel panel = (DockablePanel) comp;
+        if (comp instanceof DockablePanel panel) {
             int index = dockablePanels.indexOf(panel);
             if (index >= 0) {
                 dockablePanels.remove(index);
@@ -169,8 +168,7 @@ public class TabbedDockingContainer extends JPanel {
         // Look for common components that might have useful titles
         Component[] components = panel.getComponents();
         for (Component comp : components) {
-            if (comp instanceof JLabel) {
-                JLabel label = (JLabel) comp;
+            if (comp instanceof JLabel label) {
                 String text = label.getText();
                 if (text != null && !text.trim().isEmpty()) {
                     // Clean up HTML tags if present
@@ -183,8 +181,7 @@ public class TabbedDockingContainer extends JPanel {
         }
 
         // If panel has a border with title
-        if (panel.getBorder() instanceof javax.swing.border.TitledBorder) {
-            javax.swing.border.TitledBorder titledBorder = (javax.swing.border.TitledBorder) panel.getBorder();
+        if (panel.getBorder() instanceof javax.swing.border.TitledBorder titledBorder) {
             String title = titledBorder.getTitle();
             if (title != null && !title.trim().isEmpty()) {
                 return title;

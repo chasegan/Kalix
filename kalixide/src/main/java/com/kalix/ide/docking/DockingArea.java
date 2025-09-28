@@ -1,13 +1,45 @@
 package com.kalix.ide.docking;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
 
 import static com.kalix.ide.docking.DockingConstants.*;
 
 /**
- * A container that can accept dockable panels as drop targets.
- * Provides visual feedback during drag operations and manages docked panels.
+ * A specialized container that serves as a drop target for dockable panels in the Kalix IDE docking system.
+ *
+ * <p>DockingArea provides a region where {@link DockablePanel} instances can be dropped during
+ * drag operations. It offers visual feedback during drag operations and can contain various
+ * types of content including single panels, tabbed containers, and split panes.</p>
+ *
+ * <h3>Features:</h3>
+ * <ul>
+ *   <li>Visual drop zone highlighting during drag operations</li>
+ *   <li>Support for hybrid docking (center, top, bottom, left, right zones)</li>
+ *   <li>Empty state with philosophical placeholder text</li>
+ *   <li>Automatic registration with {@link DockingManager}</li>
+ *   <li>Support for complex nested layouts (tabs and splits)</li>
+ * </ul>
+ *
+ * <h3>Drop Zones:</h3>
+ * <p>When a panel is dragged over an occupied docking area, the cursor position
+ * determines the drop zone which affects how the new panel is integrated:</p>
+ * <ul>
+ *   <li><strong>Center:</strong> Creates tabbed interface with existing content</li>
+ *   <li><strong>Top/Bottom:</strong> Creates vertical split pane</li>
+ *   <li><strong>Left/Right:</strong> Creates horizontal split pane</li>
+ * </ul>
+ *
+ * @see DockablePanel
+ * @see DockingManager
+ * @see DropZoneDetector
+ * @author Kalix Development Team
+ * @since 2025-09-27
  */
 public class DockingArea extends JPanel {
 
@@ -21,10 +53,18 @@ public class DockingArea extends JPanel {
     private DropZoneDetector.DropZone currentDropZone = DropZoneDetector.DropZone.NONE;
     private Point lastCursorPosition;
 
+    /**
+     * Creates a new DockingArea with the default name "Docking Area".
+     */
     public DockingArea() {
         this("Docking Area");
     }
 
+    /**
+     * Creates a new DockingArea with the specified name.
+     *
+     * @param name the display name for this docking area
+     */
     public DockingArea(String name) {
         this.areaName = name;
         setLayout(new BorderLayout());

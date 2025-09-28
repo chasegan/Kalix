@@ -1,7 +1,9 @@
 package com.kalix.ide.docking;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.Timer;
+import java.awt.MouseInfo;
+import java.awt.Point;
+import java.awt.PointerInfo;
 import java.awt.event.MouseEvent;
 
 import static com.kalix.ide.docking.DockingConstants.*;
@@ -29,8 +31,7 @@ public class MouseStateTracker {
      */
     private void setupGlobalMouseListener() {
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
-            if (event instanceof MouseEvent) {
-                MouseEvent mouseEvent = (MouseEvent) event;
+            if (event instanceof MouseEvent mouseEvent) {
 
                 if (mouseEvent.getID() == MouseEvent.MOUSE_PRESSED &&
                     SwingUtilities.isLeftMouseButton(mouseEvent)) {

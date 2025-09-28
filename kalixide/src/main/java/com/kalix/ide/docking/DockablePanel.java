@@ -1,17 +1,59 @@
 package com.kalix.ide.docking;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
+import javax.swing.JPanel;
+import javax.swing.Timer;
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.LayoutManager;
+import java.awt.RenderingHints;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 
 import static com.kalix.ide.docking.DockingConstants.*;
 
 /**
- * A JPanel that can be made dockable by pressing F6 while hovering.
- * When activated, shows a translucent blue highlight and a draggable grip.
+ * A specialized JPanel that provides dockable functionality within the Kalix IDE docking system.
+ *
+ * <p>This panel can be made dockable by hovering over it and pressing F9. When activated,
+ * it displays a translucent blue highlight border and a draggable grip in the top-left corner.
+ * The panel can then be dragged to other docking areas or outside the window to create
+ * floating windows.</p>
+ *
+ * <h3>Usage:</h3>
+ * <ol>
+ *   <li>Hover the mouse over the panel</li>
+ *   <li>Press F9 to activate docking mode (shows highlight and grip)</li>
+ *   <li>Click and drag the grip to move the panel</li>
+ *   <li>Drop in a docking area or outside to create a floating window</li>
+ * </ol>
+ *
+ * <h3>Features:</h3>
+ * <ul>
+ *   <li>Visual feedback with translucent blue highlighting</li>
+ *   <li>Draggable grip with dotted pattern and shadow effects</li>
+ *   <li>Automatic timeout after 6 seconds of inactivity</li>
+ *   <li>Focus management for reliable key event handling</li>
+ *   <li>Integration with {@link DockingManager} for drag operations</li>
+ * </ul>
+ *
+ * <p>The panel automatically manages its own mouse and keyboard listeners, and provides
+ * visual feedback through theme-aware colors defined in {@link DockingConstants.Colors}.</p>
+ *
+ * @see DockingArea
+ * @see DockingManager
+ * @see DockingGrip
+ * @author Kalix Development Team
+ * @since 2025-09-27
  */
 public class DockablePanel extends JPanel {
-
 
     // State management
     private boolean isHighlighted = false;
@@ -24,17 +66,26 @@ public class DockablePanel extends JPanel {
     private MouseListener hoverListener;
     private KeyListener keyListener;
 
+    /**
+     * Creates a new DockablePanel with BorderLayout as the default layout manager.
+     */
     public DockablePanel() {
         this(new BorderLayout());
     }
 
+    /**
+     * Creates a new DockablePanel with the specified layout manager.
+     *
+     * @param layout the layout manager to use for this panel
+     */
     public DockablePanel(LayoutManager layout) {
         super(layout);
         initializeDocking();
     }
 
     /**
-     * Initializes the docking functionality for this panel.
+     * Initializes the docking functionality for this panel by setting up mouse and keyboard listeners.
+     * This method configures hover detection, F9 key handling, focus management, and the grip component.
      */
     private void initializeDocking() {
         setFocusable(true);
@@ -188,7 +239,6 @@ public class DockablePanel extends JPanel {
             g2d.dispose();
         }
     }
-
 
     /**
      * Returns whether this panel is currently highlighted (F6 + hover).

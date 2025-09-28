@@ -1,7 +1,12 @@
 package com.kalix.ide.docking;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderLayout;
+import javax.swing.JSplitPane;
+import javax.swing.SwingUtilities;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.Point;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -21,7 +26,7 @@ public class DockingManager {
     private boolean isDragging = false;
 
     // Mouse state tracking
-    private MouseStateTracker mouseTracker;
+    private final MouseStateTracker mouseTracker;
     private Point lastDragPosition;
 
     // Registered docking windows and areas
@@ -279,9 +284,8 @@ public class DockingManager {
         if (existingContent instanceof DockablePanel) {
             // Simple case: create tabbed container with two panels
             createTabbedContainer(area, (DockablePanel) existingContent, newPanel);
-        } else if (existingContent instanceof TabbedDockingContainer) {
+        } else if (existingContent instanceof TabbedDockingContainer tabbed) {
             // Add to existing tabbed container
-            TabbedDockingContainer tabbed = (TabbedDockingContainer) existingContent;
             tabbed.addDockablePanel(newPanel);
         } else {
             // For split panes or other complex content, wrap in tabbed container
@@ -328,34 +332,6 @@ public class DockingManager {
         return null;
     }
 
-    /**
-     * Finds the existing DockablePanel in the area.
-     * @deprecated Use getMainContent instead for better complex container handling
-     */
-    private DockablePanel findExistingPanel(DockingArea area) {
-        for (Component comp : area.getComponents()) {
-            if (comp instanceof DockablePanel) {
-                return (DockablePanel) comp;
-            }
-            // Also check inside tabbed containers or split panes
-            if (comp instanceof TabbedDockingContainer) {
-                TabbedDockingContainer tabbed = (TabbedDockingContainer) comp;
-                if (!tabbed.isEmpty()) {
-                    return tabbed.getSelectedPanel();
-                }
-            }
-            if (comp instanceof DockingSplitPane) {
-                DockingSplitPane split = (DockingSplitPane) comp;
-                if (split.getLeftComponent() instanceof DockablePanel) {
-                    return (DockablePanel) split.getLeftComponent();
-                }
-                if (split.getRightComponent() instanceof DockablePanel) {
-                    return (DockablePanel) split.getRightComponent();
-                }
-            }
-        }
-        return null;
-    }
 
     /**
      * Creates a tabbed container with the existing and new panels.
@@ -401,14 +377,6 @@ public class DockingManager {
         area.repaint();
     }
 
-    /**
-     * Creates a split pane with the two panels.
-     * @deprecated Use createSplitPaneWithExistingContent for better flexibility
-     */
-    private void createSplitPane(DockingArea area, DockablePanel firstPanel, DockablePanel secondPanel,
-                                int orientation, boolean firstOnTop) {
-        createSplitPaneWithExistingContent(area, firstPanel, secondPanel, orientation);
-    }
 
     /**
      * Creates a new floating window for the panel.
@@ -455,18 +423,15 @@ public class DockingManager {
             Container parent = oldParent;
             while (parent != null) {
                 // Check for tab container cleanup
-                if (parent instanceof TabbedDockingContainer) {
-                    TabbedDockingContainer tabContainer = (TabbedDockingContainer) parent;
+                if (parent instanceof TabbedDockingContainer tabContainer) {
                     tabContainer.checkForCleanup();
                 }
                 // Check for split pane cleanup
-                else if (parent instanceof DockingSplitPane) {
-                    DockingSplitPane splitPane = (DockingSplitPane) parent;
+                else if (parent instanceof DockingSplitPane splitPane) {
                     splitPane.scheduleCleanupCheck();
                 }
                 // Check for window auto-close
-                else if (parent instanceof DockingWindow) {
-                    DockingWindow window = (DockingWindow) parent;
+                else if (parent instanceof DockingWindow window) {
                     if (window.isAutoClose() && window.isEmpty()) {
                         window.closeWindow();
                         unregisterDockingWindow(window);

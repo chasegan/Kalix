@@ -1,15 +1,39 @@
 package com.kalix.ide.docking;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JFrame;
+import java.awt.BorderLayout;
+import java.awt.Frame;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 import static com.kalix.ide.docking.DockingConstants.*;
 
 /**
- * A floating window that can contain dockable panels.
- * Automatically manages its lifecycle and cleans up when empty.
+ * A floating window that hosts dockable panels outside the main application window.
+ *
+ * <p>DockingWindow provides a separate window container for {@link DockablePanel} instances
+ * that have been dragged outside of the main application. These windows can be moved
+ * independently and serve as floating containers for panels.</p>
+ *
+ * <h3>Features:</h3>
+ * <ul>
+ *   <li>Contains a main {@link DockingArea} for accepting dropped panels</li>
+ *   <li>Optional auto-close behavior when empty</li>
+ *   <li>Automatic registration with {@link DockingManager}</li>
+ *   <li>Window lifecycle management and cleanup</li>
+ *   <li>Icon inheritance from main application window</li>
+ * </ul>
+ *
+ * <h3>Auto-Close Behavior:</h3>
+ * <p>Windows created through drag operations typically have auto-close enabled,
+ * meaning they will automatically close when they become empty. Windows created
+ * manually may have this behavior disabled to persist even when empty.</p>
+ *
+ * @see DockablePanel
+ * @see DockingArea
+ * @see DockingManager
+ * @author Kalix Development Team
+ * @since 2025-09-27
  */
 public class DockingWindow extends JFrame {
 
@@ -17,14 +41,28 @@ public class DockingWindow extends JFrame {
     private static int windowCounter = 1;
     private boolean autoClose = false; // Whether to auto-close when empty
 
+    /**
+     * Creates a new DockingWindow with a default auto-generated title.
+     */
     public DockingWindow() {
         this(Text.WINDOW_TITLE_PREFIX + " " + windowCounter++);
     }
 
+    /**
+     * Creates a new DockingWindow with the specified title and auto-close disabled.
+     *
+     * @param title the window title
+     */
     public DockingWindow(String title) {
         this(title, false);
     }
 
+    /**
+     * Creates a new DockingWindow with the specified title and auto-close behavior.
+     *
+     * @param title the window title
+     * @param autoClose if true, the window will automatically close when empty
+     */
     public DockingWindow(String title, boolean autoClose) {
         super(title);
         this.autoClose = autoClose;
