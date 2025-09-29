@@ -186,7 +186,7 @@ public class StdioTaskManager {
                     break;
                     
                 case READY:
-                    statusUpdater.accept("Session ready - " + event.getSessionKey());
+                    // Session is ready but don't show this message in status bar as it's not useful to users
                     // Progress bar already at 100% from CLI progress updates
                     // AutoHidingProgressBar will automatically hide after delay
                     break;

@@ -1,5 +1,6 @@
 package com.kalix.ide.cli;
 
+import com.kalix.ide.windows.RunManager;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -66,11 +67,11 @@ public class RunModelProgram {
         String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText, kalixcliUid);
         sessionManager.sendCommand(sessionKey, loadCommand)
             .thenRun(() -> {
-                statusUpdater.accept("Loading model in session: " + sessionKey);
+                statusUpdater.accept("Loading model in " + getDisplayName());
             })
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to send model to session " + sessionKey + ": " + throwable.getMessage());
+                statusUpdater.accept("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
                 return null;
             });
     }
@@ -116,11 +117,11 @@ public class RunModelProgram {
                 String runCommand = JsonStdioProtocol.Commands.runSimulation(kalixcliUid);
                 sessionManager.sendCommand(sessionKey, runCommand)
                     .thenRun(() -> {
-                        statusUpdater.accept("Model loaded, starting simulation in session: " + sessionKey);
+                        statusUpdater.accept("Model loaded, starting simulation in " + getDisplayName());
                     })
                     .exceptionally(throwable -> {
                         currentState = ProgramState.FAILED;
-                        statusUpdater.accept("Failed to start simulation in session " + sessionKey + ": " + throwable.getMessage());
+                        statusUpdater.accept("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());
                         return null;
                     });
                 return true;
@@ -129,7 +130,7 @@ public class RunModelProgram {
                 // Model loading failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Model loading failed in session " + sessionKey + ": " + errorMsg);
+                statusUpdater.accept("Model loading failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
                 
             default:
@@ -146,7 +147,7 @@ public class RunModelProgram {
         switch (msgType) {
             case BUSY:
                 // Simulation started
-                statusUpdater.accept("Simulation running in session: " + sessionKey);
+                statusUpdater.accept("Simulation running in " + getDisplayName());
                 return true;
                 
             case PROGRESS:
@@ -163,12 +164,12 @@ public class RunModelProgram {
                             );
                             progressCallback.accept(progressInfo);
                         }
-                        statusUpdater.accept(String.format("Session %s: %.1f%% - %s",
-                                sessionKey, progress.getPercentComplete(), progress.getCurrentStep()));
+                        statusUpdater.accept(String.format("%s: %.1f%% - %s",
+                                getDisplayName(), progress.getPercentComplete(), progress.getCurrentStep()));
                     }
                     return true;
                 } catch (Exception e) {
-                    statusUpdater.accept("Error parsing progress from session " + sessionKey + ": " + e.getMessage());
+                    statusUpdater.accept("Error parsing progress from " + getDisplayName() + ": " + e.getMessage());
                     return true;
                 }
                 
@@ -184,23 +185,23 @@ public class RunModelProgram {
                     }
                 } catch (Exception e) {
                     // If we can't parse the result data, just continue without outputs
-                    statusUpdater.accept("Warning: Could not parse outputs from result in session " + sessionKey + ": " + e.getMessage());
+                    statusUpdater.accept("Warning: Could not parse outputs from result in " + getDisplayName() + ": " + e.getMessage());
                 }
 
-                statusUpdater.accept("Model run completed successfully in session: " + sessionKey);
+                statusUpdater.accept("Model run completed successfully in " + getDisplayName());
                 return true;
                 
             case STOPPED:
                 // Simulation was interrupted
                 currentState = ProgramState.COMPLETED; // Still considered completed, just stopped early
-                statusUpdater.accept("Model run stopped in session: " + sessionKey);
+                statusUpdater.accept("Model run stopped in " + getDisplayName());
                 return true;
                 
             case ERROR:
                 // Simulation failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Simulation failed in session " + sessionKey + ": " + errorMsg);
+                statusUpdater.accept("Simulation failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
                 
             default:
@@ -210,12 +211,26 @@ public class RunModelProgram {
     }
     
     /**
+     * Gets the display name for this run (run name if available, otherwise session key).
+     */
+    private String getDisplayName() {
+        String runName = RunManager.getRunNameForSession(sessionKey);
+        return runName != null ? runName : sessionKey;
+    }
+
+    /**
      * Extracts error message from JSON error response.
      */
     private String extractErrorMessage(JsonMessage.SystemMessage message) {
         try {
             if (message.getData() != null && message.getData().has("error")) {
-                return message.getData().get("error").asText();
+                var errorNode = message.getData().get("error");
+                // Check if error is an object with a message property
+                if (errorNode.has("message")) {
+                    return errorNode.get("message").asText();
+                }
+                // Fallback to treating error as a string
+                return errorNode.asText();
             }
         } catch (Exception e) {
             // If we can't parse error details, use the raw message

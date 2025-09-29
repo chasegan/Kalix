@@ -485,7 +485,7 @@ public class SessionManager {
                 SessionState oldState = session.getState();
                 session.setState(SessionState.READY, "Session ready for commands");
                 fireSessionEvent(sessionKey, oldState, SessionState.READY, "Session ready");
-                updateStatus("Session ready: " + sessionKey);
+                // Don't show session ready message in status bar as it's not useful to users
                 break;
 
             default:

@@ -714,7 +714,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void flowViz() {
         com.kalix.ide.flowviz.FlowVizWindow.createNewWindow();
-        updateStatus(AppConstants.STATUS_FLOWVIZ_OPENED);
     }
 
 
@@ -920,7 +919,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void searchModel() {
         textEditor.getSearchManager().showFindDialog();
-        updateStatus("Find dialog opened");
     }
     
     @Override
@@ -938,7 +936,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void showRunManager() {
         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
-        updateStatus("Run Manager opened");
     }
     
     
@@ -961,7 +958,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     // Automatically open Run Manager if not already open
                     if (!RunManager.isWindowOpen()) {
                         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
-                        updateStatus("Run Manager opened to monitor progress");
                     }
 
                     // Select the newly created run after a brief delay to allow Run Manager to refresh

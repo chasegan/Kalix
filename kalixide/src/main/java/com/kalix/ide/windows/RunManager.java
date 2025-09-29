@@ -139,6 +139,16 @@ public class RunManager extends JFrame {
         return (instance != null && instance.isVisible()) ? instance : null;
     }
 
+    /**
+     * Gets the run name for a session key, if available.
+     */
+    public static String getRunNameForSession(String sessionKey) {
+        if (instance != null) {
+            return instance.sessionToRunName.get(sessionKey);
+        }
+        return null;
+    }
+
     private void setupWindow(JFrame parentFrame) {
         setTitle("Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
