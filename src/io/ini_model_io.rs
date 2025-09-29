@@ -73,7 +73,11 @@ impl IniModelIO {
     pub fn result_map_to_model(map: HashMap<String, HashMap<String, Option<String>>>) -> Result<Model, String> {
         // The first thing we want to read is the ini format version.
         // After that we will just loop through all the sections in the order they appear.
-        let ini_format_version = map["attributes"]["ini_version"].clone().unwrap_or("".to_string());
+        let ini_format_version = map.get("attributes")
+            .and_then(|attrs| attrs.get("ini_version"))
+            .and_then(|opt| opt.as_ref())
+            .unwrap_or(&"input-did-not-specify-format-version".to_string())
+            .to_string();
 
         // Use appropriate interpreter for given ini format version
         match ini_format_version.as_str() {
