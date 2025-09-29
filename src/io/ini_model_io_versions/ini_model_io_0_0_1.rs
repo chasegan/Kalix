@@ -10,7 +10,8 @@ use crate::nodes::{NodeEnum,confluence_node::ConfluenceNode,diversion_node::Dive
 
 
 
-/// Parser version 0.0.1
+/// Converts INI-parsed HashMap to Model struct.
+/// Returns Model on success, error message on failure.
 pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<String>>>) -> Result<Model, String> {
 
     // Create a new model
@@ -48,18 +49,25 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
             // Loading a node
             // -------------------------------------------------------------------------------------
             let node_name = &k[5..];
-            let node_type = v["type"].clone().unwrap();
+            let node_type = v.get("type")
+                .ok_or("Missing 'type' field")?
+                .as_ref()
+                .ok_or("Empty 'type' field")?;
+
             let node_enum= match node_type.as_str() {
                 "confluence" => {
                     let mut n = ConfluenceNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -73,10 +81,12 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut n = DiversionNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "demand" {
-                            n.demand_def.name = vv.clone().unwrap();
+                            n.demand_def.name = vvc.clone();
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -89,17 +99,19 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut n = Gr4jNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
-                        let vvc = vv.clone().unwrap();
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
                             n.evap_mm_def.name = vvc.clone();
                         } else if vp == "rain" {
                             n.rain_mm_def.name = vvc.clone();
                         } else if vp == "area" {
-                            n.area_km2 = vv.clone().unwrap().parse::<f64>().unwrap();
+                            n.area_km2 = vvc.parse::<f64>()
+                                .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
                         } else if vp == "params" {
-                            let params = csv_string_to_f64_vec(vv.clone().unwrap().as_str())?;
+                            let params = csv_string_to_f64_vec(vvc.as_str())?;
                             if params.len() != 4 {
                                 return Err(format!("GR4J params must have 4 values, got {}", params.len()));
                             }
@@ -110,7 +122,8 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -124,14 +137,19 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut n = InflowNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "inflow" {
-                            n.inflow_def.name = vv.clone().unwrap();
+                            n.inflow_def.name = vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?
+                                .clone();
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -147,15 +165,19 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut r_times: Option<Vec<f64>> = None;
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
-                        let vvc = vv.clone().unwrap();
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "lag" {
-                            n.set_lag(vvc.parse::<i32>().unwrap());
+                            n.set_lag(vvc.parse::<i32>()
+                                .map_err(|_| format!("Invalid '{}' value for node '{}': required integer", vp, node_name))?);
                         } else if vp == "divs" {
-                            n.set_divs(vvc.parse::<usize>().unwrap());
+                            n.set_divs(vvc.parse::<usize>()
+                                .map_err(|_| format!("Invalid '{}' value for node '{}': required non-negative integer", vp, node_name))?);
                         } else if vp == "x" {
-                            n.set_x(vvc.parse::<f64>().unwrap());
+                            n.set_x(vvc.parse::<f64>()
+                                .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?);
                         } else if vp == "index_flows" {
                             let index_flows = csv_string_to_f64_vec(vvc.as_str())?;
                             if let Some(index_times) = &r_times {
@@ -173,7 +195,8 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -187,15 +210,17 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut n = SacramentoNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
-                        let vvc = vv.clone().unwrap();
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
                             n.evap_mm_def.name = vvc.clone();
                         } else if vp == "rain" {
                             n.rain_mm_def.name = vvc.clone();
                         } else if vp == "area" {
-                            n.area_km2 = vvc.parse::<f64>().unwrap();
+                            n.area_km2 = vvc.parse::<f64>()
+                                .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
                         } else if vp == "params" {
                             let params = csv_string_to_f64_vec(vvc.as_str())?;
                             if params.len() < 17 {
@@ -208,7 +233,8 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -222,9 +248,10 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     let mut n = StorageNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
-                        let vvc = vv.clone().unwrap();
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
-                            n.location = Location::from_str(vv.clone().unwrap().as_str())?;
+                            n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
                             n.evap_mm_def.name = vvc.clone();
                         } else if vp == "rain" {
@@ -238,12 +265,14 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "ds_2" {
                             let outlet = 1_u8; //ds_2 is outlet 1
                             let inlet = 0_u8; //always inlet 0
-                            let ds_node_name = vv.clone().unwrap();
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
                         } else if vp == "type" {
                             // skipping this
@@ -280,9 +309,11 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
     // Create all the links
     // -------------------------------------------------------------------------------------
     for link_helper in vec_link_defs {
-        let from_node_idx = model.node_lookup[&link_helper.from_node_name];
-        let to_node_idx = model.node_lookup[&link_helper.to_node_name];
-        model.add_link(from_node_idx, to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
+        let from_node_idx = model.node_lookup.get(&link_helper.from_node_name)
+            .ok_or(format!("Node '{}' not found", link_helper.from_node_name))?;
+        let to_node_idx = model.node_lookup.get(&link_helper.to_node_name)
+            .ok_or(format!("Node '{}' not found", link_helper.to_node_name))?;
+        model.add_link(*from_node_idx, *to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
     }
 
     // -------------------------------------------------------------------------------------

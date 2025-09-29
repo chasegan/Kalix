@@ -1,5 +1,3 @@
-use crate::nodes::Link;
-
 #[derive(Clone, Default, Debug)]
 pub struct LinkHelper {
     pub from_node_name: String,
