@@ -218,6 +218,9 @@ public class ModelLinter {
             case "params":
                 validateNumberSequence(prop, schema, result);
                 break;
+            case "lag":
+                validateInteger(prop, schema, result, 0, null); // Lag must be >= 0
+                break;
             default:
                 // Handle downstream parameters
                 if (paramName.startsWith("ds_")) {
@@ -270,6 +273,34 @@ public class ModelLinter {
             result.addIssue(prop.getLineNumber(),
                           "Invalid number sequence format. Expected comma-separated numbers",
                           ValidationRule.Severity.ERROR, "invalid_number_sequence");
+        }
+    }
+
+    private void validateInteger(INIModelParser.Property prop, LinterSchema schema, ValidationResult result,
+                               Integer min, Integer max) {
+        LinterSchema.DataType integerType = schema.getDataType("integer");
+        if (integerType != null && !integerType.matches(prop.getValue())) {
+            result.addIssue(prop.getLineNumber(),
+                          "Invalid integer format: " + prop.getValue(),
+                          ValidationRule.Severity.ERROR, "invalid_integer");
+            return;
+        }
+
+        // Check bounds if specified
+        try {
+            int value = Integer.parseInt(prop.getValue());
+            if (min != null && value < min) {
+                result.addIssue(prop.getLineNumber(),
+                              "Value must be >= " + min + ": " + prop.getValue(),
+                              ValidationRule.Severity.ERROR, "value_out_of_range");
+            }
+            if (max != null && value > max) {
+                result.addIssue(prop.getLineNumber(),
+                              "Value must be <= " + max + ": " + prop.getValue(),
+                              ValidationRule.Severity.ERROR, "value_out_of_range");
+            }
+        } catch (NumberFormatException e) {
+            // Already handled by pattern validation above
         }
     }
 

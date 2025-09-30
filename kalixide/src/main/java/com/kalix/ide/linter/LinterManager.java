@@ -1,6 +1,8 @@
 package com.kalix.ide.linter;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,6 +106,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
 
     private JWindow tooltipWindow;
     private JLabel tooltipLabel;
+    private JPanel tooltipPanel;
 
     /**
      * Setup a completely custom tooltip popup that bypasses Swing's ToolTipManager.
@@ -111,14 +114,17 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     private void setupCustomTooltipPopup() {
         // Create custom tooltip window
         tooltipWindow = new JWindow();
-        tooltipLabel = new JLabel();
-        tooltipLabel.setOpaque(true);
-        tooltipLabel.setBackground(new Color(255, 255, 225)); // Light yellow background
-        tooltipLabel.setBorder(BorderFactory.createCompoundBorder(
+
+        // Create a panel to hold the tooltip content with proper layout
+        tooltipPanel = new JPanel(new BorderLayout());
+        tooltipPanel.setOpaque(true);
+        tooltipPanel.setBackground(new Color(255, 255, 225)); // Light yellow background
+        tooltipPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(Color.BLACK, 1),
-            BorderFactory.createEmptyBorder(2, 4, 2, 4)
+            BorderFactory.createEmptyBorder(4, 6, 4, 6)
         ));
-        tooltipWindow.add(tooltipLabel);
+
+        tooltipWindow.add(tooltipPanel);
 
         // Add mouse motion listener
         textArea.addMouseMotionListener(new MouseMotionAdapter() {
@@ -131,10 +137,10 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
                     hideTimer.stop();
                 }
 
-                String tooltip = getValidationTooltipForPosition(e.getPoint());
+                ValidationResult.ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
 
-                if (tooltip != null) {
-                    showCustomTooltip(tooltip, e.getLocationOnScreen());
+                if (issue != null) {
+                    showCustomTooltip(issue, e.getLocationOnScreen());
                 } else {
                     // Hide tooltip after a short delay to prevent flickering
                     hideTimer = new Timer(100, evt -> hideCustomTooltip());
@@ -153,8 +159,8 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
         });
     }
 
-    private void showCustomTooltip(String text, Point screenLocation) {
-        tooltipLabel.setText(text);
+    private void showCustomTooltip(ValidationResult.ValidationIssue issue, Point screenLocation) {
+        buildTooltipContent(issue);
         tooltipWindow.pack();
 
         // Position tooltip slightly offset from mouse
@@ -177,6 +183,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     private void hideCustomTooltip() {
         if (tooltipWindow != null) {
             tooltipWindow.setVisible(false);
+            tooltipPanel.removeAll(); // Clear the content when hiding
         }
     }
 
@@ -261,17 +268,14 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     }
 
     /**
-     * Get validation tooltip for the given position, or null if no validation issue.
+     * Get validation issue for the given position, or null if no validation issue.
      */
-    private String getValidationTooltipForPosition(Point point) {
+    private ValidationResult.ValidationIssue getValidationIssueForPosition(Point point) {
         try {
             int offset = textArea.viewToModel2D(point);
             int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based line numbers
 
-            ValidationResult.ValidationIssue issue = issuesByLine.get(line);
-            if (issue != null) {
-                return formatTooltip(issue);
-            }
+            return issuesByLine.get(line);
 
         } catch (BadLocationException e) {
             // Invalid position, no tooltip
@@ -281,14 +285,47 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     }
 
     /**
-     * Format validation issue as tooltip text.
+     * Build custom tooltip layout for validation issue with properly aligned icon and text.
      */
-    private String formatTooltip(ValidationResult.ValidationIssue issue) {
-        String severityIcon = issue.getSeverity() == ValidationRule.Severity.ERROR ? "❌" : "⚠️";
-        return String.format("<html><b>%s %s</b><br/>%s</html>",
-                           severityIcon,
-                           issue.getSeverity().name(),
-                           issue.getMessage());
+    private void buildTooltipContent(ValidationResult.ValidationIssue issue) {
+        // Clear previous content
+        tooltipPanel.removeAll();
+
+        // Create appropriate FontAwesome icon based on severity
+        FontIcon icon;
+        Color severityColor;
+        if (issue.getSeverity() == ValidationRule.Severity.ERROR) {
+            icon = FontIcon.of(FontAwesomeSolid.TIMES, 12, Color.RED);
+            severityColor = new Color(204, 0, 0); // Dark red
+        } else {
+            icon = FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 12, new Color(255, 140, 0));
+            severityColor = new Color(255, 140, 0); // Dark orange
+        }
+
+        // Create the top row with icon and severity text aligned
+        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        topRow.setOpaque(false);
+
+        // Icon label
+        JLabel iconLabel = new JLabel(icon);
+        iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 4)); // Small gap after icon
+
+        // Severity text label
+        JLabel severityLabel = new JLabel(issue.getSeverity().name());
+        severityLabel.setFont(severityLabel.getFont().deriveFont(11f)); // Smaller font
+        severityLabel.setForeground(severityColor);
+
+        topRow.add(iconLabel);
+        topRow.add(severityLabel);
+
+        // Create the message label
+        JLabel messageLabel = new JLabel(issue.getMessage());
+        messageLabel.setFont(messageLabel.getFont().deriveFont(12f)); // Normal font size
+        messageLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0)); // Small gap above message
+
+        // Add components to tooltip panel
+        tooltipPanel.add(topRow, BorderLayout.NORTH);
+        tooltipPanel.add(messageLabel, BorderLayout.CENTER);
     }
 
     /**

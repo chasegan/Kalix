@@ -77,6 +77,29 @@
           "description": "GR4J parameters: X1, X2, X3, X4"
         }
       }
+    },
+
+    "routing_node": {
+      "description": "Routing node with optional lag parameter for flow delay",
+      "required_params": ["type", "loc"],
+      "optional_params": ["lag"],
+      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "routing_node"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "lag": {
+          "type": "integer",
+          "min": 0,
+          "description": "Time lag in time steps (integer >= 0)"
+        }
+      }
     }
   },
 
@@ -119,6 +142,11 @@
     "number": {
       "pattern": "^-?\\d+(?:\\.\\d+)?$",
       "parse": "parse_float"
+    },
+
+    "integer": {
+      "pattern": "^-?\\d+$",
+      "parse": "parse_int"
     },
 
     "coordinates": {
