@@ -79,15 +79,105 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
             }
         });
 
-        // Add mouse motion listener for tooltips
+        // Override tooltip behavior to show only our validation messages
+        setupCustomTooltips();
+
+        logger.debug("LinterManager initialized for text area");
+    }
+
+    /**
+     * Setup custom tooltip behavior that only shows our validation messages.
+     */
+    private void setupCustomTooltips() {
+        // Completely disable RSyntaxTextArea's tooltip system
+        textArea.setToolTipSupplier(null);
+        textArea.setToolTipText(null);
+
+        // Unregister from tooltip manager completely
+        ToolTipManager.sharedInstance().unregisterComponent(textArea);
+
+        // Create our own custom tooltip popup
+        setupCustomTooltipPopup();
+
+        logger.debug("Custom tooltip system initialized");
+    }
+
+    private JWindow tooltipWindow;
+    private JLabel tooltipLabel;
+
+    /**
+     * Setup a completely custom tooltip popup that bypasses Swing's ToolTipManager.
+     */
+    private void setupCustomTooltipPopup() {
+        // Create custom tooltip window
+        tooltipWindow = new JWindow();
+        tooltipLabel = new JLabel();
+        tooltipLabel.setOpaque(true);
+        tooltipLabel.setBackground(new Color(255, 255, 225)); // Light yellow background
+        tooltipLabel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.BLACK, 1),
+            BorderFactory.createEmptyBorder(2, 4, 2, 4)
+        ));
+        tooltipWindow.add(tooltipLabel);
+
+        // Add mouse motion listener
         textArea.addMouseMotionListener(new MouseMotionAdapter() {
+            private Timer hideTimer;
+
             @Override
             public void mouseMoved(MouseEvent e) {
-                showTooltipForPosition(e.getPoint());
+                // Cancel any existing hide timer
+                if (hideTimer != null && hideTimer.isRunning()) {
+                    hideTimer.stop();
+                }
+
+                String tooltip = getValidationTooltipForPosition(e.getPoint());
+
+                if (tooltip != null) {
+                    showCustomTooltip(tooltip, e.getLocationOnScreen());
+                } else {
+                    // Hide tooltip after a short delay to prevent flickering
+                    hideTimer = new Timer(100, evt -> hideCustomTooltip());
+                    hideTimer.setRepeats(false);
+                    hideTimer.start();
+                }
             }
         });
 
-        logger.debug("LinterManager initialized for text area");
+        // Hide tooltip when mouse exits text area
+        textArea.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                hideCustomTooltip();
+            }
+        });
+    }
+
+    private void showCustomTooltip(String text, Point screenLocation) {
+        tooltipLabel.setText(text);
+        tooltipWindow.pack();
+
+        // Position tooltip slightly offset from mouse
+        int x = screenLocation.x + 10;
+        int y = screenLocation.y + 20;
+
+        // Adjust position if tooltip would go off screen
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        if (x + tooltipWindow.getWidth() > screenSize.width) {
+            x = screenLocation.x - tooltipWindow.getWidth() - 5;
+        }
+        if (y + tooltipWindow.getHeight() > screenSize.height) {
+            y = screenLocation.y - tooltipWindow.getHeight() - 5;
+        }
+
+        tooltipWindow.setLocation(x, y);
+        tooltipWindow.setVisible(true);
+    }
+
+    private void hideCustomTooltip() {
+        if (tooltipWindow != null) {
+            tooltipWindow.setVisible(false);
+        }
     }
 
     /**
@@ -171,24 +261,23 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     }
 
     /**
-     * Show tooltip for validation issues at the given position.
+     * Get validation tooltip for the given position, or null if no validation issue.
      */
-    private void showTooltipForPosition(Point point) {
+    private String getValidationTooltipForPosition(Point point) {
         try {
             int offset = textArea.viewToModel2D(point);
             int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based line numbers
 
             ValidationResult.ValidationIssue issue = issuesByLine.get(line);
             if (issue != null) {
-                String tooltip = formatTooltip(issue);
-                textArea.setToolTipText(tooltip);
-            } else {
-                textArea.setToolTipText(null);
+                return formatTooltip(issue);
             }
 
         } catch (BadLocationException e) {
-            textArea.setToolTipText(null);
+            // Invalid position, no tooltip
         }
+
+        return null; // No validation issue at this position
     }
 
     /**
@@ -338,6 +427,13 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     public void dispose() {
         // Unregister from schema manager
         schemaManager.removeLintingStateChangeListener(this);
+
+        // Clean up custom tooltip
+        hideCustomTooltip();
+        if (tooltipWindow != null) {
+            tooltipWindow.dispose();
+            tooltipWindow = null;
+        }
 
         if (validationTimer != null && validationTimer.isRunning()) {
             validationTimer.stop();
