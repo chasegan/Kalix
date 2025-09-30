@@ -131,6 +131,18 @@ public class LinterPreferencesPanel extends JPanel {
     private void onLintingEnabledChanged() {
         boolean enabled = enableLintingCheckBox.isSelected();
         PreferenceManager.setFileBoolean(PreferenceKeys.LINTER_ENABLED, enabled);
+
+        // Update schema manager to propagate the change
+        Set<String> disabledRules = rulesTableModel != null ?
+            rulesTableModel.getDisabledRules() :
+            schemaManager.getDisabledRules();
+
+        schemaManager.updatePreferences(
+            enabled,
+            schemaPathField.getText().trim(),
+            disabledRules
+        );
+
         updateControlStates();
     }
 

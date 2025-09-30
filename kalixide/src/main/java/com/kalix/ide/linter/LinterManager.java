@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * Manages real-time linting integration with RSyntaxTextArea.
  * Provides debounced validation, visual feedback, and tooltip integration.
  */
-public class LinterManager {
+public class LinterManager implements SchemaManager.LintingStateChangeListener {
 
     private static final Logger logger = LoggerFactory.getLogger(LinterManager.class);
     private static final int VALIDATION_DELAY_MS = 300;
@@ -56,6 +56,8 @@ public class LinterManager {
     }
 
     private void initialize() {
+        // Register as listener for schema manager changes
+        schemaManager.addLintingStateChangeListener(this);
         // Create highlighter for visual feedback
         highlighter = new LinterHighlighter(textArea);
 
@@ -322,9 +324,21 @@ public class LinterManager {
     }
 
     /**
+     * Handle linting enabled state changes from SchemaManager.
+     */
+    @Override
+    public void onLintingEnabledChanged(boolean enabled) {
+        setValidationEnabled(enabled);
+        logger.debug("Linting enabled state changed to: {}", enabled);
+    }
+
+    /**
      * Cleanup resources when the manager is no longer needed.
      */
     public void dispose() {
+        // Unregister from schema manager
+        schemaManager.removeLintingStateChangeListener(this);
+
         if (validationTimer != null && validationTimer.isRunning()) {
             validationTimer.stop();
         }

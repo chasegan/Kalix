@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Manages linter schema lifecycle including loading from preferences and schema reloading.
@@ -22,6 +23,13 @@ public class SchemaManager {
     private LinterSchema currentSchema;
     private Set<String> disabledRules = new HashSet<>();
     private boolean lintingEnabled;
+
+    // Callback interface for preference changes
+    public interface LintingStateChangeListener {
+        void onLintingEnabledChanged(boolean enabled);
+    }
+
+    private final List<LintingStateChangeListener> listeners = new CopyOnWriteArrayList<>();
 
     /**
      * Initialize the schema manager by loading schema and preferences.
@@ -103,6 +111,8 @@ public class SchemaManager {
      * Update preferences and reload schema.
      */
     public void updatePreferences(boolean enabled, String schemaPath, Set<String> disabledRuleNames) {
+        boolean wasEnabled = this.lintingEnabled;
+
         // Save to preferences
         PreferenceManager.setFileBoolean(PreferenceKeys.LINTER_ENABLED, enabled);
         PreferenceManager.setFileString(PreferenceKeys.LINTER_SCHEMA_PATH, schemaPath != null ? schemaPath : "");
@@ -114,6 +124,11 @@ public class SchemaManager {
 
         // Reload schema with new preferences
         reloadSchema();
+
+        // Notify listeners if linting enabled state changed
+        if (wasEnabled != enabled) {
+            notifyLintingStateChanged(enabled);
+        }
 
         logger.info("Updated linter preferences and reloaded schema");
     }
@@ -169,5 +184,32 @@ public class SchemaManager {
      */
     public String getSchemaVersion() {
         return currentSchema != null ? currentSchema.getVersion() : "unknown";
+    }
+
+    /**
+     * Add a listener for linting state changes.
+     */
+    public void addLintingStateChangeListener(LintingStateChangeListener listener) {
+        listeners.add(listener);
+    }
+
+    /**
+     * Remove a linting state change listener.
+     */
+    public void removeLintingStateChangeListener(LintingStateChangeListener listener) {
+        listeners.remove(listener);
+    }
+
+    /**
+     * Notify all listeners that the linting enabled state has changed.
+     */
+    private void notifyLintingStateChanged(boolean enabled) {
+        for (LintingStateChangeListener listener : listeners) {
+            try {
+                listener.onLintingEnabledChanged(enabled);
+            } catch (Exception e) {
+                logger.warn("Error notifying linting state change listener", e);
+            }
+        }
     }
 }
