@@ -44,7 +44,7 @@ public class LinterHighlighter {
         }
 
         // Add highlights for each issue
-        for (ValidationResult.ValidationIssue issue : result.getIssues()) {
+        for (ValidationIssue issue : result.getIssues()) {
             addHighlightForIssue(issue);
         }
 
@@ -55,7 +55,7 @@ public class LinterHighlighter {
     /**
      * Add highlight for a specific validation issue.
      */
-    private void addHighlightForIssue(ValidationResult.ValidationIssue issue) {
+    private void addHighlightForIssue(ValidationIssue issue) {
         try {
             int lineNumber = issue.getLineNumber() - 1; // Convert to 0-based
             if (lineNumber < 0 || lineNumber >= textArea.getLineCount()) {

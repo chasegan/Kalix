@@ -64,13 +64,13 @@ public class SchemaManager {
             if (customSchemaPath.isEmpty()) {
                 // Use default embedded schema
                 currentSchema = LinterSchema.loadDefault();
-                logger.info("Loaded default embedded schema");
+                logger.debug("Loaded default embedded schema");
             } else {
                 // Try to load custom schema
                 Path schemaPath = Paths.get(customSchemaPath);
                 if (Files.exists(schemaPath) && Files.isRegularFile(schemaPath)) {
                     currentSchema = LinterSchema.loadFromFile(schemaPath);
-                    logger.info("Loaded custom schema from: {}", customSchemaPath);
+                    logger.debug("Loaded custom schema from: {}", customSchemaPath);
                 } else {
                     logger.warn("Custom schema file not found: {}, falling back to default", customSchemaPath);
                     currentSchema = LinterSchema.loadDefault();
@@ -130,7 +130,7 @@ public class SchemaManager {
             notifyLintingStateChanged(enabled);
         }
 
-        logger.info("Updated linter preferences and reloaded schema");
+        logger.debug("Updated linter preferences and reloaded schema");
     }
 
     /**

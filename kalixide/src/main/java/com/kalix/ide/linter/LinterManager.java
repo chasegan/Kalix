@@ -36,7 +36,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
 
     // Validation state
     private ValidationResult currentValidationResult;
-    private final ConcurrentHashMap<Integer, ValidationResult.ValidationIssue> issuesByLine = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine = new ConcurrentHashMap<>();
     private Timer validationTimer;
     private boolean validationEnabled = true;
 
@@ -137,7 +137,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
                     hideTimer.stop();
                 }
 
-                ValidationResult.ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
+                ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
 
                 if (issue != null) {
                     showCustomTooltip(issue, e.getLocationOnScreen());
@@ -159,7 +159,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
         });
     }
 
-    private void showCustomTooltip(ValidationResult.ValidationIssue issue, Point screenLocation) {
+    private void showCustomTooltip(ValidationIssue issue, Point screenLocation) {
         buildTooltipContent(issue);
         tooltipWindow.pack();
 
@@ -246,7 +246,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
         issuesByLine.clear();
 
         // Index issues by line number
-        for (ValidationResult.ValidationIssue issue : result.getIssues()) {
+        for (ValidationIssue issue : result.getIssues()) {
             issuesByLine.put(issue.getLineNumber(), issue);
         }
 
@@ -270,7 +270,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     /**
      * Get validation issue for the given position, or null if no validation issue.
      */
-    private ValidationResult.ValidationIssue getValidationIssueForPosition(Point point) {
+    private ValidationIssue getValidationIssueForPosition(Point point) {
         try {
             int offset = textArea.viewToModel2D(point);
             int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based line numbers
@@ -287,7 +287,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     /**
      * Build custom tooltip layout for validation issue with properly aligned icon and text.
      */
-    private void buildTooltipContent(ValidationResult.ValidationIssue issue) {
+    private void buildTooltipContent(ValidationIssue issue) {
         // Clear previous content
         tooltipPanel.removeAll();
 
@@ -359,14 +359,14 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     /**
      * Get issues for a specific line number.
      */
-    public ValidationResult.ValidationIssue getIssueForLine(int lineNumber) {
+    public ValidationIssue getIssueForLine(int lineNumber) {
         return issuesByLine.get(lineNumber);
     }
 
     /**
      * Get all current validation issues.
      */
-    public List<ValidationResult.ValidationIssue> getAllIssues() {
+    public List<ValidationIssue> getAllIssues() {
         return currentValidationResult != null ?
                currentValidationResult.getIssues() :
                List.of();
@@ -380,12 +380,12 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
             return;
         }
 
-        List<ValidationResult.ValidationIssue> errors = currentValidationResult.getErrors();
+        List<ValidationIssue> errors = currentValidationResult.getErrors();
         int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
 
         // Find next error after current line
-        ValidationResult.ValidationIssue nextError = null;
-        for (ValidationResult.ValidationIssue error : errors) {
+        ValidationIssue nextError = null;
+        for (ValidationIssue error : errors) {
             if (error.getLineNumber() > currentLine) {
                 nextError = error;
                 break;
@@ -410,13 +410,13 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
             return;
         }
 
-        List<ValidationResult.ValidationIssue> errors = currentValidationResult.getErrors();
+        List<ValidationIssue> errors = currentValidationResult.getErrors();
         int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
 
         // Find previous error before current line
-        ValidationResult.ValidationIssue prevError = null;
+        ValidationIssue prevError = null;
         for (int i = errors.size() - 1; i >= 0; i--) {
-            ValidationResult.ValidationIssue error = errors.get(i);
+            ValidationIssue error = errors.get(i);
             if (error.getLineNumber() < currentLine) {
                 prevError = error;
                 break;

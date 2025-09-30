@@ -81,9 +81,9 @@ public class LinterSchema {
         // Parse data types
         parseDataTypes();
 
-        logger.info("Loaded linter schema version: {}", version);
-        logger.info("Loaded {} validation rules, {} node types, {} data types",
-                   validationRules.size(), nodeTypes.size(), dataTypes.size());
+        logger.debug("Loaded linter schema version: {}", version);
+        logger.debug("Loaded {} validation rules, {} node types, {} data types",
+                    validationRules.size(), nodeTypes.size(), dataTypes.size());
     }
 
     private void parseValidationRules() {

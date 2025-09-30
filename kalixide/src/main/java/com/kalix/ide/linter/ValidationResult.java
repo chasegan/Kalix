@@ -90,41 +90,4 @@ public class ValidationResult {
                            getErrors().size(), getWarnings().size());
     }
 
-    /**
-     * Represents a single validation issue.
-     */
-    public static class ValidationIssue {
-        private final int lineNumber;
-        private final String message;
-        private final ValidationRule.Severity severity;
-        private final String ruleName;
-
-        public ValidationIssue(int lineNumber, String message, ValidationRule.Severity severity, String ruleName) {
-            this.lineNumber = lineNumber;
-            this.message = message;
-            this.severity = severity;
-            this.ruleName = ruleName;
-        }
-
-        public int getLineNumber() {
-            return lineNumber;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public ValidationRule.Severity getSeverity() {
-            return severity;
-        }
-
-        public String getRuleName() {
-            return ruleName;
-        }
-
-        @Override
-        public String toString() {
-            return String.format("Line %d: %s [%s]", lineNumber, message, severity);
-        }
-    }
 }

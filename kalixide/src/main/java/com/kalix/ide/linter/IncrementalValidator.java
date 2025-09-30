@@ -51,12 +51,11 @@ public class IncrementalValidator {
         // If too many sections changed, do full validation
         boolean forceFullValidation = shouldDoFullValidation(currentModel);
         if (changedSections.size() > 5 || forceFullValidation) {
-            logger.info("Performing FULL validation. Sections changed: {}, Force full: {}, Cache empty: {}",
-                       changedSections.size(), forceFullValidation, sectionCache.isEmpty());
+            logger.debug("Performing full validation ({} sections changed)", changedSections.size());
             result = linter.validate(content);
             updateCacheForFullValidation(content, currentModel, result);
         } else {
-            logger.info("Performing INCREMENTAL validation. Sections changed: {}", changedSections);
+            logger.debug("Performing incremental validation ({} sections changed)", changedSections.size());
             result = performIncrementalValidation(content, currentModel);
             updateCacheForIncrementalValidation(content, currentModel, result);
         }
@@ -115,25 +114,16 @@ public class IncrementalValidator {
 
         if (currentModel.getOutputReferences() != null) {
             SectionCache outputsCache = sectionCache.get("outputs");
-            List<String> cachedOutputs = outputsCache != null ? outputsCache.outputReferences : null;
-            List<String> currentOutputs = currentModel.getOutputReferences();
-            boolean matches = outputsCache != null && outputsCache.matchesOutputs(currentOutputs);
-
-            logger.info("OUTPUTS COMPARISON: Cached={}, Current={}, Matches={}",
-                       cachedOutputs, currentOutputs, matches);
-
-            if (outputsCache == null || !matches) {
+            if (outputsCache == null || !outputsCache.matchesOutputs(currentModel.getOutputReferences())) {
                 changedSections.add("outputs");
-                logger.info("Outputs section marked as CHANGED");
-            } else {
-                logger.info("Outputs section marked as UNCHANGED");
+                logger.debug("Outputs section changed");
             }
         } else {
             // If outputs section is now empty but we had cached outputs, mark as changed
             SectionCache outputsCache = sectionCache.get("outputs");
             if (outputsCache != null && outputsCache.outputReferences != null && !outputsCache.outputReferences.isEmpty()) {
                 changedSections.add("outputs");
-                logger.debug("Outputs section marked as changed (now empty)");
+                logger.debug("Outputs section changed (now empty)");
             }
         }
     }
@@ -170,7 +160,7 @@ public class IncrementalValidator {
 
         // Start with previous validation results for unchanged sections
         if (lastValidationResult != null) {
-            for (ValidationResult.ValidationIssue issue : lastValidationResult.getIssues()) {
+            for (ValidationIssue issue : lastValidationResult.getIssues()) {
                 // Keep issues that are not in changed sections
                 String issueSection = findSectionForLine(issue.getLineNumber(), currentModel);
 
@@ -258,13 +248,10 @@ public class IncrementalValidator {
     }
 
     private void validateOutputsSection(List<String> outputRefs, INIModelParser.ParsedModel model, ValidationResult result) {
-        // Use shared validation logic to ensure consistency with ModelLinter
-        // We need to use the same method as ModelLinter for consistency
         LinterSchema schema = linter.getSchemaManager().getCurrentSchema();
         if (schema != null) {
             ValidationUtils.validateOutputReferencesWithSchema(outputRefs, model, schema, result);
         } else {
-            // Fallback to basic validation if schema not available
             ValidationUtils.validateOutputReferences(outputRefs, model, result);
         }
     }
