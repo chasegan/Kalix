@@ -62,6 +62,33 @@ public class ModelLinter {
         return result;
     }
 
+    /**
+     * Validate pre-parsed model against the loaded schema.
+     * Used by performance-optimized parsers.
+     */
+    public ValidationResult validateParsedModel(INIModelParser.ParsedModel model) {
+        ValidationResult result = new ValidationResult();
+
+        if (!schemaManager.isLintingEnabled()) {
+            return result; // Linting disabled
+        }
+
+        LinterSchema schema = schemaManager.getCurrentSchema();
+        if (schema == null) {
+            result.addIssue(1, "Linter schema not loaded", ValidationRule.Severity.ERROR, "schema_error");
+            return result;
+        }
+
+        try {
+            validateModel(model, schema, result);
+        } catch (Exception e) {
+            logger.error("Error during validation", e);
+            result.addIssue(1, "Validation failed: " + e.getMessage(), ValidationRule.Severity.ERROR, "validation_error");
+        }
+
+        return result;
+    }
+
     private void validateModel(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
         for (ValidationStrategy validator : validators) {
             try {
