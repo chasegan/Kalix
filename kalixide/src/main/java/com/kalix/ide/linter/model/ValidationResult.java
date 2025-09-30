@@ -1,4 +1,4 @@
-package com.kalix.ide.linter;
+package com.kalix.ide.linter.model;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -82,6 +82,13 @@ public class ValidationResult {
      */
     public boolean isValid() {
         return !hasErrors();
+    }
+
+    /**
+     * Check if the result is empty (no issues).
+     */
+    public boolean isEmpty() {
+        return issues.isEmpty();
     }
 
     @Override

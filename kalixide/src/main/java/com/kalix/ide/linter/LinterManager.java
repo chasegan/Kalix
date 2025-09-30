@@ -1,247 +1,118 @@
 package com.kalix.ide.linter;
 
+import com.kalix.ide.linter.events.ValidationEventManager;
+import com.kalix.ide.linter.managers.LinterOrchestrator;
+import com.kalix.ide.linter.model.ValidationIssue;
+import com.kalix.ide.linter.model.ValidationResult;
+import com.kalix.ide.linter.ui.ErrorNavigationManager;
+import com.kalix.ide.linter.ui.LinterTooltipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.text.BadLocationException;
-import java.awt.*;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionAdapter;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Manages real-time linting integration with RSyntaxTextArea.
- * Provides debounced validation, visual feedback, and tooltip integration.
+ * Coordinates between validation, UI updates, and user interactions.
  */
-public class LinterManager implements SchemaManager.LintingStateChangeListener {
+public class LinterManager implements SchemaManager.LintingStateChangeListener,
+                                      ValidationEventManager.ValidationTrigger,
+                                      LinterOrchestrator.ValidationResultHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(LinterManager.class);
-    private static final int VALIDATION_DELAY_MS = 300;
 
     private final RSyntaxTextArea textArea;
     private final SchemaManager schemaManager;
-    private final ModelLinter linter;
-    private final IncrementalValidator incrementalValidator;
-    private final ScheduledExecutorService scheduler;
 
-    // Validation state
-    private ValidationResult currentValidationResult;
-    private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine = new ConcurrentHashMap<>();
-    private Timer validationTimer;
-    private boolean validationEnabled = true;
+    // Delegated responsibilities
+    private final LinterOrchestrator orchestrator;
+    private ValidationEventManager eventManager;
+    private final LinterTooltipManager tooltipManager;
+    private final ErrorNavigationManager navigationManager;
+    private final LinterHighlighter highlighter;
 
-    // UI integration
-    private LinterHighlighter highlighter;
+    // Issue tracking for UI integration
+    private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine;
 
+    /**
+     * Constructor with dependency injection.
+     */
+    public LinterManager(
+            RSyntaxTextArea textArea,
+            SchemaManager schemaManager,
+            LinterOrchestrator orchestrator,
+            LinterHighlighter highlighter,
+            LinterTooltipManager tooltipManager,
+            ErrorNavigationManager navigationManager,
+            ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
+
+        this.textArea = textArea;
+        this.schemaManager = schemaManager;
+        this.orchestrator = orchestrator;
+        this.highlighter = highlighter;
+        this.tooltipManager = tooltipManager;
+        this.navigationManager = navigationManager;
+        this.issuesByLine = issuesByLine;
+
+        initialize();
+    }
+
+    /**
+     * Legacy constructor for backward compatibility.
+     */
+    @Deprecated
     public LinterManager(RSyntaxTextArea textArea, SchemaManager schemaManager) {
         this.textArea = textArea;
         this.schemaManager = schemaManager;
-        this.linter = new ModelLinter(schemaManager);
-        this.incrementalValidator = new IncrementalValidator(linter);
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "LinterManager-Validation");
-            t.setDaemon(true);
-            return t;
-        });
+
+        // Create dependencies using factory
+        this.issuesByLine = new ConcurrentHashMap<>();
+        this.orchestrator = new LinterOrchestrator(schemaManager);
+        this.eventManager = new ValidationEventManager(textArea, this);
+        this.tooltipManager = new LinterTooltipManager(textArea, issuesByLine);
+        this.navigationManager = new ErrorNavigationManager(textArea);
+        this.highlighter = new LinterHighlighter(textArea);
 
         initialize();
+    }
+
+    /**
+     * Set the event manager (used by factory for proper wiring).
+     */
+    public void setEventManager(ValidationEventManager eventManager) {
+        this.eventManager = eventManager;
     }
 
     private void initialize() {
         // Register as listener for schema manager changes
         schemaManager.addLintingStateChangeListener(this);
-        // Create highlighter for visual feedback
-        highlighter = new LinterHighlighter(textArea);
 
-        // Add document listener for real-time validation
-        textArea.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                scheduleValidation();
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                scheduleValidation();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                scheduleValidation();
-            }
-        });
-
-        // Override tooltip behavior to show only our validation messages
-        setupCustomTooltips();
+        // Set up orchestrator callback
+        orchestrator.setValidationResultHandler(this);
 
         logger.debug("LinterManager initialized for text area");
     }
 
     /**
-     * Setup custom tooltip behavior that only shows our validation messages.
+     * ValidationTrigger implementation - called by ValidationEventManager.
      */
-    private void setupCustomTooltips() {
-        // Completely disable RSyntaxTextArea's tooltip system
-        textArea.setToolTipSupplier(null);
-        textArea.setToolTipText(null);
-
-        // Unregister from tooltip manager completely
-        ToolTipManager.sharedInstance().unregisterComponent(textArea);
-
-        // Create our own custom tooltip popup
-        setupCustomTooltipPopup();
-
-        logger.debug("Custom tooltip system initialized");
-    }
-
-    private JWindow tooltipWindow;
-    private JLabel tooltipLabel;
-    private JPanel tooltipPanel;
-
-    /**
-     * Setup a completely custom tooltip popup that bypasses Swing's ToolTipManager.
-     */
-    private void setupCustomTooltipPopup() {
-        // Create custom tooltip window
-        tooltipWindow = new JWindow();
-
-        // Create a panel to hold the tooltip content with proper layout
-        tooltipPanel = new JPanel(new BorderLayout());
-        tooltipPanel.setOpaque(true);
-        tooltipPanel.setBackground(new Color(255, 255, 225)); // Light yellow background
-        tooltipPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.BLACK, 1),
-            BorderFactory.createEmptyBorder(4, 6, 4, 6)
-        ));
-
-        tooltipWindow.add(tooltipPanel);
-
-        // Add mouse motion listener
-        textArea.addMouseMotionListener(new MouseMotionAdapter() {
-            private Timer hideTimer;
-
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                // Cancel any existing hide timer
-                if (hideTimer != null && hideTimer.isRunning()) {
-                    hideTimer.stop();
-                }
-
-                ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
-
-                if (issue != null) {
-                    showCustomTooltip(issue, e.getLocationOnScreen());
-                } else {
-                    // Hide tooltip after a short delay to prevent flickering
-                    hideTimer = new Timer(100, evt -> hideCustomTooltip());
-                    hideTimer.setRepeats(false);
-                    hideTimer.start();
-                }
-            }
-        });
-
-        // Hide tooltip when mouse exits text area
-        textArea.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                hideCustomTooltip();
-            }
-        });
-    }
-
-    private void showCustomTooltip(ValidationIssue issue, Point screenLocation) {
-        buildTooltipContent(issue);
-        tooltipWindow.pack();
-
-        // Position tooltip slightly offset from mouse
-        int x = screenLocation.x + 10;
-        int y = screenLocation.y + 20;
-
-        // Adjust position if tooltip would go off screen
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        if (x + tooltipWindow.getWidth() > screenSize.width) {
-            x = screenLocation.x - tooltipWindow.getWidth() - 5;
-        }
-        if (y + tooltipWindow.getHeight() > screenSize.height) {
-            y = screenLocation.y - tooltipWindow.getHeight() - 5;
-        }
-
-        tooltipWindow.setLocation(x, y);
-        tooltipWindow.setVisible(true);
-    }
-
-    private void hideCustomTooltip() {
-        if (tooltipWindow != null) {
-            tooltipWindow.setVisible(false);
-            tooltipPanel.removeAll(); // Clear the content when hiding
-        }
-    }
-
-    /**
-     * Schedule validation with debouncing to avoid excessive validation calls.
-     */
-    private void scheduleValidation() {
-        if (!validationEnabled || !schemaManager.isLintingEnabled()) {
-            return;
-        }
-
-        // Cancel previous timer if running
-        if (validationTimer != null && validationTimer.isRunning()) {
-            validationTimer.stop();
-        }
-
-        // Start new timer
-        validationTimer = new Timer(VALIDATION_DELAY_MS, e -> performValidation());
-        validationTimer.setRepeats(false);
-        validationTimer.start();
-    }
-
-    /**
-     * Perform validation in background thread.
-     */
-    private void performValidation() {
-        if (!validationEnabled || !schemaManager.isLintingEnabled()) {
-            return;
-        }
-
+    @Override
+    public void triggerValidation() {
         String content = textArea.getText();
         if (content.trim().isEmpty()) {
-            clearValidationResults();
-            return;
+            orchestrator.clearValidation();
+        } else {
+            orchestrator.performValidation(content);
         }
-
-        // Perform validation in background
-        scheduler.execute(() -> {
-            try {
-                ValidationResult result = incrementalValidator.validateIncremental(content);
-
-                // Update UI on EDT
-                SwingUtilities.invokeLater(() -> {
-                    updateValidationResults(result);
-                });
-
-            } catch (Exception e) {
-                logger.error("Error during validation", e);
-            }
-        });
     }
 
     /**
-     * Update UI with validation results.
+     * ValidationResultHandler implementation - called by LinterOrchestrator.
      */
-    private void updateValidationResults(ValidationResult result) {
-        this.currentValidationResult = result;
-
+    @Override
+    public void onValidationCompleted(ValidationResult result) {
         // Clear previous issues
         issuesByLine.clear();
 
@@ -258,92 +129,20 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
     }
 
     /**
-     * Clear all validation results and visual feedback.
-     */
-    private void clearValidationResults() {
-        currentValidationResult = null;
-        issuesByLine.clear();
-        highlighter.clearHighlights();
-        incrementalValidator.clearCache();
-    }
-
-    /**
-     * Get validation issue for the given position, or null if no validation issue.
-     */
-    private ValidationIssue getValidationIssueForPosition(Point point) {
-        try {
-            int offset = textArea.viewToModel2D(point);
-            int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based line numbers
-
-            return issuesByLine.get(line);
-
-        } catch (BadLocationException e) {
-            // Invalid position, no tooltip
-        }
-
-        return null; // No validation issue at this position
-    }
-
-    /**
-     * Build custom tooltip layout for validation issue with properly aligned icon and text.
-     */
-    private void buildTooltipContent(ValidationIssue issue) {
-        // Clear previous content
-        tooltipPanel.removeAll();
-
-        // Create appropriate FontAwesome icon based on severity
-        FontIcon icon;
-        Color severityColor;
-        if (issue.getSeverity() == ValidationRule.Severity.ERROR) {
-            icon = FontIcon.of(FontAwesomeSolid.TIMES, 12, Color.RED);
-            severityColor = new Color(204, 0, 0); // Dark red
-        } else {
-            icon = FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 12, new Color(255, 140, 0));
-            severityColor = new Color(255, 140, 0); // Dark orange
-        }
-
-        // Create the top row with icon and severity text aligned
-        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        topRow.setOpaque(false);
-
-        // Icon label
-        JLabel iconLabel = new JLabel(icon);
-        iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 4)); // Small gap after icon
-
-        // Severity text label
-        JLabel severityLabel = new JLabel(issue.getSeverity().name());
-        severityLabel.setFont(severityLabel.getFont().deriveFont(11f)); // Smaller font
-        severityLabel.setForeground(severityColor);
-
-        topRow.add(iconLabel);
-        topRow.add(severityLabel);
-
-        // Create the message label
-        JLabel messageLabel = new JLabel(issue.getMessage());
-        messageLabel.setFont(messageLabel.getFont().deriveFont(12f)); // Normal font size
-        messageLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0)); // Small gap above message
-
-        // Add components to tooltip panel
-        tooltipPanel.add(topRow, BorderLayout.NORTH);
-        tooltipPanel.add(messageLabel, BorderLayout.CENTER);
-    }
-
-    /**
      * Get current validation result.
      */
     public ValidationResult getCurrentValidationResult() {
-        return currentValidationResult;
+        return orchestrator.getCurrentValidationResult();
     }
 
     /**
      * Enable or disable real-time validation.
      */
     public void setValidationEnabled(boolean enabled) {
-        this.validationEnabled = enabled;
+        orchestrator.setValidationEnabled(enabled);
         if (!enabled) {
-            clearValidationResults();
-        } else {
-            scheduleValidation();
+            issuesByLine.clear();
+            highlighter.clearHighlights();
         }
     }
 
@@ -351,9 +150,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
      * Manually trigger validation (useful for preference changes).
      */
     public void validateNow() {
-        if (validationEnabled && schemaManager.isLintingEnabled()) {
-            performValidation();
-        }
+        eventManager.validateNow();
     }
 
     /**
@@ -367,87 +164,24 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
      * Get all current validation issues.
      */
     public List<ValidationIssue> getAllIssues() {
-        return currentValidationResult != null ?
-               currentValidationResult.getIssues() :
-               List.of();
+        ValidationResult result = getCurrentValidationResult();
+        return result != null ? result.getIssues() : List.of();
     }
 
     /**
      * Navigate to next validation error.
      */
     public void goToNextError() {
-        if (currentValidationResult == null || !currentValidationResult.hasErrors()) {
-            return;
-        }
-
-        List<ValidationIssue> errors = currentValidationResult.getErrors();
-        int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
-
-        // Find next error after current line
-        ValidationIssue nextError = null;
-        for (ValidationIssue error : errors) {
-            if (error.getLineNumber() > currentLine) {
-                nextError = error;
-                break;
-            }
-        }
-
-        // If no error found after current line, wrap to first error
-        if (nextError == null && !errors.isEmpty()) {
-            nextError = errors.get(0);
-        }
-
-        if (nextError != null) {
-            goToLine(nextError.getLineNumber());
-        }
+        navigationManager.goToNextError(getCurrentValidationResult());
     }
 
     /**
      * Navigate to previous validation error.
      */
     public void goToPreviousError() {
-        if (currentValidationResult == null || !currentValidationResult.hasErrors()) {
-            return;
-        }
-
-        List<ValidationIssue> errors = currentValidationResult.getErrors();
-        int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
-
-        // Find previous error before current line
-        ValidationIssue prevError = null;
-        for (int i = errors.size() - 1; i >= 0; i--) {
-            ValidationIssue error = errors.get(i);
-            if (error.getLineNumber() < currentLine) {
-                prevError = error;
-                break;
-            }
-        }
-
-        // If no error found before current line, wrap to last error
-        if (prevError == null && !errors.isEmpty()) {
-            prevError = errors.get(errors.size() - 1);
-        }
-
-        if (prevError != null) {
-            goToLine(prevError.getLineNumber());
-        }
+        navigationManager.goToPreviousError(getCurrentValidationResult());
     }
 
-    /**
-     * Navigate to specific line number.
-     */
-    private void goToLine(int lineNumber) {
-        try {
-            int line = lineNumber - 1; // Convert to 0-based
-            if (line >= 0 && line < textArea.getLineCount()) {
-                int offset = textArea.getLineStartOffset(line);
-                textArea.setCaretPosition(offset);
-                textArea.requestFocus();
-            }
-        } catch (BadLocationException e) {
-            logger.warn("Could not navigate to line {}", lineNumber, e);
-        }
-    }
 
     /**
      * Handle linting enabled state changes from SchemaManager.
@@ -465,28 +199,12 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener {
         // Unregister from schema manager
         schemaManager.removeLintingStateChangeListener(this);
 
-        // Clean up custom tooltip
-        hideCustomTooltip();
-        if (tooltipWindow != null) {
-            tooltipWindow.dispose();
-            tooltipWindow = null;
-        }
-
-        if (validationTimer != null && validationTimer.isRunning()) {
-            validationTimer.stop();
-        }
-
-        scheduler.shutdown();
-        try {
-            if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-
+        // Dispose delegated components
+        eventManager.dispose();
+        tooltipManager.dispose();
+        orchestrator.dispose();
         highlighter.dispose();
+
         logger.debug("LinterManager disposed");
     }
 }

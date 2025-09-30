@@ -1,5 +1,6 @@
 package com.kalix.ide.linter;
 
+import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.PreferenceManager;
 import org.slf4j.Logger;

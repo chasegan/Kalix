@@ -1,9 +1,12 @@
 package com.kalix.ide.linter.validators;
 
-import com.kalix.ide.linter.INIModelParser;
+import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
-import com.kalix.ide.linter.ValidationResult;
-import com.kalix.ide.linter.ValidationRule;
+import com.kalix.ide.linter.model.ValidationResult;
+import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.schema.DataType;
+import com.kalix.ide.linter.schema.NodeTypeDefinition;
+import com.kalix.ide.linter.schema.ParameterDefinition;
 
 /**
  * Validates individual nodes including their type, required parameters, and parameter formats.
@@ -31,7 +34,7 @@ public class NodeValidator implements ValidationStrategy {
             return;
         }
 
-        LinterSchema.NodeTypeDefinition typeDef = schema.getNodeType(nodeType);
+        NodeTypeDefinition typeDef = schema.getNodeType(nodeType);
         if (typeDef == null) {
             INIModelParser.Property typeProp = node.getProperties().get("type");
             int lineNumber = typeProp != null ? typeProp.getLineNumber() : node.getStartLine();
@@ -57,7 +60,7 @@ public class NodeValidator implements ValidationStrategy {
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,
-                                    LinterSchema.NodeTypeDefinition typeDef, LinterSchema schema,
+                                    NodeTypeDefinition typeDef, LinterSchema schema,
                                     ValidationResult result) {
 
         String paramName = prop.getKey();
@@ -93,7 +96,7 @@ public class NodeValidator implements ValidationStrategy {
 
     // Helper validation methods extracted from ModelLinter
     private void validateCoordinates(INIModelParser.Property prop, LinterSchema schema, ValidationResult result) {
-        LinterSchema.DataType coordType = schema.getDataType("coordinates");
+        DataType coordType = schema.getDataType("coordinates");
         if (coordType != null && !coordType.matches(prop.getValue())) {
             result.addIssue(prop.getLineNumber(),
                           "Invalid coordinate format. Expected: 'X, Y' (two comma-separated numbers)",
@@ -103,7 +106,7 @@ public class NodeValidator implements ValidationStrategy {
 
     private void validateNumber(INIModelParser.Property prop, LinterSchema schema, ValidationResult result,
                               Double min, Double max) {
-        LinterSchema.DataType numberType = schema.getDataType("number");
+        DataType numberType = schema.getDataType("number");
         if (numberType != null && !numberType.matches(prop.getValue())) {
             result.addIssue(prop.getLineNumber(),
                           "Invalid number format: " + prop.getValue(),
@@ -130,10 +133,10 @@ public class NodeValidator implements ValidationStrategy {
     }
 
     private void validateNumberSequenceWithCount(INIModelParser.NodeSection node, INIModelParser.Property prop,
-                                               LinterSchema.NodeTypeDefinition typeDef, LinterSchema schema,
+                                               NodeTypeDefinition typeDef, LinterSchema schema,
                                                ValidationResult result) {
         // First validate the format
-        LinterSchema.DataType seqType = schema.getDataType("number_sequence");
+        DataType seqType = schema.getDataType("number_sequence");
         if (seqType != null && !seqType.matches(prop.getValue())) {
             result.addIssue(prop.getLineNumber(),
                           "Invalid number sequence format. Expected comma-separated numbers",
@@ -141,7 +144,7 @@ public class NodeValidator implements ValidationStrategy {
         }
 
         // Get parameter definition for count validation
-        LinterSchema.ParameterDefinition paramDef = typeDef.getParameterDefinition(prop.getKey());
+        ParameterDefinition paramDef = typeDef.getParameterDefinition(prop.getKey());
         if (paramDef == null || paramDef.count == null) {
             return; // No count constraint specified
         }
@@ -161,7 +164,7 @@ public class NodeValidator implements ValidationStrategy {
 
     private void validateInteger(INIModelParser.Property prop, LinterSchema schema, ValidationResult result,
                                Integer min, Integer max) {
-        LinterSchema.DataType integerType = schema.getDataType("integer");
+        DataType integerType = schema.getDataType("integer");
         if (integerType != null && !integerType.matches(prop.getValue())) {
             result.addIssue(prop.getLineNumber(),
                           "Invalid integer format: " + prop.getValue(),

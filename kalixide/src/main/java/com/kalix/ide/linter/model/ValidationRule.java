@@ -1,4 +1,4 @@
-package com.kalix.ide.linter;
+package com.kalix.ide.linter.model;
 
 /**
  * Represents a single validation rule with severity level and description.

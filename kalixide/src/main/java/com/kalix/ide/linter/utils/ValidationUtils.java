@@ -1,4 +1,9 @@
-package com.kalix.ide.linter;
+package com.kalix.ide.linter.utils;
+
+import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.model.ValidationResult;
+import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.parsing.INIModelParser;
 
 import java.util.List;
 import java.util.regex.Pattern;

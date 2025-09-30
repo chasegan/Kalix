@@ -1,4 +1,4 @@
-package com.kalix.ide.linter;
+package com.kalix.ide.linter.parsing;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

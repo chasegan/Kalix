@@ -1,5 +1,8 @@
 package com.kalix.ide.linter;
 
+import com.kalix.ide.linter.model.ValidationResult;
+import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.validators.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

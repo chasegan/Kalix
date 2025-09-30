@@ -2,6 +2,10 @@ package com.kalix.ide.linter;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.schema.DataType;
+import com.kalix.ide.linter.schema.NodeTypeDefinition;
+import com.kalix.ide.linter.schema.ParameterDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,46 +227,4 @@ public class LinterSchema {
     public NodeTypeDefinition getNodeType(String name) { return nodeTypes.get(name); }
     public DataType getDataType(String name) { return dataTypes.get(name); }
 
-    // Inner classes for schema data structures
-    public static class NodeTypeDefinition {
-        public String name;
-        public String description;
-        public Set<String> requiredParams = new HashSet<>();
-        public Set<String> optionalParams = new HashSet<>();
-        public Set<String> dsnodeParams = new HashSet<>();
-        public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
-
-        public Set<String> getAllowedParams() {
-            Set<String> all = new HashSet<>();
-            all.addAll(requiredParams);
-            all.addAll(optionalParams);
-            all.addAll(dsnodeParams);
-            return all;
-        }
-
-        public ParameterDefinition getParameterDefinition(String paramName) {
-            return parameterDefinitions.get(paramName);
-        }
-    }
-
-    public static class ParameterDefinition {
-        public String name;
-        public String type;
-        public String description;
-        public Integer count; // For number_sequence type
-        public Double min;    // For number/integer types
-        public Double max;    // For number/integer types
-        public String pattern; // For custom validation
-    }
-
-    public static class DataType {
-        public String name;
-        public String pattern;
-        public String parse;
-        public Pattern compiledPattern;
-
-        public boolean matches(String value) {
-            return compiledPattern != null && compiledPattern.matcher(value).matches();
-        }
-    }
 }

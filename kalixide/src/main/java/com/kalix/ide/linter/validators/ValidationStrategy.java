@@ -1,8 +1,8 @@
 package com.kalix.ide.linter.validators;
 
-import com.kalix.ide.linter.INIModelParser;
+import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
-import com.kalix.ide.linter.ValidationResult;
+import com.kalix.ide.linter.model.ValidationResult;
 
 /**
  * Strategy interface for different types of validation.

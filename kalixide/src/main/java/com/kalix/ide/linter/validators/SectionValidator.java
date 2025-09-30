@@ -1,10 +1,10 @@
 package com.kalix.ide.linter.validators;
 
-import com.kalix.ide.linter.INIModelParser;
+import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
-import com.kalix.ide.linter.ValidationResult;
-import com.kalix.ide.linter.ValidationRule;
-import com.kalix.ide.linter.ValidationUtils;
+import com.kalix.ide.linter.model.ValidationResult;
+import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.util.Set;
 
