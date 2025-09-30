@@ -41,7 +41,7 @@ public final class AppConstants {
     
     // Themes
     public static final String[] AVAILABLE_THEMES = {
-        "Light", "Keylime", "Lapland", "Nemo", "Dracula", "One Dark", "Obsidian"
+        "Light", "Keylime", "Lapland", "Nemo", "Botanical", "Dracula", "One Dark", "Obsidian", "Sanne"
     };
     public static final String DEFAULT_THEME = "Light";
     public static final String DEFAULT_NODE_THEME = "Vibrant";

@@ -144,12 +144,32 @@ public class ThemeManager {
                 break;
             case "Nemo":
                 try {
-                    FlatPropertiesLaf nemoLaf = new FlatPropertiesLaf("Nemo", 
+                    FlatPropertiesLaf nemoLaf = new FlatPropertiesLaf("Nemo",
                         getClass().getResourceAsStream("/themes/finding-nemo-theme.properties"));
                     UIManager.setLookAndFeel(nemoLaf);
                 } catch (Exception e) {
                     System.err.println("Failed to load Nemo theme properties, falling back to Light theme: " + e.getMessage());
                     UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                break;
+            case "Botanical":
+                try {
+                    FlatPropertiesLaf botanicalLaf = new FlatPropertiesLaf("Botanical",
+                        getClass().getResourceAsStream("/themes/botanical-theme.properties"));
+                    UIManager.setLookAndFeel(botanicalLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Botanical theme properties, falling back to Light theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                }
+                break;
+            case "Sanne":
+                try {
+                    FlatPropertiesLaf sanneLaf = new FlatPropertiesLaf("Sanne",
+                        getClass().getResourceAsStream("/themes/sanne-theme.properties"));
+                    UIManager.setLookAndFeel(sanneLaf);
+                } catch (Exception e) {
+                    System.err.println("Failed to load Sanne theme properties, falling back to Dark theme: " + e.getMessage());
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
                 }
                 break;
             default:

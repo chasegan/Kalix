@@ -74,12 +74,20 @@ public class NodeTheme {
               },
               new TextStyle(10, new Color(25, 25, 112), 14, new Color(240, 248, 255), 190)),
         
-        SUNSET("Sunset Warmth", 
+        SUNSET("Sunset Warmth",
                new String[]{
                    "FF6B35", "F7931E", "FFD23F", "06FFA5", "4ECDC4",
                    "45B7D1", "96CEB4", "FECA57", "FF9FF3", "54A0FF"
                },
-               new TextStyle(11, new Color(139, 69, 19), 17, new Color(255, 248, 220), 210));
+               new TextStyle(11, new Color(139, 69, 19), 17, new Color(255, 248, 220), 210)),
+
+        BOTANICAL("Botanical",
+                  new String[]{
+                      "228B22", "B8860B", "2F4F4F", "DAA520", "556B2F",
+                      "4682B4", "8B4513", "CCCC00", "1E90FF", "A0522D",
+                      "32CD32", "CD853F", "6495ED", "D2691E", "2E8B57"
+                  },
+                  new TextStyle(11, new Color(34, 139, 34), 16, new Color(248, 248, 255), 200));
         
         private final String displayName;
         private final String[] colors;
