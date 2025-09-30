@@ -14,6 +14,9 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
+import com.kalix.ide.linter.LinterManager;
+import com.kalix.ide.linter.SchemaManager;
+
 /**
  * Simplified enhanced text editor component with professional code editor features.
  * Features include:
@@ -43,6 +46,7 @@ public class EnhancedTextEditor extends JPanel {
     private TextNavigationManager navigationManager;
     private TextSearchManager searchManager;
     private FileDropManager dropManager;
+    private LinterManager linterManager;
     
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
@@ -100,6 +104,18 @@ public class EnhancedTextEditor extends JPanel {
                 fileDropHandler.onFileDropped(file);
             }
         });
+    }
+
+    /**
+     * Initialize the linter manager with the schema manager.
+     * This should be called after the EnhancedTextEditor is created.
+     */
+    public void initializeLinter(SchemaManager schemaManager) {
+        if (linterManager != null) {
+            linterManager.dispose();
+        }
+        linterManager = new LinterManager(textArea, schemaManager);
+        logger.debug("Linter manager initialized");
     }
     
     private void setupKeyBindings() {
@@ -382,5 +398,61 @@ public class EnhancedTextEditor extends JPanel {
         }
         // Consider theme dark if the sum of RGB values is less than 384 (128 * 3)
         return (bg.getRed() + bg.getGreen() + bg.getBlue()) < 384;
+    }
+
+    // Linter integration methods
+
+    /**
+     * Get the linter manager for this editor.
+     */
+    public LinterManager getLinterManager() {
+        return linterManager;
+    }
+
+    /**
+     * Navigate to the next validation error.
+     */
+    public void goToNextError() {
+        if (linterManager != null) {
+            linterManager.goToNextError();
+        }
+    }
+
+    /**
+     * Navigate to the previous validation error.
+     */
+    public void goToPreviousError() {
+        if (linterManager != null) {
+            linterManager.goToPreviousError();
+        }
+    }
+
+    /**
+     * Manually trigger validation.
+     */
+    public void validateNow() {
+        if (linterManager != null) {
+            linterManager.validateNow();
+        }
+    }
+
+    /**
+     * Enable or disable linting for this editor.
+     */
+    public void setLintingEnabled(boolean enabled) {
+        if (linterManager != null) {
+            linterManager.setValidationEnabled(enabled);
+        }
+    }
+
+    /**
+     * Dispose of resources when the editor is no longer needed.
+     */
+    public void dispose() {
+        if (linterManager != null) {
+            linterManager.dispose();
+            linterManager = null;
+        }
+        logger.debug("EnhancedTextEditor disposed");
     }
 }
