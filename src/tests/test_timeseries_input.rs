@@ -1,7 +1,6 @@
-use crate::timeseries_input::TimeseriesInput;
-
 #[test]
 fn test_load() {
+    use crate::timeseries_input::TimeseriesInput;
     let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_mpot.csv") {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
@@ -19,6 +18,7 @@ fn test_load() {
 
 #[test]
 fn test_load_2() {
+    use crate::timeseries_input::TimeseriesInput;
     let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv") {
         Ok(v) => v,
         Err(e) => panic!("{}", e),

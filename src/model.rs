@@ -135,7 +135,7 @@ impl Model {
         self.initialize_network();
 
         //Run all timesteps
-        let mut step = 0;
+        let mut _step = 0; //TODO: why am I using 'time' and 'step' if I also have a concept of a 'current_step'?
         let mut time = self.configuration.sim_start_timestamp;
         while time <= self.configuration.sim_end_timestamp {
 
@@ -145,7 +145,7 @@ impl Model {
             //Increment time
             //TODO: why am I using 'time' and 'step' if I also have a concept of a 'current_step'?
             time += self.configuration.sim_stepsize;
-            step += 1;
+            _step += 1;
             self.data_cache.increment_current_step();
         }
     }

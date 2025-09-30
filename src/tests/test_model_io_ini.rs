@@ -41,7 +41,7 @@ fn test_model_1_io_ini_read() {
 
     // Writing outputs
     let output_filename = "./src/tests/example_models/1/outputs.csv";
-    let output_write_result = m.write_outputs(output_filename);
+    let _output_write_result = m.write_outputs(output_filename);
 
     // Printing data cache
     println!(" ");
@@ -114,7 +114,7 @@ fn test_model_3_io_ini_read() {
 
     //
     let output_filename = "./src/tests/example_models/3/outputs.csv";
-    m.write_outputs(output_filename);
+    let _ = m.write_outputs(output_filename);
 }
 
 

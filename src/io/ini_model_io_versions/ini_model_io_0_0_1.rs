@@ -42,7 +42,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
             // -------------------------------------------------------------------------------------
             for (vp, _vv) in &v {
                 // Each vp is a path to an input file
-                let l = model.load_input_data(vp.as_str())?;
+                let _ = model.load_input_data(vp.as_str())?;
             }
         } else if k.starts_with("node.") {
             // -------------------------------------------------------------------------------------

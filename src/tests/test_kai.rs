@@ -1,10 +1,8 @@
-use crate::io::kaz_io::{read_series, read_all_series, get_series_info};
-
-
 #[test]
 pub fn demonstrate_kaz_io_2() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::io::kaz_io::{read_series, read_all_series, get_series_info};
 
-    let model_filename = "./src/tests/example_data/output_31d6f6b4.kai";
+    //let model_filename = "./src/tests/example_data/output_31d6f6b4.kai";
     let base_path = "./src/tests/example_data/output_31d6f6b4";
 
     // Example 2: Read series information without loading data

@@ -42,7 +42,7 @@ enum Commands {
         /// ask for the model via STDIO.
         model_file: Option<String>,
         /// Path to the output file
-        #[arg(long)]
+        #[arg(short, long)]
         output_file: Option<String>,
     },
     /// Run calibration
@@ -67,13 +67,12 @@ fn main() {
             }
         }
         Commands::Test { sim_duration_seconds, new_session } => {
-            if let Some(new_session) = new_session {
+            if let Some(_) = new_session {
                 println!("KALIX_SESSION_READY");
-                //pause indefinitely
-                let duration = Duration::from_millis(5000);
+
                 let mut buffer=String::new();
                 while buffer.trim().is_empty() {
-                    io::stdin().read_to_string(&mut buffer).expect("TODO: panic message");
+                    io::stdin().read_to_string(&mut buffer).expect("Something went wrong reading stdin");
                     println!("Input was: {}", &buffer);
                 }
                 println!("KALIX_SESSION_ENDING");
@@ -138,11 +137,12 @@ fn main() {
 
             match output_file {
                 Some(f) => {
-                    m.write_outputs(f.as_str()); // TODO: handle error
+                    match m.write_outputs(f.as_str()) {
+                        Ok(_) => { }
+                        Err(s) => eprintln!("{}", s)
+                    }
                 }
-                None => {
-                    println!("No output filename specified!");
-                }
+                None => eprintln!("No output filename specified!")
             }
             println!("Done!");
         }

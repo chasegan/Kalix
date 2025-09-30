@@ -24,4 +24,8 @@ impl Location {
             Err(_) => Err("Error parsing node location: expected 2 coordinates."),
         }
     }
+    
+    pub fn to_string(&self) -> String {
+        format!("{},{}", self.x, self.y)
+    }
 }
