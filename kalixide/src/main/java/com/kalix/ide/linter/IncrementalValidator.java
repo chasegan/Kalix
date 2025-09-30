@@ -49,14 +49,16 @@ public class IncrementalValidator {
         ValidationResult result;
 
         // If too many sections changed, do full validation
-        if (changedSections.size() > 5 || shouldDoFullValidation(currentModel)) {
-            logger.debug("Performing full validation ({} sections changed)", changedSections.size());
+        boolean forceFullValidation = shouldDoFullValidation(currentModel);
+        if (changedSections.size() > 5 || forceFullValidation) {
+            logger.info("Performing FULL validation. Sections changed: {}, Force full: {}, Cache empty: {}",
+                       changedSections.size(), forceFullValidation, sectionCache.isEmpty());
             result = linter.validate(content);
             updateCacheForFullValidation(content, currentModel, result);
         } else {
-            logger.debug("Performing incremental validation ({} sections changed: {})",
-                        changedSections.size(), changedSections);
+            logger.info("Performing INCREMENTAL validation. Sections changed: {}", changedSections);
             result = performIncrementalValidation(content, currentModel);
+            updateCacheForIncrementalValidation(content, currentModel, result);
         }
 
         lastValidatedContent = content;
@@ -113,8 +115,25 @@ public class IncrementalValidator {
 
         if (currentModel.getOutputReferences() != null) {
             SectionCache outputsCache = sectionCache.get("outputs");
-            if (outputsCache == null || !outputsCache.matchesOutputs(currentModel.getOutputReferences())) {
+            List<String> cachedOutputs = outputsCache != null ? outputsCache.outputReferences : null;
+            List<String> currentOutputs = currentModel.getOutputReferences();
+            boolean matches = outputsCache != null && outputsCache.matchesOutputs(currentOutputs);
+
+            logger.info("OUTPUTS COMPARISON: Cached={}, Current={}, Matches={}",
+                       cachedOutputs, currentOutputs, matches);
+
+            if (outputsCache == null || !matches) {
                 changedSections.add("outputs");
+                logger.info("Outputs section marked as CHANGED");
+            } else {
+                logger.info("Outputs section marked as UNCHANGED");
+            }
+        } else {
+            // If outputs section is now empty but we had cached outputs, mark as changed
+            SectionCache outputsCache = sectionCache.get("outputs");
+            if (outputsCache != null && outputsCache.outputReferences != null && !outputsCache.outputReferences.isEmpty()) {
+                changedSections.add("outputs");
+                logger.debug("Outputs section marked as changed (now empty)");
             }
         }
     }
@@ -154,9 +173,21 @@ public class IncrementalValidator {
             for (ValidationResult.ValidationIssue issue : lastValidationResult.getIssues()) {
                 // Keep issues that are not in changed sections
                 String issueSection = findSectionForLine(issue.getLineNumber(), currentModel);
-                if (issueSection == null || !changedSections.contains(issueSection)) {
+
+                // Special handling for outputs section - if it changed, drop ALL previous errors
+                // from outputs section regardless of line number mapping issues
+                if (changedSections.contains("outputs") &&
+                    (issueSection == null || "outputs".equals(issueSection) ||
+                     issue.getRuleName().equals("invalid_output_reference"))) {
+                    // Drop all output-related errors when outputs section changes
+                    continue;
+                }
+
+                // Only keep issues if we can definitively identify the section and it hasn't changed
+                if (issueSection != null && !changedSections.contains(issueSection)) {
                     result.addIssue(issue);
                 }
+                // If issueSection is null, the error is stale/invalid and should be dropped
             }
         }
 
@@ -199,12 +230,19 @@ public class IncrementalValidator {
     }
 
     private void validateAttributesSection(INIModelParser.Section section, ValidationResult result) {
-        // Basic ini_version validation
+        // Basic ini_version validation using shared logic
         INIModelParser.Property versionProp = section.getProperties().get("ini_version");
         if (versionProp == null) {
             result.addIssue(section.getStartLine() + 1,
                           "Missing required property: ini_version",
                           ValidationRule.Severity.ERROR, "missing_ini_version");
+        } else {
+            String version = versionProp.getValue();
+            if (!ValidationUtils.isValidIniVersion(version)) {
+                result.addIssue(versionProp.getLineNumber(),
+                              "Invalid ini_version format. Expected: X.Y.Z",
+                              ValidationRule.Severity.ERROR, "invalid_ini_version");
+            }
         }
     }
 
@@ -220,13 +258,14 @@ public class IncrementalValidator {
     }
 
     private void validateOutputsSection(List<String> outputRefs, INIModelParser.ParsedModel model, ValidationResult result) {
-        // Basic output reference validation
-        for (String outputRef : outputRefs) {
-            if (!outputRef.matches("^node\\.[\\w_]+\\.(dsflow|usflow)$")) {
-                result.addIssue(1, // Line number would need to be tracked properly
-                              "Invalid output reference format: " + outputRef,
-                              ValidationRule.Severity.ERROR, "invalid_output_reference");
-            }
+        // Use shared validation logic to ensure consistency with ModelLinter
+        // We need to use the same method as ModelLinter for consistency
+        LinterSchema schema = linter.getSchemaManager().getCurrentSchema();
+        if (schema != null) {
+            ValidationUtils.validateOutputReferencesWithSchema(outputRefs, model, schema, result);
+        } else {
+            // Fallback to basic validation if schema not available
+            ValidationUtils.validateOutputReferences(outputRefs, model, result);
         }
     }
 
@@ -252,12 +291,20 @@ public class IncrementalValidator {
     }
 
     private String findSectionForLine(int lineNumber, INIModelParser.ParsedModel model) {
+        // Use section boundaries as the primary method for determining section membership
         for (Map.Entry<String, INIModelParser.Section> entry : model.getSections().entrySet()) {
             INIModelParser.Section section = entry.getValue();
             if (lineNumber >= section.getStartLine() && lineNumber <= section.getEndLine()) {
                 return entry.getKey();
             }
         }
+
+        // Fallback: Special handling for outputs section using line number mapping
+        // This helps when section boundaries might not be perfectly accurate
+        if (model.getOutputReferenceLineNumbers().containsValue(lineNumber)) {
+            return "outputs";
+        }
+
         return null;
     }
 
@@ -285,6 +332,30 @@ public class IncrementalValidator {
             SectionCache outputsCache = new SectionCache();
             outputsCache.outputReferences = new ArrayList<>(model.getOutputReferences());
             sectionCache.put("outputs", outputsCache);
+        }
+    }
+
+    /**
+     * Update cache after incremental validation - only update changed sections.
+     */
+    private void updateCacheForIncrementalValidation(String content, INIModelParser.ParsedModel model, ValidationResult result) {
+        // Update cache for changed sections only
+        for (String sectionName : changedSections) {
+            if ("inputs".equals(sectionName)) {
+                SectionCache inputsCache = new SectionCache();
+                inputsCache.inputFiles = new ArrayList<>(model.getInputFiles());
+                sectionCache.put("inputs", inputsCache);
+            } else if ("outputs".equals(sectionName)) {
+                SectionCache outputsCache = new SectionCache();
+                outputsCache.outputReferences = new ArrayList<>(model.getOutputReferences());
+                sectionCache.put("outputs", outputsCache);
+            } else {
+                // Regular section
+                INIModelParser.Section section = model.getSections().get(sectionName);
+                if (section != null) {
+                    sectionCache.put(sectionName, new SectionCache(section));
+                }
+            }
         }
     }
 

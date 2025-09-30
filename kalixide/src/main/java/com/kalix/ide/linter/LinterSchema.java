@@ -146,6 +146,42 @@ public class LinterSchema {
                 }
             }
 
+            // Parse parameter definitions
+            JsonNode parametersNode = typeNode.path("parameters");
+            if (parametersNode.isObject()) {
+                Iterator<Map.Entry<String, JsonNode>> paramFields = parametersNode.fields();
+                while (paramFields.hasNext()) {
+                    Map.Entry<String, JsonNode> paramEntry = paramFields.next();
+                    String paramName = paramEntry.getKey();
+                    JsonNode paramNode = paramEntry.getValue();
+
+                    ParameterDefinition paramDef = new ParameterDefinition();
+                    paramDef.name = paramName;
+                    paramDef.type = paramNode.path("type").asText("");
+                    paramDef.description = paramNode.path("description").asText("");
+
+                    // Parse count for number_sequence type
+                    if (paramNode.has("count")) {
+                        paramDef.count = paramNode.path("count").asInt();
+                    }
+
+                    // Parse min/max for numeric types
+                    if (paramNode.has("min")) {
+                        paramDef.min = paramNode.path("min").asDouble();
+                    }
+                    if (paramNode.has("max")) {
+                        paramDef.max = paramNode.path("max").asDouble();
+                    }
+
+                    // Parse pattern for custom validation
+                    if (paramNode.has("pattern")) {
+                        paramDef.pattern = paramNode.path("pattern").asText();
+                    }
+
+                    nodeType.parameterDefinitions.put(paramName, paramDef);
+                }
+            }
+
             nodeTypes.put(typeName, nodeType);
         }
     }
@@ -194,6 +230,7 @@ public class LinterSchema {
         public Set<String> requiredParams = new HashSet<>();
         public Set<String> optionalParams = new HashSet<>();
         public Set<String> dsnodeParams = new HashSet<>();
+        public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
         public Set<String> getAllowedParams() {
             Set<String> all = new HashSet<>();
@@ -202,6 +239,20 @@ public class LinterSchema {
             all.addAll(dsnodeParams);
             return all;
         }
+
+        public ParameterDefinition getParameterDefinition(String paramName) {
+            return parameterDefinitions.get(paramName);
+        }
+    }
+
+    public static class ParameterDefinition {
+        public String name;
+        public String type;
+        public String description;
+        public Integer count; // For number_sequence type
+        public Double min;    // For number/integer types
+        public Double max;    // For number/integer types
+        public String pattern; // For custom validation
     }
 
     public static class DataType {

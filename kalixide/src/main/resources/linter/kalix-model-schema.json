@@ -113,7 +113,7 @@
     "output_references": {
       "severity": "error",
       "description": "Output references must point to valid node.property combinations",
-      "pattern": "^node\\.[\\w_]+\\.(dsflow|usflow)$"
+      "pattern": "^node\\.[\\w_]+\\.(dsflow|usflow|storage)$"
     },
 
     "dsnode_references": {

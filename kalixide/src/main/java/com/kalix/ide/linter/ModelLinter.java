@@ -25,6 +25,10 @@ public class ModelLinter {
         this.schemaManager = schemaManager;
     }
 
+    public SchemaManager getSchemaManager() {
+        return schemaManager;
+    }
+
     /**
      * Validate INI model content against the loaded schema.
      */
@@ -98,8 +102,7 @@ public class ModelLinter {
                           ValidationRule.Severity.ERROR, "missing_ini_version");
         } else {
             String version = versionProp.getValue();
-            Pattern versionPattern = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
-            if (!versionPattern.matcher(version).matches()) {
+            if (!ValidationUtils.isValidIniVersion(version)) {
                 result.addIssue(versionProp.getLineNumber(),
                               "Invalid ini_version format. Expected: X.Y.Z",
                               ValidationRule.Severity.ERROR, "invalid_ini_version");
@@ -124,19 +127,16 @@ public class ModelLinter {
     }
 
     private void validateOutputReferences(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+        // Use shared validation logic
+        ValidationUtils.validateOutputReferencesWithSchema(model.getOutputReferences(), model, schema, result);
+
+        // Additional validation for node existence (beyond pattern matching)
         ValidationRule rule = schema.getValidationRule("output_references");
         if (rule == null || !rule.isEnabled()) return;
 
-        Pattern outputPattern = Pattern.compile("^node\\.[\\w_]+\\.(dsflow|usflow)$");
-
-        List<String> outputRefs = model.getOutputReferences();
-        for (String outputRef : outputRefs) {
-            if (!outputPattern.matcher(outputRef).matches()) {
-                int lineNumber = findOutputRefLineNumber(model, outputRef);
-                result.addIssue(lineNumber,
-                              "Invalid output reference format: " + outputRef,
-                              rule.getSeverity(), "invalid_output_reference");
-            } else {
+        Pattern outputPattern = ValidationUtils.getOutputReferencePattern();
+        for (String outputRef : model.getOutputReferences()) {
+            if (outputPattern.matcher(outputRef).matches()) {
                 // Extract node name and check if it exists
                 String[] parts = outputRef.split("\\.");
                 if (parts.length >= 2) {
@@ -216,7 +216,8 @@ public class ModelLinter {
                 validateNumber(prop, schema, result, 0.0, null); // Area must be positive
                 break;
             case "params":
-                validateNumberSequence(prop, schema, result);
+                // For params, we need to get the expected count from the node type definition
+                validateNumberSequenceWithCount(node, prop, typeDef, schema, result);
                 break;
             case "lag":
                 validateInteger(prop, schema, result, 0, null); // Lag must be >= 0
@@ -273,6 +274,31 @@ public class ModelLinter {
             result.addIssue(prop.getLineNumber(),
                           "Invalid number sequence format. Expected comma-separated numbers",
                           ValidationRule.Severity.ERROR, "invalid_number_sequence");
+        }
+    }
+
+    private void validateNumberSequenceWithCount(INIModelParser.NodeSection node, INIModelParser.Property prop,
+                                               LinterSchema.NodeTypeDefinition typeDef, LinterSchema schema,
+                                               ValidationResult result) {
+        // First validate the format
+        validateNumberSequence(prop, schema, result);
+
+        // Get parameter definition for count validation
+        LinterSchema.ParameterDefinition paramDef = typeDef.getParameterDefinition(prop.getKey());
+        if (paramDef == null || paramDef.count == null) {
+            return; // No count constraint specified
+        }
+
+        // Count the actual number of values
+        String[] values = prop.getValue().split("\\s*,\\s*");
+        int actualCount = values.length;
+        int expectedCount = paramDef.count;
+
+        if (actualCount != expectedCount) {
+            result.addIssue(prop.getLineNumber(),
+                          String.format("Parameter '%s' expects %d values but got %d",
+                                      prop.getKey(), expectedCount, actualCount),
+                          ValidationRule.Severity.ERROR, "incorrect_parameter_count");
         }
     }
 
@@ -368,8 +394,25 @@ public class ModelLinter {
     }
 
     private int findOutputRefLineNumber(INIModelParser.ParsedModel model, String outputRef) {
-        // This is a simplified implementation - in practice you'd track line numbers during parsing
+        // Get the actual line number where this output reference appears
+        Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+        if (lineNumber != null) {
+            return lineNumber;
+        }
+
+        // If lookup failed, try to find a reasonable line number in the outputs section
         INIModelParser.Section outputsSection = model.getSections().get("outputs");
-        return outputsSection != null ? outputsSection.getStartLine() + 1 : 1;
+        if (outputsSection != null) {
+            // If we have any output references with line numbers, use the first one as a reasonable approximation
+            if (!model.getOutputReferenceLineNumbers().isEmpty()) {
+                int firstOutputLine = model.getOutputReferenceLineNumbers().values().iterator().next();
+                return firstOutputLine;
+            }
+            // Otherwise use the section start line + 2
+            return Math.max(outputsSection.getStartLine() + 2, 1);
+        }
+
+        // Last resort fallback
+        return 1;
     }
 }
