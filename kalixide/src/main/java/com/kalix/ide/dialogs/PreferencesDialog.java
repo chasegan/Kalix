@@ -2,6 +2,8 @@ package com.kalix.ide.dialogs;
 
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.linter.LinterPreferencesPanel;
+import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -24,6 +26,7 @@ public class PreferencesDialog extends JDialog {
     private final JFrame parent;
     private final ThemeManager themeManager;
     private final EnhancedTextEditor textEditor;
+    private final SchemaManager schemaManager;
 
     // Callback interface for preference changes
     public interface PreferenceChangeCallback {
@@ -46,6 +49,7 @@ public class PreferencesDialog extends JDialog {
     private FilePreferencePanel filePanel;
     private KalixCliPreferencePanel kalixCliPanel;
     private CompressionPreferencePanel compressionPanel;
+    private LinterPreferencesPanel linterPanel;
     private SystemPreferencePanel systemPanel;
 
     // Panel identifiers
@@ -54,16 +58,18 @@ public class PreferencesDialog extends JDialog {
     private static final String FILE_PANEL = "file";
     private static final String KALIXCLI_PANEL = "kalixcli";
     private static final String COMPRESSION_PANEL = "compression";
+    private static final String LINTER_PANEL = "linter";
     private static final String SYSTEM_PANEL = "system";
 
     /**
      * Creates a new professional preferences dialog.
      */
-    public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor) {
+    public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor, SchemaManager schemaManager) {
         super(parent, "Preferences", true);
         this.parent = parent;
         this.themeManager = themeManager;
         this.textEditor = textEditor;
+        this.schemaManager = schemaManager;
 
         initializeDialog();
     }
@@ -72,11 +78,12 @@ public class PreferencesDialog extends JDialog {
      * Creates a new professional preferences dialog with callback.
      */
     public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor,
-                           PreferenceChangeCallback changeCallback) {
+                           SchemaManager schemaManager, PreferenceChangeCallback changeCallback) {
         super(parent, "Preferences", true);
         this.parent = parent;
         this.themeManager = themeManager;
         this.textEditor = textEditor;
+        this.schemaManager = schemaManager;
         this.changeCallback = changeCallback;
 
         initializeDialog();
@@ -144,6 +151,7 @@ public class PreferencesDialog extends JDialog {
         DefaultMutableTreeNode kalix = new DefaultMutableTreeNode("Kalix");
         kalix.add(new DefaultMutableTreeNode("Kalixcli"));
         kalix.add(new DefaultMutableTreeNode("Data & Visualization"));
+        kalix.add(new DefaultMutableTreeNode("Model Linting"));
         root.add(kalix);
 
         // System branch
@@ -181,6 +189,9 @@ public class PreferencesDialog extends JDialog {
                 case "Data & Visualization":
                     cardLayout.show(contentPanel, COMPRESSION_PANEL);
                     break;
+                case "Model Linting":
+                    cardLayout.show(contentPanel, LINTER_PANEL);
+                    break;
                 case "System":
                     cardLayout.show(contentPanel, SYSTEM_PANEL);
                     break;
@@ -197,6 +208,7 @@ public class PreferencesDialog extends JDialog {
         filePanel = new FilePreferencePanel();
         kalixCliPanel = new KalixCliPreferencePanel();
         compressionPanel = new CompressionPreferencePanel();
+        linterPanel = new LinterPreferencesPanel(schemaManager);
         systemPanel = new SystemPreferencePanel();
 
         contentPanel.add(themePanel, THEME_PANEL);
@@ -204,6 +216,7 @@ public class PreferencesDialog extends JDialog {
         contentPanel.add(filePanel, FILE_PANEL);
         contentPanel.add(kalixCliPanel, KALIXCLI_PANEL);
         contentPanel.add(compressionPanel, COMPRESSION_PANEL);
+        contentPanel.add(linterPanel, LINTER_PANEL);
         contentPanel.add(systemPanel, SYSTEM_PANEL);
     }
 

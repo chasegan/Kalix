@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "sections": {
+    "attributes": {
+      "required": true,
+      "properties": {
+        "ini_version": {
+          "required": true,
+          "type": "version",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        }
+      }
+    },
+    "inputs": {
+      "required": true,
+      "validation": "file_paths"
+    },
+    "outputs": {
+      "required": true,
+      "validation": "output_references"
+    }
+  },
+
+  "node_types": {
+    "inflow": {
+      "description": "Inflow node with external data source",
+      "required_params": ["type", "loc"],
+      "optional_params": ["inflow"],
+      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "inflow"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "inflow": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        }
+      }
+    },
+
+    "gr4j": {
+      "description": "GR4J rainfall-runoff model",
+      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "gr4j"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float"
+        },
+        "area": {
+          "type": "number",
+          "min": 0,
+          "description": "Catchment area"
+        },
+        "rain": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        },
+        "evap": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        },
+        "params": {
+          "type": "number_sequence",
+          "count": 4,
+          "description": "GR4J parameters: X1, X2, X3, X4"
+        }
+      }
+    },
+
+    "routing_node": {
+      "description": "Routing node with optional lag parameter for flow delay",
+      "required_params": ["type", "loc"],
+      "optional_params": ["lag"],
+      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "routing_node"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "lag": {
+          "type": "integer",
+          "min": 0,
+          "description": "Time lag in time steps (integer >= 0)"
+        }
+      }
+    }
+  },
+
+  "validation_rules": {
+    "file_paths": {
+      "severity": "error",
+      "description": "All input file paths must exist",
+      "check": "file_exists"
+    },
+
+    "output_references": {
+      "severity": "error",
+      "description": "Output references must point to valid node.property combinations",
+      "pattern": "^node\\.[\\w_]+\\.(dsflow|usflow|storage)$"
+    },
+
+    "dsnode_references": {
+      "severity": "error",
+      "description": "Links must point to existing nodes",
+      "check": "node_exists"
+    },
+
+    "unique_node_names": {
+      "severity": "error",
+      "description": "Node names must be unique"
+    },
+
+    "data_reference_files": {
+      "severity": "warning",
+      "description": "Data references should point to files listed in inputs section"
+    },
+
+    "coordinate_format": {
+      "severity": "error",
+      "description": "Coordinates must be two comma-separated numbers"
+    }
+  },
+
+  "data_types": {
+    "number": {
+      "pattern": "^-?\\d+(?:\\.\\d+)?$",
+      "parse": "parse_float"
+    },
+
+    "integer": {
+      "pattern": "^-?\\d+$",
+      "parse": "parse_int"
+    },
+
+    "coordinates": {
+      "pattern": "^-?\\d+(?:\\.\\d+)?\\s*,\\s*-?\\d+(?:\\.\\d+)?$",
+      "parse": "split_floats"
+    },
+
+    "number_sequence": {
+      "pattern": "^-?\\d+(?:\\.\\d+)?(?:\\s*,\\s*-?\\d+(?:\\.\\d+)?)*$",
+      "parse": "split_floats"
+    },
+
+    "data_reference": {
+      "components": ["dataset", "accessor", "field"],
+      "format": "data.{dataset}.by_{accessor}.{field}"
+    }
+  }
+}

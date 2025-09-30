@@ -47,6 +47,15 @@ public class PreferenceKeys {
     /** External editor command template (string, default: "code <folder_path> <file_path>") */
     public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
 
+    /** Enable model linting (boolean, default: true) */
+    public static final String LINTER_ENABLED = "linter.enabled";
+
+    /** Custom linter schema file path (string, default: "") */
+    public static final String LINTER_SCHEMA_PATH = "linter.schemaPath";
+
+    /** Disabled linter rules (string array, default: empty) */
+    public static final String LINTER_DISABLED_RULES = "linter.disabledRules";
+
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
     // These preferences are machine-specific and handle transient UI state
 

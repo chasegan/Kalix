@@ -9,6 +9,7 @@ import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
+import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.docking.DockableMapPanel;
 import com.kalix.ide.docking.DockablePanel;
 import com.kalix.ide.docking.DockableTextEditor;
@@ -92,7 +93,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private ProcessExecutor processExecutor;
     private StdioTaskManager stdioTaskManager;
     private FileWatcherManager fileWatcherManager;
-    
+    private SchemaManager schemaManager;
+
     // Data model
     private HydrologicalModel hydrologicalModel;
     
@@ -162,6 +164,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // File watcher manager
         fileWatcherManager = new FileWatcherManager(this::handleFileReload);
 
+        // Schema manager for linting
+        schemaManager = new SchemaManager();
+        schemaManager.initialize();
+
         // Initialize data model with change listener
         hydrologicalModel = new HydrologicalModel();
         hydrologicalModel.addChangeListener(this::onModelChanged);
@@ -223,6 +229,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Get references to the underlying components for existing functionality
         mapPanel = dockableMapPanel.getMapPanel();
         textEditor = dockableTextEditor.getTextEditor();
+
+        // Initialize linter for text editor
+        textEditor.initializeLinter(schemaManager);
 
         // Load saved node theme
         String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
@@ -785,7 +794,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         };
 
-        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, callback);
+        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, schemaManager, callback);
         boolean preferencesChanged = preferencesDialog.showDialog();
 
         if (preferencesChanged) {
