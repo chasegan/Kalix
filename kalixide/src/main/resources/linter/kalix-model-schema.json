@@ -100,6 +100,41 @@
           "description": "Time lag in time steps (integer >= 0)"
         }
       }
+    },
+
+    "sacramento": {
+      "description": "Sacramento rainfall-runoff model",
+      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "sacramento"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float"
+        },
+        "area": {
+          "type": "number",
+          "min": 0,
+          "description": "Catchment area"
+        },
+        "rain": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        },
+        "evap": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        },
+        "params": {
+          "type": "number_sequence",
+          "count": 17,
+          "description": "Sacramento model parameters (17 parameters)"
+        }
+      }
     }
   },
 
