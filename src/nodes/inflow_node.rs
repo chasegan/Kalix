@@ -17,9 +17,10 @@ pub struct InflowNode {
     storage: f64,
 
     // Recorders
-    recorder_idx_dsflow: Option<usize>,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_inflow: Option<usize>,
+    recorder_idx_dsflow: Option<usize>,
+    recorder_idx_ds_1: Option<usize>,
 }
 
 impl InflowNode {
@@ -53,14 +54,17 @@ impl Node for InflowNode {
         self.inflow_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
 
         // Initialize result recorders
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
         self.recorder_idx_inflow = data_cache.get_series_idx(
             make_result_name(&self.name, "inflow").as_str(), false
+        );
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
         );
     }
 
@@ -78,14 +82,17 @@ impl Node for InflowNode {
         self.dsflow_primary = self.usflow + self.lateral_inflow;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
-        }
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_inflow {
             data_cache.add_value_at_index(idx, self.lateral_inflow);
+        }
+        if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1 {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 
         // Reset upstream inflow for next timestep

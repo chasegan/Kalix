@@ -8,6 +8,10 @@ use crate::nodes::{NodeEnum,confluence_node::ConfluenceNode,diversion_node::Dive
                    gr4j_node::Gr4jNode,inflow_node::InflowNode,routing_node::RoutingNode,
                    sacramento_node::SacramentoNode,storage_node::StorageNode};
 
+const INLET: u8 = 0; //always inlet 0
+const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
+const DS_2_OUTLET: u8 = 1; //ds_2 is outlet 1
+
 
 
 /// Converts INI-parsed HashMap to Model struct.
@@ -120,11 +124,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.gr4j_model.x3 = params[2];
                             n.gr4j_model.x4 = params[3];
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -146,11 +148,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?
                                 .clone();
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -193,11 +193,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                                 r_times = Some(index_times);
                             }
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -231,11 +229,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                                                           params[8], params[9], params[10],params[11],
                                                           params[12], params[13], params[14], params[15],params[16]);
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -263,17 +259,13 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "dimensions_file" {
                             n.d = Table::from_csv(vvc.as_str());
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "ds_2" {
-                            let outlet = 1_u8; //ds_2 is outlet 1
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_2_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {

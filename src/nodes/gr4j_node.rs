@@ -24,9 +24,11 @@ pub struct Gr4jNode {
     runoff_volume_megs: f64,
 
     // Recorders
-    recorder_idx_dsflow: Option<usize>,
+    recorder_idx_usflow: Option<usize>,
     recorder_idx_runoff_volume_megs: Option<usize>,
     recorder_idx_runoff_depth_mm: Option<usize>,
+    recorder_idx_dsflow: Option<usize>,
+    recorder_idx_ds_1: Option<usize>,
 }
 
 impl Gr4jNode {
@@ -68,14 +70,20 @@ impl Node for Gr4jNode {
         self.evap_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
 
         // Initialize result recorders
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
+        self.recorder_idx_usflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "usflow").as_str(), false
         );
         self.recorder_idx_runoff_volume_megs = data_cache.get_series_idx(
             make_result_name(&self.name, "runoff_volume").as_str(), false
         );
         self.recorder_idx_runoff_depth_mm = data_cache.get_series_idx(
             make_result_name(&self.name, "runoff_depth").as_str(), false
+        );
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
         );
     }
 
@@ -98,14 +106,20 @@ impl Node for Gr4jNode {
         self.dsflow_primary = self.usflow + self.runoff_volume_megs;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {
             data_cache.add_value_at_index(idx, self.runoff_volume_megs);
         }
         if let Some(idx) = self.recorder_idx_runoff_depth_mm {
             data_cache.add_value_at_index(idx, self.runoff_depth_mm);
+        }
+        if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1 {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 
         // Reset upstream inflow for next timestep

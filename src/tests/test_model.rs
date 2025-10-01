@@ -1,10 +1,121 @@
+use std::collections::HashMap;
 use crate::model::Model;
 use crate::nodes::inflow_node::InflowNode;
+use crate::nodes::sacramento_node::SacramentoNode;
+use crate::nodes::gr4j_node::Gr4jNode;
 use crate::nodes::storage_node::StorageNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
+
+#[test]
+fn test_model_with_all_node_types() {
+
+    //Create model
+    let mut model = Model::new();
+    let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
+
+    //Add rainfall, evap, and flow data
+    let _ = model.load_input_data("./src/tests/example_models/1/flows.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/rex_mpot.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/rex_rain.csv");
+
+    //Add an inflow node
+    let mut node1_idx = 0usize;
+    {
+        //Node
+        let mut n = InflowNode::new();
+        n.name = "node1_inflow".to_string();
+        n.inflow_def.name = "data.flows_csv.by_index.1".to_string();
+        node1_idx = model.add_node(NodeEnum::InflowNode(n));
+
+        //Node results
+        let result_name = "node.node1_inflow.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 0.0, 0.0));
+
+        let result_name = "node.node1_inflow.inflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
+
+        let result_name = "node.node1_inflow.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
+    }
+
+    //Add an sacramento node
+    let mut node2_idx = 0usize;
+    {
+        //Node
+        let mut n = SacramentoNode::new();
+        n.name = "node2_sacramento".to_string();
+        n.rain_mm_def.name = "data.rex_rain_csv.by_index.1".to_string();
+        n.evap_mm_def.name = "data.rex_mpot_csv.by_index.1".to_string();
+        n.area_km2 = 80.0;
+        node2_idx = model.add_node(NodeEnum::SacramentoNode(n));
+
+        //Node results
+        let result_name = "node.node2_sacramento.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
+
+        let result_name = "node.node2_sacramento.runoff_volume".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 264.37366169710083, 1249.115576264033));
+
+        let result_name = "node.node2_sacramento.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 391.16933957961965, 1376.5048361232634));
+    }
+    model.add_link(node1_idx, node2_idx, 0, 0);
+
+    //Add an gr4j node
+    let mut node3_idx = 0usize;
+    {
+        //Node
+        let mut n = Gr4jNode::new();
+        n.name = "node3_gr4j".to_string();
+        n.rain_mm_def.name = "data.rex_rain_csv.by_index.1".to_string();
+        n.evap_mm_def.name = "data.rex_mpot_csv.by_index.1".to_string();
+        n.area_km2 = 80.0;
+        node3_idx = model.add_node(NodeEnum::Gr4jNode(n));
+
+        //Node results
+        let result_name = "node.node3_gr4j.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 391.16933957961965, 1376.5048361232634));
+
+        let result_name = "node.node3_gr4j.runoff_volume".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 251.7564530253888, 1010.8535625355022));
+
+        let result_name = "node.node3_gr4j.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 642.925792605013, 2236.5833607731133));
+    }
+    model.add_link(node2_idx, node3_idx, 0, 0);
+
+    //Run the model
+    model.configure();
+    model.run();
+
+    //Assess the results
+    for key in regression_results.keys() {
+        let ds_idx = model.data_cache.get_existing_series_idx(key).unwrap();
+        let len = model.data_cache.series[ds_idx].len();
+        let mean = model.data_cache.series[ds_idx].mean();
+        let std_dev = model.data_cache.series[ds_idx].std_dev();
+
+        let new_answer = (len, mean, std_dev);
+        let old_answer = &regression_results[key];
+        println!("\n{}", key);
+        println!("new_answer: {:?}", new_answer);
+        println!("old_answer: {:?}", old_answer);
+        assert_eq!(new_answer, *old_answer);
+    }
+}
+
 
 
 /// Create a model with 1 storage node. Configure the storage dimensions

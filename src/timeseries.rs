@@ -183,6 +183,18 @@ impl Timeseries {
     }
 
     /*
+    Returns the standard deviation of values in the timeseries, including any non-finite values.
+     */
+    pub fn std_dev(&self) -> f64 {
+        let n = self.values.len() as f64;
+        let mean = self.mean();
+        let variance = self.values.iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / n;
+        variance.sqrt()
+    }
+
+    /*
     Returns the number of values in the timeseries.
      */
     pub fn len(&self) -> usize {
