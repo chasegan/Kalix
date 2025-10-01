@@ -4,7 +4,6 @@ import com.kalix.ide.linter.*;
 import com.kalix.ide.linter.events.ValidationEventManager;
 import com.kalix.ide.linter.managers.LinterOrchestrator;
 import com.kalix.ide.linter.model.ValidationIssue;
-import com.kalix.ide.linter.performance.PerformanceLinterOrchestrator;
 import com.kalix.ide.linter.ui.ErrorNavigationManager;
 import com.kalix.ide.linter.ui.LinterTooltipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -55,12 +54,6 @@ public class LinterComponentFactory {
         return new LinterOrchestrator(schemaManager);
     }
 
-    /**
-     * Create a high-performance LinterOrchestrator with caching, async validation, and monitoring.
-     */
-    public static PerformanceLinterOrchestrator createPerformanceOrchestrator(SchemaManager schemaManager) {
-        return new PerformanceLinterOrchestrator(schemaManager);
-    }
 
     /**
      * Create a LinterHighlighter for the given text area.

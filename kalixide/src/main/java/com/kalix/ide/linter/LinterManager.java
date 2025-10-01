@@ -97,6 +97,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
     /**
      * ValidationTrigger implementation - called by ValidationEventManager.
+     * Always performs full validation for maximum accuracy and simplicity.
      */
     @Override
     public void triggerValidation() {
@@ -108,20 +109,6 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         }
     }
 
-    /**
-     * Trigger full validation (used when line numbers have shifted).
-     * This bypasses incremental validation to ensure accuracy.
-     */
-    @Override
-    public void triggerFullValidation() {
-        String content = textArea.getText();
-        if (content.trim().isEmpty()) {
-            orchestrator.clearValidation();
-        } else {
-            // Force full validation by clearing incremental cache
-            orchestrator.performFullValidation(content);
-        }
-    }
 
     /**
      * ValidationResultHandler implementation - called by LinterOrchestrator.

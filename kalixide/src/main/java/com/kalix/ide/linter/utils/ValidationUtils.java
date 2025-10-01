@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Shared validation utilities to ensure consistency between ModelLinter and IncrementalValidator.
+ * Shared validation utilities used by the ModelLinter validation system.
  * All validation logic should be centralized here to avoid duplication and ensure synchronization.
  */
 public class ValidationUtils {
