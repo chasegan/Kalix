@@ -58,8 +58,16 @@ public class LinterOrchestrator {
         // Perform validation in background
         scheduler.execute(() -> {
             try {
+                long startTime = System.currentTimeMillis();
                 ValidationResult result = incrementalValidator.validateIncremental(content);
+                long endTime = System.currentTimeMillis();
+
                 currentValidationResult = result;
+
+                int lineCount = content.split("\n").length;
+                int charCount = content.length();
+                System.out.println("VALIDATION TIMING: Incremental validation took " + (endTime - startTime) + "ms" +
+                                 " (content: " + lineCount + " lines, " + charCount + " chars)");
 
                 // Notify handler on EDT
                 if (resultHandler != null) {
@@ -89,6 +97,45 @@ public class LinterOrchestrator {
      */
     public ValidationResult getCurrentValidationResult() {
         return currentValidationResult;
+    }
+
+    /**
+     * Perform full validation, bypassing incremental validation.
+     * Used when line numbers have shifted and incremental cache is invalid.
+     */
+    public void performFullValidation(String content) {
+        if (!validationEnabled || !schemaManager.isLintingEnabled()) {
+            return;
+        }
+
+        // Perform validation in background, forcing full validation
+        scheduler.execute(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
+
+                // Clear incremental cache to force full validation
+                incrementalValidator.clearCache();
+
+                // Perform full validation
+                ValidationResult result = linter.validate(content);
+                long endTime = System.currentTimeMillis();
+
+                currentValidationResult = result;
+
+                int lineCount = content.split("\n").length;
+                int charCount = content.length();
+                System.out.println("VALIDATION TIMING: Full validation took " + (endTime - startTime) + "ms" +
+                                 " (content: " + lineCount + " lines, " + charCount + " chars)");
+
+                // Notify handler on EDT
+                if (resultHandler != null) {
+                    SwingUtilities.invokeLater(() -> resultHandler.onValidationCompleted(result));
+                }
+
+            } catch (Exception e) {
+                logger.error("Error during full validation", e);
+            }
+        });
     }
 
     /**

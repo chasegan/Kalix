@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.BadLocationException;
 
 /**
  * Manages validation events with debouncing to avoid excessive validation calls.
@@ -32,17 +33,20 @@ public class ValidationEventManager {
      */
     public interface ValidationTrigger {
         void triggerValidation();
+        void triggerFullValidation(); // Force full validation when lines shift
     }
 
     private void setupDocumentListener() {
         textArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
+                handleDocumentChange(e, true);
                 scheduleValidation();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
+                handleDocumentChange(e, false);
                 scheduleValidation();
             }
 
@@ -51,6 +55,55 @@ public class ValidationEventManager {
                 scheduleValidation();
             }
         });
+    }
+
+    /**
+     * Handle document changes and detect line number shifts.
+     * @param e The document event
+     * @param isInsert true for insert, false for remove
+     */
+    private void handleDocumentChange(DocumentEvent e, boolean isInsert) {
+        try {
+            // Check if the change involves newlines (line shifts)
+            boolean hasLineShift = false;
+
+            if (isInsert) {
+                // For insertions, check if the inserted text contains newlines
+                String insertedText = textArea.getDocument().getText(e.getOffset(), e.getLength());
+                hasLineShift = insertedText.contains("\n");
+            } else {
+                // For removals, check if we're removing across line boundaries
+                // This is trickier since we can't see the removed text, but we can
+                // check if the removal length is significant or spans lines
+                if (e.getLength() > 0) {
+                    // Check if the removal could have involved newlines by examining
+                    // the text around the change position
+                    int offset = e.getOffset();
+
+                    // Heuristic: if we're at the start of a line and removed multiple chars,
+                    // or if the removal was substantial, assume it may have involved newlines
+                    try {
+                        int line = textArea.getLineOfOffset(offset);
+                        int lineStart = textArea.getLineStartOffset(line);
+                        hasLineShift = (offset == lineStart && e.getLength() > 1) || e.getLength() > 50;
+                    } catch (BadLocationException ex) {
+                        // If we can't determine line position, be conservative and assume line shift
+                        hasLineShift = e.getLength() > 1;
+                    }
+                }
+            }
+
+            if (hasLineShift) {
+                // Line numbers have shifted - force full validation to ensure accuracy
+                logger.debug("Line shift detected - triggering full validation");
+                validationTrigger.triggerFullValidation();
+            }
+
+        } catch (BadLocationException ex) {
+            logger.warn("Error detecting line shifts", ex);
+            // If we can't analyze the change, be conservative and trigger full validation
+            validationTrigger.triggerFullValidation();
+        }
     }
 
     private void scheduleValidation() {

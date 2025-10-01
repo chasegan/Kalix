@@ -26,6 +26,7 @@ public class INIModelParser {
         private final List<String> inputFiles = new ArrayList<>();
         private final List<String> outputReferences = new ArrayList<>();
         private final Map<String, Integer> outputReferenceLineNumbers = new LinkedHashMap<>(); // Track line numbers for output refs
+        private final Map<String, Integer> inputFileLineNumbers = new LinkedHashMap<>(); // Track line numbers for input files
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
 
@@ -33,6 +34,7 @@ public class INIModelParser {
         public List<String> getInputFiles() { return inputFiles; }
         public List<String> getOutputReferences() { return outputReferences; }
         public Map<String, Integer> getOutputReferenceLineNumbers() { return outputReferenceLineNumbers; }
+        public Map<String, Integer> getInputFileLineNumbers() { return inputFileLineNumbers; }
         public Map<String, NodeSection> getNodes() { return nodes; }
         public List<NodeSection> getAllNodeSections() { return allNodeSections; }
     }
@@ -141,6 +143,7 @@ public class INIModelParser {
                     if ("inputs".equals(currentSection.getName())) {
                         // Input files are listed directly
                         model.getInputFiles().add(line);
+                        model.getInputFileLineNumbers().put(line, lineNumber);
                         currentSection.updateEndLine(lineNumber);
                     } else if ("outputs".equals(currentSection.getName())) {
                         // Output references are listed directly

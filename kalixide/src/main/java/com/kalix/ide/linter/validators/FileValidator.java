@@ -60,6 +60,13 @@ public class FileValidator implements ValidationStrategy {
     }
 
     private int findFilePathLineNumber(INIModelParser.ParsedModel model, String filePath) {
+        // First try to get the exact line number for this file path
+        Integer lineNumber = model.getInputFileLineNumbers().get(filePath);
+        if (lineNumber != null) {
+            return lineNumber;
+        }
+
+        // Fallback to section start line if not found
         INIModelParser.Section inputsSection = model.getSections().get("inputs");
         return inputsSection != null ? inputsSection.getStartLine() + 1 : 1;
     }

@@ -214,7 +214,7 @@ public class IncrementalValidator {
         if (sectionName.equals("attributes")) {
             validateAttributesSection(section, result);
         } else if (sectionName.equals("inputs")) {
-            validateInputsSection(model.getInputFiles(), result);
+            validateInputsSection(model, result);
         } else if (sectionName.equals("outputs")) {
             validateOutputsSection(model.getOutputReferences(), model, result);
         } else if (sectionName.startsWith("node.")) {
@@ -241,14 +241,17 @@ public class IncrementalValidator {
         }
     }
 
-    private void validateInputsSection(List<String> inputFiles, ValidationResult result) {
-        // Basic file existence check (simplified)
-        for (String filePath : inputFiles) {
-            if (!java.nio.file.Files.exists(java.nio.file.Paths.get(filePath))) {
-                result.addIssue(1, // Line number would need to be tracked properly
-                              "Input file does not exist: " + filePath,
-                              ValidationRule.Severity.ERROR, "file_not_found");
-            }
+    private void validateInputsSection(INIModelParser.ParsedModel model, ValidationResult result) {
+        // For incremental validation, we need to use the full FileValidator
+        // to get proper line number tracking. The incremental validator
+        // should not duplicate validation logic.
+        LinterSchema schema = linter.getSchemaManager().getCurrentSchema();
+
+        if (schema != null) {
+            // Use the full FileValidator which has proper line number tracking
+            com.kalix.ide.linter.validators.FileValidator fileValidator =
+                new com.kalix.ide.linter.validators.FileValidator();
+            fileValidator.validate(model, schema, result);
         }
     }
 

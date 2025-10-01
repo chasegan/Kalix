@@ -53,6 +53,12 @@ public class ModelLinter {
 
         try {
             INIModelParser.ParsedModel model = INIModelParser.parse(content);
+
+            // Skip validation for empty models (no sections or content)
+            if (isModelEmpty(model)) {
+                return result; // Return empty result - no errors for empty models
+            }
+
             validateModel(model, schema, result);
         } catch (Exception e) {
             logger.error("Error during validation", e);
@@ -80,6 +86,11 @@ public class ModelLinter {
         }
 
         try {
+            // Skip validation for empty models (no sections or content)
+            if (isModelEmpty(model)) {
+                return result; // Return empty result - no errors for empty models
+            }
+
             validateModel(model, schema, result);
         } catch (Exception e) {
             logger.error("Error during validation", e);
@@ -87,6 +98,46 @@ public class ModelLinter {
         }
 
         return result;
+    }
+
+    /**
+     * Check if the parsed model is effectively empty (no meaningful content).
+     * This includes models that are completely empty or contain only comments.
+     */
+    private boolean isModelEmpty(INIModelParser.ParsedModel model) {
+        // Check if model has any sections
+        if (model.getSections().isEmpty()) {
+            return true;
+        }
+
+        // Check if model has any meaningful content
+        // (sections exist but they're all empty, or only contain empty sections)
+        boolean hasContent = false;
+
+        // Check for input files
+        if (!model.getInputFiles().isEmpty()) {
+            hasContent = true;
+        }
+
+        // Check for output references
+        if (!model.getOutputReferences().isEmpty()) {
+            hasContent = true;
+        }
+
+        // Check for node sections
+        if (!model.getNodes().isEmpty()) {
+            hasContent = true;
+        }
+
+        // Check for any sections with properties
+        for (INIModelParser.Section section : model.getSections().values()) {
+            if (!section.getProperties().isEmpty()) {
+                hasContent = true;
+                break;
+            }
+        }
+
+        return !hasContent;
     }
 
     private void validateModel(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
