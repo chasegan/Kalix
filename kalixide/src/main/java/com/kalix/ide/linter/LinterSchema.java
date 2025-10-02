@@ -235,4 +235,17 @@ public class LinterSchema {
     public NodeTypeDefinition getNodeType(String name) { return nodeTypes.get(name); }
     public DataType getDataType(String name) { return dataTypes.get(name); }
 
+    /**
+     * Get the default schema JSON content as a string.
+     * This is useful for exporting the default schema to a file.
+     */
+    public static String getDefaultSchemaContent() throws Exception {
+        try (InputStream stream = LinterSchema.class.getResourceAsStream(DEFAULT_SCHEMA_RESOURCE)) {
+            if (stream == null) {
+                throw new RuntimeException("Schema resource not found: " + DEFAULT_SCHEMA_RESOURCE);
+            }
+            return new String(stream.readAllBytes());
+        }
+    }
+
 }

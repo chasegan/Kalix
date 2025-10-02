@@ -10,6 +10,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.List;
 
@@ -124,6 +126,10 @@ public class LinterPreferencesPanel extends JPanel {
         resetButton.addActionListener(e -> resetRulesToDefaults());
         buttonPanel.add(resetButton);
 
+        JButton exportButton = new JButton("Export Default Schema");
+        exportButton.addActionListener(this::exportDefaultSchema);
+        buttonPanel.add(exportButton);
+
         panel.add(buttonPanel, BorderLayout.SOUTH);
 
         return panel;
@@ -227,6 +233,42 @@ public class LinterPreferencesPanel extends JPanel {
             schemaPathField.getText().trim(),
             disabledRules
         );
+    }
+
+    private void exportDefaultSchema(ActionEvent e) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Export Default Linting Schema");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON files", "json"));
+        fileChooser.setSelectedFile(new File("linting_rules.json"));
+
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            
+            // Ensure .json extension
+            if (!file.getName().toLowerCase().endsWith(".json")) {
+                file = new File(file.getAbsolutePath() + ".json");
+            }
+
+            try {
+                String schemaContent = LinterSchema.getDefaultSchemaContent();
+                Files.writeString(file.toPath(), schemaContent);
+                JOptionPane.showMessageDialog(this,
+                    "Default schema exported successfully to " + file.getName(),
+                    "Export Successful",
+                    JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Error exporting schema: " + ex.getMessage(),
+                    "Export Error",
+                    JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Error reading default schema: " + ex.getMessage(),
+                    "Export Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
     }
 
     // Table model for validation rules
