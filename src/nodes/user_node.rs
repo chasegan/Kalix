@@ -48,7 +48,7 @@ use crate::misc::location::Location;
 //----------------------------------------------//
 
 #[derive(Default, Clone)]
-pub struct DiversionNode {
+pub struct UserNode {
     pub name: String,
     pub location: Location,
     pub demand_def: InputDataDefinition,
@@ -61,13 +61,14 @@ pub struct DiversionNode {
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
-    recorder_idx_dsflow: Option<usize>,
-    recorder_idx_diversion: Option<usize>,
     recorder_idx_demand: Option<usize>,
+    recorder_idx_diversion: Option<usize>,
+    recorder_idx_dsflow: Option<usize>,
+    recorder_ids_ds_1: Option<usize>,
 }
 
 
-impl DiversionNode {
+impl UserNode {
 
     /// Base constructor
     pub fn new() -> Self {
@@ -86,7 +87,7 @@ impl DiversionNode {
     }
 }
 
-impl Node for DiversionNode {
+impl Node for UserNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
         self.usflow = 0.0;
@@ -101,14 +102,17 @@ impl Node for DiversionNode {
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
+        self.recorder_idx_demand = data_cache.get_series_idx(
+            make_result_name(&self.name, "demand").as_str(), false
         );
         self.recorder_idx_diversion = data_cache.get_series_idx(
             make_result_name(&self.name, "diversion").as_str(), false
         );
-        self.recorder_idx_demand = data_cache.get_series_idx(
-            make_result_name(&self.name, "demand").as_str(), false
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_ids_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
         );
 
         // Return
@@ -129,17 +133,20 @@ impl Node for DiversionNode {
         self.dsflow_primary = self.usflow - self.diversion;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
-        }
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
+        }
+        if let Some(idx) = self.recorder_idx_demand {
+            data_cache.add_value_at_index(idx, demand);
         }
         if let Some(idx) = self.recorder_idx_diversion {
             data_cache.add_value_at_index(idx, self.diversion);
         }
-        if let Some(idx) = self.recorder_idx_demand {
-            data_cache.add_value_at_index(idx, demand);
+        if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_ids_ds_1 {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 
         // Reset upstream inflow for next timestep

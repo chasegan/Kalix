@@ -8,6 +8,7 @@ use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
+use crate::nodes::user_node::UserNode;
 
 #[test]
 fn test_model_with_all_node_types() {
@@ -20,6 +21,7 @@ fn test_model_with_all_node_types() {
     let _ = model.load_input_data("./src/tests/example_models/1/flows.csv");
     let _ = model.load_input_data("./src/tests/example_models/1/rex_mpot.csv");
     let _ = model.load_input_data("./src/tests/example_models/1/rex_rain.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
 
     //Add an inflow node
     let node1_idx: usize;
@@ -53,6 +55,7 @@ fn test_model_with_all_node_types() {
         n.rain_mm_def.name = "data.rex_rain_csv.by_index.1".to_string();
         n.evap_mm_def.name = "data.rex_mpot_csv.by_index.1".to_string();
         n.area_km2 = 80.0;
+        //n.sacramento_model.set_params();
         node2_idx = model.add_node(NodeEnum::SacramentoNode(n));
 
         //Node results
@@ -95,6 +98,34 @@ fn test_model_with_all_node_types() {
         regression_results.insert(result_name, (48824, 642.925792605013, 2236.5833607731133));
     }
     model.add_link(node2_idx, node3_idx, 0, 0);
+
+    //Add a user node
+    let node4_idx: usize;
+    {
+        //Node
+        let mut n = UserNode::new();
+        n.name = "node4_user".to_string();
+        n.demand_def.name = "data.constants_csv.by_name.const_20".to_string();
+        node4_idx = model.add_node(NodeEnum::UserNode(n));
+
+        //Node results
+        let result_name = "node.node4_user.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 642.925792605013, 2236.5833607731133));
+
+        let result_name = "node.node4_user.demand".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 20.0, 0.0));
+
+        let result_name = "node.node4_user.diversion".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 19.984550376890894, 0.5523837133339123));
+
+        let result_name = "node.node4_user.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9412422281207, 2236.578989471308));
+    }
+    model.add_link(node3_idx, node4_idx, 0, 0);
 
     //Run the model
     model.configure().expect("Configuration error");

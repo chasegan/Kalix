@@ -7,7 +7,7 @@ pub mod confluence_node;
 pub mod gr4j_node;
 pub mod inflow_node;
 pub mod storage_node;
-pub mod diversion_node;
+pub mod user_node;
 pub mod routing_node;
 pub mod sacramento_node;
 pub mod node_enum;

@@ -4,9 +4,9 @@ use crate::misc::location::Location;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::nodes::{NodeEnum,confluence_node::ConfluenceNode,diversion_node::DiversionNode,
-                   gr4j_node::Gr4jNode,inflow_node::InflowNode,routing_node::RoutingNode,
-                   sacramento_node::SacramentoNode,storage_node::StorageNode};
+use crate::nodes::{NodeEnum, confluence_node::ConfluenceNode, user_node::UserNode,
+                   gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
+                   sacramento_node::SacramentoNode, storage_node::StorageNode};
 
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
@@ -81,8 +81,8 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     }
                     NodeEnum::ConfluenceNode(n)
                 },
-                "diversion" => {
-                    let mut n = DiversionNode::new();
+                "user" => {
+                    let mut n = UserNode::new();
                     n.name = node_name.to_string();
                     for (vp, vv) in &v {
                         let vvc = vv.as_ref()
@@ -97,7 +97,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             return Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name));
                         }
                     }
-                    NodeEnum::DiversionNode(n)
+                    NodeEnum::UserNode(n)
                 },
                 "gr4j" => {
                     let mut n = Gr4jNode::new();
