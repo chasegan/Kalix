@@ -13,7 +13,7 @@ pub enum NodeEnum {
 }
 
 impl Node for NodeEnum {
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         match self {
             NodeEnum::ConfluenceNode(node) => node.initialise(data_cache),
             NodeEnum::DiversionNode(node) => node.initialise(data_cache),

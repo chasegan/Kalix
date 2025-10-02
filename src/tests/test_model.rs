@@ -22,7 +22,7 @@ fn test_model_with_all_node_types() {
     let _ = model.load_input_data("./src/tests/example_models/1/rex_rain.csv");
 
     //Add an inflow node
-    let mut node1_idx = 0usize;
+    let node1_idx: usize;
     {
         //Node
         let mut n = InflowNode::new();
@@ -44,8 +44,8 @@ fn test_model_with_all_node_types() {
         regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
     }
 
-    //Add an sacramento node
-    let mut node2_idx = 0usize;
+    //Add a sacramento node
+    let node2_idx: usize;
     {
         //Node
         let mut n = SacramentoNode::new();
@@ -71,7 +71,7 @@ fn test_model_with_all_node_types() {
     model.add_link(node1_idx, node2_idx, 0, 0);
 
     //Add an gr4j node
-    let mut node3_idx = 0usize;
+    let node3_idx: usize;
     {
         //Node
         let mut n = Gr4jNode::new();
@@ -97,8 +97,8 @@ fn test_model_with_all_node_types() {
     model.add_link(node2_idx, node3_idx, 0, 0);
 
     //Run the model
-    model.configure();
-    model.run();
+    model.configure().expect("Configuration error");
+    model.run().expect("Simulation error");
 
     //Assess the results
     for key in regression_results.keys() {
@@ -132,7 +132,7 @@ fn test_create_and_run_model_with_storage_node() {
     st1.d = Table::from_csv("./src/tests/example_tables/test_4_dim_table.csv");
     let mut data_cache = DataCache::new();
 
-    st1.initialise(&mut data_cache);
+    st1.initialise(&mut data_cache).expect("Initialisation error");
     println!("Initial vol = {}", st1.v_initial);
     println!("Area 0 = {}", st1.area0);
 
@@ -185,7 +185,7 @@ fn test_create_and_run_model_with_nodes() {
     //m.add_link(id1, id2);
 
     // Now run the model
-    m.run();
+    m.run().expect("Simulation error");
 
     // assert_eq!(what2.sum(), 38.1);
 }
@@ -218,7 +218,7 @@ fn test_create_and_run_model_with_nodes_reverse_order() {
     m.add_link(in1_idx, in2_idx, 0, 0);
 
     // Now run the model
-    m.run();
+    m.run().expect("Simulation error");
 
     // assert_eq!(what2.sum(), 38.1);
 }
@@ -242,18 +242,18 @@ fn test_clone_model() {
     m.outputs.push("node.my_inflow_node.dsflow".to_owned());
 
     //Configure the model, clone it, run both, and compare the results.
-    m.configure();
+    m.configure().expect("Configuration error");
     let mut m2 = m.clone();
 
     //Check the results of m
-    m.run();
+    m.run().expect("Simulation error");
     let ds_idx = m.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();
     let ans = m.data_cache.series[ds_idx].clone();
     assert_eq!(ans.len(), 6);
     assert_eq!(ans.sum(), 38.1);
 
     //Check the results of m2
-    m2.run();
+    m2.run().expect("Simulation error");
     let ds_idx = m2.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();
     let ans = m2.data_cache.series[ds_idx].clone();
     assert_eq!(ans.len(), 6);

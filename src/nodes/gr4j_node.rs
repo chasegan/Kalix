@@ -55,7 +55,7 @@ impl Gr4jNode {
 }
 
 impl Node for Gr4jNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
@@ -68,6 +68,12 @@ impl Node for Gr4jNode {
         // Initialize input series
         self.rain_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
         self.evap_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+
+        // Checks
+        if self.area_km2 < 0.0 {
+            let message = format!("Error in node '{}'. Catchment area cannot be negative, but was {}.", self.name, self.area_km2);
+            return Err(message);
+        }
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -85,6 +91,9 @@ impl Node for Gr4jNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+
+        // Return
+        Ok(())
     }
 
     fn get_name(&self) -> &str {

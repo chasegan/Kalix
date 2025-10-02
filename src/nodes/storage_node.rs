@@ -68,7 +68,7 @@ impl StorageNode {
 
 impl Node for StorageNode {
 
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         // Initialize only internal state
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
@@ -90,7 +90,8 @@ impl Node for StorageNode {
 
         // Checks
         if self.d.nrows() < 2 {
-            panic!("Error in storage node. Storage dimension table must have at least 2 rows.")
+            let message = format!("Error in node '{}'. Storage dimension table must have at least 2 rows.", self.name);
+            return Err(message);
         }
 
         // Initial values and pre-calculations
@@ -106,6 +107,8 @@ impl Node for StorageNode {
         self.recorder_idx_storage = data_cache.get_series_idx(
             make_result_name(&self.name, "storage").as_str(), false
         );
+
+        Ok(())
     }
 
     fn get_name(&self) -> &str { &self.name }

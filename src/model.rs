@@ -77,7 +77,7 @@ impl Model {
     /*
     Model configuration needs to be done once, after loading the model, but not for every run.
      */
-    pub fn configure(&mut self) {
+    pub fn configure(&mut self) -> Result<(), String> {
 
         //TASKS
         //1) Define output series
@@ -86,7 +86,7 @@ impl Model {
         }
 
         //2) Nodes ask data_cache for idx of relevant data series for input
-        self.initialize_nodes();
+        self.initialize_nodes()?;
 
         //3) Read the input data from file
         // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
@@ -124,15 +124,18 @@ impl Model {
 
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
+
+        // Return
+        Ok(())
     }
 
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<(), String> {
 
         //Initialise the node network
         //TODO: We shouldn't do a full initialisation again here!
         // Maybe we need an "initialize()" and a "reset()" on each node?
-        self.initialize_network();
+        self.initialize_network()?;
 
         //Run all timesteps
         let mut _step = 0; //TODO: why am I using 'time' and 'step' if I also have a concept of a 'current_step'?
@@ -148,6 +151,9 @@ impl Model {
             _step += 1;
             self.data_cache.increment_current_step();
         }
+
+        // Return success
+        Ok(())
     }
     
     pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String> 
@@ -155,7 +161,7 @@ impl Model {
         F: Fn() -> bool,
     {
         //Initialise the node network
-        self.initialize_network();
+        self.initialize_network()?;
         
         //Calculate total steps for progress reporting
         let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp) 
@@ -296,14 +302,14 @@ impl Model {
     }
 
 
-    
-    pub fn initialize_network(&mut self) {
+    pub fn initialize_network(&mut self) -> Result<(), String> {
 
-        // Initialize all the nodes
-        self.initialize_nodes();
+        // Initialize the nodes and execution order
+        self.initialize_nodes()?;
+        self.determine_execution_order()?;
 
-        // Initialize the execution order
-        self.determine_execution_order();
+        // Return
+        Ok(())
     }
 
 
@@ -320,7 +326,7 @@ impl Model {
 
 
     /// Determine execution order using Kahn's algorithm (O(V+E) complexity)
-    fn determine_execution_order(&mut self) {
+    fn determine_execution_order(&mut self) -> Result<(), String> {
         let num_nodes = self.nodes.len();
         let mut in_degree = vec![0; num_nodes];
 
@@ -353,21 +359,22 @@ impl Model {
             }
         }
 
-        // Check for cycles
+        // Check the results
         if self.execution_order.len() != num_nodes {
-            panic!("Cycle detected in the model network!");
+            // This happens when the model is cyclic
+            Err("Closed cycle detected in the model network!".to_string())
+        } else {
+            Ok(())
         }
     }
 
-
-
-
     // Initialize all the nodes
     // TODO: Keep in mind this is done in order of definition. Hopefully order will never matter.
-    fn initialize_nodes(&mut self) {
+    fn initialize_nodes(&mut self) -> Result<(), String> {
         for i in 0..self.nodes.len() {
-            self.nodes[i].initialise(&mut self.data_cache);
+            self.nodes[i].initialise(&mut self.data_cache)?
         }
+        Ok(())
     }
 
     /// Returns a reference to the node with a given ID

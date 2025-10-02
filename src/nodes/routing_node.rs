@@ -109,7 +109,7 @@ impl RoutingNode {
 
 
 impl Node for RoutingNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String>{
 
         // Initialize only internal state
         self.usflow = 0.0;
@@ -165,6 +165,9 @@ impl Node for RoutingNode {
         self.recorder_idx_storage = data_cache.get_series_idx(
             make_result_name(&self.name, "storage").as_str(), false
         );
+
+        //Return
+        Ok(())
     }
 
     fn get_name(&self) -> &str {

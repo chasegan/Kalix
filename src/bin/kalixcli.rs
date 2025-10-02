@@ -124,16 +124,20 @@ fn main() {
                     println!("Reading model from STDIN ({} bytes)...", buffer.len());
                     match IniModelIO::new().read_model_string(buffer.as_str()) {
                         Ok(model) => model,
-                        Err(s) => {
-                            panic!("Error: {}", s); // TODO: handle error properly
+                        Err(e) => {
+                            panic!("Error: {}", e); // TODO: handle error properly
                         }
                     }
                 }
             };
 
             println!("Running simulation...");
-            m.configure();
-            m.run();
+            if let Err(e) =  m.configure() {
+                panic!("Error: {}", e); // TODO: handle error properly
+            }
+            if let Err(e) = m.run() {
+                panic!("Error: {}", e); // TODO: handle error properly
+            }
 
             match output_file {
                 Some(f) => {

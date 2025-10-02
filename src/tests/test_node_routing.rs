@@ -38,7 +38,7 @@ fn test_inflow_node_with_timeseries() {
 
 
     // Now run the model
-    m.run();
+    m.run().expect("Simulation error");
 
     ////////////////////////////////////////////////
     // 

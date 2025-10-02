@@ -30,8 +30,8 @@ fn test_sacramento_node_with_timeseries() {
     m.outputs.push("node.my_sac_node.dsflow".to_owned());
 
     //Configure and run the model
-    m.configure();
-    m.run();
+    m.configure().expect("Configuration error");
+    m.run().expect("Simulation error");
 
     //Check the results
     let dsflow_idx = m.data_cache.get_series_idx("node.my_sac_node.dsflow", false).unwrap();
@@ -71,8 +71,8 @@ fn test_sacramento_node_with_timeseries_by_index() {
     m.outputs.push("node.my_sac_node.dsflow".to_owned());
 
     //Configure and run the model
-    m.configure();
-    m.run();
+    m.configure().expect("Configuration error");
+    m.run().expect("Simulation error");
 
     //Check the results
     let dsflow_idx = m.data_cache.get_series_idx("node.my_sac_node.dsflow", false).unwrap();

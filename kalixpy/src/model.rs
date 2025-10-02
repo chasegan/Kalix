@@ -28,7 +28,7 @@ impl Model {
 
     // run -> ()
     fn run(&mut self) -> PyResult<()> {
-        self.model.run();
+        self.model.run().expect("Simulation error");
         Ok(())
     }
 

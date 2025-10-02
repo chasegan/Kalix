@@ -23,9 +23,9 @@ fn test_inflow_node_with_timeseries() {
     m.outputs.push("node.my_inflow_node.dsflow".to_owned());
 
     //Configure and run the model
-    m.configure();
+    m.configure().expect("Configuration error");
     println!("Configuration:\n{:#?}", &m.configuration);
-    m.run();
+    m.run().expect("Simulation error");
 
     //Check the results
     let ds_idx = m.data_cache.get_series_idx("node.my_inflow_node.dsflow", false).unwrap();

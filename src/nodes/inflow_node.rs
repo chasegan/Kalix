@@ -43,7 +43,7 @@ impl InflowNode {
 }
 
 impl Node for InflowNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
         self.usflow = 0.0;
         self.lateral_inflow = 0.0;
@@ -66,6 +66,9 @@ impl Node for InflowNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+
+        // Return
+        Ok(())
     }
 
     fn get_name(&self) -> &str {

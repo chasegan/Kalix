@@ -23,10 +23,10 @@ fn test_model_1_io_ini_read() {
         }
     };
 
-    m.configure();
+    m.configure().expect("Configuration error");
     println!("Config: {:?}", m.configuration);
 
-    m.run();
+    m.run().expect("Simulation error");
     println!("Done!");
 
     //Check the number of nodes
@@ -57,8 +57,8 @@ fn test_model_1_io_ini_read() {
 fn test_model_2_io_ini_read() {
     let ini_reader = IniModelIO::new();
     let mut m = ini_reader.read_model_file("./src/tests/example_models/2/model.ini").unwrap();
-    m.configure();
-    m.run();
+    m.configure().expect("Configuration error");
+    m.run().expect("Simulation error");
 
     //Check the number of nodes
     assert_eq!(m.nodes.len(), 1);
@@ -95,10 +95,10 @@ fn test_model_3_io_ini_read() {
         }
     };
 
-    m.configure();
+    m.configure().expect("Configuration error");
     println!("Config: {:?}", m.configuration);
 
-    m.run();
+    m.run().expect("Simulation error");
     println!("Done!");
 
     //Check the number of nodes
@@ -110,7 +110,6 @@ fn test_model_3_io_ini_read() {
         let ts = m.data_cache.series[idx].clone();
         println!("output: {}, idx: {}, len:{}", output_name, idx, ts.len());
     }
-    //m.data_cache.print();
 
     //
     let output_filename = "./src/tests/example_models/3/outputs.csv";
@@ -125,8 +124,8 @@ fn test_model_3_minimal_version() {
     fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
         let ini_reader = IniModelIO::new();
         let mut m = ini_reader.read_model_file(model_filename)?;
-        m.configure();
-        m.run();
+        m.configure()?;
+        m.run()?;
         m.write_outputs(output_filename)?;
         Ok(())
     }
@@ -144,8 +143,8 @@ fn test_model_4() {
     fn run_model(model_filename: &str, output_filename: &str) -> Result<Model, String> {
         let ini_reader = IniModelIO::new();
         let mut m = ini_reader.read_model_file(model_filename)?;
-        m.configure();
-        m.run();
+        m.configure()?;
+        m.run()?;
         m.write_outputs(output_filename)?;
         Ok(m)
     }

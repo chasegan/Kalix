@@ -531,7 +531,7 @@ impl Command for RunSimulationCommand {
             return Err(CommandError::DataNotLoaded);
         }
 
-        model.configure();
+        model.configure().expect("Configuration error");
         
         // Get simulation info for result
         let start_timestamp = model.configuration.sim_start_timestamp;
