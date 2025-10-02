@@ -14,6 +14,7 @@ public class NodeTypeDefinition {
     public Set<String> requiredParams = new HashSet<>();
     public Set<String> optionalParams = new HashSet<>();
     public Set<String> dsnodeParams = new HashSet<>();
+    public Set<String> allowedOutputs = new HashSet<>();
     public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
     public Set<String> getAllowedParams() {

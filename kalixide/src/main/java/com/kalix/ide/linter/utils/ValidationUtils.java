@@ -49,6 +49,12 @@ public class ValidationUtils {
         ValidationRule rule = schema.getValidationRule("output_references");
         if (rule == null || !rule.isEnabled()) return;
 
+        // Check if this rule uses node-specific output validation
+        if ("node_output_validation".equals(rule.getCheck())) {
+            validateNodeSpecificOutputs(outputRefs, model, schema, result, rule);
+            return;
+        }
+
         // Use pattern from schema rule, fallback to our standard pattern
         String patternStr = rule.getPattern();
         Pattern outputPattern;
@@ -65,6 +71,85 @@ public class ValidationUtils {
                 result.addIssue(reportLine,
                               "Invalid output reference format: " + outputRef,
                               rule.getSeverity(), "invalid_output_reference");
+            }
+        }
+    }
+
+    /**
+     * Validate output references using node-specific allowed outputs.
+     * @param outputRefs List of output references to validate
+     * @param model Parsed model for line number lookup
+     * @param schema Schema containing node type definitions
+     * @param result ValidationResult to add issues to
+     * @param rule The validation rule for error reporting
+     */
+    private static void validateNodeSpecificOutputs(List<String> outputRefs, INIModelParser.ParsedModel model,
+                                                   LinterSchema schema, ValidationResult result, ValidationRule rule) {
+        // Basic pattern to extract node name and output property
+        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
+
+        for (String outputRef : outputRefs) {
+            java.util.regex.Matcher matcher = basicPattern.matcher(outputRef);
+            if (!matcher.matches()) {
+                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+                result.addIssue(reportLine,
+                              "Invalid output reference format: " + outputRef + " (should be node.nodename.property)",
+                              rule.getSeverity(), "invalid_output_reference");
+                continue;
+            }
+
+            String nodeName = matcher.group(1);
+            String outputProperty = matcher.group(2);
+
+            // Check if the node exists
+            if (!model.getNodes().containsKey(nodeName)) {
+                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+                result.addIssue(reportLine,
+                              "Output reference points to non-existent node: " + nodeName,
+                              rule.getSeverity(), "invalid_node_reference");
+                continue;
+            }
+
+            // Get the node's type
+            INIModelParser.NodeSection node = model.getNodes().get(nodeName);
+            String nodeType = null;
+            for (INIModelParser.Property prop : node.getProperties().values()) {
+                if ("type".equals(prop.getKey())) {
+                    nodeType = prop.getValue();
+                    break;
+                }
+            }
+
+            if (nodeType == null) {
+                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+                result.addIssue(reportLine,
+                              "Node " + nodeName + " has no type defined",
+                              rule.getSeverity(), "missing_node_type");
+                continue;
+            }
+
+            // Get the node type definition and check allowed outputs
+            com.kalix.ide.linter.schema.NodeTypeDefinition nodeTypeDef = schema.getNodeType(nodeType);
+            if (nodeTypeDef == null) {
+                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+                result.addIssue(reportLine,
+                              "Unknown node type: " + nodeType,
+                              rule.getSeverity(), "unknown_node_type");
+                continue;
+            }
+
+            // Check if the output property is allowed for this node type
+            // If no allowed outputs are defined, allow everything (fallback to no error/warning)
+            if (!nodeTypeDef.allowedOutputs.isEmpty() && !nodeTypeDef.allowedOutputs.contains(outputProperty)) {
+                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+                result.addIssue(reportLine,
+                              "Output property '" + outputProperty + "' is not allowed for node type '" + nodeType + "'. Allowed outputs: " + nodeTypeDef.allowedOutputs,
+                              rule.getSeverity(), "invalid_output_property");
             }
         }
     }

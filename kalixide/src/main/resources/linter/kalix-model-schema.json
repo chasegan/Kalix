@@ -24,6 +24,7 @@
   "node_types": {
     "inflow": {
       "description": "Inflow node with external data source",
+      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1"],
       "required_params": ["type", "loc"],
       "optional_params": ["inflow"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -46,6 +47,7 @@
 
     "gr4j": {
       "description": "GR4J rainfall-runoff model",
+      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
       "optional_params": [],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -81,6 +83,7 @@
 
     "routing_node": {
       "description": "Routing node with optional lag parameter for flow delay",
+      "allowed_outputs": ["dsflow", "usflow", "storage", "ds_1"],
       "required_params": ["type", "loc"],
       "optional_params": ["lag"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -104,6 +107,7 @@
 
     "sacramento": {
       "description": "Sacramento rainfall-runoff model",
+      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
       "optional_params": [],
       "dsnode_params": ["ds_1"],
@@ -135,6 +139,29 @@
           "description": "Sacramento model parameters (17 parameters)"
         }
       }
+    },
+
+    "user": {
+      "description": "User node representing water demand",
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "demand", "diversion"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["demand"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "user"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "demand": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        }
+      }
     }
   },
 
@@ -148,7 +175,7 @@
     "output_references": {
       "severity": "error",
       "description": "Output references must point to valid node.property combinations",
-      "pattern": "^node\\.[\\w_]+\\.(dsflow|usflow|storage)$"
+      "check": "node_output_validation"
     },
 
     "dsnode_references": {

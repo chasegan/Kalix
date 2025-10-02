@@ -150,6 +150,14 @@ public class LinterSchema {
                 }
             }
 
+            // Parse allowed outputs
+            JsonNode allowedOutputsNode = typeNode.path("allowed_outputs");
+            if (allowedOutputsNode.isArray()) {
+                for (JsonNode output : allowedOutputsNode) {
+                    nodeType.allowedOutputs.add(output.asText());
+                }
+            }
+
             // Parse parameter definitions
             JsonNode parametersNode = typeNode.path("parameters");
             if (parametersNode.isObject()) {
