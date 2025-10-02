@@ -28,6 +28,7 @@ public class LinterPreferencesPanel extends JPanel {
     private JButton browseSchemaButton;
     private JButton useDefaultButton;
     private JButton reloadSchemaButton;
+    private JButton exportDefaultSchemaButton;
     private JLabel schemaStatusLabel;
     private JTable rulesTable;
     private RulesTableModel rulesTableModel;
@@ -78,6 +79,11 @@ public class LinterPreferencesPanel extends JPanel {
         reloadSchemaButton.addActionListener(this::reloadSchema);
         contentPanel.add(reloadSchemaButton, gbc);
 
+        gbc.gridx = 2;
+        exportDefaultSchemaButton = new JButton("Export Default Schema");
+        exportDefaultSchemaButton.addActionListener(this::exportDefaultSchema);
+        contentPanel.add(exportDefaultSchemaButton, gbc);
+
         // Schema status
         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
         schemaStatusLabel = new JLabel();
@@ -125,10 +131,6 @@ public class LinterPreferencesPanel extends JPanel {
         JButton resetButton = new JButton("Reset to Defaults");
         resetButton.addActionListener(e -> resetRulesToDefaults());
         buttonPanel.add(resetButton);
-
-        JButton exportButton = new JButton("Export Default Schema");
-        exportButton.addActionListener(this::exportDefaultSchema);
-        buttonPanel.add(exportButton);
 
         panel.add(buttonPanel, BorderLayout.SOUTH);
 
@@ -213,6 +215,7 @@ public class LinterPreferencesPanel extends JPanel {
         browseSchemaButton.setEnabled(lintingEnabled);
         useDefaultButton.setEnabled(lintingEnabled);
         reloadSchemaButton.setEnabled(lintingEnabled);
+        exportDefaultSchemaButton.setEnabled(lintingEnabled);
         rulesTable.setEnabled(lintingEnabled);
     }
 
