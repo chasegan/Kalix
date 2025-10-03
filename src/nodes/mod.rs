@@ -3,6 +3,7 @@ pub use link::Link;
 pub use node_enum::NodeEnum;
 
 //List all the submodules here
+pub mod blackhole_node;
 pub mod confluence_node;
 pub mod gr4j_node;
 pub mod inflow_node;

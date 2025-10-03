@@ -1,8 +1,9 @@
 use crate::data_cache::DataCache;
-use crate::nodes::{Node, confluence_node::ConfluenceNode, user_node::UserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode};
+use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, user_node::UserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode};
 
 #[derive(Clone)]
 pub enum NodeEnum {
+    BlackholeNode(BlackholeNode),
     ConfluenceNode(ConfluenceNode),
     UserNode(UserNode),
     Gr4jNode(Gr4jNode),
@@ -15,6 +16,7 @@ pub enum NodeEnum {
 impl Node for NodeEnum {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         match self {
+            NodeEnum::BlackholeNode(node) => node.initialise(data_cache),
             NodeEnum::ConfluenceNode(node) => node.initialise(data_cache),
             NodeEnum::UserNode(node) => node.initialise(data_cache),
             NodeEnum::Gr4jNode(node) => node.initialise(data_cache),
@@ -27,6 +29,7 @@ impl Node for NodeEnum {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         match self {
+            NodeEnum::BlackholeNode(node) => node.run_flow_phase(data_cache),
             NodeEnum::ConfluenceNode(node) => node.run_flow_phase(data_cache),
             NodeEnum::UserNode(node) => node.run_flow_phase(data_cache),
             NodeEnum::Gr4jNode(node) => node.run_flow_phase(data_cache),
@@ -39,6 +42,7 @@ impl Node for NodeEnum {
 
     fn get_name(&self) -> &str {
         match self {
+            NodeEnum::BlackholeNode(node) => node.get_name(),
             NodeEnum::ConfluenceNode(node) => node.get_name(),
             NodeEnum::UserNode(node) => node.get_name(),
             NodeEnum::Gr4jNode(node) => node.get_name(),
@@ -51,6 +55,7 @@ impl Node for NodeEnum {
 
     fn add_usflow(&mut self, flow: f64, inlet: u8) {
         match self {
+            NodeEnum::BlackholeNode(node) => node.add_usflow(flow, inlet),
             NodeEnum::ConfluenceNode(node) => node.add_usflow(flow, inlet),
             NodeEnum::UserNode(node) => node.add_usflow(flow, inlet),
             NodeEnum::Gr4jNode(node) => node.add_usflow(flow, inlet),
@@ -63,6 +68,7 @@ impl Node for NodeEnum {
 
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match self {
+            NodeEnum::BlackholeNode(node) => node.remove_dsflow(outlet),
             NodeEnum::ConfluenceNode(node) => node.remove_dsflow(outlet),
             NodeEnum::UserNode(node) => node.remove_dsflow(outlet),
             NodeEnum::Gr4jNode(node) => node.remove_dsflow(outlet),

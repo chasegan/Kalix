@@ -4,7 +4,7 @@ use crate::misc::location::Location;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::nodes::{NodeEnum, confluence_node::ConfluenceNode, user_node::UserNode,
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
 
@@ -138,6 +138,26 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         }
                     }
                     NodeEnum::Gr4jNode(n)
+                },
+                "blackhole" => {
+                    let mut n = BlackholeNode::new();
+                    n.name = node_name.to_string();
+                    for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                        if vp == "loc" {
+                            n.location = Location::from_str(vvc)?;
+                        } else if vp == "ds_1" {
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
+                        } else if vp == "type" {
+                            // skipping this
+                        } else {
+                            return Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name));
+                        }
+                    }
+                    NodeEnum::BlackholeNode(n)
                 },
                 "inflow" => {
                     let mut n = InflowNode::new();
