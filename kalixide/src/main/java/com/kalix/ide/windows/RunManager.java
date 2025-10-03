@@ -304,7 +304,7 @@ public class RunManager extends JFrame {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(150); // Keep original width
+        splitPane.setDividerLocation(190);
         splitPane.setResizeWeight(0);
 
         // Left side: vertical split with runs tree and outputs tree
@@ -882,9 +882,9 @@ public class RunManager extends JFrame {
      * Check if a node represents a special message (like "No outputs available")
      */
     private boolean isSpecialMessageNode(DefaultMutableTreeNode node) {
-        String nodeText = node.getUserObject().toString();
-        return nodeText.equals("No outputs available") ||
-               nodeText.equals("Outputs will appear when simulation completes");
+        String variableName = node.getUserObject().toString();
+        return variableName.equals("No outputs available") ||
+               variableName.equals("Outputs will appear when simulation completes");
     }
 
     /**
@@ -1148,21 +1148,25 @@ public class RunManager extends JFrame {
 
             if (value instanceof DefaultMutableTreeNode) {
                 DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
-                String nodeText = node.getUserObject().toString();
+                String variableName = node.getUserObject().toString();
 
                 // Only add icons to leaf nodes
                 if (leaf && !isSpecialMessageNode(node)) {
                     int treeIconSize = 12; // Same size as run tree icons
 
-                    // Determine icon based on the leaf node name
-                    if (nodeText.equals("dsflow") || nodeText.equals("usflow")) {
+                    // Determine icon based on the variable name
+                    if (variableName.equals("dsflow") || variableName.equals("usflow") || variableName.matches("ds_\\d+")) {
                         setIcon(FontIcon.of(FontAwesomeSolid.WATER, treeIconSize));
-                    } else if (nodeText.equals("storage")) {
+                    } else if (variableName.equals("storage") || variableName.equals("volume")) {
                         setIcon(FontIcon.of(FontAwesomeSolid.GLASS_WHISKEY, treeIconSize));
-                    } else if (nodeText.equals("demand")) {
-                        setIcon(FontIcon.of(FontAwesomeSolid.QUESTION_CIRCLE, treeIconSize));
-                    } else if (nodeText.equals("diversion")) {
-                        setIcon(FontIcon.of(FontAwesomeSolid.PLAY_CIRCLE, treeIconSize));
+                    } else if (variableName.equals("runoff_depth")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.TINT, treeIconSize));
+                    } else if (variableName.equals("demand")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.ARROW_CIRCLE_LEFT, treeIconSize));
+                    } else if (variableName.equals("diversion")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.ARROW_ALT_CIRCLE_LEFT, treeIconSize));
+                    } else if (variableName.equals("inflow") || variableName.equals("runoff_volume")) {
+                        setIcon(FontIcon.of(FontAwesomeSolid.ARROW_ALT_CIRCLE_RIGHT, treeIconSize));
                     } else {
                         // Default icon for any other leaf nodes
                         setIcon(FontIcon.of(FontAwesomeSolid.WAVE_SQUARE, treeIconSize));
@@ -1180,9 +1184,9 @@ public class RunManager extends JFrame {
          * Helper method to check if a node represents a special message (reused from parent class logic)
          */
         private boolean isSpecialMessageNode(DefaultMutableTreeNode node) {
-            String nodeText = node.getUserObject().toString();
-            return nodeText.equals("No outputs available") ||
-                   nodeText.equals("Outputs will appear when simulation completes");
+            String variableName = node.getUserObject().toString();
+            return variableName.equals("No outputs available") ||
+                   variableName.equals("Outputs will appear when simulation completes");
         }
     }
 
