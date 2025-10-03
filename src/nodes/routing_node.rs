@@ -12,7 +12,7 @@ pub struct RoutingNode {
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
-    storage: f64,
+    storage_volume: f64,
 
     //Parameters
     lag: i32,           //number of days lag
@@ -48,7 +48,7 @@ pub struct RoutingNode {
     //Recorders
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_usflow: Option<usize>,
-    recorder_idx_storage: Option<usize>,
+    recorder_idx_volume: Option<usize>,
 }
 
 impl RoutingNode {
@@ -114,7 +114,7 @@ impl Node for RoutingNode {
         // Initialize only internal state
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
-        self.storage = 0.0;
+        self.storage_volume = 0.0;
 
         // Init for lag routing
         for i in 0..self.lag_sto_array.len(){
@@ -162,8 +162,8 @@ impl Node for RoutingNode {
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
-        self.recorder_idx_storage = data_cache.get_series_idx(
-            make_result_name(&self.name, "storage").as_str(), false
+        self.recorder_idx_volume = data_cache.get_series_idx(
+            make_result_name(&self.name, "volume").as_str(), false
         );
 
         //Return
@@ -239,9 +239,9 @@ impl Node for RoutingNode {
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }
-        if let Some(idx) = self.recorder_idx_storage {
-            self.storage = self.calculate_storage();
-            data_cache.add_value_at_index(idx, self.storage);
+        if let Some(idx) = self.recorder_idx_volume {
+            self.storage_volume = self.calculate_storage();
+            data_cache.add_value_at_index(idx, self.storage_volume);
         }
 
         // Reset upstream inflow for next timestep

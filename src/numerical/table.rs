@@ -24,8 +24,45 @@ impl Table {
     }
 
 
-    /// TODO:
-    pub fn from_csv(filename: &str) -> Self {
+    // TODO: docs
+    pub fn from_csv_string(s: &str, ncols: usize, skip_header: bool) -> Result<Self, String> {
+
+        // Split the string at all the commas
+        let ss = s.split(',').map(|x| x.trim()).collect::<Vec<&str>>();
+
+        // Check that there the right number of elements
+        let n_elements = ss.len();
+        if (n_elements % ncols) != 0 {
+            return Err(format!("Number of elements must be divisible by {}", ncols));
+        }
+
+        // Parse the values into a table
+        let mut answer = Self::new(ncols);
+        let mut i = if skip_header { ncols } else { 0 };
+        let mut row = 0;
+        let mut col = 0;
+        while i < n_elements {
+            //Parse the element at location i
+            let value = ss[i].parse::<f64>().expect("Error parsing number in table");
+
+            //Put it into the table
+            answer.set_value(row, col, value);
+
+            //Move to the next element
+            i += 1;
+            col = i % ncols;
+            if col == 0 {
+                row += 1;
+            }
+        }
+
+        // Return
+        Ok(answer)
+    }
+
+
+    // TODO: docs
+    pub fn from_csv_file(filename: &str) -> Self {
 
         // Read the csv file into some sort of structure.
         let csv_string = fs::read_to_string(filename).expect("Unable to read file");

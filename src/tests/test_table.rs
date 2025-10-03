@@ -37,7 +37,7 @@ fn test_interpolation_table() {
 #[test]
 fn test_table_is_monotonic() {
     {
-        let tab = Table::from_csv("./src/tests/example_tables/test_dim_table.csv");
+        let tab = Table::from_csv_file("./src/tests/example_tables/test_dim_table.csv");
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;
@@ -46,7 +46,7 @@ fn test_table_is_monotonic() {
         assert_eq!(true, tab.is_monotonically_increasing(volume_col, area_col))
     }
     {
-        let tab = Table::from_csv("./src/tests/example_tables/test_dim_table_2.csv");
+        let tab = Table::from_csv_file("./src/tests/example_tables/test_dim_table_2.csv");
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;
@@ -55,7 +55,7 @@ fn test_table_is_monotonic() {
         assert_eq!(true, tab.is_monotonically_increasing(volume_col, area_col))
     }
     {
-        let tab = Table::from_csv("./src/tests/example_tables/test_dim_table_bad.csv");
+        let tab = Table::from_csv_file("./src/tests/example_tables/test_dim_table_bad.csv");
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;

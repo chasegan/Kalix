@@ -9,7 +9,7 @@ const LEVL: usize = 0;
 const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
-const EPSILON: f64 = 1e-9;
+const EPSILON: f64 = 1e-6;
 
 
 #[derive(Default, Clone)]
@@ -27,9 +27,9 @@ pub struct StorageNode {
 
     // Internal state only
     usflow: f64,
-    dsflow_primary: f64,
-    dsflow_secondary: f64,
-    storage: f64,
+    dsflow: f64,
+    ds_1_flow: f64,
+    ds_2_flow: f64,
     level: f64,
     rain: f64,
     evap: f64,
@@ -38,9 +38,11 @@ pub struct StorageNode {
     spill: f64,
 
     // Recorders
-    recorder_idx_dsflow: Option<usize>,
     recorder_idx_usflow: Option<usize>,
-    recorder_idx_storage: Option<usize>,
+    recorder_idx_volume: Option<usize>,
+    recorder_idx_dsflow: Option<usize>,
+    recorder_idx_ds_1: Option<usize>,
+    recorder_idx_ds_2: Option<usize>,
 }
 
 impl StorageNode {
@@ -71,9 +73,9 @@ impl Node for StorageNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         // Initialize only internal state
         self.usflow = 0.0;
-        self.dsflow_primary = 0.0;
-        self.dsflow_secondary = 0.0;
-        self.storage = self.v_initial;
+        self.dsflow = 0.0;
+        self.ds_1_flow = 0.0;
+        self.ds_2_flow = 0.0;
         self.v = self.v_initial;
         self.level = 0.0;
         self.rain = 0.0;
@@ -98,14 +100,20 @@ impl Node for StorageNode {
         self.area0 = self.d.interpolate(VOLU, AREA, 0_f64);
 
         // Initialize result recorders
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
-        self.recorder_idx_storage = data_cache.get_series_idx(
-            make_result_name(&self.name, "storage").as_str(), false
+        self.recorder_idx_volume = data_cache.get_series_idx(
+            make_result_name(&self.name, "volume").as_str(), false
+        );
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
+        );
+        self.recorder_idx_ds_2 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2").as_str(), false
         );
 
         Ok(())
@@ -235,21 +243,25 @@ impl Node for StorageNode {
         }
 
         // Only spills go downstream via primary outlet
-        self.dsflow_primary = self.spill;
-        self.dsflow_secondary = 0.0;  // Not implemented yet
-
-        // Update storage state
-        self.storage = self.v;
+        self.ds_1_flow = self.spill;
+        self.ds_2_flow = 0.0;  // Not implemented yet
+        self.dsflow = self.ds_1_flow + self.ds_2_flow;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
-        }
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }
-        if let Some(idx) = self.recorder_idx_storage {
-            data_cache.add_value_at_index(idx, self.storage);
+        if let Some(idx) = self.recorder_idx_volume {
+            data_cache.add_value_at_index(idx, self.v);
+        }
+        if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1 {
+            data_cache.add_value_at_index(idx, self.ds_1_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2 {
+            data_cache.add_value_at_index(idx, self.ds_2_flow);
         }
 
         // Reset upstream inflow for next timestep
@@ -269,13 +281,13 @@ impl Node for StorageNode {
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match outlet {
             0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
+                let outflow = self.ds_1_flow;
+                self.ds_1_flow = 0.0;
                 outflow
             }
             1 => {
-                let outflow = self.dsflow_secondary;
-                self.dsflow_secondary = 0.0;
+                let outflow = self.ds_2_flow;
+                self.ds_2_flow = 0.0;
                 outflow
             }
             _ => 0.0,

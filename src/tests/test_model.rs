@@ -127,6 +127,32 @@ fn test_model_with_all_node_types() {
     }
     model.add_link(node3_idx, node4_idx, 0, 0);
 
+
+    //Add a user node
+    let node5_idx: usize;
+    {
+        //Node
+        let mut n = StorageNode::new();
+        n.name = "node5_storage".to_string();
+        //n.demand_def.name = "data.constants_csv.by_name.const_20".to_string();
+        n.d = Table::from_csv_string(
+            "90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8",
+            //"90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e6, 92, 102, 1, 1e8",
+            4, false).expect("Failed to create table");
+        node5_idx = model.add_node(NodeEnum::StorageNode(n));
+
+        //Node results
+        let result_name = "node.node5_storage.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9412422281207, 2236.578989471308));
+
+        let result_name = "node.node5_storage.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9391940550569, 2236.5791385071666));
+    }
+    model.add_link(node4_idx, node5_idx, 0, 0);
+
+
     //Run the model
     model.configure().expect("Configuration error");
     model.run().expect("Simulation error");
@@ -160,7 +186,7 @@ fn test_model_with_all_node_types() {
 fn test_create_and_run_model_with_storage_node() {
 
     let mut st1 = StorageNode::new();
-    st1.d = Table::from_csv("./src/tests/example_tables/test_4_dim_table.csv");
+    st1.d = Table::from_csv_file("./src/tests/example_tables/test_4_dim_table.csv");
     let mut data_cache = DataCache::new();
 
     st1.initialise(&mut data_cache).expect("Initialisation error");

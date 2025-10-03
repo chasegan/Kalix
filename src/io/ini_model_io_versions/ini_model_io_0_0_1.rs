@@ -91,6 +91,10 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "demand" {
                             n.demand_def.name = vvc.clone();
+                        } else if vp == "ds_1" {
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -256,8 +260,11 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.seep_mm_def.name = vvc.clone();
                         } else if vp == "pond_demand" {
                             n.demand_def.name = vvc.clone();
+                        } else if vp == "dimensions" {
+                            n.d = Table::from_csv_string(vvc.as_str(), 4, false)
+                                .expect(format!("Could not parse dimensions table {}", n.name).as_str());
                         } else if vp == "dimensions_file" {
-                            n.d = Table::from_csv(vvc.as_str());
+                            n.d = Table::from_csv_file(vvc.as_str());
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;

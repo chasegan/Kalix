@@ -83,7 +83,7 @@
 
     "routing_node": {
       "description": "Routing node with optional lag parameter for flow delay",
-      "allowed_outputs": ["dsflow", "usflow", "storage", "ds_1"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1"],
       "required_params": ["type", "loc"],
       "optional_params": ["lag"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -160,6 +160,48 @@
         "demand": {
           "type": "data_reference",
           "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        }
+      }
+    },
+
+    "storage": {
+      "description": "Storage node for water storage modeling",
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep"],
+      "dsnode_params": ["ds_1", "ds_2"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "storage"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "dimensions": {
+          "type": "string",
+          "description": "Storage dimensions (no validation on value)"
+        },
+        "dimensions_file": {
+          "type": "string",
+          "description": "File containing storage dimensions"
+        },
+        "rain": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
+          "description": "Rainfall data reference"
+        },
+        "evap": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
+          "description": "Evaporation data reference"
+        },
+        "seep": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
+          "description": "Seepage data reference"
         }
       }
     }
