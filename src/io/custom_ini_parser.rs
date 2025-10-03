@@ -364,26 +364,35 @@ params = 1.0, 2.0, 3.0
     }
 
     #[test]
-    fn test_configparser_comparison() {
-        use configparser::ini::Ini;
+    fn test_line_continuation_integration() {
+        use crate::io::ini_model_io::IniModelIO;
 
         let content = r#"
-[inputs]
-/path/to/file1.csv
-/path/to/file2.csv
+[attributes]
+ini_version = 0.0.1
 
-[outputs]
-node.test.output1
-node.test.output2
+[inputs]
+/Users/chas/github/Kalix/src/tests/example_models/1/flows.csv
+
+[node.test_node]
+type = sacramento
+params = 0.01, 40.0, 23.0,
+         0.009, 0.043, 130.0,
+         0.01, 0.063, 1.0, 0.01, 0.0, 0.0,
+         40.0, 0.245, 50.0, 40.0, 0.1
 "#;
 
-        // Test with configparser
-        let configparser_result = Ini::new().read(content.to_string()).unwrap();
-        println!("Configparser inputs: {:#?}", configparser_result.get("inputs"));
+        let io = IniModelIO::new();
+        let result = io.read_model_string(content);
 
-        // Test with our parser
-        let our_result = IniDocument::parse(content).unwrap();
-        let legacy = our_result.to_legacy_format();
-        println!("Our parser inputs: {:#?}", legacy.get("inputs"));
+        // Should parse successfully (though may fail model validation due to incomplete model)
+        match result {
+            Ok(_) => println!("✅ Line continuation parsing successful!"),
+            Err(e) => {
+                // Expected to fail at model building stage, not parsing stage
+                assert!(!e.contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
+                println!("✅ Parsing succeeded, model building failed as expected: {}", e);
+            }
+        }
     }
 }

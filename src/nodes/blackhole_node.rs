@@ -1,6 +1,5 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
-use crate::misc::input_data_definition::InputDataDefinition;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 
@@ -82,6 +81,7 @@ impl Node for BlackholeNode {
         self.usflow += flow;
     }
 
+    #[allow(unused_variables)]
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         0f64
     }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::model::Model;
-use configparser::ini::Ini;
+use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io_versions::ini_model_io_0_0_1::result_map_to_model_0_0_1;
 
 #[derive(Default)]
@@ -32,9 +32,12 @@ impl IniModelIO {
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
     pub fn read_model_file(&self, path: &str) -> Result<Model, String> {
-        // This is just a wrapper in case we want to change the lib we use for this.
-        let result_map = ini!(safe path);
-        Self::result_map_to_model(result_map?)
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
+
+        let doc = IniDocument::parse(&content)?;
+        let result_map = doc.to_legacy_format();
+        Self::result_map_to_model(result_map)
     }
 
     /// Parses a hydrological model from a string.
@@ -53,8 +56,9 @@ impl IniModelIO {
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
     pub fn read_model_string(&self, ini_string: &str) -> Result<Model, String> {
-        let result_map = Ini::new().read(String::from(ini_string));
-        Self::result_map_to_model(result_map?)
+        let doc = IniDocument::parse(ini_string)?;
+        let result_map = doc.to_legacy_format();
+        Self::result_map_to_model(result_map)
     }
 
     /// Converts a result_map to a hydrological model.

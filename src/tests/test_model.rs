@@ -8,6 +8,7 @@ use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
+use crate::nodes::blackhole_node::BlackholeNode;
 use crate::nodes::user_node::UserNode;
 
 #[test]
@@ -152,6 +153,24 @@ fn test_model_with_all_node_types() {
     }
     model.add_link(node4_idx, node5_idx, 0, 0);
 
+    //Add a user node
+    let node6_idx: usize;
+    {
+        //Node
+        let mut n = BlackholeNode::new();
+        n.name = "node6_blackhole".to_string();
+        node6_idx = model.add_node(NodeEnum::BlackholeNode(n));
+
+        //Node results
+        let result_name = "node.node6_blackhole.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9391940550569, 2236.5791385071666));
+
+        let result_name = "node.node6_blackhole.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 0f64, 0f64));
+    }
+    model.add_link(node5_idx, node6_idx, 0, 0);
 
     //Run the model
     model.configure().expect("Configuration error");

@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate ini;
 
 pub mod apis;
 pub mod misc;
