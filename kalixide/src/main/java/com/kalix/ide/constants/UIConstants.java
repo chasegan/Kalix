@@ -27,8 +27,8 @@ public final class UIConstants {
         /** Standard node size in pixels (constant screen size) */
         public static final int NODE_SIZE = 20;
 
-        /** Node radius in pixels (NODE_SIZE / 2) */
-        public static final int NODE_RADIUS = NODE_SIZE / 2;
+        /** Node radius in pixels (NODE_SIZE / 2 + 1 for slightly larger circles) */
+        public static final int NODE_RADIUS = NODE_SIZE / 2 + 1;
 
         /** Grid size for map background grid lines */
         public static final int GRID_SIZE = 50;

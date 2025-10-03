@@ -13,7 +13,7 @@ import com.kalix.ide.constants.UIConstants;
  *
  * This class handles all rendering operations for the map panel including:
  * - Grid rendering with dynamic viewport calculation
- * - Node visualization with theme-based styling
+ * - Node visualization with theme-based styling and shapes
  * - Text rendering with proper font handling
  * - Selection rectangle drawing
  * - Debug information overlays
@@ -22,9 +22,12 @@ import com.kalix.ide.constants.UIConstants;
  * through method parameters, making it thread-safe and easily testable.
  *
  * @author Claude Code Assistant
- * @version 1.0
+ * @version 1.1
  */
 public class MapRenderer {
+
+    // Shape renderer for node visualization
+    private final NodeShapeRenderer shapeRenderer;
 
     // Rendering constants (centralized in UIConstants)
     private static final int GRID_SIZE = UIConstants.Map.GRID_SIZE;
@@ -52,6 +55,13 @@ public class MapRenderer {
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
     private static final double CHEVRON_ANGLE = Math.PI / 6; // 30 degrees
+
+    /**
+     * Creates a new MapRenderer with shape rendering capabilities.
+     */
+    public MapRenderer() {
+        this.shapeRenderer = new NodeShapeRenderer();
+    }
 
     /**
      * Renders the complete map view including grid, nodes, selection, and debug info.
@@ -316,9 +326,10 @@ public class MapRenderer {
                                  NodeTheme nodeTheme, double zoomLevel, double panX, double panY,
                                  AffineTransform originalTransform) {
 
-        // Get node color from theme
+        // Get node styling from theme
         Color nodeColor = nodeTheme.getColorForNodeType(node.getType());
-        g2d.setColor(nodeColor);
+        NodeTheme.NodeShape nodeShape = nodeTheme.getShapeForNodeType(node.getType());
+        String shapeText = nodeTheme.getShapeTextForNodeType(node.getType());
 
         // Transform node world coordinates to screen coordinates
         double screenX = node.getX() * zoomLevel + panX;
@@ -327,22 +338,23 @@ public class MapRenderer {
         // Ensure we're in screen space for constant size rendering
         g2d.setTransform(originalTransform);
 
-        // Render node circle
-        int nodeRadius = NODE_RADIUS;
-        g2d.fillOval((int)(screenX - nodeRadius), (int)(screenY - nodeRadius),
-                    NODE_SIZE, NODE_SIZE);
-
-        // Render node border with selection highlighting
+        // Determine selection state and border styling
         boolean isSelected = model.isNodeSelected(node.getName());
-        g2d.setColor(isSelected ? UIConstants.Selection.NODE_SELECTED_BORDER : UIConstants.Selection.NODE_UNSELECTED_BORDER);
-        g2d.setStroke(isSelected ? new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH) : new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH));
-        g2d.drawOval((int)(screenX - nodeRadius), (int)(screenY - nodeRadius),
-                    NODE_SIZE, NODE_SIZE);
+        Color borderColor = isSelected ? UIConstants.Selection.NODE_SELECTED_BORDER : UIConstants.Selection.NODE_UNSELECTED_BORDER;
+        BasicStroke borderStroke = isSelected ?
+            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH) :
+            new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH);
+
+        // Render node shape with border
+        shapeRenderer.renderShape(g2d, nodeShape, screenX, screenY, nodeColor, borderColor, borderStroke);
+
+        // Render text inside shape
+        shapeRenderer.renderShapeText(g2d, shapeText, screenX, screenY, nodeShape, nodeColor, nodeTheme);
 
         // Reset stroke for next node
         g2d.setStroke(new BasicStroke(1.0f));
 
-        // Render node text label
+        // Render node name text label below shape (unchanged)
         renderNodeText(g2d, node.getName(), screenX, screenY, nodeTheme);
     }
 
