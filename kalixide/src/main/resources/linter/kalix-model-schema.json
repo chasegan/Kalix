@@ -204,6 +204,25 @@
           "description": "Seepage data reference"
         }
       }
+    },
+
+    "blackhole": {
+      "description": "Blackhole node that consumes flow without further routing",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "required_params": ["type", "loc"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "blackhole"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        }
+      }
     }
   },
 
