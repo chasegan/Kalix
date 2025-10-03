@@ -1,6 +1,10 @@
 package com.kalix.ide.rendering;
 
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.constants.UIConstants;
@@ -8,9 +12,9 @@ import com.kalix.ide.constants.UIConstants;
 /**
  * Dedicated renderer for node shapes with consistent sizing and positioning.
  *
- * This class handles rendering of different node shapes (circles, triangles, squares, diamonds)
- * with 2-character text labels inside each shape. All shapes are rendered within a consistent
- * 20x20 pixel bounding box for uniform appearance.
+ * This class handles rendering of different node shapes (circles, triangles, squares, diamonds,
+ * water drops, and podiums) with 2-character text labels inside each shape. All shapes are
+ * rendered within a consistent bounding box for uniform appearance.
  *
  * @author Claude Code Assistant
  * @version 1.0
@@ -203,91 +207,60 @@ public class NodeShapeRenderer {
 
     /**
      * Renders a node shape with the specified parameters.
-     *
-     * @param g2d Graphics context for rendering
-     * @param shape The shape type to render
-     * @param centerX Center X coordinate of the shape
-     * @param centerY Center Y coordinate of the shape
-     * @param fillColor Fill color for the shape
-     * @param borderColor Border color for the shape (can be null for no border)
-     * @param borderStroke Border stroke (can be null for default stroke)
      */
     public void renderShape(Graphics2D g2d, NodeTheme.NodeShape shape, double centerX, double centerY,
                            Color fillColor, Color borderColor, BasicStroke borderStroke) {
 
-        // Set fill color
+        // Render fill
         g2d.setColor(fillColor);
-
-        // Render shape based on type
-        switch (shape) {
-            case CIRCLE:
-                renderCircle(g2d, centerX, centerY);
-                break;
-            case SQUARE:
-                renderSquare(g2d, centerX, centerY);
-                break;
-            case DIAMOND:
-                renderDiamond(g2d, centerX, centerY);
-                break;
-            case TRIANGLE_DOWN:
-                renderTriangleDown(g2d, centerX, centerY);
-                break;
-            case TRIANGLE_UP:
-                renderTriangleUp(g2d, centerX, centerY);
-                break;
-            case TRIANGLE_RIGHT:
-                renderTriangleRight(g2d, centerX, centerY);
-                break;
-            case TRIANGLE_LEFT:
-                renderTriangleLeft(g2d, centerX, centerY);
-                break;
-            case WATER_DROP:
-                renderWaterDrop(g2d, centerX, centerY);
-                break;
-            case PODIUM:
-                renderPodium(g2d, centerX, centerY);
-                break;
-        }
+        renderShapeInternal(g2d, shape, centerX, centerY, true);
 
         // Render border if specified
         if (borderColor != null) {
+            BasicStroke originalStroke = (BasicStroke) g2d.getStroke();
             g2d.setColor(borderColor);
             if (borderStroke != null) {
                 g2d.setStroke(borderStroke);
             }
 
-            switch (shape) {
-                case CIRCLE:
-                    renderCircleBorder(g2d, centerX, centerY);
-                    break;
-                case SQUARE:
-                    renderSquareBorder(g2d, centerX, centerY);
-                    break;
-                case DIAMOND:
-                    renderDiamondBorder(g2d, centerX, centerY);
-                    break;
-                case TRIANGLE_DOWN:
-                    renderTriangleDownBorder(g2d, centerX, centerY);
-                    break;
-                case TRIANGLE_UP:
-                    renderTriangleUpBorder(g2d, centerX, centerY);
-                    break;
-                case TRIANGLE_RIGHT:
-                    renderTriangleRightBorder(g2d, centerX, centerY);
-                    break;
-                case TRIANGLE_LEFT:
-                    renderTriangleLeftBorder(g2d, centerX, centerY);
-                    break;
-                case WATER_DROP:
-                    renderWaterDropBorder(g2d, centerX, centerY);
-                    break;
-                case PODIUM:
-                    renderPodiumBorder(g2d, centerX, centerY);
-                    break;
-            }
+            renderShapeInternal(g2d, shape, centerX, centerY, false);
+            g2d.setStroke(originalStroke);
+        }
+    }
 
-            // Reset stroke
-            g2d.setStroke(new BasicStroke(1.0f));
+    /**
+     * Internal method to render shapes with unified logic
+     */
+    private void renderShapeInternal(Graphics2D g2d, NodeTheme.NodeShape shape,
+                                   double centerX, double centerY, boolean fill) {
+        switch (shape) {
+            case CIRCLE:
+                renderCircleInternal(g2d, centerX, centerY, fill);
+                break;
+            case SQUARE:
+                renderSquareInternal(g2d, centerX, centerY, fill);
+                break;
+            case DIAMOND:
+                renderDiamondInternal(g2d, centerX, centerY, fill);
+                break;
+            case TRIANGLE_DOWN:
+                renderPolygon(g2d, centerX, centerY, TRIANGLE_DOWN_X, TRIANGLE_DOWN_Y, fill);
+                break;
+            case TRIANGLE_UP:
+                renderPolygon(g2d, centerX, centerY, TRIANGLE_UP_X, TRIANGLE_UP_Y, fill);
+                break;
+            case TRIANGLE_RIGHT:
+                renderPolygon(g2d, centerX, centerY, TRIANGLE_RIGHT_X, TRIANGLE_RIGHT_Y, fill);
+                break;
+            case TRIANGLE_LEFT:
+                renderPolygon(g2d, centerX, centerY, TRIANGLE_LEFT_X, TRIANGLE_LEFT_Y, fill);
+                break;
+            case WATER_DROP:
+                renderPolygon(g2d, centerX, centerY, WATER_DROP_X, WATER_DROP_Y, fill);
+                break;
+            case PODIUM:
+                renderPodiumInternal(g2d, centerX, centerY, fill);
+                break;
         }
     }
 
@@ -306,7 +279,7 @@ public class NodeShapeRenderer {
                                NodeTheme.NodeShape shape, Color backgroundColor,
                                NodeTheme.ShapeTextStyle textStyle) {
 
-        if (text == null || text.trim().isEmpty()) {
+        if (text == null || text.isEmpty()) {
             return;
         }
 
@@ -342,198 +315,71 @@ public class NodeShapeRenderer {
 
     // Private shape rendering methods
 
-    private void renderCircle(Graphics2D g2d, double centerX, double centerY) {
+    /**
+     * Generic polygon renderer to eliminate duplication
+     */
+    private void renderPolygon(Graphics2D g2d, double centerX, double centerY,
+                              int[] xCoords, int[] yCoords, boolean fill) {
+        int[] xPoints = new int[xCoords.length];
+        int[] yPoints = new int[yCoords.length];
+
+        for (int i = 0; i < xCoords.length; i++) {
+            xPoints[i] = (int)(centerX + xCoords[i]);
+            yPoints[i] = (int)(centerY + yCoords[i]);
+        }
+
+        if (fill) {
+            g2d.fillPolygon(xPoints, yPoints, xCoords.length);
+        } else {
+            g2d.drawPolygon(xPoints, yPoints, xCoords.length);
+        }
+    }
+
+    private void renderCircleInternal(Graphics2D g2d, double centerX, double centerY, boolean fill) {
         int diameter = 2 * NODE_RADIUS;
-        g2d.fillOval((int)(centerX - NODE_RADIUS), (int)(centerY - NODE_RADIUS), diameter, diameter);
+        int x = (int)(centerX - NODE_RADIUS);
+        int y = (int)(centerY - NODE_RADIUS);
+
+        if (fill) {
+            g2d.fillOval(x, y, diameter, diameter);
+        } else {
+            g2d.drawOval(x, y, diameter, diameter);
+        }
     }
 
-    private void renderCircleBorder(Graphics2D g2d, double centerX, double centerY) {
-        int diameter = 2 * NODE_RADIUS;
-        g2d.drawOval((int)(centerX - NODE_RADIUS), (int)(centerY - NODE_RADIUS), diameter, diameter);
-    }
-
-    private void renderSquare(Graphics2D g2d, double centerX, double centerY) {
+    private void renderSquareInternal(Graphics2D g2d, double centerX, double centerY, boolean fill) {
         int halfSize = SQUARE_SIZE / 2;
-        g2d.fillRect((int)(centerX - halfSize), (int)(centerY - halfSize), SQUARE_SIZE, SQUARE_SIZE);
+        int x = (int)(centerX - halfSize);
+        int y = (int)(centerY - halfSize);
+
+        if (fill) {
+            g2d.fillRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+        } else {
+            g2d.drawRect(x, y, SQUARE_SIZE, SQUARE_SIZE);
+        }
     }
 
-    private void renderSquareBorder(Graphics2D g2d, double centerX, double centerY) {
-        int halfSize = SQUARE_SIZE / 2;
-        g2d.drawRect((int)(centerX - halfSize), (int)(centerY - halfSize), SQUARE_SIZE, SQUARE_SIZE);
-    }
-
-    private void renderDiamond(Graphics2D g2d, double centerX, double centerY) {
-        // Diamond is a rotated square
+    private void renderDiamondInternal(Graphics2D g2d, double centerX, double centerY, boolean fill) {
         AffineTransform originalTransform = g2d.getTransform();
         g2d.translate(centerX, centerY);
         g2d.rotate(Math.PI / 4); // 45 degrees
 
         int halfSize = DIAMOND_SIZE / 2;
-        g2d.fillRect(-halfSize, -halfSize, DIAMOND_SIZE, DIAMOND_SIZE);
+        if (fill) {
+            g2d.fillRect(-halfSize, -halfSize, DIAMOND_SIZE, DIAMOND_SIZE);
+        } else {
+            g2d.drawRect(-halfSize, -halfSize, DIAMOND_SIZE, DIAMOND_SIZE);
+        }
 
         g2d.setTransform(originalTransform);
     }
 
-    private void renderDiamondBorder(Graphics2D g2d, double centerX, double centerY) {
-        AffineTransform originalTransform = g2d.getTransform();
-        g2d.translate(centerX, centerY);
-        g2d.rotate(Math.PI / 4); // 45 degrees
+    private void renderPodiumInternal(Graphics2D g2d, double centerX, double centerY, boolean fill) {
+        double[] offset = PODIUM_OFFSET;
+        double offsetCenterX = centerX + offset[0];
+        double offsetCenterY = centerY + offset[1];
 
-        int halfSize = DIAMOND_SIZE / 2;
-        g2d.drawRect(-halfSize, -halfSize, DIAMOND_SIZE, DIAMOND_SIZE);
-
-        g2d.setTransform(originalTransform);
+        renderPolygon(g2d, offsetCenterX, offsetCenterY, PODIUM_X, PODIUM_Y, fill);
     }
 
-    private void renderTriangleDown(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_DOWN_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_DOWN_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleDownBorder(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_DOWN_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_DOWN_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleRight(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_RIGHT_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_RIGHT_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleRightBorder(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_RIGHT_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_RIGHT_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleUp(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_UP_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_UP_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleUpBorder(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_UP_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_UP_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleLeft(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_LEFT_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_LEFT_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderTriangleLeftBorder(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[3];
-        int[] yPoints = new int[3];
-
-        for (int i = 0; i < 3; i++) {
-            xPoints[i] = (int)(centerX + TRIANGLE_LEFT_X[i]);
-            yPoints[i] = (int)(centerY + TRIANGLE_LEFT_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, 3);
-    }
-
-    private void renderWaterDrop(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[WATER_DROP_X.length];
-        int[] yPoints = new int[WATER_DROP_Y.length];
-
-        for (int i = 0; i < WATER_DROP_X.length; i++) {
-            xPoints[i] = (int)(centerX + WATER_DROP_X[i]);
-            yPoints[i] = (int)(centerY + WATER_DROP_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, WATER_DROP_X.length);
-    }
-
-    private void renderWaterDropBorder(Graphics2D g2d, double centerX, double centerY) {
-        int[] xPoints = new int[WATER_DROP_X.length];
-        int[] yPoints = new int[WATER_DROP_Y.length];
-
-        for (int i = 0; i < WATER_DROP_X.length; i++) {
-            xPoints[i] = (int)(centerX + WATER_DROP_X[i]);
-            yPoints[i] = (int)(centerY + WATER_DROP_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, WATER_DROP_X.length);
-    }
-
-    private void renderPodium(Graphics2D g2d, double centerX, double centerY) {
-        // Apply pre-calculated offset
-        double offsetCenterX = centerX + PODIUM_OFFSET[0];
-        double offsetCenterY = centerY + PODIUM_OFFSET[1];
-
-        int[] xPoints = new int[PODIUM_X.length];
-        int[] yPoints = new int[PODIUM_Y.length];
-
-        for (int i = 0; i < PODIUM_X.length; i++) {
-            xPoints[i] = (int)(offsetCenterX + PODIUM_X[i]);
-            yPoints[i] = (int)(offsetCenterY + PODIUM_Y[i]);
-        }
-
-        g2d.fillPolygon(xPoints, yPoints, PODIUM_X.length);
-    }
-
-    private void renderPodiumBorder(Graphics2D g2d, double centerX, double centerY) {
-        // Apply pre-calculated offset
-        double offsetCenterX = centerX + PODIUM_OFFSET[0];
-        double offsetCenterY = centerY + PODIUM_OFFSET[1];
-
-        int[] xPoints = new int[PODIUM_X.length];
-        int[] yPoints = new int[PODIUM_Y.length];
-
-        for (int i = 0; i < PODIUM_X.length; i++) {
-            xPoints[i] = (int)(offsetCenterX + PODIUM_X[i]);
-            yPoints[i] = (int)(offsetCenterY + PODIUM_Y[i]);
-        }
-
-        g2d.drawPolygon(xPoints, yPoints, PODIUM_X.length);
-    }
 }
