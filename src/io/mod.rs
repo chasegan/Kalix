@@ -1,5 +1,6 @@
 pub mod csv_io;
 pub mod ini_model_io;
+pub mod custom_ini_parser;
 pub mod compression;
 pub mod kaz_io;
 
