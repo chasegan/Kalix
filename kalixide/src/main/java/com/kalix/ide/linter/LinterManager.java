@@ -145,6 +145,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         if (!enabled) {
             issuesByLine.clear();
             highlighter.clearHighlights();
+        } else {
+            // When re-enabling linting, trigger validation to show any existing errors
+            validateNow();
         }
     }
 

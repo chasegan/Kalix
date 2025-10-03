@@ -100,12 +100,17 @@ public class ToolBarBuilder {
         
         // CLI operations
         toolBar.add(createToolBarButton(
-            "Version", 
+            "Version",
             AppConstants.TOOLBAR_VERSION_TOOLTIP,
             FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.getCliVersion()
         ));
-        
+
+        toolBar.addSeparator();
+
+        // Linting toggle
+        toolBar.add(createLintingToggleButton());
+
         return toolBar;
     }
     
@@ -273,5 +278,59 @@ public class ToolBarBuilder {
         // Fallback to dark gray if theme color not available
         return Color.DARK_GRAY;
     }
-    
+
+    /**
+     * Creates a toggle button for linting with theme-aware icons.
+     *
+     * @return Configured JToggleButton for linting
+     */
+    private JToggleButton createLintingToggleButton() {
+        JToggleButton lintingButton = new JToggleButton();
+        lintingButton.setToolTipText("Toggle linting on/off");
+        lintingButton.setFocusPainted(false);
+        lintingButton.setBorderPainted(false);
+        lintingButton.setContentAreaFilled(false);
+        lintingButton.setOpaque(false);
+
+        // Set initial state and icon
+        updateLintingButtonState(lintingButton);
+
+        // Add action listener
+        lintingButton.addActionListener(e -> {
+            callbacks.toggleLinting();
+            updateLintingButtonState(lintingButton);
+        });
+
+        // Set accessible name for screen readers
+        lintingButton.getAccessibleContext().setAccessibleName("Toggle Linting");
+
+        return lintingButton;
+    }
+
+    /**
+     * Updates the linting button's icon and state based on current linting status.
+     *
+     * @param button The linting toggle button to update
+     */
+    private void updateLintingButtonState(JToggleButton button) {
+        boolean lintingEnabled = callbacks.isLintingEnabled();
+        button.setSelected(lintingEnabled);
+
+        // Choose appropriate icon
+        FontIcon icon = lintingEnabled
+            ? FontIcon.of(FontAwesomeSolid.USER_NINJA, AppConstants.TOOLBAR_ICON_SIZE)
+            : FontIcon.of(FontAwesomeSolid.USER_SLASH, AppConstants.TOOLBAR_ICON_SIZE);
+
+        // Apply theme-appropriate color
+        Color iconColor = getThemeAwareIconColor();
+        icon.setIconColor(iconColor);
+
+        button.setIcon(icon);
+
+        // Update tooltip
+        button.setToolTipText(lintingEnabled
+            ? "Linting enabled - click to disable"
+            : "Linting disabled - click to enable");
+    }
+
 }

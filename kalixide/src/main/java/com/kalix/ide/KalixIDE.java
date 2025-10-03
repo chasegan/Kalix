@@ -573,10 +573,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 // Remove all components without triggering empty state check (avoids placeholder re-addition)
                 area.removeAllQuietly();
 
-                // Create horizontal split pane with map panel on left, existing content on right
+                // Create horizontal split pane with existing content on left, map panel on right
                 DockingSplitPane splitPane = new DockingSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-                splitPane.setLeftComponent(panel);
-                splitPane.setRightComponent(existingContent);
+                splitPane.setLeftComponent(existingContent);
+                splitPane.setRightComponent(panel);
 
                 // Set the standard divider location and resize weight
                 splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
@@ -996,6 +996,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public boolean isGridlinesVisible() {
         return mapPanel.isShowGridlines();
+    }
+
+    @Override
+    public void toggleLinting() {
+        boolean currentState = schemaManager.isLintingEnabled();
+        boolean newState = !currentState;
+
+        // Update schema manager preferences
+        schemaManager.updatePreferences(
+            newState,
+            null, // Keep current schema path
+            schemaManager.getDisabledRules()
+        );
+
+        updateStatus(newState ? "Linting enabled" : "Linting disabled");
+    }
+
+    @Override
+    public boolean isLintingEnabled() {
+        return schemaManager.isLintingEnabled();
     }
 
     @Override
