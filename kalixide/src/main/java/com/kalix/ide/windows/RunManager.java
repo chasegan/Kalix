@@ -8,6 +8,8 @@ import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -225,6 +227,10 @@ public class RunManager extends JFrame {
 
         // Enable coordinate display for mouse hover
         plotPanel.setShowCoordinates(true);
+
+        // Set Auto-Y mode to default preference value
+        boolean autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+        plotPanel.setAutoYMode(autoYMode);
 
         // Create stats panel
         createStatsPanel();
