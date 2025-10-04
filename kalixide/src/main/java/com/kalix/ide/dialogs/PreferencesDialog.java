@@ -331,7 +331,7 @@ public class PreferencesDialog extends JDialog {
             syntaxThemeComboBox = new JComboBox<>(com.kalix.ide.themes.SyntaxTheme.getAllThemes());
 
             // Get current syntax theme from preference or default
-            String currentSyntaxThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "DEFAULT");
+            String currentSyntaxThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
             com.kalix.ide.themes.SyntaxTheme.Theme currentSyntaxTheme = com.kalix.ide.themes.SyntaxTheme.getThemeByName(currentSyntaxThemeName);
             syntaxThemeComboBox.setSelectedItem(currentSyntaxTheme);
 

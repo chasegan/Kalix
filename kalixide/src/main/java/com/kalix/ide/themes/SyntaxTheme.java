@@ -11,43 +11,90 @@ import java.util.Map;
 public class SyntaxTheme {
 
     /**
-     * Available syntax themes with predefined color schemes.
+     * Available syntax themes with predefined color schemes that match application themes.
      */
     public enum Theme {
-        DEFAULT("Default",
-            Color.BLACK,           // IDENTIFIER (keys, regular text)
-            Color.BLUE,            // OPERATOR (equals signs)
-            Color.decode("#8B4A02"), // LITERAL_STRING_DOUBLE_QUOTE (values, continuation lines) - brown
-            Color.BLUE,            // RESERVED_WORD (section headers)
-            Color.decode("#008000"), // COMMENT_EOL (comments) - green
-            Color.LIGHT_GRAY       // WHITESPACE
-        ),
-
-        DARK("Dark",
-            Color.decode("#D4D4D4"), // IDENTIFIER - light gray
-            Color.decode("#569CD6"), // OPERATOR - light blue
-            Color.decode("#CE9178"), // LITERAL_STRING_DOUBLE_QUOTE - orange
-            Color.decode("#4EC9B0"), // RESERVED_WORD - cyan
-            Color.decode("#6A9955"), // COMMENT_EOL - green
-            Color.decode("#404040")  // WHITESPACE - dark gray
-        ),
-
-        GITHUB_LIGHT("GitHub Light",
-            Color.decode("#24292e"), // IDENTIFIER - dark gray
-            Color.decode("#d73a49"), // OPERATOR - red
-            Color.decode("#032f62"), // LITERAL_STRING_DOUBLE_QUOTE - dark blue
-            Color.decode("#6f42c1"), // RESERVED_WORD - purple
-            Color.decode("#6a737d"), // COMMENT_EOL - gray
+        // Light Application Themes
+        LIGHT("Light",
+            Color.decode("#2d2d2d"), // IDENTIFIER (keys, regular text) - dark gray
+            Color.decode("#3b82f6"), // OPERATOR (equals signs) - blue
+            Color.decode("#059669"), // LITERAL_STRING_DOUBLE_QUOTE (values) - green
+            Color.decode("#7c3aed"), // RESERVED_WORD (section headers) - purple
+            Color.decode("#6b7280"), // COMMENT_EOL (comments) - gray
             Color.LIGHT_GRAY         // WHITESPACE
         ),
 
-        MONOKAI("Monokai",
-            Color.decode("#F8F8F2"), // IDENTIFIER - white
-            Color.decode("#F92672"), // OPERATOR - pink
-            Color.decode("#E6DB74"), // LITERAL_STRING_DOUBLE_QUOTE - yellow
-            Color.decode("#66D9EF"), // RESERVED_WORD - cyan
-            Color.decode("#75715E"), // COMMENT_EOL - gray
-            Color.decode("#3E3D32")  // WHITESPACE - dark gray
+        KEYLIME("Keylime",
+            Color.decode("#1a1a1a"), // IDENTIFIER - dark text
+            Color.decode("#65a30d"), // OPERATOR - lime green accent
+            Color.decode("#84cc16"), // LITERAL_STRING_DOUBLE_QUOTE - bright lime
+            Color.decode("#2563eb"), // RESERVED_WORD - contrasting blue
+            Color.decode("#6b7280"), // COMMENT_EOL - muted gray
+            Color.LIGHT_GRAY         // WHITESPACE
+        ),
+
+        LAPLAND("Lapland",
+            Color.decode("#1e293b"), // IDENTIFIER - dark slate
+            Color.decode("#2563eb"), // OPERATOR - nordic blue
+            Color.decode("#0ea5e9"), // LITERAL_STRING_DOUBLE_QUOTE - sky blue
+            Color.decode("#3b82f6"), // RESERVED_WORD - medium blue
+            Color.decode("#64748b"), // COMMENT_EOL - slate gray
+            Color.decode("#e2e8f0")  // WHITESPACE - light slate
+        ),
+
+        NEMO("Nemo",
+            Color.decode("#0d3d56"), // IDENTIFIER - deep sea blue
+            Color.decode("#ff6f00"), // OPERATOR - clownfish orange
+            Color.decode("#0288d1"), // LITERAL_STRING_DOUBLE_QUOTE - ocean blue
+            Color.decode("#ff8f00"), // RESERVED_WORD - bright orange
+            Color.decode("#546e7a"), // COMMENT_EOL - sea gray
+            Color.decode("#e1f5fe")  // WHITESPACE - light ocean
+        ),
+
+        BOTANICAL("Botanical",
+            Color.decode("#0f2a0f"), // IDENTIFIER - darker forest green
+            Color.decode("#A0522D"), // OPERATOR - sienna brown (from botanical node theme)
+            Color.decode("#5a8a4a"), // LITERAL_STRING_DOUBLE_QUOTE - darker botanical green
+            Color.decode("#5a8a5a"), // RESERVED_WORD - darker nature green
+            Color.decode("#8b9098"), // COMMENT_EOL - lighter gray
+            Color.decode("#f0f4f0")  // WHITESPACE - soft green tint
+        ),
+
+        // Dark Application Themes
+        DRACULA("Dracula",
+            Color.decode("#f8f8f2"), // IDENTIFIER - foreground
+            Color.decode("#ff79c6"), // OPERATOR - pink
+            Color.decode("#f1fa8c"), // LITERAL_STRING_DOUBLE_QUOTE - yellow
+            Color.decode("#bd93f9"), // RESERVED_WORD - purple
+            Color.decode("#6272a4"), // COMMENT_EOL - comment blue
+            Color.decode("#44475a")  // WHITESPACE - current line
+        ),
+
+        ONE_DARK("One Dark",
+            Color.decode("#abb2bf"), // IDENTIFIER - light gray
+            Color.decode("#56b6c2"), // OPERATOR - cyan
+            Color.decode("#98c379"), // LITERAL_STRING_DOUBLE_QUOTE - green
+            Color.decode("#c678dd"), // RESERVED_WORD - purple
+            Color.decode("#5c6370"), // COMMENT_EOL - gray
+            Color.decode("#3e4451")  // WHITESPACE - dark gray
+        ),
+
+        OBSIDIAN("Obsidian",
+            Color.decode("#e6e6e6"), // IDENTIFIER - light gray
+            Color.decode("#8b5cf6"), // OPERATOR - purple accent
+            Color.decode("#a855f7"), // LITERAL_STRING_DOUBLE_QUOTE - bright purple
+            Color.decode("#7c3aed"), // RESERVED_WORD - deep purple
+            Color.decode("#6b7280"), // COMMENT_EOL - muted gray
+            Color.decode("#374151")  // WHITESPACE - dark gray
+        ),
+
+        SANNE("Sanne",
+            Color.decode("#f0f0f0"), // IDENTIFIER - crisp white
+            Color.decode("#ff1493"), // OPERATOR - vibrant pink
+            Color.decode("#ff69b4"), // LITERAL_STRING_DOUBLE_QUOTE - hot pink
+            Color.decode("#ff1493"), // RESERVED_WORD - deep pink
+            Color.decode("#a0a0a0"), // COMMENT_EOL - light gray
+            Color.decode("#404040")  // WHITESPACE - dark gray
         );
 
         private final String displayName;
@@ -89,7 +136,7 @@ public class SyntaxTheme {
      * Creates a new SyntaxTheme with the default theme.
      */
     public SyntaxTheme() {
-        this(Theme.DEFAULT);
+        this(Theme.LIGHT);
     }
 
     /**
@@ -123,7 +170,7 @@ public class SyntaxTheme {
     /**
      * Gets a theme by display name.
      * @param displayName The display name of the theme
-     * @return The corresponding Theme enum, or DEFAULT if not found
+     * @return The corresponding Theme enum, or LIGHT if not found
      */
     public static Theme getThemeByDisplayName(String displayName) {
         for (Theme theme : Theme.values()) {
@@ -131,19 +178,19 @@ public class SyntaxTheme {
                 return theme;
             }
         }
-        return Theme.DEFAULT; // Default fallback
+        return Theme.LIGHT; // Default fallback
     }
 
     /**
      * Gets a theme by enum name (for preference storage).
      * @param name The enum name of the theme
-     * @return The corresponding Theme enum, or DEFAULT if not found
+     * @return The corresponding Theme enum, or LIGHT if not found
      */
     public static Theme getThemeByName(String name) {
         try {
             return Theme.valueOf(name);
         } catch (IllegalArgumentException e) {
-            return Theme.DEFAULT; // Default fallback
+            return Theme.LIGHT; // Default fallback
         }
     }
 

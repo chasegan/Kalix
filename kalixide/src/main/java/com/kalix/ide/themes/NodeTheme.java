@@ -190,6 +190,7 @@ public class NodeTheme {
 
     private Theme currentTheme;
     private final Map<String, Color> nodeTypeColors;
+    private final Map<String, Integer> customNodeTypePaletteIndices;
     private int nextColorIndex;
     
     /**
@@ -206,15 +207,27 @@ public class NodeTheme {
     public NodeTheme(Theme theme) {
         this.currentTheme = theme;
         this.nodeTypeColors = new HashMap<>();
+        this.customNodeTypePaletteIndices = new HashMap<>();
         this.nextColorIndex = 0;
+        initializeCustomPaletteIndices();
     }
     
     /**
      * Gets the color for a specific node type, assigning a new color if needed.
+     * Checks custom palette index mappings first, then falls back to sequential assignment.
      * @param nodeType The type of the node
      * @return The color for this node type
      */
     public Color getColorForNodeType(String nodeType) {
+        // Check custom palette indices first
+        Integer customPaletteIndex = customNodeTypePaletteIndices.get(nodeType);
+        if (customPaletteIndex != null) {
+            String[] palette = currentTheme.getColors();
+            String hexColor = palette[customPaletteIndex % palette.length];
+            return Color.decode("#" + hexColor);
+        }
+
+        // Fall back to sequential assignment
         return nodeTypeColors.computeIfAbsent(nodeType, type -> {
             String[] palette = currentTheme.getColors();
             String hexColor = palette[nextColorIndex % palette.length];
@@ -265,6 +278,49 @@ public class NodeTheme {
     public void resetColors() {
         nodeTypeColors.clear();
         nextColorIndex = 0;
+    }
+
+    /**
+     * Sets a custom palette index for a specific node type.
+     * @param nodeType The node type to assign a palette index to
+     * @param paletteIndex The palette index to assign (0-based)
+     */
+    public void setCustomPaletteIndexForNodeType(String nodeType, int paletteIndex) {
+        customNodeTypePaletteIndices.put(nodeType, paletteIndex);
+    }
+
+    /**
+     * Removes the custom palette index assignment for a node type.
+     * @param nodeType The node type to remove custom index from
+     */
+    public void removeCustomPaletteIndexForNodeType(String nodeType) {
+        customNodeTypePaletteIndices.remove(nodeType);
+    }
+
+    /**
+     * Clears all custom palette index assignments.
+     */
+    public void clearCustomPaletteIndices() {
+        customNodeTypePaletteIndices.clear();
+    }
+
+    /**
+     * Initializes the custom palette index mappings with predefined assignments.
+     * Maps specific node types to specific indices in the current theme's palette.
+     */
+    private void initializeCustomPaletteIndices() {
+        // Clear any existing custom indices
+        customNodeTypePaletteIndices.clear();
+
+        // Set the requested custom palette indices based on botanical theme positions:
+        // Botanical palette: [Forest Green, Dark Goldenrod, Dark Slate Gray, Goldenrod, Dark Olive Green,
+        //                     Steel Blue, Saddle Brown, Yellow, Dodger Blue, Sienna, ...]
+        customNodeTypePaletteIndices.put("storage", 5);    // Steel Blue (#4682B4)
+        customNodeTypePaletteIndices.put("user", 9);       // Sienna (#A0522D)
+        customNodeTypePaletteIndices.put("sacramento", 10); // Lime Green (#32CD32)
+        customNodeTypePaletteIndices.put("gr4j", 10);      // Lime Green (#32CD32)
+        customNodeTypePaletteIndices.put("blackhole", 2);  // Dark Slate Gray (#2F4F4F)
+        customNodeTypePaletteIndices.put("inflow", 14);    // Sea Green (#2E8B57)
     }
     
     /**

@@ -35,7 +35,7 @@ public class PreferenceKeys {
     /** Node theme selection (string, default: "VIBRANT") */
     public static final String UI_NODE_THEME = "ui.nodeTheme";
 
-    /** Syntax theme selection (string, default: "DEFAULT") */
+    /** Syntax theme selection (string, default: "LIGHT") */
     public static final String UI_SYNTAX_THEME = "ui.syntaxTheme";
 
     /** Map gridlines visibility toggle (boolean, default: true) */

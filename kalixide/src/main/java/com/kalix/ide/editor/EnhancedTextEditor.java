@@ -19,6 +19,8 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -85,6 +87,9 @@ public class EnhancedTextEditor extends JPanel {
         
         // Apply theme-aware colors
         updateThemeColors();
+
+        // Apply saved syntax theme
+        applySavedSyntaxTheme();
         
         // Enable mark occurrences
         textArea.setMarkOccurrences(true);
@@ -478,6 +483,27 @@ public class EnhancedTextEditor extends JPanel {
             logger.info("Custom Kalix INI TokenMaker registered successfully");
         } catch (Exception e) {
             logger.error("Failed to register custom Kalix INI TokenMaker", e);
+        }
+    }
+
+    /**
+     * Applies the saved syntax theme from preferences on startup.
+     * This ensures the syntax theme is loaded when the editor is first created.
+     */
+    private void applySavedSyntaxTheme() {
+        try {
+            // Get the saved syntax theme from preferences
+            String savedThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
+            SyntaxTheme.Theme savedTheme = SyntaxTheme.getThemeByName(savedThemeName);
+
+            // Apply the saved theme
+            updateSyntaxTheme(savedTheme);
+
+            logger.debug("Applied saved syntax theme: {}", savedTheme.getDisplayName());
+        } catch (Exception e) {
+            logger.warn("Failed to apply saved syntax theme, using default: {}", e.getMessage());
+            // Fallback to Light theme if anything goes wrong
+            updateSyntaxTheme(SyntaxTheme.Theme.LIGHT);
         }
     }
 
