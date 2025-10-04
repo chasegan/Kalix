@@ -91,8 +91,8 @@ public class SyntaxTheme {
         OBSIDIAN("Obsidian",
             Color.decode("#e6e6e6"), // IDENTIFIER - light gray
             Color.decode("#8b5cf6"), // OPERATOR - purple accent
-            Color.decode("#a855f7"), // LITERAL_STRING_DOUBLE_QUOTE - bright purple
-            Color.decode("#7c3aed"), // RESERVED_WORD - deep purple
+            Color.decode("#c084fc"), // LITERAL_STRING_DOUBLE_QUOTE - lighter purple (property values)
+            Color.decode("#a855f7"), // RESERVED_WORD - medium light purple (section headers)
             Color.decode("#6b7280"), // COMMENT_EOL - muted gray
             Color.decode("#374151")  // WHITESPACE - dark gray
         ),

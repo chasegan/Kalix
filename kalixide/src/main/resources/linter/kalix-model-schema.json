@@ -266,6 +266,25 @@
           "description": "Downstream link to another node"
         }
       }
+    },
+
+    "confluence": {
+      "description": "Confluence node that merges multiple flow streams",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "required_params": ["type", "loc"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "confluence"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        }
+      }
     }
   },
 

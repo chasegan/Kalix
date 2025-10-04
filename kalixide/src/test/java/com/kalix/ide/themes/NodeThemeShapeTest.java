@@ -15,10 +15,12 @@ public class NodeThemeShapeTest {
         // Test known node types
         assertEquals(NodeTheme.NodeShape.TRIANGLE_RIGHT, theme.getShapeForNodeType("inflow"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("gr4j"));
-        assertEquals(NodeTheme.NodeShape.SQUARE, theme.getShapeForNodeType("routing_node"));
+        assertEquals(NodeTheme.NodeShape.SQUARE, theme.getShapeForNodeType("routing"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("sacramento"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("user"));
         assertEquals(NodeTheme.NodeShape.TRIANGLE_UP, theme.getShapeForNodeType("storage"));
+        assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("blackhole"));
+        assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("confluence"));
 
         // Test unknown node type falls back to circle
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("unknown_type"));
@@ -54,11 +56,12 @@ public class NodeThemeShapeTest {
         // Test known node types
         assertEquals("In", theme.getShapeTextForNodeType("inflow"));
         assertEquals("G4", theme.getShapeTextForNodeType("gr4j"));
-        assertEquals("Rt", theme.getShapeTextForNodeType("routing_node"));
+        assertEquals("Rt", theme.getShapeTextForNodeType("routing"));
         assertEquals("Sc", theme.getShapeTextForNodeType("sacramento"));
         assertEquals("Us", theme.getShapeTextForNodeType("user"));
         assertEquals("St", theme.getShapeTextForNodeType("storage"));
         assertEquals("Bh", theme.getShapeTextForNodeType("blackhole"));
+        assertEquals("Co", theme.getShapeTextForNodeType("confluence"));
 
         // Test unknown node type generates abbreviation
         assertEquals("UT", theme.getShapeTextForNodeType("unknown_type")); // "Unknown" + "Type"

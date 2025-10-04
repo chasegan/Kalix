@@ -289,11 +289,12 @@ public class NodeTheme {
     private static final Map<String, ShapeTextMapping> NODE_TYPE_MAPPINGS = Map.of(
         "inflow", new ShapeTextMapping(NodeShape.TRIANGLE_RIGHT, "In"),
         "gr4j", new ShapeTextMapping(NodeShape.WATER_DROP, "G4"),
-        "routing_node", new ShapeTextMapping(NodeShape.SQUARE, "Rt"),
+        "routing", new ShapeTextMapping(NodeShape.SQUARE, "Rt"),
         "sacramento", new ShapeTextMapping(NodeShape.WATER_DROP, "Sc"),
         "user", new ShapeTextMapping(NodeShape.PODIUM, "Us"),
         "storage", new ShapeTextMapping(NodeShape.TRIANGLE_UP, "St"),
-        "blackhole", new ShapeTextMapping(NodeShape.CIRCLE, "Bh")
+        "blackhole", new ShapeTextMapping(NodeShape.CIRCLE, "Bh"),
+        "confluence", new ShapeTextMapping(NodeShape.CIRCLE, "Co")
     );
 
     // Default shape text styling
