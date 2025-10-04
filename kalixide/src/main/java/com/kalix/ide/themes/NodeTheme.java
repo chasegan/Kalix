@@ -115,28 +115,35 @@ public class NodeTheme {
      * Available color themes for nodes with text styling
      */
     public enum Theme {
-        VIBRANT("Vibrant", 
+        LIGHT("Light",
                 new String[]{
-                    "F94144", "F3722C", "F8961E", "F9844A", "F9C74F", 
+                    "F94144", "F3722C", "F8961E", "F9844A", "F9C74F",
                     "90BE6D", "43AA8B", "4D908E", "577590", "277DA1"
                 },
                 new TextStyle(10, Color.BLACK, 15, Color.WHITE, 180)),
-        
-        EARTH("Earth Tones", 
-              new String[]{
-                  "8B4513", "CD853F", "DEB887", "F4A460", "D2691E",
-                  "BC8F8F", "A0522D", "8FBC8F", "556B2F", "9ACD32"
-              },
-              new TextStyle(11, new Color(92, 51, 23), 16, new Color(245, 245, 220), 200)),
-        
-        OCEAN("Ocean Blues", 
+
+        KEYLIME("Keylime",
+                new String[]{
+                    "65a30d", "84cc16", "a3e635", "bef264", "d9f99d",
+                    "22c55e", "16a34a", "15803d", "166534", "14532d"
+                },
+                new TextStyle(10, new Color(45, 45, 45), 15, Color.WHITE, 190)),
+
+        LAPLAND("Lapland",
+                new String[]{
+                    "2563eb", "3b82f6", "60a5fa", "93c5fd", "bfdbfe",
+                    "0ea5e9", "0284c7", "0369a1", "075985", "0c4a6e"
+                },
+                new TextStyle(10, new Color(30, 41, 59), 15, new Color(248, 250, 252), 185)),
+
+        NEMO("Nemo",
               new String[]{
                   "191970", "4169E1", "6495ED", "87CEEB", "00CED1",
                   "48D1CC", "20B2AA", "008B8B", "5F9EA0", "4682B4"
               },
               new TextStyle(10, new Color(25, 25, 112), 14, new Color(240, 248, 255), 190)),
-        
-        SUNSET("Sunset Warmth",
+
+        SUNSET_WARMTH("Sunset Warmth",
                new String[]{
                    "FF6B35", "F7931E", "FFD23F", "06FFA5", "4ECDC4",
                    "45B7D1", "96CEB4", "FECA57", "FF9FF3", "54A0FF"
@@ -149,16 +156,91 @@ public class NodeTheme {
                       "4682B4", "8B4513", "CCCC00", "1E90FF", "A0522D",
                       "32CD32", "CD853F", "6495ED", "D2691E", "2E8B57"
                   },
-                  new TextStyle(11, new Color(34, 139, 34), 16, new Color(248, 248, 255), 200));
+                  new TextStyle(11, new Color(34, 139, 34), 16, new Color(248, 248, 255), 200)),
+
+        DRACULA("Dracula",
+                new String[]{
+                    "ff79c6", "bd93f9", "f1fa8c", "8be9fd", "ffb86c",
+                    "50fa7b", "ff5555", "6272a4", "44475a", "282a36"
+                },
+                new TextStyle(10, new Color(248, 248, 242), 15, new Color(68, 71, 90), 200)),
+
+        ONE_DARK("One Dark",
+                 new String[]{
+                     "56b6c2", "c678dd", "98c379", "e06c75", "d19a66",
+                     "61afef", "e5c07b", "abb2bf", "5c6370", "3e4451"
+                 },
+                 new TextStyle(10, new Color(171, 178, 191), 15, new Color(62, 68, 81), 200)),
+
+        OBSIDIAN("Obsidian",
+                 new String[]{
+                     "8b5cf6", "a855f7", "c084fc", "d8b4fe", "e9d5ff",
+                     "7c3aed", "6d28d9", "5b21b6", "4c1d95", "3730a3"
+                 },
+                 new TextStyle(10, new Color(230, 230, 230), 15, new Color(55, 65, 81), 200)),
+
+        SANNE("Sanne",
+              new String[]{
+                  "ff1493", "ff69b4", "ff6347", "ff4500", "dc143c",
+                  "c71585", "ba55d3", "9370db", "8a2be2", "7b68ee"
+              },
+              new TextStyle(10, Color.WHITE, 15, new Color(42, 42, 46), 200));
         
         private final String displayName;
         private final String[] colors;
         private final TextStyle textStyle;
-        
+        private final Map<String, String> nodeTypeColorMap;
+
         Theme(String displayName, String[] colors, TextStyle textStyle) {
             this.displayName = displayName;
             this.colors = colors;
             this.textStyle = textStyle;
+            this.nodeTypeColorMap = createNodeTypeColorMap();
+        }
+
+        private Map<String, String> createNodeTypeColorMap() {
+            Map<String, String> map = new HashMap<>();
+            switch (this) {
+                case BOTANICAL:
+                    // Current assignments for Botanical theme
+                    map.put("storage", "4682B4");        // Steel Blue (index 5)
+                    map.put("user", "A0522D");           // Sienna (index 9)
+                    map.put("sacramento", "32CD32");     // Lime Green (index 10)
+                    map.put("gr4j", "32CD32");           // Lime Green (index 10)
+                    map.put("blackhole", "2F4F4F");     // Dark Slate Gray (index 2)
+                    map.put("inflow", "2E8B57");         // Sea Green (index 14)
+                    // Unused colors from botanical palette
+                    map.put("unused_1", "228B22");       // Forest Green (index 0)
+                    map.put("unused_2", "B8860B");       // Dark Goldenrod (index 1)
+                    map.put("unused_3", "DAA520");       // Goldenrod (index 3)
+                    map.put("unused_4", "556B2F");       // Dark Olive Green (index 4)
+                    map.put("unused_5", "8B4513");       // Saddle Brown (index 6)
+                    map.put("unused_6", "CCCC00");       // Yellow-lime (index 7)
+                    map.put("unused_7", "1E90FF");       // Dodger Blue (index 8)
+                    map.put("unused_8", "CD853F");       // Peru (index 11)
+                    map.put("unused_9", "6495ED");       // Cornflower Blue (index 12)
+                    map.put("unused_10", "D2691E");      // Chocolate (index 13)
+                    break;
+                case NEMO: // Nemo
+                    // Map to similar concept colors in Nemo palette
+                    map.put("storage", "48D1CC");        // Medium Turquoise (index 5) - water storage
+                    map.put("user", "5F9EA0");           // Cadet Blue (index 8) - user interaction
+                    map.put("sacramento", "20B2AA");     // Light Sea Green (index 6) - river/flow
+                    map.put("gr4j", "20B2AA");           // Light Sea Green (index 6) - river/flow
+                    map.put("blackhole", "191970");      // Midnight Blue (index 0) - void/dark
+                    map.put("inflow", "4169E1");         // Royal Blue (index 1) - main flow
+                    // Unused colors from Nemo palette
+                    map.put("unused_1", "6495ED");       // Cornflower Blue (index 2)
+                    map.put("unused_2", "87CEEB");       // Sky Blue (index 3)
+                    map.put("unused_3", "00CED1");       // Dark Turquoise (index 4)
+                    map.put("unused_4", "008B8B");       // Dark Cyan (index 7)
+                    map.put("unused_5", "4682B4");       // Steel Blue (index 9)
+                    break;
+                default:
+                    // For other themes, use cycling assignment
+                    break;
+            }
+            return map;
         }
         
         public String getDisplayName() {
@@ -171,6 +253,10 @@ public class NodeTheme {
         
         public TextStyle getTextStyle() {
             return textStyle;
+        }
+
+        public Map<String, String> getNodeTypeColorMap() {
+            return nodeTypeColorMap;
         }
     }
     
@@ -190,14 +276,13 @@ public class NodeTheme {
 
     private Theme currentTheme;
     private final Map<String, Color> nodeTypeColors;
-    private final Map<String, Integer> customNodeTypePaletteIndices;
     private int nextColorIndex;
     
     /**
-     * Creates a new NodeTheme with the default VIBRANT theme.
+     * Creates a new NodeTheme with the default LIGHT theme.
      */
     public NodeTheme() {
-        this(Theme.VIBRANT);
+        this(Theme.LIGHT);
     }
     
     /**
@@ -207,27 +292,24 @@ public class NodeTheme {
     public NodeTheme(Theme theme) {
         this.currentTheme = theme;
         this.nodeTypeColors = new HashMap<>();
-        this.customNodeTypePaletteIndices = new HashMap<>();
         this.nextColorIndex = 0;
-        initializeCustomPaletteIndices();
     }
     
     /**
-     * Gets the color for a specific node type, assigning a new color if needed.
-     * Checks custom palette index mappings first, then falls back to sequential assignment.
+     * Gets the color for a specific node type, using theme-specific mappings first,
+     * then falls back to sequential assignment from the palette.
      * @param nodeType The type of the node
      * @return The color for this node type
      */
     public Color getColorForNodeType(String nodeType) {
-        // Check custom palette indices first
-        Integer customPaletteIndex = customNodeTypePaletteIndices.get(nodeType);
-        if (customPaletteIndex != null) {
-            String[] palette = currentTheme.getColors();
-            String hexColor = palette[customPaletteIndex % palette.length];
-            return Color.decode("#" + hexColor);
+        // Check theme-specific color mapping first
+        Map<String, String> themeColorMap = currentTheme.getNodeTypeColorMap();
+        String themeSpecificColor = themeColorMap.get(nodeType);
+        if (themeSpecificColor != null) {
+            return Color.decode("#" + themeSpecificColor);
         }
 
-        // Fall back to sequential assignment
+        // Fall back to sequential assignment from palette
         return nodeTypeColors.computeIfAbsent(nodeType, type -> {
             String[] palette = currentTheme.getColors();
             String hexColor = palette[nextColorIndex % palette.length];
@@ -280,48 +362,6 @@ public class NodeTheme {
         nextColorIndex = 0;
     }
 
-    /**
-     * Sets a custom palette index for a specific node type.
-     * @param nodeType The node type to assign a palette index to
-     * @param paletteIndex The palette index to assign (0-based)
-     */
-    public void setCustomPaletteIndexForNodeType(String nodeType, int paletteIndex) {
-        customNodeTypePaletteIndices.put(nodeType, paletteIndex);
-    }
-
-    /**
-     * Removes the custom palette index assignment for a node type.
-     * @param nodeType The node type to remove custom index from
-     */
-    public void removeCustomPaletteIndexForNodeType(String nodeType) {
-        customNodeTypePaletteIndices.remove(nodeType);
-    }
-
-    /**
-     * Clears all custom palette index assignments.
-     */
-    public void clearCustomPaletteIndices() {
-        customNodeTypePaletteIndices.clear();
-    }
-
-    /**
-     * Initializes the custom palette index mappings with predefined assignments.
-     * Maps specific node types to specific indices in the current theme's palette.
-     */
-    private void initializeCustomPaletteIndices() {
-        // Clear any existing custom indices
-        customNodeTypePaletteIndices.clear();
-
-        // Set the requested custom palette indices based on botanical theme positions:
-        // Botanical palette: [Forest Green, Dark Goldenrod, Dark Slate Gray, Goldenrod, Dark Olive Green,
-        //                     Steel Blue, Saddle Brown, Yellow, Dodger Blue, Sienna, ...]
-        customNodeTypePaletteIndices.put("storage", 5);    // Steel Blue (#4682B4)
-        customNodeTypePaletteIndices.put("user", 9);       // Sienna (#A0522D)
-        customNodeTypePaletteIndices.put("sacramento", 10); // Lime Green (#32CD32)
-        customNodeTypePaletteIndices.put("gr4j", 10);      // Lime Green (#32CD32)
-        customNodeTypePaletteIndices.put("blackhole", 2);  // Dark Slate Gray (#2F4F4F)
-        customNodeTypePaletteIndices.put("inflow", 14);    // Sea Green (#2E8B57)
-    }
     
     /**
      * Gets the number of node types that have been assigned colors.
@@ -343,11 +383,11 @@ public class NodeTheme {
     /**
      * Converts a theme name string to a Theme enum.
      * @param themeName The theme name string
-     * @return The corresponding Theme enum, or VIBRANT if not found
+     * @return The corresponding Theme enum, or LIGHT if not found
      */
     public static Theme themeFromString(String themeName) {
         if (themeName == null) {
-            return Theme.VIBRANT;
+            return Theme.LIGHT;
         }
         
         for (Theme theme : Theme.values()) {
@@ -360,7 +400,7 @@ public class NodeTheme {
         try {
             return Theme.valueOf(themeName.toUpperCase());
         } catch (IllegalArgumentException e) {
-            return Theme.VIBRANT; // Default fallback
+            return Theme.LIGHT; // Default fallback
         }
     }
     

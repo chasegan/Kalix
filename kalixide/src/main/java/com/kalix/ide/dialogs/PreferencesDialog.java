@@ -304,6 +304,18 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             nodeThemeComboBox = new JComboBox<>(com.kalix.ide.themes.NodeTheme.getAllThemes());
 
+            // Set custom renderer to show display names instead of enum names
+            nodeThemeComboBox.setRenderer(new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof com.kalix.ide.themes.NodeTheme.Theme) {
+                        setText(((com.kalix.ide.themes.NodeTheme.Theme) value).getDisplayName());
+                    }
+                    return this;
+                }
+            });
+
             // Get current node theme from preference or default
             String currentNodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
             com.kalix.ide.themes.NodeTheme.Theme currentNodeTheme = com.kalix.ide.themes.NodeTheme.themeFromString(currentNodeThemeName);
@@ -312,8 +324,8 @@ public class PreferencesDialog extends JDialog {
             nodeThemeComboBox.addActionListener(e -> {
                 com.kalix.ide.themes.NodeTheme.Theme selectedNodeTheme = (com.kalix.ide.themes.NodeTheme.Theme) nodeThemeComboBox.getSelectedItem();
                 if (selectedNodeTheme != null) {
-                    // Save preference
-                    PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, selectedNodeTheme.name());
+                    // Save preference using display name instead of enum name
+                    PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, selectedNodeTheme.getDisplayName());
 
                     // Notify callback to update map display
                     if (changeCallback != null) {
@@ -349,21 +361,8 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(syntaxThemeComboBox, gbc);
 
-            // Description
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            JTextArea description = new JTextArea();
-            description.setText("Application Theme: Choose the visual theme for the application interface.\n\n" +
-                "Node Theme: Select the color scheme and styling for map nodes and connections.\n\n" +
-                "Syntax Theme: Choose the color scheme for text editor syntax highlighting.\n\n" +
-                "Changes are applied immediately and saved automatically.");
-            description.setEditable(false);
-            description.setOpaque(false);
-            description.setWrapStyleWord(true);
-            description.setLineWrap(true);
-            formPanel.add(description, gbc);
 
-            add(formPanel, BorderLayout.CENTER);
+            add(formPanel, BorderLayout.NORTH);
         }
     }
 

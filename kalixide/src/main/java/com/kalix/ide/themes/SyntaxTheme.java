@@ -27,9 +27,9 @@ public class SyntaxTheme {
         KEYLIME("Keylime",
             Color.decode("#1a1a1a"), // IDENTIFIER - dark text
             Color.decode("#65a30d"), // OPERATOR - lime green accent
-            Color.decode("#84cc16"), // LITERAL_STRING_DOUBLE_QUOTE - bright lime
-            Color.decode("#2563eb"), // RESERVED_WORD - contrasting blue
-            Color.decode("#6b7280"), // COMMENT_EOL - muted gray
+            Color.decode("#4b5563"), // LITERAL_STRING_DOUBLE_QUOTE - medium dark grey
+            Color.decode("#15803d"), // RESERVED_WORD - darker green for section headers
+            Color.decode("#a3e635"), // COMMENT_EOL - lighter vibrant green
             Color.LIGHT_GRAY         // WHITESPACE
         ),
 
@@ -49,6 +49,15 @@ public class SyntaxTheme {
             Color.decode("#ff8f00"), // RESERVED_WORD - bright orange
             Color.decode("#546e7a"), // COMMENT_EOL - sea gray
             Color.decode("#e1f5fe")  // WHITESPACE - light ocean
+        ),
+
+        SUNSET_WARMTH("Sunset Warmth",
+            Color.decode("#8b4513"), // IDENTIFIER - saddle brown (for readability)
+            Color.decode("#ff6b35"), // OPERATOR - vibrant sunset orange
+            Color.decode("#8b4513"), // LITERAL_STRING_DOUBLE_QUOTE - saddle brown (for readability)
+            Color.decode("#45b7d1"), // RESERVED_WORD - sky blue
+            Color.decode("#feca57"), // COMMENT_EOL - golden yellow
+            Color.decode("#fffcf8")  // WHITESPACE - warm cream
         ),
 
         BOTANICAL("Botanical",

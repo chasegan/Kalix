@@ -32,7 +32,7 @@ public class PreferenceKeys {
     /** List of recently opened files (string list, default: empty) */
     public static final String DATA_RECENT_FILES = "data.recentFiles";
 
-    /** Node theme selection (string, default: "VIBRANT") */
+    /** Node theme selection (string, default: "LIGHT") */
     public static final String UI_NODE_THEME = "ui.nodeTheme";
 
     /** Syntax theme selection (string, default: "LIGHT") */
@@ -79,6 +79,9 @@ public class PreferenceKeys {
 
     /** FlowViz split pane divider position (int, default: 250) */
     public static final String FLOWVIZ_SPLIT_PANE_POSITION = "flowviz.splitPanePosition";
+
+    /** Last opened file path for session restoration (string, default: "") */
+    public static final String LAST_OPENED_FILE = "lastOpenedFile";
 
     // ==== DEFAULT VALUES ====
 
