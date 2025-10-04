@@ -101,14 +101,14 @@ public class INIModelParser {
     public static ParsedModel parse(String content) {
         ParsedModel model = new ParsedModel();
 
-        try (BufferedReader reader = new BufferedReader(new StringReader(content))) {
-            String line;
+        try {
+            String[] lines = content.split("\n");
             int lineNumber = 0;
             Section currentSection = null;
 
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                line = line.trim();
+            for (int i = 0; i < lines.length; i++) {
+                lineNumber = i + 1;
+                String line = lines[i].trim();
 
                 // Skip empty lines and comments
                 if (line.isEmpty() || COMMENT_PATTERN.matcher(line).matches()) {
@@ -128,8 +128,15 @@ public class INIModelParser {
                 if (kvMatcher.matches() && currentSection != null) {
                     String key = kvMatcher.group(1).trim();
                     String value = kvMatcher.group(2).trim();
+
+                    // Handle line continuation - collect continuation lines
+                    LineContinuationResult continuationResult = collectContinuationLines(lines, i, value);
+                    value = continuationResult.combinedValue;
+                    i = continuationResult.lastLineIndex; // Skip processed continuation lines
+                    int endLineNumber = i + 1;
+
                     currentSection.addProperty(key, value, lineNumber);
-                    currentSection.updateEndLine(lineNumber);
+                    currentSection.updateEndLine(endLineNumber);
 
                     // Special handling for node type
                     if (currentSection instanceof NodeSection && "type".equals(key)) {
@@ -141,15 +148,23 @@ public class INIModelParser {
                 // Handle special sections without key-value pairs
                 if (currentSection != null) {
                     if ("inputs".equals(currentSection.getName())) {
-                        // Input files are listed directly
-                        model.getInputFiles().add(line);
-                        model.getInputFileLineNumbers().put(line, lineNumber);
-                        currentSection.updateEndLine(lineNumber);
+                        // Input files are listed directly - handle continuation here too
+                        LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
+                        String fullLine = continuationResult.combinedValue;
+                        i = continuationResult.lastLineIndex;
+
+                        model.getInputFiles().add(fullLine);
+                        model.getInputFileLineNumbers().put(fullLine, lineNumber);
+                        currentSection.updateEndLine(i + 1);
                     } else if ("outputs".equals(currentSection.getName())) {
-                        // Output references are listed directly
-                        model.getOutputReferences().add(line);
-                        model.getOutputReferenceLineNumbers().put(line, lineNumber);
-                        currentSection.updateEndLine(lineNumber);
+                        // Output references are listed directly - handle continuation here too
+                        LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
+                        String fullLine = continuationResult.combinedValue;
+                        i = continuationResult.lastLineIndex;
+
+                        model.getOutputReferences().add(fullLine);
+                        model.getOutputReferenceLineNumbers().put(fullLine, lineNumber);
+                        currentSection.updateEndLine(i + 1);
                     }
                 }
             }
@@ -159,6 +174,52 @@ public class INIModelParser {
         }
 
         return model;
+    }
+
+    /**
+     * Helper class to return both the combined value and the last processed line index.
+     */
+    private static class LineContinuationResult {
+        final String combinedValue;
+        final int lastLineIndex;
+
+        LineContinuationResult(String combinedValue, int lastLineIndex) {
+            this.combinedValue = combinedValue;
+            this.lastLineIndex = lastLineIndex;
+        }
+    }
+
+    /**
+     * Collect continuation lines and concatenate them to the initial value.
+     * A continuation line is non-empty and starts with whitespace.
+     */
+    private static LineContinuationResult collectContinuationLines(String[] lines, int startIndex, String initialValue) {
+        StringBuilder combinedValue = new StringBuilder(initialValue);
+        int currentIndex = startIndex;
+
+        // Look ahead for continuation lines
+        for (int i = startIndex + 1; i < lines.length; i++) {
+            String nextLine = lines[i];
+
+            // Check if this is a continuation line: non-empty and starts with whitespace
+            if (!nextLine.isEmpty() && Character.isWhitespace(nextLine.charAt(0))) {
+                // This is a continuation line - append it (trimmed)
+                String continuationContent = nextLine.trim();
+                if (!continuationContent.isEmpty()) {
+                    // Add a space before appending to maintain separation
+                    if (combinedValue.length() > 0 && !combinedValue.toString().endsWith(" ")) {
+                        combinedValue.append(" ");
+                    }
+                    combinedValue.append(continuationContent);
+                }
+                currentIndex = i; // Update the last processed line
+            } else {
+                // Not a continuation line - stop processing
+                break;
+            }
+        }
+
+        return new LineContinuationResult(combinedValue.toString(), currentIndex);
     }
 
     private static Section createSection(String sectionName, int lineNumber, ParsedModel model) {
