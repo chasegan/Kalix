@@ -11,10 +11,11 @@ pub struct ConfluenceNode {
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
-    storage: f64,
 
     // Recorders
+    recorder_idx_usflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
+    recorder_idx_ds_1: Option<usize>,
 }
 
 impl ConfluenceNode {
@@ -41,11 +42,16 @@ impl Node for ConfluenceNode {
         // Initialize only internal state
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
-        self.storage = 0.0;
 
         // Initialize result recorders
+        self.recorder_idx_usflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "usflow").as_str(), false
+        );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
         );
 
         // Return
@@ -61,7 +67,13 @@ impl Node for ConfluenceNode {
         self.dsflow_primary = self.usflow;
 
         // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
         if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 

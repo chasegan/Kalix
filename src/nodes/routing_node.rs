@@ -46,9 +46,10 @@ pub struct RoutingNode {
     seg_par_cc: [f64; 32],    //PWL segment parameters - cc coefficient
 
     //Recorders
-    recorder_idx_dsflow: Option<usize>,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
+    recorder_idx_dsflow: Option<usize>,
+    recorder_idx_ds_1: Option<usize>,
 }
 
 impl RoutingNode {
@@ -156,14 +157,17 @@ impl Node for RoutingNode {
         }
 
         // Initialize result recorders
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
         self.recorder_idx_volume = data_cache.get_series_idx(
             make_result_name(&self.name, "volume").as_str(), false
+        );
+        self.recorder_idx_dsflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
+        self.recorder_idx_ds_1 = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1").as_str(), false
         );
 
         //Return
@@ -233,15 +237,18 @@ impl Node for RoutingNode {
         self.dsflow_primary = qout;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
-        }
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_volume {
             self.storage_volume = self.calculate_storage();
             data_cache.add_value_at_index(idx, self.storage_volume);
+        }
+        if let Some(idx) = self.recorder_idx_dsflow {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1 {
+            data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
 
         // Reset upstream inflow for next timestep
