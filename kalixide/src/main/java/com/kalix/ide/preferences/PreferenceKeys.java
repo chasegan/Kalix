@@ -47,6 +47,9 @@ public class PreferenceKeys {
     /** Auto-reload clean files when they change externally (boolean, default: false) */
     public static final String FILE_AUTO_RELOAD = "file.autoReload";
 
+    /** Prompt to save unsaved changes before closing (boolean, default: true) */
+    public static final String FILE_PROMPT_SAVE_ON_EXIT = "file.promptSaveOnExit";
+
     /** External editor command template (string, default: "code <folder_path> <file_path>") */
     public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
 

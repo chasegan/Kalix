@@ -639,6 +639,57 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void exitApplication() {
+        // Check if we should prompt to save unsaved changes
+        boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
+
+        if (promptOnExit && textEditor.isDirty()) {
+            // Show save confirmation dialog
+            String fileName = fileOperations.getCurrentFile() != null ?
+                fileOperations.getCurrentFile().getName() : "Untitled";
+
+            int choice = JOptionPane.showConfirmDialog(
+                this,
+                "You have unsaved changes in \"" + fileName + "\".\n\nDo you want to save your changes before closing?",
+                "Unsaved Changes",
+                JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            );
+
+            switch (choice) {
+                case JOptionPane.YES_OPTION:
+                    // Save the file first
+                    try {
+                        if (fileOperations.getCurrentFile() != null) {
+                            fileOperations.saveModel();
+                        } else {
+                            // No current file, need to save as
+                            fileOperations.saveAsModel();
+                            // Check if save succeeded by seeing if we now have a current file
+                            if (fileOperations.getCurrentFile() == null) {
+                                // User cancelled save as dialog or save failed
+                                return;
+                            }
+                        }
+                    } catch (Exception e) {
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Failed to save file: " + e.getMessage(),
+                            "Save Error",
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                        return;
+                    }
+                    break;
+                case JOptionPane.NO_OPTION:
+                    // Don't save, just exit
+                    break;
+                case JOptionPane.CANCEL_OPTION:
+                default:
+                    // Cancel exit
+                    return;
+            }
+        }
+
         // Clean up resources before exiting
         // First shutdown CLI sessions to avoid ProcessExecutor waiting
         if (stdioTaskManager != null) {

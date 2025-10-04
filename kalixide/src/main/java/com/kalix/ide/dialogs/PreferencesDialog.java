@@ -46,6 +46,7 @@ public class PreferencesDialog extends JDialog {
     // Preference panels
     private ThemePreferencePanel themePanel;
     private FilePreferencePanel filePanel;
+    private LoadSavePreferencePanel loadSavePanel;
     private KalixCliPreferencePanel kalixCliPanel;
     private CompressionPreferencePanel compressionPanel;
     private LinterPreferencesPanel linterPanel;
@@ -55,6 +56,7 @@ public class PreferencesDialog extends JDialog {
     // Panel identifiers
     private static final String THEME_PANEL = "theme";
     private static final String FILE_PANEL = "file";
+    private static final String LOAD_SAVE_PANEL = "loadsave";
     private static final String KALIXCLI_PANEL = "kalixcli";
     private static final String COMPRESSION_PANEL = "compression";
     private static final String LINTER_PANEL = "linter";
@@ -148,6 +150,7 @@ public class PreferencesDialog extends JDialog {
 
         // Editor branch
         DefaultMutableTreeNode editor = new DefaultMutableTreeNode("Editor");
+        editor.add(new DefaultMutableTreeNode("Load and Save"));
         editor.add(new DefaultMutableTreeNode("Themes"));
         editor.add(new DefaultMutableTreeNode("Model Linting"));
         editor.add(new DefaultMutableTreeNode("Node Diagram"));
@@ -183,6 +186,9 @@ public class PreferencesDialog extends JDialog {
 
             String nodeName = node.toString();
             switch (nodeName) {
+                case "Load and Save":
+                    cardLayout.show(contentPanel, LOAD_SAVE_PANEL);
+                    break;
                 case "Themes":
                     cardLayout.show(contentPanel, THEME_PANEL);
                     break;
@@ -217,6 +223,7 @@ public class PreferencesDialog extends JDialog {
     private void createPreferencePanels() {
         themePanel = new ThemePreferencePanel();
         filePanel = new FilePreferencePanel();
+        loadSavePanel = new LoadSavePreferencePanel();
         kalixCliPanel = new KalixCliPreferencePanel();
         compressionPanel = new CompressionPreferencePanel();
         linterPanel = new LinterPreferencesPanel(schemaManager);
@@ -225,6 +232,7 @@ public class PreferencesDialog extends JDialog {
 
         contentPanel.add(themePanel, THEME_PANEL);
         contentPanel.add(filePanel, FILE_PANEL);
+        contentPanel.add(loadSavePanel, LOAD_SAVE_PANEL);
         contentPanel.add(kalixCliPanel, KALIXCLI_PANEL);
         contentPanel.add(compressionPanel, COMPRESSION_PANEL);
         contentPanel.add(linterPanel, LINTER_PANEL);
@@ -319,7 +327,7 @@ public class PreferencesDialog extends JDialog {
         private JComboBox<com.kalix.ide.themes.SyntaxTheme.Theme> syntaxThemeComboBox;
 
         public ThemePreferencePanel() {
-            super("Theme Settings");
+            super("Themes");
             initializePanel();
         }
 
@@ -417,11 +425,10 @@ public class PreferencesDialog extends JDialog {
      * File preferences panel.
      */
     private class FilePreferencePanel extends PreferencePanel {
-        private JCheckBox autoReloadCheckBox;
         private JTextField externalEditorField;
 
         public FilePreferencePanel() {
-            super("File Settings");
+            super("Integrations");
             initializePanel();
         }
 
@@ -431,24 +438,8 @@ public class PreferencesDialog extends JDialog {
             gbc.insets = new Insets(5, 5, 5, 5);
             gbc.anchor = GridBagConstraints.WEST;
 
-            // Auto-reload setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-            autoReloadCheckBox = new JCheckBox("Auto-reload clean files when changed externally");
-            autoReloadCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, false));
-            autoReloadCheckBox.setToolTipText("Automatically reload clean (unchanged) files when modified by external programs. Files with unsaved changes will not be reloaded to prevent data loss.");
-            autoReloadCheckBox.addActionListener(e -> {
-                boolean enabled = autoReloadCheckBox.isSelected();
-                PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
-
-                // Notify callback to update file watching
-                if (changeCallback != null) {
-                    changeCallback.onAutoReloadChanged(enabled);
-                }
-            });
-            formPanel.add(autoReloadCheckBox, gbc);
-
             // External editor command
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             formPanel.add(new JLabel("External Editor Command:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
@@ -473,6 +464,57 @@ public class PreferencesDialog extends JDialog {
     }
 
     /**
+     * Load and Save preferences panel.
+     */
+    private class LoadSavePreferencePanel extends PreferencePanel {
+        private JCheckBox autoReloadCheckBox;
+        private JCheckBox promptSaveOnExitCheckBox;
+
+        public LoadSavePreferencePanel() {
+            super("Load and Save");
+            initializePanel();
+        }
+
+        private void initializePanel() {
+            JPanel formPanel = createFormPanel();
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.anchor = GridBagConstraints.WEST;
+
+            // Auto-reload setting
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            autoReloadCheckBox = new JCheckBox("Auto-reload clean files when changed externally");
+            autoReloadCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, false));
+            autoReloadCheckBox.setToolTipText("Automatically reload clean (unchanged) files when modified by external programs. Files with unsaved changes will not be reloaded to prevent data loss.");
+            autoReloadCheckBox.addActionListener(e -> {
+                boolean enabled = autoReloadCheckBox.isSelected();
+                PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
+
+                // Notify callback to update file watching
+                if (changeCallback != null) {
+                    changeCallback.onAutoReloadChanged(enabled);
+                }
+            });
+            formPanel.add(autoReloadCheckBox, gbc);
+
+            // Prompt save on exit setting
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
+            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            promptSaveOnExitCheckBox = new JCheckBox("Prompt to save unsaved changes before closing");
+            promptSaveOnExitCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true));
+            promptSaveOnExitCheckBox.setToolTipText("Show a confirmation dialog when closing the application with unsaved changes, giving you the option to save your work.");
+            promptSaveOnExitCheckBox.addActionListener(e -> {
+                boolean enabled = promptSaveOnExitCheckBox.isSelected();
+                PreferenceManager.setFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, enabled);
+            });
+            formPanel.add(promptSaveOnExitCheckBox, gbc);
+
+            add(formPanel, BorderLayout.NORTH);
+        }
+    }
+
+    /**
      * Kalix CLI preferences panel.
      */
     private class KalixCliPreferencePanel extends PreferencePanel {
@@ -482,7 +524,7 @@ public class PreferencesDialog extends JDialog {
         private JLabel statusLabel;
 
         public KalixCliPreferencePanel() {
-            super("Kalixcli Settings");
+            super("Kalixcli");
             initializePanel();
         }
 
@@ -603,7 +645,7 @@ public class PreferencesDialog extends JDialog {
         private JCheckBox autoYModeCheckBox;
 
         public CompressionPreferencePanel() {
-            super("Data & Visualization Settings");
+            super("Data & Visualization");
             initializePanel();
         }
 
@@ -667,7 +709,7 @@ public class PreferencesDialog extends JDialog {
      */
     private class SystemPreferencePanel extends PreferencePanel {
         public SystemPreferencePanel() {
-            super("System Information");
+            super("General");
             initializePanel();
         }
 
@@ -770,7 +812,7 @@ public class PreferencesDialog extends JDialog {
         private JCheckBox gridlinesCheckBox;
 
         public NodeDiagramPreferencePanel() {
-            super("Node Diagram Settings");
+            super("Node Diagram");
             initializePanel();
         }
 
