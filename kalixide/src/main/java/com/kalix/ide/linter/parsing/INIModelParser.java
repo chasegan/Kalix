@@ -129,7 +129,7 @@ public class INIModelParser {
                     String key = kvMatcher.group(1).trim();
                     String value = kvMatcher.group(2).trim();
 
-                    // Handle line continuation - collect continuation lines
+                    // Handle line continuation - collect continuation lines (comments will be removed in collectContinuationLines)
                     LineContinuationResult continuationResult = collectContinuationLines(lines, i, value);
                     value = continuationResult.combinedValue;
                     i = continuationResult.lastLineIndex; // Skip processed continuation lines
@@ -148,7 +148,7 @@ public class INIModelParser {
                 // Handle special sections without key-value pairs
                 if (currentSection != null) {
                     if ("inputs".equals(currentSection.getName())) {
-                        // Input files are listed directly - handle continuation here too
+                        // Input files are listed directly - handle continuation here too (comments will be removed in collectContinuationLines)
                         LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
                         String fullLine = continuationResult.combinedValue;
                         i = continuationResult.lastLineIndex;
@@ -157,7 +157,7 @@ public class INIModelParser {
                         model.getInputFileLineNumbers().put(fullLine, lineNumber);
                         currentSection.updateEndLine(i + 1);
                     } else if ("outputs".equals(currentSection.getName())) {
-                        // Output references are listed directly - handle continuation here too
+                        // Output references are listed directly - handle continuation here too (comments will be removed in collectContinuationLines)
                         LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
                         String fullLine = continuationResult.combinedValue;
                         i = continuationResult.lastLineIndex;
@@ -190,11 +190,34 @@ public class INIModelParser {
     }
 
     /**
+     * Remove comments from a line. Comments start with ';' or '#'.
+     */
+    private static String removeComments(String line) {
+        int commentIndex = -1;
+
+        // Find the first occurrence of comment characters
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == ';' || c == '#') {
+                commentIndex = i;
+                break;
+            }
+        }
+
+        if (commentIndex >= 0) {
+            return line.substring(0, commentIndex).trim();
+        }
+
+        return line;
+    }
+
+    /**
      * Collect continuation lines and concatenate them to the initial value.
      * A continuation line is non-empty and starts with whitespace.
      */
     private static LineContinuationResult collectContinuationLines(String[] lines, int startIndex, String initialValue) {
-        StringBuilder combinedValue = new StringBuilder(initialValue);
+        // Remove comments from initial value first
+        StringBuilder combinedValue = new StringBuilder(removeComments(initialValue));
         int currentIndex = startIndex;
 
         // Look ahead for continuation lines
@@ -203,8 +226,8 @@ public class INIModelParser {
 
             // Check if this is a continuation line: non-empty and starts with whitespace
             if (!nextLine.isEmpty() && Character.isWhitespace(nextLine.charAt(0))) {
-                // This is a continuation line - append it (trimmed)
-                String continuationContent = nextLine.trim();
+                // This is a continuation line - remove comments and append it (trimmed)
+                String continuationContent = removeComments(nextLine).trim();
                 if (!continuationContent.isEmpty()) {
                     // Add a space before appending to maintain separation
                     if (combinedValue.length() > 0 && !combinedValue.toString().endsWith(" ")) {
