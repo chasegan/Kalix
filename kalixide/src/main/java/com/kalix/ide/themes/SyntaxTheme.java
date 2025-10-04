@@ -18,9 +18,9 @@ public class SyntaxTheme {
         LIGHT("Light",
             Color.decode("#2d2d2d"), // IDENTIFIER (keys, regular text) - dark gray
             Color.decode("#3b82f6"), // OPERATOR (equals signs) - blue
-            Color.decode("#7c3aed"), // LITERAL_STRING_DOUBLE_QUOTE (values) - purple
+            Color.decode("#577590"), // LITERAL_STRING_DOUBLE_QUOTE (values) - blue-gray (matches blackhole node)
             Color.decode("#059669"), // RESERVED_WORD (section headers) - green
-            Color.decode("#577590"), // COMMENT_EOL (comments) - blue-gray
+            Color.decode("#F3722C"), // COMMENT_EOL (comments) - orange-red (matches user node)
             Color.LIGHT_GRAY         // WHITESPACE
         ),
 
