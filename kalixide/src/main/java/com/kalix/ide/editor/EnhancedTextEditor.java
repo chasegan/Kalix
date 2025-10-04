@@ -12,6 +12,8 @@ import java.awt.event.*;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
+import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.linter.LinterManager;
@@ -28,7 +30,15 @@ import com.kalix.ide.linter.SchemaManager;
  */
 public class EnhancedTextEditor extends JPanel {
     private static final Logger logger = LoggerFactory.getLogger(EnhancedTextEditor.class);
-    
+
+    // Custom syntax style for Kalix INI with line continuation
+    private static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
+
+    // Static block to register custom TokenMaker
+    static {
+        registerCustomTokenMaker();
+    }
+
     private RSyntaxTextArea textArea;
     private RTextScrollPane scrollPane;
     private UndoManager undoManager;
@@ -65,7 +75,7 @@ public class EnhancedTextEditor extends JPanel {
         undoManager = new UndoManager();
         
         textArea = new RSyntaxTextArea();
-        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI); // INI syntax highlighting
+        textArea.setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI); // Test simplified custom TokenMaker
         textArea.setLineWrap(false); // Disable line wrapping
         textArea.setWrapStyleWord(false);
         
@@ -454,5 +464,19 @@ public class EnhancedTextEditor extends JPanel {
             linterManager = null;
         }
         logger.debug("EnhancedTextEditor disposed");
+    }
+
+    /**
+     * Register the custom TokenMaker for Kalix INI format with line continuation support.
+     * This method is called once when the class is loaded.
+     */
+    private static void registerCustomTokenMaker() {
+        try {
+            AbstractTokenMakerFactory factory = (AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance();
+            factory.putMapping(SYNTAX_STYLE_KALIX_INI, "com.kalix.ide.editor.KalixIniTokenMaker");
+            logger.info("Custom Kalix INI TokenMaker registered successfully");
+        } catch (Exception e) {
+            logger.error("Failed to register custom Kalix INI TokenMaker", e);
+        }
     }
 }
