@@ -246,6 +246,21 @@ public class NodeTheme {
                     map.put("routing", "2F4F4F");        // Dark Slate Gray (swapped from blackhole)
                     map.put("inflow", "4682B4");         // Steel Blue
                     break;
+                case LIGHT:
+                    // Light theme color mappings using the Light palette
+                    map.put("storage", "277DA1");        // Dark Blue (index 9) - water storage
+                    map.put("user", "F3722C");           // Orange-red (index 1) - user interaction
+                    map.put("sacramento", "90BE6D");     // Green (index 5) - river/flow
+                    map.put("gr4j", "90BE6D");           // Green (index 5) - river/flow
+                    map.put("blackhole", "577590");      // Blue-gray (index 8) - blackhole
+                    map.put("routing", "F9C74F");        // Yellow (index 4) - routing
+                    map.put("inflow", "4D908E");         // Blue-green (index 7) - main flow
+                    // Additional mappings using unused colors
+                    map.put("outflow", "F94144");        // Red (index 0)
+                    map.put("junction", "F8961E");       // Orange (index 2)
+                    map.put("reservoir", "F9844A");      // Light orange (index 3)
+                    map.put("diversion", "43AA8B");      // Teal (index 6)
+                    break;
                 default:
                     // For other themes, use cycling assignment
                     break;
