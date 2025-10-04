@@ -4,6 +4,7 @@ use crate::misc::location::Location;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
+use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
@@ -183,7 +184,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                     }
                     NodeEnum::InflowNode(n)
                 },
-                "routing_node" => {
+                "routing" => {
                     let mut n = RoutingNode::new();
                     let mut r_flows: Option<Vec<f64>> = None;
                     let mut r_times: Option<Vec<f64>> = None;
@@ -196,12 +197,25 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "lag" {
                             n.set_lag(vvc.parse::<i32>()
                                 .map_err(|_| format!("Invalid '{}' value for node '{}': required integer", vp, node_name))?);
-                        } else if vp == "divs" {
+                        } else if vp == "n_divs" {
                             n.set_divs(vvc.parse::<usize>()
                                 .map_err(|_| format!("Invalid '{}' value for node '{}': required non-negative integer", vp, node_name))?);
                         } else if vp == "x" {
                             n.set_x(vvc.parse::<f64>()
                                 .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?);
+                        } else if vp == "pwl" {
+                            let all_values = csv_string_to_f64_vec(vvc.as_str())?;
+                            let nvals = all_values.len();
+                            let nrows = nvals / 2;
+                            if all_values.len() % 2 > 0 {
+                                return Err(format!("Pwl table must contain an even number of elements, but found {}", nvals))
+                            } else if nrows > 32 {
+                                return Err(format!("Pwl table must contain no more than 32 rows but found {}", nrows))
+                            } else if nrows < 1 {
+                                return Err(format!("Pwl table must contain at least one row"))
+                            }
+                            let (index_flows, index_times) = split_interleaved(&all_values);
+                            n.set_routing_table(index_flows, index_times);
                         } else if vp == "index_flows" {
                             let index_flows = csv_string_to_f64_vec(vvc.as_str())?;
                             if let Some(index_times) = &r_times {
