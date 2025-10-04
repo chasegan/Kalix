@@ -18,6 +18,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
+import com.kalix.ide.themes.SyntaxTheme;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -478,5 +479,36 @@ public class EnhancedTextEditor extends JPanel {
         } catch (Exception e) {
             logger.error("Failed to register custom Kalix INI TokenMaker", e);
         }
+    }
+
+    /**
+     * Updates the syntax highlighting theme for the text editor.
+     * This method applies custom colors for different token types based on the selected theme.
+     *
+     * @param syntaxTheme The syntax theme to apply
+     */
+    public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
+        if (textArea == null) {
+            return;
+        }
+
+        // For now, we'll apply syntax theme through RSyntaxTextArea's style mechanism
+        // RSyntaxTextArea uses SyntaxScheme to define token colors
+        org.fife.ui.rsyntaxtextarea.SyntaxScheme syntaxScheme = textArea.getSyntaxScheme();
+
+        if (syntaxScheme != null) {
+            // Apply colors from our SyntaxTheme to RSyntaxTextArea's token types
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.IDENTIFIER).foreground = syntaxTheme.getIdentifierColor();
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.OPERATOR).foreground = syntaxTheme.getOperatorColor();
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = syntaxTheme.getStringColor();
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.RESERVED_WORD).foreground = syntaxTheme.getReservedWordColor();
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.COMMENT_EOL).foreground = syntaxTheme.getCommentColor();
+            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.WHITESPACE).foreground = syntaxTheme.getWhitespaceColor();
+
+            // Refresh the text area to apply the new colors
+            textArea.repaint();
+        }
+
+        logger.debug("Syntax theme updated to: {}", syntaxTheme.getDisplayName());
     }
 }

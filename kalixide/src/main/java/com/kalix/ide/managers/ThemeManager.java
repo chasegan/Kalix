@@ -11,6 +11,7 @@ import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.themes.SyntaxTheme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -278,5 +279,26 @@ public class ThemeManager {
         System.setProperty(AppConstants.PROP_MACOS_APP_NAME, "Kalix IDE");
         System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
         System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+    }
+
+    /**
+     * Updates the syntax theme for text editors.
+     * Called when the user changes the syntax theme in preferences.
+     *
+     * @param syntaxTheme The new syntax theme to apply
+     */
+    public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
+        // Update EnhancedTextEditor with new syntax theme
+        if (textEditor != null) {
+            SwingUtilities.invokeLater(() -> textEditor.updateSyntaxTheme(syntaxTheme));
+        }
+
+        // Update all open FlowViz windows (if they have text editors)
+        for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
+            SwingUtilities.invokeLater(() -> {
+                // FlowViz windows don't currently have text editors, but if they do in the future
+                // we would update them here
+            });
+        }
     }
 }

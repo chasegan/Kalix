@@ -269,6 +269,7 @@ public class PreferencesDialog extends JDialog {
     private class ThemePreferencePanel extends PreferencePanel {
         private JComboBox<String> themeComboBox;
         private JComboBox<com.kalix.ide.themes.NodeTheme.Theme> nodeThemeComboBox;
+        private JComboBox<com.kalix.ide.themes.SyntaxTheme.Theme> syntaxThemeComboBox;
 
         public ThemePreferencePanel() {
             super("Theme Settings");
@@ -322,12 +323,39 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(nodeThemeComboBox, gbc);
 
+            // Syntax theme selection
+            gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            formPanel.add(new JLabel("Syntax Theme:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            syntaxThemeComboBox = new JComboBox<>(com.kalix.ide.themes.SyntaxTheme.getAllThemes());
+
+            // Get current syntax theme from preference or default
+            String currentSyntaxThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "DEFAULT");
+            com.kalix.ide.themes.SyntaxTheme.Theme currentSyntaxTheme = com.kalix.ide.themes.SyntaxTheme.getThemeByName(currentSyntaxThemeName);
+            syntaxThemeComboBox.setSelectedItem(currentSyntaxTheme);
+
+            syntaxThemeComboBox.addActionListener(e -> {
+                com.kalix.ide.themes.SyntaxTheme.Theme selectedSyntaxTheme = (com.kalix.ide.themes.SyntaxTheme.Theme) syntaxThemeComboBox.getSelectedItem();
+                if (selectedSyntaxTheme != null) {
+                    // Save preference
+                    PreferenceManager.setFileString(PreferenceKeys.UI_SYNTAX_THEME, selectedSyntaxTheme.name());
+
+                    // Notify ThemeManager to update syntax highlighting
+                    if (themeManager != null) {
+                        themeManager.updateSyntaxTheme(selectedSyntaxTheme);
+                    }
+                }
+            });
+            formPanel.add(syntaxThemeComboBox, gbc);
+
             // Description
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             JTextArea description = new JTextArea();
             description.setText("Application Theme: Choose the visual theme for the application interface.\n\n" +
                 "Node Theme: Select the color scheme and styling for map nodes and connections.\n\n" +
+                "Syntax Theme: Choose the color scheme for text editor syntax highlighting.\n\n" +
                 "Changes are applied immediately and saved automatically.");
             description.setEditable(false);
             description.setOpaque(false);
