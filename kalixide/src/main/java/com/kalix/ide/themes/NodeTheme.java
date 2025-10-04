@@ -236,6 +236,16 @@ public class NodeTheme {
                     map.put("unused_4", "008B8B");       // Dark Cyan (index 7)
                     map.put("unused_5", "4682B4");       // Steel Blue (index 9)
                     break;
+                case SUNSET_WARMTH:
+                    // Sunset warmth color mappings with requested swaps
+                    map.put("storage", "DAA520");        // Goldenrod (swapped from user)
+                    map.put("user", "4682B4");           // Steel Blue (swapped from storage)
+                    map.put("sacramento", "228B22");     // Forest Green
+                    map.put("gr4j", "556B2F");           // Dark Olive Green
+                    map.put("blackhole", "FF8C00");      // Dark Orange (swapped from routing)
+                    map.put("routing", "2F4F4F");        // Dark Slate Gray (swapped from blackhole)
+                    map.put("inflow", "4682B4");         // Steel Blue
+                    break;
                 default:
                     // For other themes, use cycling assignment
                     break;

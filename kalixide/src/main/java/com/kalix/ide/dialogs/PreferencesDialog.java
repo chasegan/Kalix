@@ -45,21 +45,21 @@ public class PreferencesDialog extends JDialog {
 
     // Preference panels
     private ThemePreferencePanel themePanel;
-    private EditorPreferencePanel editorPanel;
     private FilePreferencePanel filePanel;
     private KalixCliPreferencePanel kalixCliPanel;
     private CompressionPreferencePanel compressionPanel;
     private LinterPreferencesPanel linterPanel;
     private SystemPreferencePanel systemPanel;
+    private NodeDiagramPreferencePanel nodeDiagramPanel;
 
     // Panel identifiers
     private static final String THEME_PANEL = "theme";
-    private static final String EDITOR_PANEL = "editor";
     private static final String FILE_PANEL = "file";
     private static final String KALIXCLI_PANEL = "kalixcli";
     private static final String COMPRESSION_PANEL = "compression";
     private static final String LINTER_PANEL = "linter";
     private static final String SYSTEM_PANEL = "system";
+    private static final String NODE_DIAGRAM_PANEL = "nodediagram";
 
     /**
      * Creates a new professional preferences dialog.
@@ -95,6 +95,11 @@ public class PreferencesDialog extends JDialog {
     private void initializeDialog() {
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout());
+
+        // Ensure tooltips are enabled
+        ToolTipManager.sharedInstance().setEnabled(true);
+        ToolTipManager.sharedInstance().setInitialDelay(300);
+        ToolTipManager.sharedInstance().setDismissDelay(500);
 
         // Create tree navigation
         createPreferencesTree();
@@ -138,24 +143,28 @@ public class PreferencesDialog extends JDialog {
     private void createPreferencesTree() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("Preferences");
 
-        // Appearance branch
-        DefaultMutableTreeNode appearance = new DefaultMutableTreeNode("Appearance");
-        appearance.add(new DefaultMutableTreeNode("Theme"));
-        appearance.add(new DefaultMutableTreeNode("Editor"));
-        root.add(appearance);
+        // General branch (first item)
+        root.add(new DefaultMutableTreeNode("General"));
 
-        // File branch
-        root.add(new DefaultMutableTreeNode("File"));
+        // Editor branch
+        DefaultMutableTreeNode editor = new DefaultMutableTreeNode("Editor");
+        editor.add(new DefaultMutableTreeNode("Themes"));
+        editor.add(new DefaultMutableTreeNode("Model Linting"));
+        editor.add(new DefaultMutableTreeNode("Node Diagram"));
+        root.add(editor);
 
-        // Kalix branch
-        DefaultMutableTreeNode kalix = new DefaultMutableTreeNode("Kalix");
+        // Run Management below Model Linting
+        DefaultMutableTreeNode runManagement = new DefaultMutableTreeNode("Run Management");
+        runManagement.add(new DefaultMutableTreeNode("Data & Visualization"));
+        root.add(runManagement);
+
+        // Simulation branch
+        DefaultMutableTreeNode kalix = new DefaultMutableTreeNode("Simulation");
         kalix.add(new DefaultMutableTreeNode("Kalixcli"));
-        kalix.add(new DefaultMutableTreeNode("Data & Visualization"));
-        kalix.add(new DefaultMutableTreeNode("Model Linting"));
         root.add(kalix);
 
-        // System branch
-        root.add(new DefaultMutableTreeNode("System"));
+        // Integrations at the bottom
+        root.add(new DefaultMutableTreeNode("Integrations"));
 
         preferencesTree = new JTree(new DefaultTreeModel(root));
         preferencesTree.setRootVisible(false);
@@ -174,13 +183,10 @@ public class PreferencesDialog extends JDialog {
 
             String nodeName = node.toString();
             switch (nodeName) {
-                case "Theme":
+                case "Themes":
                     cardLayout.show(contentPanel, THEME_PANEL);
                     break;
-                case "Editor":
-                    cardLayout.show(contentPanel, EDITOR_PANEL);
-                    break;
-                case "File":
+                case "Integrations":
                     cardLayout.show(contentPanel, FILE_PANEL);
                     break;
                 case "Kalixcli":
@@ -192,11 +198,17 @@ public class PreferencesDialog extends JDialog {
                 case "Model Linting":
                     cardLayout.show(contentPanel, LINTER_PANEL);
                     break;
-                case "System":
+                case "Node Diagram":
+                    cardLayout.show(contentPanel, NODE_DIAGRAM_PANEL);
+                    break;
+                case "General":
                     cardLayout.show(contentPanel, SYSTEM_PANEL);
                     break;
             }
         });
+
+        // Add context menu for tree
+        createTreeContextMenu();
     }
 
     /**
@@ -204,20 +216,55 @@ public class PreferencesDialog extends JDialog {
      */
     private void createPreferencePanels() {
         themePanel = new ThemePreferencePanel();
-        editorPanel = new EditorPreferencePanel();
         filePanel = new FilePreferencePanel();
         kalixCliPanel = new KalixCliPreferencePanel();
         compressionPanel = new CompressionPreferencePanel();
         linterPanel = new LinterPreferencesPanel(schemaManager);
         systemPanel = new SystemPreferencePanel();
+        nodeDiagramPanel = new NodeDiagramPreferencePanel();
 
         contentPanel.add(themePanel, THEME_PANEL);
-        contentPanel.add(editorPanel, EDITOR_PANEL);
         contentPanel.add(filePanel, FILE_PANEL);
         contentPanel.add(kalixCliPanel, KALIXCLI_PANEL);
         contentPanel.add(compressionPanel, COMPRESSION_PANEL);
         contentPanel.add(linterPanel, LINTER_PANEL);
         contentPanel.add(systemPanel, SYSTEM_PANEL);
+        contentPanel.add(nodeDiagramPanel, NODE_DIAGRAM_PANEL);
+    }
+
+    /**
+     * Creates a context menu for the preferences tree.
+     */
+    private void createTreeContextMenu() {
+        JPopupMenu contextMenu = new JPopupMenu();
+
+        JMenuItem expandAllItem = new JMenuItem("Expand All");
+        expandAllItem.addActionListener(e -> expandAllNodes());
+        contextMenu.add(expandAllItem);
+
+        JMenuItem collapseAllItem = new JMenuItem("Collapse All");
+        collapseAllItem.addActionListener(e -> collapseAllNodes());
+        contextMenu.add(collapseAllItem);
+
+        preferencesTree.setComponentPopupMenu(contextMenu);
+    }
+
+    /**
+     * Expands all nodes in the preferences tree.
+     */
+    private void expandAllNodes() {
+        for (int i = 0; i < preferencesTree.getRowCount(); i++) {
+            preferencesTree.expandRow(i);
+        }
+    }
+
+    /**
+     * Collapses all nodes in the preferences tree.
+     */
+    private void collapseAllNodes() {
+        for (int i = preferencesTree.getRowCount() - 1; i >= 0; i--) {
+            preferencesTree.collapseRow(i);
+        }
     }
 
     /**
@@ -367,59 +414,6 @@ public class PreferencesDialog extends JDialog {
     }
 
     /**
-     * Editor preferences panel.
-     */
-    private class EditorPreferencePanel extends PreferencePanel {
-        private JCheckBox gridlinesCheckBox;
-
-        public EditorPreferencePanel() {
-            super("Editor Settings");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Map gridlines setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-            gridlinesCheckBox = new JCheckBox("Show gridlines on map");
-            gridlinesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
-            gridlinesCheckBox.addActionListener(e -> {
-                boolean enabled = gridlinesCheckBox.isSelected();
-                PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, enabled);
-
-                // Notify callback to update map display
-                if (changeCallback != null) {
-                    changeCallback.onMapPreferencesChanged();
-                }
-            });
-            formPanel.add(gridlinesCheckBox, gbc);
-
-            // Future editor settings placeholder
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            JTextArea placeholder = new JTextArea();
-            placeholder.setText("Additional editor preferences will be added here in future updates.\n\n" +
-                "This could include:\n" +
-                "• Font size and family\n" +
-                "• Line wrapping settings\n" +
-                "• Syntax highlighting preferences\n" +
-                "• Tab size and indentation\n" +
-                "• Auto-completion settings");
-            placeholder.setEditable(false);
-            placeholder.setOpaque(false);
-            placeholder.setWrapStyleWord(true);
-            placeholder.setLineWrap(true);
-            formPanel.add(placeholder, gbc);
-
-            add(formPanel, BorderLayout.CENTER);
-        }
-    }
-
-    /**
      * File preferences panel.
      */
     private class FilePreferencePanel extends PreferencePanel {
@@ -441,6 +435,7 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
             autoReloadCheckBox = new JCheckBox("Auto-reload clean files when changed externally");
             autoReloadCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, false));
+            autoReloadCheckBox.setToolTipText("Automatically reload clean (unchanged) files when modified by external programs. Files with unsaved changes will not be reloaded to prevent data loss.");
             autoReloadCheckBox.addActionListener(e -> {
                 boolean enabled = autoReloadCheckBox.isSelected();
                 PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
@@ -459,7 +454,7 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             externalEditorField = new JTextField(PreferenceManager.getFileString(
                 PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, "code <folder_path> <file_path>"));
-            externalEditorField.setToolTipText("Use <folder_path> and <file_path> as placeholders");
+            externalEditorField.setToolTipText("Command to launch an external editor. Use <folder_path> for the folder containing the current file and <file_path> for the full path to the current file.");
             externalEditorField.addActionListener(e -> saveExternalEditorCommand());
             externalEditorField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
                 public void insertUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
@@ -468,27 +463,7 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(externalEditorField, gbc);
 
-            // Description
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            JTextArea description = new JTextArea();
-            description.setText("Auto-reload: When enabled, clean (unchanged) files will automatically reload if modified " +
-                "by external programs. Files with unsaved changes will not be automatically reloaded to " +
-                "prevent data loss.\n\n" +
-                "External Editor: Command to launch an external editor. Use <folder_path> as placeholder for " +
-                "the folder containing the current file and <file_path> for the full path to the current file.\n\n" +
-                "Examples:\n" +
-                "• Visual Studio Code: code <folder_path> <file_path>\n" +
-                "• Sublime Text: subl <file_path>\n" +
-                "• Vim: vim <file_path>\n" +
-                "• Notepad++: notepad++ <file_path>");
-            description.setEditable(false);
-            description.setOpaque(false);
-            description.setWrapStyleWord(true);
-            description.setLineWrap(true);
-            formPanel.add(description, gbc);
-
-            add(formPanel, BorderLayout.CENTER);
+            add(formPanel, BorderLayout.NORTH);
         }
 
         private void saveExternalEditorCommand() {
@@ -639,8 +614,9 @@ public class PreferencesDialog extends JDialog {
             gbc.anchor = GridBagConstraints.WEST;
 
             // 64-bit precision setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             precision64CheckBox = new JCheckBox("Use 64-bit precision for data export");
+            precision64CheckBox.setToolTipText("Higher accuracy but larger file sizes; 32-bit is sufficient for most applications");
             precision64CheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true));
             precision64CheckBox.addActionListener(e -> {
                 PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64CheckBox.isSelected());
@@ -653,8 +629,9 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(precision64CheckBox, gbc);
 
             // Show coordinates setting
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             showCoordinatesCheckBox = new JCheckBox("Show coordinates in FlowViz");
+            showCoordinatesCheckBox.setToolTipText("Display current cursor position in FlowViz charts");
             showCoordinatesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false));
             showCoordinatesCheckBox.addActionListener(e -> {
                 PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, showCoordinatesCheckBox.isSelected());
@@ -667,8 +644,9 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(showCoordinatesCheckBox, gbc);
 
             // Auto-Y mode setting
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2;
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             autoYModeCheckBox = new JCheckBox("Enable Auto-Y mode in FlowViz");
+            autoYModeCheckBox.setToolTipText("Automatically adjust Y-axis scaling in FlowViz charts");
             autoYModeCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true));
             autoYModeCheckBox.addActionListener(e -> {
                 PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYModeCheckBox.isSelected());
@@ -680,23 +658,7 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(autoYModeCheckBox, gbc);
 
-            // Description
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            JTextArea description = new JTextArea();
-            description.setText("Data Export:\n" +
-                "• 64-bit precision provides higher accuracy but larger file sizes\n" +
-                "• 32-bit precision is sufficient for most hydrological applications\n\n" +
-                "FlowViz Display:\n" +
-                "• Show coordinates displays current cursor position\n" +
-                "• Auto-Y mode automatically adjusts Y-axis scaling");
-            description.setEditable(false);
-            description.setOpaque(false);
-            description.setWrapStyleWord(true);
-            description.setLineWrap(true);
-            formPanel.add(description, gbc);
-
-            add(formPanel, BorderLayout.CENTER);
+            add(formPanel, BorderLayout.NORTH);
         }
     }
 
@@ -715,16 +677,31 @@ public class PreferencesDialog extends JDialog {
             gbc.insets = new Insets(5, 5, 5, 5);
             gbc.anchor = GridBagConstraints.WEST;
 
+            // System info (moved to top)
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1.0; gbc.weighty = 0;
+            JTextArea systemInfo = new JTextArea();
+            systemInfo.setEditable(false);
+            systemInfo.setOpaque(false);
+            systemInfo.setText("Application: " + AppConstants.APP_NAME + " " + AppConstants.APP_VERSION + "\n" +
+                "Java Version: " + System.getProperty("java.version") + "\n" +
+                "Operating System: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + "\n" +
+                "User Directory: " + System.getProperty("user.dir"));
+            formPanel.add(systemInfo, gbc);
+
             // Preference file location
-            gbc.gridx = 0; gbc.gridy = 0;
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.insets = new Insets(15, 5, 5, 5); // Extra top margin for separation
             formPanel.add(new JLabel("Preferences File:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            gbc.insets = new Insets(15, 5, 5, 5);
             JTextField prefFileField = new JTextField(PreferenceManager.getPreferenceFilePath());
             prefFileField.setEditable(false);
             formPanel.add(prefFileField, gbc);
 
             gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.insets = new Insets(15, 5, 5, 5);
             JButton locateButton = new JButton("Locate");
             locateButton.addActionListener(e -> {
                 try {
@@ -741,8 +718,8 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(locateButton, gbc);
 
             // Clear app data section
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 1.0; gbc.weighty = 0;
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1.0; gbc.weighty = 1.0;
             gbc.insets = new Insets(15, 5, 5, 5); // Extra top margin for separation
 
             JPanel clearDataPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -756,20 +733,7 @@ public class PreferencesDialog extends JDialog {
 
             formPanel.add(clearDataPanel, gbc);
 
-            // System info
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            gbc.insets = new Insets(10, 5, 5, 5);
-            JTextArea systemInfo = new JTextArea();
-            systemInfo.setEditable(false);
-            systemInfo.setOpaque(false);
-            systemInfo.setText("Application: " + AppConstants.APP_NAME + " " + AppConstants.APP_VERSION + "\n" +
-                "Java Version: " + System.getProperty("java.version") + "\n" +
-                "Operating System: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + "\n" +
-                "User Directory: " + System.getProperty("user.dir"));
-            formPanel.add(systemInfo, gbc);
-
-            add(formPanel, BorderLayout.CENTER);
+            add(formPanel, BorderLayout.NORTH);
         }
 
         private void clearAppData() {
@@ -796,6 +760,42 @@ public class PreferencesDialog extends JDialog {
                     changeCallback.onSystemActionRequested("clearAppData");
                 }
             }
+        }
+    }
+
+    /**
+     * Node diagram preferences panel.
+     */
+    private class NodeDiagramPreferencePanel extends PreferencePanel {
+        private JCheckBox gridlinesCheckBox;
+
+        public NodeDiagramPreferencePanel() {
+            super("Node Diagram Settings");
+            initializePanel();
+        }
+
+        private void initializePanel() {
+            JPanel formPanel = createFormPanel();
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.anchor = GridBagConstraints.WEST;
+
+            // Map gridlines setting
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            gridlinesCheckBox = new JCheckBox("Show gridlines on map");
+            gridlinesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
+            gridlinesCheckBox.addActionListener(e -> {
+                boolean enabled = gridlinesCheckBox.isSelected();
+                PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, enabled);
+
+                // Notify callback to update map display
+                if (changeCallback != null) {
+                    changeCallback.onMapPreferencesChanged();
+                }
+            });
+            formPanel.add(gridlinesCheckBox, gbc);
+
+            add(formPanel, BorderLayout.NORTH);
         }
     }
 }
