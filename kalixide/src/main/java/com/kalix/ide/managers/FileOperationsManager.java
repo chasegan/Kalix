@@ -3,6 +3,8 @@ package com.kalix.ide.managers;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -63,9 +65,13 @@ public class FileOperationsManager {
         textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
         mapPanel.clearModel();
         currentFile = null; // Clear current file path for new model
+
+        // Clear last opened file preference since user is starting fresh
+        PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, "");
+
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
         fileChangedCallback.run(); // Notify title bar of file change
-        
+
         // Trigger model parsing to update the map with the new default content
         modelUpdateCallback.run();
     }
@@ -117,7 +123,10 @@ public class FileOperationsManager {
             
             // Add to recent files
             addRecentFileCallback.accept(file.getAbsolutePath());
-            
+
+            // Save as last opened file for session restoration
+            PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, file.getAbsolutePath());
+
             // Clear the map panel
             mapPanel.clearModel();
             
@@ -151,6 +160,9 @@ public class FileOperationsManager {
             // Reset dirty state
             textEditor.setDirty(false);
             
+            // Save as last opened file for session restoration
+            PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, currentFile.getAbsolutePath());
+
             String statusMessage = String.format("Saved model: %s", currentFile.getName());
             statusUpdateCallback.accept(statusMessage);
             
@@ -194,7 +206,10 @@ public class FileOperationsManager {
                 
                 // Add to recent files
                 addRecentFileCallback.accept(selectedFile.getAbsolutePath());
-                
+
+                // Save as last opened file for session restoration
+                PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, selectedFile.getAbsolutePath());
+
                 String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
                 statusUpdateCallback.accept(statusMessage);
                 

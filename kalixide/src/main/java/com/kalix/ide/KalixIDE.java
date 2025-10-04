@@ -134,8 +134,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupGlobalKeyBindings();
         
         // Note: Split pane divider position loading removed - using simple grid layout now
-        
+
         setVisible(true);
+
+        // Load last opened file if available and exists (after all UI initialization is complete)
+        loadLastOpenedFile();
     }
     
     /**
@@ -1157,6 +1160,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             revalidate();
             repaint();
         }
+    }
+
+    /**
+     * Attempts to load the last opened file from OS preferences.
+     * If the file doesn't exist or no preference is set, falls back to default behavior.
+     */
+    private void loadLastOpenedFile() {
+        String lastFilePath = PreferenceManager.getOsString(PreferenceKeys.LAST_OPENED_FILE, "");
+
+        if (!lastFilePath.isEmpty()) {
+            File lastFile = new File(lastFilePath);
+            if (lastFile.exists() && lastFile.isFile() && fileOperations.isKalixModelFile(lastFile)) {
+                // File exists and is valid, load it
+                fileOperations.loadModelFile(lastFile);
+                return;
+            }
+        }
+
+        // No last file, file doesn't exist, or invalid file type
+        // Fall back to default behavior (new model with default text is already set)
     }
 
     /**
