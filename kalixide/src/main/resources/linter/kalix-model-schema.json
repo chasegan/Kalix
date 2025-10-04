@@ -223,6 +223,49 @@
           "description": "X,Y coordinates"
         }
       }
+    },
+
+    "routing": {
+      "description": "Routing node with advanced flow distribution capabilities",
+      "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["lag", "pwl", "n_divs", "x", "ds_1"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "routing"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "lag": {
+          "type": "integer",
+          "min": 0,
+          "description": "Time lag in time steps (integer >= 0)"
+        },
+        "pwl": {
+          "type": "string",
+          "description": "Piecewise linear function specification"
+        },
+        "n_divs": {
+          "type": "integer",
+          "min": 1,
+          "description": "Number of divisions (integer >= 1)"
+        },
+        "x": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "description": "Fraction parameter (real number from 0 to 1 inclusive)"
+        },
+        "ds_1": {
+          "type": "downstream_reference",
+          "description": "Downstream link to another node"
+        }
+      }
     }
   },
 
@@ -285,6 +328,12 @@
     "data_reference": {
       "components": ["dataset", "accessor", "field"],
       "format": "data.{dataset}.by_{accessor}.{field}"
+    },
+
+    "downstream_reference": {
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      "description": "Reference to a downstream node (node name)",
+      "validation": "dsnode_references"
     }
   }
 }
