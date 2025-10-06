@@ -28,6 +28,7 @@ import com.kalix.ide.managers.VersionChecker;
 import com.kalix.ide.managers.TitleBarManager;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.FileWatcherManager;
+import com.kalix.ide.managers.IconManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
 import com.kalix.ide.preferences.PreferenceManager;
@@ -145,6 +146,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * Sets up basic window properties.
      */
     private void setupWindow() {
+        IconManager.SetIcon(this);
         setTitle(AppConstants.APP_NAME);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(AppConstants.DEFAULT_WINDOW_WIDTH, AppConstants.DEFAULT_WINDOW_HEIGHT);

@@ -113,11 +113,11 @@ public final class AppConstants {
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Show Run Manager";
     
     // Branding
-    public static final String KALIX_LOGO_PATH = "/images/kalix_landscape_1024_241.png";
-    public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_landscape_1024_241_dark.png";
+    public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";
+    public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_banner_dark-124-24.png";
     public static final String TOOLBAR_LOGO_TOOLTIP = "Visit Kalix Development Website";
     public static final int TOOLBAR_LOGO_HEIGHT = 24; // Scaled height for toolbar
-    
+
     // Status messages for new actions
     public static final String STATUS_MODEL_RUNNING = "Running model...";
     public static final String STATUS_MODEL_RUN_COMPLETE = "Model run completed";
