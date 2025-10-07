@@ -4,10 +4,17 @@ use crate::nodes::inflow_node::InflowNode;
 use crate::nodes::sacramento_node::SacramentoNode;
 use crate::nodes::gr4j_node::Gr4jNode;
 use crate::nodes::storage_node::StorageNode;
+use crate::nodes::routing_node::RoutingNode;
+use crate::nodes::confluence_node::ConfluenceNode;
+use crate::nodes::splitter_node::SplitterNode;
+use crate::nodes::gauge_node::GaugeNode;
+use crate::nodes::loss_node::LossNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_cache::DataCache;
+use crate::io::csv_io::csv_string_to_f64_vec;
+use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::blackhole_node::BlackholeNode;
 use crate::nodes::user_node::UserNode;
 
@@ -18,16 +25,15 @@ fn test_model_with_all_node_types() {
     let mut model = Model::new();
     let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
 
-    //Add rainfall, evap, and flow data
+    //Add rainfall, evap, and flow data (matching INI file)
     let _ = model.load_input_data("./src/tests/example_models/1/flows.csv");
-    let _ = model.load_input_data("./src/tests/example_models/1/rex_mpot.csv");
-    let _ = model.load_input_data("./src/tests/example_models/1/rex_rain.csv");
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_mpot.csv");
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_rain.csv");
     let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
 
-    //Add an inflow node
+    //Add node1_inflow
     let node1_idx: usize;
     {
-        //Node
         let mut n = InflowNode::new();
         n.name = "node1_inflow".to_string();
         n.inflow_def.name = "data.flows_csv.by_index.1".to_string();
@@ -36,7 +42,7 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node1_inflow.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 0.0, 0.0));
+        regression_results.insert(result_name, (48824, 0f64, 0f64));
 
         let result_name = "node.node1_inflow.inflow".to_string();
         model.outputs.push(result_name.clone());
@@ -45,18 +51,21 @@ fn test_model_with_all_node_types() {
         let result_name = "node.node1_inflow.dsflow".to_string();
         model.outputs.push(result_name.clone());
         regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
+
+        let result_name = "node.node1_inflow.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 126.79567788251778, 189.52350495319962));
     }
 
-    //Add a sacramento node
+    //Add node2_sacramento
     let node2_idx: usize;
     {
-        //Node
         let mut n = SacramentoNode::new();
         n.name = "node2_sacramento".to_string();
-        n.rain_mm_def.name = "data.rex_rain_csv.by_index.1".to_string();
-        n.evap_mm_def.name = "data.rex_mpot_csv.by_index.1".to_string();
+        n.rain_mm_def.name = "data.rex_rain_csv.by_name.value".to_string();
+        n.evap_mm_def.name = "data.rex_mpot_csv.by_name.value".to_string();
         n.area_km2 = 80.0;
-        //n.sacramento_model.set_params();
+        // Set params: 0.01, 40.0, 23.0, 0.009, 0.043, 130.0, 0.01, 0.063, 1.0, 0.01, 0.0, 0.0, 40.0, 0.245, 50.0, 40.0, 0.1
         node2_idx = model.add_node(NodeEnum::SacramentoNode(n));
 
         //Node results
@@ -71,106 +80,263 @@ fn test_model_with_all_node_types() {
         let result_name = "node.node2_sacramento.dsflow".to_string();
         model.outputs.push(result_name.clone());
         regression_results.insert(result_name, (48824, 391.16933957961965, 1376.5048361232634));
+
+        let result_name = "node.node2_sacramento.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 391.16933957961965, 1376.5048361232634));
     }
     model.add_link(node1_idx, node2_idx, 0, 0);
 
-    //Add an gr4j node
+    //Add node3_user
     let node3_idx: usize;
     {
-        //Node
-        let mut n = Gr4jNode::new();
-        n.name = "node3_gr4j".to_string();
-        n.rain_mm_def.name = "data.rex_rain_csv.by_index.1".to_string();
-        n.evap_mm_def.name = "data.rex_mpot_csv.by_index.1".to_string();
-        n.area_km2 = 80.0;
-        node3_idx = model.add_node(NodeEnum::Gr4jNode(n));
+        let mut n = UserNode::new();
+        n.name = "node3_user".to_string();
+        n.demand_def.name = "data.constants_csv.by_name.const_20".to_string();
+        node3_idx = model.add_node(NodeEnum::UserNode(n));
 
         //Node results
-        let result_name = "node.node3_gr4j.usflow".to_string();
+        let result_name = "node.node3_user.usflow".to_string();
         model.outputs.push(result_name.clone());
         regression_results.insert(result_name, (48824, 391.16933957961965, 1376.5048361232634));
 
-        let result_name = "node.node3_gr4j.runoff_volume".to_string();
-        model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 251.7564530253888, 1010.8535625355022));
-
-        let result_name = "node.node3_gr4j.dsflow".to_string();
-        model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 642.925792605013, 2236.5833607731133));
-    }
-    model.add_link(node2_idx, node3_idx, 0, 0);
-
-    //Add a user node
-    let node4_idx: usize;
-    {
-        //Node
-        let mut n = UserNode::new();
-        n.name = "node4_user".to_string();
-        n.demand_def.name = "data.constants_csv.by_name.const_20".to_string();
-        node4_idx = model.add_node(NodeEnum::UserNode(n));
-
-        //Node results
-        let result_name = "node.node4_user.usflow".to_string();
-        model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 642.925792605013, 2236.5833607731133));
-
-        let result_name = "node.node4_user.demand".to_string();
+        let result_name = "node.node3_user.demand".to_string();
         model.outputs.push(result_name.clone());
         regression_results.insert(result_name, (48824, 20.0, 0.0));
 
-        let result_name = "node.node4_user.diversion".to_string();
+        let result_name = "node.node3_user.diversion".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 19.984550376890894, 0.5523837133339123));
+        regression_results.insert(result_name, (48824, 19.98453413318486, 0.5528799978068212));
 
-        let result_name = "node.node4_user.dsflow".to_string();
+        let result_name = "node.node3_user.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9412422281207, 2236.578989471308));
+        regression_results.insert(result_name, (48824, 371.1848054464354, 1376.5005545966646));
+
+        let result_name = "node.node3_user.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 371.1848054464354, 1376.5005545966646));
+    }
+    model.add_link(node2_idx, node3_idx, 0, 0);
+
+    //Add node4_storage
+    let node4_idx: usize;
+    {
+        let mut n = StorageNode::new();
+        n.name = "node4_storage".to_string();
+        n.d = Table::from_csv_string(
+            "90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8",
+            4, false).expect("Failed to create table");
+        node4_idx = model.add_node(NodeEnum::StorageNode(n));
+
+        //Node results
+        let result_name = "node.node4_storage.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 371.1848054464354, 1376.5005545966646));
+
+        let result_name = "node.node4_storage.volume".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 99.92012496291957, 2.8251539417028777));
+
+        let result_name = "node.node4_storage.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 371.1827572733822, 1376.5004320617302));
+
+        let result_name = "node.node4_storage.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 371.1827572733822, 1376.5004320617302));
     }
     model.add_link(node3_idx, node4_idx, 0, 0);
 
 
-    //Add a user node
+    //Add node5_routing
     let node5_idx: usize;
     {
-        //Node
-        let mut n = StorageNode::new();
-        n.name = "node5_storage".to_string();
-        //n.demand_def.name = "data.constants_csv.by_name.const_20".to_string();
-        n.d = Table::from_csv_string(
-            "90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8",
-            //"90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e6, 92, 102, 1, 1e8",
-            4, false).expect("Failed to create table");
-        node5_idx = model.add_node(NodeEnum::StorageNode(n));
+        let mut n = RoutingNode::new();
+        n.name = "node5_routing".to_string();
+        n.set_lag(2);
+        let all_values = csv_string_to_f64_vec("0, 3, 10, 3, 100, 2, 200, 1, 500, 0, 1e8, 0").unwrap();
+        let (index_flows, index_times) = split_interleaved(&all_values);
+        n.set_routing_table(index_flows, index_times);
+        n.set_divs(1);
+        n.set_x(0.0);
+        node5_idx = model.add_node(NodeEnum::RoutingNode(n));
 
         //Node results
-        let result_name = "node.node5_storage.usflow".to_string();
+        let result_name = "node.node5_routing.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9412422281207, 2236.578989471308));
+        regression_results.insert(result_name, (48824, 371.1827572733822, 1376.5004320617302));
 
-        let result_name = "node.node5_storage.dsflow".to_string();
+        let result_name = "node.node5_routing.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9391940550569, 2236.5791385071666));
+        regression_results.insert(result_name, (48824, 371.1720340795404, 1372.6828578769025));
+
+        let result_name = "node.node5_routing.volume".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 1002.7048782060103, 2545.6242472664344));
+
+        let result_name = "node.node5_routing.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 371.1720340795404, 1372.6828578769025));
     }
     model.add_link(node4_idx, node5_idx, 0, 0);
 
-    //Add a user node
+    //Add node6_gr4j
     let node6_idx: usize;
     {
-        //Node
-        let mut n = BlackholeNode::new();
-        n.name = "node6_blackhole".to_string();
-        node6_idx = model.add_node(NodeEnum::BlackholeNode(n));
+        let mut n = Gr4jNode::new();
+        n.name = "node6_gr4j".to_string();
+        n.rain_mm_def.name = "data.rex_rain_csv.by_name.value".to_string();
+        n.evap_mm_def.name = "data.rex_mpot_csv.by_name.value".to_string();
+        n.area_km2 = 80.0;
+        // Set params: 350.0, 0.0, 90.0, 1.7
+        node6_idx = model.add_node(NodeEnum::Gr4jNode(n));
 
         //Node results
-        let result_name = "node.node6_blackhole.usflow".to_string();
+        let result_name = "node.node6_gr4j.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9391940550569, 2236.5791385071666));
+        regression_results.insert(result_name, (48824, 0.0, 0.0));
 
-        let result_name = "node.node6_blackhole.dsflow".to_string();
+        let result_name = "node.node6_gr4j.runoff_volume".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 0f64, 0f64));
+        regression_results.insert(result_name, (48824, 251.7564530253888, 1010.8535625355022));
+
+        let result_name = "node.node6_gr4j.runoff_depth".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 3.1469556628173585, 12.63566953169385));
+
+        let result_name = "node.node6_gr4j.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 251.7564530253888, 1010.8535625355022));
+
+        let result_name = "node.node6_gr4j.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 251.7564530253888, 1010.8535625355022));
     }
-    model.add_link(node5_idx, node6_idx, 0, 0);
+
+    //Add node7_confluence
+    let node7_idx: usize;
+    {
+        let mut n = ConfluenceNode::new();
+        n.name = "node7_confluence".to_string();
+        node7_idx = model.add_node(NodeEnum::ConfluenceNode(n));
+
+        //Node results
+        let result_name = "node.node7_confluence.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9284871049249, 2111.0755320978315));
+
+        let result_name = "node.node7_confluence.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9284871049249, 2111.0755320978315));
+
+        let result_name = "node.node7_confluence.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9284871049249, 2111.0755320978315));
+    }
+    model.add_link(node5_idx, node7_idx, 0, 0);
+    model.add_link(node6_idx, node7_idx, 0, 0);
+
+    //Add node8_splitter
+    let node8_idx: usize;
+    {
+        let mut n = SplitterNode::new();
+        n.name = "node8_splitter".to_string();
+        n.splitter_table = Table::from_csv_string(
+            "0, 0, 10, 0, 100, 0, 1000, 500, 1e8, 5e7",
+            2, false).expect("Failed to create table");
+        node8_idx = model.add_node(NodeEnum::SplitterNode(n));
+
+        //Node results
+        let result_name = "node.node8_splitter.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9284871049249, 2111.0755320978315));
+
+        let result_name = "node.node8_splitter.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 622.9284871049249, 2111.0755320978315));
+
+        let result_name = "node.node8_splitter.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 338.1118483781078, 1049.9076304994353));
+
+        let result_name = "node.node8_splitter.ds_2".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 284.8166387268217, 1061.3908660865322));
+    }
+    model.add_link(node7_idx, node8_idx, 0, 0);
+
+    //Add node9_blackhole
+    let node9_idx: usize;
+    {
+        let mut n = BlackholeNode::new();
+        n.name = "node9_blackhole".to_string();
+        node9_idx = model.add_node(NodeEnum::BlackholeNode(n));
+
+        //Node results
+        let result_name = "node.node9_blackhole.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 338.1118483781078, 1049.9076304994353));
+
+        let result_name = "node.node9_blackhole.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 0.0, 0.0));
+
+        let result_name = "node.node9_blackhole.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 0.0, 0.0));
+    }
+    model.add_link(node8_idx, node9_idx, 0, 0);
+
+    //Add node10_gauge
+    let node10_idx: usize;
+    {
+        let mut n = GaugeNode::new();
+        n.name = "node10_gauge".to_string();
+        node10_idx = model.add_node(NodeEnum::GaugeNode(n));
+
+        //Node results
+        let result_name = "node.node10_gauge.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 284.8166387268217, 1061.3908660865322));
+
+        let result_name = "node.node10_gauge.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 284.8166387268217, 1061.3908660865322));
+
+        let result_name = "node.node10_gauge.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 284.8166387268217, 1061.3908660865322));
+    }
+    model.add_link(node8_idx, node10_idx, 1, 0);
+
+    //Add node11_loss
+    let node11_idx: usize;
+    {
+        let mut n = LossNode::new();
+        n.name = "node11_loss".to_string();
+        n.loss_table = Table::from_csv_string(
+            "0, 0, 1e9, 1e8",
+            2, false).expect("Failed to create table");
+        node11_idx = model.add_node(NodeEnum::LossNode(n));
+
+        //Node results
+        let result_name = "node.node11_loss.usflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 284.8166387268217, 1061.3908660865322));
+
+        let result_name = "node.node11_loss.dsflow".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 256.33497485413926, 955.2517794780713));
+
+        let result_name = "node.node11_loss.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 256.33497485413926, 955.2517794780713));
+
+        let result_name = "node.node11_loss.loss".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 28.481663872681956, 106.13908660865427));
+    }
+    model.add_link(node10_idx, node11_idx, 0, 0);
 
     //Run the model
     model.configure().expect("Configuration error");

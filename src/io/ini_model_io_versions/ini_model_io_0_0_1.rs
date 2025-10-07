@@ -5,7 +5,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::misc::misc_functions::split_interleaved;
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, user_node::UserNode,
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
 
@@ -81,6 +81,78 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         }
                     }
                     NodeEnum::ConfluenceNode(n)
+                },
+                "gauge" => {
+                    let mut n = GaugeNode::new();
+                    n.name = node_name.to_string();
+                    for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                        if vp == "loc" {
+                            n.location = Location::from_str(vvc)?;
+                        } else if vp == "ds_1" {
+                            let outlet = 0_u8; //ds_1 is outlet 0
+                            let inlet = 0_u8; //always inlet 0
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                        } else if vp == "type" {
+                            // skipping this
+                        } else {
+                            return Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name));
+                        }
+                    }
+                    NodeEnum::GaugeNode(n)
+                },
+                "loss" => {
+                    let mut n = LossNode::new();
+                    n.name = node_name.to_string();
+                    for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                        if vp == "loc" {
+                            n.location = Location::from_str(vvc)?;
+                        } else if vp == "table" {
+                            n.loss_table = Table::from_csv_string(vvc.as_str(), 2, false)
+                                .expect(format!("Could not parse loss table {}", n.name).as_str());
+                        } else if vp == "ds_1" {
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
+                        } else if vp == "type" {
+                            // skipping this
+                        } else {
+                            return Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name));
+                        }
+                    }
+                    NodeEnum::LossNode(n)
+                },
+                "splitter" => {
+                    let mut n = SplitterNode::new();
+                    n.name = node_name.to_string();
+                    for (vp, vv) in &v {
+                        let vvc = vv.as_ref()
+                            .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                        if vp == "loc" {
+                            n.location = Location::from_str(vvc)?;
+                        } else if vp == "table" {
+                            n.splitter_table = Table::from_csv_string(vvc.as_str(), 2, false)
+                                .expect(format!("Could not parse splitter table {}", n.name).as_str());
+                        } else if vp == "ds_1" {
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
+                        } else if vp == "ds_2" {
+                            let ds_node_name= vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_2_OUTLET, INLET))
+                        } else if vp == "type" {
+                            // skipping this
+                        } else {
+                            return Err(format!("Unexpected parameter '{}' for node '{}'", vp, node_name));
+                        }
+                    }
+                    NodeEnum::SplitterNode(n)
                 },
                 "user" => {
                     let mut n = UserNode::new();

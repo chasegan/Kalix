@@ -5,6 +5,9 @@ pub use node_enum::NodeEnum;
 //List all the submodules here
 pub mod blackhole_node;
 pub mod confluence_node;
+pub mod gauge_node;
+pub mod loss_node;
+pub mod splitter_node;
 pub mod gr4j_node;
 pub mod inflow_node;
 pub mod storage_node;
