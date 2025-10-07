@@ -128,11 +128,11 @@ fn handle_command_message(
 
     let start_time = Instant::now();
 
-    // Create progress callback for compact protocol
+    // Create progress callback for protocol messages
     let session_id = session.id.clone();
     let transport_clone = transport.stdout.clone();
     let progress_callback = Box::new(move |progress: ProgressInfo| {
-        // Convert progress to compact format and send
+        // Convert progress to protocol format and send
         let progress_msg = create_progress_message(
             session_id.clone(),
             progress.percent_complete as i64,
@@ -329,8 +329,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compact_message_handling() {
-        // Test that we can parse compact command messages
+    fn test_message_handling() {
+        // Test that we can parse command messages
         let fields = serde_json::json!({
             "c": "run_simulation",
             "p": {}
@@ -343,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compact_query_handling() {
+    fn test_query_handling() {
         let fields = serde_json::json!({
             "q": "get_state"
         });

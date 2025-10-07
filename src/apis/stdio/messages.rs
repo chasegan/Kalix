@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-// Compact Protocol - Single Message Structure
+// JSON Protocol - Single Message Structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub m: String,
@@ -56,7 +56,7 @@ pub struct StateInfo {
     pub last_simulation: Option<String>,
 }
 
-// Compact message creation functions
+// Message creation functions
 pub fn create_ready_message(kalixcli_uid: String, return_code: i32) -> Message {
     let fields = serde_json::json!({
         "rc": return_code
@@ -156,7 +156,7 @@ pub fn duration_to_ms(duration: std::time::Duration) -> f64 {
     duration.as_secs_f64() * 1000.0
 }
 
-// Legacy compatibility structure for commands module
+// Progress information structure for commands module
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressInfo {
     pub percent_complete: f64,

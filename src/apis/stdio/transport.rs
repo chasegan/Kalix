@@ -112,11 +112,11 @@ mod tests {
     }
 
     #[test]
-    fn test_compact_json_format() {
+    fn test_json_format() {
         let msg = create_ready_message("test_uid_456".to_string(), 0);
         let json = serde_json::to_string(&msg).unwrap();
 
-        // Verify the JSON contains compact fields
+        // Verify the JSON contains expected fields
         assert!(json.contains("\"m\":\"rdy\""));
         assert!(json.contains("\"uid\":\"test_uid_456\""));
         assert!(json.contains("\"rc\":0"));
