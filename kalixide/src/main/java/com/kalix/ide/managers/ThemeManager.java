@@ -139,23 +139,71 @@ public class ThemeManager {
                     return LightThemeDefinitions.createKeylimeTheme();
                 }
             case "Lapland":
-                return LightThemeDefinitions.createLaplandTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createLaplandThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Lapland theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createLaplandTheme();
+                }
             case "Nemo":
-                return LightThemeDefinitions.createNemoTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createNemoThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Nemo theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createNemoTheme();
+                }
             case "Sunset Warmth":
-                return LightThemeDefinitions.createSunsetWarmthTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createSunsetWarmthThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Sunset Warmth theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createSunsetWarmthTheme();
+                }
             case "Botanical":
-                return DarkThemeDefinitions.createBotanicalTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createBotanicalThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Botanical theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createBotanicalTheme();
+                }
 
             // Dark themes
             case "Sanne":
-                return DarkThemeDefinitions.createSanneTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createSanneThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Sanne theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createSanneTheme();
+                }
             case "Obsidian":
-                return DarkThemeDefinitions.createObsidianTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createObsidianThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Obsidian theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createObsidianTheme();
+                }
             case "Dracula":
-                return DarkThemeDefinitions.createDraculaTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createDraculaThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Dracula theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createDraculaTheme();
+                }
             case "One Dark":
-                return DarkThemeDefinitions.createOneDarkTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createOneDarkThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored One Dark theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createOneDarkTheme();
+                }
 
             default:
                 return null; // Fall back to legacy theme system (none remaining)
