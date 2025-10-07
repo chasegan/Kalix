@@ -12,6 +12,12 @@ import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
+import com.kalix.ide.utils.Platform;
+import com.kalix.ide.utils.PlatformUtils;
+import com.kalix.ide.themes.unified.LightThemeDefinitions;
+import com.kalix.ide.themes.unified.DarkThemeDefinitions;
+import com.kalix.ide.themes.unified.ThemeCompatibilityAdapter;
 
 import javax.swing.*;
 import java.awt.*;
@@ -46,11 +52,21 @@ public class ThemeManager {
     
     /**
      * Gets the current theme name.
-     * 
+     *
      * @return The current theme name
      */
     public String getCurrentTheme() {
         return currentTheme;
+    }
+
+    /**
+     * Gets the current unified theme definition if available.
+     * This allows components to access the full color palette.
+     *
+     * @return The current unified theme definition or null if using legacy theme
+     */
+    public UnifiedThemeDefinition getCurrentUnifiedTheme() {
+        return getUnifiedThemeDefinition(currentTheme);
     }
     
     /**
@@ -97,88 +113,129 @@ public class ThemeManager {
     }
     
     /**
+     * Gets a unified theme definition if available, null otherwise.
+     * This allows for gradual migration from legacy to unified themes.
+     *
+     * @param themeName The name of the theme
+     * @return The unified theme definition or null if not available
+     */
+    private UnifiedThemeDefinition getUnifiedThemeDefinition(String themeName) {
+        switch (themeName) {
+            // Light themes
+            case "Light":
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createLightThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Light theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createLightTheme();
+                }
+            case "Keylime":
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createKeylimeThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Keylime theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createKeylimeTheme();
+                }
+            case "Lapland":
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createLaplandThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Lapland theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createLaplandTheme();
+                }
+            case "Nemo":
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createNemoThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Nemo theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createNemoTheme();
+                }
+            case "Sunset Warmth":
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createSunsetWarmthThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Sunset Warmth theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createSunsetWarmthTheme();
+                }
+            case "Botanical":
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createBotanicalThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Botanical theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createBotanicalTheme();
+                }
+
+            // Dark themes
+            case "Sanne":
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createSanneThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Sanne theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createSanneTheme();
+                }
+            case "Obsidian":
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createObsidianThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Obsidian theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createObsidianTheme();
+                }
+            case "Dracula":
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createDraculaThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Dracula theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createDraculaTheme();
+                }
+            case "One Dark":
+                // Use refactored version if available, fallback to original
+                try {
+                    return DarkThemeDefinitions.createOneDarkThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored One Dark theme failed, using original: " + e.getMessage());
+                    return DarkThemeDefinitions.createOneDarkTheme();
+                }
+
+            default:
+                return null; // Fall back to legacy theme system (none remaining)
+        }
+    }
+
+    /**
      * Sets the look and feel for the specified theme.
-     * 
+     * Supports both legacy and unified theme systems.
+     *
      * @param theme The theme name
      * @throws UnsupportedLookAndFeelException if the theme is not supported
      */
     private void setLookAndFeelForTheme(String theme) throws UnsupportedLookAndFeelException {
-        switch (theme) {
-            case "Light":
-                UIManager.setLookAndFeel(new FlatLightLaf());
-                break;
-            case "Dracula":
-                UIManager.setLookAndFeel(new FlatDraculaIJTheme());
-                break;
-            case "One Dark":
-                UIManager.setLookAndFeel(new FlatOneDarkIJTheme());
-                break;
-            case "Obsidian":
-                try {
-                    FlatPropertiesLaf obsidianLaf = new FlatPropertiesLaf("Obsidian", 
-                        getClass().getResourceAsStream("/themes/obsidian-theme.properties"));
-                    UIManager.setLookAndFeel(obsidianLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Obsidian theme properties, falling back to Dark theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatDarkLaf());
-                }
-                break;
-            case "Keylime":
-                try {
-                    FlatPropertiesLaf keylimeLaf = new FlatPropertiesLaf("Keylime", 
-                        getClass().getResourceAsStream("/themes/keylime-theme.properties"));
-                    UIManager.setLookAndFeel(keylimeLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Keylime theme properties, falling back to Light theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatLightLaf());
-                }
-                break;
-            case "Lapland":
-                try {
-                    FlatPropertiesLaf laplandLaf = new FlatPropertiesLaf("Lapland", 
-                        getClass().getResourceAsStream("/themes/lapland-theme.properties"));
-                    UIManager.setLookAndFeel(laplandLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Lapland theme properties, falling back to Light theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatLightLaf());
-                }
-                break;
-            case "Nemo":
-                try {
-                    FlatPropertiesLaf nemoLaf = new FlatPropertiesLaf("Nemo",
-                        getClass().getResourceAsStream("/themes/finding-nemo-theme.properties"));
-                    UIManager.setLookAndFeel(nemoLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Nemo theme properties, falling back to Light theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatLightLaf());
-                }
-                break;
-            case "Botanical":
-                try {
-                    FlatPropertiesLaf botanicalLaf = new FlatPropertiesLaf("Botanical",
-                        getClass().getResourceAsStream("/themes/botanical-theme.properties"));
-                    UIManager.setLookAndFeel(botanicalLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Botanical theme properties, falling back to Light theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatLightLaf());
-                }
-                break;
-            case "Sanne":
-                try {
-                    FlatPropertiesLaf sanneLaf = new FlatPropertiesLaf("Sanne",
-                        getClass().getResourceAsStream("/themes/sanne-theme.properties"));
-                    UIManager.setLookAndFeel(sanneLaf);
-                } catch (Exception e) {
-                    System.err.println("Failed to load Sanne theme properties, falling back to Dark theme: " + e.getMessage());
-                    UIManager.setLookAndFeel(new FlatDarkLaf());
-                }
-                break;
-            default:
-                UIManager.setLookAndFeel(new FlatLightLaf());
-                break;
+        // Try unified theme system first
+        UnifiedThemeDefinition unifiedTheme = getUnifiedThemeDefinition(theme);
+        if (unifiedTheme != null) {
+            FlatPropertiesLaf unifiedLaf = ThemeCompatibilityAdapter.createApplicationTheme(unifiedTheme);
+            UIManager.setLookAndFeel(unifiedLaf);
+            return;
         }
+
+        // All themes should now use the unified system
+        // This fallback should rarely be used since all known themes are unified
+        System.err.println("Unknown theme '" + theme + "', falling back to unified Light theme");
+        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightTheme();
+
+
+        FlatPropertiesLaf lightLaf = ThemeCompatibilityAdapter.createApplicationTheme(lightTheme);
+        UIManager.setLookAndFeel(lightLaf);
     }
-    
+
     /**
      * Configures FlatLaf UI properties for better appearance.
      */
@@ -275,10 +332,34 @@ public class ThemeManager {
      * Configures system properties for better macOS integration.
      */
     public static void configureSystemProperties() {
-        System.setProperty(AppConstants.PROP_MACOS_SCREEN_MENU, "true");
-        System.setProperty(AppConstants.PROP_MACOS_APP_NAME, "Kalix IDE");
-        System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
-        System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+        Platform platform = PlatformUtils.getCurrentPlatform();
+
+        switch (platform) {
+            case MACOS:
+                // macOS-specific properties
+                System.setProperty(AppConstants.PROP_MACOS_SCREEN_MENU, "true");
+                System.setProperty(AppConstants.PROP_MACOS_APP_NAME, "Kalix IDE");
+
+                // Note: Not setting apple.awt.application.appearance to keep title bars light
+
+                // Disable FlatLaf window decorations (not supported on macOS)
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+
+            case WINDOWS:
+            case LINUX:
+                // Enable FlatLaf window decorations for custom title bars on Windows/Linux
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "true");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+
+            case UNKNOWN:
+                // Conservative defaults for unknown platforms
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+        }
     }
 
     /**

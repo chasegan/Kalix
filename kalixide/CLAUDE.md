@@ -134,18 +134,20 @@ JSON-based STDIO protocol for communicating with Rust backend. For detailed prot
 ## Custom Themes
 
 ### Theme System
-FlatPropertiesLaf-based custom themes with component-specific styling:
+Unified theme architecture using `UnifiedThemeDefinition` with exact color mappings:
 
 **Available Themes:**
-- **Light**: Keylime (lime green), Lapland (nordic blue), Nemo (ocean blue/orange)
-- **Dark**: Dracula, One Dark, Obsidian (purple accents)
+- **Light**: Light, Keylime (lime green), Lapland (nordic blue), Nemo (ocean blue/orange), Sunset Warmth
+- **Dark**: Dracula, One Dark, Obsidian (purple accents), Sanne, Botanical
 
 ### Technical Implementation
-- **Properties files**: `/src/main/resources/themes/` directory
-- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, splitPaneDividerColor
-- **Graceful fallback**: Error handling for corrupted theme files
+- **Unified architecture**: Java-based color definitions in `LightThemeDefinitions.java` and `DarkThemeDefinitions.java`
+- **Exact color mappings**: Migrated from algorithmic generation to precise color specifications
+- **Platform-aware**: Cross-platform title bar handling with `Platform` enum (macOS, Windows, Linux)
+- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background
+- **FlatPropertiesLaf integration**: Converted to properties via `ThemeCompatibilityAdapter`
 
-Key files: `ThemeManager.java`, theme properties files
+Key files: `ThemeManager.java`, `UnifiedThemeDefinition.java`, `Platform.java`, `PlatformUtils.java`
 
 ## Interactive Map Features
 
