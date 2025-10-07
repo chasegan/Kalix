@@ -66,7 +66,7 @@ public class RunModelProgram {
             kalixcliUid = session.get().getKalixcliUid();
         }
 
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText, kalixcliUid);
+        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         sessionManager.sendCommand(sessionKey, loadCommand)
             .thenRun(() -> {
                 statusUpdater.accept("Loading model in " + getDisplayName());
@@ -116,7 +116,7 @@ public class RunModelProgram {
                     kalixcliUid = session.get().getKalixcliUid();
                 }
 
-                String runCommand = JsonStdioProtocol.Commands.runSimulation(kalixcliUid);
+                String runCommand = JsonStdioProtocol.Commands.runSimulation();
                 sessionManager.sendCommand(sessionKey, runCommand)
                     .thenRun(() -> {
                         statusUpdater.accept("Model loaded, starting simulation in " + getDisplayName());
@@ -155,19 +155,27 @@ public class RunModelProgram {
             case PROGRESS:
                 // Progress update during simulation
                 try {
-                    JsonMessage.ProgressData progressData = JsonStdioProtocol.extractData(message, JsonMessage.ProgressData.class);
-                    JsonMessage.ProgressInfo progress = progressData.getProgress();
-                    if (progress != null) {
+                    // Compact protocol: progress data is directly in the message fields
+                    Integer current = message.getCurrent();
+                    Integer total = message.getTotal();
+                    String command = message.getCommand();
+
+                    if (current != null && total != null && total > 0) {
+                        double percentComplete = (current.doubleValue() / total.doubleValue()) * 100.0;
+
                         if (progressCallback != null) {
                             ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
-                                    progress.getPercentComplete(),
-                                    progress.getCurrentStep(),
-                                    progressData.getCommand()
+                                    percentComplete,
+                                    "Processing", // Generic step description
+                                    command != null ? command : "simulation"
                             );
                             progressCallback.accept(progressInfo);
                         }
-                        statusUpdater.accept(String.format("%s: %.1f%% - %s",
-                                getDisplayName(), progress.getPercentComplete(), progress.getCurrentStep()));
+
+                        statusUpdater.accept(String.format("%s: %.1f%% - Processing",
+                                getDisplayName(), percentComplete));
+                    } else {
+                        statusUpdater.accept("Progress update received in " + getDisplayName());
                     }
                     return true;
                 } catch (Exception e) {
@@ -251,8 +259,15 @@ public class RunModelProgram {
      */
     private String extractErrorMessage(JsonMessage.SystemMessage message) {
         try {
-            if (message.getData() != null && message.getData().has("error")) {
-                var errorNode = message.getData().get("error");
+            // In compact protocol, error message is in the errorMessage field
+            String errorMsg = message.getErrorMessage();
+            if (errorMsg != null && !errorMsg.isEmpty()) {
+                return errorMsg;
+            }
+
+            // Fallback: check if error info is in the result field
+            if (message.getResult() != null && message.getResult().has("error")) {
+                var errorNode = message.getResult().get("error");
                 // Check if error is an object with a message property
                 if (errorNode.has("message")) {
                     return errorNode.get("message").asText();

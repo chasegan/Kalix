@@ -202,7 +202,7 @@ public class TimeSeriesRequestManager {
             logger.info("Processing timeseries request for {}", request.seriesName);
 
             // Create the get_result command
-            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv", request.sessionKey);
+            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv");
 
             // Send command
             sessionManager.sendCommand(request.sessionKey, command)
@@ -260,27 +260,8 @@ public class TimeSeriesRequestManager {
                 return;
             }
 
-            // Fallback to legacy verbose protocol format
-            String legacyMessageType = response.path("type").asText();
-            if (!"result".equalsIgnoreCase(legacyMessageType)) {
-                logger.debug("Ignoring non-result message: type={}", legacyMessageType);
-                return;
-            }
-
-            JsonNode data = response.path("data");
-            String command = data.path("command").asText();
-            if (!"get_result".equals(command)) {
-                logger.debug("Ignoring non-get_result command: {}", command);
-                return;
-            }
-
-            JsonNode result = data.path("result");
-            String seriesName = result.path("series_name").asText();
-            String dataString = result.path("data").asText();
-            String kalixcliUid = response.path("kalixcli_uid").asText();
-
-
-            handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
+            // No legacy protocol support - all messages should be compact format
+            logger.debug("Message does not match compact protocol format, ignoring");
 
         } catch (Exception e) {
             logger.error("Failed to handle JSON response", e);

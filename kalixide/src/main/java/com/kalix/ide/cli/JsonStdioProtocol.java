@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Compact JSON-based STDIO protocol utility methods for kalixcli communication.
+ * JSON-based STDIO protocol utility methods for kalixcli communication.
  * Provides parsing and message creation utilities for the compact JSON protocol.
  */
 public class JsonStdioProtocol {
@@ -16,7 +16,7 @@ public class JsonStdioProtocol {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Parses a JSON line into a SystemMessage using compact protocol.
+     * Parses a JSON line into a SystemMessage.
      *
      * @param line the JSON line to parse
      * @return parsed system message if valid JSON, empty otherwise
@@ -29,7 +29,7 @@ public class JsonStdioProtocol {
         try {
             JsonMessage.SystemMessage message = objectMapper.readValue(line.trim(), JsonMessage.SystemMessage.class);
 
-            // Validate required fields for compact protocol
+            // Validate required fields
             if (message.getMessageType() == null) {
                 return Optional.empty();
             }
@@ -42,7 +42,7 @@ public class JsonStdioProtocol {
     }
 
     /**
-     * Creates a compact command message to send to kalixcli.
+     * Creates a command message to send to kalixcli.
      *
      * @param command the command name
      * @param parameters the command parameters
@@ -79,21 +79,9 @@ public class JsonStdioProtocol {
         }
     }
 
-    /**
-     * Creates a compact command message to send to kalixcli (legacy version with sessionKey).
-     *
-     * @param command the command name
-     * @param parameters the command parameters
-     * @param sessionKey the session key (ignored in compact protocol)
-     * @return JSON string representation
-     */
-    public static String createCommandMessage(String command, Map<String, Object> parameters, String sessionKey) {
-        // For backward compatibility, ignore sessionKey in compact protocol
-        return createCommandMessage(command, parameters);
-    }
 
     /**
-     * Creates a compact stop message to interrupt current operation.
+     * Creates a stop message to interrupt current operation.
      *
      * @param reason the reason for stopping
      * @return JSON string representation
@@ -110,7 +98,7 @@ public class JsonStdioProtocol {
     }
 
     /**
-     * Creates a compact query message to request information.
+     * Creates a query message to request information.
      *
      * @param queryType the type of query
      * @return JSON string representation
@@ -127,7 +115,7 @@ public class JsonStdioProtocol {
     }
 
     /**
-     * Creates a compact terminate message to end the session.
+     * Creates a terminate message to end the session.
      *
      * @return JSON string representation
      */
@@ -157,10 +145,10 @@ public class JsonStdioProtocol {
     }
 
     /**
-     * Checks if a line looks like a compact JSON message (starts with { and contains "m").
+     * Checks if a line looks like a JSON message (starts with { and contains "m").
      *
      * @param line the line to check
-     * @return true if it might be compact JSON
+     * @return true if it might be a JSON protocol message
      */
     public static boolean looksLikeCompactJson(String line) {
         if (line == null) return false;
@@ -168,15 +156,6 @@ public class JsonStdioProtocol {
         return trimmed.startsWith("{") && trimmed.endsWith("}") && trimmed.contains("\"m\":");
     }
 
-    /**
-     * Legacy method name for backward compatibility.
-     *
-     * @param line the line to check
-     * @return true if it might be JSON
-     */
-    public static boolean looksLikeJson(String line) {
-        return looksLikeCompactJson(line);
-    }
 
     /**
      * Helper method to get progress percentage from a progress message.
@@ -240,18 +219,8 @@ public class JsonStdioProtocol {
             return createCommandMessage("load_model_string", Map.of("model_ini", modelIni));
         }
 
-        public static String loadModelString(String modelIni, String sessionKey) {
-            // For backward compatibility, ignore sessionKey in compact protocol
-            return loadModelString(modelIni);
-        }
-
         public static String runSimulation() {
             return createCommandMessage("run_simulation", Map.of());
-        }
-
-        public static String runSimulation(String sessionKey) {
-            // For backward compatibility, ignore sessionKey in compact protocol
-            return runSimulation();
         }
 
         public static String testProgress() {
@@ -269,10 +238,6 @@ public class JsonStdioProtocol {
             ));
         }
 
-        public static String getResult(String seriesName, String format, String sessionKey) {
-            // For backward compatibility, ignore sessionKey in compact protocol
-            return getResult(seriesName, format);
-        }
 
         public static String echo(String text) {
             return createCommandMessage("echo", Map.of("string", text));

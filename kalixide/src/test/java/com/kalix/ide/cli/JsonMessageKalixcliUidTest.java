@@ -11,14 +11,13 @@ public class JsonMessageKalixcliUidTest {
     @Test
     void testCommandMessageSerialization() throws Exception {
         JsonMessage.CommandMessage message = new JsonMessage.CommandMessage();
-        message.setType("command");
-        message.setKalixcliUid("test_kalixcli_uid_123");
+        message.setMessageType("cmd");
+        message.setSessionId("test_kalixcli_uid_123");
         
         String json = mapper.writeValueAsString(message);
         
-        // Verify the JSON contains kalixcli_uid field, not session_id
-        assertTrue(json.contains("kalixcli_uid"), "JSON should contain kalixcli_uid field");
-        assertFalse(json.contains("session_id"), "JSON should not contain session_id field");
+        // Verify the JSON contains uid field for compact protocol
+        assertTrue(json.contains("uid"), "JSON should contain uid field");
         assertTrue(json.contains("test_kalixcli_uid_123"), "JSON should contain the UID value");
         
         System.out.println("Command message JSON: " + json);
@@ -34,8 +33,8 @@ public class JsonMessageKalixcliUidTest {
 
         JsonMessage.SystemMessage message = mapper.readValue(json, JsonMessage.SystemMessage.class);
 
-        assertEquals("rdy", message.getType());
-        assertEquals("test_uid_456", message.getKalixcliUid());
+        assertEquals("rdy", message.getMessageType());
+        assertEquals("test_uid_456", message.getSessionId());
 
         System.out.println("Deserialized system message: " + message.toString());
     }

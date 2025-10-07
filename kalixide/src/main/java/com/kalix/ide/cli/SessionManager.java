@@ -380,7 +380,7 @@ public class SessionManager {
     private void processSessionOutput(KalixSession session, String line, SessionConfig config) {
 
         // Check for JSON protocol messages
-        if (JsonStdioProtocol.looksLikeJson(line)) {
+        if (JsonStdioProtocol.looksLikeCompactJson(line)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
             if (jsonMsg.isPresent())
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
@@ -406,7 +406,7 @@ public class SessionManager {
         }
         
         // Check for JSON protocol messages on stderr (some CLIs send protocol info there)
-        if (JsonStdioProtocol.looksLikeJson(errorLine)) {
+        if (JsonStdioProtocol.looksLikeCompactJson(errorLine)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
             if (jsonMsg.isPresent()) {
                 handleJsonProtocolMessage(session, jsonMsg.get(), config);
@@ -434,8 +434,8 @@ public class SessionManager {
         String sessionKey = session.getSessionKey();
 
         // Store kalixcli_uid from the first message we receive
-        if (session.getKalixcliUid() == null && message.getKalixcliUid() != null) {
-            session.setKalixcliUid(message.getKalixcliUid());
+        if (session.getKalixcliUid() == null && message.getSessionId() != null) {
+            session.setKalixcliUid(message.getSessionId());
         }
 
         // Check if this is a get_result response and route to TimeSeriesRequestManager
@@ -474,7 +474,7 @@ public class SessionManager {
             case LOG:
                 // Generic log message
                 try {
-                    String logMsg = message.getData().asText();
+                    String logMsg = message.getResult().asText();
                     updateStatus("Session " + sessionKey + " log: " + logMsg);
                 } catch (Exception e) {
                     updateStatus("Session " + sessionKey + " log message received");
@@ -507,17 +507,10 @@ public class SessionManager {
                 return false;
             }
 
-            // Check compact protocol format first: command is directly accessible
+            // Check if the result is for a get_result command
             String command = message.getCommand();
             if (command != null && "get_result".equals(command)) {
-                logger.debug("Detected get_result response in compact protocol format");
                 return true;
-            }
-
-            // Fallback to legacy verbose protocol format
-            if (message.getData() != null && message.getData().has("command")) {
-                String legacyCommand = message.getData().path("command").asText();
-                return "get_result".equals(legacyCommand);
             }
 
             return false;

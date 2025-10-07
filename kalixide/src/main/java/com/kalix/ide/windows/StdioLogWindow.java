@@ -333,7 +333,7 @@ public class StdioLogWindow extends JFrame {
             // Generate initial JSON command
             Map<String, Object> parameters = Map.of("string", "Ping from IDE at " + java.time.LocalDateTime.now());
             String kalixcliUid = session.getKalixcliUid() != null ? session.getKalixcliUid() : "";
-            String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters, kalixcliUid);
+            String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters);
 
             // Show dialog with editable JSON
             JTextArea textArea = new JTextArea(UIConstants.StdioLog.DIALOG_ROWS, UIConstants.StdioLog.DIALOG_COLS);

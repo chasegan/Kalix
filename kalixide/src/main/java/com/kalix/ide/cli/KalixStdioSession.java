@@ -131,7 +131,7 @@ public class KalixStdioSession {
         logger.info("Sending JSON load_model_string command (" + modelText.length() + " characters)");
         
         // Create JSON command using the new protocol
-        String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText, "");
+        String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         
         // Send the JSON command
         runningProcess.sendInput(jsonCommand);

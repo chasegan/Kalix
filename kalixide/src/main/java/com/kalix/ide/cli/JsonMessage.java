@@ -106,15 +106,6 @@ public class JsonMessage {
         public String getErrorMessage() { return errorMessage; }
         public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 
-        // Legacy compatibility methods
-        public String getKalixcliUid() { return getSessionId(); }
-
-        public JsonNode getData() {
-            // For backward compatibility, return the result field as data
-            return result;
-        }
-
-        public String getType() { return getMessageType(); }
 
         public JsonStdioTypes.SystemMessageType systemMessageType() {
             return JsonStdioTypes.SystemMessageType.fromString(getMessageType()).orElse(null);
@@ -169,12 +160,6 @@ public class JsonMessage {
         public String getStopReason() { return stopReason; }
         public void setStopReason(String stopReason) { this.stopReason = stopReason; }
 
-        // Legacy compatibility methods
-        public String getType() { return getMessageType(); }
-        public void setType(String type) { setMessageType(type); }
-
-        public String getKalixcliUid() { return getSessionId(); }
-        public void setKalixcliUid(String kalixcliUid) { setSessionId(kalixcliUid); }
 
         public JsonStdioTypes.CommandMessageType commandMessageType() {
             for (JsonStdioTypes.CommandMessageType type : JsonStdioTypes.CommandMessageType.values()) {
@@ -191,61 +176,6 @@ public class JsonMessage {
         }
     }
 
-    /**
-     * Legacy compatibility class for progress data.
-     */
-    public static class ProgressData {
-        private ProgressInfo progress;
-        private String command;
-
-        public ProgressData() {}
-
-        public ProgressInfo getProgress() { return progress; }
-        public void setProgress(ProgressInfo progress) { this.progress = progress; }
-
-        public String getCommand() { return command; }
-        public void setCommand(String command) { this.command = command; }
-    }
-
-    /**
-     * Legacy compatibility class for progress info.
-     */
-    public static class ProgressInfo {
-        private double percentComplete;
-        private String currentStep;
-        private String estimatedRemaining;
-
-        public ProgressInfo() {}
-
-        public double getPercentComplete() { return percentComplete; }
-        public void setPercentComplete(double percentComplete) { this.percentComplete = percentComplete; }
-
-        public String getCurrentStep() { return currentStep; }
-        public void setCurrentStep(String currentStep) { this.currentStep = currentStep; }
-
-        public String getEstimatedRemaining() { return estimatedRemaining; }
-        public void setEstimatedRemaining(String estimatedRemaining) { this.estimatedRemaining = estimatedRemaining; }
-    }
-
-    /**
-     * Legacy compatibility class for result data.
-     */
-    public static class ResultData {
-        private JsonNode result;
-        private boolean success;
-        private double executionTimeMs;
-
-        public ResultData() {}
-
-        public JsonNode getResult() { return result; }
-        public void setResult(JsonNode result) { this.result = result; }
-
-        public boolean isSuccess() { return success; }
-        public void setSuccess(boolean success) { this.success = success; }
-
-        public double getExecutionTimeMs() { return executionTimeMs; }
-        public void setExecutionTimeMs(double executionTimeMs) { this.executionTimeMs = executionTimeMs; }
-    }
 
     /**
      * Helper class for parsing simulation results.
