@@ -123,7 +123,7 @@ Key architectural pattern throughout the application:
 ## KalixCLI Communication
 
 ### Overview
-JSON-based STDIO protocol for communicating with Rust backend. For detailed protocol specifications, message formats, and examples, see `KALIXCLI_DOCUMENTATION.md`.
+JSON-based STDIO protocol for communicating with Rust backend. For detailed protocol specifications, message formats, and examples, see `docs/kalixcli-stdio-spec.md`.
 
 ### Key Components
 - `SessionManager.java` - Core session lifecycle management

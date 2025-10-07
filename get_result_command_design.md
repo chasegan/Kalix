@@ -7,50 +7,17 @@ The `get_result` command retrieves timeseries results from a loaded and executed
 
 ### Request Format:
 ```json
-{
-  "type": "command",
-  "data": {
-    "command": "get_result",
-    "parameters": {
-      "series_name": "rainfall_station_01",
-      "format": "csv"
-    }
-  }
-}
+{"m":"cmd","c":"get_result","p":{"series_name":"rainfall_station_01","format":"csv"}}
 ```
 
 ### Success Response (CSV Format):
 ```json
-{
-  "type": "command_result",
-  "data": {
-    "series_name": "rainfall_station_01",
-    "format": "csv",
-    "metadata": {
-      "start_timestamp": "2023-01-01T00:00:00Z",
-      "timestep_seconds": 3600,
-      "total_points": 8760,
-      "units": "unknown"
-    },
-    "data": "2023-01-01T00:00:00Z,3600,1.2,2.1,0.8,1.5,..."
-  }
-}
+{"m":"res","uid":"X2vB3yCbrVqw","cmd":"get_result","exec_ms":23.1,"ok":true,"r":{"series_name":"rainfall_station_01","format":"csv","metadata":{"start_timestamp":"2023-01-01T00:00:00Z","timestep_seconds":3600,"total_points":8760,"units":"unknown"},"data":"2023-01-01T00:00:00Z,3600,1.2,2.1,0.8,1.5,..."}}
 ```
 
 ### Error Response (Series Not Found):
 ```json
-{
-  "type": "error",
-  "timestamp": "2025-09-21T10:32:00Z",
-  "session_id": "sess_20250921_103000_a7b9",
-  "data": {
-    "command": "get_result",
-    "error": {
-      "code": "RESULT_NOT_FOUND",
-      "message": "Timeseries 'invalid_series_name' not found in model results"
-    }
-  }
-}
+{"m":"err","uid":"X2vB3yCbrVqw","cmd":"get_result","msg":"Timeseries 'invalid_series_name' not found in model results"}
 ```
 
 ## Implementation Notes
