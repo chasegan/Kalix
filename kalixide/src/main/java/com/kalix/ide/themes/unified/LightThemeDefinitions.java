@@ -10,7 +10,166 @@ import java.util.Arrays;
 public class LightThemeDefinitions {
 
     /**
-     * Create the unified Light theme definition
+     * REFACTORED: Create the Light theme using component builders (eliminates 150+ lines of duplication)
+     * This demonstrates the new architecture that preserves exact colors while eliminating code duplication.
+     */
+    public static UnifiedThemeDefinition createLightThemeRefactored() {
+        ExactColorTheme lightTheme = new ExactColorTheme("Light", false);
+
+        // Set exact colors (same as before, but organized)
+        lightTheme
+            // Base components
+            .setColor("Component.background", "#f2f2f2")
+            .setColor("Panel.background", "#f2f2f2")
+            .setColor("OptionPane.background", "#f2f2f2")
+            .setColor("PopupMenu.background", "#ffffff")
+            .setColor("MenuItem.background", "#ffffff")
+            .setColor("Dialog.background", "#f2f2f2")
+            .setColor("Component.foreground", "#000000")
+            .setColor("Label.foreground", "#000000")
+            .setColor("Component.focusedBorderColor", "#89b0d4")
+            .setColor("Component.borderColor", "#c2c2c2")
+
+            // Text components
+            .setColor("TextArea.background", "#ffffff")
+            .setColor("TextPane.background", "#ffffff")
+            .setColor("TextField.background", "#ffffff")
+            .setColor("FormattedTextField.background", "#ffffff")
+            .setColor("PasswordField.background", "#ffffff")
+            .setColor("EditorPane.background", "#ffffff")
+            .setColor("TextArea.foreground", "#000000")
+            .setColor("TextPane.foreground", "#000000")
+            .setColor("TextField.foreground", "#000000")
+            .setColor("TextArea.selectionBackground", "#2675bf")
+            .setColor("TextPane.selectionBackground", "#2675bf")
+            .setColor("TextField.selectionBackground", "#2675bf")
+
+            // Buttons
+            .setColor("Button.background", "#ffffff")
+            .setColor("Button.foreground", "#000000")
+            .setColor("Button.focusedBorderColor", "#89b0d4")
+            .setColor("Button.hoverBackground", "#f7f7f7")
+            .setColor("Button.pressedBackground", "#e6e6e6")
+            .setColor("Button.default.background", "#ffffff")
+            .setColor("Button.default.foreground", "#000000")
+            .setColor("Button.default.hoverBackground", "#f7f7f7")
+            .setColor("RadioButton.background", "#f2f2f2")
+            .setColor("RadioButton.icon.centerColor", "#000000")
+            .setColor("CheckBox.background", "#f2f2f2")
+            .setColor("CheckBox.icon.checkmarkColor", "#000000")
+
+            // Custom Kalix components
+            .setColor("MapPanel.background", "#ffffff")
+            .setColor("MapPanel.gridlineColor", "#e0e0e0");
+
+        return lightTheme.toUnifiedTheme();
+    }
+
+    /**
+     * REFACTORED: Create the Keylime theme using component builders (eliminates 150+ lines of duplication)
+     * This demonstrates the second theme migration to the new architecture.
+     */
+    public static UnifiedThemeDefinition createKeylimeThemeRefactored() {
+        ExactColorTheme keylimeTheme = new ExactColorTheme("Keylime", false);
+
+        keylimeTheme
+            // Base components (lime green accent theme)
+            .setColor("Component.background", "#ffffff")
+            .setColor("Panel.background", "#fafafa")
+            .setColor("OptionPane.background", "#fafafa")
+            .setColor("PopupMenu.background", "#ffffff")
+            .setColor("MenuItem.background", "#ffffff")
+            .setColor("Component.foreground", "#2d2d2d")
+            .setColor("Label.foreground", "#2d2d2d")
+            .setColor("Component.focusedBorderColor", "#84cc16")
+            .setColor("Component.borderColor", "#e0e0e0")
+
+            // Text components
+            .setColor("TextArea.background", "#ffffff")
+            .setColor("TextPane.background", "#ffffff")
+            .setColor("TextField.background", "#ffffff")
+            .setColor("FormattedTextField.background", "#ffffff")
+            .setColor("PasswordField.background", "#ffffff")
+            .setColor("EditorPane.background", "#ffffff")
+            .setColor("TextArea.foreground", "#1a1a1a")
+            .setColor("TextPane.foreground", "#1a1a1a")
+            .setColor("TextField.foreground", "#1a1a1a")
+            .setColor("TextArea.selectionBackground", "#d4ff8f")
+            .setColor("TextPane.selectionBackground", "#d4ff8f")
+            .setColor("TextField.selectionBackground", "#d4ff8f")
+
+            // Buttons (lime green theme)
+            .setColor("Button.background", "#f5f5f5")
+            .setColor("Button.foreground", "#2d2d2d")
+            .setColor("Button.focusedBorderColor", "#84cc16")
+            .setColor("Button.hoverBackground", "#f0f9ff")
+            .setColor("Button.pressedBackground", "#e5e5e5")
+            .setColor("Button.default.background", "#65a30d")
+            .setColor("Button.default.foreground", "#ffffff")
+            .setColor("Button.default.hoverBackground", "#84cc16")
+
+            // Menus
+            .setColor("MenuBar.background", "#f8f8f8")
+            .setColor("Menu.background", "#f8f8f8")
+            .setColor("Menu.foreground", "#2d2d2d")
+            .setColor("MenuItem.foreground", "#2d2d2d")
+            .setColor("MenuItem.hoverBackground", "#f0f9ff")
+            .setColor("MenuItem.selectionBackground", "#ecfccb")
+
+            // Tables and lists (lime selection)
+            .setColor("Table.background", "#ffffff")
+            .setColor("Table.foreground", "#1a1a1a")
+            .setColor("Table.selectionBackground", "#ecfccb")
+            .setColor("Table.selectionForeground", "#1a1a1a")
+            .setColor("Table.gridColor", "#f0f0f0")
+            .setColor("List.background", "#ffffff")
+            .setColor("List.foreground", "#1a1a1a")
+            .setColor("List.selectionBackground", "#ecfccb")
+            .setColor("List.selectionForeground", "#1a1a1a")
+            .setColor("Tree.background", "#ffffff")
+            .setColor("Tree.foreground", "#1a1a1a")
+            .setColor("Tree.selectionBackground", "#ecfccb")
+            .setColor("Tree.selectionForeground", "#1a1a1a")
+
+            // Toolbar and other components
+            .setColor("ToolBar.background", "#f8f8f8")
+            .setColor("ToolBar.borderColor", "#e5e5e5")
+            .setColor("Separator.foreground", "#e0e0e0")
+            .setColor("StatusBar.background", "#f8f8f8")
+            .setColor("StatusBar.foreground", "#2d2d2d")
+
+            // Tabs
+            .setColor("TabbedPane.background", "#fafafa")
+            .setColor("TabbedPane.foreground", "#2d2d2d")
+            .setColor("TabbedPane.selectedBackground", "#ffffff")
+            .setColor("TabbedPane.hoverColor", "#f0f9ff")
+
+            // Scrollbars
+            .setColor("ScrollBar.track", "#f5f5f5")
+            .setColor("ScrollBar.thumb", "#d0d0d0")
+            .setColor("ScrollBar.hoverThumbColor", "#b0b0b0")
+            .setColor("ScrollBar.pressedThumbColor", "#a0a0a0")
+
+            // Progress bars
+            .setColor("ProgressBar.background", "#f0f0f0")
+            .setColor("ProgressBar.foreground", "#65a30d")
+            .setColor("ProgressBar.selectionBackground", "#ffffff")
+            .setColor("ProgressBar.selectionForeground", "#000000")
+
+            // Custom Kalix components
+            .setColor("MapPanel.background", "#ffffff")
+            .setColor("MapPanel.gridlineColor", "#f0f0f0")
+
+            // Title bar
+            .setColor("TitlePane.background", "#f8fcf4")
+            .setColor("TitlePane.unifiedBackground", "false");
+
+        return keylimeTheme.toUnifiedTheme();
+    }
+
+    /**
+     * ORIGINAL: Create the unified Light theme definition
+     * This is the original 150+ line method - kept for comparison
      */
     public static UnifiedThemeDefinition createLightTheme() {
         // Create exact color mapping from resolved FlatLightLaf colors

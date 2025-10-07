@@ -123,9 +123,21 @@ public class ThemeManager {
         switch (themeName) {
             // Light themes
             case "Light":
-                return LightThemeDefinitions.createLightTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createLightThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Light theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createLightTheme();
+                }
             case "Keylime":
-                return LightThemeDefinitions.createKeylimeTheme();
+                // Use refactored version if available, fallback to original
+                try {
+                    return LightThemeDefinitions.createKeylimeThemeRefactored();
+                } catch (Exception e) {
+                    System.err.println("Refactored Keylime theme failed, using original: " + e.getMessage());
+                    return LightThemeDefinitions.createKeylimeTheme();
+                }
             case "Lapland":
                 return LightThemeDefinitions.createLaplandTheme();
             case "Nemo":
