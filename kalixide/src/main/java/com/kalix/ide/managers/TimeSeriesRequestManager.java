@@ -233,10 +233,37 @@ public class TimeSeriesRequestManager {
         try {
             JsonNode response = objectMapper.readTree(jsonResponse);
 
-            // Check if this is a result response (case-insensitive)
-            String messageType = response.path("type").asText();
-            if (!"result".equalsIgnoreCase(messageType)) {
-                logger.debug("Ignoring non-result message: type={}", messageType);
+            // Handle compact protocol format first
+            String messageType = response.path("m").asText();
+            if ("res".equals(messageType)) {
+                // Compact protocol format
+                String command = response.path("cmd").asText();
+                if (!"get_result".equals(command)) {
+                    logger.debug("Ignoring non-get_result command: {}", command);
+                    return;
+                }
+
+                // Check if the command was successful
+                boolean success = response.path("ok").asBoolean(false);
+                if (!success) {
+                    logger.warn("get_result command failed");
+                    return;
+                }
+
+                JsonNode result = response.path("r");
+                String seriesName = result.path("series_name").asText();
+                String dataString = result.path("data").asText();
+                String kalixcliUid = response.path("uid").asText();
+
+                logger.debug("Successfully parsed compact protocol get_result response for series: {}", seriesName);
+                handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
+                return;
+            }
+
+            // Fallback to legacy verbose protocol format
+            String legacyMessageType = response.path("type").asText();
+            if (!"result".equalsIgnoreCase(legacyMessageType)) {
+                logger.debug("Ignoring non-result message: type={}", legacyMessageType);
                 return;
             }
 
@@ -253,27 +280,34 @@ public class TimeSeriesRequestManager {
             String kalixcliUid = response.path("kalixcli_uid").asText();
 
 
-            if (seriesName.isEmpty() || dataString.isEmpty()) {
-                logger.warn("Invalid timeseries response: missing series_name or data");
-                return;
-            }
-
-            // Parse the timeseries data
-            TimeSeriesData timeSeriesData = parseTimeSeriesData(seriesName, dataString);
-
-            // Update cache
-            String cacheKey = kalixcliUid + ":" + seriesName;
-            completedCache.put(cacheKey, timeSeriesData);
-
-            CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
-            if (future != null) {
-                future.complete(timeSeriesData);
-            } else {
-                logger.warn("No pending future found for cacheKey: '{}'", cacheKey);
-            }
+            handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
 
         } catch (Exception e) {
             logger.error("Failed to handle JSON response", e);
+        }
+    }
+
+    /**
+     * Handle the actual timeseries result data (common logic for both protocols)
+     */
+    private void handleTimeSeriesResult(String seriesName, String dataString, String kalixcliUid) {
+        if (seriesName.isEmpty() || dataString.isEmpty()) {
+            logger.warn("Invalid timeseries response: missing series_name or data");
+            return;
+        }
+
+        // Parse the timeseries data
+        TimeSeriesData timeSeriesData = parseTimeSeriesData(seriesName, dataString);
+
+        // Update cache
+        String cacheKey = kalixcliUid + ":" + seriesName;
+        completedCache.put(cacheKey, timeSeriesData);
+
+        CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
+        if (future != null) {
+            future.complete(timeSeriesData);
+        } else {
+            logger.warn("No pending future found for cacheKey: '{}'", cacheKey);
         }
     }
 

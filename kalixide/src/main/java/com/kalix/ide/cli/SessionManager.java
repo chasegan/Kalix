@@ -444,6 +444,7 @@ public class SessionManager {
                 try {
                     // Convert the message back to JSON string for the TimeSeriesRequestManager
                     String jsonResponse = convertMessageToJsonString(message);
+                    logger.debug("Routing get_result response to TimeSeriesRequestManager");
                     timeSeriesResponseHandler.accept(jsonResponse);
                     return; // Message was handled by TimeSeriesRequestManager
                 } catch (Exception e) {
@@ -506,10 +507,17 @@ public class SessionManager {
                 return false;
             }
 
-            // Check if the result is for a get_result command
+            // Check compact protocol format first: command is directly accessible
+            String command = message.getCommand();
+            if (command != null && "get_result".equals(command)) {
+                logger.debug("Detected get_result response in compact protocol format");
+                return true;
+            }
+
+            // Fallback to legacy verbose protocol format
             if (message.getData() != null && message.getData().has("command")) {
-                String command = message.getData().path("command").asText();
-                return "get_result".equals(command);
+                String legacyCommand = message.getData().path("command").asText();
+                return "get_result".equals(legacyCommand);
             }
 
             return false;

@@ -1,6 +1,8 @@
 package com.kalix.ide.cli;
 
 import com.kalix.ide.windows.RunManager;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -177,11 +179,37 @@ public class RunModelProgram {
                 // Simulation completed successfully
                 currentState = ProgramState.COMPLETED;
 
-                // Extract outputs_generated from result message
+                // Extract outputs from compact protocol result message
                 try {
-                    JsonMessage.ResultData resultData = JsonStdioProtocol.extractData(message, JsonMessage.ResultData.class);
-                    if (resultData != null && resultData.getResult() != null) {
-                        outputsGenerated = resultData.getResult().getOutputsGenerated();
+                    JsonNode resultNode = message.getResult();
+                    if (resultNode != null) {
+                        // Try compact protocol format first: result.ts.outputs
+                        if (resultNode.has("ts")) {
+                            JsonNode tsNode = resultNode.get("ts");
+                            if (tsNode.has("outputs")) {
+                                JsonNode outputsNode = tsNode.get("outputs");
+                                if (outputsNode.isArray()) {
+                                    outputsGenerated = new ArrayList<>();
+                                    for (JsonNode output : outputsNode) {
+                                        if (output.isTextual()) {
+                                            outputsGenerated.add(output.asText());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Fallback to legacy format: result.outputs_generated
+                        else if (resultNode.has("outputs_generated")) {
+                            JsonNode outputsNode = resultNode.get("outputs_generated");
+                            if (outputsNode.isArray()) {
+                                outputsGenerated = new ArrayList<>();
+                                for (JsonNode output : outputsNode) {
+                                    if (output.isTextual()) {
+                                        outputsGenerated.add(output.asText());
+                                    }
+                                }
+                            }
+                        }
                     }
                 } catch (Exception e) {
                     // If we can't parse the result data, just continue without outputs

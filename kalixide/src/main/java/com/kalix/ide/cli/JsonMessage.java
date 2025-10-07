@@ -10,256 +10,212 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JSON message data classes for the STDIO protocol.
+ * Compact JSON message data classes for the STDIO protocol.
  * These classes represent the structure of messages exchanged between the IDE and kalixcli.
  */
 public class JsonMessage {
-    
+
     /**
-     * Base message structure for all JSON messages.
+     * Base message structure for all JSON messages using compact protocol.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static abstract class BaseMessage {
-        @JsonProperty("type")
-        private String type;
-        
-        @JsonProperty("timestamp")
-        private String timestamp;
-        
-        @JsonProperty("data")
-        private JsonNode data;
-        
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        
-        public String getTimestamp() { return timestamp; }
-        public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
-        
-        public JsonNode getData() { return data; }
-        public void setData(JsonNode data) { this.data = data; }
-        
-        protected void setCurrentTimestamp() {
-            this.timestamp = Instant.now().toString();
-        }
+        @JsonProperty("m")
+        private String messageType;
+
+        @JsonProperty(value = "uid", required = false)
+        private String sessionId;
+
+        public String getMessageType() { return messageType; }
+        public void setMessageType(String messageType) { this.messageType = messageType; }
+
+        public String getSessionId() { return sessionId; }
+        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     }
-    
+
     /**
-     * Message received from kalixcli (includes kalixcli_uid).
+     * Message received from kalixcli (includes session ID).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SystemMessage extends BaseMessage {
-        @JsonProperty("kalixcli_uid")
-        private String kalixcliUid;
-        
-        public String getKalixcliUid() { return kalixcliUid; }
-        public void setKalixcliUid(String kalixcliUid) { this.kalixcliUid = kalixcliUid; }
-        
-        public JsonStdioTypes.SystemMessageType systemMessageType() {
-            return JsonStdioTypes.SystemMessageType.fromString(getType()).orElse(null);
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("SystemMessage[type=%s, kalixcli_uid=%s]", getType(), kalixcliUid);
-        }
-    }
-    
-    /**
-     * Message sent from frontend to kalixcli (includes kalixcli_uid).
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonPropertyOrder({"type", "timestamp", "kalixcli_uid", "data"})
-    public static class CommandMessage extends BaseMessage {
-        @JsonProperty("kalixcli_uid")
-        private String kalixcliUid;
-        
-        public CommandMessage() {
-            setCurrentTimestamp();
-        }
-        
-        public CommandMessage(JsonStdioTypes.CommandMessageType type) {
-            this();
-            setType(type.getValue());
+        // All additional fields are flattened into this message
+
+        // Ready message fields
+        @JsonProperty("rc")
+        private Integer returnCode;
+
+        // Busy message fields
+        @JsonProperty("cmd")
+        private String command;
+
+        @JsonProperty("int")
+        private Boolean interruptible;
+
+        // Progress message fields
+        @JsonProperty("i")
+        private Integer current;
+
+        @JsonProperty("n")
+        private Integer total;
+
+        @JsonProperty("t")
+        private String taskType;
+
+        // Result message fields
+        @JsonProperty("exec_ms")
+        private Double executionTimeMs;
+
+        @JsonProperty("ok")
+        private Boolean success;
+
+        @JsonProperty("r")
+        private JsonNode result;
+
+        // Error message fields
+        @JsonProperty("msg")
+        private String errorMessage;
+
+        // Getters and setters
+        public Integer getReturnCode() { return returnCode; }
+        public void setReturnCode(Integer returnCode) { this.returnCode = returnCode; }
+
+        public String getCommand() { return command; }
+        public void setCommand(String command) { this.command = command; }
+
+        public Boolean getInterruptible() { return interruptible; }
+        public void setInterruptible(Boolean interruptible) { this.interruptible = interruptible; }
+
+        public Integer getCurrent() { return current; }
+        public void setCurrent(Integer current) { this.current = current; }
+
+        public Integer getTotal() { return total; }
+        public void setTotal(Integer total) { this.total = total; }
+
+        public String getTaskType() { return taskType; }
+        public void setTaskType(String taskType) { this.taskType = taskType; }
+
+        public Double getExecutionTimeMs() { return executionTimeMs; }
+        public void setExecutionTimeMs(Double executionTimeMs) { this.executionTimeMs = executionTimeMs; }
+
+        public Boolean getSuccess() { return success; }
+        public void setSuccess(Boolean success) { this.success = success; }
+
+        public JsonNode getResult() { return result; }
+        public void setResult(JsonNode result) { this.result = result; }
+
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+        // Legacy compatibility methods
+        public String getKalixcliUid() { return getSessionId(); }
+
+        public JsonNode getData() {
+            // For backward compatibility, return the result field as data
+            return result;
         }
 
-        public String getKalixcliUid() { return kalixcliUid; }
-        public void setKalixcliUid(String kalixcliUid) { this.kalixcliUid = kalixcliUid; }
-        
+        public String getType() { return getMessageType(); }
+
+        public JsonStdioTypes.SystemMessageType systemMessageType() {
+            return JsonStdioTypes.SystemMessageType.fromString(getMessageType()).orElse(null);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("SystemMessage[type=%s, sessionId=%s]", getMessageType(), getSessionId());
+        }
+    }
+
+    /**
+     * Message sent from frontend to kalixcli (no session ID needed).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonPropertyOrder({"m", "c", "p", "q", "reason"})
+    public static class CommandMessage extends BaseMessage {
+
+        // Command message fields
+        @JsonProperty("c")
+        private String commandName;
+
+        @JsonProperty("p")
+        private JsonNode parameters;
+
+        // Query message fields
+        @JsonProperty("q")
+        private String queryType;
+
+        // Stop message fields
+        @JsonProperty("reason")
+        private String stopReason;
+
+        public CommandMessage() {
+            // No timestamp needed for compact protocol
+        }
+
+        public CommandMessage(JsonStdioTypes.CommandMessageType type) {
+            this();
+            setMessageType(type.getValue());
+        }
+
+        public String getCommandName() { return commandName; }
+        public void setCommandName(String commandName) { this.commandName = commandName; }
+
+        public JsonNode getParameters() { return parameters; }
+        public void setParameters(JsonNode parameters) { this.parameters = parameters; }
+
+        public String getQueryType() { return queryType; }
+        public void setQueryType(String queryType) { this.queryType = queryType; }
+
+        public String getStopReason() { return stopReason; }
+        public void setStopReason(String stopReason) { this.stopReason = stopReason; }
+
+        // Legacy compatibility methods
+        public String getType() { return getMessageType(); }
+        public void setType(String type) { setMessageType(type); }
+
+        public String getKalixcliUid() { return getSessionId(); }
+        public void setKalixcliUid(String kalixcliUid) { setSessionId(kalixcliUid); }
+
         public JsonStdioTypes.CommandMessageType commandMessageType() {
             for (JsonStdioTypes.CommandMessageType type : JsonStdioTypes.CommandMessageType.values()) {
-                if (type.getValue().equals(getType())) {
+                if (type.getValue().equals(getMessageType())) {
                     return type;
                 }
             }
             return null;
         }
-        
+
         @Override
         public String toString() {
-            return String.format("CommandMessage[type=%s]", getType());
+            return String.format("CommandMessage[type=%s]", getMessageType());
         }
     }
-    
+
     /**
-     * Ready message data structure.
+     * Legacy compatibility class for progress data.
      */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ReadyData {
-        @JsonProperty("status")
-        private String status;
-        
-        @JsonProperty("available_commands")
-        private List<AvailableCommand> availableCommands;
-        
-        @JsonProperty("current_state")
-        private CurrentState currentState;
-        
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        
-        public List<AvailableCommand> getAvailableCommands() { return availableCommands; }
-        public void setAvailableCommands(List<AvailableCommand> availableCommands) { this.availableCommands = availableCommands; }
-        
-        public CurrentState getCurrentState() { return currentState; }
-        public void setCurrentState(CurrentState currentState) { this.currentState = currentState; }
-    }
-    
-    /**
-     * Available command structure in ready messages.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class AvailableCommand {
-        @JsonProperty("name")
-        private String name;
-        
-        @JsonProperty("description")
-        private String description;
-        
-        @JsonProperty("parameters")
-        private List<CommandParameter> parameters;
-        
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        
-        public List<CommandParameter> getParameters() { return parameters; }
-        public void setParameters(List<CommandParameter> parameters) { this.parameters = parameters; }
-    }
-    
-    /**
-     * Command parameter structure.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class CommandParameter {
-        @JsonProperty("name")
-        private String name;
-        
-        @JsonProperty("type")
-        private String type;
-        
-        @JsonProperty("required")
-        private boolean required;
-        
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        
-        public boolean isRequired() { return required; }
-        public void setRequired(boolean required) { this.required = required; }
-    }
-    
-    /**
-     * Current state structure in ready messages.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class CurrentState {
-        @JsonProperty("model_loaded")
-        private boolean modelLoaded;
-        
-        @JsonProperty("data_loaded")
-        private boolean dataLoaded;
-        
-        @JsonProperty("last_simulation")
-        private String lastSimulation;
-        
-        public boolean isModelLoaded() { return modelLoaded; }
-        public void setModelLoaded(boolean modelLoaded) { this.modelLoaded = modelLoaded; }
-        
-        public boolean isDataLoaded() { return dataLoaded; }
-        public void setDataLoaded(boolean dataLoaded) { this.dataLoaded = dataLoaded; }
-        
-        public String getLastSimulation() { return lastSimulation; }
-        public void setLastSimulation(String lastSimulation) { this.lastSimulation = lastSimulation; }
-    }
-    
-    /**
-     * Busy message data structure.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class BusyData {
-        @JsonProperty("status")
-        private String status;
-        
-        @JsonProperty("executing_command")
-        private String executingCommand;
-        
-        @JsonProperty("interruptible")
-        private boolean interruptible;
-        
-        @JsonProperty("started_at")
-        private String startedAt;
-        
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        
-        public String getExecutingCommand() { return executingCommand; }
-        public void setExecutingCommand(String executingCommand) { this.executingCommand = executingCommand; }
-        
-        public boolean isInterruptible() { return interruptible; }
-        public void setInterruptible(boolean interruptible) { this.interruptible = interruptible; }
-        
-        public String getStartedAt() { return startedAt; }
-        public void setStartedAt(String startedAt) { this.startedAt = startedAt; }
-    }
-    
-    /**
-     * Progress message data structure.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProgressData {
-        @JsonProperty("command")
-        private String command;
-        
-        @JsonProperty("progress")
         private ProgressInfo progress;
-        
-        public String getCommand() { return command; }
-        public void setCommand(String command) { this.command = command; }
-        
+        private String command;
+
+        public ProgressData() {}
+
         public ProgressInfo getProgress() { return progress; }
         public void setProgress(ProgressInfo progress) { this.progress = progress; }
+
+        public String getCommand() { return command; }
+        public void setCommand(String command) { this.command = command; }
     }
-    
+
     /**
-     * Progress information structure.
+     * Legacy compatibility class for progress info.
      */
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProgressInfo {
-        @JsonProperty("percent_complete")
         private double percentComplete;
-
-        @JsonProperty("current_step")
         private String currentStep;
-
-        @JsonProperty("estimated_remaining")
         private String estimatedRemaining;
 
-        @JsonProperty("details")
-        private JsonNode details;
+        public ProgressInfo() {}
 
         public double getPercentComplete() { return percentComplete; }
         public void setPercentComplete(double percentComplete) { this.percentComplete = percentComplete; }
@@ -269,62 +225,89 @@ public class JsonMessage {
 
         public String getEstimatedRemaining() { return estimatedRemaining; }
         public void setEstimatedRemaining(String estimatedRemaining) { this.estimatedRemaining = estimatedRemaining; }
-
-        public JsonNode getDetails() { return details; }
-        public void setDetails(JsonNode details) { this.details = details; }
     }
 
     /**
-     * Result message data structure.
+     * Legacy compatibility class for result data.
      */
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ResultData {
-        @JsonProperty("command")
-        private String command;
+        private JsonNode result;
+        private boolean success;
+        private double executionTimeMs;
 
-        @JsonProperty("status")
-        private String status;
+        public ResultData() {}
 
-        @JsonProperty("execution_time")
-        private String executionTime;
+        public JsonNode getResult() { return result; }
+        public void setResult(JsonNode result) { this.result = result; }
 
-        @JsonProperty("result")
-        private ResultInfo result;
+        public boolean isSuccess() { return success; }
+        public void setSuccess(boolean success) { this.success = success; }
 
-        public String getCommand() { return command; }
-        public void setCommand(String command) { this.command = command; }
-
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-
-        public String getExecutionTime() { return executionTime; }
-        public void setExecutionTime(String executionTime) { this.executionTime = executionTime; }
-
-        public ResultInfo getResult() { return result; }
-        public void setResult(ResultInfo result) { this.result = result; }
+        public double getExecutionTimeMs() { return executionTimeMs; }
+        public void setExecutionTimeMs(double executionTimeMs) { this.executionTimeMs = executionTimeMs; }
     }
 
     /**
-     * Result information structure.
+     * Helper class for parsing simulation results.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ResultInfo {
-        @JsonProperty("summary")
-        private JsonNode summary;
+    public static class SimulationResult {
+        @JsonProperty("ts")
+        private TimeseriesInfo timeseries;
 
-        @JsonProperty("data_available")
-        private List<String> dataAvailable;
+        public TimeseriesInfo getTimeseries() { return timeseries; }
+        public void setTimeseries(TimeseriesInfo timeseries) { this.timeseries = timeseries; }
 
-        @JsonProperty("outputs_generated")
-        private List<String> outputsGenerated;
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class TimeseriesInfo {
+            @JsonProperty("len")
+            private Integer timesteps;
 
-        public JsonNode getSummary() { return summary; }
-        public void setSummary(JsonNode summary) { this.summary = summary; }
+            @JsonProperty("start")
+            private String startDate;
 
-        public List<String> getDataAvailable() { return dataAvailable; }
-        public void setDataAvailable(List<String> dataAvailable) { this.dataAvailable = dataAvailable; }
+            @JsonProperty("end")
+            private String endDate;
 
-        public List<String> getOutputsGenerated() { return outputsGenerated; }
-        public void setOutputsGenerated(List<String> outputsGenerated) { this.outputsGenerated = outputsGenerated; }
+            @JsonProperty("o")
+            private List<String> availableTypes;
+
+            @JsonProperty("outputs")
+            private List<String> outputSeries;
+
+            public Integer getTimesteps() { return timesteps; }
+            public void setTimesteps(Integer timesteps) { this.timesteps = timesteps; }
+
+            public String getStartDate() { return startDate; }
+            public void setStartDate(String startDate) { this.startDate = startDate; }
+
+            public String getEndDate() { return endDate; }
+            public void setEndDate(String endDate) { this.endDate = endDate; }
+
+            public List<String> getAvailableTypes() { return availableTypes; }
+            public void setAvailableTypes(List<String> availableTypes) { this.availableTypes = availableTypes; }
+
+            public List<String> getOutputSeries() { return outputSeries; }
+            public void setOutputSeries(List<String> outputSeries) { this.outputSeries = outputSeries; }
+        }
+    }
+
+    /**
+     * Helper methods for working with progress messages.
+     */
+    public static class ProgressHelper {
+        public static double calculatePercentage(SystemMessage msg) {
+            if (msg.getCurrent() != null && msg.getTotal() != null && msg.getTotal() > 0) {
+                return (double) msg.getCurrent() / msg.getTotal() * 100.0;
+            }
+            return 0.0;
+        }
+
+        public static boolean isComplete(SystemMessage msg) {
+            if (msg.getCurrent() != null && msg.getTotal() != null) {
+                return msg.getCurrent().equals(msg.getTotal());
+            }
+            return false;
+        }
     }
 }

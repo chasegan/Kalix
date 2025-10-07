@@ -9,15 +9,11 @@ pub fn run_stdio_session() -> Result<(), StdioError> {
     let mut session = Session::new();
     let transport = Transport::new();
     let registry = CommandRegistry::new();
-    
-    // Send initial ready message
-    let ready_msg = create_ready_message(
-        session.id.clone(),
-        registry.get_all_specs(),
-        session.get_state_info()
-    );
+
+    // Send initial ready message with return code 0 (success)
+    let ready_msg = create_ready_message(session.id.clone(), 0);
     transport.send_message(&ready_msg)?;
-    
+
     loop {
         match handle_session_loop(&mut session, &transport, &registry) {
             Ok(should_continue) => {
@@ -30,26 +26,20 @@ pub fn run_stdio_session() -> Result<(), StdioError> {
                 let error_msg = create_error_message(
                     session.id.clone(),
                     None,
-                    "SESSION_ERROR".to_string(),
-                    e.to_string(),
-                    None
+                    format!("Session error: {}", e)
                 );
                 transport.send_message(&error_msg)?;
-                
-                // Ensure we're in ready state after error
+
+                // Reset to ready state after error
                 let _ = session.set_ready();
-                
+
                 // Send ready message to indicate recovery
-                let ready_msg = create_ready_message(
-                    session.id.clone(),
-                    registry.get_all_specs(),
-                    session.get_state_info()
-                );
+                let ready_msg = create_ready_message(session.id.clone(), 1); // Error code 1
                 transport.send_message(&ready_msg)?;
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -61,58 +51,54 @@ fn handle_session_loop(
     if session.is_ready() {
         // Block waiting for command when ready
         let msg = transport.receive_message_blocking()?;
-        
-        // Frontend messages don't include session_id - no validation needed
-        
-        match msg.msg_type.as_str() {
-            "command" => {
-                handle_command_message(session, transport, registry, msg)?;
+
+        match msg.m.as_str() {
+            MSG_COMMAND => {
+                if let Some((command, params)) = extract_command_info(&msg) {
+                    handle_command_message(session, transport, registry, command, params)?;
+                } else {
+                    send_error_message(session, transport, None, "Invalid command format".to_string())?;
+                }
             }
-            "query" => {
-                handle_query_message(session, transport, msg)?;
+            MSG_QUERY => {
+                if let Some(query_type) = extract_query_type(&msg) {
+                    handle_query_message(session, transport, query_type)?;
+                } else {
+                    send_error_message(session, transport, None, "Invalid query format".to_string())?;
+                }
             }
-            "terminate" => {
+            MSG_TERMINATE => {
                 return Ok(false); // Signal to exit
             }
             _ => {
-                return Err(StdioError::InvalidMessageType(msg.msg_type));
+                send_error_message(session, transport, None, format!("Unknown message type: {}", msg.m))?;
             }
         }
     } else if session.is_busy() {
         // Check for interrupt messages while busy
         if let Some(msg) = transport.try_receive_message()? {
-            // Frontend messages don't include session_id - no validation needed
-            
-            match msg.msg_type.as_str() {
-                "stop" => {
-                    handle_stop_message(session, transport, msg)?;
+            match msg.m.as_str() {
+                MSG_STOPPED => {
+                    session.request_interrupt()?;
                 }
-                "query" => {
-                    handle_query_message(session, transport, msg)?;
+                MSG_QUERY => {
+                    if let Some(query_type) = extract_query_type(&msg) {
+                        handle_query_message(session, transport, query_type)?;
+                    }
                 }
-                "terminate" => {
+                MSG_TERMINATE => {
                     // Force interrupt and exit
                     let _ = session.request_interrupt();
                     return Ok(false);
                 }
                 _ => {
                     // Invalid message while busy, send error but continue
-                    let error_msg = create_error_message(
-                        session.id.clone(),
-                        None,
-                        "INVALID_STATE".to_string(),
-                        format!("Cannot process '{}' message while busy", msg.msg_type),
-                        None
-                    );
-                    transport.send_message(&error_msg)?;
+                    send_error_message(session, transport, None, format!("Cannot process '{}' message while busy", msg.m))?;
                 }
             }
         }
-        
-        // Small sleep to avoid busy-waiting
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    
+
     Ok(true)
 }
 
@@ -120,117 +106,144 @@ fn handle_command_message(
     session: &mut Session,
     transport: &Transport,
     registry: &CommandRegistry,
-    msg: Message
+    command: String,
+    parameters: serde_json::Value
 ) -> Result<(), StdioError> {
-    let command_data: CommandData = serde_json::from_value(msg.data)
-        .map_err(|e| StdioError::InvalidMessageData(e.to_string()))?;
-    
-    let command = registry.get_command(&command_data.command)
-        .ok_or_else(|| StdioError::UnknownCommand(command_data.command.clone()))?;
-    
-    // Set session to busy
-    session.set_busy(command_data.command.clone(), command.interruptible())?;
-    
+    // Find command in registry
+    let command_spec = registry.get_command(&command)
+        .ok_or_else(|| StdioError::UnknownCommand(command.clone()))?;
+
+    let is_interruptible = command_spec.interruptible();
+
     // Send busy message
     let busy_msg = create_busy_message(
         session.id.clone(),
-        command_data.command.clone(),
-        command.interruptible()
+        command.clone(),
+        is_interruptible
     );
     transport.send_message(&busy_msg)?;
-    
+
+    // Set session to busy
+    session.set_busy(command.clone(), is_interruptible)?;
+
     let start_time = Instant::now();
-    
-    // Create progress callback with cloned transport data
+
+    // Create progress callback for compact protocol
     let session_id = session.id.clone();
-    let command_name = command_data.command.clone();
-    let stdout_handle = transport.stdout.clone();
-    
+    let transport_clone = transport.stdout.clone();
     let progress_callback = Box::new(move |progress: ProgressInfo| {
+        // Convert progress to compact format and send
         let progress_msg = create_progress_message(
             session_id.clone(),
-            command_name.clone(),
-            progress
+            progress.percent_complete as i64,
+            100, // Total is 100 for percentage-based progress
+            "sim".to_string(), // Default task type
         );
-        
+
         if let Ok(json) = serde_json::to_string(&progress_msg) {
-            if let Ok(mut stdout) = stdout_handle.lock() {
+            if let Ok(mut stdout) = transport_clone.lock() {
                 let _ = writeln!(stdout, "{}", json);
                 let _ = stdout.flush();
             }
         }
     });
-    
+
     // Execute command
-    let result = command.execute(session, command_data.parameters, progress_callback);
-    
-    let execution_time = format_duration(start_time.elapsed());
-    
-    // Handle result and send appropriate message
+    let result = command_spec.execute(session, parameters, progress_callback);
+
+    let execution_time_ms = duration_to_ms(start_time.elapsed());
+
+    // Send result or error based on outcome
     match result {
-        Ok(result_data) => {
+        Ok(ref command_result) => {
+            // Determine result structure based on command type
+            let result_data = match command.as_str() {
+                "run_simulation" => {
+                    // Extract simulation-specific data
+                    if let Some(outputs) = command_result.get("outputs_generated").and_then(|v| v.as_array()) {
+                        let output_names: Vec<String> = outputs.iter()
+                            .filter_map(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .collect();
+
+                        let timesteps = command_result.get("timesteps_processed")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+
+                        let period = command_result.get("simulation_period")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+
+                        // Parse start and end dates
+                        let (start_date, end_date) = if let Some(parts) = period.split(" to ").collect::<Vec<&str>>().get(0..2) {
+                            (parts[0].to_string(), parts[1].to_string())
+                        } else {
+                            ("unknown".to_string(), "unknown".to_string())
+                        };
+
+                        create_simulation_result(
+                            timesteps,
+                            start_date,
+                            end_date,
+                            vec!["timeseries_data".to_string(), "summary_statistics".to_string()],
+                            output_names
+                        )
+                    } else {
+                        command_result.clone()
+                    }
+                }
+                _ => command_result.clone()
+            };
+
             let result_msg = create_result_message(
                 session.id.clone(),
-                command_data.command,
-                execution_time,
+                command.clone(),
+                execution_time_ms,
+                true,
                 result_data
             );
             transport.send_message(&result_msg)?;
         }
-        Err(CommandError::Interrupted) => {
-            let stopped_msg = create_stopped_message(
-                session.id.clone(),
-                command_data.command,
-                execution_time,
-                None // TODO: Could include partial results
-            );
-            transport.send_message(&stopped_msg)?;
-        }
-        Err(e) => {
+        Err(ref command_error) => {
             let error_msg = create_error_message(
                 session.id.clone(),
-                Some(command_data.command),
-                "COMMAND_ERROR".to_string(),
-                e.to_string(),
-                None
+                Some(command.clone()),
+                format!("Command execution error: {}", command_error)
             );
             transport.send_message(&error_msg)?;
         }
     }
-    
-    // Return to ready state
-    session.set_ready()?;
-    
-    // Send ready message
-    let registry_specs = registry.get_all_specs();
-    let ready_msg = create_ready_message(
-        session.id.clone(),
-        registry_specs,
-        session.get_state_info()
-    );
-    transport.send_message(&ready_msg)?;
-    
-    Ok(())
-}
 
-fn handle_stop_message(
-    session: &mut Session,
-    _transport: &Transport,
-    _msg: Message
-) -> Result<(), StdioError> {
-    session.request_interrupt()?;
+    // Check if command was interrupted
+    if session.interrupt_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        let stopped_msg = create_stopped_message(
+            session.id.clone(),
+            command.clone(),
+            execution_time_ms
+        );
+        transport.send_message(&stopped_msg)?;
+    }
+
+    // Reset to ready state
+    session.set_ready()?;
+
+    // Send ready message with appropriate return code
+    let return_code = match &result {
+        Ok(_) => if session.interrupt_flag.load(std::sync::atomic::Ordering::Relaxed) { 2 } else { 0 }, // 2 = interrupted
+        Err(_) => 1, // 1 = error
+    };
+    let ready_msg = create_ready_message(session.id.clone(), return_code);
+    transport.send_message(&ready_msg)?;
+
     Ok(())
 }
 
 fn handle_query_message(
-    session: &mut Session,
+    session: &Session,
     transport: &Transport,
-    msg: Message
+    query_type: String
 ) -> Result<(), StdioError> {
-    let query_data: QueryData = serde_json::from_value(msg.data)
-        .map_err(|e| StdioError::InvalidMessageData(e.to_string()))?;
-    
-    let result = match query_data.query_type.as_str() {
+    let result: Result<serde_json::Value, String> = match query_type.as_str() {
         "get_state" => {
             Ok(serde_json::to_value(session.get_state_info()).unwrap())
         }
@@ -238,59 +251,77 @@ fn handle_query_message(
             Ok(serde_json::json!({"session_id": session.id}))
         }
         _ => {
-            Err(format!("Unknown query type: {}", query_data.query_type))
+            return send_error_message(session, transport, None, format!("Unknown query type: {}", query_type));
         }
     };
-    
+
     match result {
         Ok(data) => {
             let result_msg = create_result_message(
                 session.id.clone(),
-                format!("query_{}", query_data.query_type),
-                "00:00:00".to_string(),
+                format!("query_{}", query_type),
+                0.0, // Queries are instantaneous
+                true,
                 data
             );
             transport.send_message(&result_msg)?;
         }
-        Err(error) => {
-            let error_msg = create_error_message(
-                session.id.clone(),
-                Some(format!("query_{}", query_data.query_type)),
-                "QUERY_ERROR".to_string(),
-                error,
-                None
-            );
-            transport.send_message(&error_msg)?;
+        Err(e) => {
+            send_error_message(session, transport, Some(format!("query_{}", query_type)), e.to_string())?;
         }
     }
-    
+
     Ok(())
 }
 
-fn format_duration(duration: std::time::Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+fn send_error_message(
+    session: &Session,
+    transport: &Transport,
+    command: Option<String>,
+    message: String
+) -> Result<(), StdioError> {
+    let error_msg = create_error_message(session.id.clone(), command, message);
+    transport.send_message(&error_msg)?;
+    Ok(())
+}
+
+// Progress reporting helper for commands
+pub fn send_progress_update(
+    session: &Session,
+    transport: &Transport,
+    current: i64,
+    total: i64,
+    task_type: &str
+) -> Result<(), StdioError> {
+    let progress_msg = create_progress_message(
+        session.id.clone(),
+        current,
+        total,
+        task_type.to_string()
+    );
+    transport.send_message(&progress_msg)?;
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum StdioError {
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError),
-    
+
     #[error("Session error: {0}")]
     Session(#[from] SessionError),
-    
-    #[error("Invalid message type: {0}")]
-    InvalidMessageType(String),
-    
-    #[error("Invalid message data: {0}")]
-    InvalidMessageData(String),
-    
+
+    #[error("Command error: {0}")]
+    Command(#[from] CommandError),
+
     #[error("Unknown command: {0}")]
     UnknownCommand(String),
+
+    #[error("Invalid message type: {0}")]
+    InvalidMessageType(String),
+
+    #[error("Invalid message data: {0}")]
+    InvalidMessageData(String),
 }
 
 #[cfg(test)]
@@ -298,11 +329,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_format_duration() {
-        let duration = std::time::Duration::from_secs(3661); // 1h 1m 1s
-        assert_eq!(format_duration(duration), "01:01:01");
-        
-        let duration = std::time::Duration::from_secs(125); // 2m 5s
-        assert_eq!(format_duration(duration), "00:02:05");
+    fn test_compact_message_handling() {
+        // Test that we can parse compact command messages
+        let fields = serde_json::json!({
+            "c": "run_simulation",
+            "p": {}
+        });
+        let msg = Message::new(MSG_COMMAND, None, fields);
+
+        let (command, params) = extract_command_info(&msg).unwrap();
+        assert_eq!(command, "run_simulation");
+        assert!(params.is_object());
+    }
+
+    #[test]
+    fn test_compact_query_handling() {
+        let fields = serde_json::json!({
+            "q": "get_state"
+        });
+        let msg = Message::new(MSG_QUERY, None, fields);
+
+        let query_type = extract_query_type(&msg).unwrap();
+        assert_eq!(query_type, "get_state");
     }
 }

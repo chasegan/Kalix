@@ -1,48 +1,42 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
+// Compact Protocol - Single Message Structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    #[serde(rename = "type")]
-    pub msg_type: String,
-    pub timestamp: DateTime<Utc>,
-    #[serde(default)]
-    pub kalixcli_uid: String,
-    pub data: serde_json::Value,
+    pub m: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(flatten)]
+    pub fields: serde_json::Value,
 }
 
 impl Message {
-    pub fn new(msg_type: &str, kalixcli_uid: String, data: serde_json::Value) -> Self {
+    pub fn new(message_type: &str, uid: Option<String>, fields: serde_json::Value) -> Self {
         Self {
-            msg_type: msg_type.to_string(),
-            timestamp: Utc::now(),
-            kalixcli_uid,
-            data,
+            m: message_type.to_string(),
+            uid,
+            fields,
         }
     }
 }
 
-// Outgoing message types (kalixcli → frontend)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OutgoingMessageType {
-    Ready,
-    Busy,
-    Progress,
-    Result,
-    Stopped,
-    Error,
-    Log,
-}
+// Message type constants
+pub const MSG_READY: &str = "rdy";
+pub const MSG_BUSY: &str = "bsy";
+pub const MSG_PROGRESS: &str = "prg";
+pub const MSG_RESULT: &str = "res";
+pub const MSG_ERROR: &str = "err";
+pub const MSG_STOPPED: &str = "stp";
+pub const MSG_COMMAND: &str = "cmd";
+pub const MSG_QUERY: &str = "query";
+pub const MSG_TERMINATE: &str = "term";
 
-// Incoming message types (frontend → kalixcli)  
+// Helper structs for specific data structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum IncomingMessageType {
-    Command,
-    Stop,
-    Query,
-    Terminate,
+pub struct CommandSpec {
+    pub name: String,
+    pub description: String,
+    pub parameters: Vec<ParameterSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,149 +50,167 @@ pub struct ParameterSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandSpec {
-    pub name: String,
-    pub description: String,
-    pub parameters: Vec<ParameterSpec>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateInfo {
     pub model_loaded: bool,
     pub data_loaded: bool,
     pub last_simulation: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReadyData {
-    pub status: String,
-    pub available_commands: Vec<CommandSpec>,
-    pub current_state: StateInfo,
+// Compact message creation functions
+pub fn create_ready_message(kalixcli_uid: String, return_code: i32) -> Message {
+    let fields = serde_json::json!({
+        "rc": return_code
+    });
+    Message::new(MSG_READY, Some(kalixcli_uid), fields)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BusyData {
-    pub status: String,
-    pub executing_command: String,
-    pub interruptible: bool,
-    pub started_at: DateTime<Utc>,
+pub fn create_busy_message(kalixcli_uid: String, command: String, interruptible: bool) -> Message {
+    let fields = serde_json::json!({
+        "cmd": command,
+        "int": interruptible
+    });
+    Message::new(MSG_BUSY, Some(kalixcli_uid), fields)
 }
 
+pub fn create_progress_message(kalixcli_uid: String, current: i64, total: i64, task_type: String) -> Message {
+    let fields = serde_json::json!({
+        "i": current,
+        "n": total,
+        "t": task_type
+    });
+    Message::new(MSG_PROGRESS, Some(kalixcli_uid), fields)
+}
+
+pub fn create_result_message(kalixcli_uid: String, command: String, exec_time_ms: f64, success: bool, result: serde_json::Value) -> Message {
+    let fields = serde_json::json!({
+        "cmd": command,
+        "exec_ms": exec_time_ms,
+        "ok": success,
+        "r": result
+    });
+    Message::new(MSG_RESULT, Some(kalixcli_uid), fields)
+}
+
+pub fn create_error_message(kalixcli_uid: String, command: Option<String>, message: String) -> Message {
+    let mut fields = serde_json::json!({
+        "msg": message
+    });
+    if let Some(cmd) = command {
+        fields.as_object_mut().unwrap().insert("cmd".to_string(), serde_json::Value::String(cmd));
+    }
+    Message::new(MSG_ERROR, Some(kalixcli_uid), fields)
+}
+
+pub fn create_stopped_message(kalixcli_uid: String, command: String, exec_time_ms: f64) -> Message {
+    let fields = serde_json::json!({
+        "cmd": command,
+        "exec_ms": exec_time_ms
+    });
+    Message::new(MSG_STOPPED, Some(kalixcli_uid), fields)
+}
+
+// Helper functions for parsing incoming messages
+pub fn extract_command_info(msg: &Message) -> Option<(String, serde_json::Value)> {
+    if msg.m == MSG_COMMAND {
+        if let (Some(command), Some(params)) = (
+            msg.fields.get("c").and_then(|v| v.as_str()),
+            msg.fields.get("p")
+        ) {
+            return Some((command.to_string(), params.clone()));
+        }
+    }
+    None
+}
+
+pub fn extract_query_type(msg: &Message) -> Option<String> {
+    if msg.m == MSG_QUERY {
+        msg.fields.get("q").and_then(|v| v.as_str()).map(|s| s.to_string())
+    } else {
+        None
+    }
+}
+
+pub fn extract_stop_reason(msg: &Message) -> Option<String> {
+    if msg.m == MSG_STOPPED {
+        msg.fields.get("reason").and_then(|v| v.as_str()).map(|s| s.to_string())
+    } else {
+        None
+    }
+}
+
+// Helper for creating simulation result data structure
+pub fn create_simulation_result(timesteps: i64, start_date: String, end_date: String, available_types: Vec<String>, outputs: Vec<String>) -> serde_json::Value {
+    serde_json::json!({
+        "ts": {
+            "len": timesteps,
+            "start": start_date,
+            "end": end_date,
+            "o": available_types,
+            "outputs": outputs
+        }
+    })
+}
+
+// Helper for parsing execution time from duration
+pub fn duration_to_ms(duration: std::time::Duration) -> f64 {
+    duration.as_secs_f64() * 1000.0
+}
+
+// Legacy compatibility structure for commands module
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressInfo {
     pub percent_complete: f64,
     pub current_step: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_remaining: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProgressData {
-    pub command: String,
-    pub progress: ProgressInfo,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandData {
-    pub command: String,
-    pub parameters: serde_json::Value,
-}
+    #[test]
+    fn test_ready_message_creation() {
+        let msg = create_ready_message("test_uid_123".to_string(), 0);
+        assert_eq!(msg.m, "rdy");
+        assert_eq!(msg.uid, Some("test_uid_123".to_string()));
+        assert_eq!(msg.fields["rc"], 0);
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StopData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-}
+    #[test]
+    fn test_progress_message_creation() {
+        let msg = create_progress_message("test_uid_123".to_string(), 100, 1000, "sim".to_string());
+        assert_eq!(msg.m, "prg");
+        assert_eq!(msg.fields["i"], 100);
+        assert_eq!(msg.fields["n"], 1000);
+        assert_eq!(msg.fields["t"], "sim");
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResultData {
-    pub command: String,
-    pub status: String,
-    pub execution_time: String,
-    pub result: serde_json::Value,
-}
+    #[test]
+    fn test_command_extraction() {
+        let fields = serde_json::json!({
+            "c": "run_simulation",
+            "p": {"param1": "value1"}
+        });
+        let msg = Message::new("cmd", None, fields);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoppedData {
-    pub command: String,
-    pub status: String,
-    pub execution_time: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub partial_result: Option<serde_json::Value>,
-}
+        let (command, params) = extract_command_info(&msg).unwrap();
+        assert_eq!(command, "run_simulation");
+        assert_eq!(params["param1"], "value1");
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorInfo {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-}
+    #[test]
+    fn test_simulation_result_structure() {
+        let result = create_simulation_result(
+            48824,
+            "1889-01-01".to_string(),
+            "2022-09-04".to_string(),
+            vec!["timeseries_data".to_string(), "summary_statistics".to_string()],
+            vec!["node.output1".to_string(), "node.output2".to_string()]
+        );
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
-    pub error: ErrorInfo,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryData {
-    pub query_type: String,
-    pub parameters: serde_json::Value,
-}
-
-// Helper functions for creating common messages
-pub fn create_ready_message(kalixcli_uid: String, commands: Vec<CommandSpec>, state: StateInfo) -> Message {
-    let data = ReadyData {
-        status: "ready".to_string(),
-        available_commands: commands,
-        current_state: state,
-    };
-    Message::new("ready", kalixcli_uid, serde_json::to_value(data).unwrap())
-}
-
-pub fn create_busy_message(kalixcli_uid: String, command: String, interruptible: bool) -> Message {
-    let data = BusyData {
-        status: "busy".to_string(),
-        executing_command: command,
-        interruptible,
-        started_at: Utc::now(),
-    };
-    Message::new("busy", kalixcli_uid, serde_json::to_value(data).unwrap())
-}
-
-pub fn create_progress_message(kalixcli_uid: String, command: String, progress: ProgressInfo) -> Message {
-    let data = ProgressData { command, progress };
-    Message::new("progress", kalixcli_uid, serde_json::to_value(data).unwrap())
-}
-
-pub fn create_result_message(kalixcli_uid: String, command: String, execution_time: String, result: serde_json::Value) -> Message {
-    let data = ResultData {
-        command,
-        status: "success".to_string(),
-        execution_time,
-        result,
-    };
-    Message::new("result", kalixcli_uid, serde_json::to_value(data).unwrap())
-}
-
-pub fn create_error_message(kalixcli_uid: String, command: Option<String>, code: String, message: String, details: Option<serde_json::Value>) -> Message {
-    let data = ErrorData {
-        command,
-        error: ErrorInfo { code, message, details },
-    };
-    Message::new("error", kalixcli_uid, serde_json::to_value(data).unwrap())
-}
-
-pub fn create_stopped_message(kalixcli_uid: String, command: String, execution_time: String, partial_result: Option<serde_json::Value>) -> Message {
-    let data = StoppedData {
-        command,
-        status: "stopped".to_string(),
-        execution_time,
-        partial_result,
-    };
-    Message::new("stopped", kalixcli_uid, serde_json::to_value(data).unwrap())
+        assert_eq!(result["ts"]["len"], 48824);
+        assert_eq!(result["ts"]["start"], "1889-01-01");
+        assert_eq!(result["ts"]["outputs"].as_array().unwrap().len(), 2);
+    }
 }

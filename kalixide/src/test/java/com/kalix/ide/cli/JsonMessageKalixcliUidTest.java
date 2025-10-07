@@ -27,17 +27,16 @@ public class JsonMessageKalixcliUidTest {
     @Test
     void testSystemMessageDeserialization() throws Exception {
         String json = "{\n" +
-                "  \"type\": \"ready\",\n" +
-                "  \"timestamp\": \"2024-01-01T00:00:00Z\",\n" +
-                "  \"kalixcli_uid\": \"test_uid_456\",\n" +
-                "  \"data\": {\"status\": \"ready\"}\n" +
+                "  \"m\": \"rdy\",\n" +
+                "  \"uid\": \"test_uid_456\",\n" +
+                "  \"rc\": 0\n" +
                 "}";
-        
+
         JsonMessage.SystemMessage message = mapper.readValue(json, JsonMessage.SystemMessage.class);
-        
-        assertEquals("ready", message.getType());
+
+        assertEquals("rdy", message.getType());
         assertEquals("test_uid_456", message.getKalixcliUid());
-        
+
         System.out.println("Deserialized system message: " + message.toString());
     }
 }

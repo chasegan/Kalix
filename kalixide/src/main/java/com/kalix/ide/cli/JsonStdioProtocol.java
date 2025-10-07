@@ -8,16 +8,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * JSON-based STDIO protocol utility methods for kalixcli communication.
- * Provides parsing and message creation utilities for the JSON protocol.
+ * Compact JSON-based STDIO protocol utility methods for kalixcli communication.
+ * Provides parsing and message creation utilities for the compact JSON protocol.
  */
 public class JsonStdioProtocol {
-    
+
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     /**
-     * Parses a JSON line into a SystemMessage.
-     * 
+     * Parses a JSON line into a SystemMessage using compact protocol.
+     *
      * @param line the JSON line to parse
      * @return parsed system message if valid JSON, empty otherwise
      */
@@ -25,42 +25,36 @@ public class JsonStdioProtocol {
         if (line == null || line.trim().isEmpty()) {
             return Optional.empty();
         }
-        
+
         try {
             JsonMessage.SystemMessage message = objectMapper.readValue(line.trim(), JsonMessage.SystemMessage.class);
-            
-            // Validate required fields
-            if (message.getType() == null || message.getKalixcliUid() == null) {
+
+            // Validate required fields for compact protocol
+            if (message.getMessageType() == null) {
                 return Optional.empty();
             }
-            
+
             return Optional.of(message);
         } catch (JsonProcessingException e) {
             // Not valid JSON or not a system message
             return Optional.empty();
         }
     }
-    
+
     /**
-     * Creates a command message to send to kalixcli.
+     * Creates a compact command message to send to kalixcli.
      *
      * @param command the command name
      * @param parameters the command parameters
-     * @param kalixcliUid the kalixcli UID (use empty string if unknown)
      * @return JSON string representation
      */
-    public static String createCommandMessage(String command, Map<String, Object> parameters, String kalixcliUid) {
+    public static String createCommandMessage(String command, Map<String, Object> parameters) {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.COMMAND);
 
-            // Set the kalixcli UID if provided (non-empty)
-            if (kalixcliUid != null && !kalixcliUid.isEmpty()) {
-                message.setKalixcliUid(kalixcliUid);
-            }
+            message.setCommandName(command);
 
-            ObjectNode dataNode = objectMapper.createObjectNode();
-            dataNode.put("command", command);
-            
+            // Convert parameters to JSON node
             ObjectNode paramsNode = objectMapper.createObjectNode();
             if (parameters != null && !parameters.isEmpty()) {
                 parameters.forEach((key, value) -> {
@@ -77,90 +71,78 @@ public class JsonStdioProtocol {
                     }
                 });
             }
-            dataNode.set("parameters", paramsNode);
-            
-            message.setData(dataNode);
-            
+            message.setParameters(paramsNode);
+
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to create command message", e);
         }
     }
-    
+
     /**
-     * Creates a stop message to interrupt current operation.
-     * 
+     * Creates a compact command message to send to kalixcli (legacy version with sessionKey).
+     *
+     * @param command the command name
+     * @param parameters the command parameters
+     * @param sessionKey the session key (ignored in compact protocol)
+     * @return JSON string representation
+     */
+    public static String createCommandMessage(String command, Map<String, Object> parameters, String sessionKey) {
+        // For backward compatibility, ignore sessionKey in compact protocol
+        return createCommandMessage(command, parameters);
+    }
+
+    /**
+     * Creates a compact stop message to interrupt current operation.
+     *
      * @param reason the reason for stopping
      * @return JSON string representation
      */
     public static String createStopMessage(String reason) {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.STOP);
-            
-            ObjectNode dataNode = objectMapper.createObjectNode();
-            dataNode.put("reason", reason != null ? reason : "User requested cancellation");
-            
-            message.setData(dataNode);
-            
+            message.setStopReason(reason != null ? reason : "User requested cancellation");
+
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to create stop message", e);
         }
     }
-    
+
     /**
-     * Creates a query message to request information.
-     * 
+     * Creates a compact query message to request information.
+     *
      * @param queryType the type of query
-     * @param parameters query parameters
      * @return JSON string representation
      */
-    public static String createQueryMessage(String queryType, Map<String, Object> parameters) {
+    public static String createQueryMessage(String queryType) {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.QUERY);
-            
-            ObjectNode dataNode = objectMapper.createObjectNode();
-            dataNode.put("query_type", queryType);
-            
-            if (parameters != null && !parameters.isEmpty()) {
-                ObjectNode paramsNode = objectMapper.createObjectNode();
-                parameters.forEach((key, value) -> {
-                    if (value instanceof String) {
-                        paramsNode.put(key, (String) value);
-                    } else {
-                        paramsNode.put(key, value.toString());
-                    }
-                });
-                dataNode.set("parameters", paramsNode);
-            }
-            
-            message.setData(dataNode);
-            
+            message.setQueryType(queryType);
+
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to create query message", e);
         }
     }
-    
+
     /**
-     * Creates a terminate message to end the session.
-     * 
+     * Creates a compact terminate message to end the session.
+     *
      * @return JSON string representation
      */
     public static String createTerminateMessage() {
         try {
             JsonMessage.CommandMessage message = new JsonMessage.CommandMessage(JsonStdioTypes.CommandMessageType.TERMINATE);
-            message.setData(objectMapper.createObjectNode());
-            
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to create terminate message", e);
         }
     }
-    
+
     /**
      * Utility method to extract strongly-typed data from a system message.
-     * 
+     *
      * @param message the system message
      * @param dataClass the class to deserialize data into
      * @param <T> the data type
@@ -168,62 +150,136 @@ public class JsonStdioProtocol {
      */
     public static <T> T extractData(JsonMessage.SystemMessage message, Class<T> dataClass) {
         try {
-            return objectMapper.treeToValue(message.getData(), dataClass);
+            return objectMapper.treeToValue(message.getResult(), dataClass);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to extract data from message", e);
         }
     }
-    
+
     /**
-     * Checks if a line looks like a JSON message (starts with {).
-     * 
+     * Checks if a line looks like a compact JSON message (starts with { and contains "m").
+     *
+     * @param line the line to check
+     * @return true if it might be compact JSON
+     */
+    public static boolean looksLikeCompactJson(String line) {
+        if (line == null) return false;
+        String trimmed = line.trim();
+        return trimmed.startsWith("{") && trimmed.endsWith("}") && trimmed.contains("\"m\":");
+    }
+
+    /**
+     * Legacy method name for backward compatibility.
+     *
      * @param line the line to check
      * @return true if it might be JSON
      */
     public static boolean looksLikeJson(String line) {
-        if (line == null) return false;
-        String trimmed = line.trim();
-        return trimmed.startsWith("{") && trimmed.endsWith("}");
+        return looksLikeCompactJson(line);
     }
-    
+
+    /**
+     * Helper method to get progress percentage from a progress message.
+     *
+     * @param message the progress message
+     * @return percentage complete (0-100)
+     */
+    public static double getProgressPercentage(JsonMessage.SystemMessage message) {
+        return JsonMessage.ProgressHelper.calculatePercentage(message);
+    }
+
+    /**
+     * Helper method to check if a progress message indicates completion.
+     *
+     * @param message the progress message
+     * @return true if progress is complete
+     */
+    public static boolean isProgressComplete(JsonMessage.SystemMessage message) {
+        return JsonMessage.ProgressHelper.isComplete(message);
+    }
+
+    /**
+     * Helper method to extract simulation result information.
+     *
+     * @param message the result message from run_simulation
+     * @return simulation result data, or null if not a simulation result
+     */
+    public static JsonMessage.SimulationResult extractSimulationResult(JsonMessage.SystemMessage message) {
+        if (message.getResult() != null) {
+            try {
+                return objectMapper.treeToValue(message.getResult(), JsonMessage.SimulationResult.class);
+            } catch (JsonProcessingException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     /**
      * Utility methods for common queries.
      */
     public static class Queries {
         public static String getState() {
-            return createQueryMessage("get_state", null);
+            return createQueryMessage("get_state");
         }
-        
-        public static String getVersion() {
-            return createQueryMessage("get_version", null);
+
+        public static String getSessionId() {
+            return createQueryMessage("get_session_id");
         }
     }
-    
+
     /**
      * Utility methods for common commands.
      */
     public static class Commands {
-        public static String loadModelFile(String modelPath, String kalixcliUid) {
-            return createCommandMessage("load_model_file", Map.of("model_path", modelPath), kalixcliUid);
+        public static String loadModelFile(String modelPath) {
+            return createCommandMessage("load_model_file", Map.of("model_path", modelPath));
         }
 
-        public static String loadModelString(String modelIni, String kalixcliUid) {
-            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni), kalixcliUid);
-        }
-        
-        public static String runSimulation(String kalixcliUid) {
-            return createCommandMessage("run_simulation", Map.of(), kalixcliUid);
-        }
-        
-        public static String testProgress(String kalixcliUid) {
-            return createCommandMessage("test_progress", null, kalixcliUid);
+        public static String loadModelString(String modelIni) {
+            return createCommandMessage("load_model_string", Map.of("model_ini", modelIni));
         }
 
-        public static String getResult(String seriesName, String format, String kalixcliUid) {
+        public static String loadModelString(String modelIni, String sessionKey) {
+            // For backward compatibility, ignore sessionKey in compact protocol
+            return loadModelString(modelIni);
+        }
+
+        public static String runSimulation() {
+            return createCommandMessage("run_simulation", Map.of());
+        }
+
+        public static String runSimulation(String sessionKey) {
+            // For backward compatibility, ignore sessionKey in compact protocol
+            return runSimulation();
+        }
+
+        public static String testProgress() {
+            return createCommandMessage("test_progress", Map.of());
+        }
+
+        public static String testProgressWithDuration(int durationSeconds) {
+            return createCommandMessage("test_progress", Map.of("duration_seconds", durationSeconds));
+        }
+
+        public static String getResult(String seriesName, String format) {
             return createCommandMessage("get_result", Map.of(
                 "series_name", seriesName,
                 "format", format
-            ), kalixcliUid);
+            ));
+        }
+
+        public static String getResult(String seriesName, String format, String sessionKey) {
+            // For backward compatibility, ignore sessionKey in compact protocol
+            return getResult(seriesName, format);
+        }
+
+        public static String echo(String text) {
+            return createCommandMessage("echo", Map.of("string", text));
+        }
+
+        public static String getVersion() {
+            return createCommandMessage("get_version", Map.of());
         }
     }
 }
