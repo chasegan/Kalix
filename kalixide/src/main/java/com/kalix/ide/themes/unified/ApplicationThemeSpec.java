@@ -2,6 +2,7 @@ package com.kalix.ide.themes.unified;
 
 import java.awt.Color;
 import java.util.Properties;
+import java.util.Map;
 
 /**
  * Specification for generating application theme properties from a color palette.
@@ -14,6 +15,14 @@ public class ApplicationThemeSpec {
      * This replaces the need for separate .properties files.
      */
     public static Properties generateProperties(ColorPalette palette) {
+        return generateProperties(palette, null);
+    }
+
+    /**
+     * Generate FlatLaf properties from a color palette with custom overrides.
+     * Allows exact color mappings to be preserved for specific themes.
+     */
+    public static Properties generateProperties(ColorPalette palette, Map<String, String> customOverrides) {
         Properties props = new Properties();
 
         // Base backgrounds
@@ -158,6 +167,13 @@ public class ApplicationThemeSpec {
         // Tooltips
         props.setProperty("ToolTip.background", colorToHex(palette.getPrimary()));
         props.setProperty("ToolTip.foreground", colorToHex(palette.isDark() ? Color.WHITE : Color.BLACK));
+
+        // Apply custom overrides if provided
+        if (customOverrides != null) {
+            for (Map.Entry<String, String> override : customOverrides.entrySet()) {
+                props.setProperty(override.getKey(), override.getValue());
+            }
+        }
 
         return props;
     }

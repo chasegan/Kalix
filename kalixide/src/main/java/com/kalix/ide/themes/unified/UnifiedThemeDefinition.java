@@ -3,6 +3,7 @@ package com.kalix.ide.themes.unified;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.themes.SyntaxTheme;
 import java.awt.Color;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -13,10 +14,16 @@ public class UnifiedThemeDefinition {
 
     private final ColorPalette palette;
     private final String name;
+    private final Map<String, String> customApplicationProperties;
 
     public UnifiedThemeDefinition(String name, ColorPalette palette) {
+        this(name, palette, null);
+    }
+
+    public UnifiedThemeDefinition(String name, ColorPalette palette, Map<String, String> customApplicationProperties) {
         this.name = name;
         this.palette = palette;
+        this.customApplicationProperties = customApplicationProperties;
     }
 
     /**
@@ -37,7 +44,7 @@ public class UnifiedThemeDefinition {
      * Generate application theme properties
      */
     public Properties generateApplicationProperties() {
-        return ApplicationThemeSpec.generateProperties(palette);
+        return ApplicationThemeSpec.generateProperties(palette, customApplicationProperties);
     }
 
     /**
