@@ -22,6 +22,7 @@ import com.kalix.ide.interaction.MapInteractionManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
 import com.kalix.ide.rendering.MapRenderer;
 import com.kalix.ide.constants.UIConstants;
 
@@ -63,6 +64,9 @@ public class MapPanel extends JPanel implements KeyListener {
 
     // Display settings
     private boolean showGridlines = true;
+
+    // Theme management (optional - for enhanced unified theme support)
+    private com.kalix.ide.managers.ThemeManager themeManager;
 
     public MapPanel() {
         updateThemeColors();
@@ -292,10 +296,34 @@ public class MapPanel extends JPanel implements KeyListener {
     }
     
     /**
+     * Sets the theme manager for enhanced unified theme support.
+     * This is optional - MapPanel will continue to work without it.
+     *
+     * @param themeManager The theme manager instance
+     */
+    public void setThemeManager(com.kalix.ide.managers.ThemeManager themeManager) {
+        this.themeManager = themeManager;
+    }
+
+    /**
      * Updates the panel colors based on the current UI theme.
      * This method should be called when the theme changes.
+     * Now supports enhanced unified theme integration.
      */
     public void updateThemeColors() {
+        // Try unified theme system first if available
+        if (themeManager != null) {
+            UnifiedThemeDefinition unifiedTheme = themeManager.getCurrentUnifiedTheme();
+            if (unifiedTheme != null) {
+                // Use unified theme background color
+                Color themeBackground = unifiedTheme.getColorPalette().getBackground();
+                setBackground(themeBackground);
+                repaint();
+                return;
+            }
+        }
+
+        // Fallback to existing theme logic
         // First check for custom MapPanel background color
         Color customMapBg = UIManager.getColor("MapPanel.background");
         if (customMapBg != null) {
@@ -303,10 +331,10 @@ public class MapPanel extends JPanel implements KeyListener {
             repaint();
             return;
         }
-        
+
         // Fallback to original logic
         Color bgColor = UIManager.getColor("Panel.background");
-        
+
         // For light themes, keep the original white background
         if (isLightTheme()) {
             setBackground(Color.WHITE);
