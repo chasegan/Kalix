@@ -13,40 +13,178 @@ public class LightThemeDefinitions {
      * Create the unified Light theme definition
      */
     public static UnifiedThemeDefinition createLightTheme() {
-        // Extract colors from existing Light theme
-        Color primary = Color.decode("#3b82f6");     // Blue from syntax theme
-        Color secondary = Color.decode("#577590");   // Blue-gray
-        Color background = Color.WHITE;              // Standard light background
-        Color surface = Color.decode("#f5f5f5");     // Light gray surface
-        Color onBackground = Color.BLACK;            // Black text on white
-        Color onSurface = Color.decode("#2d2d2d");   // Dark gray text on surfaces
+        // Create exact color mapping from resolved FlatLightLaf colors
+        java.util.Map<String, String> lightColors = new java.util.HashMap<>();
 
-        // Create accent colors from existing Light node theme
+        // Base backgrounds
+        lightColors.put("Component.background", "#f2f2f2");
+        lightColors.put("Panel.background", "#f2f2f2");
+        lightColors.put("OptionPane.background", "#f2f2f2");
+        lightColors.put("PopupMenu.background", "#ffffff");
+        lightColors.put("MenuItem.background", "#ffffff");
+        lightColors.put("Dialog.background", "#f2f2f2");
+
+        // Text areas and input fields
+        lightColors.put("TextArea.background", "#ffffff");
+        lightColors.put("TextPane.background", "#ffffff");
+        lightColors.put("TextField.background", "#ffffff");
+        lightColors.put("FormattedTextField.background", "#ffffff");
+        lightColors.put("PasswordField.background", "#ffffff");
+        lightColors.put("EditorPane.background", "#ffffff");
+
+        // Text colors
+        lightColors.put("Component.foreground", "#000000");
+        lightColors.put("TextArea.foreground", "#000000");
+        lightColors.put("TextPane.foreground", "#000000");
+        lightColors.put("TextField.foreground", "#000000");
+        lightColors.put("Label.foreground", "#000000");
+
+        // Selection colors
+        lightColors.put("TextArea.selectionBackground", "#2675bf");
+        lightColors.put("TextPane.selectionBackground", "#2675bf");
+        lightColors.put("TextField.selectionBackground", "#2675bf");
+        lightColors.put("Component.focusedBorderColor", "#89b0d4");
+
+        // Buttons
+        lightColors.put("Button.background", "#ffffff");
+        lightColors.put("Button.foreground", "#000000");
+        lightColors.put("Button.focusedBorderColor", "#89b0d4");
+        lightColors.put("Button.hoverBackground", "#f7f7f7");
+        lightColors.put("Button.pressedBackground", "#e6e6e6");
+        lightColors.put("Button.default.background", "#ffffff");
+        lightColors.put("Button.default.foreground", "#000000");
+        lightColors.put("Button.default.hoverBackground", "#f7f7f7");
+
+        // Menu bar and menus
+        lightColors.put("MenuBar.background", "#ffffff");
+        lightColors.put("Menu.background", "#ffffff");
+        lightColors.put("Menu.foreground", "#000000");
+        lightColors.put("MenuItem.foreground", "#000000");
+        lightColors.put("MenuItem.hoverBackground", "#f2f2f2");
+        lightColors.put("MenuItem.selectionBackground", "#2675bf");
+
+        // Toolbar
+        lightColors.put("ToolBar.background", "#f2f2f2");
+        lightColors.put("ToolBar.borderColor", "#c2c2c2");
+
+        // Borders and separators
+        lightColors.put("Component.borderColor", "#c2c2c2");
+        lightColors.put("Separator.foreground", "#cecece");
+
+        // Tables
+        lightColors.put("Table.background", "#ffffff");
+        lightColors.put("Table.foreground", "#000000");
+        lightColors.put("Table.selectionBackground", "#2675bf");
+        lightColors.put("Table.selectionForeground", "#ffffff");
+        lightColors.put("Table.gridColor", "#ebebeb");
+
+        // Lists
+        lightColors.put("List.background", "#ffffff");
+        lightColors.put("List.foreground", "#000000");
+        lightColors.put("List.selectionBackground", "#2675bf");
+        lightColors.put("List.selectionForeground", "#ffffff");
+
+        // Trees
+        lightColors.put("Tree.background", "#ffffff");
+        lightColors.put("Tree.foreground", "#000000");
+        lightColors.put("Tree.selectionBackground", "#2675bf");
+        lightColors.put("Tree.selectionForeground", "#ffffff");
+
+        // Progress bars
+        lightColors.put("ProgressBar.background", "#d1d1d1");
+        lightColors.put("ProgressBar.foreground", "#2285e1");
+        lightColors.put("ProgressBar.selectionBackground", "#000000");
+        lightColors.put("ProgressBar.selectionForeground", "#ffffff");
+
+        // Tabs
+        lightColors.put("TabbedPane.background", "#f2f2f2");
+        lightColors.put("TabbedPane.foreground", "#000000");
+        lightColors.put("TabbedPane.selectedBackground", "#f2f2f2");
+        lightColors.put("TabbedPane.hoverColor", "#e0e0e0");
+
+        // Scrollbars
+        lightColors.put("ScrollBar.track", "#f5f5f5");
+        lightColors.put("ScrollBar.thumb", "#dcdcdc");
+        lightColors.put("ScrollBar.hoverThumbColor", "#c3c3c3");
+        lightColors.put("ScrollBar.pressedThumbColor", "#a9a9a9");
+
+        // Status bar area
+        lightColors.put("StatusBar.background", "#f2f2f2");
+        lightColors.put("StatusBar.foreground", "#000000");
+
+        // Additional elements
+        lightColors.put("CheckBox.background", "#f2f2f2");
+        lightColors.put("CheckBox.icon.checkmarkColor", "#4e9de7");
+        lightColors.put("RadioButton.background", "#f2f2f2");
+        lightColors.put("RadioButton.icon.centerColor", "#000000");
+        lightColors.put("Spinner.background", "#ffffff");
+        lightColors.put("Spinner.buttonBackground", "#fafafa");
+        lightColors.put("Spinner.buttonArrowColor", "#666666");
+
+        // ComboBox
+        lightColors.put("ComboBox.background", "#ffffff");
+        lightColors.put("ComboBox.foreground", "#000000");
+        lightColors.put("ComboBox.buttonBackground", "#ffffff");
+        lightColors.put("ComboBox.buttonArrowColor", "#666666");
+        lightColors.put("ComboBox.selectionBackground", "#2675bf");
+        lightColors.put("ComboBox.selectionForeground", "#ffffff");
+
+        // Split pane
+        lightColors.put("SplitPane.background", "#f2f2f2");
+        lightColors.put("SplitPaneDivider.draggingColor", "#c2c2c2");
+        lightColors.put("Component.splitPaneDividerColor", "#c2c2c2");
+        lightColors.put("SplitPane.oneTouchButtonColor", "#ffffff");
+        lightColors.put("SplitPane.oneTouchArrowColor", "#000000");
+
+        // Internal frames
+        lightColors.put("InternalFrame.activeTitleBackground", "#ffffff");
+        lightColors.put("InternalFrame.inactiveTitleBackground", "#fafafa");
+        lightColors.put("Window.background", "#ffffff");
+
+        // Title bar properties for light theme
+        lightColors.put("TitlePane.background", "#f2f2f2");
+        lightColors.put("TitlePane.unifiedBackground", "false");
+
+        // Sliders
+        lightColors.put("Slider.thumb", "#2285e1");
+        lightColors.put("Slider.track", "#c4c4c4");
+        lightColors.put("Slider.trackColor", "#c4c4c4");
+        lightColors.put("Slider.trackValueColor", "#2285e1");
+        lightColors.put("Slider.focus", "#9c9c9c");
+        lightColors.put("Slider.hoverThumbColor", "#1c78ce");
+        lightColors.put("Slider.pressedThumbColor", "#1a70c0");
+
+        // Tooltips
+        lightColors.put("ToolTip.background", "#fafafa");
+        lightColors.put("ToolTip.foreground", "#000000");
+
+        // TitledBorder
+        lightColors.put("TitledBorder.titleColor", "#000000");
+
+        // Custom map panel background - use white like other input areas
+        lightColors.put("MapPanel.background", "#ffffff");
+        lightColors.put("MapPanel.gridlineColor", "#ebebeb");
+
+        // Create minimal palette for backward compatibility
+        Color primary = Color.decode("#2675bf");     // Selection blue
+        Color secondary = Color.decode("#89b0d4");   // Focused border blue
+        Color background = Color.decode("#f2f2f2");  // Panel background
+        Color surface = Color.decode("#ffffff");     // Input surface
+        Color onBackground = Color.decode("#000000"); // Text on background
+        Color onSurface = Color.decode("#000000");    // Text on surface
+
         java.util.List<Color> accentColors = Arrays.asList(
-            Color.decode("#F94144"), // Red
-            Color.decode("#F3722C"), // Orange-red
-            Color.decode("#F8961E"), // Orange
-            Color.decode("#F9C74F"), // Yellow
-            Color.decode("#90BE6D"), // Green
-            Color.decode("#43AA8B"), // Teal
-            Color.decode("#4D908E"), // Dark teal
-            Color.decode("#577590"), // Blue-gray
-            Color.decode("#277DA1")  // Blue
+            Color.decode("#2675bf"), Color.decode("#89b0d4"), Color.decode("#4e9de7"),
+            Color.decode("#2285e1"), Color.decode("#1c78ce"), Color.decode("#1a70c0"),
+            Color.decode("#f7f7f7"), Color.decode("#e6e6e6"), Color.decode("#e0e0e0")
         );
 
         ColorPalette palette = new ColorPalette(
-            "Light",
-            primary,
-            secondary,
-            background,
-            surface,
-            onBackground,
-            onSurface,
-            accentColors,
-            false // not dark
+            "Light", primary, secondary, background, surface,
+            onBackground, onSurface, accentColors, false
         );
 
-        return new UnifiedThemeDefinition("Light", palette);
+        return new UnifiedThemeDefinition("Light", palette, lightColors);
     }
 
     /**
@@ -154,6 +292,10 @@ public class LightThemeDefinitions {
         // Custom map panel background and gridline colors
         keylimeColors.put("MapPanel.background", "#ffffff");
         keylimeColors.put("MapPanel.gridlineColor", "#f0f0f0");
+
+        // Title bar properties for light theme
+        keylimeColors.put("TitlePane.background", "#f8fcf4");
+        keylimeColors.put("TitlePane.unifiedBackground", "false");
 
         // Create minimal palette for backward compatibility
         Color primary = Color.decode("#65a30d");     // Main lime green
@@ -290,6 +432,10 @@ public class LightThemeDefinitions {
         // Custom map panel background and gridline colors
         laplandColors.put("MapPanel.background", "#fefbfa");
         laplandColors.put("MapPanel.gridlineColor", "#f0f0f0");
+
+        // Title bar properties for light theme
+        laplandColors.put("TitlePane.background", "#f1f5f9");
+        laplandColors.put("TitlePane.unifiedBackground", "false");
 
         // Create minimal palette for backward compatibility
         Color primary = Color.decode("#2563eb");     // Main nordic blue
@@ -428,6 +574,10 @@ public class LightThemeDefinitions {
 
         // Custom gridline color - slightly darker for better visibility in ocean theme
         nemoColors.put("MapPanel.gridlineColor", "#d0d0d0");
+
+        // Title bar properties for light theme
+        nemoColors.put("TitlePane.background", "#e1f4ff");
+        nemoColors.put("TitlePane.unifiedBackground", "false");
 
         // Split pane dividers - sea anemone inspired
         nemoColors.put("SplitPane.background", "#cce7ff");
@@ -571,8 +721,12 @@ public class LightThemeDefinitions {
         sunsetWarmthColors.put("MapPanel.background", "#fffef9");
 
         // Sunset-specific custom properties
-        sunsetWarmthColors.put("MapPanel.gridlineColor", "#f7931e");
+        sunsetWarmthColors.put("MapPanel.gridlineColor", "#fbb668");
         sunsetWarmthColors.put("Component.splitPaneDividerColor", "#f7931e");
+
+        // Title bar properties for light theme
+        sunsetWarmthColors.put("TitlePane.background", "#feca57");
+        sunsetWarmthColors.put("TitlePane.unifiedBackground", "false");
 
         // Additional vibrant sunset elements
         sunsetWarmthColors.put("Spinner.buttonBackground", "#ff6b35");

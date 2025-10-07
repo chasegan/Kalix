@@ -13,6 +13,8 @@ import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
+import com.kalix.ide.utils.Platform;
+import com.kalix.ide.utils.PlatformUtils;
 import com.kalix.ide.themes.unified.LightThemeDefinitions;
 import com.kalix.ide.themes.unified.DarkThemeDefinitions;
 import com.kalix.ide.themes.unified.ThemeCompatibilityAdapter;
@@ -168,10 +170,12 @@ public class ThemeManager {
         // This fallback should rarely be used since all known themes are unified
         System.err.println("Unknown theme '" + theme + "', falling back to unified Light theme");
         UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightTheme();
+
+
         FlatPropertiesLaf lightLaf = ThemeCompatibilityAdapter.createApplicationTheme(lightTheme);
         UIManager.setLookAndFeel(lightLaf);
     }
-    
+
     /**
      * Configures FlatLaf UI properties for better appearance.
      */
@@ -268,10 +272,34 @@ public class ThemeManager {
      * Configures system properties for better macOS integration.
      */
     public static void configureSystemProperties() {
-        System.setProperty(AppConstants.PROP_MACOS_SCREEN_MENU, "true");
-        System.setProperty(AppConstants.PROP_MACOS_APP_NAME, "Kalix IDE");
-        System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
-        System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+        Platform platform = PlatformUtils.getCurrentPlatform();
+
+        switch (platform) {
+            case MACOS:
+                // macOS-specific properties
+                System.setProperty(AppConstants.PROP_MACOS_SCREEN_MENU, "true");
+                System.setProperty(AppConstants.PROP_MACOS_APP_NAME, "Kalix IDE");
+
+                // Note: Not setting apple.awt.application.appearance to keep title bars light
+
+                // Disable FlatLaf window decorations (not supported on macOS)
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+
+            case WINDOWS:
+            case LINUX:
+                // Enable FlatLaf window decorations for custom title bars on Windows/Linux
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "true");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+
+            case UNKNOWN:
+                // Conservative defaults for unknown platforms
+                System.setProperty(AppConstants.PROP_FLATLAF_WINDOW_DECORATIONS, "false");
+                System.setProperty(AppConstants.PROP_FLATLAF_MENU_EMBEDDED, "false");
+                break;
+        }
     }
 
     /**

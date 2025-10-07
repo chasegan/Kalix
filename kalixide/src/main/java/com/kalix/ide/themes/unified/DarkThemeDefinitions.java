@@ -125,6 +125,11 @@ public class DarkThemeDefinitions {
         // Custom map panel background - rich dark
         sanneColors.put("MapPanel.background", "#2a2a2e");
 
+        // Title bar properties for dark theme
+        sanneColors.put("TitlePane.background", "#2a2a2e");
+        sanneColors.put("TitlePane.unifiedBackground", "false");
+        sanneColors.put("Window.background", "#2a2a2e");
+
         // Sanne-specific custom properties with pink accents
         sanneColors.put("MapPanel.gridlineColor", "#ff69b430");
         sanneColors.put("Component.splitPaneDividerColor", "#505058");
@@ -293,6 +298,15 @@ public class DarkThemeDefinitions {
         // TitledBorder - fix for black text in dark themes
         obsidianColors.put("TitledBorder.titleColor", "#e6e6e6");
 
+        // Custom map panel background and grid
+        obsidianColors.put("MapPanel.background", "#1a1a1a");
+        obsidianColors.put("MapPanel.gridlineColor", "#505050");
+
+        // Title bar properties for dark theme
+        obsidianColors.put("TitlePane.background", "#161b22");
+        obsidianColors.put("TitlePane.unifiedBackground", "false");
+        obsidianColors.put("Window.background", "#1a1a1a");
+
         // Create minimal palette for backward compatibility
         Color primary = Color.decode("#8b5cf6");     // Purple
         Color secondary = Color.decode("#a855f7");   // Medium light purple
@@ -319,15 +333,168 @@ public class DarkThemeDefinitions {
      * Create the unified Dracula theme definition
      */
     public static UnifiedThemeDefinition createDraculaTheme() {
-        // Dracula theme - popular dark theme with purple and pink accents
+        // Create exact color mapping from resolved FlatDraculaIJTheme colors
+        java.util.Map<String, String> draculaColors = new java.util.HashMap<>();
+
+        // Base backgrounds
+        draculaColors.put("Component.background", "#414450");
+        draculaColors.put("Panel.background", "#414450");
+        draculaColors.put("OptionPane.background", "#414450");
+        draculaColors.put("PopupMenu.background", "#414450");
+        draculaColors.put("MenuItem.background", "#414450");
+        draculaColors.put("Dialog.background", "#414450");
+
+        // Text areas and input fields
+        draculaColors.put("TextArea.background", "#3a3d4c");
+        draculaColors.put("TextPane.background", "#3a3d4c");
+        draculaColors.put("TextField.background", "#3a3d4c");
+        draculaColors.put("FormattedTextField.background", "#3a3d4c");
+        draculaColors.put("PasswordField.background", "#3a3d4c");
+        draculaColors.put("EditorPane.background", "#3a3d4c");
+
+        // Text colors
+        draculaColors.put("Component.foreground", "#bbbbbb");
+        draculaColors.put("TextArea.foreground", "#bbbbbb");
+        draculaColors.put("TextPane.foreground", "#bbbbbb");
+        draculaColors.put("TextField.foreground", "#bbbbbb");
+        draculaColors.put("Label.foreground", "#bbbbbb");
+
+        // Selection colors
+        draculaColors.put("TextArea.selectionBackground", "#6272a4");
+        draculaColors.put("TextPane.selectionBackground", "#6272a4");
+        draculaColors.put("TextField.selectionBackground", "#6272a4");
+        draculaColors.put("Component.focusedBorderColor", "#6272a4");
+
+        // Buttons
+        draculaColors.put("Button.background", "#414450");
+        draculaColors.put("Button.foreground", "#f8f8f2");
+        draculaColors.put("Button.focusedBorderColor", "#bd93f9");
+        draculaColors.put("Button.hoverBackground", "#55585a");
+        draculaColors.put("Button.pressedBackground", "#5d5f62");
+        draculaColors.put("Button.default.background", "#414450");
+        draculaColors.put("Button.default.foreground", "#f8f8f2");
+        draculaColors.put("Button.default.hoverBackground", "#3c618c");
+
+        // Menu bar and menus
+        draculaColors.put("MenuBar.background", "#414450");
+        draculaColors.put("Menu.background", "#414450");
+        draculaColors.put("Menu.foreground", "#bbbbbb");
+        draculaColors.put("MenuItem.foreground", "#bbbbbb");
+        draculaColors.put("MenuItem.hoverBackground", "#474a58");
+        draculaColors.put("MenuItem.selectionBackground", "#6272a4");
+
+        // Toolbar
+        draculaColors.put("ToolBar.background", "#414450");
+        draculaColors.put("ToolBar.borderColor", "#6272a4");
+
+        // Borders and separators
+        draculaColors.put("Component.borderColor", "#6272a4");
+        draculaColors.put("Separator.foreground", "#5d5e66");
+
+        // Tables
+        draculaColors.put("Table.background", "#414450");
+        draculaColors.put("Table.foreground", "#bbbbbb");
+        draculaColors.put("Table.selectionBackground", "#6272a4");
+        draculaColors.put("Table.selectionForeground", "#f8f8f2");
+        draculaColors.put("Table.gridColor", "#5d617a");
+
+        // Lists
+        draculaColors.put("List.background", "#414450");
+        draculaColors.put("List.foreground", "#bbbbbb");
+        draculaColors.put("List.selectionBackground", "#6272a4");
+        draculaColors.put("List.selectionForeground", "#f8f8f2");
+
+        // Trees
+        draculaColors.put("Tree.background", "#414450");
+        draculaColors.put("Tree.foreground", "#bbbbbb");
+        draculaColors.put("Tree.selectionBackground", "#6272a4");
+        draculaColors.put("Tree.selectionForeground", "#f8f8f2");
+
+        // Progress bars
+        draculaColors.put("ProgressBar.background", "#6272a4");
+        draculaColors.put("ProgressBar.foreground", "#ff79c6");
+        draculaColors.put("ProgressBar.selectionBackground", "#ffffff");
+        draculaColors.put("ProgressBar.selectionForeground", "#ffffff");
+
+        // Tabs
+        draculaColors.put("TabbedPane.background", "#414450");
+        draculaColors.put("TabbedPane.foreground", "#bbbbbb");
+        draculaColors.put("TabbedPane.selectedBackground", "#414450");
+        draculaColors.put("TabbedPane.hoverColor", "#282a36");
+
+        // Scrollbars
+        draculaColors.put("ScrollBar.track", "#3e4244");
+        draculaColors.put("ScrollBar.thumb", "#565c5f");
+        draculaColors.put("ScrollBar.hoverThumbColor", "#6e767a");
+        draculaColors.put("ScrollBar.pressedThumbColor", "#7a8387");
+
+        // Status bar area
+        draculaColors.put("StatusBar.background", "#414450");
+        draculaColors.put("StatusBar.foreground", "#bbbbbb");
+
+        // Additional elements
+        draculaColors.put("CheckBox.background", "#414450");
+        draculaColors.put("CheckBox.icon.checkmarkColor", "#f8f8f2");
+        draculaColors.put("RadioButton.background", "#414450");
+        draculaColors.put("RadioButton.icon.centerColor", "#bbbbbb");
+        draculaColors.put("RadioButton.icon.centerDiameter", "5");
+        draculaColors.put("Spinner.background", "#3a3d4c");
+        draculaColors.put("Spinner.buttonBackground", "#3a3d4c");
+        draculaColors.put("Spinner.buttonArrowColor", "#bd93f9");
+
+        // ComboBox
+        draculaColors.put("ComboBox.background", "#3a3d4c");
+        draculaColors.put("ComboBox.foreground", "#bbbbbb");
+        draculaColors.put("ComboBox.buttonBackground", "#3a3d4c");
+        draculaColors.put("ComboBox.buttonArrowColor", "#bd93f9");
+        draculaColors.put("ComboBox.selectionBackground", "#6272a4");
+        draculaColors.put("ComboBox.selectionForeground", "#f8f8f2");
+
+        // Split pane
+        draculaColors.put("SplitPane.background", "#414450");
+        draculaColors.put("SplitPaneDivider.draggingColor", "#616365");
+        draculaColors.put("Component.splitPaneDividerColor", "#616365");
+        draculaColors.put("SplitPane.oneTouchButtonColor", "#414450");
+        draculaColors.put("SplitPane.oneTouchArrowColor", "#f8f8f2");
+        draculaColors.put("SplitPane.dividerSize", "5");
+
+        // Internal frames
+        draculaColors.put("InternalFrame.activeTitleBackground", "#242526");
+        draculaColors.put("InternalFrame.inactiveTitleBackground", "#303233");
+        draculaColors.put("Window.background", "#414450");
+
+        // Title bar properties for dark theme
+        draculaColors.put("TitlePane.background", "#414450");
+        draculaColors.put("TitlePane.unifiedBackground", "false");
+
+        // Sliders
+        draculaColors.put("Slider.thumb", "#ff79c6");
+        draculaColors.put("Slider.track", "#6272a4");
+        draculaColors.put("Slider.trackColor", "#6272a4");
+        draculaColors.put("Slider.trackValueColor", "#ff79c6");
+        draculaColors.put("Slider.focus", "#7a7d7f");
+        draculaColors.put("Slider.hoverThumbColor", "#6094ce");
+        draculaColors.put("Slider.pressedThumbColor", "#6b9cd2");
+
+        // Tooltips
+        draculaColors.put("ToolTip.background", "#414450");
+        draculaColors.put("ToolTip.foreground", "#bbbbbb");
+
+        // TitledBorder
+        draculaColors.put("TitledBorder.titleColor", "#bbbbbb");
+
+        // Custom map panel background - use darker input area
+        draculaColors.put("MapPanel.background", "#3a3d4c");
+        draculaColors.put("MapPanel.gridlineColor", "#5d617a");
+
+        // Create minimal palette for backward compatibility
         Color primary = Color.decode("#bd93f9");     // Purple
         Color secondary = Color.decode("#ff79c6");   // Pink
-        Color background = Color.decode("#282a36");  // Dark purple-gray
-        Color surface = Color.decode("#44475a");     // Lighter surface
-        Color onBackground = Color.decode("#f8f8f2"); // Light text
-        Color onSurface = Color.decode("#f8f8f2");    // Same light text
+        Color background = Color.decode("#414450");  // Panel background
+        Color surface = Color.decode("#3a3d4c");     // Input surface
+        Color onBackground = Color.decode("#bbbbbb"); // Text on background
+        Color onSurface = Color.decode("#bbbbbb");    // Text on surface
 
-        // Create accent colors from existing Dracula node theme
         java.util.List<Color> accentColors = Arrays.asList(
             Color.decode("#ff79c6"), Color.decode("#bd93f9"), Color.decode("#f1fa8c"),
             Color.decode("#8be9fd"), Color.decode("#ffb86c"), Color.decode("#50fa7b"),
@@ -339,26 +506,179 @@ public class DarkThemeDefinitions {
             onBackground, onSurface, accentColors, true
         );
 
-        return new UnifiedThemeDefinition("Dracula", palette);
+        return new UnifiedThemeDefinition("Dracula", palette, draculaColors);
     }
 
     /**
      * Create the unified One Dark theme definition
      */
     public static UnifiedThemeDefinition createOneDarkTheme() {
-        // One Dark theme - VSCode inspired dark theme
+        // Create exact color mapping from resolved FlatOneDarkIJTheme colors
+        java.util.Map<String, String> oneDarkColors = new java.util.HashMap<>();
+
+        // Base backgrounds
+        oneDarkColors.put("Component.background", "#21252b");
+        oneDarkColors.put("Panel.background", "#21252b");
+        oneDarkColors.put("OptionPane.background", "#21252b");
+        oneDarkColors.put("PopupMenu.background", "#21252b");
+        oneDarkColors.put("MenuItem.background", "#21252b");
+        oneDarkColors.put("Dialog.background", "#21252b");
+
+        // Text areas and input fields
+        oneDarkColors.put("TextArea.background", "#282c34");
+        oneDarkColors.put("TextPane.background", "#282c34");
+        oneDarkColors.put("TextField.background", "#282c34");
+        oneDarkColors.put("FormattedTextField.background", "#282c34");
+        oneDarkColors.put("PasswordField.background", "#282c34");
+        oneDarkColors.put("EditorPane.background", "#282c34");
+
+        // Text colors
+        oneDarkColors.put("Component.foreground", "#abb2bf");
+        oneDarkColors.put("TextArea.foreground", "#abb2bf");
+        oneDarkColors.put("TextPane.foreground", "#abb2bf");
+        oneDarkColors.put("TextField.foreground", "#abb2bf");
+        oneDarkColors.put("Label.foreground", "#abb2bf");
+
+        // Selection colors
+        oneDarkColors.put("TextArea.selectionBackground", "#4d78cc");
+        oneDarkColors.put("TextPane.selectionBackground", "#4d78cc");
+        oneDarkColors.put("TextField.selectionBackground", "#4d78cc");
+        oneDarkColors.put("Component.focusedBorderColor", "#568af2");
+
+        // Buttons
+        oneDarkColors.put("Button.background", "#21252b");
+        oneDarkColors.put("Button.foreground", "#a0a7b4");
+        oneDarkColors.put("Button.focusedBorderColor", "#646a73");
+        oneDarkColors.put("Button.hoverBackground", "#55585a");
+        oneDarkColors.put("Button.pressedBackground", "#5d5f62");
+        oneDarkColors.put("Button.default.background", "#21252b");
+        oneDarkColors.put("Button.default.foreground", "#ffffff");
+        oneDarkColors.put("Button.default.hoverBackground", "#3c618c");
+
+        // Menu bar and menus
+        oneDarkColors.put("MenuBar.background", "#21252b");
+        oneDarkColors.put("Menu.background", "#21252b");
+        oneDarkColors.put("Menu.foreground", "#abb2bf");
+        oneDarkColors.put("MenuItem.foreground", "#abb2bf");
+        oneDarkColors.put("MenuItem.hoverBackground", "#24282f");
+        oneDarkColors.put("MenuItem.selectionBackground", "#4d78cc");
+
+        // Toolbar
+        oneDarkColors.put("ToolBar.background", "#21252b");
+        oneDarkColors.put("ToolBar.borderColor", "#333841");
+
+        // Borders and separators
+        oneDarkColors.put("Component.borderColor", "#333841");
+        oneDarkColors.put("Separator.foreground", "#32363c");
+
+        // Tables
+        oneDarkColors.put("Table.background", "#21252b");
+        oneDarkColors.put("Table.foreground", "#abb2bf");
+        oneDarkColors.put("Table.selectionBackground", "#4d78cc");
+        oneDarkColors.put("Table.selectionForeground", "#ffffff");
+        oneDarkColors.put("Table.gridColor", "#5c6370");
+
+        // Lists
+        oneDarkColors.put("List.background", "#21252b");
+        oneDarkColors.put("List.foreground", "#abb2bf");
+        oneDarkColors.put("List.selectionBackground", "#4d78cc");
+        oneDarkColors.put("List.selectionForeground", "#ffffff");
+
+        // Trees
+        oneDarkColors.put("Tree.background", "#21252b");
+        oneDarkColors.put("Tree.foreground", "#abb2bf");
+        oneDarkColors.put("Tree.selectionBackground", "#4d78cc");
+        oneDarkColors.put("Tree.selectionForeground", "#ffffff");
+
+        // Progress bars
+        oneDarkColors.put("ProgressBar.background", "#32363c");
+        oneDarkColors.put("ProgressBar.foreground", "#568af2");
+        oneDarkColors.put("ProgressBar.selectionBackground", "#568af2");
+        oneDarkColors.put("ProgressBar.selectionForeground", "#1d1d26");
+
+        // Tabs
+        oneDarkColors.put("TabbedPane.background", "#21252b");
+        oneDarkColors.put("TabbedPane.foreground", "#abb2bf");
+        oneDarkColors.put("TabbedPane.selectedBackground", "#21252b");
+        oneDarkColors.put("TabbedPane.hoverColor", "#323844");
+
+        // Scrollbars
+        oneDarkColors.put("ScrollBar.track", "#3e4244");
+        oneDarkColors.put("ScrollBar.thumb", "#565c5f");
+        oneDarkColors.put("ScrollBar.hoverThumbColor", "#6e767a");
+        oneDarkColors.put("ScrollBar.pressedThumbColor", "#7a8387");
+
+        // Status bar area
+        oneDarkColors.put("StatusBar.background", "#21252b");
+        oneDarkColors.put("StatusBar.foreground", "#abb2bf");
+
+        // Additional elements
+        oneDarkColors.put("CheckBox.background", "#21252b");
+        oneDarkColors.put("CheckBox.icon.checkmarkColor", "#abb2bf");
+        oneDarkColors.put("RadioButton.background", "#21252b");
+        oneDarkColors.put("RadioButton.icon.centerColor", "#abb2bf");
+        oneDarkColors.put("RadioButton.icon.centerDiameter", "5");
+        oneDarkColors.put("Spinner.background", "#282c34");
+        oneDarkColors.put("Spinner.buttonBackground", "#21252b");
+        oneDarkColors.put("Spinner.buttonArrowColor", "#abb2bf");
+
+        // ComboBox
+        oneDarkColors.put("ComboBox.background", "#333841");
+        oneDarkColors.put("ComboBox.foreground", "#abb2bf");
+        oneDarkColors.put("ComboBox.buttonBackground", "#333841");
+        oneDarkColors.put("ComboBox.buttonArrowColor", "#abb2bf");
+        oneDarkColors.put("ComboBox.selectionBackground", "#4d78cc");
+        oneDarkColors.put("ComboBox.selectionForeground", "#d7dae0");
+
+        // Split pane
+        oneDarkColors.put("SplitPane.background", "#21252b");
+        oneDarkColors.put("SplitPaneDivider.draggingColor", "#616365");
+        oneDarkColors.put("Component.splitPaneDividerColor", "#616365");
+        oneDarkColors.put("SplitPane.oneTouchButtonColor", "#21252b");
+        oneDarkColors.put("SplitPane.oneTouchArrowColor", "#a0a7b4");
+        oneDarkColors.put("SplitPane.dividerSize", "5");
+
+        // Internal frames
+        oneDarkColors.put("InternalFrame.activeTitleBackground", "#242526");
+        oneDarkColors.put("InternalFrame.inactiveTitleBackground", "#303233");
+        oneDarkColors.put("Window.background", "#21252b");
+
+        // Title bar properties for dark theme
+        oneDarkColors.put("TitlePane.background", "#21252b");
+        oneDarkColors.put("TitlePane.unifiedBackground", "false");
+
+        // Sliders
+        oneDarkColors.put("Slider.thumb", "#568af2");
+        oneDarkColors.put("Slider.track", "#32363c");
+        oneDarkColors.put("Slider.trackColor", "#32363c");
+        oneDarkColors.put("Slider.trackValueColor", "#568af2");
+        oneDarkColors.put("Slider.focus", "#7a7d7f");
+        oneDarkColors.put("Slider.hoverThumbColor", "#6094ce");
+        oneDarkColors.put("Slider.pressedThumbColor", "#6b9cd2");
+
+        // Tooltips
+        oneDarkColors.put("ToolTip.background", "#3d424b");
+        oneDarkColors.put("ToolTip.foreground", "#abb2bf");
+
+        // TitledBorder
+        oneDarkColors.put("TitledBorder.titleColor", "#bbbbbb");
+
+        // Custom map panel background - use darker input area
+        oneDarkColors.put("MapPanel.background", "#282c34");
+        oneDarkColors.put("MapPanel.gridlineColor", "#5c6370");
+
+        // Create minimal palette for backward compatibility
         Color primary = Color.decode("#61afef");     // Blue
         Color secondary = Color.decode("#c678dd");   // Purple
-        Color background = Color.decode("#282c34");  // Dark gray
-        Color surface = Color.decode("#3e4451");     // Lighter surface
-        Color onBackground = Color.decode("#abb2bf"); // Light gray text
-        Color onSurface = Color.decode("#abb2bf");    // Same light gray
+        Color background = Color.decode("#21252b");  // Panel background
+        Color surface = Color.decode("#282c34");     // Input surface
+        Color onBackground = Color.decode("#abb2bf"); // Text on background
+        Color onSurface = Color.decode("#abb2bf");    // Text on surface
 
-        // Create accent colors from existing One Dark node theme
         java.util.List<Color> accentColors = Arrays.asList(
-            Color.decode("#56b6c2"), Color.decode("#c678dd"), Color.decode("#98c379"),
-            Color.decode("#e06c75"), Color.decode("#d19a66"), Color.decode("#61afef"),
-            Color.decode("#e5c07b"), Color.decode("#abb2bf"), Color.decode("#5c6370")
+            Color.decode("#61afef"), Color.decode("#c678dd"), Color.decode("#98c379"),
+            Color.decode("#e06c75"), Color.decode("#d19a66"), Color.decode("#e5c07b"),
+            Color.decode("#56b6c2"), Color.decode("#828997"), Color.decode("#5c6370")
         );
 
         ColorPalette palette = new ColorPalette(
@@ -366,7 +686,7 @@ public class DarkThemeDefinitions {
             onBackground, onSurface, accentColors, true
         );
 
-        return new UnifiedThemeDefinition("One Dark", palette);
+        return new UnifiedThemeDefinition("One Dark", palette, oneDarkColors);
     }
 
     /**
@@ -485,6 +805,10 @@ public class DarkThemeDefinitions {
         // Botanical-specific custom properties
         botanicalColors.put("MapPanel.gridlineColor", "#c8e0b8");
         botanicalColors.put("Component.splitPaneDividerColor", "#c8e0b8");
+
+        // Title bar properties for light botanical theme
+        botanicalColors.put("TitlePane.background", "#e8f2e0");
+        botanicalColors.put("TitlePane.unifiedBackground", "false");
 
         // Additional rich green elements
         botanicalColors.put("Spinner.buttonBackground", "#7fb069");
