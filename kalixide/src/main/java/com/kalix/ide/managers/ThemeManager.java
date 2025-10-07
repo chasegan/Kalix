@@ -123,90 +123,30 @@ public class ThemeManager {
         switch (themeName) {
             // Light themes
             case "Light":
-                // Use refactored version if available, fallback to original
-                try {
-                    return LightThemeDefinitions.createLightThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Light theme failed, using original: " + e.getMessage());
-                    return LightThemeDefinitions.createLightTheme();
-                }
+                return LightThemeDefinitions.createLightThemeRefactored();
             case "Keylime":
-                // Use refactored version if available, fallback to original
-                try {
-                    return LightThemeDefinitions.createKeylimeThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Keylime theme failed, using original: " + e.getMessage());
-                    return LightThemeDefinitions.createKeylimeTheme();
-                }
+                return LightThemeDefinitions.createKeylimeThemeRefactored();
             case "Lapland":
-                // Use refactored version if available, fallback to original
-                try {
-                    return LightThemeDefinitions.createLaplandThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Lapland theme failed, using original: " + e.getMessage());
-                    return LightThemeDefinitions.createLaplandTheme();
-                }
+                return LightThemeDefinitions.createLaplandThemeRefactored();
             case "Nemo":
-                // Use refactored version if available, fallback to original
-                try {
-                    return LightThemeDefinitions.createNemoThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Nemo theme failed, using original: " + e.getMessage());
-                    return LightThemeDefinitions.createNemoTheme();
-                }
+                return LightThemeDefinitions.createNemoThemeRefactored();
             case "Sunset Warmth":
-                // Use refactored version if available, fallback to original
-                try {
-                    return LightThemeDefinitions.createSunsetWarmthThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Sunset Warmth theme failed, using original: " + e.getMessage());
-                    return LightThemeDefinitions.createSunsetWarmthTheme();
-                }
+                return LightThemeDefinitions.createSunsetWarmthThemeRefactored();
             case "Botanical":
-                // Use refactored version if available, fallback to original
-                try {
-                    return DarkThemeDefinitions.createBotanicalThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Botanical theme failed, using original: " + e.getMessage());
-                    return DarkThemeDefinitions.createBotanicalTheme();
-                }
+                return DarkThemeDefinitions.createBotanicalThemeRefactored();
 
             // Dark themes
             case "Sanne":
-                // Use refactored version if available, fallback to original
-                try {
-                    return DarkThemeDefinitions.createSanneThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Sanne theme failed, using original: " + e.getMessage());
-                    return DarkThemeDefinitions.createSanneTheme();
-                }
+                return DarkThemeDefinitions.createSanneThemeRefactored();
             case "Obsidian":
-                // Use refactored version if available, fallback to original
-                try {
-                    return DarkThemeDefinitions.createObsidianThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Obsidian theme failed, using original: " + e.getMessage());
-                    return DarkThemeDefinitions.createObsidianTheme();
-                }
+                return DarkThemeDefinitions.createObsidianThemeRefactored();
             case "Dracula":
-                // Use refactored version if available, fallback to original
-                try {
-                    return DarkThemeDefinitions.createDraculaThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored Dracula theme failed, using original: " + e.getMessage());
-                    return DarkThemeDefinitions.createDraculaTheme();
-                }
+                return DarkThemeDefinitions.createDraculaThemeRefactored();
             case "One Dark":
-                // Use refactored version if available, fallback to original
-                try {
-                    return DarkThemeDefinitions.createOneDarkThemeRefactored();
-                } catch (Exception e) {
-                    System.err.println("Refactored One Dark theme failed, using original: " + e.getMessage());
-                    return DarkThemeDefinitions.createOneDarkTheme();
-                }
+                return DarkThemeDefinitions.createOneDarkThemeRefactored();
 
             default:
-                return null; // Fall back to legacy theme system (none remaining)
+                return null; // Unknown theme
         }
     }
 
@@ -229,8 +169,7 @@ public class ThemeManager {
         // All themes should now use the unified system
         // This fallback should rarely be used since all known themes are unified
         System.err.println("Unknown theme '" + theme + "', falling back to unified Light theme");
-        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightTheme();
-
+        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightThemeRefactored();
 
         FlatPropertiesLaf lightLaf = ThemeCompatibilityAdapter.createApplicationTheme(lightTheme);
         UIManager.setLookAndFeel(lightLaf);
