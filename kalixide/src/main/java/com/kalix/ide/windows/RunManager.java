@@ -16,10 +16,12 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
@@ -413,6 +415,10 @@ public class RunManager extends JFrame {
 
         contextMenu.addSeparator();
 
+        JMenuItem saveResultsItem = new JMenuItem("Save results (csv)");
+        saveResultsItem.addActionListener(e -> saveResultsFromContextMenu());
+        contextMenu.add(saveResultsItem);
+
         JMenuItem cliLogItem = new JMenuItem("STDIO Log");
         cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
         contextMenu.add(cliLogItem);
@@ -650,6 +656,71 @@ public class RunManager extends JFrame {
                         });
                         return null;
                     });
+            }
+        }
+    }
+
+    /**
+     * Handles save results action from context menu.
+     */
+    private void saveResultsFromContextMenu() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+
+        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+        String sessionKey = runInfo.session.getSessionKey();
+        String kalixcliUid = runInfo.session.getKalixcliUid();
+
+        // Check if the run has completed successfully
+        RunStatus status = runInfo.getRunStatus();
+        if (status != RunStatus.DONE) {
+            String statusText = status == RunStatus.ERROR ? "failed" :
+                              status == RunStatus.RUNNING ? "still running" : "not completed";
+            statusUpdater.accept("Cannot save results: run " + runInfo.runName + " has " + statusText);
+            return;
+        }
+
+        // Generate default filename: {run_name}_{uid}.csv
+        String safeRunName = runInfo.runName.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String defaultFilename = safeRunName + "_" + (kalixcliUid != null ? kalixcliUid : "unknown") + ".csv";
+
+        // Show save dialog
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Results");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        fileChooser.setSelectedFile(new File(defaultFilename));
+
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+
+            // Add .csv extension if not present
+            String fileName = selectedFile.getName();
+            if (!fileName.toLowerCase().endsWith(".csv")) {
+                selectedFile = new File(selectedFile.getParent(), fileName + ".csv");
+            }
+
+            // Send save_results command to kalixcli
+            String command = String.format(
+                "{\"m\":\"cmd\",\"c\":\"save_results\",\"p\":{\"path\":\"%s\",\"format\":\"csv\"}}",
+                selectedFile.getAbsolutePath().replace("\\", "\\\\").replace("\"", "\\\"")
+            );
+
+            try {
+                stdioTaskManager.sendCommand(sessionKey, command);
+                statusUpdater.accept("Saving results to: " + selectedFile.getName());
+
+                // TODO: We should ideally wait for the response and update status accordingly
+                // For now, we'll show immediate feedback
+
+            } catch (Exception e) {
+                statusUpdater.accept("Failed to send save command: " + e.getMessage());
+                DialogUtils.showError(this,
+                    "Failed to save results: " + e.getMessage(),
+                    "Save Results Error");
             }
         }
     }

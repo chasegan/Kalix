@@ -241,6 +241,10 @@ End the session and exit.
 - Description: Retrieve timeseries result data
 - Parameters: `series_name` (string, required), `format` (string, default "csv")
 
+**save_results**
+- Description: Save timeseries result data to file
+- Parameters: `path` (string, optional), `format` (string, optional, default "csv")
+
 **get_version**
 - Description: Get kalixcli version information
 - Parameters: None
@@ -331,7 +335,11 @@ End the session and exit.
 {"m":"cmd","c":"get_result","p":{"series_name":"node.output1","format":"csv"}}
 {"m":"res","uid":"sess_20250908_103000_a7b9","cmd":"get_result","exec_ms":23.1,"ok":true,"r":{"series_name":"node.output1","data":"631152000,86400,10.5,11.2,9.8"}}
 
-// 7. Frontend terminates session
+// 7. Frontend saves results to file
+{"m":"cmd","c":"save_results","p":{"path":"simulation_output.csv","format":"csv"}}
+{"m":"res","uid":"sess_20250908_103000_a7b9","cmd":"save_results","exec_ms":67.4,"ok":true,"r":{"path":"simulation_output.csv","format":"csv","n_series":3,"len":48824}}
+
+// 8. Frontend terminates session
 {"m":"term"}
 ```
 

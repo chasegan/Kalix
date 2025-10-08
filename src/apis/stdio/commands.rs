@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::apis::stdio::messages::{CommandSpec, ParameterSpec, ProgressInfo};
 use crate::apis::stdio::session::Session;
 use crate::io::ini_model_io::IniModelIO;
+use crate::io::csv_io;
 use chrono;
 use crate::tid;
 
@@ -70,6 +71,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
         registry.register(Arc::new(GetResultCommand));
+        registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
         
         registry
@@ -654,6 +656,115 @@ impl Command for RunSimulationCommand {
     }
 }
 
+pub struct SaveResultsCommand;
+
+impl Command for SaveResultsCommand {
+    fn name(&self) -> &str {
+        "save_results"
+    }
+
+    fn description(&self) -> &str {
+        "Save timeseries result data to file"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![
+            ParameterSpec {
+                name: "path".to_string(),
+                param_type: "string".to_string(),
+                required: false,
+                default: None,
+            },
+            ParameterSpec {
+                name: "format".to_string(),
+                param_type: "string".to_string(),
+                required: false,
+                default: Some(serde_json::Value::String("csv".to_string())),
+            },
+        ]
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        use std::path::Path;
+
+        // Extract parameters
+        let format = params.get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("csv");
+
+        if format != "csv" {
+            return Err(CommandError::InvalidParameters("Only csv format is currently supported".to_string()));
+        }
+
+        // Get model and check if it exists
+        let model = session.get_model()
+            .ok_or(CommandError::ModelNotLoaded)?;
+
+        // Check if we have any outputs to save
+        if model.outputs.is_empty() {
+            return Err(CommandError::ExecutionError("No simulation results available to save. Run simulation first.".to_string()));
+        }
+
+        // Determine file path
+        let file_path = if let Some(path) = params.get("path").and_then(|v| v.as_str()) {
+            path.to_string()
+        } else {
+            // Generate default filename based on current timestamp
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            format!("simulation_results_{}.csv", timestamp)
+        };
+
+        // Collect timeseries references for output series
+        let mut timeseries_refs = Vec::new();
+        let mut series_count = 0;
+        let mut total_timesteps = 0;
+
+        for output_name in &model.outputs {
+            if let Some(series_idx) = model.data_cache.get_existing_series_idx(output_name) {
+                let timeseries = &model.data_cache.series[series_idx];
+                timeseries_refs.push(timeseries);
+                series_count += 1;
+
+                // Track the number of timesteps (should be the same for all series)
+                if total_timesteps == 0 {
+                    total_timesteps = timeseries.values.len();
+                }
+            }
+        }
+
+        if timeseries_refs.is_empty() {
+            return Err(CommandError::ExecutionError("No timeseries data found for output series".to_string()));
+        }
+
+        // Use the standard csv_io write_ts function
+        csv_io::write_ts(&file_path, timeseries_refs)
+            .map_err(|e| CommandError::IoError(format!("Failed to write CSV file: {}", String::from(e))))?;
+
+        // Get the absolute path for the response
+        let absolute_path = Path::new(&file_path)
+            .canonicalize()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or(file_path.clone());
+
+        // Build response
+        Ok(serde_json::json!({
+            "path": absolute_path,
+            "format": format,
+            "n_series": series_count,
+            "len": total_timesteps
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -670,6 +781,7 @@ mod tests {
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
         assert!(commands.contains(&"get_result"));
+        assert!(commands.contains(&"save_results"));
         assert!(commands.contains(&"echo"));
     }
 
