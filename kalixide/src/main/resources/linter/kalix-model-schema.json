@@ -285,6 +285,71 @@
           "description": "X,Y coordinates"
         }
       }
+    },
+
+    "loss": {
+      "description": "Loss node for flow reduction modeling",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "loss"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["table"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "loss"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "table": {
+          "type": "number_sequence",
+          "description": "Comma-separated numerical values"
+        }
+      }
+    },
+
+    "splitter": {
+      "description": "Splitter node for dividing flow between two downstream paths",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_2"],
+      "required_params": ["type", "loc", "table"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1", "ds_2"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "splitter"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "table": {
+          "type": "number_sequence",
+          "description": "Comma-separated numerical values"
+        }
+      }
+    },
+
+    "gauge": {
+      "description": "Gauge node for monitoring and measuring flow",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "required_params": ["type", "loc"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "gauge"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        }
+      }
     }
   },
 
