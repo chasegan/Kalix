@@ -93,7 +93,7 @@ impl Model {
         // TODO: E.g. if we were doing reload on run with a subset of the data, or
 
         //4) Automatically determining the maximum simulation period
-        self.configuration = self.auto_determine_simulation_period();
+        self.configuration = self.auto_determine_simulation_period()?;
 
         //5) Allow the user to override the sim period
         // TODO: provide this functionality later
@@ -189,13 +189,15 @@ impl Model {
     }
 
     /// Determine the simulation period on the basis of the available input data
-    pub fn auto_determine_simulation_period(&self) -> Configuration {
+    pub fn auto_determine_simulation_period(&self) -> Result<Configuration, String> {
 
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
 
         // If there is no critical input data, return a default configuration.
-        if civ.len() == 0 { return Configuration::new(); }
+        if civ.len() == 0 {
+            return Ok(Configuration::new());
+        }
 
         // Go through all the critical inputs and make sure they are all in the model.
         // As you find them, you can go ahead and update the mask of data availability.
@@ -232,8 +234,7 @@ impl Model {
             }
 
             if !found {
-                // TODO: improve error response by returning a Result rather than panicking
-                panic!("Input data has nothing matching this critical input: {}", ci);
+                return Err(format!("Could not find input data: {}", ci));
             }
         }
 
@@ -269,12 +270,12 @@ impl Model {
         let n_steps = (end_index - start_index) as u64;
         let start_timestamp = mask.start_timestamp + (start_index as u64 * mask.step_size);
         let end_timestamp = mask.start_timestamp + ((end_index - 1) as u64 * mask.step_size);
-        Configuration {
+        Ok(Configuration {
             sim_stepsize: mask.step_size,
             sim_start_timestamp: start_timestamp,
             sim_end_timestamp: end_timestamp,
             sim_nsteps: n_steps,
-        }
+        })
     }
 
 

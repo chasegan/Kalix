@@ -533,7 +533,13 @@ impl Command for RunSimulationCommand {
             return Err(CommandError::DataNotLoaded);
         }
 
-        model.configure().expect("Configuration error");
+        // Try to configure the model simulation period
+        match model.configure() {
+            Ok(_) => (),
+            Err(e) => {
+                return Err(CommandError::ExecutionError(format!("Configuration failed: {}", e)));
+            }
+        }
         
         // Get simulation info for result
         let start_timestamp = model.configuration.sim_start_timestamp;

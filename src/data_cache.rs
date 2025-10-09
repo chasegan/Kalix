@@ -1,5 +1,4 @@
-﻿use uuid::Uuid;
-use crate::tid::utils::{u64_to_year_month_day_and_seconds};
+﻿use crate::tid::utils::{u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]
@@ -170,27 +169,6 @@ impl DataCache {
         self.set_current_step(self.current_step + 1);
     }
 
-    
-    /*
-    Add a recorder. The function returns an usize, which can be used for quick 
-    access in the future.
-     */
-    pub fn add_recorder(&mut self, node_id: Uuid, description: &str) -> usize {
-        let next_index = self.series.len();
-        
-        //Prep a new timeseries
-        let mut answer = Timeseries::new_daily();
-        let d = format!("{}_{}", node_id, description);
-        answer.name = d.clone();
-        answer.start_timestamp = self.start_timestamp;
-        
-        //Add the new timeseries and return the index
-        self.series.push(answer);
-        self.series_name.push(d);
-        self.is_critical.push(false);
-        next_index
-    }
-
 
     /*
     Looks for an exact match on the series name and returns the index of the matching series.
@@ -308,7 +286,7 @@ impl DataCache {
         }
     }
 
-    
+
     /*
     Moved this code to own function. This seems a bit weird and dirty.
      */
@@ -319,5 +297,4 @@ impl DataCache {
             String::from("-")
         }
     }
-
 }
