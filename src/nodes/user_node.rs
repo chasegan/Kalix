@@ -54,7 +54,7 @@ pub struct UserNode {
     pub demand_def: InputDataDefinition,
     pub pump: Option<f64>,
     pub demand_carryover_simulated: bool,
-    pub demand_carryover_writeoff_month: Option<u32>,
+    pub demand_carryover_reset_month: Option<u32>,
 
     // Internal state only
     usflow: f64,
@@ -79,7 +79,7 @@ impl UserNode {
         Self {
             name: "".to_string(),
             demand_carryover_simulated: false,
-            demand_carryover_writeoff_month: None,
+            demand_carryover_reset_month: None,
             pump: None,
             ..Default::default()
         }
@@ -145,12 +145,16 @@ impl Node for UserNode {
         match self.demand_carryover_simulated {
             true => {
                 // Simulating demand carryover
-                // Check if we need to do a writeoff
-                match self.demand_carryover_writeoff_month {
-                    Some(m_writeoff) => {
-                        let (_, m, d, s) = data_cache.get_current_year_month_day_seconds();
-                        if (d == 0) && (m == m_writeoff) && (s == 0) {
-                            self.demand_carryover_value = 0.0;
+                // Check if we need to reset the demand carryover today
+                match self.demand_carryover_reset_month {
+                    Some(m_reset) => {
+                        let d = data_cache.get_timestamp_day();
+                        if d == 1 {
+                            let m = data_cache.get_timestamp_month();
+                            let s = data_cache.get_timestamp_seconds();
+                            if (m == m_reset) && (s == 0) {
+                                self.demand_carryover_value = 0.0;
+                            }
                         }
                     }
                     None => {}

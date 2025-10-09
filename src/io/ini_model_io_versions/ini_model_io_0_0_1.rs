@@ -173,7 +173,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.demand_carryover_simulated = true_or_false(vvc).map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
                         } else if vp == "carryover_reset_month" {
                             let m = vvc.parse::<u32>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid u32", vp, node_name))?;
-                            n.demand_carryover_writeoff_month = Some(m);
+                            n.demand_carryover_reset_month = Some(m);
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;

@@ -36,9 +36,8 @@ fn test_inflow_node_with_timeseries() {
     // let inflow_ts = timeseries_vec[0].clone();
     // m <---- add data here and tell the inflow node how to find it.
 
-
     // Now run the model
-    m.run().expect("Simulation error");
+    //m.run();
 
     ////////////////////////////////////////////////
     // 

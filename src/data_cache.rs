@@ -12,6 +12,12 @@ pub struct DataCache {
     pub start_timestamp: u64,
     pub current_timestamp: u64,
     pub step_size: u64,
+
+    // These vars for model components (incl nodes) to use if they need to know the date
+    timestamp_year: i32,
+    timestamp_month: u32,
+    timestamp_day: u32,
+    timestamp_seconds: u32, //seconds past midnight
 }
 
 
@@ -68,7 +74,8 @@ impl DataCache {
             ..Default::default()
         }
     }
-    
+
+
     /*
     Delete all recorders (including data) from the result manager, and set the starting
     date for 
@@ -77,17 +84,34 @@ impl DataCache {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
-        self.start_timestamp = start_timestamp; //Set the timestamp for step 0
+
+        // Set up the timing
+        self.start_timestamp = start_timestamp;
         self.set_current_step(0); //Reset the step counter to 0
-        //self.current_timestamp = start_timestamp;
     }
 
 
     /*
+    This updates:
+      - current_timestamp on the basis of the start_timestamp, current_step, and step_size
+      - timestamp_year, timestamp_month, timestamp_day, timestamp_seconds
+     */
+    fn update_current_timestamp(&mut self) {
+        self.current_timestamp = self.start_timestamp + self.step_size * self.current_step as u64;
+        (self.timestamp_year, self.timestamp_month, self.timestamp_day, self.timestamp_seconds) =
+            u64_to_year_month_day_and_seconds(self.current_timestamp)
+    }
+
+
+    /*
+    Set the step counter.
+    This updates:
+      - current_step which counts the model steps (from 0)
+      - current_timestamp
      */
     pub fn set_current_step(&mut self, value: usize) {
         self.current_step = value;
-        self.current_timestamp = self.start_timestamp + self.step_size * self.current_step as u64;
+        self.update_current_timestamp();
     }
 
 
@@ -96,6 +120,9 @@ impl DataCache {
     pub fn set_start_and_stepsize(&mut self, start_timestep: u64, stepsize: u64) {
         self.start_timestamp = start_timestep;
         self.step_size = stepsize;
+        self.update_current_timestamp();
+
+        // All series within the data cache are also going to have the same start and stepsize
         for ts in &mut self.series {
             ts.start_timestamp = start_timestep;
             ts.step_size = stepsize;
@@ -104,13 +131,40 @@ impl DataCache {
 
 
     /*
+    Gets the current calendar year
      */
-    pub fn get_current_year_month_day_seconds(&self) -> (i32, u32, u32, u32) {
-        u64_to_year_month_day_and_seconds(self.current_timestamp)
+    pub fn get_timestamp_year(&self) -> i32 {
+        self.timestamp_year
     }
 
 
     /*
+    Gets the current month 1-12
+    */
+    pub fn get_timestamp_month(&self) -> u32 {
+        self.timestamp_month
+    }
+
+
+    /*
+    Gets the current day of the month 1-31
+     */
+    pub fn get_timestamp_day(&self) -> u32 {
+        self.timestamp_day
+    }
+
+
+    /*
+    Gets the current number of seconds since midnight
+     */
+    pub fn get_timestamp_seconds(&self) -> u32 {
+        self.timestamp_seconds
+    }
+
+
+    /*
+    Increase the current step by +1.
+    This also updates the data_cache timestamp values.
      */
     pub fn increment_current_step(&mut self) {
         self.set_current_step(self.current_step + 1);
@@ -173,7 +227,6 @@ impl DataCache {
     }
 
 
-
     /*
     */
     pub fn get_or_add_new_series(&mut self, name: &str, flag_as_critical: bool) -> usize {
@@ -221,7 +274,6 @@ impl DataCache {
 
 
     /*
-
      */
     pub fn get_current_value(&self, series_idx: usize) -> f64 {
         let answer = self.series[series_idx].values[self.current_step];
@@ -231,7 +283,6 @@ impl DataCache {
 
 
     /*
-
      */
     pub fn get_critical_input_names(&self) -> Vec<&str> {
         let mut critical_inputs: Vec<&str> = vec![];
@@ -257,6 +308,7 @@ impl DataCache {
         }
     }
 
+    
     /*
     Moved this code to own function. This seems a bit weird and dirty.
      */
