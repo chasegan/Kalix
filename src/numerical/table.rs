@@ -1,4 +1,5 @@
 use std::fs;
+use crate::misc::misc_functions::starts_with_numeric_char;
 
 /// This is a 2d table which has a fixed number of columns but may grow
 /// in length. The internal data structure is a 1d vector that is wrapped
@@ -7,6 +8,7 @@ use std::fs;
 #[derive(Clone)]
 pub struct Table {
     ncols: usize,
+    col_names: Vec<String>,
     data: Vec<f64>,
 }
 
@@ -19,13 +21,16 @@ impl Table {
     pub fn new(ncols: usize) -> Self {
         Self {
             ncols,
+            col_names: vec![],
             data: vec![],
         }
     }
 
 
     // TODO: docs
-    pub fn from_csv_string(s: &str, ncols: usize, skip_header: bool) -> Result<Self, String> {
+    pub fn from_csv_string(s: &str, ncols: usize, force_read_header: bool) -> Result<Self, String> {
+
+        let mut answer = Self::new(ncols);
 
         // Split the string at all the commas
         let ss = s.split(',').map(|x| x.trim()).collect::<Vec<&str>>();
@@ -36,9 +41,16 @@ impl Table {
             return Err(format!("Number of elements must be divisible by {}", ncols));
         }
 
+        // If the first element starts with a non-numeric char, then parse ncol header elements
+        let mut i = 0;
+        if !starts_with_numeric_char(&ss[0]) || force_read_header {
+            while i < ncols {
+                answer.col_names.push(ss[i].to_string());
+                i += 1;
+            }
+        }
+
         // Parse the values into a table
-        let mut answer = Self::new(ncols);
-        let mut i = if skip_header { ncols } else { 0 };
         let mut row = 0;
         let mut col = 0;
         while i < n_elements {

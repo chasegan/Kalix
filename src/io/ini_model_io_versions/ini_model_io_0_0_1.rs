@@ -4,7 +4,7 @@ use crate::misc::location::Location;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::misc::misc_functions::split_interleaved;
+use crate::misc::misc_functions::{split_interleaved, true_or_false};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
@@ -170,7 +170,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             let p = vvc.parse::<f64>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
                             n.pump = Some(p);
                         } else if vp == "carryover" {
-                            n.demand_carryover_simulated = vvc.parse::<bool>().map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
+                            n.demand_carryover_simulated = true_or_false(vvc).map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
                         } else if vp == "carryover_reset_month" {
                             let m = vvc.parse::<u32>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid u32", vp, node_name))?;
                             n.demand_carryover_writeoff_month = Some(m);

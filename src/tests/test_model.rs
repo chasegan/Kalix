@@ -315,7 +315,7 @@ fn test_model_with_all_node_types() {
         let mut n = LossNode::new();
         n.name = "node11_loss".to_string();
         n.loss_table = Table::from_csv_string(
-            "0, 0, 1e9, 1e8",
+            "Flow, Loss, 0, 0, 1e9, 1e8",
             2, false).expect("Failed to create table");
         node11_idx = model.add_node(NodeEnum::LossNode(n));
 
