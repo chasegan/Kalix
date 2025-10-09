@@ -139,6 +139,7 @@ impl Model {
 
         //Run all timesteps
         let mut _step = 0; //TODO: why am I using 'time' and 'step' if I also have a concept of a 'current_step'?
+        self.data_cache.set_current_step(0);
         let mut time = self.configuration.sim_start_timestamp;
         while time <= self.configuration.sim_end_timestamp {
 
@@ -168,7 +169,8 @@ impl Model {
             / self.configuration.sim_stepsize) + 1;
         
         //Run all timesteps
-        let mut step = 0;
+        let mut step: u64 = 0;
+        self.data_cache.set_current_step(0);
         let mut time = self.configuration.sim_start_timestamp;
         while time <= self.configuration.sim_end_timestamp {
             // Check for interrupt at start of each timestep
@@ -207,10 +209,12 @@ impl Model {
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         for ci in civ {
 
+            let ci_lower = ci.to_lowercase();
+
             // Searching for timeseries that matches ci
             let mut found : bool = false;
             for ts in self.inputs.iter() {
-                if (ci == ts.full_colindex_path) || (ci == ts.full_colname_path) {
+                if (ci_lower == ts.full_colindex_path) || (ci_lower == ts.full_colname_path) {
                     found = true;
 
                     // This timeseries appears to be the one we're looking for!

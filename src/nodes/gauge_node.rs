@@ -1,12 +1,14 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
+use crate::misc::input_data_definition::InputDataDefinition;
 use crate::misc::location::Location;
 
 #[derive(Default, Clone)]
 pub struct GaugeNode {
     pub name: String,
     pub location: Location,
+    pub observed_flow_def: InputDataDefinition,
 
     // Internal state only
     usflow: f64,
@@ -43,6 +45,9 @@ impl Node for GaugeNode {
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
+        //Initialize input series
+        self.observed_flow_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
@@ -65,6 +70,12 @@ impl Node for GaugeNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // For gauge nodes, outflow equals upstream inflow (same as confluence)
         self.dsflow_primary = self.usflow;
+
+        // // Get the observed flows
+        // let mut observed_flow = 0_f64;
+        // if let Some(idx) = self.observed_flow_def.idx {
+        //     observed_flow = data_cache.get_current_value(idx);
+        // }
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {

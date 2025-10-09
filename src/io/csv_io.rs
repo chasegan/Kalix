@@ -22,7 +22,7 @@ impl From<CsvError> for String {
     }
 }
 
-pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
+pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
 
     //Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
@@ -30,8 +30,8 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
     //Create a new csv reader
     let mut reader = match csv::Reader::from_path(filename) {
         Ok(r) => r,
-        Err(_) => {
-            return Err(CsvError::OpenFileError);
+        Err(s) => {
+            return Err(s.to_string());
         }
     };
 
@@ -49,7 +49,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
             }
         },
         Err(_) => {
-            return Err(CsvError::ReadError(format!("Error reading '{filename}' line {file_line}.")));
+            return Err(format!("Error reading '{filename}' line {file_line}."));
         }
     };
     // if n_data_cols <= 0 {
@@ -65,7 +65,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
             Ok(r) => r,
             Err(e) => {
                 println!("Error reading file '{filename}': {e}");
-                return Err(CsvError::ReadError(format!("Error reading '{filename}' line {file_line}.")));
+                return Err(format!("Error reading '{filename}' line {file_line}."));
             }
         };
 
@@ -80,7 +80,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, CsvError> {
                 Ok(v) => v,
                 Err(_) => {
                     let one_based_data_column = i + 1;
-                    return Err(CsvError::ReadError(format!("Error reading '{filename}' line {file_line} data column {one_based_data_column}.")));
+                    return Err(format!("Error reading '{filename}' line {file_line} data column {one_based_data_column}."));
                 }
             };
             let t = t_u64.unwrap();

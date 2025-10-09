@@ -145,7 +145,7 @@
       "description": "User node representing water demand",
       "allowed_outputs": ["dsflow", "usflow", "ds_1", "demand", "diversion"],
       "required_params": ["type", "loc"],
-      "optional_params": ["demand"],
+      "optional_params": ["demand", "carryover", "pump", "carryover_reset_month"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -160,6 +160,21 @@
         "demand": {
           "type": "data_reference",
           "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+        },
+        "carryover": {
+          "type": "string",
+          "pattern": "^(?i)(true|false)$",
+          "description": "Enable carryover (true or false, case-insensitive)"
+        },
+        "pump": {
+          "type": "number",
+          "description": "Pump capacity"
+        },
+        "carryover_reset_month": {
+          "type": "integer",
+          "min": 1,
+          "max": 12,
+          "description": "Month to reset carryover (1-12)"
         }
       }
     },

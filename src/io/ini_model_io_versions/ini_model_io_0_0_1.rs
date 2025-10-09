@@ -90,6 +90,8 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
+                        } else if vp == "observed" {
+                            n.observed_flow_def.name = vvc.clone();
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
@@ -164,6 +166,14 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "demand" {
                             n.demand_def.name = vvc.clone();
+                        } else if vp == "pump" {
+                            let p = vvc.parse::<f64>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
+                            n.pump = Some(p);
+                        } else if vp == "carryover" {
+                            n.demand_carryover_simulated = vvc.parse::<bool>().map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
+                        } else if vp == "carryover_reset_month" {
+                            let m = vvc.parse::<u32>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid u32", vp, node_name))?;
+                            n.demand_carryover_writeoff_month = Some(m);
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;

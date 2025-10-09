@@ -1,4 +1,4 @@
-use chrono::{DateTime, ParseResult, NaiveDate};
+use chrono::{DateTime, ParseResult, NaiveDate, Timelike, Datelike};
 
 /// Converts a date string (must be "%Y-%m-%d") into an u64 integer timestamp that counts the
 /// number of seconds since some fixed time in the past.
@@ -68,6 +68,20 @@ pub fn u64_to_iso_datetime_string(value: u64) -> String {
         map(|dt| format!("{}", dt.format(formatter))) {
         Some(s) => s,
         None => value.to_string(),
+    }
+}
+
+
+pub fn u64_to_year_month_day_and_seconds(value: u64) -> (i32, u32, u32, u32) {
+    match DateTime::from_timestamp(wrap_to_i64(value), 0) {
+        Some(dt) => {
+            let y = dt.year();
+            let m = dt.month();
+            let d = dt.day();
+            let s = dt.num_seconds_from_midnight();
+            (y, m, d, s)
+        }
+        None => panic!("Error wrapping value to datetime {}", value)
     }
 }
 

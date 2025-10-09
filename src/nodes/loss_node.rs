@@ -13,7 +13,7 @@ pub struct LossNode {
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
-    loss_flow: f64,
+    loss: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -46,7 +46,7 @@ impl Node for LossNode {
         // Initialize only internal state
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
-        self.loss_flow = 0.0;
+        self.loss = 0.0;
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -72,13 +72,14 @@ impl Node for LossNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Calculate loss flow from table (inflow rate -> loss rate)
-        self.loss_flow = self.loss_table.interpolate(0, 1, self.usflow);
+        let loss = self.loss_table.interpolate(0, 1, self.usflow);
+        self.loss = loss.max(0f64).min(self.usflow);
 
         // Remaining flow after loss goes to ds_1
-        self.dsflow_primary = self.usflow - self.loss_flow;
+        self.dsflow_primary = self.usflow - self.loss;
+        // TODO remove below check. This can only happen if the usflow is negative. Not this node's fault.
         if self.dsflow_primary < 0.0 {
-            panic!("Negative downstream flow at '{}' when usflow={}, loss={}",
-                   self.name, self.usflow, self.loss_flow);
+            panic!("Negative downstream flow at '{}' when usflow={}, loss={}", self.name, self.usflow, self.loss);
         }
 
         // Record results
@@ -92,7 +93,7 @@ impl Node for LossNode {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
         if let Some(idx) = self.recorder_idx_loss {
-            data_cache.add_value_at_index(idx, self.loss_flow);
+            data_cache.add_value_at_index(idx, self.loss);
         }
 
         // Reset upstream inflow for next timestep

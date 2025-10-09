@@ -1,7 +1,6 @@
 use crate::timeseries::Timeseries;
 use std::path::Path;
 
-
 #[derive(Clone)]
 #[derive(Default)]
 pub struct TimeseriesInput {
@@ -25,31 +24,34 @@ impl TimeseriesInput {
     /// Loads the timeseries data file. A successful result contains a vector
     /// of TimeseriesInput structs (not just Timeseries).
     pub fn load(file_path: &str) -> Result<Vec<TimeseriesInput>, String> {
-        if let Ok(vts) = crate::io::csv_io::read_ts(file_path) {
-            let mut vinputts: Vec<TimeseriesInput> = vec![];
+        match crate::io::csv_io::read_ts(file_path) {
+            Ok(vts) => {
+                let mut vinputts: Vec<TimeseriesInput> = vec![];
 
-            // Create an object for each and add it
-            for i in 0..vts.len() {
-                let mut inputts = TimeseriesInput::new();
-                let col_name = vts[i].name.clone();
-                let col_index = i + 1;
-                inputts.source_path = file_path.to_string();
-                let path = Path::new(file_path);
-                let source_name = path.file_name().unwrap().to_str().unwrap().to_owned();  //TODO: what the fuck is this craziness?! :)
-                let source_name = source_name.replace(".", "_");
-                inputts.source_name = source_name;
-                inputts.col_index = col_index;
-                inputts.col_name = col_name.clone();
-                let source_name = inputts.source_name.clone();
-                inputts.full_colname_path = format!("data.{source_name}.by_name.{col_name}").to_lowercase();
-                inputts.full_colindex_path = format!("data.{source_name}.by_index.{col_index}").to_lowercase();
-                inputts.timeseries = vts[i].clone();
-                inputts.reload_on_run = false;
-                vinputts.push(inputts);
+                // Create an object for each and add it
+                for i in 0..vts.len() {
+                    let mut inputts = TimeseriesInput::new();
+                    let col_name = vts[i].name.clone();
+                    let col_index = i + 1;
+                    inputts.source_path = file_path.to_string();
+                    let path = Path::new(file_path);
+                    let source_name = path.file_name().unwrap().to_str().unwrap().to_owned();  //TODO: what the fuck is this craziness?! :)
+                    let source_name = source_name.replace(".", "_");
+                    inputts.source_name = source_name;
+                    inputts.col_index = col_index;
+                    inputts.col_name = col_name.clone();
+                    let source_name = inputts.source_name.clone();
+                    inputts.full_colname_path = format!("data.{source_name}.by_name.{col_name}").to_lowercase();
+                    inputts.full_colindex_path = format!("data.{source_name}.by_index.{col_index}").to_lowercase();
+                    inputts.timeseries = vts[i].clone();
+                    inputts.reload_on_run = false;
+                    vinputts.push(inputts);
+                }
+                Ok(vinputts)
             }
-            Ok(vinputts)
-        } else {
-            Err(format!("Could not load timeseries input. {file_path}"))
+            Err(s) => {
+                Err(format!("Error reading {}: {}", file_path, s))
+            }
         }
     }
 

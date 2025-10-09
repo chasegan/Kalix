@@ -52,12 +52,16 @@ pub struct UserNode {
     pub name: String,
     pub location: Location,
     pub demand_def: InputDataDefinition,
+    pub pump: Option<f64>,
+    pub demand_carryover_simulated: bool,
+    pub demand_carryover_writeoff_month: Option<u32>,
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
     diversion: f64,
     storage: f64,
+    demand_carryover_value: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -74,6 +78,9 @@ impl UserNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
+            demand_carryover_simulated: false,
+            demand_carryover_writeoff_month: None,
+            pump: None,
             ..Default::default()
         }
     }
@@ -94,6 +101,7 @@ impl Node for UserNode {
         self.dsflow_primary = 0.0;
         self.diversion = 0.0;
         self.storage = 0.0;
+        self.demand_carryover_value = 0.0;
 
         // Initialize input series
         self.demand_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
@@ -122,6 +130,7 @@ impl Node for UserNode {
     fn get_name(&self) -> &str { &self.name }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
         // Get demand from data_cache
         let mut demand = 0.0;
         if let Some(idx) = self.demand_def.idx {
@@ -129,7 +138,40 @@ impl Node for UserNode {
         }
 
         // Calculate diversion (take minimum of demand and available flow)
-        self.diversion = demand.min(self.usflow);
+        let available = match self.pump {
+            Some(r) => { self.usflow.min(r) } //Available is limited by pump rate
+            None => { self.usflow }                //No pump rate specified so all flow is available
+        };
+        match self.demand_carryover_simulated {
+            true => {
+                // Simulating demand carryover
+                // Check if we need to do a writeoff
+                match self.demand_carryover_writeoff_month {
+                    Some(m_writeoff) => {
+                        let (_, m, d, s) = data_cache.get_current_year_month_day_seconds();
+                        if (d == 0) && (m == m_writeoff) && (s == 0) {
+                            self.demand_carryover_value = 0.0;
+                        }
+                    }
+                    None => {}
+                }
+                // Now calculate the diversion
+                self.demand_carryover_value += demand;
+                if self.demand_carryover_value > available {
+                    // we will meet demand (incl carryover)
+                    self.diversion = self.demand_carryover_value;
+                    self.demand_carryover_value = 0.0;
+                } else {
+                    // we will not meet demand
+                    self.diversion = available;
+                    self.demand_carryover_value -= self.diversion;
+                }
+            }
+            false => {
+                // Not simulating carryover
+                self.diversion = demand.min(available);
+            }
+        }
         self.dsflow_primary = self.usflow - self.diversion;
 
         // Record results

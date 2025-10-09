@@ -10,7 +10,8 @@ pub struct InputDataDefinition {
 impl InputDataDefinition {
     pub fn add_series_to_data_cache_if_required_and_get_idx(&mut self, data_cache: &mut DataCache, flag_as_critical: bool) {
         if !self.name.is_empty() {
-            self.idx = Some(data_cache.get_or_add_new_series(self.name.as_str(), flag_as_critical));
+            let lower_name = self.name.to_lowercase();
+            self.idx = Some(data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical));
         } else {
             self.idx = None;
         }

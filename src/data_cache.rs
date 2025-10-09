@@ -1,4 +1,5 @@
 ﻿use uuid::Uuid;
+use crate::tid::utils::{u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]
@@ -9,7 +10,8 @@ pub struct DataCache {
     pub is_critical: Vec<bool>,
     pub current_step: usize,
     pub start_timestamp: u64,
-    //pub step_size: u64,
+    pub current_timestamp: u64,
+    pub step_size: u64,
 }
 
 
@@ -75,8 +77,9 @@ impl DataCache {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
-        self.set_current_step(0); //Reset the step counter to 0
         self.start_timestamp = start_timestamp; //Set the timestamp for step 0
+        self.set_current_step(0); //Reset the step counter to 0
+        //self.current_timestamp = start_timestamp;
     }
 
 
@@ -84,18 +87,26 @@ impl DataCache {
      */
     pub fn set_current_step(&mut self, value: usize) {
         self.current_step = value;
+        self.current_timestamp = self.start_timestamp + self.step_size * self.current_step as u64;
     }
 
 
     /*
-
      */
     pub fn set_start_and_stepsize(&mut self, start_timestep: u64, stepsize: u64) {
         self.start_timestamp = start_timestep;
+        self.step_size = stepsize;
         for ts in &mut self.series {
             ts.start_timestamp = start_timestep;
             ts.step_size = stepsize;
         }
+    }
+
+
+    /*
+     */
+    pub fn get_current_year_month_day_seconds(&self) -> (i32, u32, u32, u32) {
+        u64_to_year_month_day_and_seconds(self.current_timestamp)
     }
 
 
@@ -256,4 +267,5 @@ impl DataCache {
             String::from("-")
         }
     }
+
 }
