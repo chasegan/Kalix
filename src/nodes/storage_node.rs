@@ -9,7 +9,7 @@ const LEVL: usize = 0;
 const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
-const EPSILON: f64 = 1e-6;
+const EPSILON: f64 = 1e-3;
 
 
 #[derive(Default, Clone)]
@@ -31,9 +31,9 @@ pub struct StorageNode {
     ds_1_flow: f64,
     ds_2_flow: f64,
     level: f64,
-    rain: f64,
-    evap: f64,
-    seep: f64,
+    rain_vol: f64,
+    evap_vol: f64,
+    seep_vol: f64,
     diversion: f64,
     spill: f64,
 
@@ -78,9 +78,9 @@ impl Node for StorageNode {
         self.ds_2_flow = 0.0;
         self.v = self.v_initial;
         self.level = 0.0;
-        self.rain = 0.0;
-        self.evap = 0.0;
-        self.seep = 0.0;
+        self.rain_vol = 0.0;
+        self.evap_vol = 0.0;
+        self.seep_vol = 0.0;
         self.diversion = 0.0;
         self.spill = 0.0;
 
@@ -171,8 +171,9 @@ impl Node for StorageNode {
 
             // The predicted volume at any row 'i' in the table is given by:
             // (remembering that self.v already accounts for inflows and diversions)
+            // 1mm * 1km2 = 1ML
             let predicted_volume = self.v +
-                net_rain_mm * self.d.get_value(i, VOLU) - self.d.get_value(i, SPIL);
+                net_rain_mm * self.d.get_value(i, AREA) - self.d.get_value(i, SPIL);
 
             // The row declares the final volume is = self.d.get_value(i, VOLU)
             // therefore the error associated with that row is:
@@ -214,22 +215,28 @@ impl Node for StorageNode {
 
         // Level and Area
         self.level = self.d.interpolate_row(istop -1, VOLU, LEVL, v);
-        let area = self.d.interpolate_row(istop -1, VOLU, AREA, v);
+        let area_km2 = self.d.interpolate_row(istop -1, VOLU, AREA, v);
 
         // Rainfall
-        let rain = rain_mm * area * 0.01;
-        self.rain = rain;
-        self.v += rain;
+        let rain_vol = rain_mm * area_km2;
+        self.rain_vol = rain_vol;
+        self.v += rain_vol;
 
         // Seep and Evap
-        let seep_nom = seep_mm * area * 0.01;
-        let evap_nom = evap_mm * area * 0.01;
-        let seep_evap_nom = seep_nom + evap_nom;
-        let mut seep_evap_factor = 1_f64;
-        if seep_evap_nom > 0_f64 { seep_evap_factor = seep_evap_nom.min(self.v) / seep_evap_nom; }
-        self.seep = seep_nom * seep_evap_factor;
-        self.evap = evap_nom * seep_evap_factor;
-        self.v = self.v - self.seep - self.evap;
+        let seep_vol_nominal = seep_mm * area_km2;
+        let evap_vol_nominal = evap_mm * area_km2;
+        let seep_evap_vol_nominal = seep_vol_nominal + evap_vol_nominal;
+        if seep_evap_vol_nominal > 0_f64 {
+            // Seepage+evap may need to be scaled down if self.v does not cover nominal seep+evap value
+            let seep_evap_factor = seep_evap_vol_nominal.min(self.v) / seep_evap_vol_nominal;
+            self.seep_vol = seep_vol_nominal * seep_evap_factor;
+            self.evap_vol = evap_vol_nominal * seep_evap_factor;
+            self.v -= seep_evap_vol_nominal * seep_evap_factor;
+        } else {
+            self.seep_vol = seep_vol_nominal;
+            self.evap_vol = evap_vol_nominal;
+            self.v -= seep_vol_nominal;
+        }
 
         // Check the answer
         // TODO: Can we get rid of this?
@@ -237,9 +244,9 @@ impl Node for StorageNode {
             println!("About to panic");
             println!("v = {}, self.v = {}", v, self.v);
             println!("self.spill = {}", self.spill);
-            println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep, self.evap, self.rain);
+            println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep_vol, self.evap_vol, self.rain_vol);
             println!("self.upstream_inflow = {}, self.diversion = {}", self.usflow, self.diversion);
-            panic!("Error in storage node. Mass balance was wrong. Solution should be {} but vol={}", v, self.v);
+            panic!("Error in {}. Mass balance was wrong. Solution should be {} but vol={}", self.name, v, self.v);
         }
 
         // Only spills go downstream via primary outlet
