@@ -352,7 +352,7 @@
       "description": "Gauge node for monitoring and measuring flow",
       "allowed_outputs": ["usflow", "dsflow", "ds_1"],
       "required_params": ["type", "loc"],
-      "optional_params": [],
+      "optional_params": ["observed"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -363,6 +363,11 @@
           "type": "coordinates",
           "format": "float,float",
           "description": "X,Y coordinates"
+        },
+        "observed": {
+          "type": "data_reference",
+          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
+          "description": "Observed flow data reference"
         }
       }
     }
