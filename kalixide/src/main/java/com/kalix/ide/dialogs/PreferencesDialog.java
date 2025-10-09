@@ -522,6 +522,7 @@ public class PreferencesDialog extends JDialog {
         private JButton browseButton;
         private JButton testButton;
         private JLabel statusLabel;
+        private JTextArea pathLabel;
 
         public KalixCliPreferencePanel() {
             super("Kalixcli");
@@ -559,14 +560,27 @@ public class PreferencesDialog extends JDialog {
             statusLabel.setFont(statusLabel.getFont().deriveFont(Font.ITALIC));
             formPanel.add(statusLabel, gbc);
 
+            // Path label (shows actual binary path)
+            gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            pathLabel = new JTextArea("");
+            pathLabel.setEditable(false);
+            pathLabel.setOpaque(false);
+            pathLabel.setLineWrap(true);
+            pathLabel.setWrapStyleWord(false);  // Wrap at character boundaries for paths
+            pathLabel.setFont(pathLabel.getFont().deriveFont(Font.PLAIN, 11f));
+            pathLabel.setForeground(Color.GRAY);
+            pathLabel.setFocusable(false);  // Prevent cursor from appearing
+            formPanel.add(pathLabel, gbc);
+
             // Info area
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.BOTH;
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.BOTH;
             gbc.weightx = 1.0; gbc.weighty = 1.0;
             JTextArea infoArea = new JTextArea();
             infoArea.setEditable(false);
             infoArea.setOpaque(false);
             infoArea.setWrapStyleWord(true);
             infoArea.setLineWrap(true);
+            infoArea.setFocusable(false);
             infoArea.setText("Configure the path to the kalixcli binary. If left empty, the system will " +
                 "search for 'kalixcli' in the system PATH and common installation directories.");
             formPanel.add(infoArea, gbc);
@@ -590,6 +604,7 @@ public class PreferencesDialog extends JDialog {
                 PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, newPath);
                 statusLabel.setText("Status: Path changed - click Test");
                 statusLabel.setForeground(Color.BLUE);
+                pathLabel.setText("");
             }
         }
 
@@ -602,6 +617,7 @@ public class PreferencesDialog extends JDialog {
             testButton.setEnabled(false);
             statusLabel.setText("Status: Testing...");
             statusLabel.setForeground(Color.BLUE);
+            pathLabel.setText("");
 
             SwingUtilities.invokeLater(() -> {
                 try {
@@ -612,23 +628,28 @@ public class PreferencesDialog extends JDialog {
                         if (location.isPresent()) {
                             statusLabel.setText("Status: ✓ Found - " + location.get().getVersion());
                             statusLabel.setForeground(new Color(0, 128, 0));
+                            pathLabel.setText("Path: " + location.get().getPath().toAbsolutePath());
                         } else {
                             statusLabel.setText("Status: ✗ Not found in system");
                             statusLabel.setForeground(Color.RED);
+                            pathLabel.setText("");
                         }
                     } else {
                         java.nio.file.Path binaryPath = java.nio.file.Paths.get(path);
                         if (com.kalix.ide.cli.KalixCliLocator.validateKalixCli(binaryPath)) {
                             statusLabel.setText("Status: ✓ Valid binary");
                             statusLabel.setForeground(new Color(0, 128, 0));
+                            pathLabel.setText("Path: " + binaryPath.toAbsolutePath());
                         } else {
                             statusLabel.setText("Status: ✗ Invalid or inaccessible");
                             statusLabel.setForeground(Color.RED);
+                            pathLabel.setText("");
                         }
                     }
                 } catch (Exception ex) {
                     statusLabel.setText("Status: ✗ Test failed");
                     statusLabel.setForeground(Color.RED);
+                    pathLabel.setText("");
                 } finally {
                     testButton.setEnabled(true);
                 }
