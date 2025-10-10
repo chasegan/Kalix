@@ -2,6 +2,7 @@ use crate::model::Model;
 use crate::io::csv_io;
 use crate::nodes::sacramento_node::SacramentoNode;
 use crate::nodes::NodeEnum;
+use crate::model_inputs::DynamicInput;
 
 
 /// Create a Sacramento node, add it to a model, and test results
@@ -18,8 +19,10 @@ fn test_sacramento_node_with_timeseries() {
     let mut n = SacramentoNode::new();
     n.name = "my_sac_node".to_owned();
     n.area_km2 = 228.0;
-    n.rain_mm_def.name = "data.rain_infilled_csv.by_name.value".to_owned(); //This is what the inflow node wants to look at
-    n.evap_mm_def.name = "data.mpot_rolled_csv.by_name.value".to_owned();
+    n.rain_mm_def = DynamicInput::from_string("data.rain_infilled_csv.by_name.value", &mut m.data_cache, true)
+        .expect("Failed to parse rain expression");
+    n.evap_mm_def = DynamicInput::from_string("data.mpot_rolled_csv.by_name.value", &mut m.data_cache, true)
+        .expect("Failed to parse evap expression");
     n.sacramento_model.set_params(0.0,45.0,60.0,0.01,
                  0.01,150.0,0.0,0.11,
                  1.5,0.0,0.2,0.01,
@@ -59,8 +62,10 @@ fn test_sacramento_node_with_timeseries_by_index() {
     let mut n = SacramentoNode::new();
     n.name = "my_sac_node".to_owned();
     n.area_km2 = 228.0;
-    n.rain_mm_def.name = "data.rain_infilled_csv.by_index.1".to_owned(); //This is what the inflow node wants to look at
-    n.evap_mm_def.name = "data.mpot_rolled_csv.by_index.1".to_owned();
+    n.rain_mm_def = DynamicInput::from_string("data.rain_infilled_csv.by_index.1", &mut m.data_cache, true)
+        .expect("Failed to parse rain expression");
+    n.evap_mm_def = DynamicInput::from_string("data.mpot_rolled_csv.by_index.1", &mut m.data_cache, true)
+        .expect("Failed to parse evap expression");
     n.sacramento_model.set_params(0.0,45.0,60.0,0.01,
                                   0.01,150.0,0.0,0.11,
                                   1.5,0.0,0.2,0.01,

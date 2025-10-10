@@ -24,7 +24,8 @@ fn test_model_with_function() {
     {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
-        n.rain_mm_def.name = "data.rex_rain_csv.by_name.value".to_string();
+        n.rain_mm_def = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
+            .expect("Failed to parse rain expression");
         // Test DynamicInput with a constant expression (evap data is constant 5.0)
         n.evap_mm_def = DynamicInput::from_string("2 + 3", &mut model.data_cache, true)
             .expect("Failed to parse evap expression");

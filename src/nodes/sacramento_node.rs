@@ -1,6 +1,6 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
-use crate::model_inputs::InputDataDefinition;
+use crate::model_inputs::DynamicInput;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
@@ -9,8 +9,8 @@ use crate::misc::location::Location;
 pub struct SacramentoNode {
     pub name: String,
     pub location: Location,
-    pub rain_mm_def: InputDataDefinition,
-    pub evap_mm_def: InputDataDefinition,
+    pub rain_mm_def: DynamicInput,
+    pub evap_mm_def: DynamicInput,
     pub area_km2: f64,
     pub sacramento_model: Sacramento,
 
@@ -68,9 +68,7 @@ impl Node for SacramentoNode {
         // Initialize inner Sacramento model
         self.sacramento_model.initialize_state_empty();
 
-        // Initialize input series
-        self.rain_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
-        self.evap_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        // DynamicInput fields are already initialized during parsing
 
         // Checks
         if self.area_km2 < 0.0 {
@@ -105,12 +103,8 @@ impl Node for SacramentoNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get driving data
-        if let Some(idx) = self.rain_mm_def.idx {
-            self.rain = data_cache.get_current_value(idx);
-        }
-        if let Some(idx) = self.evap_mm_def.idx {
-            self.pet = data_cache.get_current_value(idx);
-        }
+        self.rain = self.rain_mm_def.get_value(data_cache);
+        self.pet = self.evap_mm_def.get_value(data_cache);
 
         // Run Sacramento model to get runoff
         self.runoff_depth_mm = self.sacramento_model.run_step(self.rain, self.pet);

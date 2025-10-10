@@ -1,6 +1,6 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
-use crate::model_inputs::InputDataDefinition;
+use crate::model_inputs::DynamicInput;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 
@@ -8,7 +8,7 @@ use crate::misc::location::Location;
 pub struct InflowNode {
     pub name: String,
     pub location: Location,
-    pub inflow_def: InputDataDefinition,
+    pub inflow_def: DynamicInput,
 
     // Internal state only
     usflow: f64,
@@ -50,8 +50,7 @@ impl Node for InflowNode {
         self.dsflow_primary = 0.0;
         self.storage = 0.0;
 
-        // Initialize inflow series
-        self.inflow_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        // DynamicInput is already initialized during parsing
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -77,9 +76,7 @@ impl Node for InflowNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get lateral inflow from input data
-        if let Some(idx) = self.inflow_def.idx {
-            self.lateral_inflow = data_cache.get_current_value(idx);
-        }
+        self.lateral_inflow = self.inflow_def.get_value(data_cache);
 
         // Compute outflow based on inflow
         self.dsflow_primary = self.usflow + self.lateral_inflow;

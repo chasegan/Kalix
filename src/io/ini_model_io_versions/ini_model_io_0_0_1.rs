@@ -92,7 +92,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "observed" {
-                            n.observed_flow_def.name = vvc.clone();
+                            n.observed_flow_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
@@ -166,7 +166,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "demand" {
-                            n.demand_def.name = vvc.clone();
+                            n.demand_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "pump" {
                             let p = vvc.parse::<f64>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
                             n.pump = Some(p);
@@ -198,7 +198,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "evap" {
                             n.evap_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "rain" {
-                            n.rain_mm_def.name = vvc.clone();
+                            n.rain_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "area" {
                             n.area_km2 = vvc.parse::<f64>()
                                 .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
@@ -252,9 +252,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "inflow" {
-                            n.inflow_def.name = vv.as_ref()
-                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?
-                                .clone();
+                            n.inflow_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
@@ -334,9 +332,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
-                            n.evap_mm_def.name = vvc.clone();
+                            n.evap_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "rain" {
-                            n.rain_mm_def.name = vvc.clone();
+                            n.rain_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "area" {
                             n.area_km2 = vvc.parse::<f64>()
                                 .map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
@@ -370,9 +368,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
-                            n.evap_mm_def.name = vvc.clone();
+                            n.evap_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "rain" {
-                            n.rain_mm_def.name = vvc.clone();
+                            n.rain_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "seep" {
                             n.seep_mm_def.name = vvc.clone();
                         } else if vp == "pond_demand" {

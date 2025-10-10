@@ -1,6 +1,6 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
-use crate::model_inputs::InputDataDefinition;
+use crate::model_inputs::DynamicInput;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
 
@@ -51,7 +51,7 @@ use crate::misc::location::Location;
 pub struct UserNode {
     pub name: String,
     pub location: Location,
-    pub demand_def: InputDataDefinition,
+    pub demand_def: DynamicInput,
     pub pump: Option<f64>,
     pub demand_carryover_simulated: bool,
     pub demand_carryover_reset_month: Option<u32>,
@@ -103,8 +103,7 @@ impl Node for UserNode {
         self.storage = 0.0;
         self.demand_carryover_value = 0.0;
 
-        // Initialize input series
-        self.demand_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        // DynamicInput is already initialized during parsing
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -132,10 +131,7 @@ impl Node for UserNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get demand from data_cache
-        let mut demand = 0.0;
-        if let Some(idx) = self.demand_def.idx {
-            demand = data_cache.get_current_value(idx);
-        }
+        let demand = self.demand_def.get_value(data_cache);
 
         // Calculate diversion (take minimum of demand and available flow)
         let available = match self.pump {

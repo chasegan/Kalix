@@ -1,6 +1,6 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
-use crate::model_inputs::InputDataDefinition;
+use crate::model_inputs::{InputDataDefinition, DynamicInput};
 use crate::numerical::table::Table;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
@@ -20,8 +20,8 @@ pub struct StorageNode {
     pub v: f64,
     pub v_initial: f64,
     pub area0: f64,
-    pub rain_mm_def: InputDataDefinition,
-    pub evap_mm_def: InputDataDefinition,
+    pub rain_mm_def: DynamicInput,
+    pub evap_mm_def: DynamicInput,
     pub seep_mm_def: InputDataDefinition,
     pub demand_def: InputDataDefinition,
 
@@ -85,8 +85,7 @@ impl Node for StorageNode {
         self.spill = 0.0;
 
         //Initialize inflow series
-        self.rain_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
-        self.evap_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        // rain_mm_def and evap_mm_def are DynamicInput and already initialized during parsing
         self.seep_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
         self.demand_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
 
@@ -124,14 +123,8 @@ impl Node for StorageNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get the driving data
-        let mut rain_mm = 0_f64;
-        if let Some(idx) = self.rain_mm_def.idx {
-            rain_mm = data_cache.get_current_value(idx);
-        }
-        let mut evap_mm = 0_f64;
-        if let Some(idx) = self.evap_mm_def.idx {
-            evap_mm = data_cache.get_current_value(idx);
-        }
+        let rain_mm = self.rain_mm_def.get_value(data_cache);
+        let evap_mm = self.evap_mm_def.get_value(data_cache);
         let mut seep_mm = 0_f64;
         if let Some(idx) = self.seep_mm_def.idx {
             seep_mm = data_cache.get_current_value(idx);

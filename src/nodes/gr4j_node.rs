@@ -1,7 +1,6 @@
 use super::Node;
 use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
 use crate::misc::misc_functions::make_result_name;
-use crate::model_inputs::InputDataDefinition;
 use crate::model_inputs::DynamicInput;
 use crate::data_cache::DataCache;
 use crate::misc::location::Location;
@@ -10,8 +9,8 @@ use crate::misc::location::Location;
 pub struct Gr4jNode {
     pub name: String,
     pub location: Location,
-    pub rain_mm_def: InputDataDefinition,
-    pub evap_mm_def: DynamicInput,  // Changed to DynamicInput!
+    pub rain_mm_def: DynamicInput,
+    pub evap_mm_def: DynamicInput,
     pub area_km2: f64,
     pub gr4j_model: Gr4j,
 
@@ -66,9 +65,7 @@ impl Node for Gr4jNode {
         self.runoff_depth_mm = 0.0;
         self.runoff_volume_megs = 0.0;
 
-        // Initialize input series
-        self.rain_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
-        // Note: evap_mm_def is a DynamicInput and was already initialized during model loading
+        // DynamicInput fields are already initialized during parsing
 
         // Checks
         if self.area_km2 < 0.0 {
@@ -103,9 +100,7 @@ impl Node for Gr4jNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get driving data
-        if let Some(idx) = self.rain_mm_def.idx {
-            self.rain = data_cache.get_current_value(idx);
-        }
+        self.rain = self.rain_mm_def.get_value(data_cache);
         self.pet = self.evap_mm_def.get_value(data_cache);
 
         // Run GR4J model to get runoff
