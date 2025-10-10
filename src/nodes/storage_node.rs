@@ -16,6 +16,7 @@ const EPSILON: f64 = 1e-3;
 pub struct StorageNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub d: Table,       // Level m, Volume ML, Area ha, Spill ML
     pub v: f64,
     pub v_initial: f64,
@@ -72,6 +73,7 @@ impl Node for StorageNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
         self.ds_1_flow = 0.0;
@@ -239,6 +241,9 @@ impl Node for StorageNode {
         self.ds_2_flow = 0.0;  // Not implemented yet
         self.dsflow = self.ds_1_flow + self.ds_2_flow;
 
+        // Update mass balance
+        self.mbal += self.dsflow - self.usflow;
+
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
@@ -284,5 +289,9 @@ impl Node for StorageNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

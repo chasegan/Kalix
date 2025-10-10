@@ -16,6 +16,24 @@ pub enum NodeEnum {
     StorageNode(StorageNode),
 }
 
+impl NodeEnum {
+    pub fn get_type_as_string(&self) -> String {
+        match self {
+            NodeEnum::BlackholeNode(_) => "blackhole".to_string(),
+            NodeEnum::ConfluenceNode(_) => "confluence".to_string(),
+            NodeEnum::GaugeNode(_) => "gauge".to_string(),
+            NodeEnum::LossNode(_) => "loss".to_string(),
+            NodeEnum::SplitterNode(_) => "splitter".to_string(),
+            NodeEnum::UserNode(_) => "user".to_string(),
+            NodeEnum::Gr4jNode(_) => "gr4j".to_string(),
+            NodeEnum::InflowNode(_) => "inflow".to_string(),
+            NodeEnum::RoutingNode(_) => "routing".to_string(),
+            NodeEnum::SacramentoNode(_) => "sacramento".to_string(),
+            NodeEnum::StorageNode(_) => "storage".to_string(),
+        }
+    }
+}
+
 impl Node for NodeEnum {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
         match self {
@@ -96,4 +114,21 @@ impl Node for NodeEnum {
             NodeEnum::StorageNode(node) => node.remove_dsflow(outlet),
         }
     }
+
+    fn get_mass_balance(&self) -> f64 {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.get_mass_balance(),
+            NodeEnum::ConfluenceNode(node) => node.get_mass_balance(),
+            NodeEnum::GaugeNode(node) => node.get_mass_balance(),
+            NodeEnum::LossNode(node) => node.get_mass_balance(),
+            NodeEnum::SplitterNode(node) => node.get_mass_balance(),
+            NodeEnum::UserNode(node) => node.get_mass_balance(),
+            NodeEnum::Gr4jNode(node) => node.get_mass_balance(),
+            NodeEnum::InflowNode(node) => node.get_mass_balance(),
+            NodeEnum::RoutingNode(node) => node.get_mass_balance(),
+            NodeEnum::SacramentoNode(node) => node.get_mass_balance(),
+            NodeEnum::StorageNode(node) => node.get_mass_balance(),
+        }
+    }
 }
+

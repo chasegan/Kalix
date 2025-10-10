@@ -345,9 +345,22 @@ fn test_model_with_all_node_types() {
     }
     model.add_link(node10_idx, node11_idx, 0, 0);
 
+    //Add node9_blackhole
+    let node12_idx: usize;
+    {
+        let mut n = BlackholeNode::new();
+        n.name = "node12_blackhole".to_string();
+        node12_idx = model.add_node(NodeEnum::BlackholeNode(n));
+    }
+    model.add_link(node11_idx, node12_idx, 0, 0);
+
     //Run the model
     model.configure().expect("Configuration error");
     model.run().expect("Simulation error");
+
+    // Print the mass balance report
+    let report = model.generate_mass_balance_report();
+    println!("{}", report);
 
     //Assess the results
     for key in regression_results.keys() {

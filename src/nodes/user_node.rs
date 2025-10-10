@@ -51,6 +51,7 @@ use crate::misc::location::Location;
 pub struct UserNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub demand_input: DynamicInput,
     pub pump: Option<f64>,
     pub demand_carryover_simulated: bool,
@@ -97,6 +98,7 @@ impl UserNode {
 impl Node for UserNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.diversion = 0.0;
@@ -174,6 +176,9 @@ impl Node for UserNode {
         }
         self.dsflow_primary = self.usflow - self.diversion;
 
+        // Update mass balance
+        self.mbal -= self.diversion;
+
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
@@ -208,5 +213,9 @@ impl Node for UserNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

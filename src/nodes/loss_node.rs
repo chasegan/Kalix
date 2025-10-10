@@ -8,6 +8,7 @@ use crate::misc::location::Location;
 pub struct LossNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub loss_table: Table,  // By default, the columns mean Inflow Rate ML, Loss Rate ML
 
     // Internal state only
@@ -44,6 +45,7 @@ impl LossNode {
 impl Node for LossNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
@@ -72,8 +74,8 @@ impl Node for LossNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Calculate loss flow from table (inflow rate -> loss rate)
-        let loss = self.loss_table.interpolate(0, 1, self.usflow);
-        self.loss = loss.max(0f64).min(self.usflow);
+        let attempted_loss = self.loss_table.interpolate(0, 1, self.usflow);
+        self.loss = attempted_loss.max(0f64).min(self.usflow);
 
         // Remaining flow after loss goes to ds_1
         self.dsflow_primary = self.usflow - self.loss;
@@ -81,6 +83,9 @@ impl Node for LossNode {
         if self.dsflow_primary < 0.0 {
             panic!("Negative downstream flow at '{}' when usflow={}, loss={}", self.name, self.usflow, self.loss);
         }
+
+        // Update mass balance
+        self.mbal -= self.loss;
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -113,5 +118,9 @@ impl Node for LossNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

@@ -9,6 +9,7 @@ use crate::misc::location::Location;
 pub struct Gr4jNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub area_km2: f64,
@@ -57,6 +58,7 @@ impl Gr4jNode {
 impl Node for Gr4jNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.storage = 0.0;
@@ -108,6 +110,9 @@ impl Node for Gr4jNode {
         self.runoff_volume_megs = self.runoff_depth_mm * self.area_km2;
         self.dsflow_primary = self.usflow + self.runoff_volume_megs;
 
+        // Update mass balance
+        self.mbal += self.runoff_volume_megs;
+
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
@@ -142,5 +147,9 @@ impl Node for Gr4jNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

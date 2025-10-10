@@ -8,6 +8,7 @@ use crate::misc::location::Location;
 pub struct GaugeNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub observed_flow_input: DynamicInput,
 
     // Internal state only
@@ -42,6 +43,7 @@ impl GaugeNode {
 impl Node for GaugeNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
 
@@ -73,6 +75,9 @@ impl Node for GaugeNode {
         // // Get the observed flows (currently unused)
         // let _observed_flow = self.observed_flow_def.get_value(data_cache);
 
+        // Update mass balance
+        // self.mbal = 0.0; // This is always zero for Gauge nodes (unless we allow flow override)
+
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
@@ -101,5 +106,9 @@ impl Node for GaugeNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

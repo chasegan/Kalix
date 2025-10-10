@@ -8,6 +8,7 @@ use crate::misc::location::Location;
 pub struct SplitterNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
     pub splitter_table: Table,  // By default, the columns mean Inflow Rate ML, Effluent Rate ML (maybe ways to override this later)
 
     // Internal state only
@@ -44,6 +45,7 @@ impl SplitterNode {
 impl Node for SplitterNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.ds_1_flow = 0.0;
         self.ds_2_flow = 0.0;
@@ -78,6 +80,9 @@ impl Node for SplitterNode {
         if self.ds_1_flow < 0f64 {
             panic!("Negative ds_1 flow at '{}' when usflow={}", self.name, self.usflow);
         }
+
+        // Update mass balance
+        // self.mbal = 0.0; // This is always zero for Splitter nodes. The water on ds_2 is not lost in this node.
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -115,5 +120,9 @@ impl Node for SplitterNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

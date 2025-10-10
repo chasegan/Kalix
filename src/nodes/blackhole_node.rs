@@ -7,6 +7,7 @@ use crate::misc::location::Location;
 pub struct BlackholeNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
 
     // Internal state only
     usflow: f64,
@@ -39,6 +40,7 @@ impl BlackholeNode {
 impl Node for BlackholeNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
 
         // Initialize result recorders
@@ -56,11 +58,12 @@ impl Node for BlackholeNode {
         Ok(())
     }
 
-    fn get_name(&self) -> &str {
-        &self.name  // Return reference, not owned String
-    }
+    fn get_name(&self) -> &str { &self.name }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Update mass balance
+        self.mbal -= self.usflow; // All the water goes behind the event horizon
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -84,5 +87,9 @@ impl Node for BlackholeNode {
     #[allow(unused_variables)]
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         0f64
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }

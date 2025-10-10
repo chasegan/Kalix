@@ -1,9 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::fmt::format;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
 use crate::misc::configuration::Configuration;
+use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
 
@@ -384,6 +386,83 @@ impl Model {
         }
         None
     }
+
+
+    ///
+    pub fn generate_mass_balance_report(&self) -> String {
+
+        let mut report = "".to_string();
+        report.push_str("==================================\n");
+        report.push_str("MASS BALANCE REPORT\n");
+        report.push_str("==================================\n");
+
+        // Global stuff
+        report.push_str(format!("  Node count: {}\n", self.nodes.len()).as_str());
+        report.push_str(format!("  Timesteps: {}\n", self.configuration.sim_nsteps).as_str());
+        report.push_str(format!("  Stepsize (s): {}\n", self.configuration.sim_stepsize).as_str());
+        let start_str = u64_to_iso_datetime_string(self.configuration.sim_start_timestamp);
+        let end_str = u64_to_iso_datetime_string(self.configuration.sim_end_timestamp);
+        report.push_str(format!("  Period: {}, {}\n\n", start_str, end_str).as_str());
+
+        // Remaining nodes (<--- here is where you might allow people to organise nodes manually
+        let mut remaining_nodes: Vec<String> = self.nodes
+            .iter().map(|node| node.get_name().to_string()).collect();
+        remaining_nodes.sort();
+
+        // Get keys and values in sorted order
+        // let mut items: Vec<(&String, &f64)> = blah.iter().collect();
+        // items.sort_by_key(|&(key, _)| key);
+
+        // Keep track of the total
+        let mut total_mbal = 0f64;
+
+        // Nodes by type
+        let mut report_section_dict: HashMap<String, String> = HashMap::new();
+        for node_name in &remaining_nodes {
+
+            // Get the section for this node type (start that section if needed)
+            let node = self.get_node(node_name).unwrap();
+            let type_name = node.get_type_as_string();
+            if !report_section_dict.contains_key(&type_name) {
+                report_section_dict.insert(type_name.clone(), format!("{} NODES\n", type_name.to_uppercase()));
+            }
+
+            // Add a line for this node
+            let mbal_per_timestep = node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            let mut section = report_section_dict.remove(&type_name).unwrap();
+            section.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
+            report_section_dict.insert(type_name.clone(), section);
+
+            //Keep track of the total
+            total_mbal += mbal_per_timestep;
+        }
+
+        // Now put all the sections together
+        for type_name in [
+            "inflow",
+            "sacramento", "gr4j",
+            "user", "loss",
+            "storage", "routing",
+            "splitter", "confluence", "gauge",
+            "blackhole"] {
+            match report_section_dict.get(type_name) {
+                Some(s) => {
+                    report.push_str(s);
+                    report.push_str("\n");
+                }
+                None => {}
+            }
+        }
+
+        // Write the total line
+        report.push_str("----------------------------------\n");
+        report.push_str(format!("TOTAL = {}\n", total_mbal).as_str());
+        report.push_str("----------------------------------\n");
+
+        // Return
+        report
+    }
+
 
 
     /// Prints all the inputs to the console, one on each line.

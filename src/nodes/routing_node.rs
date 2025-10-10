@@ -8,6 +8,7 @@ use super::super::numerical::mathfn::quadratic_plus;
 pub struct RoutingNode {
     pub name: String,
     pub location: Location,
+    pub mbal: f64,
 
     // Internal state only
     usflow: f64,
@@ -113,6 +114,7 @@ impl Node for RoutingNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String>{
 
         // Initialize only internal state
+        self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.storage_volume = 0.0;
@@ -236,6 +238,9 @@ impl Node for RoutingNode {
         // Store outflow
         self.dsflow_primary = qout;
 
+        // Update mass balance
+        self.mbal += self.dsflow_primary - self.usflow;
+
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
@@ -268,5 +273,9 @@ impl Node for RoutingNode {
             }
             _ => 0.0,
         }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
     }
 }
