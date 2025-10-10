@@ -92,7 +92,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "observed" {
-                            n.observed_flow_input = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
+                            n.observed_flow_input = DynamicInput::from_string(vvc, &mut model.data_cache, false)?;
                         } else if vp == "ds_1" {
                             let outlet = 0_u8; //ds_1 is outlet 0
                             let inlet = 0_u8; //always inlet 0
