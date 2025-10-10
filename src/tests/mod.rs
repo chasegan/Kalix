@@ -47,3 +47,4 @@ mod test_sacramento_node;
 mod test_model_io_ini;
 mod test_timeseries_input;
 mod test_kai;
+mod test_model_with_function;
