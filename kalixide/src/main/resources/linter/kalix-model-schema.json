@@ -39,8 +39,8 @@
           "description": "X,Y coordinates"
         },
         "inflow": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Inflow input (data reference, constant, or expression)"
         }
       }
     },
@@ -66,12 +66,12 @@
           "description": "Catchment area"
         },
         "rain": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Rainfall input (data reference, constant, or expression)"
         },
         "evap": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Evaporation input (data reference, constant, or expression)"
         },
         "params": {
           "type": "number_sequence",
@@ -126,12 +126,12 @@
           "description": "Catchment area"
         },
         "rain": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Rainfall input (data reference, constant, or expression)"
         },
         "evap": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Evaporation input (data reference, constant, or expression)"
         },
         "params": {
           "type": "number_sequence",
@@ -158,8 +158,8 @@
           "description": "X,Y coordinates"
         },
         "demand": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$"
+          "type": "function_expression",
+          "description": "Water demand input (data reference, constant, or expression)"
         },
         "carryover": {
           "type": "string",
@@ -204,14 +204,12 @@
           "description": "File containing storage dimensions"
         },
         "rain": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
-          "description": "Rainfall data reference"
+          "type": "function_expression",
+          "description": "Rainfall input (data reference, constant, or expression)"
         },
         "evap": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
-          "description": "Evaporation data reference"
+          "type": "function_expression",
+          "description": "Evaporation input (data reference, constant, or expression)"
         },
         "seep": {
           "type": "data_reference",
@@ -365,9 +363,8 @@
           "description": "X,Y coordinates"
         },
         "observed": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
-          "description": "Observed flow data reference"
+          "type": "function_expression",
+          "description": "Observed flow input (data reference, constant, or expression)"
         }
       }
     }
@@ -438,6 +435,11 @@
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
       "description": "Reference to a downstream node (node name)",
       "validation": "dsnode_references"
+    },
+
+    "function_expression": {
+      "description": "Mathematical expression with optional data references and functions",
+      "validation": "custom_function_validator"
     }
   }
 }
