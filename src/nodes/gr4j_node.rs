@@ -9,8 +9,8 @@ use crate::misc::location::Location;
 pub struct Gr4jNode {
     pub name: String,
     pub location: Location,
-    pub rain_mm_def: DynamicInput,
-    pub evap_mm_def: DynamicInput,
+    pub rain_mm_input: DynamicInput,
+    pub evap_mm_input: DynamicInput,
     pub area_km2: f64,
     pub gr4j_model: Gr4j,
 
@@ -100,8 +100,8 @@ impl Node for Gr4jNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get driving data
-        self.rain = self.rain_mm_def.get_value(data_cache);
-        self.pet = self.evap_mm_def.get_value(data_cache);
+        self.rain = self.rain_mm_input.get_value(data_cache);
+        self.pet = self.evap_mm_input.get_value(data_cache);
 
         // Run GR4J model to get runoff
         self.runoff_depth_mm = self.gr4j_model.run_step(self.rain, self.pet);

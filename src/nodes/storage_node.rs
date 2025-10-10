@@ -20,10 +20,10 @@ pub struct StorageNode {
     pub v: f64,
     pub v_initial: f64,
     pub area0: f64,
-    pub rain_mm_def: DynamicInput,
-    pub evap_mm_def: DynamicInput,
-    pub seep_mm_def: InputDataDefinition,
-    pub demand_def: InputDataDefinition,
+    pub rain_mm_input: DynamicInput,
+    pub evap_mm_input: DynamicInput,
+    pub seep_mm_input: InputDataDefinition,
+    pub demand_input: InputDataDefinition,
 
     // Internal state only
     usflow: f64,
@@ -86,8 +86,8 @@ impl Node for StorageNode {
 
         //Initialize inflow series
         // rain_mm_def and evap_mm_def are DynamicInput and already initialized during parsing
-        self.seep_mm_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
-        self.demand_def.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        self.seep_mm_input.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
+        self.demand_input.add_series_to_data_cache_if_required_and_get_idx(data_cache, true);
 
         // Checks
         if self.d.nrows() < 2 {
@@ -123,14 +123,14 @@ impl Node for StorageNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get the driving data
-        let rain_mm = self.rain_mm_def.get_value(data_cache);
-        let evap_mm = self.evap_mm_def.get_value(data_cache);
+        let rain_mm = self.rain_mm_input.get_value(data_cache);
+        let evap_mm = self.evap_mm_input.get_value(data_cache);
         let mut seep_mm = 0_f64;
-        if let Some(idx) = self.seep_mm_def.idx {
+        if let Some(idx) = self.seep_mm_input.idx {
             seep_mm = data_cache.get_current_value(idx);
         }
         let mut demand = 0_f64;
-        if let Some(idx) = self.demand_def.idx {
+        if let Some(idx) = self.demand_input.idx {
             demand = data_cache.get_current_value(idx);
         }
 

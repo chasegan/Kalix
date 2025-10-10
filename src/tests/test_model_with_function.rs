@@ -24,10 +24,10 @@ fn test_model_with_function() {
     {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
-        n.rain_mm_def = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
+        n.rain_mm_input = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
             .expect("Failed to parse rain expression");
         // Test DynamicInput with a constant expression (evap data is constant 5.0)
-        n.evap_mm_def = DynamicInput::from_string("2 + 3", &mut model.data_cache, true)
+        n.evap_mm_input = DynamicInput::from_string("2 + 3", &mut model.data_cache, true)
             .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         let params = csv_string_to_f64_vec("350.0, 0.0, 90.0, 1.7").unwrap();

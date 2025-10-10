@@ -8,7 +8,7 @@ use crate::misc::location::Location;
 pub struct GaugeNode {
     pub name: String,
     pub location: Location,
-    pub observed_flow_def: DynamicInput,
+    pub observed_flow_input: DynamicInput,
 
     // Internal state only
     usflow: f64,

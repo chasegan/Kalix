@@ -9,8 +9,8 @@ use crate::misc::location::Location;
 pub struct SacramentoNode {
     pub name: String,
     pub location: Location,
-    pub rain_mm_def: DynamicInput,
-    pub evap_mm_def: DynamicInput,
+    pub rain_mm_input: DynamicInput,
+    pub evap_mm_input: DynamicInput,
     pub area_km2: f64,
     pub sacramento_model: Sacramento,
 
@@ -103,8 +103,8 @@ impl Node for SacramentoNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get driving data
-        self.rain = self.rain_mm_def.get_value(data_cache);
-        self.pet = self.evap_mm_def.get_value(data_cache);
+        self.rain = self.rain_mm_input.get_value(data_cache);
+        self.pet = self.evap_mm_input.get_value(data_cache);
 
         // Run Sacramento model to get runoff
         self.runoff_depth_mm = self.sacramento_model.run_step(self.rain, self.pet);

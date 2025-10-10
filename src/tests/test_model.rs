@@ -37,7 +37,7 @@ fn test_model_with_all_node_types() {
     {
         let mut n = InflowNode::new();
         n.name = "node1_inflow".to_string();
-        n.inflow_def = DynamicInput::from_string("data.flows_csv.by_index.1", &mut model.data_cache, true)
+        n.inflow_input = DynamicInput::from_string("data.flows_csv.by_index.1", &mut model.data_cache, true)
             .expect("Failed to parse inflow expression");
         node1_idx = model.add_node(NodeEnum::InflowNode(n));
 
@@ -64,9 +64,9 @@ fn test_model_with_all_node_types() {
     {
         let mut n = SacramentoNode::new();
         n.name = "node2_sacramento".to_string();
-        n.rain_mm_def = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
+        n.rain_mm_input = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
             .expect("Failed to parse rain expression");
-        n.evap_mm_def = DynamicInput::from_string("data.rex_mpot_csv.by_name.value", &mut model.data_cache, true)
+        n.evap_mm_input = DynamicInput::from_string("data.rex_mpot_csv.by_name.value", &mut model.data_cache, true)
             .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         // Set params: 0.01, 40.0, 23.0, 0.009, 0.043, 130.0, 0.01, 0.063, 1.0, 0.01, 0.0, 0.0, 40.0, 0.245, 50.0, 40.0, 0.1
@@ -96,7 +96,7 @@ fn test_model_with_all_node_types() {
     {
         let mut n = UserNode::new();
         n.name = "node3_user".to_string();
-        n.demand_def = DynamicInput::from_string("data.constants_csv.by_name.const_20", &mut model.data_cache, true)
+        n.demand_input = DynamicInput::from_string("data.constants_csv.by_name.const_20", &mut model.data_cache, true)
             .expect("Failed to parse demand expression");
         node3_idx = model.add_node(NodeEnum::UserNode(n));
 
@@ -190,9 +190,9 @@ fn test_model_with_all_node_types() {
     {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
-        n.rain_mm_def = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
+        n.rain_mm_input = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
             .expect("Failed to parse rain expression");
-        n.evap_mm_def = DynamicInput::from_string("data.rex_mpot_csv.by_name.value", &mut model.data_cache, true)
+        n.evap_mm_input = DynamicInput::from_string("data.rex_mpot_csv.by_name.value", &mut model.data_cache, true)
             .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         // Set params: 350.0, 0.0, 90.0, 1.7
@@ -485,7 +485,7 @@ fn test_clone_model() {
     //Create an inflow node and add it to the model
     let mut n = InflowNode::new();
     n.name = "my_inflow_node".to_owned();
-    n.inflow_def = DynamicInput::from_string("data.test_csv.by_name.value", &mut m.data_cache, true)
+    n.inflow_input = DynamicInput::from_string("data.test_csv.by_name.value", &mut m.data_cache, true)
         .expect("Failed to parse inflow expression");
     m.add_node(NodeEnum::InflowNode(n));
 

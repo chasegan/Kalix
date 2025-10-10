@@ -8,7 +8,7 @@ use crate::misc::location::Location;
 pub struct InflowNode {
     pub name: String,
     pub location: Location,
-    pub inflow_def: DynamicInput,
+    pub inflow_input: DynamicInput,
 
     // Internal state only
     usflow: f64,
@@ -76,7 +76,7 @@ impl Node for InflowNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Get lateral inflow from input data
-        self.lateral_inflow = self.inflow_def.get_value(data_cache);
+        self.lateral_inflow = self.inflow_input.get_value(data_cache);
 
         // Compute outflow based on inflow
         self.dsflow_primary = self.usflow + self.lateral_inflow;

@@ -51,7 +51,7 @@ use crate::misc::location::Location;
 pub struct UserNode {
     pub name: String,
     pub location: Location,
-    pub demand_def: DynamicInput,
+    pub demand_input: DynamicInput,
     pub pump: Option<f64>,
     pub demand_carryover_simulated: bool,
     pub demand_carryover_reset_month: Option<u32>,
@@ -131,7 +131,7 @@ impl Node for UserNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get demand from data_cache
-        let demand = self.demand_def.get_value(data_cache);
+        let demand = self.demand_input.get_value(data_cache);
 
         // Calculate diversion (take minimum of demand and available flow)
         let available = match self.pump {
