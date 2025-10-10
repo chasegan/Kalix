@@ -372,9 +372,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "rain" {
                             n.rain_mm_input = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "seep" {
-                            n.seep_mm_input.name = vvc.clone();
+                            n.seep_mm_input = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "pond_demand" {
-                            n.demand_input.name = vvc.clone();
+                            n.demand_input = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "dimensions" {
                             n.d = Table::from_csv_string(vvc.as_str(), 4, false)
                                 .expect(format!("Could not parse dimensions table {}", n.name).as_str());

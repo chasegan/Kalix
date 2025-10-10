@@ -183,7 +183,7 @@
       "description": "Storage node for water storage modeling",
       "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2"],
       "required_params": ["type", "loc"],
-      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep"],
+      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand"],
       "dsnode_params": ["ds_1", "ds_2"],
       "parameters": {
         "type": {
@@ -212,9 +212,12 @@
           "description": "Evaporation input (data reference, constant, or expression)"
         },
         "seep": {
-          "type": "data_reference",
-          "pattern": "^data\\.[\\w_]+\\.by_(name|index)\\.[\\w_]+$",
-          "description": "Seepage data reference"
+          "type": "function_expression",
+          "description": "Seepage input (data reference, constant, or expression)"
+        },
+        "pond_demand": {
+          "type": "function_expression",
+          "description": "Storage demand input (data reference, constant, or expression)"
         }
       }
     },

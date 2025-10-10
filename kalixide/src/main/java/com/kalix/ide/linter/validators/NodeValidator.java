@@ -8,10 +8,14 @@ import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 
+import java.util.List;
+
 /**
  * Validates individual nodes including their type, required parameters, and parameter formats.
  */
 public class NodeValidator implements ValidationStrategy {
+
+    private final FunctionExpressionValidator functionValidator = new FunctionExpressionValidator();
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
@@ -73,6 +77,14 @@ public class NodeValidator implements ValidationStrategy {
             return;
         }
 
+        // Get parameter definition to check type
+        ParameterDefinition paramDef = typeDef.getParameterDefinition(paramName);
+        if (paramDef != null && "function_expression".equals(paramDef.type)) {
+            // Validate function expression
+            validateFunctionExpression(prop, result);
+            return;
+        }
+
         // Validate based on parameter type - simplified for common cases
         switch (paramName) {
             case "loc":
@@ -91,6 +103,19 @@ public class NodeValidator implements ValidationStrategy {
             default:
                 // Handle downstream parameters - validation handled by ReferenceValidator
                 break;
+        }
+    }
+
+    private void validateFunctionExpression(INIModelParser.Property prop, ValidationResult result) {
+        List<String> errors = functionValidator.validate(prop.getValue());
+
+        for (String error : errors) {
+            // Determine severity - warnings for division by zero, errors for everything else
+            ValidationRule.Severity severity = error.toLowerCase().startsWith("warning")
+                ? ValidationRule.Severity.WARNING
+                : ValidationRule.Severity.ERROR;
+
+            result.addIssue(prop.getLineNumber(), error, severity, "function_expression_error");
         }
     }
 
