@@ -598,7 +598,7 @@ impl FunctionParser {
                     }
                     
                     self.consume_token()?; // consume ')'
-                    Ok(Box::new(ExpressionNode::FunctionCall { name, args }))
+                    Ok(Box::new(ExpressionNode::FunctionCall { name: name.to_lowercase(), args }))
                 } else {
                     // Variable
                     Ok(Box::new(ExpressionNode::Variable { name }))

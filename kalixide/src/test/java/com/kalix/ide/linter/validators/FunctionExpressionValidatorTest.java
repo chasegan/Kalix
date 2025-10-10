@@ -314,6 +314,30 @@ class FunctionExpressionValidatorTest {
             "Average fast path time should be < 1ms, was: " + avgTime + "ms");
     }
 
+    @Test
+    @DisplayName("Functions should be case-insensitive")
+    void testCaseInsensitiveFunctions() {
+        // Test various capitalizations of common functions
+        assertValid("MAX(data.a, data.b)");
+        assertValid("Max(data.a, data.b)");
+        assertValid("max(data.a, data.b)");
+
+        assertValid("MIN(data.a, data.b)");
+        assertValid("Min(data.a, data.b)");
+
+        assertValid("IF(data.a > data.b, 1, 2)");
+        assertValid("If(data.a > data.b, 1, 2)");
+
+        assertValid("ABS(data.a)");
+        assertValid("Abs(data.a)");
+
+        assertValid("SQRT(data.a)");
+        assertValid("Sqrt(data.a)");
+
+        assertValid("POW(data.a, 2)");
+        assertValid("Pow(data.a, 2)");
+    }
+
     // ==================== Helper Methods ====================
 
     private void assertValid(String expression) {
