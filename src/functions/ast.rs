@@ -17,7 +17,7 @@ use crate::functions::operators::{BinaryOperator, UnaryOperator};
 ///
 /// The trait requires `Send + Sync` to ensure thread safety for concurrent
 /// evaluation of expressions across multiple threads.
-pub trait ASTNode: Send + Sync + std::fmt::Debug {
+pub trait ASTNode: Send + Sync + std::fmt::Debug + std::any::Any {
     /// Evaluate this node given a variable context.
     ///
     /// This method recursively evaluates the node and all its children,
@@ -185,7 +185,9 @@ impl ASTNode for ExpressionNode {
 }
 
 /// Evaluate a binary operation
-fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f64, EvaluationError> {
+///
+/// This function is public to allow reuse in optimized evaluation contexts.
+pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f64, EvaluationError> {
     match op {
         BinaryOperator::Add => Ok(left + right),
         BinaryOperator::Subtract => Ok(left - right),
@@ -217,7 +219,9 @@ fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f64, 
 }
 
 /// Evaluate a unary operation
-fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, EvaluationError> {
+///
+/// This function is public to allow reuse in optimized evaluation contexts.
+pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, EvaluationError> {
     match op {
         UnaryOperator::Plus => Ok(operand),
         UnaryOperator::Minus => Ok(-operand),

@@ -1,7 +1,7 @@
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_cache::DataCache;
-use crate::misc::input_data_definition::InputDataDefinition;
+use crate::model_inputs::InputDataDefinition;
 use crate::misc::location::Location;
 
 #[derive(Default, Clone)]

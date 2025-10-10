@@ -95,16 +95,28 @@ impl Tokenizer {
     
     fn read_identifier(&mut self) -> String {
         let mut identifier = String::new();
-        
+        let mut last_was_dot = false;
+
         while let Some(ch) = self.current_char {
             if ch.is_alphanumeric() || ch == '_' {
                 identifier.push(ch);
+                last_was_dot = false;
+                self.advance();
+            } else if ch == '.' && !last_was_dot && !identifier.is_empty() {
+                // Allow dot in identifier, but not consecutive dots and not at start
+                identifier.push(ch);
+                last_was_dot = true;
                 self.advance();
             } else {
                 break;
             }
         }
-        
+
+        // Remove trailing dot if present
+        if identifier.ends_with('.') {
+            identifier.pop();
+        }
+
         identifier
     }
     
@@ -204,6 +216,7 @@ pub struct FunctionParser {
 /// This struct represents a successfully parsed expression that has been
 /// converted to an Abstract Syntax Tree. It can be evaluated multiple times
 /// with different variable contexts for optimal performance.
+#[derive(Debug)]
 pub struct ParsedFunction {
     ast: Box<dyn ASTNode>,
     variables: HashSet<String>,
@@ -255,6 +268,59 @@ impl ParsedFunction {
     /// A reference to a HashSet containing all variable names.
     pub fn get_variables(&self) -> &HashSet<String> {
         &self.variables
+    }
+
+    /// Get a reference to the internal AST.
+    ///
+    /// This method exposes the internal AST for advanced use cases like
+    /// optimization and transformation.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the AST root node.
+    pub fn get_ast(&self) -> &dyn ASTNode {
+        self.ast.as_ref()
+    }
+
+    /// Check if this function is a single variable reference (no operations).
+    ///
+    /// Returns `Some(&variable_name)` if the expression is just a simple variable
+    /// reference like "data.evap", otherwise returns `None`.
+    ///
+    /// This is useful for optimization - a single variable can be optimized to
+    /// a direct data cache lookup instead of AST evaluation.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&str)` with the variable name if this is a single variable,
+    /// `None` if it's a more complex expression.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kalix::functions::parse_function;
+    ///
+    /// let f1 = parse_function("data.evap").unwrap();
+    /// assert_eq!(f1.is_single_variable(), Some("data.evap"));
+    ///
+    /// let f2 = parse_function("data.evap * 1.2").unwrap();
+    /// assert_eq!(f2.is_single_variable(), None);
+    /// ```
+    pub fn is_single_variable(&self) -> Option<&str> {
+        // Check if we have exactly one variable
+        if self.variables.len() != 1 {
+            return None;
+        }
+
+        // Downcast to ExpressionNode to inspect the AST structure
+        if let Some(expr_node) = (self.ast.as_ref() as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
+            // Check if the root node is a simple Variable node
+            if let ExpressionNode::Variable { name } = expr_node {
+                return Some(name.as_str());
+            }
+        }
+
+        None
     }
 }
 

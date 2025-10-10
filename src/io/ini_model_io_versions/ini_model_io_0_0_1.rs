@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::misc::location::Location;
+use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
@@ -195,7 +196,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "evap" {
-                            n.evap_mm_def.name = vvc.clone();
+                            n.evap_mm_def = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "rain" {
                             n.rain_mm_def.name = vvc.clone();
                         } else if vp == "area" {

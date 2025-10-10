@@ -8,6 +8,7 @@ use crate::nodes::routing_node::RoutingNode;
 use crate::nodes::confluence_node::ConfluenceNode;
 use crate::nodes::splitter_node::SplitterNode;
 use crate::nodes::gauge_node::GaugeNode;
+use crate::model_inputs::DynamicInput;
 use crate::nodes::loss_node::LossNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
@@ -186,7 +187,8 @@ fn test_model_with_all_node_types() {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
         n.rain_mm_def.name = "data.rex_rain_csv.by_name.value".to_string();
-        n.evap_mm_def.name = "data.rex_mpot_csv.by_name.value".to_string();
+        n.evap_mm_def = DynamicInput::from_string("data.rex_mpot_csv.by_name.value", &mut model.data_cache, true)
+            .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         // Set params: 350.0, 0.0, 90.0, 1.7
         node6_idx = model.add_node(NodeEnum::Gr4jNode(n));

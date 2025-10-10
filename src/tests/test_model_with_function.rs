@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use crate::model::Model;
 use crate::nodes::gr4j_node::Gr4jNode;
-use crate::nodes::{NodeEnum};
+use crate::nodes::NodeEnum;
 use crate::io::csv_io::csv_string_to_f64_vec;
+use crate::model_inputs::DynamicInput;
 
 #[test]
 fn test_model_with_function() {
@@ -19,19 +20,21 @@ fn test_model_with_function() {
     let _ = model.load_input_data("./src/tests/example_models/1/constants_1_2_3_4_5_6.csv");
 
     //Add node6_gr4j
-    let node6_idx: usize;
+    let _node6_idx: usize;
     {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
         n.rain_mm_def.name = "data.rex_rain_csv.by_name.value".to_string();
-        n.evap_mm_def.name = "data.constants_1_2_3_4_5_6_csv.by_index.5".to_string();
+        // Test DynamicInput with a constant expression (evap data is constant 5.0)
+        n.evap_mm_def = DynamicInput::from_string("2 + 3", &mut model.data_cache, true)
+            .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         let params = csv_string_to_f64_vec("350.0, 0.0, 90.0, 1.7").unwrap();
         n.gr4j_model.x1 = params[0];
         n.gr4j_model.x2 = params[1];
         n.gr4j_model.x3 = params[2];
         n.gr4j_model.x4 = params[3];
-        node6_idx = model.add_node(NodeEnum::Gr4jNode(n));
+        _node6_idx = model.add_node(NodeEnum::Gr4jNode(n));
 
         //Node results
         let result_name = "node.node6_gr4j.runoff_depth".to_string();

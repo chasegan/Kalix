@@ -6,6 +6,7 @@ pub mod functions;
 pub mod hydrology;
 pub mod io;
 pub mod model;
+pub mod model_inputs;
 pub mod nodes;
 pub mod numerical;
 pub mod perf;
