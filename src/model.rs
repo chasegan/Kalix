@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::fmt::format;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_cache::DataCache;
@@ -402,7 +401,8 @@ impl Model {
         report.push_str(format!("  Stepsize (s): {}\n", self.configuration.sim_stepsize).as_str());
         let start_str = u64_to_iso_datetime_string(self.configuration.sim_start_timestamp);
         let end_str = u64_to_iso_datetime_string(self.configuration.sim_end_timestamp);
-        report.push_str(format!("  Period: {}, {}\n\n", start_str, end_str).as_str());
+        report.push_str(format!("  Period: {}, {}\n", start_str, end_str).as_str());
+        report.push_str(format!("  Note: units are ML/timestep\n\n").as_str());
 
         // Remaining nodes (<--- here is where you might allow people to organise nodes manually
         let mut remaining_nodes: Vec<String> = self.nodes

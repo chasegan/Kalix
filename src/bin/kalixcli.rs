@@ -3,12 +3,10 @@ use kalix::io::ini_model_io::IniModelIO;
 use kalix::perf::benchmarks;
 use kalix::misc::cli_helpers::describe_cli_api;
 use kalix::apis::stdio::handlers::run_stdio_session;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::thread;
 use std::time::Duration;
-
-
-
 
 
 #[derive(Parser)]
@@ -44,6 +42,12 @@ enum Commands {
         /// Path to the output file
         #[arg(short, long)]
         output_file: Option<String>,
+        /// Mass balance
+        #[arg(short, long)]
+        mass_balance: Option<String>,
+        /// Verify mass balance
+        #[arg(short, long)]
+        verify_mass_balance: Option<String>,
     },
     /// Run calibration
     Calibrate {
@@ -104,7 +108,9 @@ fn main() {
                 }
             }
         }
-        Commands::Sim { model_file, output_file } => {
+        Commands::Sim { model_file, output_file,
+            mass_balance, verify_mass_balance} => {
+
             // Read model either from a file (if provided) or from STDIN
             let mut m = match model_file {
                 Some(filename) => {
@@ -139,6 +145,7 @@ fn main() {
                 panic!("Error: {}", e); // TODO: handle error properly
             }
 
+            // Output file
             match output_file {
                 Some(f) => {
                     match m.write_outputs(f.as_str()) {
@@ -146,8 +153,47 @@ fn main() {
                         Err(s) => eprintln!("{}", s)
                     }
                 }
-                None => eprintln!("No output filename specified!")
+                None => {} // TODO: do we want to look at defaulting to some output here?
             }
+
+            // Mass balance reporting and verification
+            let mut mb_report = String::new();
+            match mass_balance {
+                Some(f) => {
+                    mb_report = m.generate_mass_balance_report();
+                    match fs::write(f, &mb_report) {
+                        Ok(_) => {}
+                        Err(s) => eprintln!("Error: {}", s)
+                    }
+                }
+                None => {}
+            }
+            match verify_mass_balance {
+                Some(f) => {
+                    match fs::read_to_string(f) {
+                        Ok(mb_verification) => {
+
+                            // Generate the mass balance report for the current model if we haven't already.
+                            if mb_report.is_empty() {
+                                mb_report = m.generate_mass_balance_report();
+                            }
+
+                            // Check that they are identical (nothing fancy for now)
+                            let red = "\x1b[31m";
+                            let green = "\x1b[32m";
+                            let reset = "\x1b[0m";
+                            if mb_report.trim() == mb_verification.trim() {
+                                println!("Mass balance verification: {green}VERIFIED!{reset}");
+                            } else {
+                                eprintln!("Mass balance verification: {red}FAILED!{reset}")
+                            }
+                        }
+                        Err(s) => eprintln!("Error: {}", s)
+                    }
+                }
+                None => {}
+            }
+
             println!("Done!");
         }
         Commands::Calibrate { config, iterations } => {
