@@ -84,7 +84,7 @@ impl Gr4j {
             if scaled_net_precip > 13.0 {
                 scaled_net_precip = 13.0;
             }
-            let tanh_scaled_net_precip = libm::tanh(scaled_net_precip);
+            let tanh_scaled_net_precip = f64::tanh(scaled_net_precip);
             reservoir_production = 
                 (self.x1 * (1.0 - (self.production_store / self.x1).powi(2)) * tanh_scaled_net_precip)
                 / (1.0 + self.production_store / self.x1 * tanh_scaled_net_precip);
@@ -94,7 +94,7 @@ impl Gr4j {
             if scaled_net_evap > 13.0 {
                 scaled_net_evap = 13.0;
             }
-            let tanh_scaled_net_evap = libm::tanh(scaled_net_evap);
+            let tanh_scaled_net_evap = f64::tanh(scaled_net_evap);
             let ps_div_x1 = (2.0 - self.production_store / self.x1) * tanh_scaled_net_evap;
             net_evap = self.production_store * ps_div_x1
                 / (1.0 + (1.0 - self.production_store / self.x1) * tanh_scaled_net_evap);
@@ -156,10 +156,8 @@ fn s_curves2(t: usize, x4: f64) -> f64 {
         0.0
     } else if t_f64 < x4 {
         0.5 * (t_f64 / x4).powf(2.5)
-        //0.5 * libm::pow(t_f64 / x4, 2.5)
     } else if t_f64 < 2.0 * x4 {
         1.0 - 0.5 * (2.0 - t_f64 / x4).powf(2.5)
-        //1.0 - 0.5 * libm::pow(2.0 - t_f64 / x4, 2.5)
     } else {
         1.0 // t >= x4
     }
