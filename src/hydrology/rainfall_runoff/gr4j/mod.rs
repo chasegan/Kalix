@@ -86,7 +86,7 @@ impl Gr4j {
             }
             let tanh_scaled_net_precip = libm::tanh(scaled_net_precip);
             reservoir_production = 
-                (self.x1 * (1.0 - libm::pow(self.production_store / self.x1, 2.0)) * tanh_scaled_net_precip)
+                (self.x1 * (1.0 - (self.production_store / self.x1).powi(2)) * tanh_scaled_net_precip)
                 / (1.0 + self.production_store / self.x1 * tanh_scaled_net_precip);
             routing_pattern = p - e - reservoir_production;
         } else {
@@ -103,10 +103,7 @@ impl Gr4j {
         //Production store
         self.production_store = self.production_store - net_evap + reservoir_production;
         let percolation = self.production_store
-            / libm::pow(
-                1.0 + libm::pow(self.production_store / 2.25 / self.x1, 4.0),
-                0.25,
-            );
+            / (1.0 + (self.production_store / 2.25 / self.x1).powi(4)).powf(0.25);
         routing_pattern = routing_pattern + (self.production_store - percolation);
         self.production_store = percolation;
 
@@ -123,13 +120,11 @@ impl Gr4j {
         self.uh2[uh_len - 1] = self.uh2_ordinates[uh_len - 1] * routing_pattern;
 
         //Groundwater and routing store
-        let groundwater_exchange = self.x2 * libm::pow(self.routing_store / self.x3, 3.5);
+        let groundwater_exchange = self.x2 * (self.routing_store / self.x3).powf(3.5);
         self.routing_store = f64::max(
-            0.0,
-            self.routing_store + self.uh1[0] * 0.9 + groundwater_exchange,
-        );
+            0.0, self.routing_store + self.uh1[0] * 0.9 + groundwater_exchange);
         let r2 = self.routing_store
-            / libm::pow(1.0 + libm::pow(self.routing_store / self.x3, 4.0), 0.25);
+            / (1.0 + (self.routing_store / self.x3).powi(4)).powf(0.25);
         let qr = self.routing_store - r2;
         self.routing_store = r2;
         let qd = f64::max(0.0, self.uh2[0] * 0.1 + groundwater_exchange);
@@ -146,7 +141,7 @@ fn s_curves1(t: usize, x4: f64) -> f64 {
     if t <= 0 {
         0.0
     } else if t_f64 < x4 {
-        libm::pow(t_f64 / x4, 2.5)
+        (t_f64 / x4).powf(2.5)
     } else {
         1.0
     }
@@ -160,9 +155,11 @@ fn s_curves2(t: usize, x4: f64) -> f64 {
     if t <= 0 {
         0.0
     } else if t_f64 < x4 {
-        0.5 * libm::pow(t_f64 / x4, 2.5)
+        0.5 * (t_f64 / x4).powf(2.5)
+        //0.5 * libm::pow(t_f64 / x4, 2.5)
     } else if t_f64 < 2.0 * x4 {
-        1.0 - 0.5 * libm::pow(2.0 - t_f64 / x4, 2.5)
+        1.0 - 0.5 * (2.0 - t_f64 / x4).powf(2.5)
+        //1.0 - 0.5 * libm::pow(2.0 - t_f64 / x4, 2.5)
     } else {
         1.0 // t >= x4
     }
