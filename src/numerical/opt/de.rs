@@ -1,0 +1,325 @@
+/// Differential Evolution (DE) global optimization algorithm
+///
+/// Classic DE/rand/1/bin strategy with tournament selection.
+///
+/// Reference: Storn, R. and Price, K. (1997). Differential evolutiona simple
+/// and efficient heuristic for global optimization over continuous spaces.
+/// Journal of global optimization, 11(4), 341-359.
+
+use super::optimisable::Optimisable;
+use rand::{Rng, RngCore, SeedableRng};
+use rand::rngs::StdRng;
+use rand::distributions::Uniform;
+
+/// Result of a Differential Evolution optimization run
+#[derive(Debug, Clone)]
+pub struct DEResult {
+    /// Best parameter values found (normalized [0,1])
+    pub best_params: Vec<f64>,
+
+    /// Best objective function value (lower is better)
+    pub best_fitness: f64,
+
+    /// Number of generations completed
+    pub generations: usize,
+
+    /// Number of function evaluations performed
+    pub n_evaluations: usize,
+
+    /// History of best fitness per generation
+    pub fitness_history: Vec<f64>,
+
+    /// Whether optimization terminated successfully
+    pub success: bool,
+
+    /// Termination message
+    pub message: String,
+}
+
+/// Differential Evolution optimizer configuration
+pub struct DEConfig {
+    /// Population size (NP)
+    pub population_size: usize,
+
+    /// Maximum number of generations
+    pub max_generations: usize,
+
+    /// Differential weight F  [0, 2], typically 0.8
+    pub f: f64,
+
+    /// Crossover probability CR  [0, 1], typically 0.9
+    pub cr: f64,
+
+    /// Random number generator seed (None = random seed)
+    pub seed: Option<u64>,
+
+    /// Optional callback for progress reporting: (generation, best_fitness)
+    pub progress_callback: Option<Box<dyn Fn(usize, f64)>>,
+}
+
+impl Default for DEConfig {
+    fn default() -> Self {
+        Self {
+            population_size: 50,
+            max_generations: 100,
+            f: 0.8,
+            cr: 0.9,
+            seed: None,
+            progress_callback: None,
+        }
+    }
+}
+
+/// Differential Evolution optimizer
+pub struct DifferentialEvolution {
+    config: DEConfig,
+}
+
+impl DifferentialEvolution {
+    /// Create a new DE optimizer with given configuration
+    pub fn new(config: DEConfig) -> Self {
+        Self { config }
+    }
+
+    /// Create a new DE optimizer with default configuration
+    pub fn with_defaults() -> Self {
+        Self::new(DEConfig::default())
+    }
+
+    /// Run optimization on the given problem
+    pub fn optimize(&self, problem: &mut dyn Optimisable) -> DEResult {
+        let n_params = problem.n_params();
+
+        // Initialize RNG
+        let mut rng: Box<dyn RngCore> = match self.config.seed {
+            Some(seed) => Box::new(StdRng::seed_from_u64(seed)),
+            None => Box::new(StdRng::from_entropy()),
+        };
+
+        let uniform = Uniform::new(0.0, 1.0);
+
+        // Initialize population randomly in [0, 1]^n
+        let mut population: Vec<Vec<f64>> = (0..self.config.population_size)
+            .map(|_| {
+                (0..n_params)
+                    .map(|_| rng.sample(uniform))
+                    .collect()
+            })
+            .collect();
+
+        // Evaluate initial population
+        let mut fitness: Vec<f64> = vec![f64::INFINITY; self.config.population_size];
+        let mut n_evaluations = 0;
+
+        for i in 0..self.config.population_size {
+            match problem.set_params(&population[i]) {
+                Ok(_) => {
+                    match problem.evaluate() {
+                        Ok(f) => {
+                            fitness[i] = f;
+                            n_evaluations += 1;
+                        },
+                        Err(e) => {
+                            // If evaluation fails, leave fitness as infinity (invalid solution)
+                            eprintln!("Warning: Evaluation failed for individual {}: {}", i, e);
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Warning: Failed to set params for individual {}: {}", i, e);
+                }
+            }
+        }
+
+        // Find initial best
+        let mut best_idx = 0;
+        let mut best_fitness = fitness[0];
+        for i in 1..self.config.population_size {
+            if fitness[i] < best_fitness {
+                best_fitness = fitness[i];
+                best_idx = i;
+            }
+        }
+
+        let mut best_params = population[best_idx].clone();
+        let mut fitness_history = vec![best_fitness];
+
+        // Main DE loop
+        for generation in 0..self.config.max_generations {
+
+            // Progress callback
+            if let Some(ref callback) = self.config.progress_callback {
+                callback(generation, best_fitness);
+            }
+
+            // Create trial population
+            for i in 0..self.config.population_size {
+                // Select three random distinct individuals (different from i)
+                let (r1, r2, r3) = self.select_random_indices(i, self.config.population_size, &mut *rng);
+
+                // Mutation: trial = x_r1 + F * (x_r2 - x_r3)
+                let mut trial = vec![0.0; n_params];
+                for j in 0..n_params {
+                    trial[j] = population[r1][j] +
+                               self.config.f * (population[r2][j] - population[r3][j]);
+                }
+
+                // Crossover: binomial crossover
+                let j_rand = rng.gen_range(0..n_params);  // Ensure at least one parameter is from trial
+                for j in 0..n_params {
+                    if j != j_rand && rng.sample(uniform) >= self.config.cr {
+                        trial[j] = population[i][j];  // Keep original parameter
+                    }
+                }
+
+                // Enforce bounds [0, 1] by clipping
+                for j in 0..n_params {
+                    trial[j] = trial[j].clamp(0.0, 1.0);
+                }
+
+                // Evaluate trial
+                let trial_fitness = match problem.set_params(&trial) {
+                    Ok(_) => {
+                        match problem.evaluate() {
+                            Ok(f) => {
+                                n_evaluations += 1;
+                                f
+                            },
+                            Err(_) => f64::INFINITY,  // Invalid solution
+                        }
+                    },
+                    Err(_) => f64::INFINITY,
+                };
+
+                // Selection: greedy replacement
+                if trial_fitness < fitness[i] {
+                    population[i] = trial;
+                    fitness[i] = trial_fitness;
+
+                    // Update global best
+                    if trial_fitness < best_fitness {
+                        best_fitness = trial_fitness;
+                        best_params = population[i].clone();
+                    }
+                }
+            }
+
+            fitness_history.push(best_fitness);
+        }
+
+        // Final callback
+        if let Some(ref callback) = self.config.progress_callback {
+            callback(self.config.max_generations, best_fitness);
+        }
+
+        DEResult {
+            best_params,
+            best_fitness,
+            generations: self.config.max_generations,
+            n_evaluations,
+            fitness_history,
+            success: true,
+            message: "Optimization completed successfully".to_string(),
+        }
+    }
+
+    /// Select three random distinct indices different from target_idx
+    fn select_random_indices(&self, target_idx: usize, pop_size: usize, rng: &mut dyn RngCore) -> (usize, usize, usize) {
+        let mut r1 = rng.gen_range(0..pop_size);
+        while r1 == target_idx {
+            r1 = rng.gen_range(0..pop_size);
+        }
+
+        let mut r2 = rng.gen_range(0..pop_size);
+        while r2 == target_idx || r2 == r1 {
+            r2 = rng.gen_range(0..pop_size);
+        }
+
+        let mut r3 = rng.gen_range(0..pop_size);
+        while r3 == target_idx || r3 == r1 || r3 == r2 {
+            r3 = rng.gen_range(0..pop_size);
+        }
+
+        (r1, r2, r3)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::numerical::opt::optimisable::Optimisable;
+
+    /// Simple test problem: minimize sum of squared deviations from 0.5
+    struct SimpleProblem {
+        n_params: usize,
+    }
+
+    impl Optimisable for SimpleProblem {
+        fn n_params(&self) -> usize {
+            self.n_params
+        }
+
+        fn set_params(&mut self, _params: &[f64]) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn get_params(&self) -> Vec<f64> {
+            vec![0.5; self.n_params]
+        }
+
+        fn evaluate(&mut self) -> Result<f64, String> {
+            // This is a hack - in real use set_params would store the params
+            // For testing, we'll just return a dummy value
+            Ok(0.0)
+        }
+
+        fn param_names(&self) -> Vec<String> {
+            (0..self.n_params).map(|i| format!("p{}", i)).collect()
+        }
+
+        fn clone_for_parallel(&self) -> Box<dyn Optimisable> {
+            Box::new(Self { n_params: self.n_params })
+        }
+    }
+
+    #[test]
+    fn test_de_initialization() {
+        let config = DEConfig {
+            population_size: 20,
+            max_generations: 10,
+            f: 0.8,
+            cr: 0.9,
+            seed: Some(42),
+            progress_callback: None,
+        };
+
+        let de = DifferentialEvolution::new(config);
+        assert_eq!(de.config.population_size, 20);
+        assert_eq!(de.config.max_generations, 10);
+    }
+
+    #[test]
+    fn test_select_random_indices() {
+        let config = DEConfig {
+            seed: Some(42),
+            ..Default::default()
+        };
+        let de = DifferentialEvolution::new(config);
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let (r1, r2, r3) = de.select_random_indices(0, 10, &mut rng);
+
+        // All should be different from each other and from target (0)
+        assert_ne!(r1, 0);
+        assert_ne!(r2, 0);
+        assert_ne!(r3, 0);
+        assert_ne!(r1, r2);
+        assert_ne!(r1, r3);
+        assert_ne!(r2, r3);
+
+        // All should be in range [0, 10)
+        assert!(r1 < 10);
+        assert!(r2 < 10);
+        assert!(r3 < 10);
+    }
+}

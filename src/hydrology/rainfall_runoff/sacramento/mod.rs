@@ -28,26 +28,26 @@ pub struct Sacramento {
 
     // Unit hydrograph
     unit_hydrograph: UHPrealloc32,
-    laguh: f64,         // Optional parametrisation of a unit hydrograph's lag
+    pub laguh: f64,         // Optional parametrisation of a unit hydrograph's lag
 
-    // Parameters
-    adimp: f64,
-    lzfpm: f64,
-    lzfsm: f64,
-    lzpk: f64,
-    lzsk: f64,
-    lztwm: f64,
-    pctim: f64,
-    pfree: f64,
-    rexp: f64,
-    rserv: f64,
-    sarva: f64,
-    side: f64,
-    ssout: f64,
-    uzfwm: f64,
-    uzk: f64,
-    uztwm: f64,
-    zperc: f64,
+    // Parameters (public for calibration)
+    pub adimp: f64,
+    pub lzfpm: f64,
+    pub lzfsm: f64,
+    pub lzpk: f64,
+    pub lzsk: f64,
+    pub lztwm: f64,
+    pub pctim: f64,
+    pub pfree: f64,
+    pub rexp: f64,
+    pub rserv: f64,
+    pub sarva: f64,
+    pub side: f64,
+    pub ssout: f64,
+    pub uzfwm: f64,
+    pub uzk: f64,
+    pub uztwm: f64,
+    pub zperc: f64,
 
     // TODO: which of these can be moved into the functions?
     // Other internal vars
