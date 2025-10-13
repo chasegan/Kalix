@@ -168,6 +168,8 @@ impl Optimisable for CalibrationProblem {
     }
 
     fn evaluate(&mut self) -> Result<f64, String> {
+
+
         // Configure model if needed (first time)
         if self.model.execution_order.is_empty() {
             self.model.configure()?;
@@ -177,7 +179,7 @@ impl Optimisable for CalibrationProblem {
         self.model.run()?;
 
         // Extract simulated data
-        let simulated = self.extract_simulated()?;
+        let simulated = self.extract_simulated()?; //TODO: this is a clone
 
         // Check lengths match
         if simulated.len() != self.observed_data.len() {

@@ -35,6 +35,7 @@ pub struct CalibrationIniConfig {
     pub de_f: f64,
     pub de_cr: f64,
     pub random_seed: Option<u64>,
+    pub n_threads: usize,
 
     // [Parameters] section
     pub parameter_config: CalibrationConfig,
@@ -107,6 +108,10 @@ impl CalibrationIniConfig {
         let random_seed = Self::try_get_property_ci(&algorithm_section, "random_seed")
             .and_then(|p| p.value.parse::<u64>().ok());
 
+        let n_threads = Self::try_get_property_ci(&algorithm_section, "n_threads")
+            .and_then(|p| p.value.parse::<usize>().ok())
+            .unwrap_or(1);  // Default to single-threaded
+
         // Parse [Parameters] section (keys are case-insensitive, but values are case-sensitive)
         let parameters_section = Self::get_section_ci(&ini, "Parameters")?;
 
@@ -151,6 +156,7 @@ impl CalibrationIniConfig {
             de_f,
             de_cr,
             random_seed,
+            n_threads,
             parameter_config,
             report_frequency,
             verbose,

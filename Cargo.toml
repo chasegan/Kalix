@@ -17,6 +17,7 @@ serde = "1.0.143"
 serde_derive = "1.0.143"
 csv = "1"
 rand = "0.8.5"
+rayon = "1.10"
 tsz = "0.1.4"
 chrono = { version = "0.4.38", features = ["serde"] }
 dyn-clone = "1.0"

@@ -10,6 +10,24 @@ use super::optimisable::Optimisable;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::distributions::Uniform;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+
+/// Progress information for callback reporting
+#[derive(Debug, Clone)]
+pub struct DEProgress {
+    /// Current generation number
+    pub generation: usize,
+
+    /// Best fitness value so far
+    pub best_fitness: f64,
+
+    /// Total number of function evaluations performed
+    pub n_evaluations: usize,
+
+    /// Elapsed time since optimization started
+    pub elapsed: Duration,
+}
 
 /// Result of a Differential Evolution optimization run
 #[derive(Debug, Clone)]
@@ -53,8 +71,11 @@ pub struct DEConfig {
     /// Random number generator seed (None = random seed)
     pub seed: Option<u64>,
 
-    /// Optional callback for progress reporting: (generation, best_fitness)
-    pub progress_callback: Option<Box<dyn Fn(usize, f64)>>,
+    /// Number of threads for parallel evaluation (1 = single-threaded)
+    pub n_threads: usize,
+
+    /// Optional callback for progress reporting
+    pub progress_callback: Option<Box<dyn Fn(&DEProgress)>>,
 }
 
 impl Default for DEConfig {
@@ -65,6 +86,7 @@ impl Default for DEConfig {
             f: 0.8,
             cr: 0.9,
             seed: None,
+            n_threads: 1,
             progress_callback: None,
         }
     }
@@ -88,6 +110,7 @@ impl DifferentialEvolution {
 
     /// Run optimization on the given problem
     pub fn optimize(&self, problem: &mut dyn Optimisable) -> DEResult {
+        let start_time = Instant::now();
         let n_params = problem.n_params();
 
         // Initialize RNG
@@ -149,10 +172,17 @@ impl DifferentialEvolution {
 
             // Progress callback
             if let Some(ref callback) = self.config.progress_callback {
-                callback(generation, best_fitness);
+                let progress = DEProgress {
+                    generation,
+                    best_fitness,
+                    n_evaluations,
+                    elapsed: start_time.elapsed(),
+                };
+                callback(&progress);
             }
 
-            // Create trial population
+            // Generate all trial individuals for this generation
+            let mut trials: Vec<Vec<f64>> = Vec::with_capacity(self.config.population_size);
             for i in 0..self.config.population_size {
                 // Select three random distinct individuals (different from i)
                 let (r1, r2, r3) = self.select_random_indices(i, self.config.population_size, &mut *rng);
@@ -177,28 +207,25 @@ impl DifferentialEvolution {
                     trial[j] = trial[j].clamp(0.0, 1.0);
                 }
 
-                // Evaluate trial
-                let trial_fitness = match problem.set_params(&trial) {
-                    Ok(_) => {
-                        match problem.evaluate() {
-                            Ok(f) => {
-                                n_evaluations += 1;
-                                f
-                            },
-                            Err(_) => f64::INFINITY,  // Invalid solution
-                        }
-                    },
-                    Err(_) => f64::INFINITY,
-                };
+                trials.push(trial);
+            }
 
-                // Selection: greedy replacement
-                if trial_fitness < fitness[i] {
-                    population[i] = trial;
-                    fitness[i] = trial_fitness;
+            // Evaluate trials (parallel or sequential based on n_threads)
+            let trial_fitnesses = if self.config.n_threads > 1 {
+                self.evaluate_parallel(problem, &trials, &mut n_evaluations)
+            } else {
+                self.evaluate_sequential(problem, &trials, &mut n_evaluations)
+            };
+
+            // Selection: greedy replacement
+            for i in 0..self.config.population_size {
+                if trial_fitnesses[i] < fitness[i] {
+                    population[i] = trials[i].clone();
+                    fitness[i] = trial_fitnesses[i];
 
                     // Update global best
-                    if trial_fitness < best_fitness {
-                        best_fitness = trial_fitness;
+                    if trial_fitnesses[i] < best_fitness {
+                        best_fitness = trial_fitnesses[i];
                         best_params = population[i].clone();
                     }
                 }
@@ -209,7 +236,13 @@ impl DifferentialEvolution {
 
         // Final callback
         if let Some(ref callback) = self.config.progress_callback {
-            callback(self.config.max_generations, best_fitness);
+            let progress = DEProgress {
+                generation: self.config.max_generations,
+                best_fitness,
+                n_evaluations,
+                elapsed: start_time.elapsed(),
+            };
+            callback(&progress);
         }
 
         DEResult {
@@ -241,6 +274,68 @@ impl DifferentialEvolution {
         }
 
         (r1, r2, r3)
+    }
+
+    /// Evaluate trials sequentially (single-threaded)
+    fn evaluate_sequential(&self, problem: &mut dyn Optimisable, trials: &[Vec<f64>], n_evaluations: &mut usize) -> Vec<f64> {
+        trials.iter().map(|trial| {
+            match problem.set_params(trial) {
+                Ok(_) => {
+                    match problem.evaluate() {
+                        Ok(f) => {
+                            *n_evaluations += 1;
+                            f
+                        },
+                        Err(_) => f64::INFINITY,
+                    }
+                },
+                Err(_) => f64::INFINITY,
+            }
+        }).collect()
+    }
+
+    /// Evaluate trials in parallel using rayon
+    fn evaluate_parallel(&self, problem: &dyn Optimisable, trials: &[Vec<f64>], n_evaluations: &mut usize) -> Vec<f64> {
+        use rayon::prelude::*;
+
+        // Configure thread pool
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.config.n_threads)
+            .build()
+            .unwrap();
+
+        // Clone problems upfront (one per trial)
+        let mut problems: Vec<Box<dyn Optimisable>> = (0..trials.len())
+            .map(|_| problem.clone_for_parallel())
+            .collect();
+
+        // Atomic counter for evaluations
+        let eval_counter = AtomicUsize::new(0);
+
+        // Evaluate in parallel (zip trials with their corresponding problems)
+        let fitnesses = pool.install(|| {
+            problems.par_iter_mut().zip(trials.par_iter()).map(|(thread_problem, trial)| {
+                let fitness = match thread_problem.set_params(trial) {
+                    Ok(_) => {
+                        match thread_problem.evaluate() {
+                            Ok(f) => {
+                                eval_counter.fetch_add(1, Ordering::Relaxed);
+                                f
+                            },
+                            Err(_) => f64::INFINITY,
+                        }
+                    },
+                    Err(_) => f64::INFINITY,
+                };
+
+                fitness
+            }).collect()
+        });
+
+        // Update total evaluation count
+        *n_evaluations += eval_counter.load(Ordering::Relaxed);
+
+        fitnesses
     }
 }
 
@@ -290,6 +385,7 @@ mod tests {
             f: 0.8,
             cr: 0.9,
             seed: Some(42),
+            n_threads: 1,
             progress_callback: None,
         };
 

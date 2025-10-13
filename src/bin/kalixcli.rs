@@ -195,7 +195,7 @@ fn main() {
         Commands::Calibrate { config_file } => {
             use kalix::numerical::opt::{
                 CalibrationIniConfig, CalibrationProblem,
-                DifferentialEvolution, DEConfig
+                DifferentialEvolution, DEConfig, DEProgress
             };
             use kalix::io::calibration_config_io::load_observed_timeseries;
 
@@ -265,16 +265,25 @@ fn main() {
 
             // Create DE optimizer with progress callback
             let report_freq = config.report_frequency;  // Capture value before moving
+            let n_threads = config.n_threads;  // Capture value before moving
             let de_config = DEConfig {
                 population_size: config.population_size,
                 max_generations: config.max_generations,
                 f: config.de_f,
                 cr: config.de_cr,
                 seed: config.random_seed,
+                n_threads,
                 progress_callback: if config.verbose {
-                    Some(Box::new(move |gen: usize, fitness: f64| {
-                        if gen % report_freq == 0 {
-                            println!("Generation {:4}: Best fitness = {:.6}", gen, fitness);
+                    Some(Box::new(move |progress: &DEProgress| {
+                        if progress.generation % report_freq == 0 {
+                            let elapsed_secs = progress.elapsed.as_secs_f64();
+                            println!(
+                                "Generation {:4}: fitness = {:.6} | evaluations = {:6} | time = {:.1}s",
+                                progress.generation,
+                                progress.best_fitness,
+                                progress.n_evaluations,
+                                elapsed_secs
+                            );
                         }
                     }))
                 } else {

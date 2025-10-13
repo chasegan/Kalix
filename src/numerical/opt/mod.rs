@@ -18,7 +18,7 @@ pub use calibratable::Calibratable;
 pub use parameter_mapping::{ParameterMapping, CalibrationConfig, Transform};
 pub use objectives::ObjectiveFunction;
 pub use calibration::CalibrationProblem;
-pub use de::{DifferentialEvolution, DEConfig, DEResult};
+pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
 
 // Re-export IO types for convenience
 pub use crate::io::calibration_config_io::CalibrationIniConfig;
