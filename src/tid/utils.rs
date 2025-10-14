@@ -1,4 +1,4 @@
-use chrono::{DateTime, ParseResult, NaiveDate, Timelike, Datelike};
+use chrono::{DateTime, ParseResult, NaiveDate, NaiveDateTime, Timelike, Datelike};
 
 /// Converts a date string (must be "%Y-%m-%d") into an u64 integer timestamp that counts the
 /// number of seconds since some fixed time in the past.
@@ -21,6 +21,85 @@ pub fn date_string_to_u64(date_str: &str) -> ParseResult<u64> {
         Ok((dt,_)) => Ok(wrap_to_u64(dt.and_hms_opt(0,0,0).unwrap().and_utc().timestamp())),
         Err(e) => Err(e),
     }
+}
+
+/// Converts a date/time string with automatic format detection into a u64 timestamp.
+///
+/// Tries multiple common formats and returns both the timestamp and the detected format.
+/// Daily formats are tried first (most common), then sub-daily formats (ISO first).
+///
+/// # Arguments
+///
+/// * `date_str` - Date/time string in various formats
+///
+/// # Returns
+///
+/// A tuple of (u64 timestamp, detected format string), or an error if no format matches.
+pub fn date_string_to_u64_flexible(date_str: &str) -> Result<(u64, &'static str), String> {
+    // List of formats to try, in order of preference
+    // Daily formats first (most common), then sub-daily (ISO first)
+    let formats = vec![
+        // Daily formats (no time component) - MOST COMMON
+        "%Y-%m-%d",                // 2020-01-15 (ISO, current default)
+        "%d/%m/%Y",                // 15/01/2020 (European)
+        "%Y/%m/%d",                // 2020/01/15
+        "%d-%m-%Y",                // 15-01-2020
+
+        // Sub-daily formats (with time component) - LESS COMMON, ISO FIRST
+        "%Y-%m-%dT%H:%M:%S",       // 2020-01-15T14:30:00 (ISO 8601)
+        "%Y-%m-%dT%H:%M:%S%.f",    // 2020-01-15T14:30:00.123 (ISO with fractional seconds)
+        "%Y-%m-%d %H:%M:%S",       // 2020-01-15 14:30:00 (space separator)
+        "%Y-%m-%d %H:%M",          // 2020-01-15 14:30 (space separator, no seconds)
+        "%d/%m/%Y %H:%M:%S",       // 15/01/2020 14:30:00
+        "%d/%m/%Y %H:%M",          // 15/01/2020 14:30
+        "%Y/%m/%d %H:%M:%S",       // 2020/01/15 14:30:00
+        "%Y/%m/%d %H:%M",          // 2020/01/15 14:30
+    ];
+
+    for format in formats {
+        if let Ok(dt) = try_parse_datetime(date_str, format) {
+            let timestamp = dt.and_utc().timestamp();
+            return Ok((wrap_to_u64(timestamp), format));
+        }
+    }
+
+    Err(format!("Could not parse date '{}' with any known format", date_str))
+}
+
+/// Helper function to try parsing a date/time string with a specific format.
+///
+/// Handles both date-only formats (sets time to midnight) and date+time formats.
+fn try_parse_datetime(date_str: &str, format: &str) -> ParseResult<NaiveDateTime> {
+    // Try as datetime first (handles both date+time and date-only formats)
+    if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, format) {
+        return Ok(dt);
+    }
+
+    // Try as date only (set time to midnight)
+    if let Ok(date) = NaiveDate::parse_from_str(date_str, format) {
+        return Ok(date.and_hms_opt(0, 0, 0).unwrap());
+    }
+
+    // Return the error from the datetime parse attempt
+    NaiveDateTime::parse_from_str(date_str, format)
+}
+
+/// Converts a date/time string to u64 using a known format string.
+///
+/// Used after format detection to parse subsequent rows more efficiently.
+///
+/// # Arguments
+///
+/// * `date_str` - Date/time string to parse
+/// * `format` - chrono format string (e.g., "%Y-%m-%d", "%d/%m/%Y %H:%M:%S")
+///
+/// # Returns
+///
+/// A u64 timestamp, or an error if parsing fails.
+pub fn date_string_to_u64_with_format(date_str: &str, format: &str) -> Result<u64, String> {
+    try_parse_datetime(date_str, format)
+        .map(|dt| wrap_to_u64(dt.and_utc().timestamp()))
+        .map_err(|e| format!("Failed to parse '{}' with format '{}': {}", date_str, format, e))
 }
 
 

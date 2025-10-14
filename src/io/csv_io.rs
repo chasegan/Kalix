@@ -1,7 +1,7 @@
 extern crate csv;
 
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{date_string_to_u64, u64_to_date_string};
+use crate::tid::utils::{date_string_to_u64_flexible, date_string_to_u64_with_format, u64_to_date_string};
 use std::fs;
 use std::path::Path;
 
@@ -23,80 +23,76 @@ impl From<CsvError> for String {
 }
 
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
-
-    //Here is where we will construct our result
+    // Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
 
-    //Create a new csv reader
-    let mut reader = match csv::Reader::from_path(filename) {
-        Ok(r) => r,
-        Err(s) => {
-            return Err(s.to_string());
-        }
-    };
+    // Create a new csv reader
+    let mut reader = csv::Reader::from_path(filename)
+        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
 
-    //Get the headers from the reader
+    // Get the headers from the reader
+    let headers = reader.headers()
+        .map_err(|_| format!("Error reading headers from '{}'", filename))?;
+
+    let headers_len = headers.len();
+    let n_data_cols = headers_len.saturating_sub(1); // exclude the index column
+
+    // Initialize timeseries with column names from headers
+    for i in 1..headers_len {
+        let mut ts = Timeseries::new_daily();
+        ts.name = headers.get(i).unwrap_or("").to_string();
+        answer.push(ts);
+    }
+
+    // Detect date format from first row, then reuse for all subsequent rows
+    let mut detected_format: Option<&str> = None;
     let mut file_line = 1;
-    let n_data_cols;
-    match reader.headers() {
-        Ok(headers) => {
-            let headers_len = headers.len();
-            n_data_cols = (headers_len as i32) - 1; //exclude the index column
-            for i in 1..headers_len {
-                let mut ts = Timeseries::new_daily();
-                ts.name = headers.get(i).unwrap_or("").to_string();
-                answer.push(ts);
-            }
-        },
-        Err(_) => {
-            return Err(format!("Error reading '{filename}' line {file_line}."));
-        }
-    };
-    // if n_data_cols <= 0 {
-    //     return Err(CsvError::ReadError(format!("File '{filename}' has no data columns on line {file_line}.")));
-    // }
 
-    //Iterate through the records and parse the data
+    // Iterate through the records and parse the data
     for result in reader.records() {
         file_line += 1;
 
-        //Unwrap the record
-        let record = match result {
-            Ok(r) => r,
-            Err(e) => {
-                println!("Error reading file '{filename}': {e}");
-                return Err(format!("Error reading '{filename}' line {file_line}."));
-            }
+        // Unwrap the record
+        let record = result.map_err(|e|
+            format!("Error reading '{}' line {}: {}", filename, file_line, e))?;
+
+        // Parse the timestamp column (first column)
+        let t_str = record.get(0)
+            .ok_or_else(|| format!("Missing timestamp in '{}' line {}", filename, file_line))?;
+
+        // Detect format on first data row
+        let t_u64 = if detected_format.is_none() {
+            let (timestamp, format) = date_string_to_u64_flexible(t_str)
+                .map_err(|e| format!("{} in '{}' line {}", e, filename, file_line))?;
+            detected_format = Some(format);
+            timestamp
+        } else {
+            // Use detected format for subsequent rows (much faster)
+            date_string_to_u64_with_format(t_str, detected_format.unwrap())
+                .map_err(|e| format!("Parse error in '{}' line {}: {}", filename, file_line, e))?
         };
 
-        //Parse the index column
-        let t_str = record.get(0).unwrap();
-        let t_u64 = date_string_to_u64(t_str);
+        // Parse each data column into the respective timeseries
+        for i in 0..n_data_cols {
+            // Parse the data value as a float
+            let value: f64 = record.get(i + 1)
+                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?
+                .parse()
+                .map_err(|_| format!("Invalid number in '{}' line {} column {}", filename, file_line, i + 1))?;
 
-        //Parse each data colum into the respective timeseries
-        for i in 0..(n_data_cols as usize) {
-            //Parse the data value as a float
-            let f = match record.get(i + 1).unwrap().parse() {
-                Ok(v) => v,
-                Err(_) => {
-                    let one_based_data_column = i + 1;
-                    return Err(format!("Error reading '{filename}' line {file_line} data column {one_based_data_column}."));
-                }
-            };
-            let t = t_u64.unwrap();
-            answer[i].push(t, f);
+            answer[i].push(t_u64, value);
         }
     }
 
-    //Set the start_timestamp
-    //TODO: I should get rid of this "start_timestamp" property. It is a recipe for disaster.
+    // Set the start_timestamp
+    // TODO: I should get rid of this "start_timestamp" property. It is a recipe for disaster.
     for ts in answer.iter_mut() {
         if ts.len() > 0 {
             ts.start_timestamp = ts.timestamps[0];
         }
     }
 
-    //Return
+    // Return
     Ok(answer)
 }
 
