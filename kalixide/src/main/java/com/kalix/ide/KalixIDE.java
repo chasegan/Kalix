@@ -238,6 +238,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Initialize linter for text editor
         textEditor.initializeLinter(schemaManager);
 
+        // Set up linter base directory supplier to use current file's directory
+        textEditor.setLinterBaseDirectorySupplier(() -> {
+            if (fileOperations != null) {
+                return fileOperations.getCurrentWorkingDirectory();
+            }
+            return null;
+        });
+
+        // Set up RunManager base directory supplier for file dialogs
+        RunManager.setBaseDirectorySupplier(() -> {
+            if (fileOperations != null) {
+                return fileOperations.getCurrentWorkingDirectory();
+            }
+            return null;
+        });
+
         // Load saved node theme
         String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
         NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
@@ -278,7 +294,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             processExecutor,
             this::updateStatus,
             progressBar,
-            this
+            this,
+            fileOperations::getCurrentWorkingDirectory
         );
         
         
@@ -1111,6 +1128,38 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 this,
                 message,
                 "Terminal Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    @Override
+    public void openFileManager() {
+        File targetDirectory = null;
+
+        // Get the directory of the currently loaded file
+        File currentFile = fileOperations.getCurrentFile();
+        if (currentFile != null) {
+            targetDirectory = currentFile.getParentFile();
+        }
+
+        try {
+            com.kalix.ide.utils.FileManagerLauncher.openFileManagerAt(targetDirectory);
+
+            // Show success message
+            String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
+            updateStatus("File manager opened at: " + dirPath);
+
+        } catch (Exception e) {
+            String message = "Failed to open file manager: " + e.getMessage();
+            updateStatus(message);
+            logger.error("Error opening file manager", e);
+
+            // Show error dialog
+            JOptionPane.showMessageDialog(
+                this,
+                message,
+                "File Manager Error",
                 JOptionPane.ERROR_MESSAGE
             );
         }

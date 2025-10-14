@@ -20,13 +20,13 @@ public class FileValidator implements ValidationStrategy {
     private final long cacheTimeout = 5000; // 5 seconds
 
     @Override
-    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         ValidationRule rule = schema.getValidationRule("file_paths");
         if (rule == null || !rule.isEnabled()) return;
 
         List<String> inputFiles = model.getInputFiles();
         for (String filePath : inputFiles) {
-            if (!fileExists(filePath)) {
+            if (!fileExists(filePath, baseDirectory)) {
                 int lineNumber = findFilePathLineNumber(model, filePath);
                 result.addIssue(lineNumber,
                               "Input file does not exist: " + filePath,
@@ -40,20 +40,31 @@ public class FileValidator implements ValidationStrategy {
         return "Input file existence validation";
     }
 
-    private boolean fileExists(String filePath) {
+    private boolean fileExists(String filePath, java.io.File baseDirectory) {
+        // Create cache key that includes base directory
+        String cacheKey = (baseDirectory != null ? baseDirectory.getAbsolutePath() + ":" : "") + filePath;
+
         // Use cache to avoid repeated file system calls
         long now = System.currentTimeMillis();
-        Long lastCheck = fileExistenceCache.get(filePath);
+        Long lastCheck = fileExistenceCache.get(cacheKey);
 
         if (lastCheck != null && (now - lastCheck) < cacheTimeout) {
             return true; // Assume it still exists within cache timeout
         }
 
-        boolean exists = Files.exists(Paths.get(filePath));
-        if (exists) {
-            fileExistenceCache.put(filePath, now);
+        // Resolve the path relative to base directory if provided
+        java.nio.file.Path path;
+        if (baseDirectory != null && !Paths.get(filePath).isAbsolute()) {
+            path = baseDirectory.toPath().resolve(filePath);
         } else {
-            fileExistenceCache.remove(filePath);
+            path = Paths.get(filePath);
+        }
+
+        boolean exists = Files.exists(path);
+        if (exists) {
+            fileExistenceCache.put(cacheKey, now);
+        } else {
+            fileExistenceCache.remove(cacheKey);
         }
 
         return exists;

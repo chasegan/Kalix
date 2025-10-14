@@ -37,6 +37,7 @@ public class FlowVizDataManager {
     private Consumer<File> currentFileUpdater;
     private Runnable titleUpdater;
     private Runnable zoomToFitAction;
+    private java.util.function.Supplier<File> baseDirectorySupplier;
 
     /**
      * Creates a new FlowViz data manager for comprehensive data import/export operations.
@@ -84,6 +85,16 @@ public class FlowVizDataManager {
     }
 
     /**
+     * Sets the base directory supplier for file dialogs.
+     * This should provide the model's directory for opening data files.
+     *
+     * @param supplier Supplier that returns the base directory (null if no file is loaded)
+     */
+    public void setBaseDirectorySupplier(java.util.function.Supplier<File> supplier) {
+        this.baseDirectorySupplier = supplier;
+    }
+
+    /**
      * Opens a file chooser dialog and loads selected files with support for multiple selection.
      * Supports both CSV files and Kalix compressed timeseries files (.kai).
      *
@@ -104,7 +115,17 @@ public class FlowVizDataManager {
         fileChooser.addChoosableFileFilter(allFilter);
         fileChooser.setFileFilter(allFilter); // Default to all supported
 
-        fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        // Set initial directory to model directory if available, otherwise use user home
+        if (baseDirectorySupplier != null) {
+            File baseDir = baseDirectorySupplier.get();
+            if (baseDir != null) {
+                fileChooser.setCurrentDirectory(baseDir);
+            } else {
+                fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+            }
+        } else {
+            fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        }
         fileChooser.setMultiSelectionEnabled(true);  // Enable multi-select
 
         int result = fileChooser.showOpenDialog(parentFrame);

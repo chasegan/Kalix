@@ -5,24 +5,28 @@ import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.windows.RunManager;
 
 import javax.swing.*;
+import java.io.File;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Manager class for handling STDIO session execution with progress monitoring.
  * Manages persistent kalixcli sessions for model execution and result querying.
  */
 public class StdioTaskManager {
-    
+
     // Constants for configuration
 
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
     private final JFrame parentFrame;
     private final SessionManager sessionManager;
-    
+    private final Supplier<File> workingDirectorySupplier;
+
     /**
      * Creates a new StdioTaskManager.
      *
@@ -30,19 +34,22 @@ public class StdioTaskManager {
      * @param statusUpdater callback for status updates
      * @param progressBar the progress bar component
      * @param parentFrame parent frame for dialogs
+     * @param workingDirectorySupplier supplier for getting the current working directory
      */
-    public StdioTaskManager(ProcessExecutor processExecutor, 
+    public StdioTaskManager(ProcessExecutor processExecutor,
                          Consumer<String> statusUpdater,
                          StatusProgressBar progressBar,
-                         JFrame parentFrame) {
+                         JFrame parentFrame,
+                         Supplier<File> workingDirectorySupplier) {
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.parentFrame = parentFrame;
-        
-        
+        this.workingDirectorySupplier = workingDirectorySupplier;
+
+
         // Initialize session manager
         this.sessionManager = new SessionManager(
-            processExecutor, 
+            processExecutor,
             statusUpdater,
             this::handleSessionEvent
         );
@@ -77,10 +84,16 @@ public class StdioTaskManager {
                     handleCliNotFound();
                     throw new RuntimeException("kalixcli not found");
                 }
-                
+
                 // Configure session for model run (let SessionManager auto-generate unique ID)
                 SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
-                
+
+                // Set working directory to current file's directory if available
+                File workingDir = workingDirectorySupplier.get();
+                if (workingDir != null) {
+                    config.workingDirectory(workingDir.toPath());
+                }
+
                 // Start session and wait for it to be ready
                 CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
                 String sessionKey = sessionFuture.get(); // Wait for session to start

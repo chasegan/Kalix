@@ -55,6 +55,7 @@ public class PlotInteractionManager {
     private Supplier<List<String>> visibleSeriesSupplier;
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
+    private Supplier<java.io.File> baseDirectorySupplier;
 
     /**
      * Creates a new plot interaction manager for handling all user interactions with the plot.
@@ -110,6 +111,16 @@ public class PlotInteractionManager {
      */
     public void setPrecision64Supplier(Supplier<Boolean> precision64Supplier) {
         this.precision64Supplier = precision64Supplier;
+    }
+
+    /**
+     * Sets the base directory supplier for file save dialogs.
+     * This should provide the model's directory for saving exported data.
+     *
+     * @param baseDirectorySupplier Supplier that returns the base directory (null if no file is loaded)
+     */
+    public void setBaseDirectorySupplier(Supplier<java.io.File> baseDirectorySupplier) {
+        this.baseDirectorySupplier = baseDirectorySupplier;
     }
 
     /**
@@ -504,6 +515,14 @@ public class PlotInteractionManager {
 
         fileChooser.setSelectedFile(new File("timeseries_data.csv"));
 
+        // Set initial directory to model directory if available
+        if (baseDirectorySupplier != null) {
+            java.io.File baseDir = baseDirectorySupplier.get();
+            if (baseDir != null) {
+                fileChooser.setCurrentDirectory(baseDir);
+            }
+        }
+
         int result = fileChooser.showSaveDialog(parentComponent);
         if (result == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
@@ -606,6 +625,14 @@ public class PlotInteractionManager {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
         fileChooser.setSelectedFile(new File("timeseries_data.csv"));
+
+        // Set initial directory to model directory if available
+        if (baseDirectorySupplier != null) {
+            java.io.File baseDir = baseDirectorySupplier.get();
+            if (baseDir != null) {
+                fileChooser.setCurrentDirectory(baseDir);
+            }
+        }
 
         int result = fileChooser.showSaveDialog(parentComponent);
         if (result == JFileChooser.APPROVE_OPTION) {

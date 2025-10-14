@@ -76,6 +76,9 @@ public class MenuBarBuilder {
 
         // External editor
         void openExternalEditor();
+
+        // File manager
+        void openFileManager();
     }
     
     /**
@@ -210,6 +213,7 @@ public class MenuBarBuilder {
         // Launch terminal
         aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
         aiMenu.add(createMenuItem("External Editor", e -> callbacks.openExternalEditor()));
+        aiMenu.add(createMenuItem("File Manager", e -> callbacks.openFileManager()));
         aiMenu.addSeparator();
         aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
         aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));

@@ -426,6 +426,18 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Sets the base directory supplier for the linter to resolve relative file paths.
+     * This should be set to the directory of the currently loaded model file.
+     *
+     * @param baseDirectorySupplier Supplier that returns the base directory (null if no file is loaded)
+     */
+    public void setLinterBaseDirectorySupplier(java.util.function.Supplier<java.io.File> baseDirectorySupplier) {
+        if (linterManager != null) {
+            linterManager.setBaseDirectorySupplier(baseDirectorySupplier);
+        }
+    }
+
+    /**
      * Navigate to the next validation error.
      */
     public void goToNextError() {

@@ -18,7 +18,7 @@ public class NodeValidator implements ValidationStrategy {
     private final FunctionExpressionValidator functionValidator = new FunctionExpressionValidator();
 
     @Override
-    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         for (INIModelParser.NodeSection node : model.getNodes().values()) {
             validateNode(node, schema, result);
         }

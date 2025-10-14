@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 public class ReferenceValidator implements ValidationStrategy {
 
     @Override
-    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         validateOutputReferences(model, schema, result);
         validateDownstreamReferences(model, schema, result);
     }

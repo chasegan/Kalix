@@ -50,6 +50,17 @@ public class LinterOrchestrator {
      * Always performs full validation for maximum accuracy and simplicity.
      */
     public void performValidation(String content) {
+        performValidation(content, null);
+    }
+
+    /**
+     * Perform validation on the given content with a base directory for resolving relative paths.
+     * Always performs full validation for maximum accuracy and simplicity.
+     *
+     * @param content The model content to validate
+     * @param baseDirectory The base directory for resolving relative file paths (null to use current directory)
+     */
+    public void performValidation(String content, java.io.File baseDirectory) {
         if (!validationEnabled || !schemaManager.isLintingEnabled()) {
             return;
         }
@@ -57,7 +68,7 @@ public class LinterOrchestrator {
         // Perform validation in background
         scheduler.execute(() -> {
             try {
-                ValidationResult result = linter.validate(content);
+                ValidationResult result = linter.validate(content, baseDirectory);
                 currentValidationResult = result;
 
                 // Notify handler on EDT

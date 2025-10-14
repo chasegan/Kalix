@@ -10,8 +10,10 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * Manages real-time linting integration with RSyntaxTextArea.
@@ -35,6 +37,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
     // Issue tracking for UI integration
     private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine;
+
+    // Base directory supplier for resolving relative paths
+    private Supplier<File> baseDirectorySupplier;
 
     /**
      * Constructor with dependency injection.
@@ -96,6 +101,15 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     }
 
     /**
+     * Sets the base directory supplier for resolving relative file paths during validation.
+     *
+     * @param baseDirectorySupplier Supplier that returns the base directory (typically the current model file's directory)
+     */
+    public void setBaseDirectorySupplier(Supplier<File> baseDirectorySupplier) {
+        this.baseDirectorySupplier = baseDirectorySupplier;
+    }
+
+    /**
      * ValidationTrigger implementation - called by ValidationEventManager.
      * Always performs full validation for maximum accuracy and simplicity.
      */
@@ -105,7 +119,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         if (content.trim().isEmpty()) {
             orchestrator.clearValidation();
         } else {
-            orchestrator.performValidation(content);
+            // Get base directory from supplier if available
+            File baseDirectory = (baseDirectorySupplier != null) ? baseDirectorySupplier.get() : null;
+            orchestrator.performValidation(content, baseDirectory);
         }
     }
 

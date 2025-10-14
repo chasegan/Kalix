@@ -246,7 +246,12 @@ public class FileOperationsManager {
     private JFileChooser createFileChooser() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Open Kalix Model");
-        
+
+        // Set initial directory to current file's directory if available
+        if (currentFile != null) {
+            fileChooser.setCurrentDirectory(currentFile.getParentFile());
+        }
+
         // Set file filters for supported model formats
         FileNameExtensionFilter allModelsFilter = new FileNameExtensionFilter(
             AppConstants.MODEL_FILES_DESCRIPTION, "ini");
@@ -255,7 +260,7 @@ public class FileOperationsManager {
 
         fileChooser.setFileFilter(allModelsFilter);
         fileChooser.addChoosableFileFilter(iniFilter);
-        
+
         return fileChooser;
     }
     
@@ -317,10 +322,24 @@ public class FileOperationsManager {
     
     /**
      * Checks if there is a current file loaded for saving.
-     * 
+     *
      * @return true if a file is currently loaded
      */
     public boolean hasCurrentFile() {
         return currentFile != null;
+    }
+
+    /**
+     * Gets the directory of the current file as the working directory.
+     * This is used to set the working directory for KalixCLI processes
+     * so that relative paths in model files are resolved correctly.
+     *
+     * @return The directory of the current file, or null if no file is loaded
+     */
+    public File getCurrentWorkingDirectory() {
+        if (currentFile != null) {
+            return currentFile.getParentFile();
+        }
+        return null;
     }
 }

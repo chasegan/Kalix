@@ -132,13 +132,26 @@ public class SessionManager {
      */
     public static class SessionConfig {
         private final String[] args;
+        private Path workingDirectory;
 
         public SessionConfig(String... args) {
             this.args = args;
         }
 
+        /**
+         * Sets the working directory for the session.
+         *
+         * @param workingDirectory the working directory
+         * @return this config for chaining
+         */
+        public SessionConfig workingDirectory(Path workingDirectory) {
+            this.workingDirectory = workingDirectory;
+            return this;
+        }
+
         // Getters
         public String[] getArgs() { return args; }
+        public Path getWorkingDirectory() { return workingDirectory; }
     }
     
     /**
@@ -167,7 +180,7 @@ public class SessionManager {
     
     /**
      * Starts a new kalixcli session.
-     * 
+     *
      * @param cliPath path to kalixcli executable
      * @param config session configuration
      * @return CompletableFuture with session key when session is started
@@ -176,24 +189,24 @@ public class SessionManager {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String sessionKey = generateSessionKey();
-                
-                // Start interactive process
+
+                // Start interactive process with working directory from config
                 KalixStdioSession process = KalixStdioSession.start(
-                    cliPath, processExecutor, config.getArgs());
-                
+                    cliPath, processExecutor, config.getWorkingDirectory(), config.getArgs());
+
                 // Create session
                 KalixSession session = new KalixSession(sessionKey, process);
                 activeSessions.put(sessionKey, session);
-                
+
                 // Start monitoring the session
                 monitorSession(session, config);
-                
+
                 // Notify session started
                 fireSessionEvent(sessionKey, null, SessionState.STARTING, "Session started");
                 updateStatus("Started session: " + sessionKey);
-                
+
                 return sessionKey;
-                
+
             } catch (IOException e) {
                 throw new RuntimeException("Failed to start session: " + e.getMessage(), e);
             }

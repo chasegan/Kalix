@@ -37,6 +37,7 @@ public class RunManager extends JFrame {
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private javax.swing.Timer sessionUpdateTimer;
     private static RunManager instance;
+    private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
 
     // Tree components
     private JTree runTree;
@@ -108,6 +109,16 @@ public class RunManager extends JFrame {
         instance.toFront();
         instance.requestFocus();
         instance.refreshRuns();
+    }
+
+    /**
+     * Sets the base directory supplier for file dialogs.
+     * This should be called to provide the model's directory for saving results.
+     *
+     * @param supplier Supplier that returns the base directory (null if no file is loaded)
+     */
+    public static void setBaseDirectorySupplier(java.util.function.Supplier<java.io.File> supplier) {
+        baseDirectorySupplier = supplier;
     }
 
     /**
@@ -692,6 +703,14 @@ public class RunManager extends JFrame {
         fileChooser.setDialogTitle("Save Results");
         fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
         fileChooser.setSelectedFile(new File(defaultFilename));
+
+        // Set initial directory to model directory if available
+        if (baseDirectorySupplier != null) {
+            java.io.File baseDir = baseDirectorySupplier.get();
+            if (baseDir != null) {
+                fileChooser.setCurrentDirectory(baseDir);
+            }
+        }
 
         int result = fileChooser.showSaveDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {

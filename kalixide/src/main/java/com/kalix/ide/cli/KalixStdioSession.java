@@ -95,7 +95,7 @@ public class KalixStdioSession {
     
     /**
      * Starts a new interactive kalixcli process.
-     * 
+     *
      * @param cliPath path to kalixcli executable
      * @param processExecutor the process executor to use
      * @param args additional command line arguments
@@ -103,7 +103,31 @@ public class KalixStdioSession {
      * @throws IOException if the process cannot be started
      */
     public static KalixStdioSession start(Path cliPath, ProcessExecutor processExecutor, String... args) throws IOException {
-        ProcessExecutor.RunningProcess process = processExecutor.startInteractive(cliPath.toString(), args);
+        return start(cliPath, processExecutor, null, args);
+    }
+
+    /**
+     * Starts a new interactive kalixcli process with a working directory.
+     *
+     * @param cliPath path to kalixcli executable
+     * @param processExecutor the process executor to use
+     * @param workingDir working directory for the process (null for default)
+     * @param args additional command line arguments
+     * @return a new KalixStdioSession
+     * @throws IOException if the process cannot be started
+     */
+    public static KalixStdioSession start(Path cliPath, ProcessExecutor processExecutor, Path workingDir, String... args) throws IOException {
+        ProcessExecutor.ProcessConfig config = new ProcessExecutor.ProcessConfig();
+        if (workingDir != null) {
+            config.workingDirectory(workingDir);
+        }
+
+        java.util.List<String> argList = args != null ? java.util.List.of(args) : java.util.List.of();
+        ProcessExecutor.RunningProcess process = processExecutor.startInteractive(
+            cliPath.toString(),
+            argList,
+            config
+        );
         return new KalixStdioSession(process);
     }
     

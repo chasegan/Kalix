@@ -39,6 +39,17 @@ public class ModelLinter {
      * Validate INI model content against the loaded schema.
      */
     public ValidationResult validate(String content) {
+        return validate(content, null);
+    }
+
+    /**
+     * Validate INI model content against the loaded schema with a base directory for resolving relative paths.
+     *
+     * @param content The model content to validate
+     * @param baseDirectory The base directory for resolving relative file paths (null to use current directory)
+     * @return ValidationResult containing any issues found
+     */
+    public ValidationResult validate(String content, java.io.File baseDirectory) {
         ValidationResult result = new ValidationResult();
 
         if (!schemaManager.isLintingEnabled()) {
@@ -59,7 +70,7 @@ public class ModelLinter {
                 return result; // Return empty result - no errors for empty models
             }
 
-            validateModel(model, schema, result);
+            validateModel(model, schema, result, baseDirectory);
         } catch (Exception e) {
             logger.error("Error during validation", e);
             result.addIssue(1, "Validation failed: " + e.getMessage(), ValidationRule.Severity.ERROR, "validation_error");
@@ -73,6 +84,18 @@ public class ModelLinter {
      * Used by performance-optimized parsers.
      */
     public ValidationResult validateParsedModel(INIModelParser.ParsedModel model) {
+        return validateParsedModel(model, null);
+    }
+
+    /**
+     * Validate pre-parsed model against the loaded schema with a base directory.
+     * Used by performance-optimized parsers.
+     *
+     * @param model The parsed model to validate
+     * @param baseDirectory The base directory for resolving relative file paths (null to use current directory)
+     * @return ValidationResult containing any issues found
+     */
+    public ValidationResult validateParsedModel(INIModelParser.ParsedModel model, java.io.File baseDirectory) {
         ValidationResult result = new ValidationResult();
 
         if (!schemaManager.isLintingEnabled()) {
@@ -91,7 +114,7 @@ public class ModelLinter {
                 return result; // Return empty result - no errors for empty models
             }
 
-            validateModel(model, schema, result);
+            validateModel(model, schema, result, baseDirectory);
         } catch (Exception e) {
             logger.error("Error during validation", e);
             result.addIssue(1, "Validation failed: " + e.getMessage(), ValidationRule.Severity.ERROR, "validation_error");
@@ -140,10 +163,10 @@ public class ModelLinter {
         return !hasContent;
     }
 
-    private void validateModel(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    private void validateModel(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         for (ValidationStrategy validator : validators) {
             try {
-                validator.validate(model, schema, result);
+                validator.validate(model, schema, result, baseDirectory);
             } catch (Exception e) {
                 logger.error("Error in validator {}: {}", validator.getDescription(), e.getMessage());
             }

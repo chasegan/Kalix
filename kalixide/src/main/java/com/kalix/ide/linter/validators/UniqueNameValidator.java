@@ -14,7 +14,7 @@ import java.util.Map;
 public class UniqueNameValidator implements ValidationStrategy {
 
     @Override
-    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         ValidationRule rule = schema.getValidationRule("unique_node_names");
         if (rule == null || !rule.isEnabled()) return;
 

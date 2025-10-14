@@ -14,7 +14,7 @@ import java.util.Set;
 public class SectionValidator implements ValidationStrategy {
 
     @Override
-    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+    public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         validateRequiredSections(model, result);
         validateAttributesSection(model, result);
     }
