@@ -1,0 +1,21 @@
+[optimera settings]
+algorithm = sce
+threads = 12
+complexes = 12
+runs = 80000
+seeded = false
+seed = -1
+objective = NSE
+
+[model]
+filename = c:\users\eganc\onedrive - itp (queensland government)\desktop\1_gr4j_calib\picnic_gr4j.fors
+
+[observed data]
+my_gr4j_node\0 = c:\users\eganc\onedrive - itp (queensland government)\desktop\1_gr4j_calib\data_obsflow.csv
+
+[calibration parameters]
+"gr4\my_gr4j_node\x1"="lin_range(g(1), 10, 2000)"
+"gr4\my_gr4j_node\x2"="lin_range(g(2), -8, 6)"
+"gr4\my_gr4j_node\x3"="lin_range(g(3), 10, 500)"
+"gr4\my_gr4j_node\x4"="lin_range(g(4), 0, 4)"
+"gr4\my_gr4j_node\rfsum"=""
