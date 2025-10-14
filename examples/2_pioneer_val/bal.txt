@@ -22,7 +22,7 @@ INFLOW NODES
   tannalo_pipeline_inf_05b, 0.9158074147103563
 
 USER NODES
-  abovemarian_supp_div_07, -0.9576199875109914
+  abovemarian_supp_div_07, -4.4279006076607805
   cattle_supp_06, -0.024996574210062822
   cc_ds_tan_supp_div_05b, -0.09655771893751887
   cc_unsupp_div_dsfh_05a, -0.000684675422768662
@@ -30,12 +30,12 @@ USER NODES
   cc_unsupp_div_ustan_05b, -0.0019537157483949506
   cc_us_gar_supp_div_05b, -0.04755004499958056
   fh_unsupp_div_05a, -149.36767744774298
-  marian_mill_supp_hp_div_07, -1.9522284281461266
-  marian_supp_div_07, -1.9061586264242316
+  marian_mill_supp_hp_div_07, -8.07952995483665
+  marian_supp_div_07, -8.074442676725036
   mcgregor_supp_div_07, -0.039925015525995526
   owens_unsupp_div_05b, -249.6528294424091
   palmtree_supp_div_05b, -56.8722232325802
-  pion_supp_div_03, -14.381545801336356
+  pion_supp_div_03, -15.720762477866058
   septimus_supp_06, -0.7927351290336098
   silver_pipeline_out_05b, -0.4829020749136645
   silver_supp_div_07, -0.11729026053046496
@@ -43,16 +43,16 @@ USER NODES
   tannalo_supp_div_05b, -0.9158074147103563
 
 LOSS NODES
-  reach03_loss, -5.804149083091822
-  reach06_loss, -6.733906334908878
-  reach07_loss, -1.355146992552032
-  reach2_loss, -1.4567013640584614
+  reach03_loss, -6.701660486314958
+  reach06_loss, -7.311622375413975
+  reach07_loss, -5.500252338306136
+  reach2_loss, -16.144673372274642
 
 STORAGE NODES
-  marianweir, 278.8614458996973
-  mirani, 331.52890708672595
+  marianweir, -1.1392979584492076
+  mirani, -3.600297539137367
   teemburra, 0.515248191498116
-  waterhole, -94.85760995981981
+  waterhole, -6.466113010463176
 
 ROUTING NODES
   bigmodrouting, 0
@@ -83,8 +83,8 @@ GAUGE NODES
   teemburratw, 0
 
 BLACKHOLE NODES
-  eos, -2105.566226953165
+  eos, -1541.2149771119798
 
 ----------------------------------
-TOTAL = -1.7303948581935629
+TOTAL = -1.530984223031746
 ----------------------------------
