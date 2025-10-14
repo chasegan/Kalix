@@ -11,6 +11,8 @@ pub struct Gr4j {
     pub x4: f64, //1.7 [1.1, 2.9]
 
     //UH kernel
+    uh1_len: usize,
+    uh2_len: usize,
     uh1_ordinates: Vec<f64>,
     uh2_ordinates: Vec<f64>,
 
@@ -51,17 +53,17 @@ impl Gr4j {
      */
     pub fn initialize(&mut self) {
         //Set up the unit hydrograph kernels and stores (OBS! THESE DEPEND ON x4)
-        let n_uh1 = self.x4.ceil() as i32;
-        let n_uh2 = (2.0 * self.x4).ceil() as i32;
-        self.uh1_ordinates = new_vector(0.0, n_uh1);
-        self.uh2_ordinates = new_vector(0.0, n_uh2);
-        self.uh1 = new_vector(0.0, self.uh1_ordinates.len() as i32);
-        self.uh2 = new_vector(0.0, self.uh2_ordinates.len() as i32);        
-        for t in 1..((n_uh1 + 1) as usize) {
-            self.uh1_ordinates[t - 1] = s_curves1(t, self.x4) - s_curves1(t - 1, self.x4);
+        self.uh1_len = self.x4.ceil() as usize;
+        self.uh2_len = (2.0 * self.x4).ceil() as usize;
+        self.uh1_ordinates = vec![0.0; self.uh1_len];
+        self.uh2_ordinates = vec![0.0; self.uh2_len];
+        self.uh1 = vec![0.0; self.uh1_len];
+        self.uh2 = vec![0.0; self.uh2_len];
+        for t in 0..(self.uh1_len as usize) {
+            self.uh1_ordinates[t] = s_curves1(t + 1, self.x4) - s_curves1(t, self.x4);
         }
-        for t in 1..((n_uh2 + 1) as usize) {
-            self.uh2_ordinates[t - 1] = s_curves2(t, self.x4) - s_curves2(t - 1, self.x4);
+        for t in 0..(self.uh2_len as usize) {
+            self.uh2_ordinates[t] = s_curves2(t + 1, self.x4) - s_curves2(t, self.x4);
         }
 
         //Set up the production and routing stores
@@ -74,62 +76,59 @@ impl Gr4j {
      *
      */
     pub fn run_step(&mut self, p: f64, e: f64) -> f64 {
-        let mut reservoir_production = 0.0;
-        let mut routing_pattern = 0.0;
-        let mut net_evap = 0.0;
+        let mut ps = 0.0;
+        let mut es = 0.0;
 
         //Precipitation and evaporation
+        let s_on_x1 = self.production_store / self.x1; //NOTE: s == production_store
+        let pn:f64;
         if p > e {
-            let mut scaled_net_precip = (p - e) / self.x1;
-            if scaled_net_precip > 13.0 {
-                scaled_net_precip = 13.0;
-            }
-            let tanh_scaled_net_precip = f64::tanh(scaled_net_precip);
-            reservoir_production = 
-                (self.x1 * (1.0 - (self.production_store / self.x1).powi(2)) * tanh_scaled_net_precip)
-                / (1.0 + self.production_store / self.x1 * tanh_scaled_net_precip);
-            routing_pattern = p - e - reservoir_production;
+            //Determine precipitation to the stores, ps
+            pn = p - e;
+            let pn_on_x1 = (pn / self.x1); //.min(13.0); //min(13) comes from the python implementation
+            let temp = f64::tanh(pn_on_x1);
+            ps = (self.x1 * (1.0 - s_on_x1 * s_on_x1) * temp) / (1.0 + s_on_x1 * temp);
         } else {
-            let mut scaled_net_evap = (e - p) / self.x1;
-            if scaled_net_evap > 13.0 {
-                scaled_net_evap = 13.0;
-            }
-            let tanh_scaled_net_evap = f64::tanh(scaled_net_evap);
-            let ps_div_x1 = (2.0 - self.production_store / self.x1) * tanh_scaled_net_evap;
-            net_evap = self.production_store * ps_div_x1
-                / (1.0 + (1.0 - self.production_store / self.x1) * tanh_scaled_net_evap);
+            // Determine evaporation from the stores, es
+            pn = 0.0;
+            let en_on_x1 = ((e - p) / self.x1); //.min(13.0); //min(13) comes from the python implementation
+            let temp = f64::tanh(en_on_x1);
+            es = self.production_store * (2.0 - s_on_x1) * temp / (1.0 + (1.0 - s_on_x1) * temp);
         }
 
         //Production store
-        self.production_store = self.production_store - net_evap + reservoir_production;
-        let percolation = self.production_store
-            / (1.0 + (self.production_store / 2.25 / self.x1).powi(4)).powf(0.25);
-        routing_pattern = routing_pattern + (self.production_store - percolation);
-        self.production_store = percolation;
+        self.production_store = self.production_store - es + ps;
+
+        //Percolation
+        let perc = self.production_store * (1.0 - (1.0 + (self.production_store / 2.25 / self.x1).powi(4)).powf(-0.25));
+        self.production_store -= perc;
+        let pr = perc + pn - ps;
 
         //Unit hydrographs
-        let uh_len = self.uh1.len();
-        for i in 0..uh_len - 1 {
-            self.uh1[i] = self.uh1[i + 1] + self.uh1_ordinates[i] * routing_pattern;
+        let pr90 = pr * 0.9; //90% goes through UH1 and then non-linear routing
+        for i in 0..self.uh1_len - 1 {
+            self.uh1[i] = self.uh1[i + 1] + self.uh1_ordinates[i] * pr90;
         }
-        self.uh1[uh_len - 1] = self.uh1_ordinates[uh_len - 1] * routing_pattern;
-        let uh_len = self.uh2.len();
-        for i in 0..uh_len - 1 {
-            self.uh2[i] = self.uh2[i + 1] + self.uh2_ordinates[i] * routing_pattern;
+        self.uh1[self.uh1_len - 1] = self.uh1_ordinates[self.uh1_len - 1] * pr90;
+        let pr10 = pr * 0.1; //10% goes through UH2 and no routing
+        for i in 0..self.uh2_len - 1 {
+            self.uh2[i] = self.uh2[i + 1] + self.uh2_ordinates[i] * pr10;
         }
-        self.uh2[uh_len - 1] = self.uh2_ordinates[uh_len - 1] * routing_pattern;
+        self.uh2[self.uh2_len - 1] = self.uh2_ordinates[self.uh2_len - 1] * pr10;
 
-        //Groundwater and routing store
+        //Groundwater exchange rate
         let groundwater_exchange = self.x2 * (self.routing_store / self.x3).powf(3.5);
-        self.routing_store = f64::max(
-            0.0, self.routing_store + self.uh1[0] * 0.9 + groundwater_exchange);
-        let r2 = self.routing_store
-            / (1.0 + (self.routing_store / self.x3).powi(4)).powf(0.25);
-        let qr = self.routing_store - r2;
-        self.routing_store = r2;
-        let qd = f64::max(0.0, self.uh2[0] * 0.1 + groundwater_exchange);
-        let q = qr + qd;
-        q
+
+        //Routing store (applies to UH1)
+        self.routing_store = f64::max(0.0, self.routing_store + self.uh1[0] + groundwater_exchange);
+        let qr = self.routing_store * (1.0 - (1.0 + (self.routing_store / self.x3).powi(4)).powf(-0.25));
+        self.routing_store -= qr;
+
+        //Direct flow
+        let qd = f64::max(0.0, self.uh2[0] + groundwater_exchange);
+
+        //Return the total flow
+        qr + qd
     }
 }
 
