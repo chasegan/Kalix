@@ -770,6 +770,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void toggleCommentAction() {
+        textEditor.toggleComment();
+    }
+
+    @Override
     public void zoomIn() {
         mapPanel.zoomIn();
         updateStatus(AppConstants.STATUS_ZOOMED_IN);

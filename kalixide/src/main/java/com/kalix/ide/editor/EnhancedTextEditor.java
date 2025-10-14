@@ -183,11 +183,22 @@ public class EnhancedTextEditor extends JPanel {
         // Find and Replace
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.META_DOWN_MASK), "replace");
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK), "replace");
-        
+
         actionMap.put("replace", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 searchManager.showFindReplaceDialog();
+            }
+        });
+
+        // Toggle Comment
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, InputEvent.META_DOWN_MASK), "toggleComment");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, InputEvent.CTRL_DOWN_MASK), "toggleComment");
+
+        actionMap.put("toggleComment", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleComment();
             }
         });
     }
@@ -248,6 +259,110 @@ public class EnhancedTextEditor extends JPanel {
     public void redo() {
         if (undoManager.canRedo()) {
             undoManager.redo();
+        }
+    }
+
+    /**
+     * Toggles comments on the current line or all lines in the selection.
+     * Uses "#" as the comment character. If a line starts with "#" (after whitespace),
+     * it removes the comment. Otherwise, it adds a comment.
+     */
+    public void toggleComment() {
+        try {
+            int selectionStart = textArea.getSelectionStart();
+            int selectionEnd = textArea.getSelectionEnd();
+
+            // Get line numbers for start and end of selection
+            int startLine = textArea.getLineOfOffset(selectionStart);
+            int endLine = textArea.getLineOfOffset(selectionEnd);
+
+            // If selection ends at the start of a line, don't include that line
+            if (selectionEnd > selectionStart && selectionEnd == textArea.getLineStartOffset(endLine)) {
+                endLine--;
+            }
+
+            // Check if all lines are commented (to decide whether to comment or uncomment)
+            boolean allCommented = true;
+            for (int line = startLine; line <= endLine; line++) {
+                int lineStart = textArea.getLineStartOffset(line);
+                int lineEnd = textArea.getLineEndOffset(line);
+                String lineText = textArea.getText(lineStart, lineEnd - lineStart);
+                String trimmed = lineText.trim();
+                if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                    allCommented = false;
+                    break;
+                }
+            }
+
+            // Now toggle comments on all lines
+            StringBuilder newText = new StringBuilder();
+            int newSelectionStart = selectionStart;
+            int newSelectionEnd = selectionEnd;
+            int offsetDelta = 0;
+
+            for (int line = startLine; line <= endLine; line++) {
+                int lineStart = textArea.getLineStartOffset(line);
+                int lineEnd = textArea.getLineEndOffset(line);
+                String lineText = textArea.getText(lineStart, lineEnd - lineStart);
+
+                String newLine;
+                int lineDelta = 0;
+
+                if (allCommented) {
+                    // Uncomment: remove "# " or "#" from the start (after whitespace)
+                    int firstNonWhitespace = 0;
+                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
+                        firstNonWhitespace++;
+                    }
+
+                    if (firstNonWhitespace < lineText.length() && lineText.charAt(firstNonWhitespace) == '#') {
+                        String before = lineText.substring(0, firstNonWhitespace);
+                        String after = lineText.substring(firstNonWhitespace + 1);
+
+                        // Also remove the space after # if present
+                        if (after.startsWith(" ")) {
+                            after = after.substring(1);
+                            lineDelta = -2;
+                        } else {
+                            lineDelta = -1;
+                        }
+                        newLine = before + after;
+                    } else {
+                        newLine = lineText;
+                    }
+                } else {
+                    // Comment: add "# " at the start (after whitespace)
+                    int firstNonWhitespace = 0;
+                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
+                        firstNonWhitespace++;
+                    }
+
+                    String before = lineText.substring(0, firstNonWhitespace);
+                    String after = lineText.substring(firstNonWhitespace);
+                    newLine = before + "# " + after;
+                    lineDelta = 2;
+                }
+
+                // Replace the line
+                textArea.replaceRange(newLine, lineStart, lineEnd);
+
+                // Update selection offsets
+                if (lineStart <= selectionStart) {
+                    newSelectionStart += lineDelta;
+                }
+                if (lineStart < selectionEnd) {
+                    newSelectionEnd += lineDelta;
+                }
+
+                offsetDelta += lineDelta;
+            }
+
+            // Restore selection
+            textArea.setSelectionStart(newSelectionStart);
+            textArea.setSelectionEnd(newSelectionEnd);
+
+        } catch (Exception ex) {
+            logger.error("Error toggling comments", ex);
         }
     }
     
