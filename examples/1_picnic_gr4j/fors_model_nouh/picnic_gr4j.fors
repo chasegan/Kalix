@@ -1,0 +1,37 @@
+// fors model saved at 13/10/2025 14:59:08.918
+
+///////////////////////////////////////
+// input data definitions
+
+[input]
+name = rain
+file = data.csv
+column = rain
+
+[input]
+name = mpot
+file = data.csv
+column = mpot
+
+///////////////////////////////////////
+// node definitions
+
+[gr4j]
+name = my_gr4j_node
+location = -9.511974, -1.691019
+area = 228
+rainfall = 1*rain
+evaporation = mpot
+parameters = 107.767870670107, -8, 351.484395951349, 0.0
+
+///////////////////////////////////////
+// sacramento models
+
+///////////////////////////////////////
+// recorders
+
+[recorder]
+node = my_gr4j_node
+outno = 0
+filename = modelled_flow.csv
+
