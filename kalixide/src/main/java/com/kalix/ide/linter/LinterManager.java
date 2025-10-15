@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -40,6 +41,16 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
     // Base directory supplier for resolving relative paths
     private Supplier<File> baseDirectorySupplier;
+
+    // External validation listeners
+    private final List<ValidationCompletionListener> validationListeners = new ArrayList<>();
+
+    /**
+     * Listener interface for validation completion events.
+     */
+    public interface ValidationCompletionListener {
+        void onValidationCompleted(ValidationResult result, long validationTimeMs);
+    }
 
     /**
      * Constructor with dependency injection.
@@ -144,6 +155,16 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
         logger.debug("Validation completed: {} errors, {} warnings",
                     result.getErrors().size(), result.getWarnings().size());
+
+        // Notify external listeners
+        long validationTime = orchestrator.getLastValidationTimeMs();
+        for (ValidationCompletionListener listener : validationListeners) {
+            try {
+                listener.onValidationCompleted(result, validationTime);
+            } catch (Exception e) {
+                logger.error("Error notifying validation listener", e);
+            }
+        }
     }
 
     /**
@@ -203,6 +224,29 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         navigationManager.goToPreviousError(getCurrentValidationResult());
     }
 
+    /**
+     * Get the last validation time in milliseconds.
+     * Returns 0 if no validation has been performed yet.
+     */
+    public long getLastValidationTimeMs() {
+        return orchestrator.getLastValidationTimeMs();
+    }
+
+    /**
+     * Add a validation completion listener.
+     */
+    public void addValidationListener(ValidationCompletionListener listener) {
+        if (listener != null && !validationListeners.contains(listener)) {
+            validationListeners.add(listener);
+        }
+    }
+
+    /**
+     * Remove a validation completion listener.
+     */
+    public void removeValidationListener(ValidationCompletionListener listener) {
+        validationListeners.remove(listener);
+    }
 
     /**
      * Handle linting enabled state changes from SchemaManager.

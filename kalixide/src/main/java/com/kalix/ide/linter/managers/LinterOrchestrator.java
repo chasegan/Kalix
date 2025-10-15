@@ -23,6 +23,7 @@ public class LinterOrchestrator {
 
     private ValidationResult currentValidationResult;
     private boolean validationEnabled = true;
+    private volatile long lastValidationTimeMs = 0;
 
     // Callback interface for validation completion
     public interface ValidationResultHandler {
@@ -68,7 +69,12 @@ public class LinterOrchestrator {
         // Perform validation in background
         scheduler.execute(() -> {
             try {
+                // Capture timing
+                long startTime = System.nanoTime();
                 ValidationResult result = linter.validate(content, baseDirectory);
+                long endTime = System.nanoTime();
+
+                lastValidationTimeMs = (endTime - startTime) / 1_000_000; // Convert to milliseconds
                 currentValidationResult = result;
 
                 // Notify handler on EDT
@@ -130,6 +136,14 @@ public class LinterOrchestrator {
      */
     public boolean hasValidationErrors() {
         return currentValidationResult != null && currentValidationResult.hasErrors();
+    }
+
+    /**
+     * Get the last validation time in milliseconds.
+     * Returns 0 if no validation has been performed yet.
+     */
+    public long getLastValidationTimeMs() {
+        return lastValidationTimeMs;
     }
 
     /**

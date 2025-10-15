@@ -18,9 +18,10 @@ import java.util.List;
 /**
  * Preferences panel for configuring linter settings including rule management and schema selection.
  */
-public class LinterPreferencesPanel extends JPanel {
+public class LinterPreferencesPanel extends JPanel implements LinterManager.ValidationCompletionListener {
 
     private SchemaManager schemaManager;
+    private LinterManager linterManager;
 
     // UI Components
     private JCheckBox enableLintingCheckBox;
@@ -36,8 +37,22 @@ public class LinterPreferencesPanel extends JPanel {
     public LinterPreferencesPanel(SchemaManager schemaManager) {
         super(new BorderLayout());
         this.schemaManager = schemaManager;
+        this.linterManager = null;
         setBorder(BorderFactory.createTitledBorder("Model Linting Settings"));
         initializePanel();
+    }
+
+    public LinterPreferencesPanel(SchemaManager schemaManager, LinterManager linterManager) {
+        super(new BorderLayout());
+        this.schemaManager = schemaManager;
+        this.linterManager = linterManager;
+        setBorder(BorderFactory.createTitledBorder("Model Linting Settings"));
+        initializePanel();
+
+        // Register as validation listener to get real-time updates
+        if (linterManager != null) {
+            linterManager.addValidationListener(this);
+        }
     }
 
     private void initializePanel() {
@@ -195,11 +210,20 @@ public class LinterPreferencesPanel extends JPanel {
             String path = schemaManager.getCurrentSchemaPath();
             String version = schemaManager.getSchemaVersion();
 
+            // Get validation timing if linterManager is available
+            String timingInfo = "";
+            if (linterManager != null) {
+                long timeMs = linterManager.getLastValidationTimeMs();
+                if (timeMs > 0) {
+                    timingInfo = " in " + timeMs + " ms";
+                }
+            }
+
             if (path.isEmpty()) {
-                schemaStatusLabel.setText("Status: Using default embedded schema (v" + version + ")");
+                schemaStatusLabel.setText("Status: Linting with embedded schema v" + version + timingInfo);
                 schemaStatusLabel.setForeground(new Color(0, 128, 0));
             } else {
-                schemaStatusLabel.setText("Status: Custom schema loaded (v" + version + ")");
+                schemaStatusLabel.setText("Status: Linting with custom schema v" + version + timingInfo);
                 schemaStatusLabel.setForeground(new Color(0, 128, 0));
             }
         } else {
@@ -405,6 +429,24 @@ public class LinterPreferencesPanel extends JPanel {
             }
 
             return this;
+        }
+    }
+
+    /**
+     * ValidationCompletionListener implementation - updates timing display in real-time.
+     */
+    @Override
+    public void onValidationCompleted(com.kalix.ide.linter.model.ValidationResult result, long validationTimeMs) {
+        // Update status label on EDT
+        SwingUtilities.invokeLater(this::updateSchemaStatus);
+    }
+
+    /**
+     * Cleanup when panel is no longer needed.
+     */
+    public void dispose() {
+        if (linterManager != null) {
+            linterManager.removeValidationListener(this);
         }
     }
 }

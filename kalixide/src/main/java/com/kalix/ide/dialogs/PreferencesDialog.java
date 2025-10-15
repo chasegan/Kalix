@@ -226,7 +226,7 @@ public class PreferencesDialog extends JDialog {
         loadSavePanel = new LoadSavePreferencePanel();
         kalixCliPanel = new KalixCliPreferencePanel();
         compressionPanel = new CompressionPreferencePanel();
-        linterPanel = new LinterPreferencesPanel(schemaManager);
+        linterPanel = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
         systemPanel = new SystemPreferencePanel();
         nodeDiagramPanel = new NodeDiagramPreferencePanel();
 
@@ -300,6 +300,18 @@ public class PreferencesDialog extends JDialog {
         // Since preferences apply immediately, we return false for now
         // Future implementation could track changes for status updates
         return false;
+    }
+
+    /**
+     * Cleanup when dialog is closed.
+     */
+    @Override
+    public void dispose() {
+        // Cleanup linter panel listeners
+        if (linterPanel != null) {
+            linterPanel.dispose();
+        }
+        super.dispose();
     }
 
     /**
