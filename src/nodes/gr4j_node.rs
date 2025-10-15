@@ -67,6 +67,9 @@ impl Node for Gr4jNode {
         self.runoff_depth_mm = 0.0;
         self.runoff_volume_megs = 0.0;
 
+        // Initialize the GR4J model
+        self.gr4j_model.initialize();
+        
         // DynamicInput fields are already initialized during parsing
 
         // Checks

@@ -91,7 +91,7 @@ impl Gr4j {
         } else {
             // Determine evaporation from the stores, es
             pn = 0.0;
-            let en_on_x1 = ((e - p) / self.x1); //.min(13.0); //min(13) comes from the python implementation
+            let en_on_x1 = (e - p) / self.x1; //.min(13.0); //min(13) comes from the python implementation
             let temp = f64::tanh(en_on_x1);
             es = self.production_store * (2.0 - s_on_x1) * temp / (1.0 + (1.0 - s_on_x1) * temp);
         }
