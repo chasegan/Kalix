@@ -62,8 +62,8 @@ public class StdioTaskManager {
         SwingUtilities.invokeLater(() -> {
             statusUpdater.accept("Error: kalixcli not found");
             JOptionPane.showMessageDialog(parentFrame,
-                "kalixcli executable not found. Please ensure it's installed and in your PATH.",
-                "CLI Not Found", JOptionPane.ERROR_MESSAGE);
+                "Kalixcli not found. Please fix this in File > Preferences > Kalixcli.",
+                "Kalixcli Not Found", JOptionPane.ERROR_MESSAGE);
         });
     }
     
@@ -78,8 +78,8 @@ public class StdioTaskManager {
         // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Locate kalixcli
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCli();
+                // Locate kalixcli using preferences
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences();
                 if (cliLocation.isEmpty()) {
                     handleCliNotFound();
                     throw new RuntimeException("kalixcli not found");

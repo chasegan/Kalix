@@ -28,8 +28,8 @@ public class CliTest {
         logger.info("Testing CLI location detection...");
         
         try {
-            Optional<KalixCliLocator.CliLocation> location = KalixCliLocator.findKalixCli();
-            
+            Optional<KalixCliLocator.CliLocation> location = KalixCliLocator.findKalixCliWithPreferences();
+
             if (location.isPresent()) {
                 KalixCliLocator.CliLocation cli = location.get();
                 logger.info("Found kalixcli: " + cli.toString());

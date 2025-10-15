@@ -42,49 +42,32 @@ public class KalixCliLocator {
     }
     
     /**
-     * Attempts to locate kalixcli using various strategies.
-     * 
-     * @return Optional containing CliLocation if found, empty otherwise
-     */
-    public static Optional<CliLocation> findKalixCli() {
-        return findKalixCli(null);
-    }
-    
-    /**
-     * Attempts to locate kalixcli using various strategies, with optional user-configured path.
-     * 
-     * @param userConfiguredPath Optional user-configured path to check first
+     * Attempts to locate kalixcli using a simplified strategy.
+     *
+     * If userConfiguredPath is provided:
+     *   - ONLY uses that path (no fallback)
+     *   - Returns empty if the path is invalid
+     *
+     * If no userConfiguredPath:
+     *   - Uses unqualified "kalixcli" command (relies on system PATH)
+     *
+     * @param userConfiguredPath Optional user-configured path
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCli(String userConfiguredPath) {
-        // Strategy 0: Check user-configured path first
+        // If user specified a path, ONLY use that path (no fallback)
         if (userConfiguredPath != null && !userConfiguredPath.trim().isEmpty()) {
             Path configuredPath = Paths.get(userConfiguredPath.trim());
             if (validateKalixCli(configuredPath)) {
                 String version = getVersion(configuredPath);
                 return Optional.of(new CliLocation(configuredPath, version, false));
             }
+            // User-specified path is invalid - fail (don't fallback)
+            return Optional.empty();
         }
-        
-        // Strategy 1: Check if it's in PATH
-        Optional<CliLocation> pathLocation = findInPath();
-        if (pathLocation.isPresent()) {
-            return pathLocation;
-        }
-        
-        // Strategy 2: Check common installation directories
-        Optional<CliLocation> commonLocation = findInCommonLocations();
-        if (commonLocation.isPresent()) {
-            return commonLocation;
-        }
-        
-        // Strategy 3: Check relative to IDE application (development scenario)
-        Optional<CliLocation> relativeLocation = findRelativeToApplication();
-        if (relativeLocation.isPresent()) {
-            return relativeLocation;
-        }
-        
-        return Optional.empty();
+
+        // No user path configured - use unqualified "kalixcli" from system PATH
+        return findInPath();
     }
     
     /**
@@ -101,40 +84,42 @@ public class KalixCliLocator {
             return findKalixCli(configuredPath);
         } catch (Exception e) {
             // Fall back to standard discovery if preferences fail
-            return findKalixCli();
+            return findKalixCli(null);
         }
     }
     
     /**
      * Checks if kalixcli is available in the system PATH.
+     * Uses unqualified command name and relies on system PATH resolution.
      */
     private static Optional<CliLocation> findInPath() {
         String cliName = isWindows() ? CLI_NAME_WINDOWS : CLI_NAME_BASE;
-        
+
         try {
             // Try to run the command with --version to check if it exists and get version
             ProcessBuilder pb = new ProcessBuilder(cliName, "--version");
             Process process = pb.start();
-            
+
             // Wait for completion with timeout
             boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             if (finished && process.exitValue() == 0) {
                 // Read version output
                 String version = new String(process.getInputStream().readAllBytes()).trim();
-                
-                // Try to find the actual path using 'which' (Unix) or 'where' (Windows)
+
+                // Try to find the actual absolute path using 'which' (Unix) or 'where' (Windows)
                 Path actualPath = findExecutablePath(cliName);
                 if (actualPath != null) {
                     return Optional.of(new CliLocation(actualPath, version, true));
-                } else {
-                    // Fallback: just use the command name
-                    return Optional.of(new CliLocation(Paths.get(cliName), version, true));
                 }
+
+                // If we can't determine absolute path, don't return a location
+                // (avoids creating invalid Paths.get("kalixcli") that won't work)
+                return Optional.empty();
             }
         } catch (Exception e) {
             // Command not found or failed to execute
         }
-        
+
         return Optional.empty();
     }
     
@@ -160,124 +145,6 @@ public class KalixCliLocator {
             // Ignore and return null
         }
         return null;
-    }
-    
-    /**
-     * Checks common installation directories for kalixcli.
-     */
-    private static Optional<CliLocation> findInCommonLocations() {
-        List<Path> searchPaths = getCommonInstallationPaths();
-        
-        for (Path searchPath : searchPaths) {
-            Optional<CliLocation> location = checkDirectory(searchPath, false);
-            if (location.isPresent()) {
-                return location;
-            }
-        }
-        
-        return Optional.empty();
-    }
-    
-    /**
-     * Gets a list of common installation paths based on the operating system.
-     */
-    private static List<Path> getCommonInstallationPaths() {
-        List<Path> paths = new ArrayList<>();
-        String userHome = System.getProperty("user.home");
-        
-        if (isWindows()) {
-            // Windows common paths
-            paths.add(Paths.get("C:\\Program Files\\Kalix"));
-            paths.add(Paths.get("C:\\Program Files (x86)\\Kalix"));
-            paths.add(Paths.get(userHome, "AppData", "Local", "Kalix"));
-            paths.add(Paths.get(userHome, "AppData", "Roaming", "Kalix"));
-            
-            // Scoop installation
-            paths.add(Paths.get(userHome, "scoop", "apps", "kalixcli", "current"));
-            
-            // Chocolatey installation
-            paths.add(Paths.get("C:\\ProgramData\\chocolatey\\lib\\kalixcli\\tools"));
-            
-        } else if (isMac()) {
-            // macOS common paths
-            paths.add(Paths.get("/usr/local/bin"));
-            paths.add(Paths.get("/opt/homebrew/bin"));
-            paths.add(Paths.get("/Applications/Kalix.app/Contents/MacOS"));
-            paths.add(Paths.get(userHome, ".local", "bin"));
-            paths.add(Paths.get(userHome, "Applications", "Kalix.app", "Contents", "MacOS"));
-            
-            // Homebrew installations
-            paths.add(Paths.get("/usr/local/Cellar/kalixcli"));
-            paths.add(Paths.get("/opt/homebrew/Cellar/kalixcli"));
-            
-        } else {
-            // Linux common paths
-            paths.add(Paths.get("/usr/bin"));
-            paths.add(Paths.get("/usr/local/bin"));
-            paths.add(Paths.get("/opt/kalix/bin"));
-            paths.add(Paths.get(userHome, ".local", "bin"));
-            paths.add(Paths.get(userHome, "bin"));
-            
-            // Snap installation
-            paths.add(Paths.get("/snap/bin"));
-            
-            // Flatpak installation
-            paths.add(Paths.get("/var/lib/flatpak/exports/bin"));
-            paths.add(Paths.get(userHome, ".local", "share", "flatpak", "exports", "bin"));
-        }
-        
-        return paths;
-    }
-    
-    /**
-     * Checks for kalixcli relative to the IDE application (development scenario).
-     */
-    private static Optional<CliLocation> findRelativeToApplication() {
-        try {
-            // Get the directory where the IDE is running from
-            Path currentDir = Paths.get(System.getProperty("user.dir"));
-            
-            // Check various relative paths
-            List<Path> relativePaths = List.of(
-                currentDir.resolve("kalixcli"),                    // Same directory
-                currentDir.resolve("../kalixcli"),                 // Parent directory
-                currentDir.resolve("cli"),                         // cli subdirectory
-                currentDir.resolve("target/release"),              // Rust target directory
-                currentDir.resolve("../target/release"),           // Parent's target directory
-                currentDir.resolve("build/release"),               // Alternative build directory
-                currentDir.resolve("../build/release")             // Parent's build directory
-            );
-            
-            for (Path path : relativePaths) {
-                Optional<CliLocation> location = checkDirectory(path, false);
-                if (location.isPresent()) {
-                    return location;
-                }
-            }
-        } catch (Exception e) {
-            // Ignore and continue
-        }
-        
-        return Optional.empty();
-    }
-    
-    /**
-     * Checks a directory for kalixcli executable.
-     */
-    private static Optional<CliLocation> checkDirectory(Path directory, boolean inPath) {
-        if (!Files.exists(directory) || !Files.isDirectory(directory)) {
-            return Optional.empty();
-        }
-        
-        String cliName = isWindows() ? CLI_NAME_WINDOWS : CLI_NAME_BASE;
-        Path cliPath = directory.resolve(cliName);
-        
-        if (Files.exists(cliPath) && Files.isExecutable(cliPath)) {
-            String version = getVersion(cliPath);
-            return Optional.of(new CliLocation(cliPath, version, inPath));
-        }
-        
-        return Optional.empty();
     }
     
     /**
@@ -331,43 +198,17 @@ public class KalixCliLocator {
     private static boolean isMac() {
         return System.getProperty("os.name").toLowerCase().contains("mac");
     }
-    
-    /**
-     * Gets the appropriate executable name for the current platform.
-     */
-    public static String getExecutableName() {
-        return isWindows() ? CLI_NAME_WINDOWS : CLI_NAME_BASE;
-    }
-    
+
     /**
      * Searches for all available kalixcli installations (for selection dialogs).
+     * Now simplified to only check the system PATH.
      */
     public static List<CliLocation> findAllInstallations() {
         List<CliLocation> installations = new ArrayList<>();
-        
-        // Check PATH first
+
+        // Only check PATH - consistent with simplified discovery strategy
         findInPath().ifPresent(installations::add);
-        
-        // Check all common locations
-        List<Path> searchPaths = getCommonInstallationPaths();
-        for (Path searchPath : searchPaths) {
-            checkDirectory(searchPath, false).ifPresent(location -> {
-                // Avoid duplicates
-                if (installations.stream().noneMatch(existing -> 
-                        existing.getPath().equals(location.getPath()))) {
-                    installations.add(location);
-                }
-            });
-        }
-        
-        // Check relative paths
-        findRelativeToApplication().ifPresent(location -> {
-            if (installations.stream().noneMatch(existing -> 
-                    existing.getPath().equals(location.getPath()))) {
-                installations.add(location);
-            }
-        });
-        
+
         return installations;
     }
 }

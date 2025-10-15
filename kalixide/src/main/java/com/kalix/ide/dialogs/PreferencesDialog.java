@@ -623,7 +623,7 @@ public class PreferencesDialog extends JDialog {
                 try {
                     if (path.isEmpty()) {
                         Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> location =
-                            com.kalix.ide.cli.KalixCliLocator.findKalixCli();
+                            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences();
 
                         if (location.isPresent()) {
                             statusLabel.setText("Status: ✓ Found - " + location.get().getVersion());
