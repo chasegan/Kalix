@@ -85,7 +85,7 @@ impl Gr4j {
         if p > e {
             //Determine precipitation to the stores, ps
             pn = p - e;
-            let pn_on_x1 = (pn / self.x1); //.min(13.0); //min(13) comes from the python implementation
+            let pn_on_x1 = pn / self.x1; //.min(13.0); //min(13) comes from the python implementation
             let temp = f64::tanh(pn_on_x1);
             ps = (self.x1 * (1.0 - s_on_x1 * s_on_x1) * temp) / (1.0 + s_on_x1 * temp);
         } else {

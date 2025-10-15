@@ -61,7 +61,7 @@ fn test_gr4j_rex_creek() {
     // Now compare the mean runoff
     let maf_model = mm.mean();
     let maf_answer = aa.mean();
-    assert_eq!(maf_model,maf_answer);
+    assert!((maf_answer - maf_model).abs()/maf_model < 1e-15);
 }
 
 

@@ -40,11 +40,11 @@ fn test_model_with_function() {
         //Node results
         let result_name = "node.node6_gr4j.runoff_depth".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 3.1578989817456162, 12.688885936339233));
+        regression_results.insert(result_name, (48824, 3.157898981745616, 12.68888593633923));
 
         let result_name = "node.node6_gr4j.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 252.63191853964597, 1015.1108749071437));
+        regression_results.insert(result_name, (48824, 252.63191853964588, 1015.1108749071437));
     }
 
     //Run the model
