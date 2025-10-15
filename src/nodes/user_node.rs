@@ -160,13 +160,13 @@ impl Node for UserNode {
                 // Now calculate the diversion
                 self.demand_carryover_value += demand;
                 if self.demand_carryover_value > available {
-                    // we will meet demand (incl carryover)
-                    self.diversion = self.demand_carryover_value;
-                    self.demand_carryover_value = 0.0;
-                } else {
                     // we will not meet demand
                     self.diversion = available;
                     self.demand_carryover_value -= self.diversion;
+                } else {
+                    // we will meet demand (incl carryover)
+                    self.diversion = self.demand_carryover_value;
+                    self.demand_carryover_value = 0.0;
                 }
             }
             false => {
