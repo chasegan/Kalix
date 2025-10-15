@@ -365,7 +365,52 @@ public class EnhancedTextEditor extends JPanel {
             logger.error("Error toggling comments", ex);
         }
     }
-    
+
+    /**
+     * Normalizes all line endings in the document to Unix format (LF).
+     * Converts all \r\n (Windows) and standalone \r (old Mac) to \n.
+     * Marks the document as dirty if changes were made.
+     */
+    public void normalizeLineEndings() {
+        try {
+            String currentText = textArea.getText();
+
+            // Check if normalization is needed
+            if (!currentText.contains("\r")) {
+                logger.debug("No line ending normalization needed");
+                return; // Already normalized
+            }
+
+            // Replace all \r\n with \n, then remove any remaining \r
+            String normalizedText = currentText.replace("\r\n", "\n").replace("\r", "\n");
+
+            // Count changes for user feedback
+            int crlfCount = currentText.split("\r\n", -1).length - 1;
+            int crCount = currentText.replace("\r\n", "").split("\r", -1).length - 1;
+
+            // Update text
+            int caretPosition = textArea.getCaretPosition();
+            programmaticUpdate = true;
+            textArea.setText(normalizedText);
+            programmaticUpdate = false;
+
+            // Restore caret position (adjust if needed)
+            int newCaretPosition = Math.min(caretPosition, normalizedText.length());
+            textArea.setCaretPosition(newCaretPosition);
+
+            // Mark as dirty since we modified the content
+            setDirty(true);
+
+            // Log the normalization
+            if (crlfCount > 0 || crCount > 0) {
+                logger.info("Normalized {} CRLF and {} CR line endings to LF", crlfCount, crCount);
+            }
+
+        } catch (Exception ex) {
+            logger.error("Error normalizing line endings", ex);
+        }
+    }
+
     public void setText(String text) {
         programmaticUpdate = true;
         try {

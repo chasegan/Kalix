@@ -775,6 +775,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void normalizeLineEndings() {
+        textEditor.normalizeLineEndings();
+        updateStatus("Line endings normalized to Unix format (LF)");
+    }
+
+    @Override
     public void zoomIn() {
         mapPanel.zoomIn();
         updateStatus(AppConstants.STATUS_ZOOMED_IN);

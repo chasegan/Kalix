@@ -37,6 +37,7 @@ public class MenuBarBuilder {
         void copyAction();
         void pasteAction();
         void toggleCommentAction();
+        void normalizeLineEndings();
         void zoomIn();
         void zoomOut();
         void resetZoom();
@@ -164,6 +165,7 @@ public class MenuBarBuilder {
         editMenu.add(createMenuItem("Paste", e -> callbacks.pasteAction()));
         editMenu.addSeparator();
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Toggle Comment", "/"), e -> callbacks.toggleCommentAction()));
+        editMenu.add(createMenuItem("Normalize Line Endings", e -> callbacks.normalizeLineEndings()));
         editMenu.addSeparator();
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Find...", "F"), e -> callbacks.searchModel()));
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Find and Replace...", "H"), e -> callbacks.showFindReplaceDialog()));
