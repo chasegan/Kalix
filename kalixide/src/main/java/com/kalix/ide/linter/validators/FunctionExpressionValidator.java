@@ -5,8 +5,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates function expressions used in model parameters.
- * Supports three types of inputs:
- * - Simple data references: "data.evap"
+ * Supports four types of inputs:
+ * - Data references: "data.evap", "data.field.subfield"
+ * - Constant references: "c.pi", "c.node_1_demand_levels.high"
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
  *
@@ -113,6 +114,11 @@ public class FunctionExpressionValidator {
             return errors; // Valid
         }
 
+        // Fast path: simple constant reference
+        if (isSimpleConstantReference(expression)) {
+            return errors; // Valid
+        }
+
         // Complex expression - tokenize and parse
         try {
             Tokenizer tokenizer = new Tokenizer(expression);
@@ -143,10 +149,15 @@ public class FunctionExpressionValidator {
         return s.matches("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
     }
 
+    private static boolean isSimpleConstantReference(String s) {
+        // Matches: c.xxx or c.xxx.yyy.zzz (dots and underscores allowed)
+        return s.matches("^c\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
+    }
+
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
     }
 
     static class Token {
@@ -272,30 +283,39 @@ public class FunctionExpressionValidator {
 
             // Check if this is a data reference (starts with "data.")
             if (firstSegment.equals("data") && pos < input.length() && input.charAt(pos) == '.') {
-                // Read the rest as data.xxx.yyy.zzz
-                StringBuilder sb = new StringBuilder(firstSegment);
+                return readDottedReference(start, firstSegment, TokenType.DATA_REF);
+            }
 
-                while (pos < input.length() && input.charAt(pos) == '.') {
-                    sb.append('.');
-                    pos++;
-
-                    // Check for consecutive dots or trailing dot
-                    if (pos >= input.length() || !Character.isLetterOrDigit(input.charAt(pos)) && input.charAt(pos) != '_') {
-                        break; // Will be caught as malformed
-                    }
-
-                    int segStart = pos;
-                    while (pos < input.length() && (Character.isLetterOrDigit(input.charAt(pos)) || input.charAt(pos) == '_')) {
-                        pos++;
-                    }
-                    sb.append(input.substring(segStart, pos));
-                }
-
-                return new Token(TokenType.DATA_REF, sb.toString(), start);
+            // Check if this is a constant reference (starts with "c.")
+            if (firstSegment.equals("c") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.CONST_REF);
             }
 
             // Regular identifier (function name or variable)
             return new Token(TokenType.IDENT, firstSegment, start);
+        }
+
+        // Extract the common dotted reference reading logic
+        private Token readDottedReference(int start, String prefix, TokenType tokenType) {
+            StringBuilder sb = new StringBuilder(prefix);
+
+            while (pos < input.length() && input.charAt(pos) == '.') {
+                sb.append('.');
+                pos++;
+
+                // Check for consecutive dots or trailing dot
+                if (pos >= input.length() || !Character.isLetterOrDigit(input.charAt(pos)) && input.charAt(pos) != '_') {
+                    break; // Will be caught as malformed
+                }
+
+                int segStart = pos;
+                while (pos < input.length() && (Character.isLetterOrDigit(input.charAt(pos)) || input.charAt(pos) == '_')) {
+                    pos++;
+                }
+                sb.append(input.substring(segStart, pos));
+            }
+
+            return new Token(tokenType, sb.toString(), start);
         }
 
         private boolean isOperatorChar(char ch) {
@@ -462,12 +482,15 @@ public class FunctionExpressionValidator {
             parsePrimaryExpression(errors);
         }
 
-        // PrimaryExpression := Number | DataRef | FunctionCall | '(' Expression ')'
+        // PrimaryExpression := Number | DataRef | ConstRef | FunctionCall | '(' Expression ')'
         private void parsePrimaryExpression(List<String> errors) throws ParseException {
             if (current.type == TokenType.NUMBER) {
                 advance();
             } else if (current.type == TokenType.DATA_REF) {
                 validateDataReference(current.value, errors);
+                advance();
+            } else if (current.type == TokenType.CONST_REF) {
+                validateConstantReference(current.value, errors);
                 advance();
             } else if (current.type == TokenType.IDENT) {
                 // Function call
@@ -477,7 +500,7 @@ public class FunctionExpressionValidator {
                 parseExpression(errors);
                 expect(TokenType.RPAREN, errors);
             } else {
-                throw new ParseException("Expected number, data reference, function, or '(' but got " + current.type);
+                throw new ParseException("Expected number, data reference, constant reference, function, or '(' but got " + current.type);
             }
         }
 
@@ -536,6 +559,19 @@ public class FunctionExpressionValidator {
             }
             if (dataRef.equals("data") || dataRef.equals("data.")) {
                 errors.add("Incomplete data reference: '" + dataRef + "'");
+            }
+        }
+
+        private void validateConstantReference(String constRef, List<String> errors) {
+            // Check for malformed constant references
+            if (constRef.contains("..")) {
+                errors.add("Malformed constant reference: '" + constRef + "' (consecutive dots)");
+            }
+            if (constRef.endsWith(".")) {
+                errors.add("Malformed constant reference: '" + constRef + "' (trailing dot)");
+            }
+            if (constRef.equals("c") || constRef.equals("c.")) {
+                errors.add("Incomplete constant reference: '" + constRef + "'");
             }
         }
 

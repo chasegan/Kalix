@@ -42,6 +42,15 @@ class FunctionExpressionValidatorTest {
     }
 
     @Test
+    @DisplayName("Simple constant reference should be valid")
+    void testSimpleConstantReference() {
+        assertValid("c.pi");
+        assertValid("c.node_1_demand_levels.high");
+        assertValid("c.some_value");
+        assertValid("c.nested.constant.path");
+    }
+
+    @Test
     @DisplayName("Simple arithmetic expressions should be valid")
     void testSimpleArithmetic() {
         assertValid("2 + 3");
@@ -140,6 +149,15 @@ class FunctionExpressionValidatorTest {
         assertValid("(data.flow - data.demand) * if(data.season == 1, 1.1, 0.9)");
     }
 
+    @Test
+    @DisplayName("Mixed data and constant references should be valid")
+    void testMixedDataAndConstantReferences() {
+        assertValid("data.temp * c.pi");
+        assertValid("if(data.x > c.threshold, c.high, c.low)");
+        assertValid("max(data.value, c.minimum) * c.adjustment_factor");
+        assertValid("data.flow + c.base_offset - c.calibration.factor");
+    }
+
     // ==================== Invalid Expressions ====================
 
     @Test
@@ -186,6 +204,14 @@ class FunctionExpressionValidatorTest {
         assertInvalid("data..evap", "Malformed data reference");
         assertInvalid("data.", "Incomplete data reference");
         assertInvalid("data.evap.", "Malformed data reference");
+    }
+
+    @Test
+    @DisplayName("Malformed constant references should be invalid")
+    void testMalformedConstantReferences() {
+        assertInvalid("c..pi", "Malformed constant reference");
+        assertInvalid("c.", "Incomplete constant reference");
+        assertInvalid("c.value.", "Malformed constant reference");
     }
 
     @Test
