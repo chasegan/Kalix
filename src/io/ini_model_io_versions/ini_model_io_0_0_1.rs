@@ -355,10 +355,7 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             if params.len() < 17 {
                                 return Err(format!("Sacramento params must have 17 values, got {}", params.len()));
                             }
-                            n.sacramento_model.set_params(params[0], params[1], params[2], params[3],
-                                                          params[4], params[5], params[6], params[7],
-                                                          params[8], params[9], params[10],params[11],
-                                                          params[12], params[13], params[14], params[15],params[16]);
+                            n.sacramento_model.set_params_by_vec(params);
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;

@@ -11,14 +11,6 @@ pub struct Sacramento {
     #[allow(dead_code)]
     name: String,
 
-    // TODO: this is only needed if we want the Sacs to be self-contained (with inputs)
-    // Rainfall and evaporation
-    // public FastDailyTS[] RainTSs;
-    // public double[] RainFactors;
-    // public double ForcedRainfallMean;
-    // public FastDailyTS EvapTS;
-    // public double InitialMoistureFraction;
-
     // Variable stuff
     runoff: f64,
     rainfall: f64,      // Rainfall [mm]
@@ -122,6 +114,26 @@ impl Sacramento {
         self.set_uh_ordinates_using_laguh()
     }
 
+    pub fn set_params_by_vec(&mut self, vec_params: Vec<f64>) {
+        self.rserv = 0.3;
+        self.adimp = vec_params[0];
+        self.lzfpm = vec_params[1];
+        self.lzfsm = vec_params[2];
+        self.lzpk = vec_params[3];
+        self.lzsk = vec_params[4];
+        self.lztwm = vec_params[5];
+        self.pctim = vec_params[6];
+        self.pfree = vec_params[7];
+        self.rexp = vec_params[8];
+        self.sarva = vec_params[9];
+        self.side = vec_params[10];
+        self.ssout = vec_params[11];
+        self.uzfwm = vec_params[12];
+        self.uzk = vec_params[13];
+        self.uztwm = vec_params[14];
+        self.zperc = vec_params[15];
+        self.set_laguh(vec_params[16]);
+    }
 
     pub fn set_uh_ordinates_using_laguh(&mut self) -> &mut Self {
         // How big does the kernel need to be?
