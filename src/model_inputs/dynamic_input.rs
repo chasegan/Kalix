@@ -12,7 +12,7 @@
 /// - `Function`: Minimal overhead (direct array indexing + arithmetic, no HashMap lookups)
 
 use std::collections::HashMap;
-use crate::data_cache::DataCache;
+use crate::data_management::data_cache::DataCache;
 use crate::functions::{parse_function, EvaluationConfig, VariableContext};
 use crate::functions::ast::{ExpressionNode, evaluate_binary_op, evaluate_unary_op};
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
@@ -27,6 +27,11 @@ pub enum OptimizedExpressionNode {
 
     /// Direct reference to a data cache series by index
     DataCacheReference {
+        cache_index: usize
+    },
+
+    /// Direct reference to a constant cache value by index
+    ConstantReference {
         cache_index: usize
     },
 
@@ -63,6 +68,10 @@ impl OptimizedExpressionNode {
                 Ok(data_cache.get_current_value(*cache_index))
             }
 
+            OptimizedExpressionNode::ConstantReference { cache_index } => {
+                Ok(data_cache.constants.get_value(*cache_index))
+            }
+
             OptimizedExpressionNode::BinaryOp { left, op, right } => {
                 let left_val = left.evaluate(data_cache)?;
                 let right_val = right.evaluate(data_cache)?;
@@ -90,16 +99,23 @@ impl OptimizedExpressionNode {
     /// Transform an ExpressionNode to an OptimizedExpressionNode by resolving variables to indices
     fn from_expression_node(
         node: &ExpressionNode,
-        variable_map: &HashMap<String, usize>
+        data_variable_map: &HashMap<String, usize>,
+        constant_variable_map: &HashMap<String, usize>
     ) -> Result<Self, String> {
         match node {
             ExpressionNode::Constant { value } => {
                 Ok(OptimizedExpressionNode::Constant { value: *value })
             }
             ExpressionNode::Variable { name } => {
-                let idx = *variable_map.get(name)
-                    .ok_or_else(|| format!("Variable '{}' not found in variable map", name))?;
-                Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx })
+                // Try constant first (c.* variables)
+                if let Some(&idx) = constant_variable_map.get(name) {
+                    return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
+                }
+                // Try data cache (data.* variables)
+                if let Some(&idx) = data_variable_map.get(name) {
+                    return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
+                }
+                Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::BinaryOp { left, op, right } => {
                 // Need to downcast the boxed ASTNode children to ExpressionNode
@@ -110,8 +126,8 @@ impl OptimizedExpressionNode {
                     .downcast_ref::<ExpressionNode>()
                     .ok_or("Failed to downcast right operand")?;
 
-                let left_opt = Self::from_expression_node(left_expr, variable_map)?;
-                let right_opt = Self::from_expression_node(right_expr, variable_map)?;
+                let left_opt = Self::from_expression_node(left_expr, data_variable_map, constant_variable_map)?;
+                let right_opt = Self::from_expression_node(right_expr, data_variable_map, constant_variable_map)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -124,7 +140,7 @@ impl OptimizedExpressionNode {
                     .downcast_ref::<ExpressionNode>()
                     .ok_or("Failed to downcast operand")?;
 
-                let operand_opt = Self::from_expression_node(operand_expr, variable_map)?;
+                let operand_opt = Self::from_expression_node(operand_expr, data_variable_map, constant_variable_map)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -138,7 +154,7 @@ impl OptimizedExpressionNode {
                         let arg_expr = (arg.as_ref() as &dyn std::any::Any)
                             .downcast_ref::<ExpressionNode>()
                             .ok_or("Failed to downcast function argument")?;
-                        Self::from_expression_node(arg_expr, variable_map)
+                        Self::from_expression_node(arg_expr, data_variable_map, constant_variable_map)
                     })
                     .collect();
                 let args_opt = args_opt?;
@@ -154,9 +170,10 @@ impl OptimizedExpressionNode {
 
 /// DynamicInput supports constants, data references, and function expressions
 ///
-/// This enum is optimized for performance with four variants:
+/// This enum is optimized for performance with five variants:
 /// - `None`: No input (returns 0.0)
 /// - `DirectReference`: Pure data reference (zero overhead)
+/// - `DirectConstantReference`: Pure constant reference (zero overhead)
 /// - `Constant`: Constant value (zero overhead)
 /// - `Function`: Complex expression (minimal overhead)
 #[derive(Clone, Debug)]
@@ -166,6 +183,11 @@ pub enum DynamicInput {
 
     /// Direct reference to a data cache series
     DirectReference {
+        idx: usize
+    },
+
+    /// Direct reference to a constant cache value
+    DirectConstantReference {
         idx: usize
     },
 
@@ -214,12 +236,22 @@ impl DynamicInput {
         // Get all variables referenced
         let variables = parsed.get_variables();
 
-        // Resolve variables to data cache indices
-        let mut variable_map = HashMap::new();
+        // Separate variables into data cache and constants based on prefix
+        let mut data_variable_map = HashMap::new();
+        let mut constant_variable_map = HashMap::new();
+
         for var_name in variables.iter() {
             let lower_name = var_name.to_lowercase();
-            let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
-            variable_map.insert(var_name.clone(), idx);
+
+            if lower_name.starts_with("c.") {
+                // Resolve to constants cache
+                let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
+                constant_variable_map.insert(var_name.clone(), idx);
+            } else {
+                // Resolve to data cache (existing logic)
+                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
+                data_variable_map.insert(var_name.clone(), idx);
+            }
         }
 
         // Optimize based on expression type
@@ -236,12 +268,17 @@ impl DynamicInput {
 
         } else if let Some(var_name) = parsed.is_single_variable() {
             // It's a direct reference to a single variable (no operations)
-            let idx = *variable_map.get(var_name)
-                .ok_or_else(|| format!("Variable '{}' not found in variable map", var_name))?;
-            Ok(DynamicInput::DirectReference { idx })
+            // Check if it's a constant or data reference
+            if let Some(&idx) = constant_variable_map.get(var_name) {
+                Ok(DynamicInput::DirectConstantReference { idx })
+            } else if let Some(&idx) = data_variable_map.get(var_name) {
+                Ok(DynamicInput::DirectReference { idx })
+            } else {
+                Err(format!("Variable '{}' not found in variable maps", var_name))
+            }
         } else {
             // Multiple variables or complex expression -> function expression
-            let optimized_ast = transform_to_optimized_ast(&parsed, &variable_map)?;
+            let optimized_ast = transform_to_optimized_ast(&parsed, &data_variable_map, &constant_variable_map)?;
             Ok(DynamicInput::Function {
                 expression: trimmed.to_string(),
                 optimized_ast
@@ -264,6 +301,9 @@ impl DynamicInput {
             DynamicInput::DirectReference { idx } => {
                 data_cache.get_current_value(*idx)
             }
+            DynamicInput::DirectConstantReference { idx } => {
+                data_cache.constants.get_value(*idx)
+            }
             DynamicInput::Constant { value } => *value,
             DynamicInput::Function { expression, optimized_ast } => {
                 optimized_ast.evaluate(data_cache).unwrap_or_else(|e| {
@@ -278,13 +318,14 @@ impl DynamicInput {
 /// Transform a ParsedFunction to an OptimizedExpressionNode
 fn transform_to_optimized_ast(
     parsed: &crate::functions::parser::ParsedFunction,
-    variable_map: &HashMap<String, usize>
+    data_variable_map: &HashMap<String, usize>,
+    constant_variable_map: &HashMap<String, usize>
 ) -> Result<OptimizedExpressionNode, String> {
     let ast = parsed.get_ast();
 
     // Downcast to ExpressionNode
     if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-        OptimizedExpressionNode::from_expression_node(expr_node, variable_map)
+        OptimizedExpressionNode::from_expression_node(expr_node, data_variable_map, constant_variable_map)
     } else {
         Err("Failed to downcast AST node".to_string())
     }

@@ -1,5 +1,5 @@
 use dyn_clone::{clone_trait_object, DynClone};
-use crate::data_cache::DataCache;
+use crate::data_management::data_cache::DataCache;
 
 pub trait Node: DynClone + Sync + Send {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String>;

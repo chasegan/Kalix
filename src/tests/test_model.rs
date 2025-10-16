@@ -13,7 +13,7 @@ use crate::nodes::loss_node::LossNode;
 use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
-use crate::data_cache::DataCache;
+use crate::data_management::data_cache::DataCache;
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::blackhole_node::BlackholeNode;

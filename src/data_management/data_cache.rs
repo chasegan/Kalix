@@ -1,4 +1,5 @@
-﻿use crate::tid::utils::{u64_to_year_month_day_and_seconds};
+﻿use crate::data_management::constants_cache::ConstantsCache;
+use crate::tid::utils::{u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]
@@ -11,6 +12,9 @@ pub struct DataCache {
     pub start_timestamp: u64,
     pub current_timestamp: u64,
     pub step_size: u64,
+
+    // Constants cache
+    pub constants: ConstantsCache,
 
     // These vars for model components (incl nodes) to use if they need to know the date
     timestamp_year: i32,
@@ -70,6 +74,7 @@ impl DataCache {
     */
     pub fn new() -> DataCache {
         DataCache {
+            constants: ConstantsCache::new(),
             ..Default::default()
         }
     }
@@ -87,6 +92,11 @@ impl DataCache {
         // Set up the timing
         self.start_timestamp = start_timestamp;
         self.set_current_step(0); //Reset the step counter to 0
+
+        // Validate the constants cache
+        if let Err(s) = self.constants.assert_all_constants_have_assigned_values() {
+            panic!("{}", s);
+        }
     }
 
 

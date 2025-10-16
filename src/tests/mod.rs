@@ -54,3 +54,6 @@ mod test_dynamic_input;
 
 #[cfg(test)]
 mod test_ini_with_functions;
+
+#[cfg(test)]
+mod test_constants_cache;

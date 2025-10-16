@@ -1,7 +1,6 @@
 
 pub mod apis;
 pub mod misc;
-pub mod data_cache;
 pub mod functions;
 pub mod hydrology;
 pub mod io;
@@ -14,3 +13,4 @@ pub mod tests;
 pub mod tid;
 pub mod timeseries;
 pub mod timeseries_input;
+pub mod data_management;

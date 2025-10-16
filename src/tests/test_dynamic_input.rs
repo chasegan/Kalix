@@ -4,7 +4,7 @@
 /// constants, data references, or complex function expressions.
 
 use crate::model_inputs::DynamicInput;
-use crate::data_cache::DataCache;
+use crate::data_management::data_cache::DataCache;
 use crate::timeseries::Timeseries;
 use crate::tid::utils::wrap_to_u64;
 
@@ -308,4 +308,166 @@ fn test_dynamic_input_case_insensitive_functions() {
     let input_sqrt = DynamicInput::from_string("SQRT(16)", &mut data_cache, true)
         .expect("Failed to parse SQRT");
     assert_eq!(input_sqrt.get_value(&data_cache), 4.0);
+}
+
+#[test]
+fn test_dynamic_input_direct_constant_reference() {
+    let mut data_cache = DataCache::new();
+
+    // Set a constant value
+    data_cache.constants.set_value("c.gravity", 9.81);
+
+    // Test direct constant reference
+    let input = DynamicInput::from_string("c.gravity", &mut data_cache, true)
+        .expect("Failed to parse constant reference");
+
+    // Should be optimized to DirectConstantReference variant
+    match input {
+        DynamicInput::DirectConstantReference { idx: _ } => {
+            // Correct optimization!
+        }
+        _ => panic!("Expected DirectConstantReference variant for single constant"),
+    }
+
+    assert_eq!(input.get_value(&data_cache), 9.81);
+}
+
+#[test]
+fn test_dynamic_input_constant_in_expression() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Set a constant
+    data_cache.constants.set_value("c.factor", 1.2);
+
+    // Add rainfall data
+    let idx = data_cache.get_or_add_new_series("data.rain", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(10.0);
+    ts.push_value(20.0);
+    ts.push_value(30.0);
+    data_cache.series[idx] = ts;
+
+    // Test expression mixing constant and data
+    let input = DynamicInput::from_string("c.factor * data.rain", &mut data_cache, true)
+        .expect("Failed to parse constant expression");
+
+    // Should be Function variant (has both constant and data variable)
+    match input {
+        DynamicInput::Function { .. } => {
+            // Correct!
+        }
+        _ => panic!("Expected Function variant for expression with constant and data"),
+    }
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&data_cache), 12.0); // 1.2 * 10.0
+
+    data_cache.set_current_step(1);
+    assert_eq!(input.get_value(&data_cache), 24.0); // 1.2 * 20.0
+
+    data_cache.set_current_step(2);
+    assert_eq!(input.get_value(&data_cache), 36.0); // 1.2 * 30.0
+}
+
+#[test]
+fn test_dynamic_input_multiple_constants() {
+    let mut data_cache = DataCache::new();
+
+    // Set multiple constants
+    data_cache.constants.set_value("c.a", 5.0);
+    data_cache.constants.set_value("c.b", 3.0);
+
+    // Test expression with multiple constants
+    let input = DynamicInput::from_string("c.a + c.b", &mut data_cache, true)
+        .expect("Failed to parse multi-constant expression");
+
+    // Should be Function variant (multiple variables)
+    match input {
+        DynamicInput::Function { .. } => {
+            // Correct!
+        }
+        _ => panic!("Expected Function variant for multi-constant expression"),
+    }
+
+    assert_eq!(input.get_value(&data_cache), 8.0); // 5.0 + 3.0
+}
+
+#[test]
+fn test_dynamic_input_constant_conditional() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Set constant threshold
+    data_cache.constants.set_value("c.threshold", 20.0);
+
+    // Add temperature data
+    let idx = data_cache.get_or_add_new_series("data.temperature", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(15.0);
+    ts.push_value(25.0);
+    ts.push_value(18.0);
+    data_cache.series[idx] = ts;
+
+    // Test conditional with constant threshold
+    let input = DynamicInput::from_string(
+        "if(data.temperature > c.threshold, 1.0, 0.0)",
+        &mut data_cache,
+        true
+    ).expect("Failed to parse conditional with constant");
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&data_cache), 0.0); // 15.0 not > 20.0
+
+    data_cache.set_current_step(1);
+    assert_eq!(input.get_value(&data_cache), 1.0); // 25.0 > 20.0
+
+    data_cache.set_current_step(2);
+    assert_eq!(input.get_value(&data_cache), 0.0); // 18.0 not > 20.0
+}
+
+#[test]
+fn test_dynamic_input_constant_case_insensitive() {
+    let mut data_cache = DataCache::new();
+
+    // Set constant with lowercase
+    data_cache.constants.set_value("c.my_constant", 42.0);
+
+    // Reference with mixed case
+    let input = DynamicInput::from_string("C.MY_CONSTANT * 2", &mut data_cache, true)
+        .expect("Failed to parse mixed case constant");
+
+    assert_eq!(input.get_value(&data_cache), 84.0); // 42.0 * 2
+}
+
+#[test]
+fn test_dynamic_input_unassigned_constant_registers() {
+    let mut data_cache = DataCache::new();
+
+    // Parse expression with constant that hasn't been assigned yet
+    let input = DynamicInput::from_string("c.unassigned * 10", &mut data_cache, true)
+        .expect("Failed to parse unassigned constant");
+
+    // The constant should be registered (but not assigned)
+    assert!(data_cache.constants.len() > 0);
+
+    // Validation should fail
+    let validation = data_cache.constants.assert_all_constants_have_assigned_values();
+    assert!(validation.is_err());
+    assert!(validation.unwrap_err().contains("c.unassigned"));
+
+    // Now assign it
+    data_cache.constants.set_value("c.unassigned", 5.0);
+
+    // Validation should now pass
+    assert!(data_cache.constants.assert_all_constants_have_assigned_values().is_ok());
+
+    // And the expression should evaluate correctly
+    assert_eq!(input.get_value(&data_cache), 50.0); // 5.0 * 10
 }

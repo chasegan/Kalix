@@ -5,7 +5,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::misc::misc_functions::{split_interleaved, true_or_false};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, true_or_false};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
@@ -49,6 +49,18 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
             for (vp, _vv) in &v {
                 // Each vp is a path to an input file
                 let _ = model.load_input_data(vp.as_str())?;
+            }
+        } else if k == "constants" {
+            // -------------------------------------------------------------------------------------
+            // Loading constants section
+            // -------------------------------------------------------------------------------------
+            for (vp, vv) in &v {
+                // Each vp is a variable name, and vv is the assigned value which should be a number
+                let name = vp.to_lowercase();
+                if !is_valid_variable_name(&name) { Err(format!("Invalid variable name: {}", vp))?; }
+                let vvc = vv.as_ref().ok_or(format!("Missing assignment for constant '{}'", vp))?;
+                let value = vvc.parse::<f64>().map_err(|_| format!("Invalid '{}' value for constant '{}': must be a number", vvc, vp))?;
+                model.data_cache.constants.set_value(vp, value);
             }
         } else if k.starts_with("node.") {
             // -------------------------------------------------------------------------------------

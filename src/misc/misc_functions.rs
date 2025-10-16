@@ -30,3 +30,21 @@ pub fn starts_with_numeric_char(s: &str) -> bool {
     }
 }
 
+
+pub fn is_valid_variable_name(s: &str) -> bool {
+    if let Some(b) = s.bytes().next() {
+        // First char must be lowercase alphabetic
+        if !b.is_ascii_lowercase() { return false; }
+    }
+    for b in s.bytes() {
+        // All chars must be lowercase alphabetic, or a digit, or '_' or '.'
+        if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.') {
+            return false;
+        }
+    }
+    // Last element cannot be a '.'
+    if s.bytes().last() == Some(b'.') { return false; }
+    // Looks okay
+    true
+}
+
