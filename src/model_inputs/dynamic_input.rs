@@ -8,8 +8,19 @@
 ///
 /// - `None`: Zero overhead (returns 0.0)
 /// - `DirectReference`: Zero overhead (single array lookup)
+/// - `DirectConstantReference`: Zero overhead (single array lookup)
 /// - `Constant`: Zero overhead (returns stored value)
 /// - `Function`: Minimal overhead (direct array indexing + arithmetic, no HashMap lookups)
+///
+/// # Error Handling - IEEE 754 Standard
+///
+/// Mathematical operations follow IEEE 754 floating-point standard:
+/// - Division by zero: `x / 0.0` → `+∞` (x > 0), `-∞` (x < 0), `NaN` (x = 0)
+/// - Domain errors: `sqrt(-1)` → `NaN`, `ln(0)` → `-∞`, `asin(2)` → `NaN`
+/// - Overflow: `exp(1000)` → `+∞`
+///
+/// This allows simulations to continue running even with problematic data, while making
+/// issues clearly visible in the output. Check for NaN/∞ in results to detect problems.
 
 use std::collections::HashMap;
 use crate::data_management::data_cache::DataCache;
@@ -294,7 +305,16 @@ impl DynamicInput {
     ///
     /// # Returns
     ///
-    /// The current value. Returns 0.0 for `None` or on error.
+    /// The evaluated value as f64. Returns 0.0 for `None` variant.
+    ///
+    /// # Error Handling
+    ///
+    /// Mathematical domain errors (division by zero, sqrt of negative, etc.) return
+    /// NaN or ∞ following IEEE 754 standard - they do NOT cause this function to fail.
+    ///
+    /// Programming errors (unknown function names, wrong argument counts) are extremely
+    /// rare and indicate bugs in the parser. If they occur, this function prints an
+    /// error to stderr and returns 0.0 to allow the simulation to continue.
     pub fn get_value(&self, data_cache: &DataCache) -> f64 {
         match self {
             DynamicInput::None => 0.0,
@@ -307,7 +327,7 @@ impl DynamicInput {
             DynamicInput::Constant { value } => *value,
             DynamicInput::Function { expression, optimized_ast } => {
                 optimized_ast.evaluate(data_cache).unwrap_or_else(|e| {
-                    eprintln!("Error evaluating function expression '{}': {}. Returning 0.0", expression, e);
+                    eprintln!("ERROR: Critical evaluation failure in expression '{}': {}. Returning 0.0. This indicates a parser bug.", expression, e);
                     0.0
                 })
             }

@@ -48,8 +48,15 @@ impl ConstantsCache {
 
     /// This provides fast access to the f64 values given an idx. Consumers can use this to say
     ///    "Here is an idx I have been provided. Give me the value."
-    /// This method does not check that the constant has a valid assignment and should only be
-    /// used after assert_all_constants_have_assigned_values().
+    ///
+    /// # Safety & Performance
+    ///
+    /// This method does NOT perform bounds checking for maximum performance in the hot path.
+    /// Passing an invalid index will panic. Use only indices obtained from
+    /// `add_if_needed_and_get_idx()` or `set_value()`.
+    ///
+    /// This method does not check that the constant has been assigned a value. Call
+    /// `assert_all_constants_have_assigned_values()` before the model run to validate.
     pub fn get_value(&self, idx: usize) -> f64 {
         self.value[idx]
     }

@@ -261,11 +261,27 @@ impl DataCache {
     }
 
 
-    /*
-     */
+    /// Get the current value of a data series at the current timestep.
+    ///
+    /// # Arguments
+    ///
+    /// * `series_idx` - The index of the series (obtained from `get_or_add_new_series`)
+    ///
+    /// # Returns
+    ///
+    /// The value at the current timestep.
+    ///
+    /// # Safety & Performance
+    ///
+    /// This method does NOT perform bounds checking for maximum performance in the hot path.
+    /// It will panic if:
+    /// - `series_idx` is out of bounds
+    /// - `current_step` exceeds the series length
+    ///
+    /// Use only indices obtained from `get_or_add_new_series()` and ensure the current
+    /// timestep is valid before calling.
     pub fn get_current_value(&self, series_idx: usize) -> f64 {
-        let answer = self.series[series_idx].values[self.current_step];
-        answer
+        self.series[series_idx].values[self.current_step]
     }
 
 

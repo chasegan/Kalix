@@ -9,20 +9,21 @@ use crate::functions::errors::EvaluationError;
 /// Evaluate a built-in mathematical function by name with the given arguments.
 ///
 /// This function serves as the main dispatch point for all built-in mathematical
-/// functions. It validates argument counts, performs domain checking where
-/// appropriate, and returns the computed result.
+/// functions. It validates argument counts and returns the computed result.
+/// Mathematical domain errors (sqrt of negative, log of zero, etc.) return NaN or ∞
+/// following IEEE 754 standard, rather than returning errors.
 ///
 /// # Supported Functions
 ///
 /// ## Single Argument Functions
 /// - `abs(x)` - Absolute value
-/// - `sqrt(x)` - Square root (x >= 0)
+/// - `sqrt(x)` - Square root (returns NaN for x < 0)
 /// - `sin(x)`, `cos(x)`, `tan(x)` - Trigonometric functions
-/// - `asin(x)`, `acos(x)` - Inverse trigonometric functions (|x| <= 1)
+/// - `asin(x)`, `acos(x)` - Inverse trigonometric functions (returns NaN for |x| > 1)
 /// - `atan(x)` - Inverse tangent
 /// - `exp(x)` - Exponential function (e^x)
-/// - `ln(x)` - Natural logarithm (x > 0)
-/// - `log10(x)`, `log2(x)` - Base-10 and base-2 logarithms (x > 0)
+/// - `ln(x)` - Natural logarithm (returns -∞ for x = 0, NaN for x < 0)
+/// - `log10(x)`, `log2(x)` - Base-10 and base-2 logarithms (returns -∞ for x = 0, NaN for x < 0)
 /// - `ceil(x)`, `floor(x)`, `round(x)` - Rounding functions
 ///
 /// ## Two Argument Functions
@@ -46,79 +47,34 @@ use crate::functions::errors::EvaluationError;
 /// # Returns
 ///
 /// A `Result` containing either the computed result as `f64` or an `EvaluationError`
-/// for invalid function names, wrong argument counts, or domain errors.
+/// for invalid function names or wrong argument counts. Mathematical domain violations
+/// return NaN or ∞ rather than errors.
 ///
 /// # Examples
 ///
+/// ```
 /// use kalix::functions::functions::evaluate_builtin_function;
 ///
 /// assert_eq!(evaluate_builtin_function("abs", &[-5.0]).unwrap(), 5.0);
 /// assert_eq!(evaluate_builtin_function("sqrt", &[16.0]).unwrap(), 4.0);
 /// assert_eq!(evaluate_builtin_function("max", &[3.0, 7.0, 2.0]).unwrap(), 7.0);
-/// assert!(evaluate_builtin_function("sqrt", &[-1.0]).is_err()); // Domain error
+/// assert!(evaluate_builtin_function("sqrt", &[-1.0]).unwrap().is_nan()); // Returns NaN, not error
+/// ```
 pub fn evaluate_builtin_function(name: &str, args: &[f64]) -> Result<f64, EvaluationError> {
     match name {
         // Single argument functions
         "abs" => single_arg_function(name, args, |x| x.abs()),
-        "sqrt" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] < 0.0 {
-                return math_error(name, args, "Square root of negative number");
-            }
-            Ok(args[0].sqrt())
-        }
+        "sqrt" => single_arg_function(name, args, |x| x.sqrt()),
         "sin" => single_arg_function(name, args, |x| x.sin()),
         "cos" => single_arg_function(name, args, |x| x.cos()),
         "tan" => single_arg_function(name, args, |x| x.tan()),
-        "asin" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] < -1.0 || args[0] > 1.0 {
-                return math_error(name, args, "Arcsine domain error: argument must be between -1 and 1");
-            }
-            Ok(args[0].asin())
-        }
-        "acos" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] < -1.0 || args[0] > 1.0 {
-                return math_error(name, args, "Arccosine domain error: argument must be between -1 and 1");
-            }
-            Ok(args[0].acos())
-        }
+        "asin" => single_arg_function(name, args, |x| x.asin()),
+        "acos" => single_arg_function(name, args, |x| x.acos()),
         "atan" => single_arg_function(name, args, |x| x.atan()),
         "exp" => single_arg_function(name, args, |x| x.exp()),
-        "ln" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] <= 0.0 {
-                return math_error(name, args, "Natural logarithm domain error: argument must be positive");
-            }
-            Ok(args[0].ln())
-        }
-        "log10" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] <= 0.0 {
-                return math_error(name, args, "Base-10 logarithm domain error: argument must be positive");
-            }
-            Ok(args[0].log10())
-        }
-        "log2" => {
-            if args.len() != 1 {
-                return invalid_arg_count(name, 1, args.len());
-            }
-            if args[0] <= 0.0 {
-                return math_error(name, args, "Base-2 logarithm domain error: argument must be positive");
-            }
-            Ok(args[0].log2())
-        }
+        "ln" => single_arg_function(name, args, |x| x.ln()),
+        "log10" => single_arg_function(name, args, |x| x.log10()),
+        "log2" => single_arg_function(name, args, |x| x.log2()),
         "ceil" => single_arg_function(name, args, |x| x.ceil()),
         "floor" => single_arg_function(name, args, |x| x.floor()),
         "round" => single_arg_function(name, args, |x| x.round()),
@@ -229,21 +185,3 @@ fn invalid_arg_count(name: &str, expected: usize, found: usize) -> Result<f64, E
     })
 }
 
-/// Helper function to create mathematical domain/range errors.
-///
-/// # Arguments
-///
-/// * `name` - The name of the function that failed
-/// * `args` - The arguments that caused the error
-/// * `message` - A descriptive error message
-///
-/// # Returns
-///
-/// An `EvaluationError::MathematicalError` wrapped in a Result.
-fn math_error(name: &str, args: &[f64], message: &str) -> Result<f64, EvaluationError> {
-    Err(EvaluationError::MathematicalError {
-        function: name.to_string(),
-        args: args.to_vec(),
-        message: message.to_string(),
-    })
-}

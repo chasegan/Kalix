@@ -192,20 +192,8 @@ pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f
         BinaryOperator::Add => Ok(left + right),
         BinaryOperator::Subtract => Ok(left - right),
         BinaryOperator::Multiply => Ok(left * right),
-        BinaryOperator::Divide => {
-            if right == 0.0 {
-                Err(EvaluationError::DivisionByZero)
-            } else {
-                Ok(left / right)
-            }
-        }
-        BinaryOperator::Modulo => {
-            if right == 0.0 {
-                Err(EvaluationError::DivisionByZero)
-            } else {
-                Ok(left % right)
-            }
-        }
+        BinaryOperator::Divide => Ok(left / right),
+        BinaryOperator::Modulo => Ok(left % right),
         BinaryOperator::Power => Ok(left.powf(right)),
         BinaryOperator::Equal => Ok(if (left - right).abs() < f64::EPSILON { 1.0 } else { 0.0 }),
         BinaryOperator::NotEqual => Ok(if (left - right).abs() >= f64::EPSILON { 1.0 } else { 0.0 }),
