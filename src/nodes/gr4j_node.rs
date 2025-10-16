@@ -4,6 +4,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::numerical::opt::calibratable::Calibratable;
 
 #[derive(Default, Clone)]
 pub struct Gr4jNode {
@@ -154,5 +155,54 @@ impl Node for Gr4jNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+}
+
+// ============================================================================
+// Calibratable Implementation
+// ============================================================================
+
+impl Calibratable for Gr4jNode {
+    fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        match name {
+            "x1" => {
+                self.gr4j_model.x1 = value;
+                self.gr4j_model.initialize();
+                Ok(())
+            },
+            "x2" => {
+                self.gr4j_model.x2 = value;
+                self.gr4j_model.initialize();
+                Ok(())
+            },
+            "x3" => {
+                self.gr4j_model.x3 = value;
+                self.gr4j_model.initialize();
+                Ok(())
+            },
+            "x4" => {
+                self.gr4j_model.x4 = value;
+                self.gr4j_model.initialize();  // Must reinitialize UH when x4 changes
+                Ok(())
+            },
+            _ => Err(format!("Unknown GR4J parameter: {}", name)),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<f64, String> {
+        match name {
+            "x1" => Ok(self.gr4j_model.x1),
+            "x2" => Ok(self.gr4j_model.x2),
+            "x3" => Ok(self.gr4j_model.x3),
+            "x4" => Ok(self.gr4j_model.x4),
+            _ => Err(format!("Unknown GR4J parameter: {}", name)),
+        }
+    }
+
+    fn list_params(&self) -> Vec<String> {
+        vec!["x1", "x2", "x3", "x4"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 }

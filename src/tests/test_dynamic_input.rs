@@ -471,3 +471,45 @@ fn test_dynamic_input_unassigned_constant_registers() {
     // And the expression should evaluate correctly
     assert_eq!(input.get_value(&data_cache), 50.0); // 5.0 * 10
 }
+
+#[test]
+fn test_dynamic_input_mixed_case_same_constant() {
+    let mut data_cache = DataCache::new();
+
+    // Set a constant
+    data_cache.constants.set_value("c.factor", 2.0);
+
+    // Expression uses the same constant with different cases
+    // This tests that we don't create duplicate map entries
+    let input = DynamicInput::from_string("c.FACTOR + C.Factor + C.factor", &mut data_cache, true)
+        .expect("Failed to parse mixed-case constant expression");
+
+    // Should evaluate to 2.0 + 2.0 + 2.0 = 6.0
+    // This verifies that all three references resolve to the same constant
+    assert_eq!(input.get_value(&data_cache), 6.0);
+}
+
+#[test]
+fn test_dynamic_input_mixed_case_constant_and_data() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Set constant
+    data_cache.constants.set_value("c.multiplier", 3.0);
+
+    // Add data
+    let idx = data_cache.get_or_add_new_series("data.value", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(10.0);
+    data_cache.series[idx] = ts;
+
+    // Use mixed cases for both constant and data variable
+    let input = DynamicInput::from_string("C.MULTIPLIER * DATA.VALUE", &mut data_cache, true)
+        .expect("Failed to parse mixed-case expression");
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&data_cache), 30.0); // 3.0 * 10.0
+}

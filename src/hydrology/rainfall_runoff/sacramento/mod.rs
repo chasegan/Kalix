@@ -28,7 +28,7 @@ pub struct Sacramento {
 
     // Unit hydrograph
     unit_hydrograph: UHPrealloc32,
-    pub laguh: f64,         // Optional parametrisation of a unit hydrograph's lag
+    laguh: f64,         // Optional parametrisation of a unit hydrograph's lag (use set_laguh() to modify)
 
     // Parameters (public for calibration)
     pub adimp: f64,
@@ -139,6 +139,22 @@ impl Sacramento {
             self.unit_hydrograph.set_kernel(high_ordinate_position - 1, low_ordinate_value);
         }
         self
+    }
+
+
+    /// Public setter for laguh parameter
+    ///
+    /// This method sets the laguh value and updates the unit hydrograph ordinates.
+    /// Use this instead of directly setting laguh to ensure the unit hydrograph stays synchronized.
+    pub fn set_laguh(&mut self, value: f64) -> &mut Self {
+        self.laguh = value;
+        self.set_uh_ordinates_using_laguh()
+    }
+
+
+    /// Public getter for laguh parameter
+    pub fn get_laguh(&self) -> f64 {
+        self.laguh
     }
 
 

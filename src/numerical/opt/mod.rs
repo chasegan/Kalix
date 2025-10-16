@@ -7,7 +7,6 @@ pub mod sp_uci;
 // Calibration framework
 pub mod optimisable;
 pub mod calibratable;
-pub mod calibratable_impls;
 pub mod parameter_mapping;
 pub mod objectives;
 pub mod calibration;

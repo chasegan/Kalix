@@ -118,12 +118,15 @@ impl OptimizedExpressionNode {
                 Ok(OptimizedExpressionNode::Constant { value: *value })
             }
             ExpressionNode::Variable { name } => {
+                // Convert to lowercase for case-insensitive lookup (maps use lowercase keys)
+                let lower_name = name.to_lowercase();
+
                 // Try constant first (c.* variables)
-                if let Some(&idx) = constant_variable_map.get(name) {
+                if let Some(&idx) = constant_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
                 }
                 // Try data cache (data.* variables)
-                if let Some(&idx) = data_variable_map.get(name) {
+                if let Some(&idx) = data_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
                 }
                 Err(format!("Variable '{}' not found in variable maps", name))
@@ -248,6 +251,8 @@ impl DynamicInput {
         let variables = parsed.get_variables();
 
         // Separate variables into data cache and constants based on prefix
+        // Note: We use lowercase for all map keys to ensure case-insensitive lookups
+        // and avoid duplicate entries for the same variable with different cases
         let mut data_variable_map = HashMap::new();
         let mut constant_variable_map = HashMap::new();
 
@@ -257,11 +262,11 @@ impl DynamicInput {
             if lower_name.starts_with("c.") {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
-                constant_variable_map.insert(var_name.clone(), idx);
+                constant_variable_map.insert(lower_name.clone(), idx);
             } else {
                 // Resolve to data cache (existing logic)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
-                data_variable_map.insert(var_name.clone(), idx);
+                data_variable_map.insert(lower_name.clone(), idx);
             }
         }
 
@@ -280,9 +285,10 @@ impl DynamicInput {
         } else if let Some(var_name) = parsed.is_single_variable() {
             // It's a direct reference to a single variable (no operations)
             // Check if it's a constant or data reference
-            if let Some(&idx) = constant_variable_map.get(var_name) {
+            let lower_var = var_name.to_lowercase();
+            if let Some(&idx) = constant_variable_map.get(&lower_var) {
                 Ok(DynamicInput::DirectConstantReference { idx })
-            } else if let Some(&idx) = data_variable_map.get(var_name) {
+            } else if let Some(&idx) = data_variable_map.get(&lower_var) {
                 Ok(DynamicInput::DirectReference { idx })
             } else {
                 Err(format!("Variable '{}' not found in variable maps", var_name))

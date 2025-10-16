@@ -95,16 +95,14 @@ impl CalibrationProblem {
                 .get_node_idx(node_name)
                 .ok_or_else(|| format!("Node not found: {}", node_name))?;
 
-            // Set parameter on the appropriate node type
+            // Set parameter on the node using Calibratable trait
             match &mut self.model.nodes[node_idx] {
                 NodeEnum::SacramentoNode(node) => {
-                    node.sacramento_model
-                        .set_param(param_name, value)
+                    node.set_param(param_name, value)
                         .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
                 }
                 NodeEnum::Gr4jNode(node) => {
-                    node.gr4j_model
-                        .set_param(param_name, value)
+                    node.set_param(param_name, value)
                         .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
                 }
                 _ => {

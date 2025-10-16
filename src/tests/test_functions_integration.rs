@@ -110,16 +110,18 @@ fn test_trigonometric_functions() {
 #[test]
 fn test_error_handling() {
     let vars = HashMap::new();
-    
+
     // Missing variable should error
     assert!(evaluate_expression("x + 5", &vars).is_err());
-    
-    // Division by zero should error  
-    assert!(evaluate_expression("5 / 0", &vars).is_err());
-    
-    // Square root of negative should error
-    assert!(evaluate_expression("sqrt(-1)", &vars).is_err());
-    
+
+    // Division by zero returns infinity (IEEE 754)
+    let result = evaluate_expression("5 / 0", &vars).unwrap();
+    assert!(result.is_infinite() && result.is_sign_positive());
+
+    // Square root of negative returns NaN (IEEE 754)
+    let result = evaluate_expression("sqrt(-1)", &vars).unwrap();
+    assert!(result.is_nan());
+
     // Invalid syntax should error
     assert!(parse_function("2 + * 3").is_err());
 }

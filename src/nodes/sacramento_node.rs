@@ -4,6 +4,7 @@ use crate::model_inputs::DynamicInput;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::numerical::opt::calibratable::Calibratable;
 
 #[derive(Default, Clone)]
 pub struct SacramentoNode {
@@ -154,5 +155,124 @@ impl Node for SacramentoNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+}
+
+// ============================================================================
+// Calibratable Implementation
+// ============================================================================
+
+impl Calibratable for SacramentoNode {
+    fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        match name {
+            "adimp" => {
+                self.sacramento_model.adimp = value;
+                Ok(())
+            },
+            "lzfpm" => {
+                self.sacramento_model.lzfpm = value;
+                Ok(())
+            },
+            "lzfsm" => {
+                self.sacramento_model.lzfsm = value;
+                Ok(())
+            },
+            "lzpk" => {
+                self.sacramento_model.lzpk = value;
+                Ok(())
+            },
+            "lzsk" => {
+                self.sacramento_model.lzsk = value;
+                Ok(())
+            },
+            "lztwm" => {
+                self.sacramento_model.lztwm = value;
+                Ok(())
+            },
+            "pctim" => {
+                self.sacramento_model.pctim = value;
+                Ok(())
+            },
+            "pfree" => {
+                self.sacramento_model.pfree = value;
+                Ok(())
+            },
+            "rexp" => {
+                self.sacramento_model.rexp = value;
+                Ok(())
+            },
+            "rserv" => {
+                self.sacramento_model.rserv = value;
+                Ok(())
+            },
+            "sarva" => {
+                self.sacramento_model.sarva = value;
+                Ok(())
+            },
+            "side" => {
+                self.sacramento_model.side = value;
+                Ok(())
+            },
+            "ssout" => {
+                self.sacramento_model.ssout = value;
+                Ok(())
+            },
+            "uzfwm" => {
+                self.sacramento_model.uzfwm = value;
+                Ok(())
+            },
+            "uzk" => {
+                self.sacramento_model.uzk = value;
+                Ok(())
+            },
+            "uztwm" => {
+                self.sacramento_model.uztwm = value;
+                Ok(())
+            },
+            "zperc" => {
+                self.sacramento_model.zperc = value;
+                Ok(())
+            },
+            "laguh" => {
+                self.sacramento_model.set_laguh(value);
+                Ok(())
+            },
+            _ => Err(format!("Unknown Sacramento parameter: {}", name)),
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<f64, String> {
+        match name {
+            "adimp" => Ok(self.sacramento_model.adimp),
+            "lzfpm" => Ok(self.sacramento_model.lzfpm),
+            "lzfsm" => Ok(self.sacramento_model.lzfsm),
+            "lzpk" => Ok(self.sacramento_model.lzpk),
+            "lzsk" => Ok(self.sacramento_model.lzsk),
+            "lztwm" => Ok(self.sacramento_model.lztwm),
+            "pctim" => Ok(self.sacramento_model.pctim),
+            "pfree" => Ok(self.sacramento_model.pfree),
+            "rexp" => Ok(self.sacramento_model.rexp),
+            "rserv" => Ok(self.sacramento_model.rserv),
+            "sarva" => Ok(self.sacramento_model.sarva),
+            "side" => Ok(self.sacramento_model.side),
+            "ssout" => Ok(self.sacramento_model.ssout),
+            "uzfwm" => Ok(self.sacramento_model.uzfwm),
+            "uzk" => Ok(self.sacramento_model.uzk),
+            "uztwm" => Ok(self.sacramento_model.uztwm),
+            "zperc" => Ok(self.sacramento_model.zperc),
+            "laguh" => Ok(self.sacramento_model.get_laguh()),
+            _ => Err(format!("Unknown Sacramento parameter: {}", name)),
+        }
+    }
+
+    fn list_params(&self) -> Vec<String> {
+        vec![
+            "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
+            "pctim", "pfree", "rexp", "rserv", "sarva", "side",
+            "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     }
 }
