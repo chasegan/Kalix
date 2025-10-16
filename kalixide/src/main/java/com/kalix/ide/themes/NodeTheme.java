@@ -23,7 +23,8 @@ public class NodeTheme {
         SQUARE,           // ■ Square
         DIAMOND,          // ◆ Diamond (rotated square)
         WATER_DROP,       // 💧 Symmetric water drop shape
-        PODIUM            // 🏆 Three-step podium shape
+        PODIUM,           // 🏆 Three-step podium shape
+        ARROW_DOWN        // ⬇ Fat arrow pointing down with snub arrowhead
     }
 
     /**
@@ -207,19 +208,21 @@ public class NodeTheme {
                     map.put("user", "A0522D");           // Sienna (index 9)
                     map.put("sacramento", "32CD32");     // Lime Green (index 10)
                     map.put("gr4j", "32CD32");           // Lime Green (index 10)
-                    map.put("blackhole", "2F4F4F");     // Dark Slate Gray (index 2)
+                    map.put("blackhole", "2F4F4F");      // Dark Slate Gray (index 2)
                     map.put("inflow", "2E8B57");         // Sea Green (index 14)
+                    map.put("routing", "DAA520");        // Goldenrod (index 3)
+                    map.put("loss", "DAA520");           // Goldenrod - same as routing
+                    map.put("splitter", "8B4513");       // Saddle Brown (index 6)
+                    map.put("confluence", "8B4513");     // Saddle Brown - same as splitter
+                    map.put("gauge", "228B22");          // Forest Green (index 0)
                     // Unused colors from botanical palette
-                    map.put("unused_1", "228B22");       // Forest Green (index 0)
-                    map.put("unused_2", "B8860B");       // Dark Goldenrod (index 1)
-                    map.put("unused_3", "DAA520");       // Goldenrod (index 3)
-                    map.put("unused_4", "556B2F");       // Dark Olive Green (index 4)
-                    map.put("unused_5", "8B4513");       // Saddle Brown (index 6)
-                    map.put("unused_6", "CCCC00");       // Yellow-lime (index 7)
-                    map.put("unused_7", "1E90FF");       // Dodger Blue (index 8)
-                    map.put("unused_8", "CD853F");       // Peru (index 11)
-                    map.put("unused_9", "6495ED");       // Cornflower Blue (index 12)
-                    map.put("unused_10", "D2691E");      // Chocolate (index 13)
+                    map.put("unused_1", "B8860B");       // Dark Goldenrod (index 1)
+                    map.put("unused_2", "556B2F");       // Dark Olive Green (index 4)
+                    map.put("unused_3", "CCCC00");       // Yellow-lime (index 7)
+                    map.put("unused_4", "1E90FF");       // Dodger Blue (index 8)
+                    map.put("unused_5", "CD853F");       // Peru (index 11)
+                    map.put("unused_6", "6495ED");       // Cornflower Blue (index 12)
+                    map.put("unused_7", "D2691E");       // Chocolate (index 13)
                     break;
                 case NEMO: // Nemo
                     // Map to similar concept colors in Nemo palette
@@ -229,12 +232,14 @@ public class NodeTheme {
                     map.put("gr4j", "20B2AA");           // Light Sea Green (index 6) - river/flow
                     map.put("blackhole", "191970");      // Midnight Blue (index 0) - void/dark
                     map.put("inflow", "4169E1");         // Royal Blue (index 1) - main flow
+                    map.put("routing", "6495ED");        // Cornflower Blue (index 2)
+                    map.put("loss", "6495ED");           // Cornflower Blue - same as routing
+                    map.put("splitter", "00CED1");       // Dark Turquoise (index 4)
+                    map.put("confluence", "00CED1");     // Dark Turquoise - same as splitter
+                    map.put("gauge", "87CEEB");          // Sky Blue (index 3)
                     // Unused colors from Nemo palette
-                    map.put("unused_1", "6495ED");       // Cornflower Blue (index 2)
-                    map.put("unused_2", "87CEEB");       // Sky Blue (index 3)
-                    map.put("unused_3", "00CED1");       // Dark Turquoise (index 4)
-                    map.put("unused_4", "008B8B");       // Dark Cyan (index 7)
-                    map.put("unused_5", "4682B4");       // Steel Blue (index 9)
+                    map.put("unused_1", "008B8B");       // Dark Cyan (index 7)
+                    map.put("unused_2", "4682B4");       // Steel Blue (index 9)
                     break;
                 case SUNSET_WARMTH:
                     // Sunset warmth color mappings with requested swaps
@@ -245,6 +250,10 @@ public class NodeTheme {
                     map.put("blackhole", "FF8C00");      // Dark Orange (swapped from routing)
                     map.put("routing", "2F4F4F");        // Dark Slate Gray (swapped from blackhole)
                     map.put("inflow", "4682B4");         // Steel Blue
+                    map.put("loss", "2F4F4F");           // Dark Slate Gray - same as routing
+                    map.put("splitter", "FF6B35");       // Orange-Red (from palette index 0)
+                    map.put("confluence", "FF6B35");     // Orange-Red - same as splitter
+                    map.put("gauge", "F7931E");          // Orange (from palette index 1)
                     break;
                 case LIGHT:
                     // Light theme color mappings using the Light palette
@@ -255,11 +264,13 @@ public class NodeTheme {
                     map.put("blackhole", "577590");      // Blue-gray (index 8) - blackhole
                     map.put("routing", "F9C74F");        // Yellow (index 4) - routing
                     map.put("inflow", "4D908E");         // Blue-green (index 7) - main flow
+                    map.put("loss", "F9C74F");           // Yellow - same as routing
+                    map.put("splitter", "F8961E");       // Orange (index 2)
+                    map.put("confluence", "F8961E");     // Orange - same as splitter
+                    map.put("gauge", "F94144");          // Red (index 0)
                     // Additional mappings using unused colors
-                    map.put("outflow", "F94144");        // Red (index 0)
-                    map.put("junction", "F8961E");       // Orange (index 2)
-                    map.put("reservoir", "F9844A");      // Light orange (index 3)
-                    map.put("diversion", "43AA8B");      // Teal (index 6)
+                    map.put("outflow", "F9844A");        // Light orange (index 3)
+                    map.put("reservoir", "43AA8B");      // Teal (index 6)
                     break;
                 default:
                     // For other themes, use cycling assignment
@@ -286,15 +297,18 @@ public class NodeTheme {
     }
     
     // Node type to shape and text mappings
-    private static final Map<String, ShapeTextMapping> NODE_TYPE_MAPPINGS = Map.of(
-        "inflow", new ShapeTextMapping(NodeShape.TRIANGLE_RIGHT, "In"),
-        "gr4j", new ShapeTextMapping(NodeShape.WATER_DROP, "G4"),
-        "routing", new ShapeTextMapping(NodeShape.SQUARE, "Rt"),
-        "sacramento", new ShapeTextMapping(NodeShape.WATER_DROP, "Sc"),
-        "user", new ShapeTextMapping(NodeShape.PODIUM, "Us"),
-        "storage", new ShapeTextMapping(NodeShape.TRIANGLE_UP, "St"),
-        "blackhole", new ShapeTextMapping(NodeShape.CIRCLE, "Bh"),
-        "confluence", new ShapeTextMapping(NodeShape.CIRCLE, "Co")
+    private static final Map<String, ShapeTextMapping> NODE_TYPE_MAPPINGS = Map.ofEntries(
+        Map.entry("inflow", new ShapeTextMapping(NodeShape.ARROW_DOWN, "In")),
+        Map.entry("gr4j", new ShapeTextMapping(NodeShape.WATER_DROP, "G4")),
+        Map.entry("routing", new ShapeTextMapping(NodeShape.DIAMOND, "Rt")),
+        Map.entry("sacramento", new ShapeTextMapping(NodeShape.WATER_DROP, "Sc")),
+        Map.entry("user", new ShapeTextMapping(NodeShape.PODIUM, "Us")),
+        Map.entry("storage", new ShapeTextMapping(NodeShape.TRIANGLE_UP, "St")),
+        Map.entry("blackhole", new ShapeTextMapping(NodeShape.CIRCLE, "Bh")),
+        Map.entry("confluence", new ShapeTextMapping(NodeShape.CIRCLE, "Co")),
+        Map.entry("loss", new ShapeTextMapping(NodeShape.SQUARE, "Lo")),
+        Map.entry("gauge", new ShapeTextMapping(NodeShape.CIRCLE, "Ga")),
+        Map.entry("splitter", new ShapeTextMapping(NodeShape.CIRCLE, "Sp"))
     );
 
     // Default shape text styling

@@ -13,14 +13,17 @@ public class NodeThemeShapeTest {
         NodeTheme theme = new NodeTheme();
 
         // Test known node types
-        assertEquals(NodeTheme.NodeShape.TRIANGLE_RIGHT, theme.getShapeForNodeType("inflow"));
+        assertEquals(NodeTheme.NodeShape.ARROW_DOWN, theme.getShapeForNodeType("inflow"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("gr4j"));
-        assertEquals(NodeTheme.NodeShape.SQUARE, theme.getShapeForNodeType("routing"));
+        assertEquals(NodeTheme.NodeShape.DIAMOND, theme.getShapeForNodeType("routing"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("sacramento"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("user"));
         assertEquals(NodeTheme.NodeShape.TRIANGLE_UP, theme.getShapeForNodeType("storage"));
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("blackhole"));
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("confluence"));
+        assertEquals(NodeTheme.NodeShape.SQUARE, theme.getShapeForNodeType("loss"));
+        assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("gauge"));
+        assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("splitter"));
 
         // Test unknown node type falls back to circle
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("unknown_type"));
@@ -39,14 +42,15 @@ public class NodeThemeShapeTest {
     public void testCustomShapesExist() {
         // Test that custom shapes are available
         assertNotNull(NodeTheme.NodeShape.WATER_DROP);     // 💧 water drop
-        assertNotNull(NodeTheme.NodeShape.PODIUM); // 🏆 podium
+        assertNotNull(NodeTheme.NodeShape.PODIUM);         // 🏆 podium
+        assertNotNull(NodeTheme.NodeShape.ARROW_DOWN);     // ⬇ arrow down
     }
 
     @Test
     public void testAllShapeTypesCount() {
         // Test that we have the expected number of shape types
         NodeTheme.NodeShape[] shapes = NodeTheme.NodeShape.values();
-        assertEquals(9, shapes.length); // 4 triangles + circle + square + diamond + water drop + podium
+        assertEquals(10, shapes.length); // 4 triangles + circle + square + diamond + water drop + podium + arrow down
     }
 
     @Test
@@ -62,12 +66,14 @@ public class NodeThemeShapeTest {
         assertEquals("St", theme.getShapeTextForNodeType("storage"));
         assertEquals("Bh", theme.getShapeTextForNodeType("blackhole"));
         assertEquals("Co", theme.getShapeTextForNodeType("confluence"));
+        assertEquals("Lo", theme.getShapeTextForNodeType("loss"));
+        assertEquals("Ga", theme.getShapeTextForNodeType("gauge"));
+        assertEquals("Sp", theme.getShapeTextForNodeType("splitter"));
 
         // Test unknown node type generates abbreviation
         assertEquals("UT", theme.getShapeTextForNodeType("unknown_type")); // "Unknown" + "Type"
         assertEquals("RE", theme.getShapeTextForNodeType("reservoir"));      // "REservoir"
         assertEquals("PS", theme.getShapeTextForNodeType("pump_station"));   // "Pump" + "Station"
-        assertEquals("GA", theme.getShapeTextForNodeType("gauge"));          // "GAuge"
         assertEquals("??", theme.getShapeTextForNodeType("")); // Empty string fallback
     }
 

@@ -205,6 +205,28 @@ public class NodeShapeRenderer {
         9     // back to bottom left (closes shape)
     };
 
+    // Arrow Down - fat arrow pointing down with snub arrowhead (squarish proportions)
+    // Shaft: 14px wide, runs from top to middle
+    // Arrowhead: 24px wide, snub (10px tall)
+    private static final int[] ARROW_DOWN_X = {
+        -7,   // top left of shaft
+        7,    // top right of shaft
+        7,    // right side of shaft down to arrowhead
+        12,   // right wing of arrowhead
+        0,    // tip of arrow (bottom point)
+        -12,  // left wing of arrowhead
+        -7    // left side of shaft
+    };
+    private static final int[] ARROW_DOWN_Y = {
+        -10,  // top left of shaft
+        -10,  // top right of shaft
+        0,    // right side of shaft to arrowhead transition
+        0,    // right wing of arrowhead
+        10,   // tip of arrow (bottom point)
+        0,    // left wing of arrowhead
+        0     // left side of shaft back to start
+    };
+
     /**
      * Renders a node shape with the specified parameters.
      */
@@ -260,6 +282,9 @@ public class NodeShapeRenderer {
                 break;
             case PODIUM:
                 renderPodiumInternal(g2d, centerX, centerY, fill);
+                break;
+            case ARROW_DOWN:
+                renderPolygon(g2d, centerX, centerY, ARROW_DOWN_X, ARROW_DOWN_Y, fill);
                 break;
         }
     }
