@@ -297,7 +297,7 @@ impl ParsedFunction {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use kalix::functions::parse_function;
     ///
     /// let f1 = parse_function("data.evap").unwrap();

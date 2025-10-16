@@ -177,23 +177,3 @@ fn test_model_4() {
         }
     };
 }
-
-
-
-
-#[test]
-fn test_pioneer_model() {
-
-    fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
-        let ini_reader = IniModelIO::new();
-        let mut m = ini_reader.read_model_file(model_filename)?;
-        m.configure()?;
-        m.run()?;
-        m.write_outputs(output_filename)?;
-        Ok(())
-    }
-
-    let r = run_model("/Users/chas/Desktop/pioneer_validation_model/PioneerVal_to_125001b_withLocations.ini",
-                      "/Users/chas/Desktop/pioneer_validation_model/outputs.csv");
-    assert!(r.is_ok());
-}

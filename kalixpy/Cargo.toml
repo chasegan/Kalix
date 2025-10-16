@@ -6,7 +6,7 @@ edition = "2021"
 [lib]
 # name = "kalix" #note the wheel file will be named "kalix" per the package (i.e. "pip install kalix") but the python module will be called "kalixpy" (i.e. "import kalixpy as kx")
 # "cdylib" is necessary to produce a shared library for Python to import from.
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
