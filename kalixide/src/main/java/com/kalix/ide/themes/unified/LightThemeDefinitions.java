@@ -38,9 +38,9 @@ public class LightThemeDefinitions {
             .setColor("TextArea.foreground", "#000000")
             .setColor("TextPane.foreground", "#000000")
             .setColor("TextField.foreground", "#000000")
-            .setColor("TextArea.selectionBackground", "#2675bf")
-            .setColor("TextPane.selectionBackground", "#2675bf")
-            .setColor("TextField.selectionBackground", "#2675bf")
+            .setColor("TextArea.selectionBackground", "#5a9edb")
+            .setColor("TextPane.selectionBackground", "#5a9edb")
+            .setColor("TextField.selectionBackground", "#5a9edb")
 
             // Buttons
             .setColor("Button.background", "#ffffff")
@@ -230,9 +230,9 @@ public class LightThemeDefinitions {
             .setColor("TextArea.foreground", "#1e293b")
             .setColor("TextPane.foreground", "#1e293b")
             .setColor("TextField.foreground", "#1e293b")
-            .setColor("TextArea.selectionBackground", "#bfdbfe")
-            .setColor("TextPane.selectionBackground", "#bfdbfe")
-            .setColor("TextField.selectionBackground", "#bfdbfe")
+            .setColor("TextArea.selectionBackground", "#acd3ff")
+            .setColor("TextPane.selectionBackground", "#acd3ff")
+            .setColor("TextField.selectionBackground", "#acd3ff")
 
             // Buttons (Nordic blue theme)
             .setColor("Button.background", "#f1f5f9")

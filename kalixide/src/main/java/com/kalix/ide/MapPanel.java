@@ -113,14 +113,19 @@ public class MapPanel extends JPanel implements KeyListener {
                     if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
-                        
+
                         if (nodeWasSelected && !e.isShiftDown()) {
                             // Clicking on already selected node without Shift - preserve selection
                             // Don't start drag here - wait for mouseDragged event
                         } else {
                             // Clicking on unselected node, or Shift+clicking - handle selection normally
                             handleNodeSelection(nodeAtPoint, e.isShiftDown());
-                            // Don't start drag here - wait for mouseDragged event  
+                            // Don't start drag here - wait for mouseDragged event
+                        }
+
+                        // Navigate to the node definition in text editor
+                        if (interactionManager != null) {
+                            interactionManager.handleNodeClick(nodeAtPoint);
                         }
                     } else {
                         // Not clicking on a node - check for links
@@ -154,21 +159,9 @@ public class MapPanel extends JPanel implements KeyListener {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
-                    // Check if this was a simple click (not a drag) for navigation
-                    boolean wasClick = false;
-                    if (clickStartPoint != null && clickedNodeName != null) {
-                        double distance = clickStartPoint.distance(e.getPoint());
-                        wasClick = distance <= CLICK_TOLERANCE;
-                    }
-                    
                     // End dragging if active
                     if (interactionManager != null && interactionManager.isDragging()) {
                         interactionManager.endDrag(e.getPoint());
-                    } else if (wasClick && clickedNodeName != null) {
-                        // This was a click on a node without dragging - navigate to it
-                        if (interactionManager != null) {
-                            interactionManager.handleNodeClick(clickedNodeName);
-                        }
                     }
                     
                     // Handle rectangle selection completion

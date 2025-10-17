@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.kalix.ide.editor.EnhancedTextEditor;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.Set;
+import javax.swing.JViewport;
 import javax.swing.text.Document;
 import javax.swing.text.BadLocationException;
 import javax.swing.undo.CompoundEdit;
@@ -127,13 +130,28 @@ public class TextCoordinateUpdater {
             if (section != null) {
                 // Set caret position to the start of the node section (the [node.name] header)
                 textEditor.getTextArea().setCaretPosition(section.start);
-                
-                // Scroll to make the caret position visible
-                textEditor.getTextArea().getCaret().setSelectionVisible(true);
-                
+
+                // Smart scroll: position the node at 1/4 from the top of the viewport
+                // This provides good context and matches common editor behavior
+                if (textEditor.getTextArea().getParent() instanceof JViewport) {
+                    JViewport viewport = (JViewport) textEditor.getTextArea().getParent();
+                    Rectangle viewRect = viewport.getViewRect();
+                    Rectangle caretRect = textEditor.getTextArea().modelToView(section.start);
+
+                    // Position caret at 1/4 from top of viewport
+                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    desiredY = Math.max(0, desiredY); // Don't scroll past document start
+
+                    // Scroll to position
+                    viewport.setViewPosition(new Point(viewRect.x, desiredY));
+                } else {
+                    // Fallback to default scrolling if viewport not available
+                    textEditor.getTextArea().getCaret().setSelectionVisible(true);
+                }
+
                 // Request focus to ensure the text editor is active
                 textEditor.getTextArea().requestFocusInWindow();
-                
+
                 // Successfully scrolled to node
                 return true;
             } else {

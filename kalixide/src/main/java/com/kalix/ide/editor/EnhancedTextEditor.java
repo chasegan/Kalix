@@ -540,10 +540,10 @@ public class EnhancedTextEditor extends JPanel {
         // Set current line highlight color based on theme
         if (selectionBgColor != null) {
             // Create a more subtle version of the selection color for line highlight
-            int alpha = 50; // Much more subtle than selection
+            int alpha = 80; // More visible for better navigation feedback
             Color lineHighlightColor = new Color(
                 selectionBgColor.getRed(),
-                selectionBgColor.getGreen(), 
+                selectionBgColor.getGreen(),
                 selectionBgColor.getBlue(),
                 alpha
             );

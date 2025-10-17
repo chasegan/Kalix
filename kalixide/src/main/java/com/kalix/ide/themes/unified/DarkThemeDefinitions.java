@@ -475,8 +475,8 @@ public class DarkThemeDefinitions {
             .setColor("PasswordField.background", "#f5f8f3").setColor("EditorPane.background", "#fdfffe")
             .setColor("TextArea.foreground", "#1a331a").setColor("TextPane.foreground", "#1a331a")
             .setColor("TextField.foreground", "#1a331a")
-            .setColor("TextArea.selectionBackground", "#e8f0e8").setColor("TextPane.selectionBackground", "#e8f0e8")
-            .setColor("TextField.selectionBackground", "#e8f0e8")
+            .setColor("TextArea.selectionBackground", "#c0f0b8").setColor("TextPane.selectionBackground", "#c0f0b8")
+            .setColor("TextField.selectionBackground", "#c0f0b8")
 
             .setColor("Button.background", "#e8f2e0").setColor("Button.foreground", "#2d4a2d")
             .setColor("Button.focusedBorderColor", "#7fb069").setColor("Button.hoverBackground", "#d8ead0")
