@@ -30,9 +30,7 @@ public class MapPanel extends JPanel implements KeyListener {
     private double zoomLevel = 1.0;
     // Use centralized UI constants
     private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
-    private static final double MIN_ZOOM = UIConstants.Zoom.MIN_ZOOM;
-    private static final double MAX_ZOOM = UIConstants.Zoom.MAX_ZOOM;
-    
+
     // Panning variables
     private double panX = 0.0;
     private double panY = 0.0;
@@ -235,23 +233,14 @@ public class MapPanel extends JPanel implements KeyListener {
         double worldY = (mouseY - panY) / zoomLevel;
         
         // Calculate new zoom level
-        double oldZoom = zoomLevel;
         double zoomChange = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
-        double newZoom = oldZoom * zoomChange;
-        
-        // Clamp zoom to valid range
-        newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
-        
-        // Only update if zoom actually changed
-        if (newZoom != oldZoom) {
-            zoomLevel = newZoom;
-            
-            // Adjust pan so the world point under the mouse stays at the same screen position
-            panX = mouseX - worldX * zoomLevel;
-            panY = mouseY - worldY * zoomLevel;
-            
-            repaint();
-        }
+        zoomLevel = zoomLevel * zoomChange;
+
+        // Adjust pan so the world point under the mouse stays at the same screen position
+        panX = mouseX - worldX * zoomLevel;
+        panY = mouseY - worldY * zoomLevel;
+
+        repaint();
     }
 
     @Override
@@ -399,17 +388,13 @@ public class MapPanel extends JPanel implements KeyListener {
     }
 
     public void zoomIn() {
-        if (zoomLevel < MAX_ZOOM) {
-            zoomLevel *= ZOOM_FACTOR;
-            repaint();
-        }
+        zoomLevel *= ZOOM_FACTOR;
+        repaint();
     }
 
     public void zoomOut() {
-        if (zoomLevel > MIN_ZOOM) {
-            zoomLevel /= ZOOM_FACTOR;
-            repaint();
-        }
+        zoomLevel /= ZOOM_FACTOR;
+        repaint();
     }
 
     public void resetZoom() {
@@ -469,9 +454,6 @@ public class MapPanel extends JPanel implements KeyListener {
         double scaleX = getWidth() / bufferedSpanX;
         double scaleY = getHeight() / bufferedSpanY;
         double newZoom = Math.min(scaleX, scaleY);
-
-        // Clamp zoom to valid range
-        newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
 
         // Calculate pan to center the content
         double newPanX = getWidth() / 2.0 - centerX * newZoom;

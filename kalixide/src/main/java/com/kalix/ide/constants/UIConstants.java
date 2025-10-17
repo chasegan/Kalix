@@ -49,12 +49,6 @@ public final class UIConstants {
         /** Standard zoom factor for zoom in/out operations */
         public static final double ZOOM_FACTOR = 1.2;
 
-        /** Minimum allowed zoom level */
-        public static final double MIN_ZOOM = 0.1;
-
-        /** Maximum allowed zoom level */
-        public static final double MAX_ZOOM = 5.0;
-
         private Zoom() { throw new UnsupportedOperationException("Constants class"); }
     }
 

@@ -116,7 +116,28 @@ public class MapRenderer {
     }
 
     /**
-     * Renders the grid overlay in world coordinates.
+     * Calculates adaptive grid size based on zoom level.
+     * Uses powers of 2 to keep grid lines visually spaced at ~50 pixels on screen.
+     *
+     * @param zoomLevel Current zoom level
+     * @return Grid spacing in world coordinates (always a power of 2)
+     */
+    private int calculateAdaptiveGridSize(double zoomLevel) {
+        // Target screen spacing: 50 pixels
+        double targetScreenSpacing = 50.0;
+
+        // Calculate required world spacing
+        double worldSpacing = targetScreenSpacing / zoomLevel;
+
+        // Round to nearest power of 2
+        int power = (int) Math.round(Math.log(worldSpacing) / Math.log(2));
+        int gridSize = 1 << power; // 2^power
+
+        return gridSize;
+    }
+
+    /**
+     * Renders the grid overlay in world coordinates with adaptive spacing.
      *
      * @param g2d Graphics context (in world space)
      * @param panelWidth Panel width for viewport calculation
@@ -131,7 +152,14 @@ public class MapRenderer {
         // Get grid color from UI theme
         Color gridColor = getGridlineColor();
         g2d.setColor(gridColor);
-        g2d.setStroke(new BasicStroke(1));
+
+        // Set stroke width to maintain constant screen-space thickness (1 pixel)
+        // Since we're in world space, we need to compensate for zoom
+        float strokeWidth = (float) (1.0 / zoomLevel);
+        g2d.setStroke(new BasicStroke(strokeWidth));
+
+        // Calculate adaptive grid size based on zoom level (powers of 2)
+        int adaptiveGridSize = calculateAdaptiveGridSize(zoomLevel);
 
         // Calculate the visible world bounds (accounting for pan and zoom transforms)
         int viewWidth = (int) (panelWidth / zoomLevel);
@@ -142,15 +170,15 @@ public class MapRenderer {
         int worldBottom = worldTop + viewHeight;
 
         // Draw vertical lines - aligned to world grid
-        int startX = (worldLeft / GRID_SIZE) * GRID_SIZE;  // Snap to grid
-        for (int x = startX; x <= worldRight + GRID_SIZE; x += GRID_SIZE) {
-            g2d.drawLine(x, worldTop - GRID_SIZE, x, worldBottom + GRID_SIZE);
+        int startX = (worldLeft / adaptiveGridSize) * adaptiveGridSize;  // Snap to grid
+        for (int x = startX; x <= worldRight + adaptiveGridSize; x += adaptiveGridSize) {
+            g2d.drawLine(x, worldTop - adaptiveGridSize, x, worldBottom + adaptiveGridSize);
         }
 
         // Draw horizontal lines - aligned to world grid
-        int startY = (worldTop / GRID_SIZE) * GRID_SIZE;  // Snap to grid
-        for (int y = startY; y <= worldBottom + GRID_SIZE; y += GRID_SIZE) {
-            g2d.drawLine(worldLeft - GRID_SIZE, y, worldRight + GRID_SIZE, y);
+        int startY = (worldTop / adaptiveGridSize) * adaptiveGridSize;  // Snap to grid
+        for (int y = startY; y <= worldBottom + adaptiveGridSize; y += adaptiveGridSize) {
+            g2d.drawLine(worldLeft - adaptiveGridSize, y, worldRight + adaptiveGridSize, y);
         }
     }
 
