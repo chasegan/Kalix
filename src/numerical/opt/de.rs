@@ -59,8 +59,8 @@ pub struct DEConfig {
     /// Population size (NP)
     pub population_size: usize,
 
-    /// Maximum number of generations
-    pub max_generations: usize,
+    /// Termination criterion: stop after approximately this many function evaluations
+    pub termination_evaluations: usize,
 
     /// Differential weight F  [0, 2], typically 0.8
     pub f: f64,
@@ -82,7 +82,7 @@ impl Default for DEConfig {
     fn default() -> Self {
         Self {
             population_size: 50,
-            max_generations: 100,
+            termination_evaluations: 5000,  // 50 pop × 100 generations
             f: 0.8,
             cr: 0.9,
             seed: None,
@@ -167,8 +167,9 @@ impl DifferentialEvolution {
         let mut best_params = population[best_idx].clone();
         let mut fitness_history = vec![best_fitness];
 
-        // Main DE loop
-        for generation in 0..self.config.max_generations {
+        // Main DE loop - terminate based on evaluations
+        let mut generation = 0;
+        while n_evaluations < self.config.termination_evaluations {
 
             // Progress callback
             if let Some(ref callback) = self.config.progress_callback {
@@ -232,12 +233,13 @@ impl DifferentialEvolution {
             }
 
             fitness_history.push(best_fitness);
+            generation += 1;
         }
 
         // Final callback
         if let Some(ref callback) = self.config.progress_callback {
             let progress = DEProgress {
-                generation: self.config.max_generations,
+                generation,
                 best_fitness,
                 n_evaluations,
                 elapsed: start_time.elapsed(),
@@ -248,7 +250,7 @@ impl DifferentialEvolution {
         DEResult {
             best_params,
             best_fitness,
-            generations: self.config.max_generations,
+            generations: generation,
             n_evaluations,
             fitness_history,
             success: true,
@@ -381,7 +383,7 @@ mod tests {
     fn test_de_initialization() {
         let config = DEConfig {
             population_size: 20,
-            max_generations: 10,
+            termination_evaluations: 200,
             f: 0.8,
             cr: 0.9,
             seed: Some(42),
@@ -391,7 +393,7 @@ mod tests {
 
         let de = DifferentialEvolution::new(config);
         assert_eq!(de.config.population_size, 20);
-        assert_eq!(de.config.max_generations, 10);
+        assert_eq!(de.config.termination_evaluations, 200);
     }
 
     #[test]

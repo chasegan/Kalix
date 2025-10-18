@@ -194,14 +194,14 @@ fn main() {
         }
         Commands::Calibrate { config_file } => {
             use kalix::numerical::opt::{
-                CalibrationIniConfig, CalibrationProblem,
+                CalibrationConfig, AlgorithmParams, CalibrationProblem,
                 DifferentialEvolution, DEConfig, DEProgress
             };
             use kalix::io::calibration_config_io::load_observed_timeseries;
 
             // Load calibration configuration
             println!("Loading calibration configuration: {}", config_file);
-            let config = match CalibrationIniConfig::from_file(&config_file) {
+            let config = match CalibrationConfig::from_file(&config_file) {
                 Ok(cfg) => cfg,
                 Err(e) => {
                     eprintln!("Error loading calibration config: {}", e);
@@ -211,9 +211,9 @@ fn main() {
 
             if config.verbose {
                 println!("Objective function: {:?}", config.objective_function);
-                println!("Algorithm: {}", config.algorithm);
-                println!("Population size: {}", config.population_size);
-                println!("Max generations: {}", config.max_generations);
+                println!("Algorithm: {}", config.algorithm.name());
+                println!("Population size: {}", config.algorithm.population_size());
+                println!("Termination evaluations: {}", config.termination_evaluations);
                 println!("Number of parameters: {}", config.parameter_config.n_genes());
             }
 
@@ -251,15 +251,19 @@ fn main() {
             ).with_objective(config.objective_function);
 
             // Setup optimizer based on algorithm type
-            if config.algorithm != "DE" {
-                eprintln!("Error: Only 'DE' algorithm is currently supported");
-                std::process::exit(1);
-            }
+            let (population_size, de_f, de_cr) = match &config.algorithm {
+                AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
+                _ => {
+                    eprintln!("Error: Only 'DE' algorithm is currently supported");
+                    eprintln!("Requested algorithm: {}", config.algorithm.name());
+                    std::process::exit(1);
+                }
+            };
 
             println!("\n=== Starting Calibration ===");
             println!("Algorithm: Differential Evolution");
-            println!("Population size: {}", config.population_size);
-            println!("Max generations: {}", config.max_generations);
+            println!("Population size: {}", population_size);
+            println!("Termination evaluations: {}", config.termination_evaluations);
             println!("Parameters to optimize: {}", problem.config.n_genes());
             println!("Objective: {} (minimize)\n", config.objective_function.name());
 
@@ -267,10 +271,10 @@ fn main() {
             let report_freq = config.report_frequency;  // Capture value before moving
             let n_threads = config.n_threads;  // Capture value before moving
             let de_config = DEConfig {
-                population_size: config.population_size,
-                max_generations: config.max_generations,
-                f: config.de_f,
-                cr: config.de_cr,
+                population_size,
+                termination_evaluations: config.termination_evaluations,
+                f: de_f,
+                cr: de_cr,
                 seed: config.random_seed,
                 n_threads,
                 progress_callback: if config.verbose {
@@ -325,9 +329,9 @@ fn main() {
                 writeln!(&mut output, "Model file: {}", config.model_file).unwrap();
                 writeln!(&mut output, "Observed data: {}", config.observed_data_series).unwrap();
                 writeln!(&mut output, "Simulated series: {}\n", config.simulated_series).unwrap();
-                writeln!(&mut output, "Algorithm: {}", config.algorithm).unwrap();
+                writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
                 writeln!(&mut output, "Objective function: {}", config.objective_function.name()).unwrap();
-                writeln!(&mut output, "Population size: {}", config.population_size).unwrap();
+                writeln!(&mut output, "Population size: {}", population_size).unwrap();
                 writeln!(&mut output, "Generations: {}\n", result.generations).unwrap();
                 writeln!(&mut output, "Best objective value: {:.6}", result.best_fitness).unwrap();
                 writeln!(&mut output, "Function evaluations: {}\n", result.n_evaluations).unwrap();

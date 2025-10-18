@@ -13,14 +13,150 @@
 /// - Node/series names: case-sensitive (preserved as-is)
 
 use std::fs;
+use std::collections::HashMap;
 use crate::io::custom_ini_parser::IniDocument;
-use crate::numerical::opt::parameter_mapping::CalibrationConfig;
+use crate::numerical::opt::parameter_mapping::ParameterMappingConfig;
 use crate::numerical::opt::objectives::ObjectiveFunction;
 use crate::timeseries_input::TimeseriesInput;
 
-/// Calibration configuration loaded from INI file
+/// Algorithm-specific parameters for optimization
+#[derive(Debug, Clone, PartialEq)]
+pub enum AlgorithmParams {
+    /// Differential Evolution algorithm
+    DE {
+        population_size: usize,
+        f: f64,   // Mutation factor (typically 0.5-1.0)
+        cr: f64,  // Crossover rate (typically 0.8-0.95)
+    },
+    /// CMA-ES algorithm
+    CMAES {
+        population_size: usize,
+        sigma: f64,  // Initial step size
+    },
+    /// SCE-UA algorithm
+    SCEUA {
+        complexes: usize,
+        points_per_complex: usize,
+    },
+}
+
+impl AlgorithmParams {
+    /// Get the algorithm name as a string
+    pub fn name(&self) -> &str {
+        match self {
+            AlgorithmParams::DE { .. } => "DE",
+            AlgorithmParams::CMAES { .. } => "CMAES",
+            AlgorithmParams::SCEUA { .. } => "SCEUA",
+        }
+    }
+
+    /// Get population size (common across all algorithms)
+    pub fn population_size(&self) -> usize {
+        match self {
+            AlgorithmParams::DE { population_size, .. } => *population_size,
+            AlgorithmParams::CMAES { population_size, .. } => *population_size,
+            AlgorithmParams::SCEUA { complexes, points_per_complex } => complexes * points_per_complex,
+        }
+    }
+}
+
+/// Format-agnostic intermediate representation of calibration configuration
+///
+/// This structure represents configuration data as nested HashMaps,
+/// allowing it to be parsed from multiple formats (INI, JSON, etc.)
+/// before final validation and conversion to CalibrationConfig.
+struct CalibrationConfigData {
+    /// Sections mapped to their properties
+    /// All keys are stored in lowercase for case-insensitive lookup
+    sections: HashMap<String, HashMap<String, String>>,
+}
+
+impl CalibrationConfigData {
+    /// Parse from INI format
+    fn from_ini(content: &str) -> Result<Self, String> {
+        let ini = IniDocument::parse(content)?;
+        let mut sections = HashMap::new();
+
+        // Convert IniDocument to HashMap structure with lowercase keys
+        for (section_name, section) in &ini.sections {
+            let mut properties = HashMap::new();
+            for (prop_name, prop) in &section.properties {
+                // Store with lowercase key for case-insensitive lookup
+                // but preserve the original value (case-sensitive for paths, node names)
+                properties.insert(prop_name.to_lowercase(), prop.value.clone());
+            }
+            sections.insert(section_name.to_lowercase(), properties);
+        }
+
+        Ok(Self { sections })
+    }
+
+    /// Parse from JSON format
+    fn from_json(content: &str) -> Result<Self, String> {
+        // Parse JSON into a HashMap of HashMaps
+        let json_value: serde_json::Value = serde_json::from_str(content)
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        let json_obj = json_value.as_object()
+            .ok_or_else(|| "JSON root must be an object".to_string())?;
+
+        let mut sections = HashMap::new();
+
+        // Convert each section
+        for (section_name, section_value) in json_obj {
+            let section_obj = section_value.as_object()
+                .ok_or_else(|| format!("Section '{}' must be an object", section_name))?;
+
+            let mut properties = HashMap::new();
+            for (prop_name, prop_value) in section_obj {
+                // Convert value to string
+                let value_str = match prop_value {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    _ => return Err(format!("Property '{}.{}' must be a string, number, or boolean", section_name, prop_name)),
+                };
+
+                // Store with lowercase key for case-insensitive lookup
+                properties.insert(prop_name.to_lowercase(), value_str);
+            }
+
+            sections.insert(section_name.to_lowercase(), properties);
+        }
+
+        Ok(Self { sections })
+    }
+
+    /// Get a section by name (case-insensitive)
+    fn get_section(&self, name: &str) -> Option<&HashMap<String, String>> {
+        self.sections.get(&name.to_lowercase())
+    }
+
+    /// Get a property from a section (case-insensitive)
+    fn get_property(&self, section: &str, key: &str) -> Option<&str> {
+        self.get_section(section)
+            .and_then(|s| s.get(&key.to_lowercase()))
+            .map(|v| v.as_str())
+    }
+
+    /// Get a property or return error (case-insensitive)
+    fn require_property(&self, section: &str, key: &str) -> Result<&str, String> {
+        self.get_property(section, key)
+            .ok_or_else(|| format!("Missing '{}' property in [{}] section", key, section))
+    }
+
+    /// Check if a section exists (case-insensitive)
+    fn has_section(&self, name: &str) -> bool {
+        self.sections.contains_key(&name.to_lowercase())
+    }
+}
+
+/// Calibration configuration (format-agnostic)
+///
+/// This structure represents a complete calibration run configuration,
+/// parsed from either INI or JSON format.
 #[derive(Debug, Clone)]
-pub struct CalibrationIniConfig {
+pub struct CalibrationConfig {
     // [General] section
     pub model_file: String,
     pub observed_data_series: String,  // Will be "file.csv.name" or "file.csv.N"
@@ -28,121 +164,154 @@ pub struct CalibrationIniConfig {
     pub objective_function: ObjectiveFunction,
     pub output_file: Option<String>,
 
-    // [Algorithm] section
-    pub algorithm: String,  // Case-insensitive, normalized to uppercase
-    pub population_size: usize,
-    pub max_generations: usize,
-    pub de_f: f64,
-    pub de_cr: f64,
+    // [Algorithm] section - Common parameters
+    pub termination_evaluations: usize,  // Termination criterion: stop after approximately this many function evaluations
     pub random_seed: Option<u64>,
     pub n_threads: usize,
 
+    // [Algorithm] section - Algorithm-specific parameters
+    pub algorithm: AlgorithmParams,
+
     // [Parameters] section
-    pub parameter_config: CalibrationConfig,
+    pub parameter_config: ParameterMappingConfig,
 
     // [Reporting] section
     pub report_frequency: usize,
     pub verbose: bool,
 }
 
-impl CalibrationIniConfig {
-    /// Load calibration configuration from INI file
+impl CalibrationConfig {
+    /// Load calibration configuration from file (auto-detect format)
     pub fn from_file(path: &str) -> Result<Self, String> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read calibration config file '{}': {}", path, e))?;
 
-        Self::from_string(&content)
+        // Auto-detect format based on file extension
+        if path.ends_with(".json") {
+            Self::from_json(&content)
+        } else {
+            // Default to INI format
+            Self::from_ini(&content)
+        }
     }
 
     /// Parse calibration configuration from INI string
-    pub fn from_string(content: &str) -> Result<Self, String> {
-        let ini = IniDocument::parse(content)?;
+    pub fn from_ini(content: &str) -> Result<Self, String> {
+        let data = CalibrationConfigData::from_ini(content)?;
+        Self::from_data(data)
+    }
 
-        // Parse [General] section (case-insensitive)
-        let general = Self::get_section_ci(&ini, "General")?;
+    /// Parse calibration configuration from JSON string
+    pub fn from_json(content: &str) -> Result<Self, String> {
+        let data = CalibrationConfigData::from_json(content)?;
+        Self::from_data(data)
+    }
 
-        let model_file = Self::get_property_ci(&general, "model_file")?
-            .value.clone();  // Case-sensitive value
+    /// Build configuration from intermediate data (shared validation logic)
+    fn from_data(data: CalibrationConfigData) -> Result<Self, String> {
+        // Parse [General] section
+        let model_file = data.require_property("general", "model_file")?.to_string();
 
         // Parse observed data series (by name or index)
-        let observed_data_series = if let Some(prop) = Self::try_get_property_ci(&general, "observed_data_by_name") {
-            prop.value.clone()  // Case-sensitive value
-        } else if let Some(prop) = Self::try_get_property_ci(&general, "observed_data_by_index") {
-            prop.value.clone()  // Case-sensitive value
+        let observed_data_series = if let Some(val) = data.get_property("general", "observed_data_by_name") {
+            val.to_string()
+        } else if let Some(val) = data.get_property("general", "observed_data_by_index") {
+            val.to_string()
         } else {
             return Err("Must specify either 'observed_data_by_name' or 'observed_data_by_index' in [General] section".to_string());
         };
 
-        let simulated_series = Self::get_property_ci(&general, "simulated_series")?
-            .value.clone();  // Case-sensitive value
+        let simulated_series = data.require_property("general", "simulated_series")?.to_string();
 
-        let objective_str = Self::get_property_ci(&general, "objective_function")?
-            .value.clone();
-        let objective_function = Self::parse_objective_function(&objective_str)?;
+        let objective_str = data.require_property("general", "objective_function")?;
+        let objective_function = Self::parse_objective_function(objective_str)?;
 
-        let output_file = Self::try_get_property_ci(&general, "output_file")
-            .map(|p| p.value.clone());  // Case-sensitive value
+        let output_file = data.get_property("general", "output_file")
+            .map(|s| s.to_string());
 
-        // Parse [Algorithm] section (case-insensitive)
-        let algorithm_section = Self::get_section_ci(&ini, "Algorithm")?;
+        // Parse [Algorithm] section - Common parameters
+        let termination_evaluations = data.require_property("algorithm", "termination_evaluations")?
+            .parse::<usize>()
+            .map_err(|_| "Invalid 'termination_evaluations' value")?;
 
-        let algorithm = Self::get_property_ci(&algorithm_section, "algorithm")?
-            .value.to_uppercase();  // Normalize to uppercase
+        let random_seed = data.get_property("algorithm", "random_seed")
+            .and_then(|p| p.parse::<u64>().ok());
 
-        let population_size = Self::get_property_ci(&algorithm_section, "population_size")?
-            .value.parse::<usize>()
-            .map_err(|_| "Invalid 'population_size' value")?;
-
-        let max_generations = Self::get_property_ci(&algorithm_section, "max_generations")?
-            .value.parse::<usize>()
-            .map_err(|_| "Invalid 'max_generations' value")?;
-
-        let de_f = Self::try_get_property_ci(&algorithm_section, "de_f")
-            .and_then(|p| p.value.parse::<f64>().ok())
-            .unwrap_or(0.8);
-
-        let de_cr = Self::try_get_property_ci(&algorithm_section, "de_cr")
-            .and_then(|p| p.value.parse::<f64>().ok())
-            .unwrap_or(0.9);
-
-        let random_seed = Self::try_get_property_ci(&algorithm_section, "random_seed")
-            .and_then(|p| p.value.parse::<u64>().ok());
-
-        let n_threads = Self::try_get_property_ci(&algorithm_section, "n_threads")
-            .and_then(|p| p.value.parse::<usize>().ok())
+        let n_threads = data.get_property("algorithm", "n_threads")
+            .and_then(|p| p.parse::<usize>().ok())
             .unwrap_or(1);  // Default to single-threaded
 
-        // Parse [Parameters] section (keys are case-insensitive, but values are case-sensitive)
-        let parameters_section = Self::get_section_ci(&ini, "Parameters")?;
+        // Parse algorithm-specific parameters
+        let algorithm_name = data.require_property("algorithm", "algorithm")?
+            .to_uppercase();
+
+        let algorithm = match algorithm_name.as_str() {
+            "DE" => {
+                let population_size = data.require_property("algorithm", "population_size")?
+                    .parse::<usize>()
+                    .map_err(|_| "Invalid 'population_size' for DE")?;
+
+                let f = data.get_property("algorithm", "de_f")
+                    .and_then(|p| p.parse::<f64>().ok())
+                    .unwrap_or(0.8);
+
+                let cr = data.get_property("algorithm", "de_cr")
+                    .and_then(|p| p.parse::<f64>().ok())
+                    .unwrap_or(0.9);
+
+                AlgorithmParams::DE { population_size, f, cr }
+            },
+            "CMAES" => {
+                let population_size = data.require_property("algorithm", "population_size")?
+                    .parse::<usize>()
+                    .map_err(|_| "Invalid 'population_size' for CMA-ES")?;
+
+                let sigma = data.require_property("algorithm", "sigma")?
+                    .parse::<f64>()
+                    .map_err(|_| "Invalid 'sigma' for CMA-ES")?;
+
+                AlgorithmParams::CMAES { population_size, sigma }
+            },
+            "SCEUA" | "SCE-UA" => {
+                let complexes = data.require_property("algorithm", "complexes")?
+                    .parse::<usize>()
+                    .map_err(|_| "Invalid 'complexes' for SCE-UA")?;
+
+                let points_per_complex = data.get_property("algorithm", "points_per_complex")
+                    .and_then(|p| p.parse::<usize>().ok())
+                    .unwrap_or(19);  // Common default
+
+                AlgorithmParams::SCEUA { complexes, points_per_complex }
+            },
+            _ => return Err(format!(
+                "Unknown algorithm: '{}'. Valid options: DE, CMAES, SCEUA",
+                algorithm_name
+            )),
+        };
+
+        // Parse [Parameters] section
+        let parameters_section = data.get_section("parameters")
+            .ok_or_else(|| "Missing [Parameters] section".to_string())?;
 
         let mut param_strings = Vec::new();
-        for (key, prop) in &parameters_section.properties {
+        for (key, value) in parameters_section {
             // Each property is a parameter mapping: "node.x.y = log_range(g(1), min, max)"
-            // Key and value both preserved as-is (values are case-sensitive for node names)
-            let mapping_str = format!("{} = {}", key, prop.value);
+            let mapping_str = format!("{} = {}", key, value);
             param_strings.push(mapping_str);
         }
 
-        let parameter_config = CalibrationConfig::from_strings(
+        let parameter_config = ParameterMappingConfig::from_strings(
             param_strings.iter().map(|s| s.as_str()).collect()
         )?;
 
-        // Parse [Reporting] section (optional, case-insensitive)
-        let report_frequency = if let Some(section) = Self::try_get_section_ci(&ini, "Reporting") {
-            Self::try_get_property_ci(&section, "report_frequency")
-                .and_then(|p| p.value.parse::<usize>().ok())
-                .unwrap_or(10)
-        } else {
-            10
-        };
+        // Parse [Reporting] section (optional)
+        let report_frequency = data.get_property("reporting", "report_frequency")
+            .and_then(|p| p.parse::<usize>().ok())
+            .unwrap_or(10);
 
-        let verbose = if let Some(section) = Self::try_get_section_ci(&ini, "Reporting") {
-            Self::try_get_property_ci(&section, "verbose")
-                .map(|p| p.value.to_lowercase() == "true")
-                .unwrap_or(false)
-        } else {
-            false
-        };
+        let verbose = data.get_property("reporting", "verbose")
+            .map(|p| p.to_lowercase() == "true")
+            .unwrap_or(false);
 
         Ok(Self {
             model_file,
@@ -150,61 +319,14 @@ impl CalibrationIniConfig {
             simulated_series,
             objective_function,
             output_file,
-            algorithm,
-            population_size,
-            max_generations,
-            de_f,
-            de_cr,
+            termination_evaluations,
             random_seed,
             n_threads,
+            algorithm,
             parameter_config,
             report_frequency,
             verbose,
         })
-    }
-
-    /// Get section by name (case-insensitive)
-    fn get_section_ci<'a>(ini: &'a IniDocument, name: &str) -> Result<&'a crate::io::custom_ini_parser::IniSection, String> {
-        let name_lower = name.to_lowercase();
-        for (section_name, section) in &ini.sections {
-            if section_name.to_lowercase() == name_lower {
-                return Ok(section);
-            }
-        }
-        Err(format!("Missing [{}] section in calibration config", name))
-    }
-
-    /// Try to get section by name (case-insensitive), returns None if not found
-    fn try_get_section_ci<'a>(ini: &'a IniDocument, name: &str) -> Option<&'a crate::io::custom_ini_parser::IniSection> {
-        let name_lower = name.to_lowercase();
-        for (section_name, section) in &ini.sections {
-            if section_name.to_lowercase() == name_lower {
-                return Some(section);
-            }
-        }
-        None
-    }
-
-    /// Get property by name (case-insensitive)
-    fn get_property_ci<'a>(section: &'a crate::io::custom_ini_parser::IniSection, name: &str) -> Result<&'a crate::io::custom_ini_parser::IniProperty, String> {
-        let name_lower = name.to_lowercase();
-        for (prop_name, prop) in &section.properties {
-            if prop_name.to_lowercase() == name_lower {
-                return Ok(prop);
-            }
-        }
-        Err(format!("Missing '{}' property", name))
-    }
-
-    /// Try to get property by name (case-insensitive), returns None if not found
-    fn try_get_property_ci<'a>(section: &'a crate::io::custom_ini_parser::IniSection, name: &str) -> Option<&'a crate::io::custom_ini_parser::IniProperty> {
-        let name_lower = name.to_lowercase();
-        for (prop_name, prop) in &section.properties {
-            if prop_name.to_lowercase() == name_lower {
-                return Some(prop);
-            }
-        }
-        None
     }
 
     /// Parse objective function string to enum (case-insensitive)
@@ -299,7 +421,7 @@ output_file = results.txt
 [Algorithm]
 algorithm = DE
 population_size = 30
-max_generations = 50
+termination_evaluations = 50
 de_f = 0.8
 de_cr = 0.9
 
@@ -312,18 +434,27 @@ report_frequency = 5
 verbose = true
 "#;
 
-        let config = CalibrationIniConfig::from_string(ini_content).unwrap();
+        let config = CalibrationConfig::from_ini(ini_content).unwrap();
 
         assert_eq!(config.model_file, "test.kai");
         assert_eq!(config.observed_data_series, "obs.csv.flow");
         assert_eq!(config.simulated_series, "node.gr4j.dsflow");
         assert_eq!(config.objective_function, ObjectiveFunction::NashSutcliffe);
-        assert_eq!(config.algorithm, "DE");
-        assert_eq!(config.population_size, 30);
-        assert_eq!(config.max_generations, 50);
+        assert_eq!(config.algorithm.name(), "DE");
+        assert_eq!(config.algorithm.population_size(), 30);
+        assert_eq!(config.termination_evaluations, 50);
         assert_eq!(config.parameter_config.n_genes(), 2);
         assert_eq!(config.report_frequency, 5);
         assert_eq!(config.verbose, true);
+
+        // Verify algorithm-specific parameters
+        match &config.algorithm {
+            AlgorithmParams::DE { f, cr, .. } => {
+                assert_eq!(*f, 0.8);
+                assert_eq!(*cr, 0.9);
+            },
+            _ => panic!("Expected DE algorithm"),
+        }
     }
 
     #[test]
@@ -338,7 +469,7 @@ OBJECTIVE_FUNCTION = nse
 [algorithm]
 ALGORITHM = de
 POPULATION_SIZE = 20
-MAX_GENERATIONS = 10
+TERMINATION_EVALUATIONS = 10
 
 [parameters]
 Node.GR4J.X1 = log_range(g(1), 100, 1200)
@@ -347,7 +478,7 @@ Node.GR4J.X1 = log_range(g(1), 100, 1200)
 VERBOSE = TRUE
 "#;
 
-        let config = CalibrationIniConfig::from_string(ini_content).unwrap();
+        let config = CalibrationConfig::from_ini(ini_content).unwrap();
 
         // File paths are case-sensitive
         assert_eq!(config.model_file, "Test.KAI");
@@ -360,7 +491,8 @@ VERBOSE = TRUE
         assert_eq!(config.objective_function, ObjectiveFunction::NashSutcliffe);
 
         // Algorithm is normalized to uppercase
-        assert_eq!(config.algorithm, "DE");
+        assert_eq!(config.algorithm.name(), "DE");
+        assert_eq!(config.algorithm.population_size(), 20);
 
         assert_eq!(config.verbose, true);
     }
@@ -368,21 +500,21 @@ VERBOSE = TRUE
     #[test]
     fn test_parse_objective_functions() {
         assert_eq!(
-            CalibrationIniConfig::parse_objective_function("NSE").unwrap(),
+            CalibrationConfig::parse_objective_function("NSE").unwrap(),
             ObjectiveFunction::NashSutcliffe
         );
         assert_eq!(
-            CalibrationIniConfig::parse_objective_function("nse").unwrap(),
+            CalibrationConfig::parse_objective_function("nse").unwrap(),
             ObjectiveFunction::NashSutcliffe
         );
         assert_eq!(
-            CalibrationIniConfig::parse_objective_function("KGE").unwrap(),
+            CalibrationConfig::parse_objective_function("KGE").unwrap(),
             ObjectiveFunction::KlingGupta
         );
         assert_eq!(
-            CalibrationIniConfig::parse_objective_function("kge").unwrap(),
+            CalibrationConfig::parse_objective_function("kge").unwrap(),
             ObjectiveFunction::KlingGupta
         );
-        assert!(CalibrationIniConfig::parse_objective_function("INVALID").is_err());
+        assert!(CalibrationConfig::parse_objective_function("INVALID").is_err());
     }
 }

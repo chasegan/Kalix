@@ -151,9 +151,9 @@ impl ParameterMapping {
     }
 }
 
-/// Configuration for calibration with gene-based parameter system
+/// Configuration for parameter mappings with gene-based system
 #[derive(Clone, Debug)]
-pub struct CalibrationConfig {
+pub struct ParameterMappingConfig {
     /// List of parameter mappings
     pub mappings: Vec<ParameterMapping>,
 
@@ -161,7 +161,7 @@ pub struct CalibrationConfig {
     n_genes: usize,
 }
 
-impl CalibrationConfig {
+impl ParameterMappingConfig {
     /// Create empty configuration
     pub fn new() -> Self {
         Self {
@@ -179,7 +179,7 @@ impl CalibrationConfig {
     ///     "node.sacramento_a.lzfpm = log_range(g(2), 1, 300)",
     ///     "node.sacramento_b.adimp = log_range(g(1), 1E-05, 0.15)",  // Tied!
     /// ];
-    /// let config = CalibrationConfig::from_strings(strings)?;
+    /// let config = ParameterMappingConfig::from_strings(strings)?;
     /// ```
     pub fn from_strings(strings: Vec<&str>) -> Result<Self, String> {
         let mut mappings = vec![];
@@ -277,7 +277,7 @@ mod tests {
             "node.sac_a.laguh = lin_range(g(2), 0, 3)",
         ];
 
-        let config = CalibrationConfig::from_strings(strings).unwrap();
+        let config = ParameterMappingConfig::from_strings(strings).unwrap();
         assert_eq!(config.n_genes(), 2);
         assert_eq!(config.mappings.len(), 3);
     }

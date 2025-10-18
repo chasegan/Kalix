@@ -14,13 +14,13 @@ pub mod calibration;
 // Re-exports for convenience
 pub use optimisable::{Optimisable, clone_multi};
 pub use calibratable::Calibratable;
-pub use parameter_mapping::{ParameterMapping, CalibrationConfig, Transform};
+pub use parameter_mapping::{ParameterMapping, ParameterMappingConfig, Transform};
 pub use objectives::ObjectiveFunction;
 pub use calibration::CalibrationProblem;
 pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
 
 // Re-export IO types for convenience
-pub use crate::io::calibration_config_io::CalibrationIniConfig;
+pub use crate::io::calibration_config_io::{CalibrationConfig, AlgorithmParams};
 
 // Legacy trait (to be potentially updated/replaced)
 #[allow(unused)]

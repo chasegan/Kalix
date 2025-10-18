@@ -12,14 +12,14 @@ use crate::model::Model;
 use crate::nodes::NodeEnum;
 use super::optimisable::Optimisable;
 use super::calibratable::Calibratable;
-use super::parameter_mapping::CalibrationConfig;
+use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
 
 /// Wraps a Model to make it Optimisable
 ///
 /// # Example
 /// ```ignore
-/// let config = CalibrationConfig::from_strings(vec![
+/// let config = ParameterMappingConfig::from_strings(vec![
 ///     "node.sacramento_a.lztwm = log_range(g(1), 50, 300)",
 ///     "node.sacramento_a.uzk = log_range(g(2), 0.1, 0.7)",
 /// ])?;
@@ -36,7 +36,7 @@ pub struct CalibrationProblem {
     pub model: Model,
 
     /// Gene-based parameter configuration
-    pub config: CalibrationConfig,
+    pub config: ParameterMappingConfig,
 
     /// Observed data for comparison
     pub observed_data: Vec<f64>,
@@ -52,7 +52,7 @@ impl CalibrationProblem {
     /// Create a new calibration problem
     pub fn new(
         model: Model,
-        config: CalibrationConfig,
+        config: ParameterMappingConfig,
         observed_data: Vec<f64>,
         simulated_series_name: String,
     ) -> Self {
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn test_calibration_problem_creation() {
         let model = Model::new();
-        let config = CalibrationConfig::new();
+        let config = ParameterMappingConfig::new();
         let observed = vec![1.0, 2.0, 3.0];
 
         let problem = CalibrationProblem::new(
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn test_with_objective() {
         let model = Model::new();
-        let config = CalibrationConfig::new();
+        let config = ParameterMappingConfig::new();
         let observed = vec![1.0, 2.0, 3.0];
 
         let problem = CalibrationProblem::new(
