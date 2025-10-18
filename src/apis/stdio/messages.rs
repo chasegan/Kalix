@@ -72,12 +72,18 @@ pub fn create_busy_message(kalixcli_uid: String, command: String, interruptible:
     Message::new(MSG_BUSY, Some(kalixcli_uid), fields)
 }
 
-pub fn create_progress_message(kalixcli_uid: String, current: i64, total: i64, task_type: String) -> Message {
-    let fields = serde_json::json!({
+pub fn create_progress_message(kalixcli_uid: String, current: i64, total: i64, task_type: String, data: Option<Vec<f64>>) -> Message {
+    let mut fields = serde_json::json!({
         "i": current,
         "n": total,
         "t": task_type
     });
+
+    // Add optional data field if provided
+    if let Some(d) = data {
+        fields.as_object_mut().unwrap().insert("d".to_string(), serde_json::json!(d));
+    }
+
     Message::new(MSG_PROGRESS, Some(kalixcli_uid), fields)
 }
 
@@ -162,7 +168,12 @@ pub struct ProgressInfo {
     pub percent_complete: f64,
     pub current_step: String,
     pub estimated_remaining: Option<String>,
-    pub details: Option<serde_json::Value>,
+    pub data: Option<Vec<f64>>,  // Optional numeric data (e.g., best fitness for calibration)
+
+    // Optional override values for STDIO protocol (if not provided, uses percent_complete/100)
+    pub current: Option<i64>,    // Current progress value (e.g., evaluations)
+    pub total: Option<i64>,      // Total value (e.g., termination_evaluations)
+    pub task_type: Option<String>, // Task type (defaults to "sim")
 }
 
 #[cfg(test)]
@@ -179,11 +190,22 @@ mod tests {
 
     #[test]
     fn test_progress_message_creation() {
-        let msg = create_progress_message("test_uid_123".to_string(), 100, 1000, "sim".to_string());
+        let msg = create_progress_message("test_uid_123".to_string(), 100, 1000, "sim".to_string(), None);
         assert_eq!(msg.m, "prg");
         assert_eq!(msg.fields["i"], 100);
         assert_eq!(msg.fields["n"], 1000);
         assert_eq!(msg.fields["t"], "sim");
+        assert!(msg.fields.get("d").is_none());
+    }
+
+    #[test]
+    fn test_progress_message_with_data() {
+        let msg = create_progress_message("test_uid_123".to_string(), 100, 1000, "cal".to_string(), Some(vec![0.856]));
+        assert_eq!(msg.m, "prg");
+        assert_eq!(msg.fields["i"], 100);
+        assert_eq!(msg.fields["n"], 1000);
+        assert_eq!(msg.fields["t"], "cal");
+        assert_eq!(msg.fields["d"][0], 0.856);
     }
 
     #[test]

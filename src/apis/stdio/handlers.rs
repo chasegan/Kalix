@@ -132,12 +132,18 @@ fn handle_command_message(
     let session_id = session.id.clone();
     let transport_clone = transport.stdout.clone();
     let progress_callback = Box::new(move |progress: ProgressInfo| {
+        // Use override values if provided, otherwise use percent-based progress
+        let current = progress.current.unwrap_or(progress.percent_complete as i64);
+        let total = progress.total.unwrap_or(100);
+        let task_type = progress.task_type.unwrap_or_else(|| "sim".to_string());
+
         // Convert progress to protocol format and send
         let progress_msg = create_progress_message(
             session_id.clone(),
-            progress.percent_complete as i64,
-            100, // Total is 100 for percentage-based progress
-            "sim".to_string(), // Default task type
+            current,
+            total,
+            task_type,
+            progress.data, // Pass through any data field
         );
 
         if let Ok(json) = serde_json::to_string(&progress_msg) {
@@ -291,13 +297,15 @@ pub fn send_progress_update(
     transport: &Transport,
     current: i64,
     total: i64,
-    task_type: &str
+    task_type: &str,
+    data: Option<Vec<f64>>
 ) -> Result<(), StdioError> {
     let progress_msg = create_progress_message(
         session.id.clone(),
         current,
         total,
-        task_type.to_string()
+        task_type.to_string(),
+        data
     );
     transport.send_message(&progress_msg)?;
     Ok(())

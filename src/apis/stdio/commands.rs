@@ -70,6 +70,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelFileCommand));
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
+        registry.register(Arc::new(RunCalibrationCommand));
         registry.register(Arc::new(GetResultCommand));
         registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
@@ -215,11 +216,10 @@ impl Command for TestProgressCommand {
                 } else {
                     None
                 },
-                details: Some(serde_json::json!({
-                    "current_step": i,
-                    "total_steps": total_steps,
-                    "duration_per_step_ms": step_duration.as_millis()
-                })),
+                data: None,
+                current: None,
+                total: None,
+                task_type: None,
             };
             
             progress_sender(progress);
@@ -585,11 +585,10 @@ impl Command for RunSimulationCommand {
                         percent_complete: overall_progress,
                         current_step: format!("Running simulation - Processing timestep {} of {}", current_step + 1, total_steps),
                         estimated_remaining: None,
-                        details: Some(serde_json::json!({
-                            "current_timestep": current_step + 1,
-                            "total_timesteps": total_steps,
-                            "simulation_progress": format!("{:.1}%", sim_progress)
-                        })),
+                        data: None,
+                        current: None,
+                        total: None,
+                        task_type: None,
                     });
                 }
             })
@@ -601,11 +600,10 @@ impl Command for RunSimulationCommand {
             percent_complete: 0.0,
             current_step: format!("Running simulation - Processing timestep 1 of {}", total_timesteps),
             estimated_remaining: None,
-            details: Some(serde_json::json!({
-                "current_timestep": 0,
-                "total_timesteps": total_timesteps,
-                "simulation_progress": "0.0%"
-            })),
+            data: None,
+            current: None,
+            total: None,
+            task_type: None,
         });
 
         // Simulation phase - 20% to 90%
@@ -629,11 +627,10 @@ impl Command for RunSimulationCommand {
             percent_complete: 100.0,
             current_step: format!("Running simulation - Processing timestep {} of {}", total_timesteps, total_timesteps),
             estimated_remaining: None,
-            details: Some(serde_json::json!({
-                "current_timestep": total_timesteps - 1,
-                "total_timesteps": total_timesteps,
-                "simulation_progress": "100.0%"
-            })),
+            data: None,
+            current: None,
+            total: None,
+            task_type: None,
         });
 
         // Collect output information
@@ -658,6 +655,157 @@ impl Command for RunSimulationCommand {
             ),
             "execution_time_seconds": simulation_duration.as_secs(),
             "available_results": ["timeseries_data", "summary_statistics"]
+        }))
+    }
+}
+
+pub struct RunCalibrationCommand;
+
+impl Command for RunCalibrationCommand {
+    fn name(&self) -> &str {
+        "run_calibration"
+    }
+
+    fn description(&self) -> &str {
+        "Run model calibration with specified configuration"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![
+            ParameterSpec {
+                name: "config".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                default: None,
+            },
+            ParameterSpec {
+                name: "model_ini".to_string(),
+                param_type: "string".to_string(),
+                required: false,
+                default: None,
+            }
+        ]
+    }
+
+    fn interruptible(&self) -> bool {
+        true
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        params: serde_json::Value,
+        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        use crate::numerical::opt::{
+            CalibrationConfig, AlgorithmParams, CalibrationProblem,
+            DifferentialEvolution, DEConfig, DEProgress
+        };
+        use crate::io::calibration_config_io::load_observed_timeseries;
+
+        // Extract config string parameter
+        let config_str = params.get("config")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CommandError::InvalidParameters("config is required".to_string()))?;
+
+        // Parse calibration configuration (auto-detect INI or JSON)
+        let config = if config_str.trim_start().starts_with('{') {
+            CalibrationConfig::from_json(config_str)
+        } else {
+            CalibrationConfig::from_ini(config_str)
+        }.map_err(|e| CommandError::InvalidParameters(format!("Failed to parse calibration config: {}", e)))?;
+
+        // Load model: prioritize inline model_ini parameter, otherwise use model_file from config
+        let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {
+            // Use inline model (takes precedence)
+            IniModelIO::new().read_model_string(model_ini)
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?
+        } else {
+            // Fallback to model_file from config
+            IniModelIO::new().read_model_file(&config.model_file)
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", config.model_file, e)))?
+        };
+
+        // Load observed data
+        let observed_timeseries = load_observed_timeseries(&config.observed_data_series)
+            .map_err(|e| CommandError::ExecutionError(format!("Failed to load observed data: {}", e)))?;
+
+        let observed_data = observed_timeseries.timeseries.values.clone();
+
+        // Create calibration problem
+        let mut problem = CalibrationProblem::new(
+            model,
+            config.parameter_config.clone(),
+            observed_data,
+            config.simulated_series.clone(),
+        ).with_objective(config.objective_function);
+
+        // Extract algorithm parameters
+        let (population_size, de_f, de_cr) = match &config.algorithm {
+            AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
+            _ => {
+                return Err(CommandError::ExecutionError(
+                    format!("Only 'DE' algorithm is currently supported, got: {}", config.algorithm.name())
+                ));
+            }
+        };
+
+        // Get interrupt flag
+        let interrupt_flag = std::sync::Arc::clone(&session.interrupt_flag);
+
+        // Create progress callback that sends STDIO progress messages
+        let termination_evals = config.termination_evaluations;
+        let progress_callback = Box::new(move |progress: &DEProgress| {
+            // Check for interrupt
+            if interrupt_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+
+            progress_sender(ProgressInfo {
+                percent_complete: (progress.n_evaluations as f64 / termination_evals as f64) * 100.0,
+                current_step: format!("{} evaluations, best fitness = {:.6}",
+                    progress.n_evaluations, progress.best_fitness),
+                estimated_remaining: None,
+                data: Some(vec![progress.best_fitness]),
+                current: Some(progress.n_evaluations as i64),
+                total: Some(termination_evals as i64),
+                task_type: Some("cal".to_string()),
+            });
+        });
+
+        // Create DE optimizer
+        let de_config = DEConfig {
+            population_size,
+            termination_evaluations: config.termination_evaluations,
+            f: de_f,
+            cr: de_cr,
+            seed: config.random_seed,
+            n_threads: config.n_threads,
+            progress_callback: Some(progress_callback),
+        };
+
+        let optimizer = DifferentialEvolution::new(de_config);
+
+        // Run optimization
+        let result = optimizer.optimize(&mut problem);
+
+        // Check if interrupted
+        if session.check_interrupt() {
+            return Err(CommandError::Interrupted);
+        }
+
+        // Get physical parameter values
+        let params_physical = problem.config.evaluate(&result.best_params);
+
+        // Build result
+        Ok(serde_json::json!({
+            "best_fitness": result.best_fitness,
+            "generations": result.generations,
+            "evaluations": result.n_evaluations,
+            "params_normalized": result.best_params,
+            "params_physical": params_physical.into_iter().collect::<std::collections::HashMap<_, _>>(),
+            "success": result.success,
+            "message": result.message
         }))
     }
 }
@@ -779,13 +927,14 @@ mod tests {
     fn test_command_registry() {
         let registry = CommandRegistry::new();
         let commands = registry.list_commands();
-        
+
         assert!(commands.contains(&"get_version"));
         assert!(commands.contains(&"get_state"));
         assert!(commands.contains(&"test_progress"));
         assert!(commands.contains(&"load_model_file"));
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
+        assert!(commands.contains(&"run_calibration"));
         assert!(commands.contains(&"get_result"));
         assert!(commands.contains(&"save_results"));
         assert!(commands.contains(&"echo"));
