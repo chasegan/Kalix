@@ -19,24 +19,24 @@ pub struct DEProgress {
     /// Current generation number
     pub generation: usize,
 
-    /// Best fitness value so far
-    pub best_fitness: f64,
+    /// Best objective value so far (lower is better)
+    pub best_objective: f64,
 
     /// Total number of function evaluations performed
     pub n_evaluations: usize,
 
-    /// Elapsed time since optimization started
+    /// Elapsed time since optimisation started
     pub elapsed: Duration,
 }
 
-/// Result of a Differential Evolution optimization run
+/// Result of a Differential Evolution optimisation run
 #[derive(Debug, Clone)]
 pub struct DEResult {
-    /// Best parameter values found (normalized [0,1])
+    /// Best parameter values found (normalised [0,1])
     pub best_params: Vec<f64>,
 
     /// Best objective function value (lower is better)
-    pub best_fitness: f64,
+    pub best_objective: f64,
 
     /// Number of generations completed
     pub generations: usize,
@@ -44,8 +44,8 @@ pub struct DEResult {
     /// Number of function evaluations performed
     pub n_evaluations: usize,
 
-    /// History of best fitness per generation
-    pub fitness_history: Vec<f64>,
+    /// History of best objective per generation
+    pub objective_history: Vec<f64>,
 
     /// Whether optimization terminated successfully
     pub success: bool,
@@ -131,7 +131,7 @@ impl DifferentialEvolution {
             .collect();
 
         // Evaluate initial population
-        let mut fitness: Vec<f64> = vec![f64::INFINITY; self.config.population_size];
+        let mut objective: Vec<f64> = vec![f64::INFINITY; self.config.population_size];
         let mut n_evaluations = 0;
 
         for i in 0..self.config.population_size {
@@ -139,11 +139,11 @@ impl DifferentialEvolution {
                 Ok(_) => {
                     match problem.evaluate() {
                         Ok(f) => {
-                            fitness[i] = f;
+                            objective[i] = f;
                             n_evaluations += 1;
                         },
                         Err(e) => {
-                            // If evaluation fails, leave fitness as infinity (invalid solution)
+                            // If evaluation fails, leave objective as infinity (invalid solution)
                             eprintln!("Warning: Evaluation failed for individual {}: {}", i, e);
                         }
                     }
@@ -156,16 +156,16 @@ impl DifferentialEvolution {
 
         // Find initial best
         let mut best_idx = 0;
-        let mut best_fitness = fitness[0];
+        let mut best_objective = objective[0];
         for i in 1..self.config.population_size {
-            if fitness[i] < best_fitness {
-                best_fitness = fitness[i];
+            if objective[i] < best_objective {
+                best_objective = objective[i];
                 best_idx = i;
             }
         }
 
         let mut best_params = population[best_idx].clone();
-        let mut fitness_history = vec![best_fitness];
+        let mut objective_history = vec![best_objective];
 
         // Main DE loop - terminate based on evaluations
         let mut generation = 0;
@@ -175,7 +175,7 @@ impl DifferentialEvolution {
             if let Some(ref callback) = self.config.progress_callback {
                 let progress = DEProgress {
                     generation,
-                    best_fitness,
+                    best_objective,
                     n_evaluations,
                     elapsed: start_time.elapsed(),
                 };
@@ -212,7 +212,7 @@ impl DifferentialEvolution {
             }
 
             // Evaluate trials (parallel or sequential based on n_threads)
-            let trial_fitnesses = if self.config.n_threads > 1 {
+            let trial_objectives = if self.config.n_threads > 1 {
                 self.evaluate_parallel(problem, &trials, &mut n_evaluations)
             } else {
                 self.evaluate_sequential(problem, &trials, &mut n_evaluations)
@@ -220,19 +220,19 @@ impl DifferentialEvolution {
 
             // Selection: greedy replacement
             for i in 0..self.config.population_size {
-                if trial_fitnesses[i] < fitness[i] {
+                if trial_objectives[i] < objective[i] {
                     population[i] = trials[i].clone();
-                    fitness[i] = trial_fitnesses[i];
+                    objective[i] = trial_objectives[i];
 
                     // Update global best
-                    if trial_fitnesses[i] < best_fitness {
-                        best_fitness = trial_fitnesses[i];
+                    if trial_objectives[i] < best_objective {
+                        best_objective = trial_objectives[i];
                         best_params = population[i].clone();
                     }
                 }
             }
 
-            fitness_history.push(best_fitness);
+            objective_history.push(best_objective);
             generation += 1;
         }
 
@@ -240,7 +240,7 @@ impl DifferentialEvolution {
         if let Some(ref callback) = self.config.progress_callback {
             let progress = DEProgress {
                 generation,
-                best_fitness,
+                best_objective,
                 n_evaluations,
                 elapsed: start_time.elapsed(),
             };
@@ -249,10 +249,10 @@ impl DifferentialEvolution {
 
         DEResult {
             best_params,
-            best_fitness,
+            best_objective,
             generations: generation,
             n_evaluations,
-            fitness_history,
+            objective_history,
             success: true,
             message: "Optimization completed successfully".to_string(),
         }
@@ -315,9 +315,9 @@ impl DifferentialEvolution {
         let eval_counter = AtomicUsize::new(0);
 
         // Evaluate in parallel (zip trials with their corresponding problems)
-        let fitnesses = pool.install(|| {
+        let objectives = pool.install(|| {
             problems.par_iter_mut().zip(trials.par_iter()).map(|(thread_problem, trial)| {
-                let fitness = match thread_problem.set_params(trial) {
+                let objective = match thread_problem.set_params(trial) {
                     Ok(_) => {
                         match thread_problem.evaluate() {
                             Ok(f) => {
@@ -330,14 +330,14 @@ impl DifferentialEvolution {
                     Err(_) => f64::INFINITY,
                 };
 
-                fitness
+                objective
             }).collect()
         });
 
         // Update total evaluation count
         *n_evaluations += eval_counter.load(Ordering::Relaxed);
 
-        fitnesses
+        objectives
     }
 }
 

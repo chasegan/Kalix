@@ -49,7 +49,7 @@ pub struct OptimisationProblem {
 }
 
 impl OptimisationProblem {
-    /// Create a new calibration problem
+    /// Create a new optimisation problem
     pub fn new(
         model: Model,
         config: ParameterMappingConfig,
@@ -73,7 +73,7 @@ impl OptimisationProblem {
 
     /// Apply parameter values to the model
     ///
-    /// This maps from genes to model parameters using the CalibrationConfig,
+    /// This maps from genes to model parameters using the ParameterMappingConfig,
     /// then sets each parameter on the appropriate node.
     fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
         // Evaluate all mappings: genes -> (target, physical_value)
@@ -107,7 +107,7 @@ impl OptimisationProblem {
                 }
                 _ => {
                     return Err(format!(
-                        "Node '{}' (type: {}) does not support calibration",
+                        "Node '{}' (type: {}) does not support parameter optimisation",
                         node_name,
                         self.model.nodes[node_idx].get_type_as_string()
                     ));

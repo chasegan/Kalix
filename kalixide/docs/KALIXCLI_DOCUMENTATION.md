@@ -89,16 +89,16 @@ kalixcli sim model.ini
 
 ---
 
-#### `calibrate`
-Run model calibration using optimization algorithms.
+#### `optimise`
+Run model optimisation using optimization algorithms.
 
 **Usage:**
 ```bash
-kalixcli calibrate <CONFIG_FILE>
+kalixcli optimise <CONFIG_FILE>
 ```
 
 **Arguments:**
-- `CONFIG_FILE` (required): Path to calibration configuration file (INI format)
+- `CONFIG_FILE` (required): Path to optimisation configuration file (INI format)
 
 **Configuration Format:**
 The configuration file specifies:
@@ -111,11 +111,11 @@ The configuration file specifies:
 
 **Example:**
 ```bash
-# Run calibration with INI config
-kalixcli calibrate calibration.ini
+# Run optimisation with INI config
+kalixcli optimise optimisation.ini
 ```
 
-**See Also:** The `run_calibration` session command for interactive calibration via STDIO protocol.
+**See Also:** The `run_optimisation` session command for interactive optimisation via STDIO protocol.
 
 ---
 
@@ -202,18 +202,18 @@ Sent during long-running operations.
 {"m":"prg","uid":"X2vB3yCbrVqw","i":75,"n":100,"t":"sim"}
 ```
 
-**Example (calibration):**
+**Example (optimisation):**
 ```json
-{"m":"prg","uid":"X2vB3yCbrVqw","i":2450,"n":5000,"t":"cal","d":[0.856234]}
+{"m":"prg","uid":"X2vB3yCbrVqw","i":2450,"n":5000,"t":"opt","d":[0.856234]}
 ```
 
 **Fields:**
 - `m`: Message type ("prg")
 - `uid`: Session identifier
-- `i`: Current progress count (percentage for simulation, evaluations for calibration)
-- `n`: Total count for completion (100 for simulation, termination_evaluations for calibration)
-- `t`: Task type ("sim" for simulation, "cal" for calibration)
-- `d` (optional): Numeric data array (e.g., best fitness value for calibration)
+- `i`: Current progress count (percentage for simulation, evaluations for optimisation)
+- `n`: Total count for completion (100 for simulation, termination_evaluations for optimisation)
+- `t`: Task type ("sim" for simulation, "opt" for optimisation)
+- `d` (optional): Numeric data array (e.g., best objective value for optimisation)
 
 #### 4. Result Message (`res`)
 Sent when command execution completes successfully.
@@ -357,43 +357,43 @@ Execute model simulation (interruptible).
 - Task type: `"sim"`
 - Progress: `i` = percentage (0-100), `n` = 100
 
-##### `run_calibration`
-Execute model calibration using optimization algorithms (interruptible).
+##### `run_optimisation`
+Execute model optimisation using optimization algorithms (interruptible).
 
 **Parameters:**
-- `config` (required): Calibration configuration as INI string
+- `config` (required): Optimisation configuration as INI string
 - `model_ini` (optional): Inline model definition as INI string. If provided, overrides the `model_file` specified in the config
 
 **Example (using model file from config):**
 ```json
-{"m":"cmd","c":"run_calibration","p":{"config":"[General]\nmodel_file = model.ini\n..."}}
+{"m":"cmd","c":"run_optimisation","p":{"config":"[General]\nmodel_file = model.ini\n..."}}
 ```
 
 **Example (with inline model):**
 ```json
-{"m":"cmd","c":"run_calibration","p":{"config":"[General]\n...","model_ini":"[General]\ntimestep_length = 1d\n..."}}
+{"m":"cmd","c":"run_optimisation","p":{"config":"[General]\n...","model_ini":"[General]\ntimestep_length = 1d\n..."}}
 ```
 
 **Behavior:**
-- Long-running operation with progress updates including best fitness
+- Long-running operation with progress updates including best objective
 - Can be interrupted with stop message
 - Returns optimized parameter values (both normalized and physical)
 
 **Progress Updates:**
-- Task type: `"cal"`
+- Task type: `"opt"`
 - Progress: `i` = current evaluations, `n` = termination_evaluations
-- Data: `d` = array with single element containing best fitness value
+- Data: `d` = array with single element containing best objective value
 
 **Result Format:**
 ```json
 {
   "m":"res",
   "uid":"X2vB3yCbrVqw",
-  "cmd":"run_calibration",
+  "cmd":"run_optimisation",
   "exec_ms":125400.5,
   "ok":true,
   "r":{
-    "best_fitness":0.856234,
+    "best_objective":0.856234,
     "generations":98,
     "evaluations":4900,
     "params_normalized":[0.342,0.891,0.123,0.567],

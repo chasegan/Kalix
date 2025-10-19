@@ -4,7 +4,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-use crate::numerical::opt::calibratable::Calibratable;
+use crate::numerical::opt::optimisable_node::OptimisableNode;
 
 #[derive(Default, Clone)]
 pub struct Gr4jNode {
@@ -159,10 +159,10 @@ impl Node for Gr4jNode {
 }
 
 // ============================================================================
-// Calibratable Implementation
+// OptimisableNode Implementation
 // ============================================================================
 
-impl Calibratable for Gr4jNode {
+impl OptimisableNode for Gr4jNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         match name {
             "x1" => {

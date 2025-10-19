@@ -466,6 +466,6 @@ VERBOSE = TRUE
             OptimisationConfig::parse_objective_function("kge").unwrap(),
             ObjectiveFunction::KlingGupta
         );
-        assert!(CalibrationConfig::parse_objective_function("INVALID").is_err());
+        assert!(OptimisationConfig::parse_objective_function("INVALID").is_err());
     }
 }

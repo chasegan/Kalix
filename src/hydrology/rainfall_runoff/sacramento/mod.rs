@@ -22,7 +22,7 @@ pub struct Sacramento {
     unit_hydrograph: UHPrealloc32,
     laguh: f64,         // Optional parametrisation of a unit hydrograph's lag (use set_laguh() to modify)
 
-    // Parameters (public for calibration)
+    // Parameters (public for optimisation)
     pub adimp: f64,
     pub lzfpm: f64,
     pub lzfsm: f64,

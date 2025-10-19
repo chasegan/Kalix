@@ -49,9 +49,9 @@ enum Commands {
         #[arg(short, long)]
         verify_mass_balance: Option<String>,
     },
-    /// Run calibration
-    Calibrate {
-        /// Path to the calibration configuration file (.ini)
+    /// Run parameter optimisation
+    Optimise {
+        /// Path to the optimisation configuration file (.ini)
         config_file: String,
     },
 }
@@ -192,19 +192,19 @@ fn main() {
 
             println!("Done!");
         }
-        Commands::Calibrate { config_file } => {
+        Commands::Optimise { config_file } => {
             use kalix::numerical::opt::{
-                CalibrationConfig, AlgorithmParams, CalibrationProblem,
+                OptimisationConfig, AlgorithmParams, OptimisationProblem,
                 DifferentialEvolution, DEConfig, DEProgress
             };
-            use kalix::io::calibration_config_io::load_observed_timeseries;
+            use kalix::io::optimisation_config_io::load_observed_timeseries;
 
-            // Load calibration configuration
-            println!("Loading calibration configuration: {}", config_file);
-            let config = match CalibrationConfig::from_file(&config_file) {
+            // Load optimisation configuration
+            println!("Loading optimisation configuration: {}", config_file);
+            let config = match OptimisationConfig::from_file(&config_file) {
                 Ok(cfg) => cfg,
                 Err(e) => {
-                    eprintln!("Error loading calibration config: {}", e);
+                    eprintln!("Error loading optimisation config: {}", e);
                     std::process::exit(1);
                 }
             };
@@ -221,7 +221,7 @@ fn main() {
             let model_file = match &config.model_file {
                 Some(path) => path,
                 None => {
-                    eprintln!("Error: model_file must be specified in calibration config");
+                    eprintln!("Error: model_file must be specified in optimisation config");
                     std::process::exit(1);
                 }
             };
@@ -251,7 +251,7 @@ fn main() {
             }
 
             // Create calibration problem
-            let problem = CalibrationProblem::new(
+            let problem = OptimisationProblem::new(
                 model,
                 config.parameter_config.clone(),
                 observed_data,
@@ -268,7 +268,7 @@ fn main() {
                 }
             };
 
-            println!("\n=== Starting Calibration ===");
+            println!("\n=== Starting Optimisation ===");
             println!("Algorithm: Differential Evolution");
             println!("Population size: {}", population_size);
             println!("Termination evaluations: {}", config.termination_evaluations);
@@ -290,9 +290,9 @@ fn main() {
                         if progress.generation % report_freq == 0 {
                             let elapsed_secs = progress.elapsed.as_secs_f64();
                             println!(
-                                "Generation {:4}: fitness = {:.6} | evaluations = {:6} | time = {:.1}s",
+                                "Generation {:4}: objective = {:.6} | evaluations = {:6} | time = {:.1}s",
                                 progress.generation,
-                                progress.best_fitness,
+                                progress.best_objective,
                                 progress.n_evaluations,
                                 elapsed_secs
                             );
@@ -310,12 +310,12 @@ fn main() {
             let result = optimizer.optimize(&mut problem_mut);
 
             // Report results
-            println!("\n=== Calibration Complete ===");
+            println!("\n=== Optimisation Complete ===");
             println!("Status: {}", if result.success { "SUCCESS" } else { "FAILED" });
             println!("Message: {}", result.message);
             println!("Generations: {}", result.generations);
             println!("Function evaluations: {}", result.n_evaluations);
-            println!("Best objective value: {:.6}", result.best_fitness);
+            println!("Best objective value: {:.6}", result.best_objective);
             println!("\nOptimized Parameters (normalized [0,1]):");
             for (i, val) in result.best_params.iter().enumerate() {
                 println!("  g({}) = {:.6}", i + 1, val);
@@ -332,7 +332,7 @@ fn main() {
             if let Some(output_path) = config.output_file {
                 use std::fmt::Write as FmtWrite;
                 let mut output = String::new();
-                writeln!(&mut output, "=== Kalix Calibration Results ===").unwrap();
+                writeln!(&mut output, "=== Kalix Optimisation Results ===").unwrap();
                 writeln!(&mut output, "Configuration file: {}", config_file).unwrap();
                 writeln!(&mut output, "Model file: {}", model_file).unwrap();
                 writeln!(&mut output, "Observed data: {}", config.observed_data_series).unwrap();
@@ -341,7 +341,7 @@ fn main() {
                 writeln!(&mut output, "Objective function: {}", config.objective_function.name()).unwrap();
                 writeln!(&mut output, "Population size: {}", population_size).unwrap();
                 writeln!(&mut output, "Generations: {}\n", result.generations).unwrap();
-                writeln!(&mut output, "Best objective value: {:.6}", result.best_fitness).unwrap();
+                writeln!(&mut output, "Best objective value: {:.6}", result.best_objective).unwrap();
                 writeln!(&mut output, "Function evaluations: {}\n", result.n_evaluations).unwrap();
                 writeln!(&mut output, "Optimized Parameters:").unwrap();
                 for (target, value) in &param_values {

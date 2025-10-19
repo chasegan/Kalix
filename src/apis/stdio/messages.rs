@@ -168,7 +168,7 @@ pub struct ProgressInfo {
     pub percent_complete: f64,
     pub current_step: String,
     pub estimated_remaining: Option<String>,
-    pub data: Option<Vec<f64>>,  // Optional numeric data (e.g., best fitness for calibration)
+    pub data: Option<Vec<f64>>,  // Optional numeric data (e.g., best objective for optimisation)
 
     // Optional override values for STDIO protocol (if not provided, uses percent_complete/100)
     pub current: Option<i64>,    // Current progress value (e.g., evaluations)

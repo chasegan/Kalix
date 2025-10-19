@@ -70,7 +70,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelFileCommand));
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
-        registry.register(Arc::new(RunCalibrationCommand));
+        registry.register(Arc::new(RunOptimisationCommand));
         registry.register(Arc::new(GetResultCommand));
         registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
@@ -125,7 +125,7 @@ impl Command for GetVersionCommand {
         Ok(serde_json::json!({
             "version": "0.1.0",
             "build_date": "2025-09-08",
-            "features": ["stdio", "modeling", "calibration"]
+            "features": ["stdio", "modeling", "optimisation"]
         }))
     }
 }
@@ -659,15 +659,15 @@ impl Command for RunSimulationCommand {
     }
 }
 
-pub struct RunCalibrationCommand;
+pub struct RunOptimisationCommand;
 
-impl Command for RunCalibrationCommand {
+impl Command for RunOptimisationCommand {
     fn name(&self) -> &str {
-        "run_calibration"
+        "run_optimisation"
     }
 
     fn description(&self) -> &str {
-        "Run model calibration with specified configuration"
+        "Run parameter optimisation with specified configuration"
     }
 
     fn parameters(&self) -> Vec<ParameterSpec> {
@@ -698,19 +698,19 @@ impl Command for RunCalibrationCommand {
         progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::{
-            CalibrationConfig, AlgorithmParams, CalibrationProblem,
+            OptimisationConfig, AlgorithmParams, OptimisationProblem,
             DifferentialEvolution, DEConfig, DEProgress
         };
-        use crate::io::calibration_config_io::load_observed_timeseries;
+        use crate::io::optimisation_config_io::load_observed_timeseries;
 
         // Extract config string parameter
         let config_str = params.get("config")
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("config is required".to_string()))?;
 
-        // Parse calibration configuration from INI format
-        let config = CalibrationConfig::from_ini(config_str)
-            .map_err(|e| CommandError::InvalidParameters(format!("Failed to parse calibration config: {}", e)))?;
+        // Parse optimisation configuration from INI format
+        let config = OptimisationConfig::from_ini(config_str)
+            .map_err(|e| CommandError::InvalidParameters(format!("Failed to parse optimisation config: {}", e)))?;
 
         // Load model: prioritize inline model_ini parameter, otherwise use model_file from config
         let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {
@@ -731,8 +731,8 @@ impl Command for RunCalibrationCommand {
 
         let observed_data = observed_timeseries.timeseries.values.clone();
 
-        // Create calibration problem
-        let mut problem = CalibrationProblem::new(
+        // Create optimisation problem
+        let mut problem = OptimisationProblem::new(
             model,
             config.parameter_config.clone(),
             observed_data,
@@ -740,8 +740,8 @@ impl Command for RunCalibrationCommand {
         ).with_objective(config.objective_function);
 
         // Extract algorithm parameters
-        let (population_size, de_f, de_cr) = match &config.algorithm {
-            AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
+        let (population_size, de_f, de_cr) = match config.algorithm {
+            AlgorithmParams::DE { population_size, f, cr } => (population_size, f, cr),
             _ => {
                 return Err(CommandError::ExecutionError(
                     format!("Only 'DE' algorithm is currently supported, got: {}", config.algorithm.name())
@@ -762,13 +762,13 @@ impl Command for RunCalibrationCommand {
 
             progress_sender(ProgressInfo {
                 percent_complete: (progress.n_evaluations as f64 / termination_evals as f64) * 100.0,
-                current_step: format!("{} evaluations, best fitness = {:.6}",
-                    progress.n_evaluations, progress.best_fitness),
+                current_step: format!("{} evaluations, best objective = {:.6}",
+                    progress.n_evaluations, progress.best_objective),
                 estimated_remaining: None,
-                data: Some(vec![progress.best_fitness]),
+                data: Some(vec![progress.best_objective]),
                 current: Some(progress.n_evaluations as i64),
                 total: Some(termination_evals as i64),
-                task_type: Some("cal".to_string()),
+                task_type: Some("opt".to_string()),
             });
         });
 
@@ -798,7 +798,7 @@ impl Command for RunCalibrationCommand {
 
         // Build result
         Ok(serde_json::json!({
-            "best_fitness": result.best_fitness,
+            "best_objective": result.best_objective,
             "generations": result.generations,
             "evaluations": result.n_evaluations,
             "params_normalized": result.best_params,
@@ -933,7 +933,7 @@ mod tests {
         assert!(commands.contains(&"load_model_file"));
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
-        assert!(commands.contains(&"run_calibration"));
+        assert!(commands.contains(&"run_optimisation"));
         assert!(commands.contains(&"get_result"));
         assert!(commands.contains(&"save_results"));
         assert!(commands.contains(&"echo"));

@@ -1,4 +1,4 @@
-/// Objective functions for model calibration
+/// Objective functions for model optimisation
 ///
 /// All objective functions return values where **LOWER IS BETTER** (minimization).
 /// Goodness-of-fit metrics (NSE, KGE) are negated so that optimization minimizes them.
