@@ -760,12 +760,43 @@ impl Command for RunOptimisationCommand {
                 return;
             }
 
+            // Build diversity sample: [best, ...up to 10 random samples from population]
+            let mut data_values = vec![progress.best_objective];
+
+            if let Some(ref pop_objectives) = progress.population_objectives {
+                use rand::seq::SliceRandom;
+
+                // Find index of best objective to exclude it from sampling
+                let best_idx = pop_objectives.iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .map(|(idx, _)| idx);
+
+                // Create indices excluding the best
+                let mut available_indices: Vec<usize> = (0..pop_objectives.len())
+                    .filter(|&i| Some(i) != best_idx)
+                    .collect();
+
+                // Sample up to 10 random indices (without replacement)
+                let sample_size = 10.min(available_indices.len());
+                available_indices.shuffle(&mut rand::thread_rng());
+
+                // Collect sampled values and sort them (low to high, best to worst)
+                let mut sampled: Vec<f64> = available_indices.iter()
+                    .take(sample_size)
+                    .map(|&i| pop_objectives[i])
+                    .collect();
+                sampled.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+                data_values.extend(sampled);
+            }
+
             progress_sender(ProgressInfo {
                 percent_complete: (progress.n_evaluations as f64 / termination_evals as f64) * 100.0,
                 current_step: format!("{} evaluations, best objective = {:.6}",
                     progress.n_evaluations, progress.best_objective),
                 estimated_remaining: None,
-                data: Some(vec![progress.best_objective]),
+                data: Some(data_values),
                 current: Some(progress.n_evaluations as i64),
                 total: Some(termination_evals as i64),
                 task_type: Some("opt".to_string()),

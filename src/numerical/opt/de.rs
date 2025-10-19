@@ -27,6 +27,10 @@ pub struct DEProgress {
 
     /// Elapsed time since optimisation started
     pub elapsed: Duration,
+
+    /// Current population objective values (for diversity reporting)
+    /// Contains the objective value for each member of the population
+    pub population_objectives: Option<Vec<f64>>,
 }
 
 /// Result of a Differential Evolution optimisation run
@@ -178,6 +182,7 @@ impl DifferentialEvolution {
                     best_objective,
                     n_evaluations,
                     elapsed: start_time.elapsed(),
+                    population_objectives: Some(objective.clone()),
                 };
                 callback(&progress);
             }
@@ -243,6 +248,7 @@ impl DifferentialEvolution {
                 best_objective,
                 n_evaluations,
                 elapsed: start_time.elapsed(),
+                population_objectives: Some(objective.clone()),
             };
             callback(&progress);
         }
