@@ -60,11 +60,10 @@ impl AlgorithmParams {
     }
 }
 
-/// Format-agnostic intermediate representation of calibration configuration
+/// Intermediate representation of calibration configuration from INI format
 ///
 /// This structure represents configuration data as nested HashMaps,
-/// allowing it to be parsed from multiple formats (INI, JSON, etc.)
-/// before final validation and conversion to CalibrationConfig.
+/// parsed from INI format before final validation and conversion to CalibrationConfig.
 struct CalibrationConfigData {
     /// Sections mapped to their properties
     /// All keys are stored in lowercase for case-insensitive lookup
@@ -85,42 +84,6 @@ impl CalibrationConfigData {
                 // but preserve the original value (case-sensitive for paths, node names)
                 properties.insert(prop_name.to_lowercase(), prop.value.clone());
             }
-            sections.insert(section_name.to_lowercase(), properties);
-        }
-
-        Ok(Self { sections })
-    }
-
-    /// Parse from JSON format
-    fn from_json(content: &str) -> Result<Self, String> {
-        // Parse JSON into a HashMap of HashMaps
-        let json_value: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-        let json_obj = json_value.as_object()
-            .ok_or_else(|| "JSON root must be an object".to_string())?;
-
-        let mut sections = HashMap::new();
-
-        // Convert each section
-        for (section_name, section_value) in json_obj {
-            let section_obj = section_value.as_object()
-                .ok_or_else(|| format!("Section '{}' must be an object", section_name))?;
-
-            let mut properties = HashMap::new();
-            for (prop_name, prop_value) in section_obj {
-                // Convert value to string
-                let value_str = match prop_value {
-                    serde_json::Value::String(s) => s.clone(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::Bool(b) => b.to_string(),
-                    _ => return Err(format!("Property '{}.{}' must be a string, number, or boolean", section_name, prop_name)),
-                };
-
-                // Store with lowercase key for case-insensitive lookup
-                properties.insert(prop_name.to_lowercase(), value_str);
-            }
-
             sections.insert(section_name.to_lowercase(), properties);
         }
 
@@ -151,10 +114,10 @@ impl CalibrationConfigData {
     }
 }
 
-/// Calibration configuration (format-agnostic)
+/// Calibration configuration from INI format
 ///
 /// This structure represents a complete calibration run configuration,
-/// parsed from either INI or JSON format.
+/// parsed from INI format.
 #[derive(Debug, Clone)]
 pub struct CalibrationConfig {
     // [General] section
@@ -181,18 +144,12 @@ pub struct CalibrationConfig {
 }
 
 impl CalibrationConfig {
-    /// Load calibration configuration from file (auto-detect format)
+    /// Load calibration configuration from INI file
     pub fn from_file(path: &str) -> Result<Self, String> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read calibration config file '{}': {}", path, e))?;
 
-        // Auto-detect format based on file extension
-        if path.ends_with(".json") {
-            Self::from_json(&content)
-        } else {
-            // Default to INI format
-            Self::from_ini(&content)
-        }
+        Self::from_ini(&content)
     }
 
     /// Parse calibration configuration from INI string
@@ -201,13 +158,7 @@ impl CalibrationConfig {
         Self::from_data(data)
     }
 
-    /// Parse calibration configuration from JSON string
-    pub fn from_json(content: &str) -> Result<Self, String> {
-        let data = CalibrationConfigData::from_json(content)?;
-        Self::from_data(data)
-    }
-
-    /// Build configuration from intermediate data (shared validation logic)
+    /// Build configuration from intermediate data (validation logic)
     fn from_data(data: CalibrationConfigData) -> Result<Self, String> {
         // Parse [General] section
         let model_file = data.require_property("general", "model_file")?.to_string();

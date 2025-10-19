@@ -708,12 +708,9 @@ impl Command for RunCalibrationCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("config is required".to_string()))?;
 
-        // Parse calibration configuration (auto-detect INI or JSON)
-        let config = if config_str.trim_start().starts_with('{') {
-            CalibrationConfig::from_json(config_str)
-        } else {
-            CalibrationConfig::from_ini(config_str)
-        }.map_err(|e| CommandError::InvalidParameters(format!("Failed to parse calibration config: {}", e)))?;
+        // Parse calibration configuration from INI format
+        let config = CalibrationConfig::from_ini(config_str)
+            .map_err(|e| CommandError::InvalidParameters(format!("Failed to parse calibration config: {}", e)))?;
 
         // Load model: prioritize inline model_ini parameter, otherwise use model_file from config
         let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {

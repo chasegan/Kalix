@@ -98,7 +98,7 @@ kalixcli calibrate <CONFIG_FILE>
 ```
 
 **Arguments:**
-- `CONFIG_FILE` (required): Path to calibration configuration file (INI or JSON format)
+- `CONFIG_FILE` (required): Path to calibration configuration file (INI format)
 
 **Configuration Format:**
 The configuration file specifies:
@@ -109,13 +109,10 @@ The configuration file specifies:
 - Objective function (NSE, KGE, RMSE, etc.)
 - Termination criterion (number of function evaluations)
 
-**Examples:**
+**Example:**
 ```bash
 # Run calibration with INI config
 kalixcli calibrate calibration.ini
-
-# Run calibration with JSON config
-kalixcli calibrate calibration.json
 ```
 
 **See Also:** The `run_calibration` session command for interactive calibration via STDIO protocol.
@@ -364,7 +361,7 @@ Execute model simulation (interruptible).
 Execute model calibration using optimization algorithms (interruptible).
 
 **Parameters:**
-- `config` (required): Calibration configuration as INI or JSON string
+- `config` (required): Calibration configuration as INI string
 - `model_ini` (optional): Inline model definition as INI string. If provided, overrides the `model_file` specified in the config
 
 **Example (using model file from config):**
@@ -380,7 +377,6 @@ Execute model calibration using optimization algorithms (interruptible).
 **Behavior:**
 - Long-running operation with progress updates including best fitness
 - Can be interrupted with stop message
-- Auto-detects INI vs JSON format (JSON starts with `{`)
 - Returns optimized parameter values (both normalized and physical)
 
 **Progress Updates:**
