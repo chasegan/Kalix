@@ -39,6 +39,8 @@ public class OptimisationWindow extends JFrame {
     private JTextArea resultArea;
     private JButton runButton;
     private JButton terminateButton;
+    private JButton loadConfigButton;
+    private JButton saveConfigButton;
     private JLabel statusLabel;
 
     // Session tracking
@@ -150,6 +152,12 @@ public class OptimisationWindow extends JFrame {
         resultArea.setText("Results will appear here after optimisation completes...");
 
         // Buttons
+        loadConfigButton = new JButton("Load Config");
+        loadConfigButton.addActionListener(e -> loadConfig());
+
+        saveConfigButton = new JButton("Save Config");
+        saveConfigButton.addActionListener(e -> saveConfig());
+
         runButton = new JButton("Run Optimisation");
         runButton.addActionListener(e -> runOptimisation());
 
@@ -173,6 +181,9 @@ public class OptimisationWindow extends JFrame {
 
         // Middle panel: Control buttons
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        buttonPanel.add(loadConfigButton);
+        buttonPanel.add(saveConfigButton);
+        buttonPanel.add(new JSeparator(SwingConstants.VERTICAL));
         buttonPanel.add(runButton);
         buttonPanel.add(terminateButton);
         buttonPanel.add(statusLabel);
@@ -393,6 +404,79 @@ public class OptimisationWindow extends JFrame {
         currentProgram = null;
         if (progressBar != null) {
             progressBar.reset();
+        }
+    }
+
+    /**
+     * Loads optimisation configuration from a file.
+     */
+    private void loadConfig() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Load Optimisation Configuration");
+
+        // Set initial directory to current model's directory if available
+        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
+        if (workingDir != null) {
+            fileChooser.setCurrentDirectory(workingDir);
+        }
+
+        // Set file filter for INI files
+        javax.swing.filechooser.FileNameExtensionFilter filter =
+            new javax.swing.filechooser.FileNameExtensionFilter("INI Files (*.ini)", "ini");
+        fileChooser.setFileFilter(filter);
+
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            try {
+                String content = java.nio.file.Files.readString(selectedFile.toPath());
+                configEditor.setText(content);
+                updateStatus("Loaded configuration from " + selectedFile.getName());
+            } catch (java.io.IOException e) {
+                JOptionPane.showMessageDialog(this,
+                    "Error loading configuration: " + e.getMessage(),
+                    "Load Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    /**
+     * Saves optimisation configuration to a file.
+     */
+    private void saveConfig() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Optimisation Configuration");
+
+        // Set initial directory to current model's directory if available
+        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
+        if (workingDir != null) {
+            fileChooser.setCurrentDirectory(workingDir);
+        }
+
+        // Set file filter for INI files
+        javax.swing.filechooser.FileNameExtensionFilter filter =
+            new javax.swing.filechooser.FileNameExtensionFilter("INI Files (*.ini)", "ini");
+        fileChooser.setFileFilter(filter);
+
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+
+            // Ensure .ini extension
+            if (!selectedFile.getName().endsWith(".ini")) {
+                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
+            }
+
+            try {
+                java.nio.file.Files.writeString(selectedFile.toPath(), configEditor.getText());
+                updateStatus("Saved configuration to " + selectedFile.getName());
+            } catch (java.io.IOException e) {
+                JOptionPane.showMessageDialog(this,
+                    "Error saving configuration: " + e.getMessage(),
+                    "Save Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 }

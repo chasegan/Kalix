@@ -421,10 +421,10 @@ public class MapPanel extends JPanel implements KeyListener {
         }
 
         // Calculate bounding box of all nodes
-        double minX = Double.MAX_VALUE;
-        double minY = Double.MAX_VALUE;
-        double maxX = Double.MIN_VALUE;
-        double maxY = Double.MIN_VALUE;
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
 
         for (ModelNode node : model.getAllNodes()) {
             minX = Math.min(minX, node.getX());
