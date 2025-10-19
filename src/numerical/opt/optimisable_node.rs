@@ -1,11 +1,11 @@
-/// Trait for model components that support parameter calibration
+/// Trait for model components that support parameter optimisation
 ///
 /// This is a minimal interface that allows getting/setting parameters by name.
-/// Nodes (like Sacramento, GR4J) implement this to expose their calibratable parameters.
+/// Nodes (like Sacramento, GR4J) implement this to expose their optimisable parameters.
 /// The trait only handles parameter access - bounds, transforms, and gene mappings
-/// are handled at the calibration configuration level.
-pub trait Calibratable {
-    /// Set a parameter by name (physical space, not normalized)
+/// are handled at the optimisation configuration level.
+pub trait OptimisableNode {
+    /// Set a parameter by name (physical space, not normalised)
     ///
     /// # Arguments
     /// * `name` - Parameter name (e.g., "lztwm", "uzk", "sarva_on_pctim")

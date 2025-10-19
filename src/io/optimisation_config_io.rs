@@ -1,6 +1,6 @@
-/// INI file parsing for calibration configuration
+/// INI file parsing for optimisation configuration
 ///
-/// This module parses calibration configuration from INI files using the
+/// This module parses optimisation configuration from INI files using the
 /// Kalix custom INI parser.
 ///
 /// Case-sensitivity:
@@ -60,17 +60,17 @@ impl AlgorithmParams {
     }
 }
 
-/// Intermediate representation of calibration configuration from INI format
+/// Intermediate representation of optimisation configuration from INI format
 ///
 /// This structure represents configuration data as nested HashMaps,
-/// parsed from INI format before final validation and conversion to CalibrationConfig.
-struct CalibrationConfigData {
+/// parsed from INI format before final validation and conversion to OptimisationConfig.
+struct OptimisationConfigData {
     /// Sections mapped to their properties
     /// All keys are stored in lowercase for case-insensitive lookup
     sections: HashMap<String, HashMap<String, String>>,
 }
 
-impl CalibrationConfigData {
+impl OptimisationConfigData {
     /// Parse from INI format
     fn from_ini(content: &str) -> Result<Self, String> {
         let ini = IniDocument::parse(content)?;
@@ -114,12 +114,12 @@ impl CalibrationConfigData {
     }
 }
 
-/// Calibration configuration from INI format
+/// Optimisation configuration from INI format
 ///
-/// This structure represents a complete calibration run configuration,
+/// This structure represents a complete optimisation run configuration,
 /// parsed from INI format.
 #[derive(Debug, Clone)]
-pub struct CalibrationConfig {
+pub struct OptimisationConfig {
     // [General] section
     pub model_file: Option<String>,  // Optional: can be provided via inline model instead
     pub observed_data_series: String,  // Will be "file.csv.name" or "file.csv.N"
@@ -143,23 +143,23 @@ pub struct CalibrationConfig {
     pub verbose: bool,
 }
 
-impl CalibrationConfig {
-    /// Load calibration configuration from INI file
+impl OptimisationConfig {
+    /// Load optimisation configuration from INI file
     pub fn from_file(path: &str) -> Result<Self, String> {
         let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read calibration config file '{}': {}", path, e))?;
+            .map_err(|e| format!("Failed to read optimisation config file '{}': {}", path, e))?;
 
         Self::from_ini(&content)
     }
 
-    /// Parse calibration configuration from INI string
+    /// Parse optimisation configuration from INI string
     pub fn from_ini(content: &str) -> Result<Self, String> {
-        let data = CalibrationConfigData::from_ini(content)?;
+        let data = OptimisationConfigData::from_ini(content)?;
         Self::from_data(data)
     }
 
     /// Build configuration from intermediate data (validation logic)
-    fn from_data(data: CalibrationConfigData) -> Result<Self, String> {
+    fn from_data(data: OptimisationConfigData) -> Result<Self, String> {
         // Parse [General] section
         let model_file = data.get_property("general", "model_file").map(|s| s.to_string());
 
@@ -360,7 +360,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_calibration_config() {
+    fn test_parse_optimisation_config() {
         let ini_content = r#"
 [General]
 model_file = test.kai
@@ -385,7 +385,7 @@ report_frequency = 5
 verbose = true
 "#;
 
-        let config = CalibrationConfig::from_ini(ini_content).unwrap();
+        let config = OptimisationConfig::from_ini(ini_content).unwrap();
 
         assert_eq!(config.model_file, Some("test.kai".to_string()));
         assert_eq!(config.observed_data_series, "obs.csv.flow");
@@ -429,7 +429,7 @@ Node.GR4J.X1 = log_range(g(1), 100, 1200)
 VERBOSE = TRUE
 "#;
 
-        let config = CalibrationConfig::from_ini(ini_content).unwrap();
+        let config = OptimisationConfig::from_ini(ini_content).unwrap();
 
         // File paths are case-sensitive
         assert_eq!(config.model_file, Some("Test.KAI".to_string()));
@@ -451,19 +451,19 @@ VERBOSE = TRUE
     #[test]
     fn test_parse_objective_functions() {
         assert_eq!(
-            CalibrationConfig::parse_objective_function("NSE").unwrap(),
+            OptimisationConfig::parse_objective_function("NSE").unwrap(),
             ObjectiveFunction::NashSutcliffe
         );
         assert_eq!(
-            CalibrationConfig::parse_objective_function("nse").unwrap(),
+            OptimisationConfig::parse_objective_function("nse").unwrap(),
             ObjectiveFunction::NashSutcliffe
         );
         assert_eq!(
-            CalibrationConfig::parse_objective_function("KGE").unwrap(),
+            OptimisationConfig::parse_objective_function("KGE").unwrap(),
             ObjectiveFunction::KlingGupta
         );
         assert_eq!(
-            CalibrationConfig::parse_objective_function("kge").unwrap(),
+            OptimisationConfig::parse_objective_function("kge").unwrap(),
             ObjectiveFunction::KlingGupta
         );
         assert!(CalibrationConfig::parse_objective_function("INVALID").is_err());

@@ -1,17 +1,17 @@
-/// Calibration wrapper that makes a Model optimisable
+/// Optimisation wrapper that makes a Model optimisable
 ///
-/// This module wraps a hydrological Model with calibration-specific information:
+/// This module wraps a hydrological Model with optimisation-specific information:
 /// - Parameter mappings (genes -> model parameters)
 /// - Observed data for comparison
 /// - Objective function selection
 ///
-/// The wrapper implements the Optimisable trait, presenting a simple normalized
-/// parameter interface to optimization algorithms.
+/// The wrapper implements the Optimisable trait, presenting a simple normalised
+/// parameter interface to optimisation algorithms.
 
 use crate::model::Model;
 use crate::nodes::NodeEnum;
 use super::optimisable::Optimisable;
-use super::calibratable::Calibratable;
+use super::optimisable_node::OptimisableNode;
 use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
 
@@ -24,14 +24,14 @@ use super::objectives::ObjectiveFunction;
 ///     "node.sacramento_a.uzk = log_range(g(2), 0.1, 0.7)",
 /// ])?;
 ///
-/// let problem = CalibrationProblem::new(
+/// let problem = OptimisationProblem::new(
 ///     model,
 ///     config,
 ///     observed_data,
 ///     "node.sacramento_a.dsflow".to_string()
 /// );
 /// ```
-pub struct CalibrationProblem {
+pub struct OptimisationProblem {
     /// The hydrological model
     pub model: Model,
 
@@ -48,7 +48,7 @@ pub struct CalibrationProblem {
     pub objective: ObjectiveFunction,
 }
 
-impl CalibrationProblem {
+impl OptimisationProblem {
     /// Create a new calibration problem
     pub fn new(
         model: Model,
@@ -95,7 +95,7 @@ impl CalibrationProblem {
                 .get_node_idx(node_name)
                 .ok_or_else(|| format!("Node not found: {}", node_name))?;
 
-            // Set parameter on the node using Calibratable trait
+            // Set parameter on the node using OptimisableNode trait
             match &mut self.model.nodes[node_idx] {
                 NodeEnum::SacramentoNode(node) => {
                     node.set_param(param_name, value)
@@ -144,7 +144,7 @@ impl CalibrationProblem {
     }
 }
 
-impl Optimisable for CalibrationProblem {
+impl Optimisable for OptimisationProblem {
     fn n_params(&self) -> usize {
         self.config.n_genes()
     }
@@ -212,12 +212,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_calibration_problem_creation() {
+    fn test_optimisation_problem_creation() {
         let model = Model::new();
         let config = ParameterMappingConfig::new();
         let observed = vec![1.0, 2.0, 3.0];
 
-        let problem = CalibrationProblem::new(
+        let problem = OptimisationProblem::new(
             model,
             config,
             observed,
@@ -233,7 +233,7 @@ mod tests {
         let config = ParameterMappingConfig::new();
         let observed = vec![1.0, 2.0, 3.0];
 
-        let problem = CalibrationProblem::new(
+        let problem = OptimisationProblem::new(
             model,
             config,
             observed,
