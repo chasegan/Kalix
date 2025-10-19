@@ -717,10 +717,12 @@ impl Command for RunCalibrationCommand {
             // Use inline model (takes precedence)
             IniModelIO::new().read_model_string(model_ini)
                 .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?
-        } else {
+        } else if let Some(model_file) = &config.model_file {
             // Fallback to model_file from config
-            IniModelIO::new().read_model_file(&config.model_file)
-                .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", config.model_file, e)))?
+            IniModelIO::new().read_model_file(model_file)
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", model_file, e)))?
+        } else {
+            return Err(CommandError::ExecutionError("Either 'model_ini' parameter or 'model_file' in config must be provided".to_string()));
         };
 
         // Load observed data

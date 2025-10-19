@@ -121,7 +121,7 @@ impl CalibrationConfigData {
 #[derive(Debug, Clone)]
 pub struct CalibrationConfig {
     // [General] section
-    pub model_file: String,
+    pub model_file: Option<String>,  // Optional: can be provided via inline model instead
     pub observed_data_series: String,  // Will be "file.csv.name" or "file.csv.N"
     pub simulated_series: String,
     pub objective_function: ObjectiveFunction,
@@ -161,7 +161,7 @@ impl CalibrationConfig {
     /// Build configuration from intermediate data (validation logic)
     fn from_data(data: CalibrationConfigData) -> Result<Self, String> {
         // Parse [General] section
-        let model_file = data.require_property("general", "model_file")?.to_string();
+        let model_file = data.get_property("general", "model_file").map(|s| s.to_string());
 
         // Parse observed data series (by name or index)
         let observed_data_series = if let Some(val) = data.get_property("general", "observed_data_by_name") {
@@ -387,7 +387,7 @@ verbose = true
 
         let config = CalibrationConfig::from_ini(ini_content).unwrap();
 
-        assert_eq!(config.model_file, "test.kai");
+        assert_eq!(config.model_file, Some("test.kai".to_string()));
         assert_eq!(config.observed_data_series, "obs.csv.flow");
         assert_eq!(config.simulated_series, "node.gr4j.dsflow");
         assert_eq!(config.objective_function, ObjectiveFunction::NashSutcliffe);
@@ -432,7 +432,7 @@ VERBOSE = TRUE
         let config = CalibrationConfig::from_ini(ini_content).unwrap();
 
         // File paths are case-sensitive
-        assert_eq!(config.model_file, "Test.KAI");
+        assert_eq!(config.model_file, Some("Test.KAI".to_string()));
         assert_eq!(config.observed_data_series, "Obs.CSV.Flow");
 
         // Node names in series are case-sensitive

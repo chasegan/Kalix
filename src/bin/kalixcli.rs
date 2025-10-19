@@ -218,8 +218,16 @@ fn main() {
             }
 
             // Load model
-            println!("Loading model: {}", config.model_file);
-            let model = match IniModelIO::new().read_model_file(&config.model_file) {
+            let model_file = match &config.model_file {
+                Some(path) => path,
+                None => {
+                    eprintln!("Error: model_file must be specified in calibration config");
+                    std::process::exit(1);
+                }
+            };
+
+            println!("Loading model: {}", model_file);
+            let model = match IniModelIO::new().read_model_file(model_file) {
                 Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error loading model: {}", e);
@@ -326,7 +334,7 @@ fn main() {
                 let mut output = String::new();
                 writeln!(&mut output, "=== Kalix Calibration Results ===").unwrap();
                 writeln!(&mut output, "Configuration file: {}", config_file).unwrap();
-                writeln!(&mut output, "Model file: {}", config.model_file).unwrap();
+                writeln!(&mut output, "Model file: {}", model_file).unwrap();
                 writeln!(&mut output, "Observed data: {}", config.observed_data_series).unwrap();
                 writeln!(&mut output, "Simulated series: {}\n", config.simulated_series).unwrap();
                 writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
