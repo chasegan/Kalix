@@ -547,7 +547,7 @@ impl Command for RunSimulationCommand {
         let stepsize = model.configuration.sim_stepsize;
         let total_timesteps = ((end_timestamp - start_timestamp) / stepsize) + 1;
         
-        // Track progress timing for rate limiting (max 1 update per second, 1 per percentage)
+        // Track progress timing for rate limiting (max 1 update per 200ms, 1 per percentage)
         let last_progress_time = Arc::new(std::sync::Mutex::new(Instant::now()));
         let last_progress_percent = Arc::new(AtomicU64::new(0));
         
@@ -568,7 +568,7 @@ impl Command for RunSimulationCommand {
                 let now = Instant::now();
                 let should_update = {
                     let mut last_time_guard = last_time.lock().unwrap();
-                    let time_elapsed = now.duration_since(*last_time_guard).as_secs() >= 1;
+                    let time_elapsed = now.duration_since(*last_time_guard).as_millis() >= 200;
                     let percent_changed = overall_percent > last_percent.load(Ordering::Relaxed);
                     
                     if time_elapsed && percent_changed {

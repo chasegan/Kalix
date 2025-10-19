@@ -1,6 +1,3 @@
-use crate::timeseries::new_vector;
-
-
 #[derive(Default)]
 #[derive(Clone)]
 pub struct Gr4j {
