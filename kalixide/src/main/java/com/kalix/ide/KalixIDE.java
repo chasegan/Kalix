@@ -37,6 +37,7 @@ import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalLauncher;
 import com.kalix.ide.windows.RunManager;
+import com.kalix.ide.windows.OptimisationWindow;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1030,8 +1031,23 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showRunManager() {
         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
     }
-    
-    
+
+    @Override
+    public void showOptimisation() {
+        OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
+            progressBar,
+            () -> {
+                // Working directory supplier
+                File currentFile = fileOperations.getCurrentFile();
+                return currentFile != null ? currentFile.getParentFile() : null;
+            },
+            () -> {
+                // Model text supplier
+                return textEditor.getText();
+            });
+    }
+
+
     @Override
     public void runModelFromMemory() {
         String modelText = textEditor.getText();

@@ -82,7 +82,7 @@ public class SessionManager {
         private volatile SessionState state;
         private volatile String lastMessage;
         private volatile LocalDateTime lastActivity;
-        private volatile RunModelProgram activeProgram;
+        private volatile AbstractSessionProgram activeProgram;
         private volatile String kalixcliUid;
         
         public KalixSession(String sessionKey, KalixStdioSession process) {
@@ -118,8 +118,8 @@ public class SessionManager {
             return state == SessionState.READY;
         }
         
-        public RunModelProgram getActiveProgram() { return activeProgram; }
-        public void setActiveProgram(RunModelProgram program) { this.activeProgram = program; }
+        public AbstractSessionProgram getActiveProgram() { return activeProgram; }
+        public void setActiveProgram(AbstractSessionProgram program) { this.activeProgram = program; }
         
         @Override
         public String toString() {

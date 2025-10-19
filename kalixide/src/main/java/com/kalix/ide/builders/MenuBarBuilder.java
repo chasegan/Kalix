@@ -56,7 +56,10 @@ public class MenuBarBuilder {
         
         // Run Manager window
         void showRunManager();
-        
+
+        // Optimisation window
+        void showOptimisation();
+
         // Website launch
         void openWebsite();
         
@@ -196,6 +199,7 @@ public class MenuBarBuilder {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
+        runMenu.add(createMenuItem("Optimisation", e -> callbacks.showOptimisation()));
         runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));
         return runMenu;
     }

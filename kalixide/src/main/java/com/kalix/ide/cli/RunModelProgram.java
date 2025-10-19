@@ -10,12 +10,12 @@ import java.util.function.Consumer;
 /**
  * Handles the complete "Run Model" program flow:
  * 1. Send load_model_string command
- * 2. Wait for ready response 
+ * 2. Wait for ready response
  * 3. Send run_simulation command
  * 4. Monitor progress and handle completion/errors
  */
-public class RunModelProgram {
-    
+public class RunModelProgram extends AbstractSessionProgram {
+
     private enum ProgramState {
         STARTING,           // Initial state
         MODEL_LOADING,      // Sent load_model_string, waiting for ready
@@ -23,30 +23,23 @@ public class RunModelProgram {
         COMPLETED,          // Program completed successfully
         FAILED              // Program failed with error
     }
-    
-    private final String sessionKey;
-    private final SessionManager sessionManager;
-    private final Consumer<String> statusUpdater;
-    private final Consumer<ProgressParser.ProgressInfo> progressCallback;
+
     private ProgramState currentState = ProgramState.STARTING;
     private String modelText; //Keeping this here in case I later want to save the model back out.
     private List<String> outputsGenerated;
-    
+
     /**
      * Creates a new Run Model program instance.
-     * 
+     *
      * @param sessionKey the session key
      * @param sessionManager the session manager to use for sending commands
      * @param statusUpdater callback for status updates
      * @param progressCallback callback for progress updates
      */
     public RunModelProgram(String sessionKey, SessionManager sessionManager,
-                          Consumer<String> statusUpdater, 
+                          Consumer<String> statusUpdater,
                           Consumer<ProgressParser.ProgressInfo> progressCallback) {
-        this.sessionKey = sessionKey;
-        this.sessionManager = sessionManager;
-        this.statusUpdater = statusUpdater;
-        this.progressCallback = progressCallback;
+        super(sessionKey, sessionManager, statusUpdater, progressCallback);
     }
     
     /**
@@ -78,13 +71,7 @@ public class RunModelProgram {
             });
     }
     
-    /**
-     * Handles JSON protocol messages for this program.
-     * Returns true if the message was handled by this program, false otherwise.
-     * 
-     * @param message the JSON message from kalixcli
-     * @return true if message was handled
-     */
+    @Override
     public boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
@@ -256,8 +243,10 @@ public class RunModelProgram {
 
     /**
      * Extracts error message from JSON error response.
+     * Overrides base class to provide more detailed error extraction.
      */
-    private String extractErrorMessage(JsonMessage.SystemMessage message) {
+    @Override
+    protected String extractErrorMessage(JsonMessage.SystemMessage message) {
         try {
             // In compact protocol, error message is in the errorMessage field
             String errorMsg = message.getErrorMessage();
@@ -284,35 +273,29 @@ public class RunModelProgram {
     /**
      * Gets the current state of the program.
      */
+    @Override
     public boolean isActive() {
-        return currentState == ProgramState.MODEL_LOADING || currentState == ProgramState.SIMULATION_RUNNING;
+        return currentState != ProgramState.COMPLETED && currentState != ProgramState.FAILED;
     }
-    
-    /**
-     * Gets the current state of the program.
-     */
+
+    @Override
     public boolean isCompleted() {
-        return currentState == ProgramState.COMPLETED;
+        return currentState == ProgramState.COMPLETED || currentState == ProgramState.FAILED;
     }
-    
-    /**
-     * Gets the current state of the program.
-     */
+
+    @Override
     public boolean isFailed() {
         return currentState == ProgramState.FAILED;
     }
-    
-    /**
-     * Gets a description of the current program state.
-     */
+
+    @Override
     public String getStateDescription() {
         return switch (currentState) {
-            case STARTING -> "Starting Run Model program";
-            case MODEL_LOADING -> "Loading model";
-            case SIMULATION_RUNNING -> "Running simulation";
-            case COMPLETED -> "Run Model completed";
-            case FAILED -> "Run Model failed";
-            default -> "Unknown state";
+            case STARTING -> "Starting";
+            case MODEL_LOADING -> "Loading Model";
+            case SIMULATION_RUNNING -> "Running Simulation";
+            case COMPLETED -> "Completed";
+            case FAILED -> "Failed";
         };
     }
 
