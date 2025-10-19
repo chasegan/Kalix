@@ -114,11 +114,11 @@ public class OptimisationWindow extends JFrame {
         configEditor.setTabSize(4);
         configEditor.setTabsEmulated(true);
 
-        // Set default template based on kalixcli example
+        // Set default template from calibration_from_frontend.ini example
         configEditor.setText("""
                 [General]
-                observed_data_by_name = data.csv.ObsFlow
-                simulated_series = node.mynode.ds_1
+                observed_data_by_name = ../data.csv.ObsFlow
+                simulated_series = node.mygr4jnode.ds_1
                 objective_function = NSE
                 output_file = optimisation_results.txt
 
@@ -129,11 +129,14 @@ public class OptimisationWindow extends JFrame {
                 de_f = 0.8
                 de_cr = 0.9
                 n_threads = 4
+                # random_seed = 42
 
                 [Parameters]
-                # Define parameters to optimise using lin_range or log_range
-                # node.mynode.x1 = lin_range(g(1), 10, 2000)
-                # node.mynode.x2 = lin_range(g(2), -8, 6)
+                # GR4J parameter bounds (based on literature ranges)
+                node.mygr4jnode.x1 = lin_range(g(1), 10, 2000)
+                node.mygr4jnode.x2 = lin_range(g(2), -8, 6)
+                node.mygr4jnode.x3 = lin_range(g(3), 10, 500)
+                node.mygr4jnode.x4 = lin_range(g(4), 0.0001, 4.0)
 
                 [Reporting]
                 report_frequency = 10
