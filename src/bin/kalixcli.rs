@@ -198,6 +198,8 @@ fn main() {
                 DifferentialEvolution, DEConfig, DEProgress
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
+            use kalix::terminal_plot::*;
+            use std::sync::{Arc, Mutex};
 
             // Load optimisation configuration
             println!("Loading optimisation configuration: {}", config_file);
@@ -275,9 +277,17 @@ fn main() {
             println!("Parameters to optimize: {}", problem.config.n_genes());
             println!("Objective: {} (minimize)\n", config.objective_function.name());
 
+            // Create shared state for tracking optimization progress
+            let best_history: Arc<Mutex<Vec<(f64, f64)>>> = Arc::new(Mutex::new(Vec::new()));
+            let first_render = Arc::new(Mutex::new(true));
+            let term_evals = config.termination_evaluations;
+
             // Create DE optimizer with progress callback
             let report_freq = config.report_frequency;  // Capture value before moving
             let n_threads = config.n_threads;  // Capture value before moving
+            let history_clone = Arc::clone(&best_history);
+            let first_render_clone = Arc::clone(&first_render);
+
             let de_config = DEConfig {
                 population_size,
                 termination_evaluations: config.termination_evaluations,
@@ -288,14 +298,68 @@ fn main() {
                 progress_callback: if config.verbose {
                     Some(Box::new(move |progress: &DEProgress| {
                         if progress.generation % report_freq == 0 {
-                            let elapsed_secs = progress.elapsed.as_secs_f64();
-                            println!(
-                                "Generation {:4}: objective = {:.6} | evaluations = {:6} | time = {:.1}s",
-                                progress.generation,
-                                progress.best_objective,
-                                progress.n_evaluations,
-                                elapsed_secs
-                            );
+                            // Update best history
+                            let mut history = history_clone.lock().unwrap();
+                            history.push((progress.n_evaluations as f64, progress.best_objective));
+
+                            // Create plot
+                            let mut plot = TerminalPlot::builder()
+                                .title("KALIX//OPTIMISER")
+                                .x_label("evals")
+                                .y_label("Objective Function")
+                                .width(50)
+                                .height(12)
+                                .color_scheme(ColorScheme::electric_grid())
+                                .build();
+
+                            // Set progress bar
+                            plot.set_progress(progress.n_evaluations, term_evals);
+
+                            // Add best evolution line
+                            if !history.is_empty() {
+                                plot.add_line(Line {
+                                    points: history.clone(),
+                                    style: LineStyle::Dots,
+                                    color: Some(Color::BrightMagenta),
+                                });
+                            }
+
+                            // Add current population scatter points
+                            if let Some(ref pop_objectives) = progress.population_objectives {
+                                let scatter_points: Vec<ScatterPoint> = pop_objectives
+                                    .iter()
+                                    .map(|&obj| ScatterPoint {
+                                        x: progress.n_evaluations as f64,
+                                        y: obj,
+                                        color: Some(Color::BrightYellow),
+                                        symbol: '∘',
+                                    })
+                                    .collect();
+                                plot.add_scatter_points(scatter_points);
+                            }
+
+                            // Add best marker
+                            plot.add_marker(Marker {
+                                x: progress.n_evaluations as f64,
+                                y: progress.best_objective,
+                                symbol: '★',
+                                color: Some(Color::BrightGreen),
+                                label: Some(format!("← BEST: {:.6}", progress.best_objective)),
+                            });
+
+                            // Add footer information
+                            plot.add_footer_line(format!("Best: {:.6}", progress.best_objective));
+                            plot.add_footer_line(format!("Time: {:.1}s", progress.elapsed.as_secs_f64()));
+
+                            // Render plot (clear and redraw for animation, or first render)
+                            let mut is_first = first_render_clone.lock().unwrap();
+                            if *is_first {
+                                print!("{}", plot.render());
+                                *is_first = false;
+                            } else {
+                                print!("{}", plot.clear_and_render());
+                            }
+                            io::stdout().flush().unwrap();
                         }
                     }))
                 } else {
@@ -309,8 +373,57 @@ fn main() {
             let mut problem_mut = problem;  // Make mutable for optimization
             let result = optimizer.optimize(&mut problem_mut);
 
+            // Render final plot if verbose mode is enabled
+            if config.verbose {
+                let history = best_history.lock().unwrap();
+
+                // Create final plot
+                let mut plot = TerminalPlot::builder()
+                    .title("KALIX//OPTIMISER")
+                    .x_label("evals")
+                    .y_label("Objective Function")
+                    .width(50)
+                    .height(12)
+                    .color_scheme(ColorScheme::electric_grid())
+                    .build();
+
+                // Set progress bar to 100%
+                plot.set_progress(result.n_evaluations, term_evals);
+
+                // Add best evolution line with final point
+                let mut final_history = history.clone();
+                final_history.push((result.n_evaluations as f64, result.best_objective));
+                plot.add_line(Line {
+                    points: final_history,
+                    style: LineStyle::Dots,
+                    color: Some(Color::BrightMagenta),
+                });
+
+                // Add best marker at final position
+                plot.add_marker(Marker {
+                    x: result.n_evaluations as f64,
+                    y: result.best_objective,
+                    symbol: '★',
+                    color: Some(Color::BrightGreen),
+                    label: Some(format!("← BEST: {:.6}", result.best_objective)),
+                });
+
+                // Add footer information
+                plot.add_footer_line(format!("Best: {:.6}", result.best_objective));
+                plot.add_footer_line(format!("Time: {:.1}s", result.elapsed.as_secs_f64()));
+
+                // Render final plot
+                let is_first = *first_render.lock().unwrap();
+                if is_first {
+                    print!("{}", plot.render());
+                } else {
+                    print!("{}", plot.clear_and_render());
+                }
+                io::stdout().flush().unwrap();
+            }
+
             // Report results
-            println!("\n=== Optimisation Complete ===");
+            println!("\n\n=== Optimisation Complete ===");
             println!("Status: {}", if result.success { "SUCCESS" } else { "FAILED" });
             println!("Message: {}", result.message);
             println!("Generations: {}", result.generations);

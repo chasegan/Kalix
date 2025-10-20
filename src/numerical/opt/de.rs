@@ -56,6 +56,9 @@ pub struct DEResult {
 
     /// Termination message
     pub message: String,
+
+    /// Total elapsed time for optimization
+    pub elapsed: Duration,
 }
 
 /// Differential Evolution optimizer configuration
@@ -261,6 +264,7 @@ impl DifferentialEvolution {
             objective_history,
             success: true,
             message: "Optimization completed successfully".to_string(),
+            elapsed: start_time.elapsed(),
         }
     }
 

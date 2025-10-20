@@ -33,6 +33,7 @@ pub struct TerminalPlot {
     config: PlotConfig,
     elements: Vec<PlotElement>,
     progress: Option<ProgressBar>,
+    footer_lines: Vec<String>,
 }
 
 /// Configuration for the plot
@@ -253,6 +254,21 @@ impl TerminalPlot {
         self.progress = None;
     }
 
+    /// Add a line of text to the footer (displayed below the plot)
+    pub fn add_footer_line(&mut self, line: impl Into<String>) {
+        self.footer_lines.push(line.into());
+    }
+
+    /// Clear all footer lines
+    pub fn clear_footer(&mut self) {
+        self.footer_lines.clear();
+    }
+
+    /// Set multiple footer lines at once (replaces existing footer)
+    pub fn set_footer(&mut self, lines: Vec<String>) {
+        self.footer_lines = lines;
+    }
+
     /// Calculate the total height of the rendered plot
     pub fn total_height(&self) -> usize {
         let mut height = 0;
@@ -268,6 +284,9 @@ impl TerminalPlot {
 
         // Bottom border
         height += 1;
+
+        // Footer lines
+        height += self.footer_lines.len();
 
         height
     }
@@ -391,7 +410,7 @@ impl TerminalPlot {
         // Render top border
         output.push_str(scheme.border.to_ansi());
         output.push_str("  ");
-        for _ in 0..(self.config.width + 10) {
+        for _ in 0..(self.config.width + 12) {
             output.push('━');
         }
         output.push_str(Color::Reset.to_ansi());
@@ -415,16 +434,49 @@ impl TerminalPlot {
             }
         }
 
+        // Determine label formatting based on y-range
+        let y_span = (y_range.1 - y_range.0).abs();
+        let max_abs_y = y_range.0.abs().max(y_range.1.abs());
+
+        // Use scientific notation for very small or very large values
+        let use_scientific = y_span < 0.01 || max_abs_y > 10000.0;
+
+        // Determine decimal precision for regular notation
+        let decimals = if y_span < 0.1 {
+            2
+        } else if y_span < 1.0 {
+            2
+        } else if y_span < 10.0 {
+            1
+        } else {
+            0
+        };
+
         // Render Y-axis and grid
+        let mut last_label = String::new();
         for row in 0..self.config.height {
-            // Y-axis label
+            // Y-axis label - only show every 2 rows and avoid duplicates
             if row % 2 == 0 {
                 let y_value = y_range.1 - (row as f64 / self.config.height as f64) * (y_range.1 - y_range.0);
-                output.push_str(scheme.axis_labels.to_ansi());
-                output.push_str(&format!(" {:>5.1} ", y_value));
+
+                let label = if use_scientific {
+                    format!("{:.1e}", y_value)
+                } else {
+                    format!("{:.*}", decimals, y_value)
+                };
+
+                // Only render if different from last label (avoid duplicates)
+                if label != last_label {
+                    output.push_str(scheme.axis_labels.to_ansi());
+                    output.push_str(&format!(" {:>7} ", label));
+                    last_label = label;
+                } else {
+                    output.push_str(scheme.axis.to_ansi());
+                    output.push_str("         ");
+                }
             } else {
                 output.push_str(scheme.axis.to_ansi());
-                output.push_str("       ");
+                output.push_str("         ");
             }
 
             // Y-axis separator
@@ -448,7 +500,7 @@ impl TerminalPlot {
 
         // Render X-axis
         output.push_str(scheme.axis.to_ansi());
-        output.push_str("       └");
+        output.push_str("         └");
         for _ in 0..self.config.width {
             output.push('─');
         }
@@ -475,11 +527,20 @@ impl TerminalPlot {
         // Bottom border
         output.push_str(scheme.border.to_ansi());
         output.push_str("  ");
-        for _ in 0..(self.config.width + 10) {
+        for _ in 0..(self.config.width + 12) {
             output.push('━');
         }
         output.push_str(Color::Reset.to_ansi());
         output.push('\n');
+
+        // Footer lines
+        for line in &self.footer_lines {
+            output.push_str(scheme.title.to_ansi());
+            output.push_str("  ");
+            output.push_str(line);
+            output.push_str(Color::Reset.to_ansi());
+            output.push('\n');
+        }
 
         output
     }
@@ -575,6 +636,7 @@ impl PlotBuilder {
             config: self.config,
             elements: Vec::new(),
             progress: None,
+            footer_lines: Vec::new(),
         }
     }
 }
