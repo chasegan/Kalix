@@ -262,7 +262,7 @@ public class RunManager extends JFrame {
     private void createDetailsLayouts() {
         // Create message panel for when no run is selected
         JPanel messagePanel = new JPanel(new BorderLayout());
-        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View STDIO Log<br>• Remove run</center></html>", SwingConstants.CENTER);
+        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View in KalixCLI Session Manager<br>• Remove run</center></html>", SwingConstants.CENTER);
         messageLabel.setForeground(Color.GRAY);
         messagePanel.add(messageLabel, BorderLayout.CENTER);
         messagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -430,9 +430,9 @@ public class RunManager extends JFrame {
         saveResultsItem.addActionListener(e -> saveResultsFromContextMenu());
         contextMenu.add(saveResultsItem);
 
-        JMenuItem cliLogItem = new JMenuItem("STDIO Log");
-        cliLogItem.addActionListener(e -> showCliLogFromContextMenu());
-        contextMenu.add(cliLogItem);
+        JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
+        sessionManagerItem.addActionListener(e -> showInSessionManagerFromContextMenu());
+        contextMenu.add(sessionManagerItem);
 
         // Add mouse listener for right-click
         runTree.addMouseListener(new MouseAdapter() {
@@ -476,6 +476,12 @@ public class RunManager extends JFrame {
 
             // Check for new sessions
             for (SessionManager.KalixSession session : activeSessions.values()) {
+                // FILTER: Only show simulation runs (RunModelProgram)
+                // Other session types (OptimisationProgram, etc.) are managed elsewhere
+                if (!(session.getActiveProgram() instanceof RunModelProgram)) {
+                    continue; // Skip non-simulation sessions
+                }
+
                 String sessionKey = session.getSessionKey();
 
                 if (!sessionToTreeNode.containsKey(sessionKey)) {
@@ -597,9 +603,9 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Shows the CLI log window for the selected run.
+     * Opens the KalixCLI Session Manager window with the selected run's session.
      */
-    private void showCliLogFromContextMenu() {
+    private void showInSessionManagerFromContextMenu() {
         TreePath selectedPath = runTree.getSelectionPath();
         if (selectedPath == null) return;
 
@@ -607,7 +613,8 @@ public class RunManager extends JFrame {
         if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
 
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-        StdioLogWindow.showStdioLogWindow(runInfo.runName, runInfo.session, stdioTaskManager, this);
+        String sessionKey = runInfo.session.getSessionKey();
+        SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, statusUpdater, sessionKey);
     }
 
     /**

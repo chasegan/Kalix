@@ -57,8 +57,11 @@ public class MenuBarBuilder {
         // Run Manager window
         void showRunManager();
 
-        // Optimisation window
+        // Optimiser window
         void showOptimisation();
+
+        // Session Manager window
+        void showSessionManager();
 
         // Website launch
         void openWebsite();
@@ -199,8 +202,10 @@ public class MenuBarBuilder {
         JMenu runMenu = new JMenu("Run");
         runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
-        runMenu.add(createMenuItem("Optimisation", e -> callbacks.showOptimisation()));
+        runMenu.add(createMenuItem("Optimiser", e -> callbacks.showOptimisation()));
         runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));
+        runMenu.addSeparator();
+        runMenu.add(createMenuItem("KalixCLI sessions (Advanced)", e -> callbacks.showSessionManager()));
         return runMenu;
     }
     

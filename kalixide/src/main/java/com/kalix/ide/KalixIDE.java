@@ -38,6 +38,7 @@ import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalLauncher;
 import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
+import com.kalix.ide.windows.SessionManagerWindow;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1047,6 +1048,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             });
     }
 
+    @Override
+    public void showSessionManager() {
+        SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, this::updateStatus);
+    }
 
     @Override
     public void runModelFromMemory() {

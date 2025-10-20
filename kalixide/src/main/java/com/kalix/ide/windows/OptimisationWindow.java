@@ -90,7 +90,7 @@ public class OptimisationWindow extends JFrame {
     }
 
     private void setupWindow(JFrame parentFrame) {
-        setTitle("Model Optimisation");
+        setTitle("Optimiser");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setSize(900, 700);
 
