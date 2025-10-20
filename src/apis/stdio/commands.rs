@@ -71,6 +71,7 @@ impl CommandRegistry {
         registry.register(Arc::new(LoadModelStringCommand));
         registry.register(Arc::new(RunSimulationCommand));
         registry.register(Arc::new(RunOptimisationCommand));
+        registry.register(Arc::new(GetOptimisableParamsCommand));
         registry.register(Arc::new(GetResultCommand));
         registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
@@ -843,6 +844,65 @@ impl Command for RunOptimisationCommand {
     }
 }
 
+pub struct GetOptimisableParamsCommand;
+
+impl Command for GetOptimisableParamsCommand {
+    fn name(&self) -> &str {
+        "get_optimisable_params"
+    }
+
+    fn description(&self) -> &str {
+        "Get list of all optimisable parameters from the loaded model"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![] // No parameters required
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        _params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+    ) -> Result<serde_json::Value, CommandError> {
+        use crate::numerical::opt::OptimisableNode;
+        use crate::nodes::NodeEnum;
+
+        // Get model and check if it exists
+        let model = session.get_model()
+            .ok_or(CommandError::ModelNotLoaded)?;
+
+        // Collect optimisable parameters from all nodes
+        let mut params = Vec::new();
+
+        for (node_name, &node_idx) in &model.node_lookup {
+            match &model.nodes[node_idx] {
+                NodeEnum::Gr4jNode(node) => {
+                    for param in node.list_params() {
+                        params.push(format!("node.{}.{}", node_name, param));
+                    }
+                }
+                NodeEnum::SacramentoNode(node) => {
+                    for param in node.list_params() {
+                        params.push(format!("node.{}.{}", node_name, param));
+                    }
+                }
+                _ => {
+                    // Skip non-optimisable nodes
+                }
+            }
+        }
+
+        Ok(serde_json::json!({
+            "parameters": params
+        }))
+    }
+}
+
 pub struct SaveResultsCommand;
 
 impl Command for SaveResultsCommand {
@@ -968,6 +1028,7 @@ mod tests {
         assert!(commands.contains(&"load_model_string"));
         assert!(commands.contains(&"run_simulation"));
         assert!(commands.contains(&"run_optimisation"));
+        assert!(commands.contains(&"get_optimisable_params"));
         assert!(commands.contains(&"get_result"));
         assert!(commands.contains(&"save_results"));
         assert!(commands.contains(&"echo"));
