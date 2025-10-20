@@ -108,11 +108,7 @@ fn main() {
             });
         }
 
-        if i == 1 {
-            print!("{}", anim_plot.render());
-        } else {
-            print!("{}", anim_plot.clear_and_render());
-        }
+        print!("{}", anim_plot.render());
     }
 
     println!("\n✓ Demo complete!");

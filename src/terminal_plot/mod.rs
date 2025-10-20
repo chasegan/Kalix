@@ -26,6 +26,8 @@
 //! println!("{}", plot.render());
 //! ```
 
+pub mod optimization_plot;
+
 use std::fmt;
 
 /// Main plot structure containing configuration and plot elements
@@ -34,6 +36,7 @@ pub struct TerminalPlot {
     elements: Vec<PlotElement>,
     progress: Option<ProgressBar>,
     footer_lines: Vec<String>,
+    has_rendered: bool,
 }
 
 /// Configuration for the plot
@@ -291,10 +294,19 @@ impl TerminalPlot {
         height
     }
 
-    /// Render the plot and move cursor up to overwrite previous render
-    pub fn clear_and_render(&self) -> String {
-        let height = self.total_height();
-        format!("\x1b[{}A\r{}", height, self.render())
+    /// Render the plot (automatically clears previous render if needed)
+    pub fn render(&mut self) -> String {
+        let output = if self.has_rendered {
+            // Not first render - clear previous and redraw
+            let height = self.total_height();
+            format!("\x1b[{}A\r{}", height, self.render_plot())
+        } else {
+            // First render
+            self.render_plot()
+        };
+
+        self.has_rendered = true;
+        output
     }
 
     /// Calculate actual x and y ranges based on data
@@ -374,8 +386,8 @@ impl TerminalPlot {
         Some((screen_x.min(self.config.width - 1), screen_y.min(self.config.height - 1)))
     }
 
-    /// Render the complete plot
-    pub fn render(&self) -> String {
+    /// Internal method to render the plot without clearing
+    fn render_plot(&self) -> String {
         let mut output = String::new();
         let scheme = &self.config.color_scheme;
 
@@ -637,12 +649,13 @@ impl PlotBuilder {
             elements: Vec::new(),
             progress: None,
             footer_lines: Vec::new(),
+            has_rendered: false,
         }
     }
 }
 
 impl fmt::Display for TerminalPlot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.render())
+        write!(f, "{}", self.render_plot())
     }
 }
