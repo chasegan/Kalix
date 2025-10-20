@@ -712,17 +712,20 @@ impl Command for RunOptimisationCommand {
         let config = OptimisationConfig::from_ini(config_str)
             .map_err(|e| CommandError::InvalidParameters(format!("Failed to parse optimisation config: {}", e)))?;
 
-        // Load model: prioritize inline model_ini parameter, otherwise use model_file from config
+        // Load model with priority: inline model_ini > config model_file > session model
         let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {
-            // Use inline model (takes precedence)
+            // Priority 1: Use inline model parameter
             IniModelIO::new().read_model_string(model_ini)
                 .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?
         } else if let Some(model_file) = &config.model_file {
-            // Fallback to model_file from config
+            // Priority 2: Use model_file from config
             IniModelIO::new().read_model_file(model_file)
                 .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", model_file, e)))?
+        } else if let Some(session_model) = session.get_model() {
+            // Priority 3: Use session's loaded model
+            session_model.clone()
         } else {
-            return Err(CommandError::ExecutionError("Either 'model_ini' parameter or 'model_file' in config must be provided".to_string()));
+            return Err(CommandError::ModelNotLoaded);
         };
 
         // Load observed data
