@@ -4,22 +4,25 @@ import java.util.function.Consumer;
 
 /**
  * Handles the "Optimisation" program flow:
- * 1. Wait for session ready
- * 2. Send run_optimisation command with configuration and model
- * 3. Monitor progress messages
- * 4. Handle result message
+ * 1. Send load_model_string command
+ * 2. Wait for RESULT response from load_model_string
+ * 3. Wait for READY response (kalixcli ready for next command)
+ * 4. Send run_optimisation command with configuration
+ * 5. Monitor progress messages
+ * 6. Handle RESULT message from run_optimisation
  */
 public class OptimisationProgram extends AbstractSessionProgram {
 
     private enum ProgramState {
-        WAITING_FOR_READY,  // Waiting for session to be ready
-        OPTIMISING,         // Opt command sent, optimisation in progress
+        STARTING,           // Sent load_model_string, waiting for RESULT
+        MODEL_LOADING,      // Received RESULT from load, waiting for READY
+        OPTIMISING,         // Sent run_optimisation, optimisation in progress
         COMPLETED,          // Program completed successfully
         FAILED              // Program failed with error
     }
 
     private final Consumer<String> resultCallback;
-    private ProgramState currentState = ProgramState.WAITING_FOR_READY;
+    private ProgramState currentState = ProgramState.STARTING;
     private String configText;
     private String modelIni;
 
@@ -42,7 +45,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
 
     /**
      * Starts the Optimisation program with the given configuration and model.
-     * The session must already be started.
+     * Immediately sends load_model_string command to kalixcli.
      *
      * @param configText the optimisation configuration (INI format)
      * @param modelIni the model definition (INI format)
@@ -50,8 +53,19 @@ public class OptimisationProgram extends AbstractSessionProgram {
     public void start(String configText, String modelIni) {
         this.configText = configText;
         this.modelIni = modelIni;
-        this.currentState = ProgramState.WAITING_FOR_READY;
-        statusUpdater.accept("Waiting for session to be ready...");
+
+        // Step 1: Send load_model_string command
+        // We stay in STARTING state and wait for RESULT message to know model is loaded
+        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
+        sessionManager.sendCommand(sessionKey, loadCommand)
+            .thenRun(() -> {
+                statusUpdater.accept("Loading model for optimisation");
+            })
+            .exceptionally(throwable -> {
+                currentState = ProgramState.FAILED;
+                statusUpdater.accept("Failed to send model: " + throwable.getMessage());
+                return null;
+            });
     }
 
     @Override
@@ -62,9 +76,10 @@ public class OptimisationProgram extends AbstractSessionProgram {
         }
 
         return switch (currentState) {
-            case WAITING_FOR_READY -> handleWaitingForReadyState(msgType, message);
+            case STARTING -> handleStartingState(msgType, message);
+            case MODEL_LOADING -> handleModelLoadingState(msgType, message);
             case OPTIMISING -> handleOptimisingState(msgType, message);
-            case COMPLETED, FAILED -> false;
+            case COMPLETED, FAILED -> false; // Don't handle messages in these states
         };
     }
 
@@ -86,7 +101,8 @@ public class OptimisationProgram extends AbstractSessionProgram {
     @Override
     public String getStateDescription() {
         return switch (currentState) {
-            case WAITING_FOR_READY -> "Waiting for Ready";
+            case STARTING -> "Starting";
+            case MODEL_LOADING -> "Loading Model";
             case OPTIMISING -> "Optimising";
             case COMPLETED -> "Completed";
             case FAILED -> "Failed";
@@ -94,31 +110,61 @@ public class OptimisationProgram extends AbstractSessionProgram {
     }
 
     /**
-     * Handles messages while waiting for session to be ready.
+     * Handles messages in STARTING state (waiting for model load to complete).
      */
-    private boolean handleWaitingForReadyState(JsonStdioTypes.SystemMessageType msgType,
-                                                JsonMessage.SystemMessage message) {
+    private boolean handleStartingState(JsonStdioTypes.SystemMessageType msgType,
+                                        JsonMessage.SystemMessage message) {
         switch (msgType) {
-            case READY:
-                // Session ready, send run_optimisation command with both config and model
-                currentState = ProgramState.OPTIMISING;
-
-                String optCommand = JsonStdioProtocol.createCommandMessage("run_optimisation",
-                    java.util.Map.of(
-                        "config", configText,
-                        "model_ini", modelIni
-                    ));
-
-                sendCommand(optCommand, "Optimisation started", "Failed to start optimisation");
-                return true;
+            case RESULT:
+                // Check if this is the result from load_model_string
+                String cmd = message.getCommand();
+                if ("load_model_string".equals(cmd)) {
+                    // Model loaded successfully, now wait for READY before sending run_optimisation
+                    currentState = ProgramState.MODEL_LOADING;
+                    statusUpdater.accept("Model loaded, waiting for ready signal");
+                    return true;
+                }
+                return false;
 
             case ERROR:
-                // Session failed
+                // Model loading failed
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Session error: " + extractErrorMessage(message));
+                String errorMsg = extractErrorMessage(message);
+                statusUpdater.accept("Model loading failed: " + errorMsg);
                 return true;
 
             default:
+                // Other message types (including READY) are ignored in STARTING state
+                return false;
+        }
+    }
+
+    /**
+     * Handles messages while waiting for READY after model load RESULT.
+     */
+    private boolean handleModelLoadingState(JsonStdioTypes.SystemMessageType msgType,
+                                             JsonMessage.SystemMessage message) {
+        switch (msgType) {
+            case READY:
+                // CLI is ready for next command, now send run_optimisation
+                currentState = ProgramState.OPTIMISING;
+
+                // Send run_optimisation command with only config (model already loaded)
+                String optCommand = JsonStdioProtocol.createCommandMessage("run_optimisation",
+                    java.util.Map.of("config", configText));
+
+                sendCommand(optCommand, "Model loaded, optimisation started", "Failed to start optimisation");
+                return true;
+
+            case ERROR:
+                // Unexpected error
+                currentState = ProgramState.FAILED;
+                String errorMsg = extractErrorMessage(message);
+                statusUpdater.accept("Error after model load: " + errorMsg);
+                return true;
+
+            default:
+                // Other message types are not relevant in MODEL_LOADING state
                 return false;
         }
     }
