@@ -46,8 +46,6 @@ public class OptimisationWindow extends JFrame {
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private DefaultMutableTreeNode currentOptimisationsNode;
-    private DefaultMutableTreeNode libraryNode;
-    private DefaultMutableTreeNode newOptimisationNode;
 
     // Details panel components
     private JPanel detailsPanel;
@@ -135,12 +133,8 @@ public class OptimisationWindow extends JFrame {
         // ===== Tree Structure =====
         rootNode = new DefaultMutableTreeNode("Optimisations");
         currentOptimisationsNode = new DefaultMutableTreeNode("Current optimisations");
-        libraryNode = new DefaultMutableTreeNode("Library");
-        newOptimisationNode = new DefaultMutableTreeNode("New Optimisation");
 
         rootNode.add(currentOptimisationsNode);
-        rootNode.add(libraryNode);
-        rootNode.add(newOptimisationNode);
 
         treeModel = new DefaultTreeModel(rootNode);
         optTree = new JTree(treeModel);
@@ -152,9 +146,8 @@ public class OptimisationWindow extends JFrame {
         // Setup context menu
         setupContextMenu();
 
-        // Expand all nodes by default
+        // Expand "Current optimisations" node by default
         optTree.expandRow(0);
-        optTree.expandRow(1);
 
         // ===== Details Panel with CardLayout =====
         detailsPanel = new JPanel();
@@ -264,18 +257,41 @@ public class OptimisationWindow extends JFrame {
     private void setupLayout() {
         setLayout(new BorderLayout());
 
-        // Left panel: Tree
+        // Left panel: Tree + Button
+        JPanel leftPanel = new JPanel(new BorderLayout(0, 5));
+        leftPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
         JScrollPane treeScrollPane = new JScrollPane(optTree);
-        treeScrollPane.setPreferredSize(new Dimension(200, 0));
+        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
+
+        // Button panel at bottom of left side
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 5));
+        JButton newOptButton = new JButton("New Optimisation");
+        newOptButton.setIcon(FontIcon.of(FontAwesomeSolid.PLUS, 14, new Color(0, 120, 0)));
+        newOptButton.addActionListener(e -> showNewOptimisationPanel());
+        buttonPanel.add(newOptButton);
+        leftPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        leftPanel.setPreferredSize(new Dimension(220, 0));
 
         // Create horizontal split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setLeftComponent(treeScrollPane);
+        splitPane.setLeftComponent(leftPanel);
         splitPane.setRightComponent(detailsPanel);
-        splitPane.setDividerLocation(200);
+        splitPane.setDividerLocation(220);
         splitPane.setResizeWeight(0.0);  // Tree stays fixed width when resizing
 
         add(splitPane, BorderLayout.CENTER);
+    }
+
+    /**
+     * Shows the new optimisation configuration panel.
+     */
+    private void showNewOptimisationPanel() {
+        // Clear selection in tree
+        optTree.clearSelection();
+        // Show the NEW_OPTIMISATION_PANEL
+        detailsCardLayout.show(detailsPanel, "NEW_OPTIMISATION_PANEL");
     }
 
     private void setupWindowListeners() {
@@ -473,15 +489,13 @@ public class OptimisationWindow extends JFrame {
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
 
-        if (selectedNode == newOptimisationNode) {
-            // Show config editor for new optimisation
-            detailsCardLayout.show(detailsPanel, "NEW_OPTIMISATION_PANEL");
-        } else if (selectedNode.getUserObject() instanceof OptimisationInfo) {
+        if (selectedNode.getUserObject() instanceof OptimisationInfo) {
             // Show details for existing optimisation
             OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
             updateOptimisationDetailsPanel(optInfo);
             detailsCardLayout.show(detailsPanel, "OPTIMISATION_DETAILS_PANEL");
         } else {
+            // Folder node selected (like "Current optimisations")
             detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
         }
     }
@@ -1008,11 +1022,6 @@ public class OptimisationWindow extends JFrame {
                             setForeground(Color.GRAY);
                             setIcon(FontIcon.of(FontAwesomeSolid.STOP_CIRCLE, 16, Color.GRAY));
                             break;
-                    }
-                } else if (userObject instanceof String) {
-                    String text = (String) userObject;
-                    if (text.equals("New Optimisation")) {
-                        setIcon(FontIcon.of(FontAwesomeSolid.PLUS_CIRCLE, 16, new Color(0, 150, 0)));
                     }
                 }
             }
