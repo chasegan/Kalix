@@ -78,6 +78,68 @@ public class RunManager extends JFrame {
     private boolean isUpdatingSelection = false;
 
     /**
+     * Natural sorting comparator that is case-insensitive and number-aware.
+     * Compares strings by splitting them into text and numeric parts.
+     * Text parts are compared case-insensitively, numeric parts as integers.
+     *
+     * Examples:
+     * - "node1" < "node2" < "node10" (numeric comparison)
+     * - "Node1" == "node1" (case-insensitive)
+     * - "node1_inflow" < "node10_gauge" (numeric-aware)
+     */
+    private static int naturalCompare(String s1, String s2) {
+        int i1 = 0, i2 = 0;
+        int len1 = s1.length(), len2 = s2.length();
+
+        while (i1 < len1 && i2 < len2) {
+            // Determine if current characters are digits
+            boolean isDigit1 = Character.isDigit(s1.charAt(i1));
+            boolean isDigit2 = Character.isDigit(s2.charAt(i2));
+
+            if (isDigit1 && isDigit2) {
+                // Both are digits - extract and compare as numbers
+                int numStart1 = i1, numStart2 = i2;
+                while (i1 < len1 && Character.isDigit(s1.charAt(i1))) i1++;
+                while (i2 < len2 && Character.isDigit(s2.charAt(i2))) i2++;
+
+                String numStr1 = s1.substring(numStart1, i1);
+                String numStr2 = s2.substring(numStart2, i2);
+
+                // Compare as integers (handle large numbers gracefully)
+                int cmp;
+                try {
+                    long num1 = Long.parseLong(numStr1);
+                    long num2 = Long.parseLong(numStr2);
+                    cmp = Long.compare(num1, num2);
+                } catch (NumberFormatException e) {
+                    // Fall back to string comparison if numbers too large
+                    cmp = numStr1.compareTo(numStr2);
+                }
+
+                if (cmp != 0) return cmp;
+            } else if (isDigit1) {
+                // Digits come before non-digits
+                return -1;
+            } else if (isDigit2) {
+                // Non-digits come after digits
+                return 1;
+            } else {
+                // Both are non-digits - compare case-insensitively
+                char c1 = Character.toLowerCase(s1.charAt(i1));
+                char c2 = Character.toLowerCase(s2.charAt(i2));
+                if (c1 != c2) {
+                    return Character.compare(c1, c2);
+                }
+                i1++;
+                i2++;
+            }
+        }
+
+        // One string is a prefix of the other
+        return Integer.compare(len1, len2);
+    }
+
+    /**
      * Private constructor for singleton pattern.
      */
     private RunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
@@ -193,7 +255,7 @@ public class RunManager extends JFrame {
 
         treeModel = new DefaultTreeModel(rootNode);
         runTree = new JTree(treeModel);
-        runTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        runTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
         runTree.setRootVisible(false);
         runTree.setShowsRootHandles(true);
         runTree.setCellRenderer(new RunTreeCellRenderer());
@@ -230,6 +292,9 @@ public class RunManager extends JFrame {
 
         // Add selection listener to fetch timeseries data for leaf nodes and update plot
         outputsTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
+
+        // Add context menu for expand/collapse all
+        setupOutputsTreeContextMenu();
 
         outputsScrollPane = new JScrollPane(outputsTree);
 
@@ -465,6 +530,110 @@ public class RunManager extends JFrame {
                 }
             }
         });
+    }
+
+    /**
+     * Sets up the context menu for the outputs tree with expand/collapse operations.
+     */
+    private void setupOutputsTreeContextMenu() {
+        JPopupMenu contextMenu = new JPopupMenu();
+
+        JMenuItem expandAllItem = new JMenuItem("Expand All");
+        expandAllItem.addActionListener(e -> expandAllFromSelected());
+        contextMenu.add(expandAllItem);
+
+        JMenuItem collapseAllItem = new JMenuItem("Collapse All");
+        collapseAllItem.addActionListener(e -> collapseAllFromSelected());
+        contextMenu.add(collapseAllItem);
+
+        // Add mouse listener for right-click
+        outputsTree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            private void showContextMenu(MouseEvent e) {
+                // Get the path at the mouse location
+                TreePath path = outputsTree.getPathForLocation(e.getX(), e.getY());
+                if (path != null) {
+                    // Select the node that was right-clicked if not already selected
+                    if (!outputsTree.isPathSelected(path)) {
+                        outputsTree.setSelectionPath(path);
+                    }
+                    contextMenu.show(outputsTree, e.getX(), e.getY());
+                } else {
+                    // Right-clicked on empty space - still show menu (applies to root)
+                    contextMenu.show(outputsTree, e.getX(), e.getY());
+                }
+            }
+        });
+    }
+
+    /**
+     * Expands all nodes recursively from the selected node(s).
+     */
+    private void expandAllFromSelected() {
+        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        if (selectedPaths == null || selectedPaths.length == 0) {
+            // No selection - expand all from root
+            expandAllChildren(new TreePath(outputsTreeModel.getRoot()));
+        } else {
+            // Expand all from each selected node
+            for (TreePath path : selectedPaths) {
+                expandAllChildren(path);
+            }
+        }
+    }
+
+    /**
+     * Recursively expands all children of a given tree path.
+     */
+    private void expandAllChildren(TreePath path) {
+        outputsTree.expandPath(path);
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        for (int i = 0; i < node.getChildCount(); i++) {
+            TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
+            expandAllChildren(childPath);
+        }
+    }
+
+    /**
+     * Collapses all nodes recursively from the selected node(s).
+     */
+    private void collapseAllFromSelected() {
+        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        if (selectedPaths == null || selectedPaths.length == 0) {
+            // No selection - collapse all from root
+            collapseAllChildren(new TreePath(outputsTreeModel.getRoot()));
+        } else {
+            // Collapse all from each selected node
+            for (TreePath path : selectedPaths) {
+                collapseAllChildren(path);
+            }
+        }
+    }
+
+    /**
+     * Recursively collapses all children of a given tree path.
+     */
+    private void collapseAllChildren(TreePath path) {
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        // Collapse children first (bottom-up)
+        for (int i = 0; i < node.getChildCount(); i++) {
+            TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
+            collapseAllChildren(childPath);
+        }
+        outputsTree.collapsePath(path);
     }
 
     public void refreshRuns() {
@@ -767,22 +936,28 @@ public class RunManager extends JFrame {
      * Updates the details panel based on current tree selection.
      */
     private void updateDetailsPanel() {
-        TreePath selectedPath = runTree.getSelectionPath();
-        if (selectedPath == null) {
+        TreePath[] selectedPaths = runTree.getSelectionPaths();
+        if (selectedPaths == null || selectedPaths.length == 0) {
             detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
             return;
         }
 
-        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        // Collect all selected RunInfo objects
+        List<RunInfo> selectedRuns = new ArrayList<>();
+        for (TreePath path : selectedPaths) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            if (node.getUserObject() instanceof RunInfo) {
+                selectedRuns.add((RunInfo) node.getUserObject());
+            }
+        }
 
-        // Check if the selected node is a run (has RunInfo as user object)
-        if (selectedNode.getUserObject() instanceof RunInfo) {
-            RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
-            updateOutputsTree(runInfo);
-            detailsCardLayout.show(detailsPanel, "OUTPUTS_PANEL");
-        } else {
-            // Selection is on a parent node (Current runs, Library)
+        if (selectedRuns.isEmpty()) {
+            // Selection is on parent nodes only (Current runs, Library)
             detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
+        } else {
+            // Update outputs tree with all selected runs
+            updateOutputsTreeForMultipleRuns(selectedRuns);
+            detailsCardLayout.show(detailsPanel, "OUTPUTS_PANEL");
         }
     }
 
@@ -810,8 +985,8 @@ public class RunManager extends JFrame {
         }
 
         if (outputs != null && !outputs.isEmpty()) {
-            // Sort outputs alphabetically for consistent tree organization
-            outputs.sort(String::compareTo);
+            // Sort outputs using natural sorting (case-insensitive, number-aware)
+            outputs.sort(RunManager::naturalCompare);
 
             // Parse dot-delimited strings into tree structure
             for (String output : outputs) {
@@ -846,7 +1021,248 @@ public class RunManager extends JFrame {
     }
 
     /**
+     * Updates the outputs tree for multiple selected runs using smart hybrid structure.
+     * Series available in multiple runs become parent nodes with run children.
+     * Series available in only one run become simple leaf nodes.
+     */
+    private void updateOutputsTreeForMultipleRuns(List<RunInfo> selectedRuns) {
+        // Remember current expansion state
+        List<TreePath> expandedPaths = new ArrayList<>();
+        for (int i = 0; i < outputsTree.getRowCount(); i++) {
+            TreePath path = outputsTree.getPathForRow(i);
+            if (outputsTree.isExpanded(path)) {
+                expandedPaths.add(path);
+            }
+        }
+
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        root.removeAllChildren();
+
+        // If only one run selected, use the original simple tree structure
+        if (selectedRuns.size() == 1) {
+            updateOutputsTreeSingleRun(root, selectedRuns.get(0));
+        } else {
+            // Build multi-run hybrid tree
+            updateOutputsTreeMultiRun(root, selectedRuns);
+        }
+
+        outputsTreeModel.reload();
+
+        // Restore expansion state or expand all if first time
+        if (expandedPaths.isEmpty()) {
+            // First time - expand all nodes
+            for (int i = 0; i < outputsTree.getRowCount(); i++) {
+                outputsTree.expandRow(i);
+            }
+        } else {
+            // Restore previous expansion state
+            for (TreePath expandedPath : expandedPaths) {
+                TreePath newPath = findEquivalentPath(expandedPath);
+                if (newPath != null) {
+                    outputsTree.expandPath(newPath);
+                }
+            }
+        }
+    }
+
+    /**
+     * Populates the tree for a single run using SeriesLeafNode objects.
+     */
+    private void updateOutputsTreeSingleRun(DefaultMutableTreeNode root, RunInfo runInfo) {
+        List<String> outputs = null;
+        if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+            RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+            outputs = program.getOutputsGenerated();
+        }
+
+        if (outputs != null && !outputs.isEmpty()) {
+            outputs.sort(RunManager::naturalCompare);
+            for (String seriesName : outputs) {
+                // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")
+                SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, runInfo, true);
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
+                addHierarchicalNodeToTree(root, seriesName, node);
+            }
+        } else {
+            String message = runInfo.getRunStatus() == RunStatus.DONE ?
+                "No outputs available" :
+                "Outputs will appear when simulation completes";
+            root.add(new DefaultMutableTreeNode(message));
+        }
+    }
+
+    /**
+     * Populates the tree for multiple runs using smart hybrid structure.
+     */
+    private void updateOutputsTreeMultiRun(DefaultMutableTreeNode root, List<RunInfo> selectedRuns) {
+        // Map: series name -> list of RunInfo that have this series
+        Map<String, List<RunInfo>> seriesAvailability = new LinkedHashMap<>();
+
+        // Collect all outputs from all selected runs
+        for (RunInfo runInfo : selectedRuns) {
+            List<String> outputs = null;
+            if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+                RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+                outputs = program.getOutputsGenerated();
+            }
+
+            if (outputs != null) {
+                for (String output : outputs) {
+                    seriesAvailability.computeIfAbsent(output, k -> new ArrayList<>()).add(runInfo);
+                }
+            }
+        }
+
+        if (seriesAvailability.isEmpty()) {
+            root.add(new DefaultMutableTreeNode("No outputs available from selected runs"));
+            return;
+        }
+
+        // Sort series names using natural sorting (case-insensitive, number-aware)
+        List<String> sortedSeries = new ArrayList<>(seriesAvailability.keySet());
+        sortedSeries.sort(RunManager::naturalCompare);
+
+        // Build hybrid tree structure
+        for (String seriesName : sortedSeries) {
+            List<RunInfo> runsWithSeries = seriesAvailability.get(seriesName);
+
+            if (runsWithSeries.size() == 1) {
+                // Only one run has this series - create standalone leaf node
+                RunInfo singleRun = runsWithSeries.get(0);
+                SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, singleRun, true);
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
+                addHierarchicalNodeToTree(root, seriesName, node);
+            } else {
+                // Multiple runs have this series - create parent with children
+                SeriesParentNode parentNode = new SeriesParentNode(seriesName, runsWithSeries);
+                DefaultMutableTreeNode parentTreeNode = new DefaultMutableTreeNode(parentNode);
+
+                // Add children for each run
+                for (RunInfo runInfo : runsWithSeries) {
+                    SeriesLeafNode childLeaf = new SeriesLeafNode(seriesName, runInfo, false);
+                    DefaultMutableTreeNode childNode = new DefaultMutableTreeNode(childLeaf);
+                    parentTreeNode.add(childNode);
+                }
+
+                addHierarchicalNodeToTree(root, seriesName, parentTreeNode);
+            }
+        }
+    }
+
+    /**
+     * Adds a node to the tree while preserving hierarchical structure (dot-delimited paths).
+     */
+    private void addHierarchicalNodeToTree(DefaultMutableTreeNode root, String seriesName, DefaultMutableTreeNode nodeToAdd) {
+        String[] parts = seriesName.split("\\.");
+        if (parts.length == 1) {
+            // No hierarchy, add directly
+            root.add(nodeToAdd);
+        } else {
+            // Build hierarchy
+            DefaultMutableTreeNode current = root;
+            for (int i = 0; i < parts.length - 1; i++) {
+                DefaultMutableTreeNode child = findOrCreateChild(current, parts[i]);
+                current = child;
+            }
+            current.add(nodeToAdd);
+        }
+    }
+
+    /**
+     * Finds or creates a child node with the given name.
+     */
+    private DefaultMutableTreeNode findOrCreateChild(DefaultMutableTreeNode parent, String childName) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            Object userObject = child.getUserObject();
+            if (userObject instanceof String && userObject.equals(childName)) {
+                return child;
+            }
+        }
+        // Not found, create new
+        DefaultMutableTreeNode newChild = new DefaultMutableTreeNode(childName);
+        parent.add(newChild);
+        return newChild;
+    }
+
+    // Helper classes to track series nodes with run information
+
+    /**
+     * Represents a leaf node that is a plottable series from a specific run.
+     */
+    private static class SeriesLeafNode {
+        final String seriesName;
+        final RunInfo runInfo;
+        final boolean showSeriesName;  // If true, show "ds_1 [Run_1]", else just "Run_1"
+
+        SeriesLeafNode(String seriesName, RunInfo runInfo, boolean showSeriesName) {
+            this.seriesName = seriesName;
+            this.runInfo = runInfo;
+            this.showSeriesName = showSeriesName;
+        }
+
+        @Override
+        public String toString() {
+            if (showSeriesName) {
+                // Standalone leaf: show "ds_1 [Run_1]"
+                String lastSegment = seriesName.contains(".")
+                    ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
+                    : seriesName;
+                return lastSegment + " [" + runInfo.runName + "]";
+            } else {
+                // Child of parent node: just show "Run_1"
+                return runInfo.runName;
+            }
+        }
+    }
+
+    /**
+     * Represents a parent node for a series available in multiple runs.
+     */
+    private static class SeriesParentNode {
+        final String seriesName;
+        final List<RunInfo> runsWithSeries;
+
+        SeriesParentNode(String seriesName, List<RunInfo> runsWithSeries) {
+            this.seriesName = seriesName;
+            this.runsWithSeries = runsWithSeries;
+        }
+
+        @Override
+        public String toString() {
+            // Extract just the last segment of the series name (e.g., "ds_1" from "node.node9.ds_1")
+            String lastSegment = seriesName.contains(".")
+                ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
+                : seriesName;
+
+            String[] runLabels = runsWithSeries.stream()
+                .map(r -> r.runName)
+                .toArray(String[]::new);
+            return lastSegment + " [" + String.join(", ", runLabels) + "]";
+        }
+    }
+
+    /**
+     * Creates a new TimeSeriesData with a different name but same data.
+     */
+    private TimeSeriesData renameTimeSeriesData(TimeSeriesData original, String newName) {
+        // Convert timestamps back to LocalDateTime array
+        long[] timestamps = original.getTimestamps();
+        java.time.LocalDateTime[] dateTimes = new java.time.LocalDateTime[timestamps.length];
+        for (int i = 0; i < timestamps.length; i++) {
+            dateTimes[i] = java.time.LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(timestamps[i]),
+                java.time.ZoneOffset.UTC
+            );
+        }
+
+        // Create new TimeSeriesData with new name
+        return new TimeSeriesData(newName, dateTimes, original.getValues());
+    }
+
+    /**
      * Handles selection changes in the outputs tree.
+     * Supports recursive selection: selecting a parent node plots all its leaf children.
      * Fetches timeseries data for leaf nodes and updates plot and stats.
      */
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
@@ -858,35 +1274,28 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Get the currently selected run to determine sessionKey
-        RunInfo selectedRun = getSelectedRunInfo();
-        if (selectedRun == null) {
-            clearPlotAndStats();
-            selectedSeries.clear();
-            return;
-        }
-
-        String sessionKey = selectedRun.session.getSessionKey();
-        Set<String> newSelectedSeries = new HashSet<>();
-
-        // Collect all valid leaf node series names
+        // Collect all leaf nodes recursively (parent selection = all children)
+        List<SeriesLeafNode> allLeaves = new ArrayList<>();
         for (TreePath path : selectedPaths) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-
-            // Only process leaf nodes (actual timeseries outputs)
-            if (node.isLeaf() && !isSpecialMessageNode(node)) {
-                String seriesName = getFullSeriesName(node);
-                if (seriesName != null) {
-                    newSelectedSeries.add(seriesName);
-                }
-            }
+            collectLeafNodes(node, allLeaves);
         }
 
-        // If no valid series selected, clear everything
-        if (newSelectedSeries.isEmpty()) {
+        // If no valid leaves found, clear everything
+        if (allLeaves.isEmpty()) {
             clearPlotAndStats();
             selectedSeries.clear();
             return;
+        }
+
+        // Build new set of selected series (with unique keys: "seriesName [RunName]")
+        Set<String> newSelectedSeries = new HashSet<>();
+        Map<String, SeriesLeafNode> seriesKeyToLeaf = new HashMap<>();
+
+        for (SeriesLeafNode leaf : allLeaves) {
+            String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
+            newSelectedSeries.add(seriesKey);
+            seriesKeyToLeaf.put(seriesKey, leaf);
         }
 
         // Determine which series to add and which to remove
@@ -897,51 +1306,60 @@ public class RunManager extends JFrame {
         seriesToRemove.removeAll(newSelectedSeries);
 
         // Remove series that are no longer selected
-        for (String seriesName : seriesToRemove) {
-            plotDataSet.removeSeries(seriesName);
-            seriesColorMap.remove(seriesName);
-            statsTableModel.removeSeries(seriesName);
+        for (String seriesKey : seriesToRemove) {
+            plotDataSet.removeSeries(seriesKey);
+            seriesColorMap.remove(seriesKey);
+            statsTableModel.removeSeries(seriesKey);
         }
 
         // Add new series
-        for (String seriesName : seriesToAdd) {
+        for (String seriesKey : seriesToAdd) {
+            SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
+            if (leaf == null) continue;
+
+            String sessionKey = leaf.runInfo.session.getSessionKey();
+            String seriesName = leaf.seriesName;
+
             // Assign consistent color to new series
-            Color seriesColor = getColorForSeries(seriesName);
-            seriesColorMap.put(seriesName, seriesColor);
+            Color seriesColor = getColorForSeries(seriesKey);
+            seriesColorMap.put(seriesKey, seriesColor);
 
             // Check if we already have this data cached
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
-                // Add immediately with cached data
-                addSeriesToPlot(cachedData, seriesColor);
-                statsTableModel.addOrUpdateSeries(cachedData);
+                // Add immediately with cached data, using seriesKey as display name
+                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
+                addSeriesToPlot(renamedData, seriesColor);
+                statsTableModel.addOrUpdateSeries(renamedData);
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
                 // Show loading state for this series
-                statsTableModel.addLoadingSeries(seriesName);
+                statsTableModel.addLoadingSeries(seriesKey);
 
                 // Request the timeseries data
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
                             // Check if this series is still selected
-                            if (selectedSeries.contains(seriesName)) {
-                                addSeriesToPlot(timeSeriesData, seriesColorMap.get(seriesName));
-                                statsTableModel.addOrUpdateSeries(timeSeriesData);
+                            if (selectedSeries.contains(seriesKey)) {
+                                // Rename series to include run label
+                                TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
+                                addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
+                                statsTableModel.addOrUpdateSeries(renamedData);
                                 plotPanel.zoomToFit();
                             }
                         });
                     })
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            if (selectedSeries.contains(seriesName)) {
-                                statsTableModel.addErrorSeries(seriesName, throwable.getMessage());
+                            if (selectedSeries.contains(seriesKey)) {
+                                statsTableModel.addErrorSeries(seriesKey, throwable.getMessage());
                             }
                         });
                         return null;
                     });
             } else {
                 // Request already in progress, show loading state
-                statsTableModel.addLoadingSeries(seriesName);
+                statsTableModel.addLoadingSeries(seriesKey);
             }
         }
 
@@ -952,6 +1370,42 @@ public class RunManager extends JFrame {
         updatePlotVisibility();
         if (!plotDataSet.isEmpty()) {
             plotPanel.zoomToFit();
+        }
+    }
+
+    /**
+     * Recursively collects all SeriesLeafNode objects from a tree node.
+     * If the node is a leaf, adds it directly. If it's a parent, recursively collects from children.
+     * This enables selecting a parent node (like "node.node9") to plot all its children.
+     */
+    private void collectLeafNodes(DefaultMutableTreeNode node, List<SeriesLeafNode> leaves) {
+        if (node == null) return;
+
+        Object userObject = node.getUserObject();
+
+        // Check if this is a SeriesLeafNode (plottable leaf)
+        if (userObject instanceof SeriesLeafNode) {
+            leaves.add((SeriesLeafNode) userObject);
+            return;
+        }
+
+        // Check if this is a SeriesParentNode (select all children)
+        if (userObject instanceof SeriesParentNode) {
+            SeriesParentNode parentNode = (SeriesParentNode) userObject;
+            // Add all runs for this series
+            for (int i = 0; i < node.getChildCount(); i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+                collectLeafNodes(child, leaves);
+            }
+            return;
+        }
+
+        // For regular folder nodes (String user objects), recurse to all children
+        if (!node.isLeaf()) {
+            for (int i = 0; i < node.getChildCount(); i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+                collectLeafNodes(child, leaves);
+            }
         }
     }
 
