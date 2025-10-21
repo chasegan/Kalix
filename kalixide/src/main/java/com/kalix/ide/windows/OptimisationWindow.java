@@ -6,6 +6,7 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.KalixCliLocator;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.components.StatusProgressBar;
+import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -51,7 +52,9 @@ public class OptimisationWindow extends JFrame {
     private JPanel detailsPanel;
     private CardLayout detailsCardLayout;
 
-    // Configuration editor (for new optimisations)
+    // Configuration components (for new optimisations)
+    private JTabbedPane configTabbedPane;
+    private OptimisationGuiBuilder guiBuilder;
     private RSyntaxTextArea configEditor;
     private JButton runButton;
 
@@ -164,11 +167,23 @@ public class OptimisationWindow extends JFrame {
         messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
         messagePanel.add(messageLabel, BorderLayout.CENTER);
 
-        // --- NEW_OPTIMISATION_PANEL: Config editor for new optimisation ---
+        // --- NEW_OPTIMISATION_PANEL: Tabbed interface for GUI builder and text editor ---
         JPanel newOptPanel = new JPanel(new BorderLayout(10, 10));
         newOptPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Configuration editor with INI syntax highlighting
+        // Create tabbed pane
+        configTabbedPane = new JTabbedPane();
+
+        // Tab 1: GUI Builder (first tab)
+        guiBuilder = new OptimisationGuiBuilder(generatedConfig -> {
+            // Set the generated config in the text editor
+            configEditor.setText(generatedConfig);
+            // Switch to the text editor tab
+            configTabbedPane.setSelectedIndex(1);
+        });
+        configTabbedPane.addTab("Config", guiBuilder);
+
+        // Tab 2: Text Editor (second tab)
         configEditor = new RSyntaxTextArea(20, 60);
         configEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI);
         configEditor.setCodeFoldingEnabled(true);
@@ -202,21 +217,29 @@ public class OptimisationWindow extends JFrame {
                 """);
 
         RTextScrollPane configScrollPane = new RTextScrollPane(configEditor);
+        configTabbedPane.addTab("Config INI", configScrollPane);
+
+        newOptPanel.add(configTabbedPane, BorderLayout.CENTER);
 
         // Buttons for new optimisation panel
         JPanel newOptButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+
+        JButton generateConfigButton = new JButton("Generate Config Text");
+        generateConfigButton.addActionListener(e -> guiBuilder.generateAndSwitchToTextEditor());
+        newOptButtonPanel.add(generateConfigButton);
+
         JButton loadConfigButton = new JButton("Load Config");
         loadConfigButton.addActionListener(e -> loadConfig());
+        newOptButtonPanel.add(loadConfigButton);
+
         JButton saveConfigButton = new JButton("Save Config");
         saveConfigButton.addActionListener(e -> saveConfig());
+        newOptButtonPanel.add(saveConfigButton);
+
         runButton = new JButton("Run Optimisation");
         runButton.addActionListener(e -> runOptimisation());
-
-        newOptButtonPanel.add(loadConfigButton);
-        newOptButtonPanel.add(saveConfigButton);
         newOptButtonPanel.add(runButton);
 
-        newOptPanel.add(configScrollPane, BorderLayout.CENTER);
         newOptPanel.add(newOptButtonPanel, BorderLayout.SOUTH);
 
         // --- OPTIMISATION_DETAILS_PANEL: Config + Results for existing optimisation ---

@@ -74,44 +74,56 @@ impl OptimisationProblem {
     /// Apply parameter values to the model
     ///
     /// This maps from genes to model parameters using the ParameterMappingConfig,
-    /// then sets each parameter on the appropriate node.
+    /// then sets each parameter on the appropriate component (node or constant).
+    ///
+    /// Supports two address formats:
+    /// - "node.name.param" - for node parameters
+    /// - "c.constant_name" - for constants
     fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
         // Evaluate all mappings: genes -> (target, physical_value)
         let param_values = self.config.evaluate(genes);
 
         // Apply each parameter to the model
         for (target, value) in param_values {
-            // Parse target address: "node.sacramento_a.lztwm"
+            // Parse target address
             let parts: Vec<&str> = target.split('.').collect();
-            if parts.len() != 3 || parts[0] != "node" {
-                return Err(format!("Invalid target address: {}", target));
-            }
-            let node_name = parts[1];
-            let param_name = parts[2];
 
-            // Get node index
-            let node_idx = self
-                .model
-                .get_node_idx(node_name)
-                .ok_or_else(|| format!("Node not found: {}", node_name))?;
+            if parts.len() >= 2 && parts[0] == "c" {
+                // Handle constant: "c.constant_name"
+                let constant_name = parts[1..].join(".");  // Join remaining parts in case name has dots
+                self.model.data_cache.set_param(&constant_name, value)
+                    .map_err(|e| format!("Error setting constant {}: {}", constant_name, e))?;
+            } else if parts.len() == 3 && parts[0] == "node" {
+                // Handle node parameter: "node.name.param"
+                let node_name = parts[1];
+                let param_name = parts[2];
 
-            // Set parameter on the node using OptimisableComponent trait
-            match &mut self.model.nodes[node_idx] {
-                NodeEnum::SacramentoNode(node) => {
-                    node.set_param(param_name, value)
-                        .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
+                // Get node index
+                let node_idx = self
+                    .model
+                    .get_node_idx(node_name)
+                    .ok_or_else(|| format!("Node not found: {}", node_name))?;
+
+                // Set parameter on the node using OptimisableComponent trait
+                match &mut self.model.nodes[node_idx] {
+                    NodeEnum::SacramentoNode(node) => {
+                        node.set_param(param_name, value)
+                            .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
+                    }
+                    NodeEnum::Gr4jNode(node) => {
+                        node.set_param(param_name, value)
+                            .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Node '{}' (type: {}) does not support parameter optimisation",
+                            node_name,
+                            self.model.nodes[node_idx].get_type_as_string()
+                        ));
+                    }
                 }
-                NodeEnum::Gr4jNode(node) => {
-                    node.set_param(param_name, value)
-                        .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
-                }
-                _ => {
-                    return Err(format!(
-                        "Node '{}' (type: {}) does not support parameter optimisation",
-                        node_name,
-                        self.model.nodes[node_idx].get_type_as_string()
-                    ));
-                }
+            } else {
+                return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'c.constant_name'", target));
             }
         }
 

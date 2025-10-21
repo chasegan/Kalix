@@ -85,4 +85,17 @@ impl ConstantsCache {
         }
         Ok(())
     }
+
+    /// Get the value of a constant by name
+    pub fn get_value_by_name(&self, name: &str) -> Result<f64, String> {
+        match self.name_idx_map.get(name) {
+            Some(&idx) => Ok(self.value[idx]),
+            None => Err(format!("Constant '{}' does not exist", name)),
+        }
+    }
+
+    /// List all constant names
+    pub fn list_names(&self) -> Vec<String> {
+        self.names.clone()
+    }
 }

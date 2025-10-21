@@ -876,9 +876,15 @@ impl Command for GetOptimisableParamsCommand {
         let model = session.get_model()
             .ok_or(CommandError::ModelNotLoaded)?;
 
-        // Collect optimisable parameters from all nodes
+        // Collect optimisable parameters from all components
         let mut params = Vec::new();
 
+        // Add constants (already prefixed with "c.")
+        for constant_name in model.data_cache.list_params() {
+            params.push(constant_name);
+        }
+
+        // Add node parameters (prefixed with "node.")
         for (node_name, &node_idx) in &model.node_lookup {
             match &model.nodes[node_idx] {
                 NodeEnum::Gr4jNode(node) => {

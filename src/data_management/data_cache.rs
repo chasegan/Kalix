@@ -324,3 +324,27 @@ impl DataCache {
         }
     }
 }
+
+// ============================================================================
+// OptimisableComponent Implementation - for optimising constants
+// ============================================================================
+
+use crate::numerical::opt::optimisable_component::OptimisableComponent;
+
+impl OptimisableComponent for DataCache {
+    fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        // Set constant value by name
+        self.constants.set_value(name, value);
+        Ok(())
+    }
+
+    fn get_param(&self, name: &str) -> Result<f64, String> {
+        // Get constant value by name
+        self.constants.get_value_by_name(name)
+    }
+
+    fn list_params(&self) -> Vec<String> {
+        // List all constant names
+        self.constants.list_names()
+    }
+}
