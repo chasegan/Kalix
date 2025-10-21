@@ -36,19 +36,19 @@ public class ParametersConfigPanel extends JPanel {
 
         // Button panel (above table)
         JPanel buttonPanel = new JPanel(new BorderLayout());
-        JPanel buttonsLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        JPanel buttonsRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 5));
 
         generateButton = new JButton("Generate Expressions for Selected");
         generateButton.setToolTipText("Generate calibration expressions for selected parameters");
         generateButton.addActionListener(e -> generateExpressionsForSelected());
-        buttonsLeft.add(generateButton);
+        buttonsRight.add(generateButton);
 
         clearButton = new JButton("Clear Expressions for Selected");
         clearButton.setToolTipText("Clear expressions for selected rows");
         clearButton.addActionListener(e -> clearSelectedExpressions());
-        buttonsLeft.add(clearButton);
+        buttonsRight.add(clearButton);
 
-        buttonPanel.add(buttonsLeft, BorderLayout.WEST);
+        buttonPanel.add(buttonsRight, BorderLayout.EAST);
         mainPanel.add(buttonPanel, BorderLayout.NORTH);
 
         // Table with parameter names and expressions
@@ -170,6 +170,38 @@ public class ParametersConfigPanel extends JPanel {
                 "\n\nPlease specify expressions manually for these parameters.",
                 "Unrecognized Parameter Types",
                 JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /**
+     * Automatically generates expressions for all parameters that currently have blank expressions.
+     * This is called when the Optimisation Window first opens to pre-populate the table.
+     * Silently skips any parameters with unrecognized types.
+     */
+    public void autoGenerateAllExpressions() {
+        // Get all currently used gene indices
+        Set<Integer> usedIndices = getUsedGeneIndices();
+
+        for (int row = 0; row < paramsTableModel.getRowCount(); row++) {
+            String currentExpression = paramsTableModel.getExpressionAt(row);
+            if (currentExpression.isEmpty()) {
+                String paramName = paramsTableModel.getParameterNameAt(row);
+
+                try {
+                    // Find next unused gene index
+                    int geneIndex = getNextUnusedGeneIndex(usedIndices);
+
+                    // Generate expression using the library
+                    String expression = ParameterExpressionLibrary.generateExpression(paramName, geneIndex);
+                    paramsTableModel.setExpressionAt(row, expression);
+
+                    // Mark this index as used
+                    usedIndices.add(geneIndex);
+                } catch (ParameterExpressionLibrary.UnrecognizedParameterTypeException e) {
+                    // Silently skip unrecognized parameters during auto-generation
+                    // Users can manually add expressions if needed
+                }
+            }
         }
     }
 

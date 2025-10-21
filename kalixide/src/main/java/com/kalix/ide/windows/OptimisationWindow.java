@@ -109,6 +109,15 @@ public class OptimisationWindow extends JFrame {
                 statusUpdater, progressBar, workingDirectorySupplier, modelTextSupplier);
         }
 
+        // Update simulated series options from current model
+        instance.updateSimulatedSeriesOptionsFromModel();
+
+        // Auto-generate parameter expressions to pre-populate the table
+        instance.guiBuilder.autoGenerateParameterExpressions();
+
+        // Show New Optimisation panel by default
+        instance.showNewOptimisationPanel();
+
         instance.setVisible(true);
         instance.toFront();
         instance.requestFocus();
@@ -135,7 +144,7 @@ public class OptimisationWindow extends JFrame {
     private void initializeComponents() {
         // ===== Tree Structure =====
         rootNode = new DefaultMutableTreeNode("Optimisations");
-        currentOptimisationsNode = new DefaultMutableTreeNode("Current optimisations");
+        currentOptimisationsNode = new DefaultMutableTreeNode("Optimisation runs");
 
         rootNode.add(currentOptimisationsNode);
 
@@ -149,7 +158,7 @@ public class OptimisationWindow extends JFrame {
         // Setup context menu
         setupContextMenu();
 
-        // Expand "Current optimisations" node by default
+        // Expand "Optimisation runs" node by default
         optTree.expandRow(0);
 
         // ===== Details Panel with CardLayout =====
@@ -180,7 +189,7 @@ public class OptimisationWindow extends JFrame {
             configEditor.setText(generatedConfig);
             // Switch to the text editor tab
             configTabbedPane.setSelectedIndex(1);
-        });
+        }, workingDirectorySupplier);
         configTabbedPane.addTab("Config", guiBuilder);
 
         // Tab 2: Text Editor (second tab)
@@ -224,7 +233,7 @@ public class OptimisationWindow extends JFrame {
         // Buttons for new optimisation panel
         JPanel newOptButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
-        JButton generateConfigButton = new JButton("Generate Config Text");
+        JButton generateConfigButton = new JButton("Generate Config INI");
         generateConfigButton.addActionListener(e -> guiBuilder.generateAndSwitchToTextEditor());
         newOptButtonPanel.add(generateConfigButton);
 
@@ -890,6 +899,60 @@ public class OptimisationWindow extends JFrame {
                     JOptionPane.ERROR_MESSAGE);
             }
         }
+    }
+
+    /**
+     * Updates the simulated series combo box options from the current model's [outputs] section.
+     * Parses the model text and extracts all output series names.
+     */
+    private void updateSimulatedSeriesOptionsFromModel() {
+        if (modelTextSupplier == null || guiBuilder == null) {
+            return;
+        }
+
+        String modelText = modelTextSupplier.get();
+        if (modelText == null || modelText.isEmpty()) {
+            return;
+        }
+
+        java.util.List<String> outputSeries = parseOutputsSection(modelText);
+        guiBuilder.updateSimulatedSeriesOptions(outputSeries);
+    }
+
+    /**
+     * Parses the [outputs] section from model text and returns a list of output series names.
+     *
+     * @param modelText The INI model text
+     * @return List of output series names (one per line in [outputs] section)
+     */
+    private java.util.List<String> parseOutputsSection(String modelText) {
+        java.util.List<String> outputs = new ArrayList<>();
+
+        String[] lines = modelText.split("\\r?\\n");
+        boolean inOutputsSection = false;
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            // Check if we're entering the [outputs] section
+            if (trimmedLine.equalsIgnoreCase("[outputs]")) {
+                inOutputsSection = true;
+                continue;
+            }
+
+            // Check if we're entering a new section (leaving [outputs])
+            if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]") && !trimmedLine.equalsIgnoreCase("[outputs]")) {
+                inOutputsSection = false;
+                continue;
+            }
+
+            // If we're in the outputs section and the line is not empty or a comment
+            if (inOutputsSection && !trimmedLine.isEmpty() && !trimmedLine.startsWith("#") && !trimmedLine.startsWith(";")) {
+                outputs.add(trimmedLine);
+            }
+        }
+
+        return outputs;
     }
 
     // ==================== Helper Classes ====================

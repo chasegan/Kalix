@@ -2,8 +2,10 @@ package com.kalix.ide.windows.optimisation;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Main GUI builder panel for configuring optimizations.
@@ -20,40 +22,45 @@ public class OptimisationGuiBuilder extends JPanel {
      * Creates a new OptimisationGuiBuilder.
      *
      * @param configTextConsumer Callback to receive generated config text and switch to text tab
+     * @param workingDirectorySupplier Supplier for the current model's working directory
      */
-    public OptimisationGuiBuilder(Consumer<String> configTextConsumer) {
+    public OptimisationGuiBuilder(Consumer<String> configTextConsumer, Supplier<File> workingDirectorySupplier) {
         this.configTextConsumer = configTextConsumer;
 
         setLayout(new BorderLayout());
 
-        // Main scrollable panel for all sections
-        JPanel contentPanel = new JPanel();
-        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        // Main panel with GridBagLayout for proper vertical space distribution
+        JPanel contentPanel = new JPanel(new GridBagLayout());
         contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // Add the three configuration panels
-        objectivePanel = new ObjectiveConfigPanel();
+        objectivePanel = new ObjectiveConfigPanel(workingDirectorySupplier);
         algorithmPanel = new AlgorithmConfigPanel();
         parametersPanel = new ParametersConfigPanel();
 
-        // Set maximum width to prevent panels from stretching too wide
-        Dimension maxSize = new Dimension(Integer.MAX_VALUE, objectivePanel.getPreferredSize().height);
-        objectivePanel.setMaximumSize(maxSize);
-        algorithmPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.insets = new Insets(0, 0, 10, 0); // 10px bottom margin (gap between panels)
 
-        // Parameters panel should expand to fill remaining vertical space
-        parametersPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        // Objective panel - fixed height, no vertical expansion
+        gbc.gridy = 0;
+        gbc.weighty = 0.0;
+        contentPanel.add(objectivePanel, gbc);
 
-        contentPanel.add(objectivePanel);
-        contentPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        contentPanel.add(algorithmPanel);
-        contentPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        contentPanel.add(parametersPanel);
+        // Algorithm panel - fixed height, no vertical expansion
+        gbc.gridy = 1;
+        gbc.weighty = 0.0;
+        contentPanel.add(algorithmPanel, gbc);
 
-        JScrollPane scrollPane = new JScrollPane(contentPanel);
-        scrollPane.setBorder(null);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        add(scrollPane, BorderLayout.CENTER);
+        // Parameters panel - expands to fill remaining vertical space
+        gbc.gridy = 2;
+        gbc.weighty = 1.0;
+        gbc.insets = new Insets(0, 0, 0, 0); // No bottom margin on last panel
+        contentPanel.add(parametersPanel, gbc);
+
+        add(contentPanel, BorderLayout.CENTER);
     }
 
     /**
@@ -90,7 +97,30 @@ public class OptimisationGuiBuilder extends JPanel {
 
         // [General] section (kalixcli format)
         sb.append("[General]\n");
-        sb.append("observed_data_by_name = ").append(objectivePanel.getObservedDataByName()).append("\n");
+
+        // Determine observed_data_by_index vs observed_data_by_name
+        String observedDataFile = objectivePanel.getObservedDataFile();
+        String series = objectivePanel.getSeries();
+
+        if (series.isEmpty()) {
+            // Empty series defaults to index 1
+            sb.append("observed_data_by_index = ").append(observedDataFile).append(".1\n");
+        } else {
+            // Try to parse as integer
+            try {
+                int seriesIndex = Integer.parseInt(series);
+                if (seriesIndex > 0) {
+                    sb.append("observed_data_by_index = ").append(observedDataFile).append(".").append(seriesIndex).append("\n");
+                } else {
+                    // Non-positive integer, treat as name
+                    sb.append("observed_data_by_name = ").append(observedDataFile).append(".").append(series).append("\n");
+                }
+            } catch (NumberFormatException e) {
+                // Not an integer, use by_name
+                sb.append("observed_data_by_name = ").append(observedDataFile).append(".").append(series).append("\n");
+            }
+        }
+
         sb.append("simulated_series = ").append(objectivePanel.getSimulatedSeries()).append("\n");
         sb.append("objective_function = ").append(objectivePanel.getObjectiveFunction()).append("\n");
         sb.append("\n");
@@ -175,7 +205,8 @@ public class OptimisationGuiBuilder extends JPanel {
      */
     public void loadDefaults() {
         // Set objective defaults
-        objectivePanel.setObservedDataByName("../data.csv.ObsFlow");
+        objectivePanel.setObservedDataFile("../data.csv");
+        objectivePanel.setSeries("ObsFlow");
         objectivePanel.setSimulatedSeries("node.mygr4jnode.ds_1");
         objectivePanel.setObjectiveFunction("NSE");
 
@@ -194,9 +225,29 @@ public class OptimisationGuiBuilder extends JPanel {
      * Clears all inputs.
      */
     public void clearAll() {
-        objectivePanel.setObservedDataByName("");
+        objectivePanel.setObservedDataFile("");
+        objectivePanel.setSeries("");
         objectivePanel.setSimulatedSeries("");
         objectivePanel.setObjectiveFunction("");
         parametersPanel.clearAllExpressions();
+    }
+
+    /**
+     * Updates the available options for simulated series combo box.
+     * Delegates to ObjectiveConfigPanel.
+     *
+     * @param options List of output series names from the model's [outputs] section
+     */
+    public void updateSimulatedSeriesOptions(java.util.List<String> options) {
+        objectivePanel.updateSimulatedSeriesOptions(options);
+    }
+
+    /**
+     * Automatically generates expressions for all parameters.
+     * Called when the Optimisation Window opens to pre-populate the parameters table.
+     * Delegates to ParametersConfigPanel.
+     */
+    public void autoGenerateParameterExpressions() {
+        parametersPanel.autoGenerateAllExpressions();
     }
 }
