@@ -16,13 +16,15 @@ public class OptimisationProgram extends AbstractSessionProgram {
     private enum ProgramState {
         STARTING,           // Sent load_model_string, waiting for RESULT
         MODEL_LOADING,      // Received RESULT from load, waiting for READY
-        READY,              // Model loaded, waiting for user to configure and start optimisation
+        FETCHING_PARAMS,    // Sent get_optimisable_params, waiting for RESULT
+        READY,              // Model loaded and params fetched, waiting for user to configure and start optimisation
         OPTIMISING,         // Sent run_optimisation, optimisation in progress
         COMPLETED,          // Program completed successfully
         FAILED              // Program failed with error
     }
 
     private final Consumer<String> resultCallback;
+    private final Consumer<java.util.List<String>> parametersCallback;
     private ProgramState currentState = ProgramState.STARTING;
     private String configText;
     private String modelIni;
@@ -34,13 +36,16 @@ public class OptimisationProgram extends AbstractSessionProgram {
      * @param sessionManager the session manager to use for sending commands
      * @param statusUpdater callback for status updates
      * @param progressCallback callback for progress updates
+     * @param parametersCallback callback for receiving list of optimisable parameters
      * @param resultCallback callback for final result message
      */
     public OptimisationProgram(String sessionKey, SessionManager sessionManager,
                                Consumer<String> statusUpdater,
                                Consumer<ProgressParser.ProgressInfo> progressCallback,
+                               Consumer<java.util.List<String>> parametersCallback,
                                Consumer<String> resultCallback) {
         super(sessionKey, sessionManager, statusUpdater, progressCallback);
+        this.parametersCallback = parametersCallback;
         this.resultCallback = resultCallback;
     }
 
@@ -100,6 +105,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
         return switch (currentState) {
             case STARTING -> handleStartingState(msgType, message);
             case MODEL_LOADING -> handleModelLoadingState(msgType, message);
+            case FETCHING_PARAMS -> handleFetchingParamsState(msgType, message);
             case READY -> false; // In READY state, waiting for user to call runOptimisation()
             case OPTIMISING -> handleOptimisingState(msgType, message);
             case COMPLETED, FAILED -> false; // Don't handle messages in these states
@@ -126,6 +132,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
         return switch (currentState) {
             case STARTING -> "Starting";
             case MODEL_LOADING -> "Loading Model";
+            case FETCHING_PARAMS -> "Fetching Parameters";
             case READY -> "Ready";
             case OPTIMISING -> "Optimising";
             case COMPLETED -> "Completed";
@@ -170,9 +177,11 @@ public class OptimisationProgram extends AbstractSessionProgram {
                                              JsonMessage.SystemMessage message) {
         switch (msgType) {
             case READY:
-                // CLI is ready, transition to READY state and wait for user to call runOptimisation()
-                currentState = ProgramState.READY;
-                statusUpdater.accept("Model loaded, ready to configure optimisation");
+                // CLI is ready, now fetch optimisable parameters
+                currentState = ProgramState.FETCHING_PARAMS;
+                String paramsCommand = JsonStdioProtocol.createCommandMessage("get_optimisable_params",
+                    java.util.Map.of());
+                sendCommand(paramsCommand, "Fetching optimisable parameters", "Failed to fetch parameters");
                 return true;
 
             case ERROR:
@@ -186,6 +195,72 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Other message types are not relevant in MODEL_LOADING state
                 return false;
         }
+    }
+
+    /**
+     * Handles messages while waiting for parameters list.
+     */
+    private boolean handleFetchingParamsState(JsonStdioTypes.SystemMessageType msgType,
+                                               JsonMessage.SystemMessage message) {
+        switch (msgType) {
+            case RESULT:
+                // Check if this is the result from get_optimisable_params
+                String cmd = message.getCommand();
+                if ("get_optimisable_params".equals(cmd)) {
+                    // Extract parameters list from result
+                    java.util.List<String> parameters = extractParametersList(message);
+
+                    // Call callback with parameters
+                    if (parametersCallback != null && parameters != null) {
+                        parametersCallback.accept(parameters);
+                    }
+
+                    // Transition to READY state
+                    currentState = ProgramState.READY;
+                    statusUpdater.accept("Model loaded, ready to configure optimisation");
+                    return true;
+                }
+                return false;
+
+            case ERROR:
+                // Error fetching parameters - log but continue to READY anyway
+                currentState = ProgramState.READY;
+                String errorMsg = extractErrorMessage(message);
+                statusUpdater.accept("Warning: Could not fetch parameters: " + errorMsg);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Extracts the parameters list from a get_optimisable_params RESULT message.
+     */
+    private java.util.List<String> extractParametersList(JsonMessage.SystemMessage message) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode result = message.getResult();
+
+            if (result != null && result.isObject()) {
+                // Get the "parameters" field from the JsonNode
+                com.fasterxml.jackson.databind.JsonNode parametersNode = result.get("parameters");
+
+                if (parametersNode != null && parametersNode.isArray()) {
+                    // Convert JsonNode array to List<String>
+                    java.util.List<String> parameters = new java.util.ArrayList<>();
+                    for (com.fasterxml.jackson.databind.JsonNode node : parametersNode) {
+                        if (node.isTextual()) {
+                            parameters.add(node.asText());
+                        }
+                    }
+                    return parameters;
+                }
+            }
+        } catch (Exception e) {
+            // Log but don't fail - we can continue without parameters
+            statusUpdater.accept("Warning: Could not parse parameters list: " + e.getMessage());
+        }
+        return null;
     }
 
     /**

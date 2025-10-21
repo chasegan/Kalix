@@ -250,4 +250,39 @@ public class OptimisationGuiBuilder extends JPanel {
     public void autoGenerateParameterExpressions() {
         parametersPanel.autoGenerateAllExpressions();
     }
+
+    /**
+     * Sets the list of optimisable parameters from kalixcli.
+     * Delegates to ParametersConfigPanel.
+     *
+     * @param parameters List of parameter names from get_optimisable_params
+     */
+    public void setOptimisableParameters(java.util.List<String> parameters) {
+        parametersPanel.setOptimisableParameters(parameters);
+    }
+
+    /**
+     * Enables or disables all input components in the GUI builder.
+     * This recursively disables all components in the three config panels.
+     *
+     * @param enabled true to enable components, false to disable
+     */
+    public void setComponentsEnabled(boolean enabled) {
+        setEnabledRecursive(objectivePanel, enabled);
+        setEnabledRecursive(algorithmPanel, enabled);
+        setEnabledRecursive(parametersPanel, enabled);
+    }
+
+    /**
+     * Recursively enables/disables all components in a container.
+     */
+    private void setEnabledRecursive(java.awt.Container container, boolean enabled) {
+        container.setEnabled(enabled);
+        for (java.awt.Component component : container.getComponents()) {
+            component.setEnabled(enabled);
+            if (component instanceof java.awt.Container) {
+                setEnabledRecursive((java.awt.Container) component, enabled);
+            }
+        }
+    }
 }

@@ -15,17 +15,9 @@ import java.util.regex.Pattern;
 public class ParametersConfigPanel extends JPanel {
 
     private final JTable paramsTable;
-    private final OptimizationParamsTableModel paramsTableModel;
+    private OptimizationParamsTableModel paramsTableModel; // Non-final so we can update it
     private final JButton generateButton;
     private final JButton clearButton;
-
-    // Hard-coded list of calibratable parameters
-    private static final String[] PARAMETER_NAMES = {
-        "node.mygr4jnode.x1",
-        "node.mygr4jnode.x2",
-        "node.mygr4jnode.x3",
-        "node.mygr4jnode.x4"
-    };
 
     public ParametersConfigPanel() {
         setLayout(new BorderLayout());
@@ -51,8 +43,8 @@ public class ParametersConfigPanel extends JPanel {
         buttonPanel.add(buttonsRight, BorderLayout.EAST);
         mainPanel.add(buttonPanel, BorderLayout.NORTH);
 
-        // Table with parameter names and expressions
-        paramsTableModel = new OptimizationParamsTableModel(PARAMETER_NAMES);
+        // Table with parameter names and expressions - start with empty table
+        paramsTableModel = new OptimizationParamsTableModel(new String[0]);
         paramsTable = new JTable(paramsTableModel);
         paramsTable.setRowHeight(25);
         paramsTable.setShowGrid(true);
@@ -269,6 +261,31 @@ public class ParametersConfigPanel extends JPanel {
             return result == JOptionPane.YES_OPTION;
         }
         return true;
+    }
+
+    /**
+     * Sets the list of optimisable parameters from kalixcli.
+     * Replaces the current table model with a new one containing the fetched parameters.
+     *
+     * @param parameters List of parameter names from get_optimisable_params
+     */
+    public void setOptimisableParameters(java.util.List<String> parameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            return;
+        }
+
+        // Convert list to array
+        String[] paramArray = parameters.toArray(new String[0]);
+
+        // Create new table model with fetched parameters
+        paramsTableModel = new OptimizationParamsTableModel(paramArray);
+
+        // Set the new model on the table
+        paramsTable.setModel(paramsTableModel);
+
+        // Force the table to refresh
+        paramsTable.revalidate();
+        paramsTable.repaint();
     }
 
     /**

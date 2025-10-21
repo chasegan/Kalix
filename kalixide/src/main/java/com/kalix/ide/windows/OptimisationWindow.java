@@ -49,6 +49,8 @@ public class OptimisationWindow extends JFrame {
     private DefaultMutableTreeNode currentOptimisationsNode;
 
     // Main panel components
+    private JPanel rightPanel;  // Container that switches between message and optimisation panel
+    private CardLayout rightPanelLayout;
     private JPanel optimisationPanel;
     private JTabbedPane mainTabbedPane;
 
@@ -57,9 +59,15 @@ public class OptimisationWindow extends JFrame {
     private RSyntaxTextArea configEditor;
     private JTextArea resultsDisplayArea;  // Results/progress display
     private JButton runButton;
+    private JButton loadConfigButton;
+    private JButton saveConfigButton;
+    private JLabel configStatusLabel;
 
     // Track currently displayed node to save config when switching
     private DefaultMutableTreeNode currentlyDisplayedNode = null;
+
+    // Flag to prevent DocumentListener from triggering during programmatic updates
+    private boolean isUpdatingConfigEditor = false;
 
     // Optimisation tracking
     private Map<String, String> sessionToOptName = new HashMap<>();
@@ -111,9 +119,6 @@ public class OptimisationWindow extends JFrame {
         // Update simulated series options from current model
         instance.updateSimulatedSeriesOptionsFromModel();
 
-        // Auto-generate parameter expressions to pre-populate the table
-        instance.guiBuilder.autoGenerateParameterExpressions();
-
         instance.setVisible(true);
         instance.toFront();
         instance.requestFocus();
@@ -157,6 +162,18 @@ public class OptimisationWindow extends JFrame {
         // Expand "Optimisation runs" node by default
         optTree.expandRow(0);
 
+        // ===== Right Panel with CardLayout =====
+        rightPanel = new JPanel();
+        rightPanelLayout = new CardLayout();
+        rightPanel.setLayout(rightPanelLayout);
+
+        // --- Message Panel (shown when no optimization selected) ---
+        JPanel messagePanel = new JPanel(new BorderLayout());
+        JLabel messageLabel = new JLabel("<html><center>Click \"New Optimisation\" to create an optimisation<br><br>" +
+            "Or select an existing optimisation from the tree</center></html>");
+        messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        messagePanel.add(messageLabel, BorderLayout.CENTER);
+
         // ===== Single Optimisation Panel with Tabs =====
         optimisationPanel = new JPanel(new BorderLayout(10, 10));
         optimisationPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -181,66 +198,122 @@ public class OptimisationWindow extends JFrame {
         configEditor.setTabSize(4);
         configEditor.setTabsEmulated(true);
 
-        // Set default template
-        configEditor.setText("""
-                [General]
-                observed_data_by_name = ../data.csv.ObsFlow
-                simulated_series = node.mygr4jnode.ds_1
-                objective_function = NSE
-                output_file = optimisation_results.txt
+        // Start with empty text - user can generate or type manually
+        configEditor.setText("");
 
-                [Algorithm]
-                algorithm = DE
-                population_size = 50
-                termination_evaluations = 5000
-                de_f = 0.8
-                de_cr = 0.9
-                n_threads = 4
-                # random_seed = 42
+        // Add document listener to detect manual edits
+        configEditor.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                updateConfigStatus();
+            }
 
-                [Parameters]
-                # GR4J parameter bounds (based on literature ranges)
-                node.mygr4jnode.x1 = lin_range(g(1), 10, 2000)
-                node.mygr4jnode.x2 = lin_range(g(2), -8, 6)
-                node.mygr4jnode.x3 = lin_range(g(3), 10, 500)
-                node.mygr4jnode.x4 = lin_range(g(4), 0.0001, 4.0)
-                """);
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                updateConfigStatus();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                updateConfigStatus();
+            }
+
+            private void updateConfigStatus() {
+                if (!isUpdatingConfigEditor) {
+                    configStatusLabel.setText("Modified");
+                    // Also update the current node's modification state
+                    if (currentlyDisplayedNode != null &&
+                        currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                        OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                        optInfo.isConfigModified = true;
+                    }
+                }
+            }
+        });
 
         RTextScrollPane configScrollPane = new RTextScrollPane(configEditor);
-        mainTabbedPane.addTab("Config INI", configScrollPane);
 
-        // Tab 3: Results (initially hidden, shown after run starts)
+        // Create container panel for Config INI tab with button at top
+        JPanel configIniPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
+
+        // Button panel at top - fixed height, no vertical expansion
+        gbc.gridy = 0;
+        gbc.weighty = 0.0;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        JPanel configIniButtonPanel = new JPanel(new BorderLayout(10, 0));
+
+        // Left side: Generate button
+        JPanel leftButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        JButton generateConfigButton = new JButton("Generate Config INI");
+        generateConfigButton.addActionListener(e -> {
+            isUpdatingConfigEditor = true;
+            guiBuilder.generateAndSwitchToTextEditor();
+            configStatusLabel.setText("Original");
+            // Update the current node's modification state
+            if (currentlyDisplayedNode != null &&
+                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                optInfo.isConfigModified = false;
+            }
+            isUpdatingConfigEditor = false;
+        });
+        leftButtonPanel.add(generateConfigButton);
+
+        // Right side: Status label
+        JPanel rightLabelPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        configStatusLabel = new JLabel("Original");
+        configStatusLabel.setFont(configStatusLabel.getFont().deriveFont(java.awt.Font.ITALIC));
+        configStatusLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0)); // 4px top padding
+        rightLabelPanel.add(configStatusLabel);
+
+        configIniButtonPanel.add(leftButtonPanel, BorderLayout.WEST);
+        configIniButtonPanel.add(rightLabelPanel, BorderLayout.EAST);
+        configIniPanel.add(configIniButtonPanel, gbc);
+
+        // Text editor - expands to fill remaining vertical space
+        gbc.gridy = 1;
+        gbc.weighty = 1.0;
+        gbc.insets = new Insets(0, 5, 5, 5);
+        configIniPanel.add(configScrollPane, gbc);
+
+        mainTabbedPane.addTab("Config INI", configIniPanel);
+
+        // Tab 3: Results (always present)
         resultsDisplayArea = new JTextArea(20, 60);
         resultsDisplayArea.setEditable(false);
         resultsDisplayArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JScrollPane resultsScrollPane = new JScrollPane(resultsDisplayArea);
-        // Results tab will be added dynamically when optimization starts
+        mainTabbedPane.addTab("Results", resultsScrollPane);
 
         optimisationPanel.add(mainTabbedPane, BorderLayout.CENTER);
 
         // Buttons panel at bottom
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
-        JButton generateConfigButton = new JButton("Generate Config INI");
-        generateConfigButton.addActionListener(e -> guiBuilder.generateAndSwitchToTextEditor());
-        buttonPanel.add(generateConfigButton);
-
-        JButton loadConfigButton = new JButton("Load Config");
+        loadConfigButton = new JButton("Load Config");
         loadConfigButton.addActionListener(e -> loadConfig());
         buttonPanel.add(loadConfigButton);
 
-        JButton saveConfigButton = new JButton("Save Config");
+        saveConfigButton = new JButton("Save Config");
         saveConfigButton.addActionListener(e -> saveConfig());
         buttonPanel.add(saveConfigButton);
 
-        runButton = new JButton("Run Optimisation");
+        runButton = new JButton("Start");
         runButton.addActionListener(e -> runOptimisation());
         buttonPanel.add(runButton);
 
         optimisationPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Initially hide the optimisation panel (will show when first node is created)
-        optimisationPanel.setVisible(false);
+        // Add both panels to rightPanel CardLayout
+        rightPanel.add(messagePanel, "MESSAGE");
+        rightPanel.add(optimisationPanel, "OPTIMISATION");
+
+        // Show message panel by default
+        rightPanelLayout.show(rightPanel, "MESSAGE");
     }
 
     private void setupLayout() {
@@ -266,7 +339,7 @@ public class OptimisationWindow extends JFrame {
         // Create horizontal split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setLeftComponent(leftPanel);
-        splitPane.setRightComponent(optimisationPanel);
+        splitPane.setRightComponent(rightPanel);
         splitPane.setDividerLocation(220);
         splitPane.setResizeWeight(0.0);  // Tree stays fixed width when resizing
 
@@ -318,6 +391,7 @@ public class OptimisationWindow extends JFrame {
                             stdioTaskManager.getSessionManager(),
                             statusMsg -> handleStatusUpdate(sessionKey, statusMsg),
                             progressInfo -> handleOptimisationProgress(sessionKey, progressInfo),
+                            parameters -> handleOptimisableParameters(sessionKey, parameters),
                             result -> handleOptimisationResult(sessionKey, result)
                         );
 
@@ -349,8 +423,8 @@ public class OptimisationWindow extends JFrame {
                             TreePath optPath = new TreePath(optNode.getPath());
                             optTree.setSelectionPath(optPath);
 
-                            // Show the optimisation panel
-                            optimisationPanel.setVisible(true);
+                            // Show the optimisation panel (selection handler will do this)
+                            // optimisationPanel.setVisible(true); -- now handled by tree selection
 
                             // Initialize the optimisation (load model)
                             program.initialize(finalModelText);
@@ -386,6 +460,8 @@ public class OptimisationWindow extends JFrame {
         if (!optInfo.hasStartedRunning) {
             // Save the config text from the editor (it's the source of truth)
             optInfo.configSnapshot = configEditor.getText();
+            // Save the modification state
+            optInfo.isConfigModified = "Modified".equals(configStatusLabel.getText());
         }
     }
 
@@ -398,37 +474,34 @@ public class OptimisationWindow extends JFrame {
 
         OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();
 
-        // Load config into text editor
+        // Load config into text editor (disable listener during load)
+        isUpdatingConfigEditor = true;
         if (optInfo.configSnapshot != null) {
             configEditor.setText(optInfo.configSnapshot);
+        } else {
+            configEditor.setText("");
         }
+        // Restore the modification state for this node
+        configStatusLabel.setText(optInfo.isConfigModified ? "Modified" : "Original");
+        isUpdatingConfigEditor = false;
 
         // Set editable state based on whether optimization has started
         boolean isEditable = !optInfo.hasStartedRunning;
         configEditor.setEditable(isEditable);
-        guiBuilder.setEnabled(isEditable);
+        guiBuilder.setComponentsEnabled(isEditable);
 
-        // Manage Results tab visibility
-        int resultsTabIndex = getResultsTabIndex();
+        // Disable Load button when optimization has started (but keep Save enabled)
+        loadConfigButton.setEnabled(isEditable);
+
+        // Update results display (Results tab is always present)
         if (optInfo.hasStartedRunning) {
-            // Show Results tab if not already shown
-            if (resultsTabIndex == -1) {
-                JScrollPane resultsScrollPane = new JScrollPane(resultsDisplayArea);
-                mainTabbedPane.addTab("Results", resultsScrollPane);
-            }
-            // Update results display
             updateResultsDisplay(optInfo);
-            // Switch to Results tab
-            mainTabbedPane.setSelectedIndex(mainTabbedPane.getTabCount() - 1);
         } else {
-            // Hide Results tab if shown
-            if (resultsTabIndex != -1) {
-                mainTabbedPane.removeTabAt(resultsTabIndex);
-            }
+            resultsDisplayArea.setText("");
         }
 
-        // Manage Run button visibility
-        runButton.setVisible(!optInfo.hasStartedRunning);
+        // Disable Run button once optimization has started
+        runButton.setEnabled(!optInfo.hasStartedRunning);
 
         // Update currently displayed node
         currentlyDisplayedNode = node;
@@ -680,8 +753,8 @@ public class OptimisationWindow extends JFrame {
 
         TreePath selectedPath = optTree.getSelectionPath();
         if (selectedPath == null) {
-            // No selection - hide the panel
-            optimisationPanel.setVisible(false);
+            // No selection - show message panel
+            rightPanelLayout.show(rightPanel, "MESSAGE");
             return;
         }
 
@@ -694,11 +767,11 @@ public class OptimisationWindow extends JFrame {
             // Load new config and update UI state
             loadConfigFromNode(selectedNode);
 
-            // Show the panel
-            optimisationPanel.setVisible(true);
+            // Show the optimisation panel
+            rightPanelLayout.show(rightPanel, "OPTIMISATION");
         } else {
             // Folder node selected (like "Optimisation runs")
-            optimisationPanel.setVisible(false);
+            rightPanelLayout.show(rightPanel, "MESSAGE");
         }
     }
 
@@ -706,6 +779,9 @@ public class OptimisationWindow extends JFrame {
     /**
      * Runs the optimisation for the currently selected node.
      * Calls program.runOptimisation() on the existing session.
+     * Behavior depends on which tab is currently selected:
+     * - Config tab: Generate config from GUI, update Config INI editor, then run
+     * - Config INI tab: Use text from editor directly
      */
     private void runOptimisation() {
         if (currentlyDisplayedNode == null) return;
@@ -723,8 +799,25 @@ public class OptimisationWindow extends JFrame {
             return;
         }
 
-        String configText = configEditor.getText();
+        // Determine config to use based on selected tab
+        String configText;
+        int selectedTabIndex = mainTabbedPane.getSelectedIndex();
+        String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
 
+        if ("Config".equals(selectedTabTitle)) {
+            // Generate config from GUI and update the Config INI editor
+            configText = guiBuilder.generateConfigText();
+            isUpdatingConfigEditor = true;
+            configEditor.setText(configText);
+            configStatusLabel.setText("Original");
+            optInfo.isConfigModified = false;
+            isUpdatingConfigEditor = false;
+        } else {
+            // Use text from Config INI editor
+            configText = configEditor.getText();
+        }
+
+        // Validate config
         if (configText == null || configText.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this,
                 "Configuration cannot be empty",
@@ -763,6 +856,12 @@ public class OptimisationWindow extends JFrame {
                 // Update UI state
                 loadConfigFromNode(currentlyDisplayedNode);
 
+                // Switch to Results tab after starting
+                int resultsTabIndex = getResultsTabIndex();
+                if (resultsTabIndex != -1) {
+                    mainTabbedPane.setSelectedIndex(resultsTabIndex);
+                }
+
                 // Update tree display
                 treeModel.nodeChanged(currentlyDisplayedNode);
 
@@ -796,6 +895,23 @@ public class OptimisationWindow extends JFrame {
 
             // Update details panel if this optimisation is currently selected
             updateDetailsIfSelected(sessionKey);
+        });
+    }
+
+    /**
+     * Handles the list of optimisable parameters from kalixcli.
+     */
+    private void handleOptimisableParameters(String sessionKey, java.util.List<String> parameters) {
+        SwingUtilities.invokeLater(() -> {
+            // Update the parameters table in the GUI builder
+            guiBuilder.setOptimisableParameters(parameters);
+
+            // Auto-generate expressions for all parameters
+            guiBuilder.autoGenerateParameterExpressions();
+
+            if (statusUpdater != null) {
+                statusUpdater.accept("Found " + parameters.size() + " optimisable parameters");
+            }
         });
     }
 
@@ -934,7 +1050,16 @@ public class OptimisationWindow extends JFrame {
             File selectedFile = fileChooser.getSelectedFile();
             try {
                 String content = java.nio.file.Files.readString(selectedFile.toPath());
+                isUpdatingConfigEditor = true;
                 configEditor.setText(content);
+                configStatusLabel.setText("Original");
+                // Update the current node's modification state
+                if (currentlyDisplayedNode != null &&
+                    currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                    OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                    optInfo.isConfigModified = false;
+                }
+                isUpdatingConfigEditor = false;
                 if (statusUpdater != null) {
                     statusUpdater.accept("Loaded configuration from " + selectedFile.getName());
                 }
@@ -949,8 +1074,45 @@ public class OptimisationWindow extends JFrame {
 
     /**
      * Saves optimisation configuration to a file.
+     * Behavior depends on which tab is currently selected:
+     * - Config tab: Generate config from GUI and save directly
+     * - Config INI tab: Save text from editor
      */
     private void saveConfig() {
+        // Determine what to save based on selected tab
+        String configToSave;
+        int selectedTabIndex = mainTabbedPane.getSelectedIndex();
+        String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
+
+        if ("Config".equals(selectedTabTitle)) {
+            // Check if Config INI tab has been modified
+            if ("Modified".equals(configStatusLabel.getText())) {
+                int result = JOptionPane.showConfirmDialog(this,
+                    "The config on this tab is not consistent with that on the 'Config INI' tab.\nAre you sure you want to continue?",
+                    "Config Inconsistency Warning",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+
+                if (result != JOptionPane.YES_OPTION) {
+                    return; // User chose No, cancel the save
+                }
+            }
+            // Generate config from GUI without modifying the text editor
+            configToSave = guiBuilder.generateConfigText();
+        } else {
+            // Use text from Config INI editor
+            configToSave = configEditor.getText();
+        }
+
+        // Check if config is empty
+        if (configToSave == null || configToSave.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "Configuration is empty. Nothing to save.",
+                "Empty Configuration",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Optimisation Configuration");
 
@@ -975,7 +1137,7 @@ public class OptimisationWindow extends JFrame {
             }
 
             try {
-                java.nio.file.Files.writeString(selectedFile.toPath(), configEditor.getText());
+                java.nio.file.Files.writeString(selectedFile.toPath(), configToSave);
                 if (statusUpdater != null) {
                     statusUpdater.accept("Saved configuration to " + selectedFile.getName());
                 }
@@ -1075,6 +1237,7 @@ public class OptimisationWindow extends JFrame {
         String configSnapshot;  // Store config text at time of run
         OptimisationResult result;  // Cached result (null if not complete)
         boolean hasStartedRunning = false;  // True once runOptimisation() has been called
+        boolean isConfigModified = false;  // True if config was manually edited
 
         public OptimisationInfo(String optName, SessionManager.KalixSession session) {
             this.optName = optName;

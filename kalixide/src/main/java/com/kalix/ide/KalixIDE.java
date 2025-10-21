@@ -1324,18 +1324,24 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public static void main(String[] args) {
         // Configure system properties for better macOS integration
         ThemeManager.configureSystemProperties();
-        
+
         SwingUtilities.invokeLater(() -> {
             try {
                 // Initialize theme from preferences
                 Preferences prefs = Preferences.userNodeForPackage(KalixIDE.class);
                 ThemeManager tempThemeManager = new ThemeManager(prefs, null);
                 tempThemeManager.initializeLookAndFeel();
-                
+
             } catch (UnsupportedLookAndFeelException e) {
                 logger.error("Failed to initialize FlatLaf look and feel: {}", e.getMessage(), e);
             }
-            
+
+            // Configure global tooltip settings for more responsive tooltips
+            ToolTipManager.sharedInstance().setEnabled(true);
+            ToolTipManager.sharedInstance().setInitialDelay(200);   // 200ms before tooltip appears
+            ToolTipManager.sharedInstance().setDismissDelay(4000);  // 4 seconds visible
+            ToolTipManager.sharedInstance().setReshowDelay(100);    // 100ms for quick re-show
+
             // Create the main application window
             new KalixIDE();
         });
