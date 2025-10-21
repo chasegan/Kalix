@@ -11,7 +11,7 @@
 use crate::model::Model;
 use crate::nodes::NodeEnum;
 use super::optimisable::Optimisable;
-use super::optimisable_node::OptimisableNode;
+use super::optimisable_component::OptimisableComponent;
 use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
 
@@ -95,7 +95,7 @@ impl OptimisationProblem {
                 .get_node_idx(node_name)
                 .ok_or_else(|| format!("Node not found: {}", node_name))?;
 
-            // Set parameter on the node using OptimisableNode trait
+            // Set parameter on the node using OptimisableComponent trait
             match &mut self.model.nodes[node_idx] {
                 NodeEnum::SacramentoNode(node) => {
                     node.set_param(param_name, value)

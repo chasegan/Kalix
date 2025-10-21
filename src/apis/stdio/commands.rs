@@ -869,7 +869,7 @@ impl Command for GetOptimisableParamsCommand {
         _params: serde_json::Value,
         _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
     ) -> Result<serde_json::Value, CommandError> {
-        use crate::numerical::opt::OptimisableNode;
+        use crate::numerical::opt::OptimisableComponent;
         use crate::nodes::NodeEnum;
 
         // Get model and check if it exists

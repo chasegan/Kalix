@@ -1,10 +1,10 @@
 /// Trait for model components that support parameter optimisation
 ///
 /// This is a minimal interface that allows getting/setting parameters by name.
-/// Nodes (like Sacramento, GR4J) implement this to expose their optimisable parameters.
+/// Model components (like nodes, constants, etc.) implement this to expose their optimisable parameters.
 /// The trait only handles parameter access - bounds, transforms, and gene mappings
 /// are handled at the optimisation configuration level.
-pub trait OptimisableNode {
+pub trait OptimisableComponent {
     /// Set a parameter by name (physical space, not normalised)
     ///
     /// # Arguments

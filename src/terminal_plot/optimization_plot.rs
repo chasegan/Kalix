@@ -12,6 +12,7 @@ use crate::numerical::opt::DEProgress;
 pub struct OptimizationPlot {
     plot: TerminalPlot,
     history: Vec<(f64, f64)>,  // (evaluation, objective) pairs
+    all_scatter_points: Vec<ScatterPoint>,  // All generation scatter points
     termination_evaluations: usize,
 }
 
@@ -35,8 +36,34 @@ impl OptimizationPlot {
         Self {
             plot,
             history: Vec::new(),
+            all_scatter_points: Vec::new(),
             termination_evaluations,
         }
+    }
+
+    /// Calculate x-range with minimum clamped to 0
+    fn calculate_x_range(&self) -> (f64, f64) {
+        let mut x_max = 0.0f64;
+
+        // Find max from history
+        for &(x, _) in &self.history {
+            x_max = x_max.max(x);
+        }
+
+        // Find max from scatter points
+        for point in &self.all_scatter_points {
+            x_max = x_max.max(point.x);
+        }
+
+        // Add 10% padding to max
+        let x_range = x_max - 0.0;
+        if x_range > 0.0 {
+            x_max += x_range * 0.1;
+        } else {
+            x_max = 1.0;
+        }
+
+        (0.0, x_max)  // Always start at 0
     }
 
     /// Update the plot with progress from the optimizer
@@ -51,6 +78,10 @@ impl OptimizationPlot {
         // Set progress bar
         self.plot.set_progress(progress.n_evaluations, self.termination_evaluations);
 
+        // Set x-range with minimum clamped to 0
+        let (x_min, x_max) = self.calculate_x_range();
+        self.plot.set_x_range(x_min, x_max);
+
         // Add best evolution line
         if !self.history.is_empty() {
             self.plot.add_line(Line {
@@ -60,9 +91,9 @@ impl OptimizationPlot {
             });
         }
 
-        // Add current population scatter points
+        // Add current generation scatter points to accumulated collection
         if let Some(ref pop_objectives) = progress.population_objectives {
-            let scatter_points: Vec<ScatterPoint> = pop_objectives
+            let new_scatter_points: Vec<ScatterPoint> = pop_objectives
                 .iter()
                 .map(|&obj| ScatterPoint {
                     x: progress.n_evaluations as f64,
@@ -71,7 +102,12 @@ impl OptimizationPlot {
                     symbol: '∘',
                 })
                 .collect();
-            self.plot.add_scatter_points(scatter_points);
+            self.all_scatter_points.extend(new_scatter_points);
+        }
+
+        // Render all accumulated scatter points
+        if !self.all_scatter_points.is_empty() {
+            self.plot.add_scatter_points(self.all_scatter_points.clone());
         }
 
         // Add best marker
@@ -97,6 +133,10 @@ impl OptimizationPlot {
         // Set progress bar to 100%
         self.plot.set_progress(n_evaluations, self.termination_evaluations);
 
+        // Set x-range with minimum clamped to 0
+        let (x_min, x_max) = self.calculate_x_range();
+        self.plot.set_x_range(x_min, x_max.max(n_evaluations as f64 * 1.1));
+
         // Add best evolution line with final point
         let mut final_history = self.history.clone();
         final_history.push((n_evaluations as f64, best_objective));
@@ -105,6 +145,11 @@ impl OptimizationPlot {
             style: LineStyle::Dots,
             color: Some(Color::BrightMagenta),
         });
+
+        // Render all accumulated scatter points
+        if !self.all_scatter_points.is_empty() {
+            self.plot.add_scatter_points(self.all_scatter_points.clone());
+        }
 
         // Add best marker at final position
         self.plot.add_marker(Marker {

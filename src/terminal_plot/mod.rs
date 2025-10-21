@@ -67,6 +67,7 @@ pub struct Line {
 }
 
 /// Individual scatter point
+#[derive(Clone)]
 pub struct ScatterPoint {
     pub x: f64,
     pub y: f64,
@@ -270,6 +271,16 @@ impl TerminalPlot {
     /// Set multiple footer lines at once (replaces existing footer)
     pub fn set_footer(&mut self, lines: Vec<String>) {
         self.footer_lines = lines;
+    }
+
+    /// Set the x-axis range explicitly
+    pub fn set_x_range(&mut self, min: f64, max: f64) {
+        self.config.x_range = Some((min, max));
+    }
+
+    /// Set the y-axis range explicitly
+    pub fn set_y_range(&mut self, min: f64, max: f64) {
+        self.config.y_range = Some((min, max));
     }
 
     /// Calculate the total height of the rendered plot
@@ -520,19 +531,52 @@ impl TerminalPlot {
         output.push_str(Color::Reset.to_ansi());
         output.push('\n');
 
-        // Render X-axis labels
+        // Render X-axis labels - position them to align with plot coordinates
         output.push_str(scheme.axis_labels.to_ansi());
         output.push_str("         ");
+
+        // Create a buffer of spaces for label positioning
+        let mut label_line = vec![' '; self.config.width + 10];
+
+        // Place labels at their correct screen positions
         let x_step = (x_range.1 - x_range.0) / 5.0;
         for i in 0..6 {
             let x_value = x_range.0 + i as f64 * x_step;
-            if x_value >= 1000.0 {
-                output.push_str(&format!("{:>5.0}k ", x_value / 1000.0));
+
+            // Calculate screen position for this x value
+            let screen_x = ((x_value - x_range.0) / (x_range.1 - x_range.0) * self.config.width as f64) as usize;
+
+            // Format the label
+            let label = if x_value >= 1000.0 {
+                format!("{:.0}k", x_value / 1000.0)
             } else {
-                output.push_str(&format!("{:>6.0} ", x_value));
+                format!("{:.0}", x_value)
+            };
+
+            // Center the label around its position
+            let start_pos = screen_x.saturating_sub(label.len() / 2);
+            let end_pos = (start_pos + label.len()).min(label_line.len());
+
+            // Place label characters
+            for (i, ch) in label.chars().enumerate() {
+                let pos = start_pos + i;
+                if pos < end_pos {
+                    label_line[pos] = ch;
+                }
             }
         }
-        output.push_str(&self.config.x_label);
+
+        // Add the x-axis label at the end
+        let x_label = format!(" {}", self.config.x_label);
+        let x_label_start = label_line.len().saturating_sub(x_label.len());
+        for (i, ch) in x_label.chars().enumerate() {
+            let pos = x_label_start + i;
+            if pos < label_line.len() {
+                label_line[pos] = ch;
+            }
+        }
+
+        output.push_str(&label_line.iter().collect::<String>());
         output.push_str(Color::Reset.to_ansi());
         output.push('\n');
 

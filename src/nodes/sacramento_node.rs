@@ -4,7 +4,7 @@ use crate::model_inputs::DynamicInput;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-use crate::numerical::opt::optimisable_node::OptimisableNode;
+use crate::numerical::opt::optimisable_component::OptimisableComponent;
 
 #[derive(Default, Clone)]
 pub struct SacramentoNode {
@@ -159,10 +159,10 @@ impl Node for SacramentoNode {
 }
 
 // ============================================================================
-// OptimisableNode Implementation
+// OptimisableComponent Implementation
 // ============================================================================
 
-impl OptimisableNode for SacramentoNode {
+impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         match name {
             "adimp" => {
