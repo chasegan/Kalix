@@ -16,6 +16,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
     private enum ProgramState {
         STARTING,           // Sent load_model_string, waiting for RESULT
         MODEL_LOADING,      // Received RESULT from load, waiting for READY
+        READY,              // Model loaded, waiting for user to configure and start optimisation
         OPTIMISING,         // Sent run_optimisation, optimisation in progress
         COMPLETED,          // Program completed successfully
         FAILED              // Program failed with error
@@ -44,14 +45,13 @@ public class OptimisationProgram extends AbstractSessionProgram {
     }
 
     /**
-     * Starts the Optimisation program with the given configuration and model.
-     * Immediately sends load_model_string command to kalixcli.
+     * Initializes the Optimisation program by loading the model.
+     * Sends load_model_string command and waits for model to be ready.
+     * After this completes, the program enters READY state and waits for runOptimisation() to be called.
      *
-     * @param configText the optimisation configuration (INI format)
      * @param modelIni the model definition (INI format)
      */
-    public void start(String configText, String modelIni) {
-        this.configText = configText;
+    public void initialize(String modelIni) {
         this.modelIni = modelIni;
 
         // Step 1: Send load_model_string command
@@ -68,6 +68,28 @@ public class OptimisationProgram extends AbstractSessionProgram {
             });
     }
 
+    /**
+     * Starts the optimisation with the given configuration.
+     * Can only be called when the program is in READY state.
+     *
+     * @param configText the optimisation configuration (INI format)
+     */
+    public void runOptimisation(String configText) {
+        if (currentState != ProgramState.READY) {
+            statusUpdater.accept("Cannot start optimisation: program not ready (current state: " + currentState + ")");
+            return;
+        }
+
+        this.configText = configText;
+
+        // Send run_optimisation command
+        currentState = ProgramState.OPTIMISING;
+        String optCommand = JsonStdioProtocol.createCommandMessage("run_optimisation",
+            java.util.Map.of("config", configText));
+
+        sendCommand(optCommand, "Optimisation started", "Failed to start optimisation");
+    }
+
     @Override
     public boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
@@ -78,6 +100,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
         return switch (currentState) {
             case STARTING -> handleStartingState(msgType, message);
             case MODEL_LOADING -> handleModelLoadingState(msgType, message);
+            case READY -> false; // In READY state, waiting for user to call runOptimisation()
             case OPTIMISING -> handleOptimisingState(msgType, message);
             case COMPLETED, FAILED -> false; // Don't handle messages in these states
         };
@@ -103,6 +126,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
         return switch (currentState) {
             case STARTING -> "Starting";
             case MODEL_LOADING -> "Loading Model";
+            case READY -> "Ready";
             case OPTIMISING -> "Optimising";
             case COMPLETED -> "Completed";
             case FAILED -> "Failed";
@@ -146,14 +170,9 @@ public class OptimisationProgram extends AbstractSessionProgram {
                                              JsonMessage.SystemMessage message) {
         switch (msgType) {
             case READY:
-                // CLI is ready for next command, now send run_optimisation
-                currentState = ProgramState.OPTIMISING;
-
-                // Send run_optimisation command with only config (model already loaded)
-                String optCommand = JsonStdioProtocol.createCommandMessage("run_optimisation",
-                    java.util.Map.of("config", configText));
-
-                sendCommand(optCommand, "Model loaded, optimisation started", "Failed to start optimisation");
+                // CLI is ready, transition to READY state and wait for user to call runOptimisation()
+                currentState = ProgramState.READY;
+                statusUpdater.accept("Model loaded, ready to configure optimisation");
                 return true;
 
             case ERROR:
