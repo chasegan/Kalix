@@ -201,10 +201,6 @@ impl OptimisableComponent for SacramentoNode {
                 self.sacramento_model.rexp = value;
                 Ok(())
             },
-            "rserv" => {
-                self.sacramento_model.rserv = value;
-                Ok(())
-            },
             "sarva" => {
                 self.sacramento_model.sarva = value;
                 Ok(())
@@ -252,7 +248,6 @@ impl OptimisableComponent for SacramentoNode {
             "pctim" => Ok(self.sacramento_model.pctim),
             "pfree" => Ok(self.sacramento_model.pfree),
             "rexp" => Ok(self.sacramento_model.rexp),
-            "rserv" => Ok(self.sacramento_model.rserv),
             "sarva" => Ok(self.sacramento_model.sarva),
             "side" => Ok(self.sacramento_model.side),
             "ssout" => Ok(self.sacramento_model.ssout),
@@ -268,7 +263,7 @@ impl OptimisableComponent for SacramentoNode {
     fn list_params(&self) -> Vec<String> {
         vec![
             "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
-            "pctim", "pfree", "rexp", "rserv", "sarva", "side",
+            "pctim", "pfree", "rexp", "sarva", "side",
             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
         ]
         .iter()
