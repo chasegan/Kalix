@@ -28,6 +28,7 @@ public class ParameterExpressionLibrary {
         Map.entry("pctim", "log_range(g(#),1E-05,0.11)"),
         Map.entry("pfree", "log_range(g(#),0.01,0.5)"),
         Map.entry("rexp", "log_range(g(#),1,6)"),
+        Map.entry("rserv", "lin_range(g(#),0.2,0.4)"),
         Map.entry("sarva", "log_range(g(#),1E-05,0.11)"),
         Map.entry("sarvaonpctim", "log_range(g(#),0.0001,1)"),
         Map.entry("side", "log_range(g(#),1E-05,0.1)"),
