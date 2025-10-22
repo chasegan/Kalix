@@ -18,7 +18,7 @@ public final class AppConstants {
     public static final String APP_NAME = "Kalix";
     public static final String APP_VERSION = "1.0";
     public static final String APP_DESCRIPTION = "A Java Swing interface for Kalix hydrologic models.";
-    public static final String APP_WEBSITE_URL = "https://www.notion.so/chasegan/Kalix-development-762687200b564e8e8c82b4f98879974f?pvs=12";
+    public static final String APP_WEBSITE_URL = "https://www.notion.so/chasegan/Kalix";
     
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;
@@ -107,11 +107,11 @@ public final class AppConstants {
     public static String getToolbarOpenTooltip() { return "Open Model (" + KeyboardShortcutManager.getInstance().getShortcutString("O") + ")"; }
     public static String getToolbarSaveTooltip() { return "Save Model (" + KeyboardShortcutManager.getInstance().getShortcutString("S") + ")"; }
     public static String getToolbarSearchTooltip() { return "Search in Model (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
-    public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Open FlowViz Window";
+    public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Plotting Tool";
     public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
     public static String getToolbarRunModelTooltip() { return "Run Model (" + KeyboardShortcutManager.getInstance().getShortcutString("R") + ")"; }
-    public static final String TOOLBAR_SESSIONS_TOOLTIP = "Show Run Manager";
-    public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Show Optimiser";
+    public static final String TOOLBAR_SESSIONS_TOOLTIP = "Run Manager";
+    public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
     
     // Branding
     public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";

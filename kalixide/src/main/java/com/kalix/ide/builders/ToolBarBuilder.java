@@ -63,32 +63,32 @@ public class ToolBarBuilder {
         ));
         
         toolBar.addSeparator();
-        
-        // Utility operations  
+
+        // Utility operations
         toolBar.add(createToolBarButton(
-            "Search", 
+            "Search",
             AppConstants.getToolbarSearchTooltip(),
             FontIcon.of(FontAwesomeSolid.SEARCH, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.searchModel()
         ));
-        
+
         toolBar.add(createToolBarButton(
-            "FlowViz",
-            AppConstants.TOOLBAR_FLOWVIZ_TOOLTIP,
-            FontIcon.of(FontAwesomeSolid.CHART_LINE, AppConstants.TOOLBAR_ICON_SIZE),
-            e -> callbacks.flowViz()
+            "Zoom to Fit",
+            "Zoom to Fit",
+            FontIcon.of(FontAwesomeSolid.EXPAND, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.zoomToFit()
         ));
-        
+
         toolBar.addSeparator();
-        
+
         // Model operations
         toolBar.add(createToolBarButton(
-            "Run Model", 
+            "Run Model",
             AppConstants.getToolbarRunModelTooltip(),
             FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.runModelFromMemory()
         ));
-        
+
         toolBar.add(createToolBarButton(
             "Run Manager",
             AppConstants.TOOLBAR_SESSIONS_TOOLTIP,
@@ -103,20 +103,20 @@ public class ToolBarBuilder {
             e -> callbacks.showOptimisation()
         ));
 
-        toolBar.addSeparator();
-        
-        // CLI operations
         toolBar.add(createToolBarButton(
-            "Version",
-            AppConstants.TOOLBAR_VERSION_TOOLTIP,
-            FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE),
-            e -> callbacks.getCliVersion()
+            "FlowViz",
+            AppConstants.TOOLBAR_FLOWVIZ_TOOLTIP,
+            FontIcon.of(FontAwesomeSolid.CHART_LINE, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.flowViz()
         ));
 
         toolBar.addSeparator();
 
         // Linting toggle
         toolBar.add(createLintingToggleButton());
+
+        // Grid toggle
+        toolBar.add(createGridToggleButton());
 
         return toolBar;
     }
@@ -129,16 +129,13 @@ public class ToolBarBuilder {
     private JButton createBrandingButton() {
         ImageIcon logoIcon = loadScaledLogo();
         JButton brandingButton = new JButton(logoIcon);
-        brandingButton.setToolTipText(AppConstants.TOOLBAR_LOGO_TOOLTIP);
+        brandingButton.setToolTipText(AppConstants.APP_WEBSITE_URL);
         brandingButton.setFocusPainted(false);
-        brandingButton.setBorderPainted(false);
-        brandingButton.setContentAreaFilled(false);
-        brandingButton.setOpaque(false);
         brandingButton.addActionListener(e -> callbacks.openWebsite());
-        
+
         // Set accessible name for screen readers
         brandingButton.getAccessibleContext().setAccessibleName("Kalix Logo");
-        
+
         return brandingButton;
     }
     
@@ -284,22 +281,34 @@ public class ToolBarBuilder {
     }
 
     /**
-     * Creates a toggle button for linting with theme-aware icons.
+     * Creates a toggle button for linting with theme-aware ninja icon.
      *
      * @return Configured JToggleButton for linting
      */
     private JToggleButton createLintingToggleButton() {
-        JToggleButton lintingButton = new JToggleButton();
-        lintingButton.setToolTipText("Toggle linting on/off");
+        // Create ninja icon
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.USER_NINJA, AppConstants.TOOLBAR_ICON_SIZE);
+        Color iconColor = getThemeAwareIconColor();
+        icon.setIconColor(iconColor);
+
+        JToggleButton lintingButton = new JToggleButton(icon);
         lintingButton.setFocusPainted(false);
 
-        // Set initial state and icon
-        updateLintingButtonState(lintingButton);
+        // Set initial state
+        boolean lintingEnabled = callbacks.isLintingEnabled();
+        lintingButton.setSelected(lintingEnabled);
+        lintingButton.setToolTipText(lintingEnabled
+            ? "Linting enabled - click to disable"
+            : "Linting disabled - click to enable");
 
         // Add action listener
         lintingButton.addActionListener(e -> {
             callbacks.toggleLinting();
-            updateLintingButtonState(lintingButton);
+            boolean enabled = callbacks.isLintingEnabled();
+            lintingButton.setSelected(enabled);
+            lintingButton.setToolTipText(enabled
+                ? "Linting enabled - click to disable"
+                : "Linting disabled - click to enable");
         });
 
         // Set accessible name for screen readers
@@ -309,29 +318,40 @@ public class ToolBarBuilder {
     }
 
     /**
-     * Updates the linting button's icon and state based on current linting status.
+     * Creates a toggle button for gridlines with theme-aware border icon.
      *
-     * @param button The linting toggle button to update
+     * @return Configured JToggleButton for gridlines
      */
-    private void updateLintingButtonState(JToggleButton button) {
-        boolean lintingEnabled = callbacks.isLintingEnabled();
-        button.setSelected(lintingEnabled);
-
-        // Choose appropriate icon
-        FontIcon icon = lintingEnabled
-            ? FontIcon.of(FontAwesomeSolid.USER_NINJA, AppConstants.TOOLBAR_ICON_SIZE)
-            : FontIcon.of(FontAwesomeSolid.USER_SLASH, AppConstants.TOOLBAR_ICON_SIZE);
-
-        // Apply theme-appropriate color
+    private JToggleButton createGridToggleButton() {
+        // Create border-none icon
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.BORDER_NONE, AppConstants.TOOLBAR_ICON_SIZE);
         Color iconColor = getThemeAwareIconColor();
         icon.setIconColor(iconColor);
 
-        button.setIcon(icon);
+        JToggleButton gridButton = new JToggleButton(icon);
+        gridButton.setFocusPainted(false);
 
-        // Update tooltip
-        button.setToolTipText(lintingEnabled
-            ? "Linting enabled - click to disable"
-            : "Linting disabled - click to enable");
+        // Set initial state
+        boolean gridVisible = callbacks.isGridlinesVisible();
+        gridButton.setSelected(gridVisible);
+        gridButton.setToolTipText(gridVisible
+            ? "Gridlines visible - click to hide"
+            : "Gridlines hidden - click to show");
+
+        // Add action listener
+        gridButton.addActionListener(e -> {
+            boolean newState = !callbacks.isGridlinesVisible();
+            callbacks.toggleGridlines(newState);
+            gridButton.setSelected(newState);
+            gridButton.setToolTipText(newState
+                ? "Gridlines visible - click to hide"
+                : "Gridlines hidden - click to show");
+        });
+
+        // Set accessible name for screen readers
+        gridButton.getAccessibleContext().setAccessibleName("Toggle Gridlines");
+
+        return gridButton;
     }
 
 }
