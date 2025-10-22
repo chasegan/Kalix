@@ -185,13 +185,16 @@ public class MenuBarBuilder {
      */
     private JMenu createViewMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
         JMenu viewMenu = new JMenu("View");
-        
+
+        // Zoom to Fit at the top
+        viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
+        viewMenu.addSeparator();
+
         // Zoom controls
         viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
-        viewMenu.add(createMenuItem("Reset Zoom", e -> callbacks.resetZoom()));
-        viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
-        
+        viewMenu.add(createMenuItem("Reset", e -> callbacks.resetZoom()));
+
         return viewMenu;
     }
 

@@ -7,6 +7,7 @@ import com.kalix.ide.cli.KalixCliLocator;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
+import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -127,12 +128,13 @@ public class OptimisationWindow extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("Optimiser");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(900, 700);
+        setSize(OptimisationUIConstants.WINDOW_WIDTH, OptimisationUIConstants.WINDOW_HEIGHT);
 
         if (parentFrame != null) {
             setLocationRelativeTo(parentFrame);
             Point parentLocation = parentFrame.getLocation();
-            setLocation(parentLocation.x + 30, parentLocation.y + 30);
+            setLocation(parentLocation.x + OptimisationUIConstants.WINDOW_OFFSET_X,
+                       parentLocation.y + OptimisationUIConstants.WINDOW_OFFSET_Y);
 
             if (parentFrame.getIconImage() != null) {
                 setIconImage(parentFrame.getIconImage());
@@ -188,10 +190,11 @@ public class OptimisationWindow extends JFrame {
             // Switch to the Config INI tab
             mainTabbedPane.setSelectedIndex(1);
         }, workingDirectorySupplier);
-        mainTabbedPane.addTab("Config", guiBuilder);
+        mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG, guiBuilder);
 
         // Tab 2: Config INI (Text Editor)
-        configEditor = new RSyntaxTextArea(20, 60);
+        configEditor = new RSyntaxTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
+                                           OptimisationUIConstants.TEXT_AREA_COLUMNS);
         configEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI);
         configEditor.setCodeFoldingEnabled(true);
         configEditor.setAntiAliasingEnabled(true);
@@ -220,7 +223,7 @@ public class OptimisationWindow extends JFrame {
 
             private void updateConfigStatus() {
                 if (!isUpdatingConfigEditor) {
-                    configStatusLabel.setText("Modified");
+                    configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_MODIFIED);
                     // Also update the current node's modification state
                     if (currentlyDisplayedNode != null &&
                         currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
@@ -252,7 +255,7 @@ public class OptimisationWindow extends JFrame {
         generateConfigButton.addActionListener(e -> {
             isUpdatingConfigEditor = true;
             guiBuilder.generateAndSwitchToTextEditor();
-            configStatusLabel.setText("Original");
+            configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
             // Update the current node's modification state
             if (currentlyDisplayedNode != null &&
                 currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
@@ -264,10 +267,11 @@ public class OptimisationWindow extends JFrame {
         leftButtonPanel.add(generateConfigButton);
 
         // Right side: Status label
-        JPanel rightLabelPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        configStatusLabel = new JLabel("Original");
+        JPanel rightLabelPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, OptimisationUIConstants.PADDING_SMALL, 0));
+        configStatusLabel = new JLabel(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
         configStatusLabel.setFont(configStatusLabel.getFont().deriveFont(java.awt.Font.ITALIC));
-        configStatusLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0)); // 4px top padding
+        configStatusLabel.setBorder(BorderFactory.createEmptyBorder(
+            OptimisationUIConstants.CONFIG_STATUS_LABEL_TOP_PADDING, 0, 0, 0));
         rightLabelPanel.add(configStatusLabel);
 
         configIniButtonPanel.add(leftButtonPanel, BorderLayout.WEST);
@@ -280,14 +284,15 @@ public class OptimisationWindow extends JFrame {
         gbc.insets = new Insets(0, 5, 5, 5);
         configIniPanel.add(configScrollPane, gbc);
 
-        mainTabbedPane.addTab("Config INI", configIniPanel);
+        mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG_INI, configIniPanel);
 
         // Tab 3: Results (always present)
-        resultsDisplayArea = new JTextArea(20, 60);
+        resultsDisplayArea = new JTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
+                                           OptimisationUIConstants.TEXT_AREA_COLUMNS);
         resultsDisplayArea.setEditable(false);
         resultsDisplayArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JScrollPane resultsScrollPane = new JScrollPane(resultsDisplayArea);
-        mainTabbedPane.addTab("Results", resultsScrollPane);
+        mainTabbedPane.addTab(OptimisationUIConstants.TAB_RESULTS, resultsScrollPane);
 
         optimisationPanel.add(mainTabbedPane, BorderLayout.CENTER);
 
@@ -309,11 +314,11 @@ public class OptimisationWindow extends JFrame {
         optimisationPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         // Add both panels to rightPanel CardLayout
-        rightPanel.add(messagePanel, "MESSAGE");
-        rightPanel.add(optimisationPanel, "OPTIMISATION");
+        rightPanel.add(messagePanel, OptimisationUIConstants.CARD_MESSAGE);
+        rightPanel.add(optimisationPanel, OptimisationUIConstants.CARD_OPTIMISATION);
 
         // Show message panel by default
-        rightPanelLayout.show(rightPanel, "MESSAGE");
+        rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
     }
 
     private void setupLayout() {
@@ -324,9 +329,10 @@ public class OptimisationWindow extends JFrame {
         leftPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
         // Button panel at top of left side
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, OptimisationUIConstants.PADDING_SMALL,
+                                                       OptimisationUIConstants.PADDING_SMALL));
         JButton newOptButton = new JButton("New");
-        newOptButton.setIcon(FontIcon.of(FontAwesomeSolid.PLUS, 14, new Color(0, 120, 0)));
+        newOptButton.setIcon(FontIcon.of(FontAwesomeSolid.PLUS, 14, OptimisationUIConstants.ICON_COLOR_NEW));
         newOptButton.addActionListener(e -> createNewOptimisation());
         buttonPanel.add(newOptButton);
         leftPanel.add(buttonPanel, BorderLayout.NORTH);
@@ -334,13 +340,13 @@ public class OptimisationWindow extends JFrame {
         JScrollPane treeScrollPane = new JScrollPane(optTree);
         leftPanel.add(treeScrollPane, BorderLayout.CENTER);
 
-        leftPanel.setPreferredSize(new Dimension(220, 0));
+        leftPanel.setPreferredSize(new Dimension(OptimisationUIConstants.TREE_PANEL_WIDTH, 0));
 
         // Create horizontal split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setLeftComponent(leftPanel);
         splitPane.setRightComponent(rightPanel);
-        splitPane.setDividerLocation(220);
+        splitPane.setDividerLocation(OptimisationUIConstants.TREE_PANEL_WIDTH);
         splitPane.setResizeWeight(0.0);  // Tree stays fixed width when resizing
 
         add(splitPane, BorderLayout.CENTER);
@@ -461,7 +467,7 @@ public class OptimisationWindow extends JFrame {
             // Save the config text from the editor (it's the source of truth)
             optInfo.configSnapshot = configEditor.getText();
             // Save the modification state
-            optInfo.isConfigModified = "Modified".equals(configStatusLabel.getText());
+            optInfo.isConfigModified = OptimisationUIConstants.CONFIG_STATUS_MODIFIED.equals(configStatusLabel.getText());
         }
     }
 
@@ -482,7 +488,8 @@ public class OptimisationWindow extends JFrame {
             configEditor.setText("");
         }
         // Restore the modification state for this node
-        configStatusLabel.setText(optInfo.isConfigModified ? "Modified" : "Original");
+        configStatusLabel.setText(optInfo.isConfigModified ?
+            OptimisationUIConstants.CONFIG_STATUS_MODIFIED : OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
         isUpdatingConfigEditor = false;
 
         // Set editable state based on whether optimization has started
@@ -512,7 +519,7 @@ public class OptimisationWindow extends JFrame {
      */
     private int getResultsTabIndex() {
         for (int i = 0; i < mainTabbedPane.getTabCount(); i++) {
-            if ("Results".equals(mainTabbedPane.getTitleAt(i))) {
+            if (OptimisationUIConstants.TAB_RESULTS.equals(mainTabbedPane.getTitleAt(i))) {
                 return i;
             }
         }
@@ -754,7 +761,7 @@ public class OptimisationWindow extends JFrame {
         TreePath selectedPath = optTree.getSelectionPath();
         if (selectedPath == null) {
             // No selection - show message panel
-            rightPanelLayout.show(rightPanel, "MESSAGE");
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
             return;
         }
 
@@ -768,10 +775,10 @@ public class OptimisationWindow extends JFrame {
             loadConfigFromNode(selectedNode);
 
             // Show the optimisation panel
-            rightPanelLayout.show(rightPanel, "OPTIMISATION");
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
         } else {
             // Folder node selected (like "Optimisation runs")
-            rightPanelLayout.show(rightPanel, "MESSAGE");
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
         }
     }
 
@@ -804,12 +811,12 @@ public class OptimisationWindow extends JFrame {
         int selectedTabIndex = mainTabbedPane.getSelectedIndex();
         String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
 
-        if ("Config".equals(selectedTabTitle)) {
+        if (OptimisationUIConstants.TAB_CONFIG.equals(selectedTabTitle)) {
             // Generate config from GUI and update the Config INI editor
             configText = guiBuilder.generateConfigText();
             isUpdatingConfigEditor = true;
             configEditor.setText(configText);
-            configStatusLabel.setText("Original");
+            configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
             optInfo.isConfigModified = false;
             isUpdatingConfigEditor = false;
         } else {
@@ -1052,7 +1059,7 @@ public class OptimisationWindow extends JFrame {
                 String content = java.nio.file.Files.readString(selectedFile.toPath());
                 isUpdatingConfigEditor = true;
                 configEditor.setText(content);
-                configStatusLabel.setText("Original");
+                configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
                 // Update the current node's modification state
                 if (currentlyDisplayedNode != null &&
                     currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
@@ -1084,9 +1091,9 @@ public class OptimisationWindow extends JFrame {
         int selectedTabIndex = mainTabbedPane.getSelectedIndex();
         String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
 
-        if ("Config".equals(selectedTabTitle)) {
+        if (OptimisationUIConstants.TAB_CONFIG.equals(selectedTabTitle)) {
             // Check if Config INI tab has been modified
-            if ("Modified".equals(configStatusLabel.getText())) {
+            if (OptimisationUIConstants.CONFIG_STATUS_MODIFIED.equals(configStatusLabel.getText())) {
                 int result = JOptionPane.showConfirmDialog(this,
                     "The config on this tab is not consistent with that on the 'Config INI' tab.\nAre you sure you want to continue?",
                     "Config Inconsistency Warning",

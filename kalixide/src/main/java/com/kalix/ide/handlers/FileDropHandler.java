@@ -16,19 +16,31 @@ import java.util.function.Consumer;
  * Provides functionality to drop Kalix model files onto the application window.
  */
 public class FileDropHandler {
-    
+
     private final FileOperationsManager fileOperations;
     private final Consumer<String> statusUpdateCallback;
-    
+    private java.util.function.Supplier<Boolean> beforeLoadCallback;
+
     /**
      * Creates a new FileDropHandler instance.
-     * 
+     *
      * @param fileOperations The file operations manager for handling dropped files
      * @param statusUpdateCallback Callback for status updates
      */
     public FileDropHandler(FileOperationsManager fileOperations, Consumer<String> statusUpdateCallback) {
         this.fileOperations = fileOperations;
         this.statusUpdateCallback = statusUpdateCallback;
+    }
+
+    /**
+     * Sets a callback that will be invoked before loading a dropped file.
+     * The callback should return true to allow the load, or false to cancel.
+     * Typically used to check for unsaved changes.
+     *
+     * @param callback Supplier that returns true to proceed with load, false to cancel
+     */
+    public void setBeforeLoadCallback(java.util.function.Supplier<Boolean> callback) {
+        this.beforeLoadCallback = callback;
     }
     
     /**
@@ -107,6 +119,12 @@ public class FileDropHandler {
                         // Process the first valid model file
                         for (File file : files) {
                             if (fileOperations.isKalixModelFile(file)) {
+                                // Check if load should proceed (e.g., check for unsaved changes)
+                                if (beforeLoadCallback != null && !beforeLoadCallback.get()) {
+                                    // User cancelled the load operation
+                                    dtde.dropComplete(false);
+                                    return;
+                                }
                                 fileOperations.loadModelFile(file);
                                 dtde.dropComplete(true);
                                 return;

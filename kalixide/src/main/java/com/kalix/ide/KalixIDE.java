@@ -289,8 +289,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         );
         
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
+        fileDropHandler.setBeforeLoadCallback(this::checkUnsavedChanges); // Check for unsaved changes before loading dropped files
         versionChecker = new VersionChecker(this::updateStatus);
-        
+
         // Initialize STDIO task manager
         stdioTaskManager = new StdioTaskManager(
             processExecutor,
@@ -303,7 +304,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Set up component listeners
         textEditor.setDirtyStateListener(isDirty -> titleBarManager.updateTitle(isDirty, fileOperations::getCurrentFile));
-        textEditor.setFileDropHandler(fileOperations::loadModelFile);
+        textEditor.setFileDropHandler(file -> {
+            // Check for unsaved changes before loading dropped file
+            if (checkUnsavedChanges()) {
+                fileOperations.loadModelFile(file);
+            }
+        });
         
         // Set up model parsing from text changes
         textEditor.addDocumentListener(new javax.swing.event.DocumentListener() {
@@ -547,13 +553,17 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     /**
-     * Convenience method for loading model files from file paths.
+     * Loads a model file from the given path.
      * Used by recent files manager callback.
-     * 
+     * Checks for unsaved changes before loading.
+     *
      * @param filePath The absolute path to the file to load
      */
     private void loadModelFile(String filePath) {
-        fileOperations.loadModelFile(filePath);
+        // Check for unsaved changes before loading
+        if (checkUnsavedChanges()) {
+            fileOperations.loadModelFile(filePath);
+        }
     }
     
     
@@ -624,6 +634,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void newModel() {
+        // Check for unsaved changes before proceeding
+        if (!checkUnsavedChanges()) {
+            return; // User cancelled the operation
+        }
         fileOperations.newModel();
     }
 
@@ -633,6 +647,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void openModel() {
+        // Check for unsaved changes before proceeding
+        if (!checkUnsavedChanges()) {
+            return; // User cancelled the operation
+        }
         fileOperations.openModel();
     }
     
@@ -655,60 +673,84 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Checks for unsaved changes and prompts the user to save if necessary.
+     *
+     * @return true if the operation should proceed (no changes, user saved, or user chose not to save),
+     *         false if the user cancelled the operation
+     */
+    private boolean checkUnsavedChanges() {
+        return checkUnsavedChanges("You have unsaved changes in \"%s\".\n\nDo you want to save your changes?");
+    }
+
+    /**
+     * Checks for unsaved changes and prompts the user to save if necessary.
+     *
+     * @param messageFormat Custom message format string (will be formatted with fileName)
+     * @return true if the operation should proceed (no changes, user saved, or user chose not to save),
+     *         false if the user cancelled the operation
+     */
+    private boolean checkUnsavedChanges(String messageFormat) {
+        // Check if we should prompt to save unsaved changes
+        boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
+
+        if (!promptOnExit || !textEditor.isDirty()) {
+            return true; // No prompt needed or no unsaved changes
+        }
+
+        // Show save confirmation dialog
+        String fileName = fileOperations.getCurrentFile() != null ?
+            fileOperations.getCurrentFile().getName() : "Untitled";
+
+        int choice = JOptionPane.showConfirmDialog(
+            this,
+            String.format(messageFormat, fileName),
+            "Unsaved Changes",
+            JOptionPane.YES_NO_CANCEL_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        switch (choice) {
+            case JOptionPane.YES_OPTION:
+                // Save the file first
+                try {
+                    if (fileOperations.getCurrentFile() != null) {
+                        fileOperations.saveModel();
+                    } else {
+                        // No current file, need to save as
+                        fileOperations.saveAsModel();
+                        // Check if save succeeded by seeing if we now have a current file
+                        if (fileOperations.getCurrentFile() == null) {
+                            // User cancelled save as dialog or save failed
+                            return false;
+                        }
+                    }
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Failed to save file: " + e.getMessage(),
+                        "Save Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                    return false;
+                }
+                return true; // Saved successfully, proceed
+            case JOptionPane.NO_OPTION:
+                return true; // Don't save, but proceed
+            case JOptionPane.CANCEL_OPTION:
+            default:
+                return false; // Cancel the operation
+        }
+    }
+
+    /**
      * Exits the application gracefully.
      * This will terminate the Java Virtual Machine.
      */
     @Override
     public void exitApplication() {
-        // Check if we should prompt to save unsaved changes
-        boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
-
-        if (promptOnExit && textEditor.isDirty()) {
-            // Show save confirmation dialog
-            String fileName = fileOperations.getCurrentFile() != null ?
-                fileOperations.getCurrentFile().getName() : "Untitled";
-
-            int choice = JOptionPane.showConfirmDialog(
-                this,
-                "You have unsaved changes in \"" + fileName + "\".\n\nDo you want to save your changes before closing?",
-                "Unsaved Changes",
-                JOptionPane.YES_NO_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE
-            );
-
-            switch (choice) {
-                case JOptionPane.YES_OPTION:
-                    // Save the file first
-                    try {
-                        if (fileOperations.getCurrentFile() != null) {
-                            fileOperations.saveModel();
-                        } else {
-                            // No current file, need to save as
-                            fileOperations.saveAsModel();
-                            // Check if save succeeded by seeing if we now have a current file
-                            if (fileOperations.getCurrentFile() == null) {
-                                // User cancelled save as dialog or save failed
-                                return;
-                            }
-                        }
-                    } catch (Exception e) {
-                        JOptionPane.showMessageDialog(
-                            this,
-                            "Failed to save file: " + e.getMessage(),
-                            "Save Error",
-                            JOptionPane.ERROR_MESSAGE
-                        );
-                        return;
-                    }
-                    break;
-                case JOptionPane.NO_OPTION:
-                    // Don't save, just exit
-                    break;
-                case JOptionPane.CANCEL_OPTION:
-                default:
-                    // Cancel exit
-                    return;
-            }
+        // Check for unsaved changes before exiting
+        if (!checkUnsavedChanges("You have unsaved changes in \"%s\".\n\nDo you want to save your changes before closing?")) {
+            return; // User cancelled the exit
         }
 
         // Clean up resources before exiting

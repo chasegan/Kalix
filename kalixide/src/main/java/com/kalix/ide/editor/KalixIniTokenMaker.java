@@ -45,9 +45,13 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
             // Handle section header
             handleSectionHeader(text, array, offset, end, firstNonWhitespace, startOffset);
         } else {
-            // Not a section header - check for key-value pairs
+            // Find comment position first (comments take precedence)
+            int commentPos = findCommentStart(array, offset, end);
+
+            // Look for equals sign, but only before any comment
+            int searchEnd = (commentPos >= offset) ? commentPos : end;
             int equalsPos = -1;
-            for (int i = offset; i < end; i++) {
+            for (int i = offset; i < searchEnd; i++) {
                 if (array[i] == '=') {
                     equalsPos = i;
                     break;
@@ -55,11 +59,11 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
             }
 
             if (equalsPos >= offset) {
-                // Found equals sign - this is a key-value pair
-                handleKeyValuePair(text, array, offset, end, equalsPos, startOffset);
+                // Found equals sign before any comment - this is a key-value pair
+                handleKeyValuePairWithComment(text, array, offset, end, equalsPos, commentPos, startOffset);
             } else {
-                // Regular line - check for comments (fallback)
-                handleCommentLine(text, array, offset, end, startOffset);
+                // No equals sign (or equals is after comment) - handle as regular line with potential comment
+                handleLineWithComment(text, array, offset, end, commentPos, startOffset);
             }
         }
 
@@ -201,5 +205,57 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
             }
         }
         return -1;
+    }
+
+    /**
+     * Handle a key-value pair with potential inline comment.
+     * Format: key = value # comment
+     */
+    private void handleKeyValuePairWithComment(Segment text, char[] array, int offset, int end,
+                                                int equalsPos, int commentPos, int startOffset) {
+        // Add key part (everything before =)
+        if (equalsPos > offset) {
+            addToken(text, offset, equalsPos - 1, Token.IDENTIFIER, startOffset);
+        }
+
+        // Add equals sign
+        addToken(text, equalsPos, equalsPos, Token.OPERATOR,
+                startOffset + (equalsPos - offset));
+
+        // Handle value part (between = and comment, or = and end)
+        int valueStart = equalsPos + 1;
+        int valueEnd = (commentPos >= valueStart) ? commentPos - 1 : end - 1;
+
+        if (valueStart <= valueEnd) {
+            addToken(text, valueStart, valueEnd, Token.LITERAL_STRING_DOUBLE_QUOTE,
+                    startOffset + (valueStart - offset));
+        }
+
+        // Add comment part if present
+        if (commentPos >= valueStart) {
+            addToken(text, commentPos, end - 1, Token.COMMENT_EOL,
+                    startOffset + (commentPos - offset));
+        }
+    }
+
+    /**
+     * Handle a regular line (no key-value pair) with potential inline comment.
+     * Format: some text # comment
+     */
+    private void handleLineWithComment(Segment text, char[] array, int offset, int end,
+                                        int commentPos, int startOffset) {
+        if (commentPos >= offset) {
+            // Line has a comment - split into text and comment
+            if (commentPos > offset) {
+                // Add text before comment
+                addToken(text, offset, commentPos - 1, Token.IDENTIFIER, startOffset);
+            }
+            // Add comment part
+            addToken(text, commentPos, end - 1, Token.COMMENT_EOL,
+                    startOffset + (commentPos - offset));
+        } else {
+            // No comment - entire line is regular text
+            addToken(text, offset, end - 1, Token.IDENTIFIER, startOffset);
+        }
     }
 }
