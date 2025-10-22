@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::model::Model;
+use crate::nodes::inflow_node::InflowNode;
 use crate::nodes::gr4j_node::Gr4jNode;
 use crate::nodes::NodeEnum;
 use crate::io::csv_io::csv_string_to_f64_vec;
@@ -64,5 +65,92 @@ fn test_model_with_function() {
         println!("new_answer: {:?}", new_answer);
         println!("old_answer: {:?}", old_answer);
         assert_eq!(new_answer, *old_answer);
+    }
+}
+
+
+#[test]
+fn test_model_with_changing_constant() {
+
+    //Create model
+    let mut model = Model::new();
+    let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
+
+    //Add file data
+    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
+
+    //Add data_cache constants
+    model.data_cache.constants.set_value("c.pi", 3.14);
+    model.data_cache.constants.set_value("c.run_counter", 1.0);
+
+    //Add node1
+    let node1_idx: usize;
+    {
+        let mut n = InflowNode::new();
+        n.name = "node1_inflow".to_string();
+        n.inflow_input = DynamicInput::from_string("0 * data.constants_csv.by_index.1", &mut model.data_cache, true)
+            .expect("Failed to parse expression");
+        node1_idx = model.add_node(NodeEnum::InflowNode(n));
+
+        //Node results
+        let result_name = "node.node1_inflow.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 0.0, 0.0));
+    }
+
+    //Add node2
+    let node2_idx: usize;
+    {
+        let mut n = InflowNode::new();
+        n.name = "node2_inflow".to_string();
+        n.inflow_input = DynamicInput::from_string("c.run_counter * c.run_counter", &mut model.data_cache, true)
+            .expect("Failed to parse expression");
+        node2_idx = model.add_node(NodeEnum::InflowNode(n));
+
+        //Node results
+        let result_name = "node.node2_inflow.ds_1".to_string();
+        model.outputs.push(result_name.clone());
+        regression_results.insert(result_name, (48824, 1.0, 0.0)); //c.run_counter * c.run_counter = 1.0
+    }
+    model.add_link(node1_idx, node2_idx, 0, 0);
+
+    //Run the model
+    model.configure().expect("Configuration error");
+    model.run().expect("Simulation error");
+
+    //Assess the results
+    for key in regression_results.keys() {
+        let ds_idx = model.data_cache.get_existing_series_idx(key).unwrap();
+        let len = model.data_cache.series[ds_idx].len();
+        let mean = model.data_cache.series[ds_idx].mean();
+        let std_dev = model.data_cache.series[ds_idx].std_dev();
+
+        let new_answer = (len, mean, std_dev);
+        let old_answer = &regression_results[key];
+        println!("\n{}", key);
+        println!("new_answer: {:?}", new_answer);
+        println!("old_answer: {:?}", old_answer);
+        assert_eq!(new_answer, *old_answer);
+    }
+
+    /////////////////////////////////////////////////////////// Change constant
+    /////////////////////////////////////////////////////////// Run again
+    /////////////////////////////////////////////////////////// Check results
+
+    model.data_cache.constants.set_value("c.run_counter", 2.0);
+    model.run().expect("Simulation error");
+
+    {
+        let ds_idx = model.data_cache.get_existing_series_idx("node.node2_inflow.ds_1").unwrap();
+        let len = model.data_cache.series[ds_idx].len();
+        let mean = model.data_cache.series[ds_idx].mean();
+        let std_dev = model.data_cache.series[ds_idx].std_dev();
+
+        let new_answer = (len, mean, std_dev);
+        let old_answer = (48824, 4.0, 0.0); //c.run_counter * c.run_counter = 4.0
+        println!("\nWith changed constant value");
+        println!("new_answer: {:?}", new_answer);
+        println!("old_answer: {:?}", old_answer);
+        assert_eq!(new_answer, old_answer);
     }
 }
