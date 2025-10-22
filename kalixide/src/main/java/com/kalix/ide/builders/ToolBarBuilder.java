@@ -95,7 +95,14 @@ public class ToolBarBuilder {
             FontIcon.of(FontAwesomeSolid.TASKS, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.showRunManager()
         ));
-        
+
+        toolBar.add(createToolBarButton(
+            "Optimiser",
+            AppConstants.TOOLBAR_OPTIMISER_TOOLTIP,
+            FontIcon.of(FontAwesomeSolid.DICE_D20, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.showOptimisation()
+        ));
+
         toolBar.addSeparator();
         
         // CLI operations
@@ -228,7 +235,7 @@ public class ToolBarBuilder {
     
     /**
      * Creates a toolbar button with icon and tooltip.
-     * 
+     *
      * @param text Button text (used for accessibility)
      * @param tooltip Tooltip text
      * @param icon Button icon
@@ -242,18 +249,15 @@ public class ToolBarBuilder {
             Color iconColor = getThemeAwareIconColor();
             fontIcon.setIconColor(iconColor);
         }
-        
+
         JButton button = new JButton(icon);
         button.setToolTipText(tooltip);
         button.setFocusPainted(false);
-        button.setBorderPainted(false);
-        button.setContentAreaFilled(false);
-        button.setOpaque(false);
         button.addActionListener(listener);
-        
+
         // Set accessible name for screen readers
         button.getAccessibleContext().setAccessibleName(text);
-        
+
         return button;
     }
     
@@ -288,9 +292,6 @@ public class ToolBarBuilder {
         JToggleButton lintingButton = new JToggleButton();
         lintingButton.setToolTipText("Toggle linting on/off");
         lintingButton.setFocusPainted(false);
-        lintingButton.setBorderPainted(false);
-        lintingButton.setContentAreaFilled(false);
-        lintingButton.setOpaque(false);
 
         // Set initial state and icon
         updateLintingButtonState(lintingButton);

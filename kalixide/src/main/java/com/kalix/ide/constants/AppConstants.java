@@ -111,6 +111,7 @@ public final class AppConstants {
     public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
     public static String getToolbarRunModelTooltip() { return "Run Model (" + KeyboardShortcutManager.getInstance().getShortcutString("R") + ")"; }
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Show Run Manager";
+    public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Show Optimiser";
     
     // Branding
     public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";

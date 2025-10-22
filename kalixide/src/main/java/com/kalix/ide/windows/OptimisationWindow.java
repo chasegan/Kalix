@@ -319,20 +319,20 @@ public class OptimisationWindow extends JFrame {
     private void setupLayout() {
         setLayout(new BorderLayout());
 
-        // Left panel: Tree + Button
+        // Left panel: Button + Tree
         JPanel leftPanel = new JPanel(new BorderLayout(0, 5));
         leftPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JScrollPane treeScrollPane = new JScrollPane(optTree);
-        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
-
-        // Button panel at bottom of left side
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 5));
-        JButton newOptButton = new JButton("New Optimisation");
+        // Button panel at top of left side
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        JButton newOptButton = new JButton("New");
         newOptButton.setIcon(FontIcon.of(FontAwesomeSolid.PLUS, 14, new Color(0, 120, 0)));
         newOptButton.addActionListener(e -> createNewOptimisation());
         buttonPanel.add(newOptButton);
-        leftPanel.add(buttonPanel, BorderLayout.SOUTH);
+        leftPanel.add(buttonPanel, BorderLayout.NORTH);
+
+        JScrollPane treeScrollPane = new JScrollPane(optTree);
+        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
 
         leftPanel.setPreferredSize(new Dimension(220, 0));
 
