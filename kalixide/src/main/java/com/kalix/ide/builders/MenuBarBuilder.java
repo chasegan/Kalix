@@ -234,16 +234,6 @@ public class MenuBarBuilder {
         aiMenu.addSeparator();
         aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
         aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));
-        aiMenu.addSeparator();
-
-        // Auto-reload toggle
-        JCheckBoxMenuItem autoReloadItem = new JCheckBoxMenuItem("Auto-reload Clean Files", callbacks.isAutoReloadEnabled());
-        autoReloadItem.addActionListener(e -> {
-            boolean newState = autoReloadItem.isSelected();
-            callbacks.toggleAutoReload(newState);
-            callbacks.updateStatus(newState ? "Auto-reload enabled" : "Auto-reload disabled");
-        });
-        aiMenu.add(autoReloadItem);
 
         return aiMenu;
     }

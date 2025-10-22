@@ -85,6 +85,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
+
+    // Toolbar toggle buttons (stored for state synchronization)
+    private JToggleButton lintingToggleButton;
+    private JToggleButton autoReloadToggleButton;
+    private JToggleButton gridlinesToggleButton;
     
     // Manager classes for specialized functionality
     private ThemeManager themeManager;
@@ -350,7 +355,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Add toolbar at top
         ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
-        toolBar = toolBarBuilder.buildToolBar();
+        ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
+        toolBar = components.toolBar;
+        lintingToggleButton = components.lintingToggleButton;
+        autoReloadToggleButton = components.autoReloadToggleButton;
+        gridlinesToggleButton = components.gridlinesToggleButton;
         add(toolBar, BorderLayout.NORTH);
 
         // Create a single main docking area
@@ -388,6 +397,36 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void updateMenuBar() {
         setupMenuBar();
+    }
+
+    /**
+     * Synchronizes toolbar toggle button states with current preferences.
+     * Called when preferences are changed outside of the toolbar (e.g., via Preferences dialog).
+     */
+    private void syncToggleButtonStates() {
+        if (lintingToggleButton != null) {
+            boolean lintingEnabled = isLintingEnabled();
+            lintingToggleButton.setSelected(lintingEnabled);
+            lintingToggleButton.setToolTipText(lintingEnabled
+                ? "Linting enabled - click to disable"
+                : "Linting disabled - click to enable");
+        }
+
+        if (autoReloadToggleButton != null) {
+            boolean autoReloadEnabled = isAutoReloadEnabled();
+            autoReloadToggleButton.setSelected(autoReloadEnabled);
+            autoReloadToggleButton.setToolTipText(autoReloadEnabled
+                ? "Auto-reload enabled - click to disable"
+                : "Auto-reload disabled - click to enable");
+        }
+
+        if (gridlinesToggleButton != null) {
+            boolean gridlinesVisible = isGridlinesVisible();
+            gridlinesToggleButton.setSelected(gridlinesVisible);
+            gridlinesToggleButton.setToolTipText(gridlinesVisible
+                ? "Gridlines visible - click to hide"
+                : "Gridlines hidden - click to show");
+        }
     }
     
     /**
@@ -892,6 +931,21 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
                 // Update menu bar to reflect the change
                 updateMenuBar();
+
+                // Sync toolbar button state
+                syncToggleButtonStates();
+            }
+
+            @Override
+            public void onLintingChanged(boolean enabled) {
+                // Sync toolbar button state
+                syncToggleButtonStates();
+            }
+
+            @Override
+            public void onGridlinesChanged(boolean visible) {
+                // Sync toolbar button state
+                syncToggleButtonStates();
             }
 
             @Override
@@ -912,6 +966,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 String nodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
                 com.kalix.ide.themes.NodeTheme.Theme nodeTheme = com.kalix.ide.themes.NodeTheme.themeFromString(nodeThemeName);
                 setNodeTheme(nodeTheme);
+
+                // Sync toolbar button state
+                syncToggleButtonStates();
             }
 
             @Override
@@ -1329,7 +1386,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             
             // Create a new toolbar with updated theme colors
             ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
-            toolBar = toolBarBuilder.buildToolBar();
+            ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
+            toolBar = components.toolBar;
+            lintingToggleButton = components.lintingToggleButton;
+            autoReloadToggleButton = components.autoReloadToggleButton;
+            gridlinesToggleButton = components.gridlinesToggleButton;
             add(toolBar, BorderLayout.NORTH);
             
             // Revalidate the layout

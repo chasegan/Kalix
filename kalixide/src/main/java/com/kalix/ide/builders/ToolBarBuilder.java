@@ -14,7 +14,26 @@ import java.awt.image.BufferedImage;
  * Creates a toolbar with commonly used actions and appropriate icons.
  */
 public class ToolBarBuilder {
-    
+
+    /**
+     * Container for toolbar and its toggle buttons.
+     * Allows easy access to toggle buttons for state synchronization.
+     */
+    public static class ToolBarComponents {
+        public final JToolBar toolBar;
+        public final JToggleButton lintingToggleButton;
+        public final JToggleButton autoReloadToggleButton;
+        public final JToggleButton gridlinesToggleButton;
+
+        public ToolBarComponents(JToolBar toolBar, JToggleButton lintingToggleButton,
+                                 JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton) {
+            this.toolBar = toolBar;
+            this.lintingToggleButton = lintingToggleButton;
+            this.autoReloadToggleButton = autoReloadToggleButton;
+            this.gridlinesToggleButton = gridlinesToggleButton;
+        }
+    }
+
     private final MenuBarBuilder.MenuBarCallbacks callbacks;
     
     /**
@@ -27,41 +46,41 @@ public class ToolBarBuilder {
     }
     
     /**
-     * Builds and returns the configured toolbar.
-     * 
-     * @return The configured JToolBar
+     * Builds and returns the configured toolbar with references to toggle buttons.
+     *
+     * @return ToolBarComponents containing the toolbar and toggle button references
      */
-    public JToolBar buildToolBar() {
+    public ToolBarComponents buildToolBar() {
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
         toolBar.setRollover(true);
-        
+
         // Branding button - far left
         toolBar.add(createBrandingButton());
         toolBar.addSeparator();
-        
+
         // File operations
         toolBar.add(createToolBarButton(
-            "New", 
+            "New",
             AppConstants.getToolbarNewTooltip(),
             FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.newModel()
         ));
-        
+
         toolBar.add(createToolBarButton(
-            "Open", 
+            "Open",
             AppConstants.getToolbarOpenTooltip(),
             FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openModel()
         ));
-        
+
         toolBar.add(createToolBarButton(
-            "Save", 
+            "Save",
             AppConstants.getToolbarSaveTooltip(),
             FontIcon.of(FontAwesomeSolid.SAVE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.saveModel()
         ));
-        
+
         toolBar.addSeparator();
 
         // Utility operations
@@ -92,7 +111,7 @@ public class ToolBarBuilder {
         toolBar.add(createToolBarButton(
             "Run Manager",
             AppConstants.TOOLBAR_SESSIONS_TOOLTIP,
-            FontIcon.of(FontAwesomeSolid.TASKS, AppConstants.TOOLBAR_ICON_SIZE),
+            FontIcon.of(FontAwesomeSolid.SERVER, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.showRunManager()
         ));
 
@@ -112,13 +131,16 @@ public class ToolBarBuilder {
 
         toolBar.addSeparator();
 
-        // Linting toggle
-        toolBar.add(createLintingToggleButton());
+        // Create and store toggle buttons
+        JToggleButton lintingButton = createLintingToggleButton();
+        JToggleButton autoReloadButton = createAutoReloadToggleButton();
+        JToggleButton gridlinesButton = createGridToggleButton();
 
-        // Grid toggle
-        toolBar.add(createGridToggleButton());
+        toolBar.add(lintingButton);
+        toolBar.add(autoReloadButton);
+        toolBar.add(gridlinesButton);
 
-        return toolBar;
+        return new ToolBarComponents(toolBar, lintingButton, autoReloadButton, gridlinesButton);
     }
     
     /**
@@ -315,6 +337,43 @@ public class ToolBarBuilder {
         lintingButton.getAccessibleContext().setAccessibleName("Toggle Linting");
 
         return lintingButton;
+    }
+
+    /**
+     * Creates a toggle button for auto-reload with theme-aware eye icon.
+     *
+     * @return Configured JToggleButton for auto-reload
+     */
+    private JToggleButton createAutoReloadToggleButton() {
+        // Create eye icon
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.EYE, AppConstants.TOOLBAR_ICON_SIZE);
+        Color iconColor = getThemeAwareIconColor();
+        icon.setIconColor(iconColor);
+
+        JToggleButton autoReloadButton = new JToggleButton(icon);
+        autoReloadButton.setFocusPainted(false);
+
+        // Set initial state
+        boolean autoReloadEnabled = callbacks.isAutoReloadEnabled();
+        autoReloadButton.setSelected(autoReloadEnabled);
+        autoReloadButton.setToolTipText(autoReloadEnabled
+            ? "Auto-reload enabled - click to disable"
+            : "Auto-reload disabled - click to enable");
+
+        // Add action listener
+        autoReloadButton.addActionListener(e -> {
+            boolean newState = !callbacks.isAutoReloadEnabled();
+            callbacks.toggleAutoReload(newState);
+            autoReloadButton.setSelected(newState);
+            autoReloadButton.setToolTipText(newState
+                ? "Auto-reload enabled - click to disable"
+                : "Auto-reload disabled - click to enable");
+        });
+
+        // Set accessible name for screen readers
+        autoReloadButton.getAccessibleContext().setAccessibleName("Toggle Auto-reload");
+
+        return autoReloadButton;
     }
 
     /**

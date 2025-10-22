@@ -20,8 +20,16 @@ import java.util.List;
  */
 public class LinterPreferencesPanel extends JPanel implements LinterManager.ValidationCompletionListener {
 
+    /**
+     * Callback interface for linting preference changes.
+     */
+    public interface LintingChangeCallback {
+        void onLintingEnabledChanged(boolean enabled);
+    }
+
     private SchemaManager schemaManager;
     private LinterManager linterManager;
+    private LintingChangeCallback lintingChangeCallback;
 
     // UI Components
     private JCheckBox enableLintingCheckBox;
@@ -152,6 +160,15 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
         return panel;
     }
 
+    /**
+     * Sets the callback to be notified when linting is enabled/disabled.
+     *
+     * @param callback The callback to notify
+     */
+    public void setLintingChangeCallback(LintingChangeCallback callback) {
+        this.lintingChangeCallback = callback;
+    }
+
     private void onLintingEnabledChanged() {
         boolean enabled = enableLintingCheckBox.isSelected();
         PreferenceManager.setFileBoolean(PreferenceKeys.LINTER_ENABLED, enabled);
@@ -168,6 +185,11 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
         );
 
         updateControlStates();
+
+        // Notify callback if set
+        if (lintingChangeCallback != null) {
+            lintingChangeCallback.onLintingEnabledChanged(enabled);
+        }
     }
 
     private void browseSchemaFile(ActionEvent e) {

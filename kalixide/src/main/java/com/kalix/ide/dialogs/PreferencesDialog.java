@@ -31,6 +31,8 @@ public class PreferencesDialog extends JDialog {
     // Callback interface for preference changes
     public interface PreferenceChangeCallback {
         void onAutoReloadChanged(boolean enabled);
+        void onLintingChanged(boolean enabled);
+        void onGridlinesChanged(boolean visible);
         void onFlowVizPreferencesChanged();
         void onMapPreferencesChanged();
         void onSystemActionRequested(String action);
@@ -227,6 +229,14 @@ public class PreferencesDialog extends JDialog {
         kalixCliPanel = new KalixCliPreferencePanel();
         compressionPanel = new CompressionPreferencePanel();
         linterPanel = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
+
+        // Set callback to notify when linting is enabled/disabled
+        linterPanel.setLintingChangeCallback(enabled -> {
+            if (changeCallback != null) {
+                changeCallback.onLintingChanged(enabled);
+            }
+        });
+
         systemPanel = new SystemPreferencePanel();
         nodeDiagramPanel = new NodeDiagramPreferencePanel();
 
@@ -863,9 +873,10 @@ public class PreferencesDialog extends JDialog {
                 boolean enabled = gridlinesCheckBox.isSelected();
                 PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, enabled);
 
-                // Notify callback to update map display
+                // Notify callback to update map display and toolbar button
                 if (changeCallback != null) {
                     changeCallback.onMapPreferencesChanged();
+                    changeCallback.onGridlinesChanged(enabled);
                 }
             });
             formPanel.add(gridlinesCheckBox, gbc);
