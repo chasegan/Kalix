@@ -9,13 +9,34 @@ import java.util.Map;
 public class ParameterExpressionLibrary {
 
     // Map of parameter type to expression template (# is placeholder for counter)
-    private static final Map<String, String> TYPE_EXPRESSIONS = Map.of(
-        "constant", "lin_range(g(#), 0, 100)",
-        "x1", "lin_range(g(#), 10, 2000)",
-        "x2", "lin_range(g(#), -8, 6)",
-        "x3", "lin_range(g(#), 10, 500)",
-        "x4", "lin_range(g(#), 0.0001, 4.0)"
-        // Additional parameter types (Sacramento, etc.) can be added here
+    private static final Map<String, String> TYPE_EXPRESSIONS = Map.ofEntries(
+        // GR4J parameters
+        Map.entry("constant", "lin_range(g(#),0,100)"),
+        Map.entry("x1", "lin_range(g(#),1,1500)"),
+        Map.entry("x2", "lin_range(g(#),-10,6)"),
+        Map.entry("x3", "lin_range(g(#),1,500)"),
+        Map.entry("x4", "lin_range(g(#),0.5,4)"),
+
+        // Sacramento parameters
+        Map.entry("adimp", "log_range(g(#),1E-05,0.15)"),
+        Map.entry("lzfpm", "log_range(g(#),1,300)"),
+        Map.entry("lzfsm", "log_range(g(#),1,350)"),
+        Map.entry("lzpk", "log_range(g(#),0.001,0.6)"),
+        Map.entry("lzpkonlzsk", "log_range(g(#),0.001,1)"),
+        Map.entry("lzsk", "log_range(g(#),0.001,0.9)"),
+        Map.entry("lztwm", "log_range(g(#),10,600)"),
+        Map.entry("pctim", "log_range(g(#),1E-05,0.11)"),
+        Map.entry("pfree", "log_range(g(#),0.01,0.5)"),
+        Map.entry("rexp", "log_range(g(#),1,6)"),
+        Map.entry("sarva", "log_range(g(#),1E-05,0.11)"),
+        Map.entry("sarvaonpctim", "log_range(g(#),0.0001,1)"),
+        Map.entry("side", "log_range(g(#),1E-05,0.1)"),
+        Map.entry("ssout", "log_range(g(#),1E-05,0.1)"),
+        Map.entry("uzfwm", "log_range(g(#),5,155)"),
+        Map.entry("uzk", "log_range(g(#),0.1,1)"),
+        Map.entry("uztwm", "log_range(g(#),12,180)"),
+        Map.entry("zperc", "log_range(g(#),1,600)"),
+        Map.entry("laguh", "lin_range(g(#),0,3)")
     );
 
     /**
