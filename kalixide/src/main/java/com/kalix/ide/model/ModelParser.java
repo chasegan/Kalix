@@ -32,7 +32,7 @@ public class ModelParser {
 
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
     private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+)$");
-    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.-]+)\\s*,\\s*([0-9.-]+)$");
+    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)$");
     private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+)$");
 
     /**

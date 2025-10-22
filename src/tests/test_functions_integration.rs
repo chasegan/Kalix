@@ -154,3 +154,32 @@ fn test_edge_cases() {
     // Nested function calls
     assert_eq!(evaluate_expression("abs(sin(0))", &vars).unwrap(), 0.0);
 }
+
+#[test]
+fn test_scientific_notation() {
+    let vars = HashMap::new();
+
+    // Basic scientific notation
+    assert_eq!(evaluate_expression("1e3", &vars).unwrap(), 1000.0);
+    assert_eq!(evaluate_expression("1E3", &vars).unwrap(), 1000.0);
+    assert_eq!(evaluate_expression("2.5e2", &vars).unwrap(), 250.0);
+    assert_eq!(evaluate_expression("1.5E2", &vars).unwrap(), 150.0);
+
+    // Negative exponents
+    assert_eq!(evaluate_expression("1e-3", &vars).unwrap(), 0.001);
+    assert_eq!(evaluate_expression("2.5e-2", &vars).unwrap(), 0.025);
+    assert_eq!(evaluate_expression("5E-1", &vars).unwrap(), 0.5);
+
+    // Positive exponents with explicit sign
+    assert_eq!(evaluate_expression("1e+3", &vars).unwrap(), 1000.0);
+    assert_eq!(evaluate_expression("2.5E+2", &vars).unwrap(), 250.0);
+
+    // Scientific notation in expressions
+    assert_eq!(evaluate_expression("1e3 + 1e2", &vars).unwrap(), 1100.0);
+    assert_eq!(evaluate_expression("2e-3 * 1e6", &vars).unwrap(), 2000.0);
+    assert_eq!(evaluate_expression("1.5e-2 + 2.5e-2", &vars).unwrap(), 0.04);
+
+    // Scientific notation in function arguments
+    assert_eq!(evaluate_expression("sqrt(1e4)", &vars).unwrap(), 100.0);
+    assert_eq!(evaluate_expression("max(1e-3, 1e-2, 1e-1)", &vars).unwrap(), 0.1);
+}

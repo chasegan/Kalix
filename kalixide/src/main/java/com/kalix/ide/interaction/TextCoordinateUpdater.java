@@ -55,13 +55,13 @@ public class TextCoordinateUpdater {
             
             // Create regex pattern to match the coordinate values specifically
             // Pattern explanation:
-            // (\[node\.nodeName\][^\[]*?loc\s*=\s*)([0-9.-]+)(\s*,\s*)([0-9.-]+)
+            // (\[node\.nodeName\][^\[]*?loc\s*=\s*)([0-9.eE+-]+)(\s*,\s*)([0-9.eE+-]+)
             // Group 1: Everything up to and including "loc = "
-            // Group 2: X coordinate (to replace)
+            // Group 2: X coordinate (to replace, supports scientific notation)
             // Group 3: Comma and whitespace
-            // Group 4: Y coordinate (to replace)
+            // Group 4: Y coordinate (to replace, supports scientific notation)
             String escapedNodeName = Pattern.quote(nodeName);
-            String pattern = "(\\[node\\." + escapedNodeName + "[^\\[]*?loc\\s*=\\s*)([0-9.-]+)(\\s*,\\s*)([0-9.-]+)";
+            String pattern = "(\\[node\\." + escapedNodeName + "[^\\[]*?loc\\s*=\\s*)([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)";
             Pattern nodePattern = Pattern.compile(pattern, Pattern.DOTALL | Pattern.MULTILINE);
             
             Matcher matcher = nodePattern.matcher(currentText);

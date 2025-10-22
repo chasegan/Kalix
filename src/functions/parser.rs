@@ -77,7 +77,8 @@ impl Tokenizer {
     fn read_number(&mut self) -> Result<f64, ParseError> {
         let start_pos = self.position;
         let mut number_str = String::new();
-        
+
+        // Read mantissa (digits and decimal point)
         while let Some(ch) = self.current_char {
             if ch.is_ascii_digit() || ch == '.' {
                 number_str.push(ch);
@@ -86,7 +87,33 @@ impl Tokenizer {
                 break;
             }
         }
-        
+
+        // Check for scientific notation (e.g., 1.5e-3, 2E+10)
+        if let Some(ch) = self.current_char {
+            if ch == 'e' || ch == 'E' {
+                number_str.push(ch);
+                self.advance();
+
+                // Optional sign after exponent marker
+                if let Some(sign) = self.current_char {
+                    if sign == '+' || sign == '-' {
+                        number_str.push(sign);
+                        self.advance();
+                    }
+                }
+
+                // Exponent digits
+                while let Some(digit) = self.current_char {
+                    if digit.is_ascii_digit() {
+                        number_str.push(digit);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
         number_str.parse().map_err(|_| ParseError::SyntaxError {
             position: start_pos,
             message: format!("Invalid number: {}", number_str),
