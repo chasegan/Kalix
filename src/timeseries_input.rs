@@ -1,4 +1,5 @@
 use crate::timeseries::Timeseries;
+use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
 
 #[derive(Clone)]
@@ -35,14 +36,19 @@ impl TimeseriesInput {
                     let col_index = i + 1;
                     inputts.source_path = file_path.to_string();
                     let path = Path::new(file_path);
-                    let source_name = path.file_name().unwrap().to_str().unwrap().to_owned();  //TODO: what the fuck is this craziness?! :)
-                    let source_name = source_name.replace(".", "_");
-                    inputts.source_name = source_name;
+
+                    // Sanitize the source name (filename)
+                    let source_name_raw = path.file_name().unwrap().to_str().unwrap().to_owned();
+                    let source_name = sanitize_name(&source_name_raw);
+
+                    // Sanitize the column name
+                    let col_name_sanitized = sanitize_name(&col_name);
+
+                    inputts.source_name = source_name.clone();
                     inputts.col_index = col_index;
                     inputts.col_name = col_name.clone();
-                    let source_name = inputts.source_name.clone();
-                    inputts.full_colname_path = format!("data.{source_name}.by_name.{col_name}").to_lowercase();
-                    inputts.full_colindex_path = format!("data.{source_name}.by_index.{col_index}").to_lowercase();
+                    inputts.full_colname_path = format!("data.{}.by_name.{}", source_name, col_name_sanitized);
+                    inputts.full_colindex_path = format!("data.{}.by_index.{}", source_name, col_index);
                     inputts.timeseries = vts[i].clone();
                     inputts.reload_on_run = false;
                     vinputts.push(inputts);

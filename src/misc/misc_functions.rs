@@ -48,3 +48,21 @@ pub fn is_valid_variable_name(s: &str) -> bool {
     true
 }
 
+
+/// Sanitize a name for use in data references within function expressions.
+///
+/// Converts the input to lowercase and replaces any character that is not
+/// a-z, 0-9, or underscore with an underscore.
+pub fn sanitize_name(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
