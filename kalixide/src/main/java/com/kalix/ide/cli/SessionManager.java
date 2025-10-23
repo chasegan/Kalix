@@ -283,9 +283,9 @@ public class SessionManager {
             if (session != null) {
                 SessionState oldState = session.getState();
                 session.setState(SessionState.TERMINATED, "Session terminated by user");
-                session.getProcess().close();
+                session.getProcess().close(true); // Force kill to ensure termination
                 // Keep session in activeSessions map for visibility, don't remove it
-                
+
                 fireSessionEvent(sessionKey, oldState, SessionState.TERMINATED, "Session terminated");
                 updateStatus("Terminated session: " + sessionKey);
             }
