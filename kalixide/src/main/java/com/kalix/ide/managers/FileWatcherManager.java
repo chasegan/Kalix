@@ -28,6 +28,7 @@ public class FileWatcherManager {
     private Path currentWatchedDirectory;
     private boolean isWatching = false;
     private volatile boolean shouldStop = false;
+    private volatile boolean ignoreNextChange = false;
 
     /**
      * Creates a new FileWatcherManager.
@@ -109,6 +110,15 @@ public class FileWatcherManager {
     }
 
     /**
+     * Tells the file watcher to ignore the next change event.
+     * Used when saving a file to prevent it from being immediately reloaded.
+     * The flag is automatically reset after the next change is ignored.
+     */
+    public void ignoreNextChange() {
+        this.ignoreNextChange = true;
+    }
+
+    /**
      * Checks if auto-reload is currently enabled in preferences.
      *
      * @return true if auto-reload is enabled
@@ -163,6 +173,12 @@ public class FileWatcherManager {
                             modifiedFile.equals(currentWatchedFile.toPath())) {
 
                             logger.debug("Detected change in watched file: {}", currentWatchedFile);
+
+                            // Skip reload if we should ignore this change (e.g., from our own save)
+                            if (ignoreNextChange) {
+                                ignoreNextChange = false;
+                                continue;
+                            }
 
                             // Trigger reload on EDT
                             logger.info("File change detected, triggering reload callback");

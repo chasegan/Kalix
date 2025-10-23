@@ -306,4 +306,12 @@ public class RunModelProgram extends AbstractSessionProgram {
     public List<String> getOutputsGenerated() {
         return outputsGenerated;
     }
+
+    /**
+     * Gets the model text (INI string) that was loaded for this run.
+     * @return the model text, or null if not available
+     */
+    public String getModelText() {
+        return modelText;
+    }
 }

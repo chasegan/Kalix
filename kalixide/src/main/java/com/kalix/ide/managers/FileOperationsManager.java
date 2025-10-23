@@ -27,13 +27,14 @@ public class FileOperationsManager {
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
     private final Runnable modelUpdateCallback;
-    
+    private final FileWatcherManager fileWatcherManager;
+
     // Current file tracking for save functionality
     private File currentFile;
     
     /**
      * Creates a new FileOperationsManager instance.
-     * 
+     *
      * @param parentComponent The parent component for dialogs
      * @param textEditor The text editor component
      * @param mapPanel The map panel component
@@ -41,14 +42,16 @@ public class FileOperationsManager {
      * @param addRecentFileCallback Callback for adding recent files
      * @param fileChangedCallback Callback when current file changes (load/new/save as)
      * @param modelUpdateCallback Callback to trigger model parsing after file loads
+     * @param fileWatcherManager The file watcher manager for coordinating auto-reload
      */
-    public FileOperationsManager(Component parentComponent, 
+    public FileOperationsManager(Component parentComponent,
                                EnhancedTextEditor textEditor,
                                MapPanel mapPanel,
                                Consumer<String> statusUpdateCallback,
                                Consumer<String> addRecentFileCallback,
                                Runnable fileChangedCallback,
-                               Runnable modelUpdateCallback) {
+                               Runnable modelUpdateCallback,
+                               FileWatcherManager fileWatcherManager) {
         this.parentComponent = parentComponent;
         this.textEditor = textEditor;
         this.mapPanel = mapPanel;
@@ -56,6 +59,7 @@ public class FileOperationsManager {
         this.addRecentFileCallback = addRecentFileCallback;
         this.fileChangedCallback = fileChangedCallback;
         this.modelUpdateCallback = modelUpdateCallback;
+        this.fileWatcherManager = fileWatcherManager;
     }
     
     /**
@@ -152,20 +156,23 @@ public class FileOperationsManager {
             saveAsModel();
             return;
         }
-        
+
         try {
+            // Prevent file watcher from reloading the file we're about to save
+            fileWatcherManager.ignoreNextChange();
+
             String content = textEditor.getText();
             Files.writeString(currentFile.toPath(), content);
-            
+
             // Reset dirty state
             textEditor.setDirty(false);
-            
+
             // Save as last opened file for session restoration
             PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, currentFile.getAbsolutePath());
 
             String statusMessage = String.format("Saved model: %s", currentFile.getName());
             statusUpdateCallback.accept(statusMessage);
-            
+
         } catch (IOException e) {
             showFileSaveError(currentFile, e);
         }
@@ -197,13 +204,16 @@ public class FileOperationsManager {
             }
             
             try {
+                // Prevent file watcher from reloading the file we're about to save
+                fileWatcherManager.ignoreNextChange();
+
                 String content = textEditor.getText();
                 Files.writeString(selectedFile.toPath(), content);
-                
+
                 // Update current file and reset dirty state
                 currentFile = selectedFile;
                 textEditor.setDirty(false);
-                
+
                 // Add to recent files
                 addRecentFileCallback.accept(selectedFile.getAbsolutePath());
 
@@ -212,10 +222,10 @@ public class FileOperationsManager {
 
                 String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
                 statusUpdateCallback.accept(statusMessage);
-                
+
                 // Notify title bar of file change
                 fileChangedCallback.run();
-                
+
             } catch (IOException e) {
                 showFileSaveError(selectedFile, e);
             }

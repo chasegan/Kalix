@@ -495,6 +495,10 @@ public class RunManager extends JFrame {
         saveResultsItem.addActionListener(e -> saveResultsFromContextMenu());
         contextMenu.add(saveResultsItem);
 
+        JMenuItem showModelItem = new JMenuItem("Show Model");
+        showModelItem.addActionListener(e -> showModelFromContextMenu());
+        contextMenu.add(showModelItem);
+
         JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
         sessionManagerItem.addActionListener(e -> showInSessionManagerFromContextMenu());
         contextMenu.add(sessionManagerItem);
@@ -784,6 +788,47 @@ public class RunManager extends JFrame {
         RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String sessionKey = runInfo.session.getSessionKey();
         SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, statusUpdater, sessionKey);
+    }
+
+    /**
+     * Shows the model INI string for the selected run in a MinimalEditorWindow.
+     */
+    private void showModelFromContextMenu() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+
+        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+
+        // Get the model text from the RunModelProgram
+        if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+            RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+            String modelText = program.getModelText();
+
+            if (modelText != null && !modelText.isEmpty()) {
+                // Create and show MinimalEditorWindow with the model text
+                MinimalEditorWindow editorWindow = new MinimalEditorWindow(modelText);
+                editorWindow.setTitle("Model - " + runInfo.runName);
+                editorWindow.setSyntaxEditingStyle(org.fife.ui.rsyntaxtextarea.SyntaxConstants.SYNTAX_STYLE_NONE);
+                editorWindow.setVisible(true);
+            } else {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Model text is not available for this run.",
+                    "Model Not Available",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            }
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "This run does not contain model information.",
+                "Not a Model Run",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        }
     }
 
     /**

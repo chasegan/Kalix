@@ -39,6 +39,7 @@ import com.kalix.ide.utils.TerminalLauncher;
 import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
+import com.kalix.ide.windows.MinimalEditorWindow;
 
 import javax.swing.*;
 import java.awt.*;
@@ -261,6 +262,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             return null;
         });
 
+        // Set up MinimalEditorWindow base directory supplier for file dialogs
+        MinimalEditorWindow.setBaseDirectorySupplier(() -> {
+            if (fileOperations != null) {
+                return fileOperations.getCurrentWorkingDirectory();
+            }
+            return null;
+        });
+
         // Load saved node theme
         String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
         NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
@@ -290,7 +299,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 // Update file watcher
                 fileWatcherManager.watchFile(fileOperations.getCurrentFile());
             },
-            () -> updateModelFromText(true) // Model update callback for when files are loaded with auto-zoom
+            () -> updateModelFromText(true), // Model update callback for when files are loaded with auto-zoom
+            fileWatcherManager // Pass file watcher for coordinating auto-reload on save
         );
         
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
