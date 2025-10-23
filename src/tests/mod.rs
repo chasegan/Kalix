@@ -57,3 +57,6 @@ mod test_ini_with_functions;
 
 #[cfg(test)]
 mod test_constants_cache;
+
+#[cfg(test)]
+mod test_model_constant_optimisation;

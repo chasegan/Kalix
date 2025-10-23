@@ -78,7 +78,7 @@ impl OptimisationProblem {
     ///
     /// Supports two address formats:
     /// - "node.name.param" - for node parameters
-    /// - "c.constant_name" - for constants
+    /// - "c.blah.blah.blah" - for constants
     fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
         // Evaluate all mappings: genes -> (target, physical_value)
         let param_values = self.config.evaluate(genes);
@@ -89,10 +89,9 @@ impl OptimisationProblem {
             let parts: Vec<&str> = target.split('.').collect();
 
             if parts.len() >= 2 && parts[0] == "c" {
-                // Handle constant: "c.constant_name"
-                let constant_name = parts[1..].join(".");  // Join remaining parts in case name has dots
-                self.model.data_cache.set_param(&constant_name, value)
-                    .map_err(|e| format!("Error setting constant {}: {}", constant_name, e))?;
+                // Handle constant: "c.something"
+                self.model.data_cache.set_param(&target, value)
+                    .map_err(|e| format!("Error setting constant {}: {}", &target, e))?;
             } else if parts.len() == 3 && parts[0] == "node" {
                 // Handle node parameter: "node.name.param"
                 let node_name = parts[1];
