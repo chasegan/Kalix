@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! use kalix::misc::terminal_plot::*;
+//! use kalix::terminal_plot::*;
 //!
 //! let mut plot = TerminalPlot::builder()
 //!     .title("KALIX//OPTIMISER")

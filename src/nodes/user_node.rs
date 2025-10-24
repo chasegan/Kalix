@@ -49,25 +49,39 @@ use crate::misc::location::Location;
 
 #[derive(Default, Clone)]
 pub struct UserNode {
+
+    // Properties - basic
     pub name: String,
     pub location: Location,
     pub mbal: f64,
     pub demand_input: DynamicInput,
-    pub pump: Option<f64>,
-    pub demand_carryover_simulated: bool,
+
+    // Properties - additional unreg
+    pub pump_capacity: DynamicInput,
+    pub flow_threshold: DynamicInput,
+    pub annual_cap: Option<f64>,
+    pub annual_cap_reset_month: u32,
+
+    // Properties - additional carryover
+    pub demand_carryover_allowed: bool,
     pub demand_carryover_reset_month: Option<u32>,
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
     diversion: f64,
-    storage: f64,
+    annual_diversion: f64,
+    pump_capacity_value: f64,
+    flow_threshold_value: f64,
     demand_carryover_value: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_demand: Option<usize>,
     recorder_idx_diversion: Option<usize>,
+    recorder_idx_pump_capacity: Option<usize>, //New
+    recorder_idx_flow_threshold: Option<usize>, //New
+    recorder_idx_demand_carryover: Option<usize>, //New
     recorder_idx_dsflow: Option<usize>,
     recorder_ids_ds_1: Option<usize>,
 }
@@ -79,9 +93,13 @@ impl UserNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            demand_carryover_simulated: false,
+            demand_input: DynamicInput::None,
+            pump_capacity: DynamicInput::None,
+            flow_threshold: DynamicInput::None,
+            annual_cap: None,
+            annual_cap_reset_month: 7,
+            demand_carryover_allowed: false,
             demand_carryover_reset_month: None,
-            pump: None,
             ..Default::default()
         }
     }
@@ -102,8 +120,25 @@ impl Node for UserNode {
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.diversion = 0.0;
-        self.storage = 0.0;
+        self.annual_diversion = 0.0;
         self.demand_carryover_value = 0.0;
+        self.flow_threshold_value = 0.0;
+        self.pump_capacity_value = f64::INFINITY;
+
+        // Checks
+        if (self.annual_cap_reset_month < 1) || (self.annual_cap_reset_month > 12) {
+            return Err(format!("Invalid annual cap reset month at '{}': {}", self.name, self.annual_cap_reset_month).to_string());
+        }
+        if let Some(v) = self.annual_cap {
+            if v < 0.0 {
+                return Err(format!("Invalid annual cap at '{}': {} < 0", self.name, v).to_string());
+            }
+        }
+        if let Some(v) = self.demand_carryover_reset_month {
+            if (v < 1) || (v > 12) {
+                return Err(format!("Invalid demand carryover reset month at '{}': {}", self.name, v).to_string());
+            }
+        }
 
         // DynamicInput is already initialized during parsing
 
@@ -116,6 +151,15 @@ impl Node for UserNode {
         );
         self.recorder_idx_diversion = data_cache.get_series_idx(
             make_result_name(&self.name, "diversion").as_str(), false
+        );
+        self.recorder_idx_pump_capacity = data_cache.get_series_idx(
+            make_result_name(&self.name, "pump_capacity").as_str(), false
+        );
+        self.recorder_idx_flow_threshold = data_cache.get_series_idx(
+            make_result_name(&self.name, "flow_threshold").as_str(), false
+        );
+        self.recorder_idx_demand_carryover = data_cache.get_series_idx(
+            make_result_name(&self.name, "demand_carryover").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -133,50 +177,81 @@ impl Node for UserNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get demand from data_cache
-        let demand = self.demand_input.get_value(data_cache);
+        let new_demand = self.demand_input.get_value(data_cache);
 
-        // Calculate diversion (take minimum of demand and available flow)
-        let available = match self.pump {
-            Some(r) => { self.usflow.min(r) } //Available is limited by pump rate
-            None => { self.usflow }                //No pump rate specified so all flow is available
-        };
-        match self.demand_carryover_simulated {
-            true => {
-                // Simulating demand carryover
-                // Check if we need to reset the demand carryover today
-                match self.demand_carryover_reset_month {
-                    Some(m_reset) => {
-                        let d = data_cache.get_timestamp_day();
-                        if d == 1 {
-                            let m = data_cache.get_timestamp_month();
-                            let s = data_cache.get_timestamp_seconds();
-                            if (m == m_reset) && (s == 0) {
-                                self.demand_carryover_value = 0.0;
-                            }
-                        }
-                    }
-                    None => {}
-                }
-                // Now calculate the diversion
-                self.demand_carryover_value += demand;
-                if self.demand_carryover_value > available {
-                    // we will not meet demand
-                    self.diversion = available;
-                    self.demand_carryover_value -= self.diversion;
-                } else {
-                    // we will meet demand (incl carryover)
-                    self.diversion = self.demand_carryover_value;
-                    self.demand_carryover_value = 0.0;
-                }
+        // Work out availability considering flow threshold
+        let mut available = match self.flow_threshold {
+            DynamicInput::None => { self.usflow }
+            _ => {
+                self.flow_threshold_value = self.flow_threshold.get_value(data_cache);
+                (self.usflow - self.flow_threshold_value).max(0.0)
             }
-            false => {
-                // Not simulating carryover
-                self.diversion = demand.min(available);
+        };
+
+        // Restrict for pump capacity
+        match self.pump_capacity {
+            DynamicInput::None => {}
+            _ => {
+                self.pump_capacity_value = self.pump_capacity.get_value(data_cache);
+                available = available.min(self.pump_capacity_value) //Limited by pump rate
+            }
+        };
+
+        // Restrict for annual cap if applicable
+        match self.annual_cap {
+            None => {}
+            Some(annual_cap) => {
+                let d = data_cache.get_timestamp_day();
+                if d == 1 {
+                    let m_reset = self.annual_cap_reset_month;
+                    let m = data_cache.get_timestamp_month();
+                    let s = data_cache.get_timestamp_seconds();
+                    if (m == m_reset) && (s == 0) {
+                        self.annual_diversion = 0.0;
+                    }
+                }
+                available = available.min(annual_cap - self.annual_diversion);
             }
         }
-        self.dsflow_primary = self.usflow - self.diversion;
 
-        // Update mass balance
+        // Carryover
+        if self.demand_carryover_allowed {
+            // Allowing demand carryover
+            // Check if we need to reset the demand carryover today
+            match self.demand_carryover_reset_month {
+                Some(m_reset) => {
+                    let d = data_cache.get_timestamp_day();
+                    if d == 1 {
+                        let m = data_cache.get_timestamp_month();
+                        let s = data_cache.get_timestamp_seconds();
+                        if (m == m_reset) && (s == 0) {
+                            self.demand_carryover_value = 0.0;
+                        }
+                    }
+                }
+                None => {}
+            }
+            // Now calculate the diversion
+            self.demand_carryover_value += new_demand;
+            if self.demand_carryover_value > available {
+                // we will not meet demand
+                self.diversion = available;
+                self.demand_carryover_value -= self.diversion;
+            } else {
+                // we will meet demand (incl carryover)
+                self.diversion = self.demand_carryover_value;
+                self.demand_carryover_value = 0.0;
+            }
+        } else {
+            // Not simulating carryover
+            self.diversion = new_demand.min(available);
+        }
+
+        // Update the annual diversion
+        if let Some(_) = self.annual_cap { self.annual_diversion += self.diversion; }
+
+        // Extract the water and update mbal
+        self.dsflow_primary = self.usflow - self.diversion;
         self.mbal -= self.diversion;
 
         // Record results
@@ -184,10 +259,19 @@ impl Node for UserNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_demand {
-            data_cache.add_value_at_index(idx, demand);
+            data_cache.add_value_at_index(idx, new_demand);
         }
         if let Some(idx) = self.recorder_idx_diversion {
             data_cache.add_value_at_index(idx, self.diversion);
+        }
+        if let Some(idx) = self.recorder_idx_pump_capacity {
+            data_cache.add_value_at_index(idx, self.pump_capacity_value)
+        }
+        if let Some(idx) = self.recorder_idx_flow_threshold {
+            data_cache.add_value_at_index(idx, self.flow_threshold_value)
+        }
+        if let Some(idx) = self.recorder_idx_demand_carryover {
+            data_cache.add_value_at_index(idx, self.demand_carryover_value)
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);

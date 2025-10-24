@@ -179,11 +179,19 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "demand" {
                             n.demand_input = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
+                        } else if vp == "annual_cap" {
+                            let params = csv_string_to_f64_vec(vvc.as_str())?;
+                            if params.len() != 2 {
+                                return Err(format!("User 'annual_cap' must have 2 values, got {}", params.len()));
+                            }
+                            n.annual_cap = Some(params[0]);
+                            n.annual_cap_reset_month = params[1] as u32;
                         } else if vp == "pump" {
-                            let p = vvc.parse::<f64>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid number", vp, node_name))?;
-                            n.pump = Some(p);
+                            n.pump_capacity = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
+                        } else if vp == "flow_threshold" {
+                            n.flow_threshold = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "carryover" {
-                            n.demand_carryover_simulated = true_or_false(vvc).map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
+                            n.demand_carryover_allowed = true_or_false(vvc).map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
                         } else if vp == "carryover_reset_month" {
                             let m = vvc.parse::<u32>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid u32", vp, node_name))?;
                             n.demand_carryover_reset_month = Some(m);
