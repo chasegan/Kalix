@@ -7,6 +7,8 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -15,6 +17,7 @@ import java.util.List;
  */
 public class NodeValidator implements ValidationStrategy {
 
+    private static final Logger logger = LoggerFactory.getLogger(NodeValidator.class);
     private final FunctionExpressionValidator functionValidator = new FunctionExpressionValidator();
 
     @Override
@@ -79,29 +82,43 @@ public class NodeValidator implements ValidationStrategy {
 
         // Get parameter definition to check type
         ParameterDefinition paramDef = typeDef.getParameterDefinition(paramName);
-        if (paramDef != null && "function_expression".equals(paramDef.type)) {
-            // Validate function expression
-            validateFunctionExpression(prop, result);
+        if (paramDef == null) {
+            // Parameter not defined in schema - downstream params are validated by ReferenceValidator
             return;
         }
 
-        // Validate based on parameter type - simplified for common cases
-        switch (paramName) {
-            case "loc":
+        // Validate based on parameter type from schema
+        switch (paramDef.type) {
+            case "function_expression":
+                validateFunctionExpression(prop, result);
+                break;
+            case "number":
+                validateNumber(prop, schema, result, paramDef.min, paramDef.max);
+                break;
+            case "integer":
+                Integer min = paramDef.min != null ? paramDef.min.intValue() : null;
+                Integer max = paramDef.max != null ? paramDef.max.intValue() : null;
+                validateInteger(prop, schema, result, min, max);
+                break;
+            case "coordinates":
                 validateCoordinates(prop, schema, result);
                 break;
-            case "area":
-                validateNumber(prop, schema, result, 0.0, null); // Area must be positive
-                break;
-            case "params":
-                // For params, we need to get the expected count from the node type definition
+            case "number_sequence":
                 validateNumberSequenceWithCount(node, prop, typeDef, schema, result);
                 break;
-            case "lag":
-                validateInteger(prop, schema, result, 0, null); // Lag must be >= 0
+            case "string":
+                if (paramDef.pattern != null) {
+                    validateStringPattern(prop, paramDef.pattern, result);
+                }
+                break;
+            case "literal":
+                // Literal values are validated during parsing
+                break;
+            case "downstream_reference":
+                // Downstream references are validated by ReferenceValidator
                 break;
             default:
-                // Handle downstream parameters - validation handled by ReferenceValidator
+                // Unknown parameter type - skip validation
                 break;
         }
     }
@@ -212,6 +229,20 @@ public class NodeValidator implements ValidationStrategy {
             }
         } catch (NumberFormatException e) {
             // Already handled by pattern validation above
+        }
+    }
+
+    private void validateStringPattern(INIModelParser.Property prop, String pattern, ValidationResult result) {
+        try {
+            java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
+            if (!regex.matcher(prop.getValue()).matches()) {
+                result.addIssue(prop.getLineNumber(),
+                              "Invalid format for parameter '" + prop.getKey() + "': " + prop.getValue(),
+                              ValidationRule.Severity.ERROR, "invalid_string_format");
+            }
+        } catch (java.util.regex.PatternSyntaxException e) {
+            // Invalid regex in schema - log but don't fail validation
+            logger.warn("Invalid regex pattern in schema for parameter {}: {}", prop.getKey(), pattern);
         }
     }
 }
