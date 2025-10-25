@@ -5,7 +5,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, true_or_false};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, true_or_false, parse_csv_to_bool_option_u32};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode,
                    gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode,
                    sacramento_node::SacramentoNode, storage_node::StorageNode};
@@ -190,11 +190,10 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                             n.pump_capacity = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
                         } else if vp == "flow_threshold" {
                             n.flow_threshold = DynamicInput::from_string(vvc, &mut model.data_cache, true)?;
-                        } else if vp == "carryover" {
-                            n.demand_carryover_allowed = true_or_false(vvc).map_err(|_| format!("Invalid '{}' value for node '{}': must be true or false", vp, node_name))?;
-                        } else if vp == "carryover_reset_month" {
-                            let m = vvc.parse::<u32>().map_err(|_| format!("Invalid '{}' value for node '{}': not a valid u32", vp, node_name))?;
-                            n.demand_carryover_reset_month = Some(m);
+                        } else if vp == "demand_carryover" {
+                            let vvc = vv.as_ref()
+                                .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
+                            (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u32(vvc)?;
                         } else if vp == "ds_1" {
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;

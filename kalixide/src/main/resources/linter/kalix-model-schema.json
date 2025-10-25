@@ -145,7 +145,7 @@
       "description": "User node representing water demand",
       "allowed_outputs": ["dsflow", "usflow", "ds_1", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
       "required_params": ["type", "loc"],
-      "optional_params": ["demand", "carryover", "pump", "carryover_reset_month", "flow_threshold", "annual_cap"],
+      "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -161,20 +161,9 @@
           "type": "function_expression",
           "description": "Water demand input (data reference, constant, or expression)"
         },
-        "carryover": {
-          "type": "string",
-          "pattern": "^(?i)(true|false)$",
-          "description": "Enable carryover (true or false, case-insensitive)"
-        },
         "pump": {
           "type": "function_expression",
           "description": "Pump capacity (data reference, constant, or expression)"
-        },
-        "carryover_reset_month": {
-          "type": "integer",
-          "min": 1,
-          "max": 12,
-          "description": "Month to reset carryover (1-12)"
         },
         "flow_threshold": {
           "type": "function_expression",
@@ -184,6 +173,11 @@
           "type": "number_sequence",
           "count": 2,
           "description": "Annual capacity limits (two comma-separated numbers)"
+        },
+        "demand_carryover": {
+          "type": "string",
+          "pattern": "^(?i)(true|false)(\\s*,\\s*([1-9]|1[0-2]))?$",
+          "description": "Demand carryover: 'true'/'false', or 'true/false, N' where N is month 1-12 (case-insensitive)"
         }
       }
     },
