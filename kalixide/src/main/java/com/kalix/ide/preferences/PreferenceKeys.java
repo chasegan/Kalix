@@ -23,6 +23,21 @@ public class PreferenceKeys {
     /** FlowViz Auto-Y mode toggle (boolean, default: true) */
     public static final String FLOWVIZ_AUTO_Y_MODE = "flowviz.autoYMode";
 
+    /** Plot legend enabled toggle (boolean, default: true) */
+    public static final String PLOT_LEGEND_ENABLED = "plot.legend.enabled";
+
+    /** Plot legend collapsed state (boolean, default: false) */
+    public static final String PLOT_LEGEND_COLLAPSED = "plot.legend.collapsed";
+
+    /** Plot legend X position (int, default: -1 for auto-position) */
+    public static final String PLOT_LEGEND_POSITION_X = "plot.legend.position.x";
+
+    /** Plot legend Y position (int, default: -1 for auto-position) */
+    public static final String PLOT_LEGEND_POSITION_Y = "plot.legend.position.y";
+
+    /** Plot legend display mode (string, default: "FULL_NAME") */
+    public static final String PLOT_LEGEND_DISPLAY_MODE = "plot.legend.display.mode";
+
     /** UI theme selection (string, default: "Light") */
     public static final String UI_THEME = "ui.theme";
 

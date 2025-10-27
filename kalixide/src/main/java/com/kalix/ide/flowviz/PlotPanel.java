@@ -38,6 +38,7 @@ public class PlotPanel extends JPanel {
     // Managers
     private CoordinateDisplayManager coordinateDisplayManager;
     private PlotInteractionManager plotInteractionManager;
+    private PlotLegendManager legendManager;
 
     public PlotPanel() {
         setBackground(Color.WHITE);
@@ -50,6 +51,7 @@ public class PlotPanel extends JPanel {
         // Initialize managers
         coordinateDisplayManager = new CoordinateDisplayManager(this, seriesColors, visibleSeries);
         plotInteractionManager = new PlotInteractionManager(this, coordinateDisplayManager);
+        legendManager = new PlotLegendManager();
 
         // Setup manager data access
         plotInteractionManager.setupDataAccess(
@@ -143,10 +145,76 @@ public class PlotPanel extends JPanel {
     }
 
     private void setupMouseListeners() {
-        MouseAdapter mouseHandler = plotInteractionManager.createMouseHandler();
-        addMouseListener(mouseHandler);
-        addMouseMotionListener(mouseHandler);
-        addMouseWheelListener(mouseHandler);
+        MouseAdapter plotMouseHandler = plotInteractionManager.createMouseHandler();
+
+        // Create composite mouse handler that routes events to legend first, then to plot
+        MouseAdapter compositeHandler = new MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                if (legendManager != null && legendManager.handleMousePress(e.getX(), e.getY())) {
+                    repaint();
+                    return; // Event consumed by legend
+                }
+                plotMouseHandler.mousePressed(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                if (legendManager != null) {
+                    legendManager.handleMouseRelease();
+                    repaint();
+                }
+                plotMouseHandler.mouseReleased(e);
+            }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (legendManager != null && legendManager.handleMouseClick(e.getX(), e.getY())) {
+                    repaint();
+                    return; // Event consumed by legend
+                }
+                plotMouseHandler.mouseClicked(e);
+            }
+
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
+                if (legendManager != null && legendManager.handleMouseDrag(e.getX(), e.getY())) {
+                    repaint();
+                    return; // Event consumed by legend
+                }
+                plotMouseHandler.mouseDragged(e);
+            }
+
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                // Update legend hover state and cursor
+                if (legendManager != null) {
+                    if (legendManager.handleMouseMove(e.getX(), e.getY())) {
+                        repaint();
+                    }
+                    Cursor legendCursor = legendManager.getCursor(e.getX(), e.getY());
+                    if (legendCursor != null) {
+                        setCursor(legendCursor);
+                    } else {
+                        setCursor(Cursor.getDefaultCursor());
+                    }
+                }
+                plotMouseHandler.mouseMoved(e);
+            }
+
+            @Override
+            public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                // Don't zoom if mouse is over legend
+                if (legendManager != null && legendManager.contains(e.getX(), e.getY())) {
+                    return; // Event consumed by legend
+                }
+                plotMouseHandler.mouseWheelMoved(e);
+            }
+        };
+
+        addMouseListener(compositeHandler);
+        addMouseMotionListener(compositeHandler);
+        addMouseWheelListener(compositeHandler);
     }
     
     private Rectangle getPlotArea() {
@@ -195,6 +263,11 @@ public class PlotPanel extends JPanel {
         if (coordinateDisplayManager != null) {
             coordinateDisplayManager.updateCoordinateDisplay(dataSet, currentViewport);
             coordinateDisplayManager.renderCoordinateOverlays(g2d, currentViewport);
+        }
+
+        // Render legend (after plot and coordinates, so it appears on top)
+        if (legendManager != null) {
+            legendManager.render(g2d, currentViewport);
         }
 
         g2d.dispose();
@@ -251,5 +324,44 @@ public class PlotPanel extends JPanel {
         if (plotInteractionManager != null) {
             plotInteractionManager.setPrecision64Supplier(precision64Supplier);
         }
+    }
+
+    // Legend management methods
+
+    /**
+     * Adds a series to the plot legend.
+     */
+    public void addLegendSeries(String name, Color color) {
+        if (legendManager != null) {
+            legendManager.addSeries(name, color);
+            repaint();
+        }
+    }
+
+    /**
+     * Removes a series from the plot legend.
+     */
+    public void removeLegendSeries(String name) {
+        if (legendManager != null) {
+            legendManager.removeSeries(name);
+            repaint();
+        }
+    }
+
+    /**
+     * Clears all series from the plot legend.
+     */
+    public void clearLegend() {
+        if (legendManager != null) {
+            legendManager.clear();
+            repaint();
+        }
+    }
+
+    /**
+     * Gets the legend manager for direct access.
+     */
+    public PlotLegendManager getLegendManager() {
+        return legendManager;
     }
 }

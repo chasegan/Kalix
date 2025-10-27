@@ -227,19 +227,26 @@ public class FlowVizWindow extends JFrame {
                 Color seriesColor = generateSeriesColor(dataSet.getSeriesCount() - 1);
 
                 dataPanel.addSeries(series.getName(), seriesColor, series.getPointCount());
-                
+
                 // Update plot panel with new data
                 updatePlotPanel();
-                
+
+                // Add to legend
+                plotPanel.addLegendSeries(series.getName(), seriesColor);
+
                 updateTitle();
-                updateStatus(String.format("Added series '%s' with %,d points", 
+                updateStatus(String.format("Added series '%s' with %,d points",
                     series.getName(), series.getPointCount()));
             }
-            
+
             @Override
             public void onSeriesRemoved(String seriesName) {
                 dataPanel.removeSeries(seriesName);
                 updatePlotPanel();
+
+                // Remove from legend
+                plotPanel.removeLegendSeries(seriesName);
+
                 updateTitle();
                 updateStatus("Removed series: " + seriesName);
             }

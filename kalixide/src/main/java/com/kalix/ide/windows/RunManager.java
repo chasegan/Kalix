@@ -1355,6 +1355,9 @@ public class RunManager extends JFrame {
             plotDataSet.removeSeries(seriesKey);
             seriesColorMap.remove(seriesKey);
             statsTableModel.removeSeries(seriesKey);
+
+            // Remove from legend
+            plotPanel.removeLegendSeries(seriesKey);
         }
 
         // Add new series
@@ -1422,6 +1425,9 @@ public class RunManager extends JFrame {
      * Recursively collects all SeriesLeafNode objects from a tree node.
      * If the node is a leaf, adds it directly. If it's a parent, recursively collects from children.
      * This enables selecting a parent node (like "node.node9") to plot all its children.
+     *
+     * Top-level folder nodes (direct children of root) are NOT recursively expanded to prevent
+     * accidentally plotting hundreds of series.
      */
     private void collectLeafNodes(DefaultMutableTreeNode node, List<SeriesLeafNode> leaves) {
         if (node == null) return;
@@ -1445,8 +1451,17 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // For regular folder nodes (String user objects), recurse to all children
-        if (!node.isLeaf()) {
+        // For regular folder nodes (String user objects), check depth
+        if (!node.isLeaf() && userObject instanceof String) {
+            // Check if this is a top-level folder (direct child of invisible root)
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            if (node.getParent() == root) {
+                // Top-level folder - don't recurse to prevent accidental mass plotting
+                // User must select specific sub-folders or series
+                return;
+            }
+
+            // Not top-level - recurse normally
             for (int i = 0; i < node.getChildCount(); i++) {
                 DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
                 collectLeafNodes(child, leaves);
@@ -1712,6 +1727,9 @@ public class RunManager extends JFrame {
         plotDataSet.addSeries(timeSeriesData);
         seriesColorMap.put(timeSeriesData.getName(), seriesColor);
         updatePlotVisibility();
+
+        // Add to legend
+        plotPanel.addLegendSeries(timeSeriesData.getName(), seriesColor);
     }
 
     /**
@@ -1730,6 +1748,9 @@ public class RunManager extends JFrame {
         plotPanel.setVisibleSeries(new ArrayList<>());
         seriesColorMap.clear();
         statsTableModel.clear();
+
+        // Clear legend
+        plotPanel.clearLegend();
     }
 
 
