@@ -46,19 +46,14 @@ public class RunManager extends JFrame {
     private DefaultMutableTreeNode currentRunsNode;
     private DefaultMutableTreeNode libraryNode;
 
-    // Details panel components
-    private JPanel detailsPanel;
-    private CardLayout detailsCardLayout;
+    // Outputs tree components
     private JTree outputsTree;
     private DefaultTreeModel outputsTreeModel;
     private JScrollPane outputsScrollPane;
 
-    // Plot and stats components
-    private PlotPanel plotPanel;
+    // Visualization tab manager
+    private VisualizationTabManager tabManager;
     private DataSet plotDataSet;
-    private JScrollPane statsScrollPane;
-    private JTable statsTable;
-    private StatsTableModel statsTableModel;
 
     // Series color management
     private static final Color[] SERIES_COLORS = {
@@ -270,12 +265,8 @@ public class RunManager extends JFrame {
         // Add context menu
         setupContextMenu();
 
-        // Initialize details panel components
-        detailsCardLayout = new CardLayout();
-        detailsPanel = new JPanel(detailsCardLayout);
-
+        // Initialize visualization components
         createDetailsComponents();
-        createDetailsLayouts();
     }
 
     private void createDetailsComponents() {
@@ -298,84 +289,17 @@ public class RunManager extends JFrame {
 
         outputsScrollPane = new JScrollPane(outputsTree);
 
-        // Create plot panel
-        plotPanel = new PlotPanel();
+        // Create shared dataset and color map
         plotDataSet = new DataSet();
-        plotPanel.setDataSet(plotDataSet);
 
-        // Enable coordinate display for mouse hover
-        plotPanel.setShowCoordinates(true);
+        // Create tab manager with shared data
+        tabManager = new VisualizationTabManager(plotDataSet, seriesColorMap);
 
-        // Set Auto-Y mode to default preference value
-        boolean autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
-        plotPanel.setAutoYMode(autoYMode);
-
-        // Create stats panel
-        createStatsPanel();
+        // Add default tabs (settings are applied by the tab manager)
+        tabManager.addPlotTab("Plot 1");
+        tabManager.addStatsTab("Statistics");
     }
 
-    private void createStatsPanel() {
-        statsTableModel = new StatsTableModel();
-        statsTable = new JTable(statsTableModel);
-        statsTable.setFillsViewportHeight(true);
-        statsTable.setRowSelectionAllowed(false);
-
-        statsScrollPane = new JScrollPane(statsTable);
-        statsScrollPane.setPreferredSize(new Dimension(0, 150));
-    }
-
-    private void createDetailsLayouts() {
-        // Create message panel for when no run is selected
-        JPanel messagePanel = new JPanel(new BorderLayout());
-        JLabel messageLabel = new JLabel("<html><center>Select a run to view outputs<br><br>Right-click on a run to:<br>• View in KalixCLI Session Manager<br>• Remove run</center></html>", SwingConstants.CENTER);
-        messageLabel.setForeground(Color.GRAY);
-        messagePanel.add(messageLabel, BorderLayout.CENTER);
-        messagePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        // Create main outputs panel with three sections when a run is selected
-        JPanel outputsMainPanel = createOutputsMainPanel();
-
-        // Add both panels to details panel
-        detailsPanel.add(messagePanel, "MESSAGE_PANEL");
-        detailsPanel.add(outputsMainPanel, "OUTPUTS_PANEL");
-
-        // Show message panel by default
-        detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
-    }
-
-    private JPanel createOutputsMainPanel() {
-        JPanel mainPanel = new JPanel(new BorderLayout());
-
-        // Create horizontal split pane for outputs tree and visualization
-        JSplitPane horizontalSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        horizontalSplit.setDividerLocation(150); // 200px for outputs tree
-        horizontalSplit.setResizeWeight(0); // Give equal weight initially
-
-        // Left side: outputs tree panel
-        JPanel outputsTreePanel = new JPanel(new BorderLayout());
-        outputsTreePanel.add(outputsScrollPane, BorderLayout.CENTER);
-
-        // Right side: vertical split pane for plot and stats
-        JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        verticalSplit.setDividerLocation(350); // 350px for plot
-        verticalSplit.setResizeWeight(0.75); // Give more space to plot
-
-        // Top of right side: plot panel
-        JPanel plotWrapperPanel = new JPanel(new BorderLayout());
-        plotWrapperPanel.add(plotPanel, BorderLayout.CENTER);
-
-        // Bottom of right side: stats table
-        verticalSplit.setTopComponent(plotWrapperPanel);
-        verticalSplit.setBottomComponent(statsScrollPane);
-
-        // Assemble the layout
-        horizontalSplit.setLeftComponent(outputsTreePanel);
-        horizontalSplit.setRightComponent(verticalSplit);
-
-        mainPanel.add(horizontalSplit, BorderLayout.CENTER);
-
-        return mainPanel;
-    }
 
     private void setupLayout() {
         setLayout(new BorderLayout());
@@ -404,32 +328,11 @@ public class RunManager extends JFrame {
         leftSplitPane.setTopComponent(runsPanel);
         leftSplitPane.setBottomComponent(outputsPanel);
 
-        // Right side: vertical split pane for plot and stats (reusing existing layout)
-        JSplitPane rightVerticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        rightVerticalSplit.setDividerLocation(350); // 350px for plot
-        rightVerticalSplit.setResizeWeight(0.75); // Give more space to plot
-
-        // Top of right side: plot panel
-        JPanel plotWrapperPanel = new JPanel(new BorderLayout());
-        plotWrapperPanel.add(plotPanel, BorderLayout.CENTER);
-
-        // Bottom of right side: stats table
-        rightVerticalSplit.setTopComponent(plotWrapperPanel);
-        rightVerticalSplit.setBottomComponent(statsScrollPane);
-
+        // Right side: tabbed pane for visualizations
         splitPane.setLeftComponent(leftSplitPane);
-        splitPane.setRightComponent(rightVerticalSplit);
+        splitPane.setRightComponent(tabManager.getTabbedPane());
 
         add(splitPane, BorderLayout.CENTER);
-
-        // Footer
-        JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> setVisible(false));
-        footerPanel.add(closeButton);
-        footerPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
-
-        add(footerPanel, BorderLayout.SOUTH);
     }
 
     private void setupWindowListeners() {
@@ -966,7 +869,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Handles tree selection changes to update the details panel.
+     * Handles tree selection changes to update the outputs tree.
      */
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
@@ -974,16 +877,20 @@ public class RunManager extends JFrame {
             return;
         }
 
-        updateDetailsPanel();
+        updateOutputsTree();
     }
 
     /**
-     * Updates the details panel based on current tree selection.
+     * Updates the outputs tree based on current run tree selection.
      */
-    private void updateDetailsPanel() {
+    private void updateOutputsTree() {
         TreePath[] selectedPaths = runTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
-            detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
+            // Clear outputs tree when no runs selected
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            root.removeAllChildren();
+            root.add(new DefaultMutableTreeNode("Select a run to view outputs"));
+            outputsTreeModel.reload();
             return;
         }
 
@@ -998,11 +905,13 @@ public class RunManager extends JFrame {
 
         if (selectedRuns.isEmpty()) {
             // Selection is on parent nodes only (Current runs, Library)
-            detailsCardLayout.show(detailsPanel, "MESSAGE_PANEL");
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            root.removeAllChildren();
+            root.add(new DefaultMutableTreeNode("Select a run to view outputs"));
+            outputsTreeModel.reload();
         } else {
             // Update outputs tree with all selected runs
             updateOutputsTreeForMultipleRuns(selectedRuns);
-            detailsCardLayout.show(detailsPanel, "OUTPUTS_PANEL");
         }
     }
 
@@ -1354,10 +1263,16 @@ public class RunManager extends JFrame {
         for (String seriesKey : seriesToRemove) {
             plotDataSet.removeSeries(seriesKey);
             seriesColorMap.remove(seriesKey);
-            statsTableModel.removeSeries(seriesKey);
 
-            // Remove from legend
-            plotPanel.removeLegendSeries(seriesKey);
+            // Remove from all stats tables
+            for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                model.removeSeries(seriesKey);
+            }
+
+            // Remove from legend in all plots
+            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                panel.removeLegendSeries(seriesKey);
+            }
         }
 
         // Add new series
@@ -1378,10 +1293,16 @@ public class RunManager extends JFrame {
                 // Add immediately with cached data, using seriesKey as display name
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
                 addSeriesToPlot(renamedData, seriesColor);
-                statsTableModel.addOrUpdateSeries(renamedData);
+
+                // Add to all stats tables
+                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                    model.addOrUpdateSeries(renamedData);
+                }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                // Show loading state for this series
-                statsTableModel.addLoadingSeries(seriesKey);
+                // Show loading state for this series in all stats tables
+                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                    model.addLoadingSeries(seriesKey);
+                }
 
                 // Request the timeseries data
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
@@ -1392,22 +1313,35 @@ public class RunManager extends JFrame {
                                 // Rename series to include run label
                                 TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
                                 addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
-                                statsTableModel.addOrUpdateSeries(renamedData);
-                                plotPanel.zoomToFit();
+
+                                // Update all stats tables
+                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                                    model.addOrUpdateSeries(renamedData);
+                                }
+
+                                // Zoom to fit in all plot panels
+                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                                    panel.zoomToFit();
+                                }
                             }
                         });
                     })
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
                             if (selectedSeries.contains(seriesKey)) {
-                                statsTableModel.addErrorSeries(seriesKey, throwable.getMessage());
+                                // Add error to all stats tables
+                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                                    model.addErrorSeries(seriesKey, throwable.getMessage());
+                                }
                             }
                         });
                         return null;
                     });
             } else {
-                // Request already in progress, show loading state
-                statsTableModel.addLoadingSeries(seriesKey);
+                // Request already in progress, show loading state in all stats tables
+                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                    model.addLoadingSeries(seriesKey);
+                }
             }
         }
 
@@ -1417,7 +1351,9 @@ public class RunManager extends JFrame {
         // Update plot visibility and auto-zoom if we have any series
         updatePlotVisibility();
         if (!plotDataSet.isEmpty()) {
-            plotPanel.zoomToFit();
+            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                panel.zoomToFit();
+            }
         }
     }
 
@@ -1611,8 +1547,8 @@ public class RunManager extends JFrame {
                 // Scroll to make the selection visible
                 runTree.scrollPathToVisible(pathToRun);
 
-                // Update details panel
-                updateDetailsPanel();
+                // Update outputs tree
+                updateOutputsTree();
             }
         });
     }
@@ -1721,36 +1657,50 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Adds a series to the plot with the specified color.
+     * Adds a series to all tabs with the specified color.
      */
     private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
         plotDataSet.addSeries(timeSeriesData);
         seriesColorMap.put(timeSeriesData.getName(), seriesColor);
-        updatePlotVisibility();
+        updateAllTabs();
 
-        // Add to legend
-        plotPanel.addLegendSeries(timeSeriesData.getName(), seriesColor);
+        // Add to legend in all plot panels
+        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+            panel.addLegendSeries(timeSeriesData.getName(), seriesColor);
+        }
     }
 
     /**
-     * Updates the plot panel's color map and visible series list.
+     * Updates all visualization tabs with current data.
      */
     private void updatePlotVisibility() {
-        plotPanel.setSeriesColors(new HashMap<>(seriesColorMap));
-        plotPanel.setVisibleSeries(new ArrayList<>(selectedSeries));
+        updateAllTabs();
     }
 
     /**
-     * Clears the plot and resets stats table.
+     * Updates all tabs with the current dataset and color map.
+     */
+    private void updateAllTabs() {
+        tabManager.updateAllTabs();
+    }
+
+    /**
+     * Clears all plots and stats tables.
      */
     private void clearPlotAndStats() {
         plotDataSet.removeAllSeries();
-        plotPanel.setVisibleSeries(new ArrayList<>());
         seriesColorMap.clear();
-        statsTableModel.clear();
+        updateAllTabs();
 
-        // Clear legend
-        plotPanel.clearLegend();
+        // Clear legend in all plot panels
+        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+            panel.clearLegend();
+        }
+
+        // Clear all stats tables
+        for (StatsTableModel model : tabManager.getAllStatsModels()) {
+            model.clear();
+        }
     }
 
 
@@ -1884,7 +1834,7 @@ public class RunManager extends JFrame {
     /**
      * Table model for displaying statistics of multiple time series.
      */
-    private static class StatsTableModel extends AbstractTableModel {
+    public static class StatsTableModel extends AbstractTableModel {
         private final String[] columnNames = {"Series", "Min", "Max", "Mean", "Points"};
         private final List<SeriesStats> seriesData = new ArrayList<>();
 

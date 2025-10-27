@@ -496,7 +496,7 @@ public class PlotInteractionManager {
     /**
      * Displays a file save dialog with multiple format options and exports based on selected file extension.
      */
-    private void saveData() {
+    public void saveData() {
         DataSet dataSet = dataSetSupplier.get();
         if (dataSet == null || dataSet.isEmpty()) {
             JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);

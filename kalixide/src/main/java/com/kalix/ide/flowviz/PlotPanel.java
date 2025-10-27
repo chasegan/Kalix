@@ -302,6 +302,12 @@ public class PlotPanel extends JPanel {
         }
     }
 
+    public void saveData() {
+        if (plotInteractionManager != null) {
+            plotInteractionManager.saveData();
+        }
+    }
+
     public boolean isAutoYMode() {
         return autoYMode;
     }
