@@ -37,8 +37,44 @@ public class VisualizationTabManager {
     private int dragStartIndex = -1;
     private int pressX, pressY;
 
-    // Icon sizes
-    private static final int TAB_ICON_SIZE = 14;
+    /**
+     * UI constants for consistent styling and sizing.
+     */
+    private static class UIConstants {
+        static final int TAB_ICON_SIZE = 14;
+        static final int BUTTON_ICON_SIZE = 14;
+        static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
+        static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
+        static final Color DRAG_HIGHLIGHT_COLOR = new Color(200, 200, 255, 100);
+        static final int HORIZONTAL_SPACING = 5;
+        static final int TAB_PANEL_PADDING = 2;
+    }
+
+    /**
+     * Aggregation period options for time series data.
+     */
+    private static final String[] AGGREGATION_OPTIONS = {
+        "Original resolution",
+        "Monthly",
+        "Annual (Jan-Dec)",
+        "Annual (Feb-Jan)",
+        "Annual (Mar-Feb)",
+        "Annual (Apr-Mar)",
+        "Annual (May-Apr)",
+        "Annual (Jun-May)",
+        "Annual (Jul-Jun)",
+        "Annual (Aug-Jul)",
+        "Annual (Sep-Aug)",
+        "Annual (Oct-Sep)",
+        "Annual (Nov-Oct)",
+        "Annual (Dec-Nov)"
+    };
+
+    /** Aggregation method options. */
+    private static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
+
+    /** Y-axis scale options. */
+    private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
 
     /**
      * Represents a visualization tab with its type and components.
@@ -79,12 +115,11 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Adds a new plot tab.
+     * Adds a new plot tab with default settings from preferences.
      *
-     * @param name Ignored - tabs now use icons instead of names
      * @return The created PlotPanel
      */
-    public PlotPanel addPlotTab(String name) {
+    public PlotPanel addPlotTab() {
         // Create new plot panel with shared dataset
         PlotPanel plotPanel = new PlotPanel();
         plotPanel.setDataSet(sharedDataSet);
@@ -94,10 +129,10 @@ public class VisualizationTabManager {
         List<String> visibleSeries = getVisibleSeriesFromDataSet();
         plotPanel.setVisibleSeries(visibleSeries);
 
-        // Enable features
-        plotPanel.setShowCoordinates(true);
+        // Get default settings from preferences
+        boolean defaultShowCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
+        plotPanel.setShowCoordinates(defaultShowCoordinates);
 
-        // Get default Auto-Y mode from preferences
         boolean defaultAutoY = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
         plotPanel.setAutoYMode(defaultAutoY);
 
@@ -111,7 +146,7 @@ public class VisualizationTabManager {
 
         // Create container panel with toolbar
         JPanel containerPanel = new JPanel(new BorderLayout());
-        JToolBar toolbar = createPlotToolbar(plotPanel, defaultAutoY);
+        JToolBar toolbar = createPlotToolbar(plotPanel, defaultAutoY, defaultShowCoordinates);
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
@@ -129,52 +164,148 @@ public class VisualizationTabManager {
     /**
      * Creates a toolbar for a plot tab.
      */
-    private JToolBar createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY) {
-        JToolBar toolbar = new JToolBar();
-        toolbar.setFloatable(false);
-        toolbar.setRollover(true);
+    private JToolBar createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
+        return new PlotToolbarBuilder(plotPanel)
+            .addSaveButton()
+            .addSeparator()
+            .addAggregationControls()
+            .addSeparator()
+            .addYSpaceDropdown()
+            .addSeparator()
+            .addZoomButton()
+            .addAutoYToggle(initialAutoY)
+            .addCoordinatesToggle(initialShowCoordinates)
+            .build();
+    }
 
-        // Save Data button
-        JButton saveButton = new JButton(FontIcon.of(FontAwesomeSolid.SAVE, 14));
-        saveButton.setToolTipText("Save Data");
-        saveButton.setFocusable(false);
-        saveButton.addActionListener(e -> plotPanel.saveData());
-        toolbar.add(saveButton);
+    /**
+     * Builder for creating plot toolbars with consistent styling.
+     */
+    private static class PlotToolbarBuilder {
+        private final JToolBar toolbar;
+        private final PlotPanel plotPanel;
 
-        toolbar.addSeparator();
+        PlotToolbarBuilder(PlotPanel plotPanel) {
+            this.plotPanel = plotPanel;
+            this.toolbar = new JToolBar();
+            this.toolbar.setFloatable(false);
+            this.toolbar.setRollover(true);
+        }
 
-        // Zoom to Fit button
-        JButton zoomFitButton = new JButton(FontIcon.of(FontAwesomeSolid.EXPAND, 14));
-        zoomFitButton.setToolTipText("Zoom to Fit");
-        zoomFitButton.setFocusable(false);
-        zoomFitButton.addActionListener(e -> plotPanel.zoomToFit());
-        toolbar.add(zoomFitButton);
+        PlotToolbarBuilder addSaveButton() {
+            JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", plotPanel::saveData);
+            toolbar.add(button);
+            return this;
+        }
 
-        // Auto-Y toggle button
-        JToggleButton autoYButton = new JToggleButton(FontIcon.of(FontAwesomeSolid.ARROWS_ALT_V, 14));
-        autoYButton.setToolTipText("Auto-Y Mode");
-        autoYButton.setFocusable(false);
-        autoYButton.setSelected(initialAutoY);
-        autoYButton.addActionListener(e -> {
-            boolean enabled = autoYButton.isSelected();
-            plotPanel.setAutoYMode(enabled);
-            // If enabling Auto-Y, immediately apply it by zooming to fit
-            if (enabled) {
-                plotPanel.zoomToFit();
-            }
-        });
-        toolbar.add(autoYButton);
+        PlotToolbarBuilder addAggregationControls() {
+            // Aggregation period dropdown
+            JComboBox<String> aggregationCombo = createDropdown(AGGREGATION_OPTIONS,
+                UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
+            aggregationCombo.addActionListener(e -> {
+                String selected = (String) aggregationCombo.getSelectedItem();
+                // Functionality to be implemented
+            });
+            toolbar.add(aggregationCombo);
 
-        return toolbar;
+            // "by" label
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+            toolbar.add(new JLabel("by"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
+            // Aggregation method dropdown
+            JComboBox<String> methodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
+                UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
+            methodCombo.addActionListener(e -> {
+                String selected = (String) methodCombo.getSelectedItem();
+                // Functionality to be implemented
+            });
+            toolbar.add(methodCombo);
+
+            return this;
+        }
+
+        PlotToolbarBuilder addYSpaceDropdown() {
+            JComboBox<String> ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
+                UIConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
+            ySpaceCombo.addActionListener(e -> {
+                String selected = (String) ySpaceCombo.getSelectedItem();
+                // Functionality to be implemented
+            });
+            toolbar.add(ySpaceCombo);
+            return this;
+        }
+
+        PlotToolbarBuilder addZoomButton() {
+            JButton button = createIconButton(FontAwesomeSolid.EXPAND, "Zoom to Fit", plotPanel::zoomToFit);
+            toolbar.add(button);
+            return this;
+        }
+
+        PlotToolbarBuilder addAutoYToggle(boolean initialState) {
+            JToggleButton button = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V,
+                "Auto-Y Mode", initialState);
+            button.addActionListener(e -> {
+                boolean enabled = button.isSelected();
+                plotPanel.setAutoYMode(enabled);
+                if (enabled) {
+                    plotPanel.zoomToFit();
+                }
+            });
+            toolbar.add(button);
+            return this;
+        }
+
+        PlotToolbarBuilder addCoordinatesToggle(boolean initialState) {
+            JToggleButton button = createToggleButton(FontAwesomeSolid.CROSSHAIRS,
+                "Show Coordinates", initialState);
+            button.addActionListener(e -> plotPanel.setShowCoordinates(button.isSelected()));
+            toolbar.add(button);
+            return this;
+        }
+
+        PlotToolbarBuilder addSeparator() {
+            toolbar.addSeparator();
+            return this;
+        }
+
+        JToolBar build() {
+            return toolbar;
+        }
+
+        /** Creates a standard icon button. */
+        private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
+            JButton button = new JButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
+            button.setToolTipText(tooltip);
+            button.setFocusable(false);
+            button.addActionListener(e -> action.run());
+            return button;
+        }
+
+        /** Creates a standard toggle button. */
+        private JToggleButton createToggleButton(FontAwesomeSolid icon, String tooltip, boolean initialState) {
+            JToggleButton button = new JToggleButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
+            button.setToolTipText(tooltip);
+            button.setFocusable(false);
+            button.setSelected(initialState);
+            return button;
+        }
+
+        /** Creates a standard dropdown. */
+        private JComboBox<String> createDropdown(String[] options, Dimension size, String tooltip) {
+            JComboBox<String> combo = new JComboBox<>(options);
+            combo.setMaximumSize(size);
+            combo.setToolTipText(tooltip);
+            return combo;
+        }
     }
 
     /**
      * Adds a new statistics tab.
      *
-     * @param name Ignored - tabs now use icons instead of names
      * @return The created StatsTableModel
      */
-    public RunManager.StatsTableModel addStatsTab(String name) {
+    public RunManager.StatsTableModel addStatsTab() {
         // Create new stats table
         RunManager.StatsTableModel model = new RunManager.StatsTableModel();
         JTable table = new JTable(model);
@@ -195,21 +326,22 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Sets up a tab with an icon.
+     * Sets up a tab with an icon and interaction handlers.
      */
     private void setupTabIcon(int index, TabInfo.TabType tabType) {
         // Create tab panel with just the icon
-        JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
+            UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
         tabPanel.setOpaque(false);
 
         // Create icon based on tab type
         FontIcon tabIcon;
         String tooltip;
         if (tabType == TabInfo.TabType.PLOT) {
-            tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, TAB_ICON_SIZE);
+            tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
             tooltip = "Plot";
         } else {
-            tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, TAB_ICON_SIZE);
+            tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, UIConstants.TAB_ICON_SIZE);
             tooltip = "Statistics";
         }
 
@@ -255,7 +387,7 @@ public class VisualizationTabManager {
                     if (draggingTab == null) {
                         draggingTab = tabPanel;
                         tabPanel.setOpaque(true);
-                        tabPanel.setBackground(new Color(200, 200, 255, 100));
+                        tabPanel.setBackground(UIConstants.DRAG_HIGHLIGHT_COLOR);
                     }
 
                     // Determine which tab we're hovering over
@@ -309,9 +441,9 @@ public class VisualizationTabManager {
         JMenuItem duplicateItem = new JMenuItem("Duplicate");
         duplicateItem.addActionListener(e -> {
             if (tabType == TabInfo.TabType.PLOT) {
-                addPlotTab(null);
+                addPlotTab();
             } else {
-                addStatsTab(null);
+                addStatsTab();
             }
         });
         contextMenu.add(duplicateItem);

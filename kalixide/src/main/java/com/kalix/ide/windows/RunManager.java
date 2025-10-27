@@ -296,8 +296,8 @@ public class RunManager extends JFrame {
         tabManager = new VisualizationTabManager(plotDataSet, seriesColorMap);
 
         // Add default tabs (settings are applied by the tab manager)
-        tabManager.addPlotTab("Plot 1");
-        tabManager.addStatsTab("Statistics");
+        tabManager.addPlotTab();
+        tabManager.addStatsTab();
     }
 
 
