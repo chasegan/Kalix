@@ -3,6 +3,9 @@ package com.kalix.ide.windows;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.transform.AggregationMethod;
+import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -185,6 +188,10 @@ public class VisualizationTabManager {
         private final JToolBar toolbar;
         private final PlotPanel plotPanel;
 
+        // Store dropdown references for coordinated updates
+        private JComboBox<String> aggregationPeriodCombo;
+        private JComboBox<String> aggregationMethodCombo;
+
         PlotToolbarBuilder(PlotPanel plotPanel) {
             this.plotPanel = plotPanel;
             this.toolbar = new JToolBar();
@@ -200,13 +207,10 @@ public class VisualizationTabManager {
 
         PlotToolbarBuilder addAggregationControls() {
             // Aggregation period dropdown
-            JComboBox<String> aggregationCombo = createDropdown(AGGREGATION_OPTIONS,
+            aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
                 UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
-            aggregationCombo.addActionListener(e -> {
-                String selected = (String) aggregationCombo.getSelectedItem();
-                // Functionality to be implemented
-            });
-            toolbar.add(aggregationCombo);
+            aggregationPeriodCombo.addActionListener(e -> applyAggregation());
+            toolbar.add(aggregationPeriodCombo);
 
             // "by" label
             toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
@@ -214,15 +218,28 @@ public class VisualizationTabManager {
             toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
 
             // Aggregation method dropdown
-            JComboBox<String> methodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
+            aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
                 UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
-            methodCombo.addActionListener(e -> {
-                String selected = (String) methodCombo.getSelectedItem();
-                // Functionality to be implemented
-            });
-            toolbar.add(methodCombo);
+            aggregationMethodCombo.addActionListener(e -> applyAggregation());
+            toolbar.add(aggregationMethodCombo);
 
             return this;
+        }
+
+        /** Applies current aggregation settings to the plot panel. */
+        private void applyAggregation() {
+            if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
+                return;
+            }
+
+            String periodStr = (String) aggregationPeriodCombo.getSelectedItem();
+            String methodStr = (String) aggregationMethodCombo.getSelectedItem();
+
+            if (periodStr != null && methodStr != null) {
+                AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
+                AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
+                plotPanel.setAggregation(period, method);
+            }
         }
 
         PlotToolbarBuilder addYSpaceDropdown() {
@@ -230,7 +247,10 @@ public class VisualizationTabManager {
                 UIConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
             ySpaceCombo.addActionListener(e -> {
                 String selected = (String) ySpaceCombo.getSelectedItem();
-                // Functionality to be implemented
+                if (selected != null) {
+                    YAxisScale scale = YAxisScale.fromDisplayName(selected);
+                    plotPanel.setYAxisScale(scale);
+                }
             });
             toolbar.add(ySpaceCombo);
             return this;
@@ -547,7 +567,9 @@ public class VisualizationTabManager {
                 // Update plot tabs
                 tab.plotPanel.setSeriesColors(sharedColorMap);
                 tab.plotPanel.setVisibleSeries(visibleSeries);
-                tab.plotPanel.repaint();
+
+                // CRITICAL: Rebuild display dataset when underlying data changes
+                tab.plotPanel.refreshData();
             }
             // Stats tabs update automatically through their DataSet listeners
         }

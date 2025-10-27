@@ -1,8 +1,13 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.transform.AggregationMethod;
+import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 
 import javax.swing.*;
 import java.awt.*;
@@ -28,12 +33,21 @@ public class PlotPanel extends JPanel {
     
     
     // Data and rendering
-    private DataSet dataSet;
+    private DataSet originalDataSet;  // Reference to shared dataset
+    private DataSet displayDataSet;   // Transformed for display (cached)
     private TimeSeriesRenderer renderer;
     private ViewPort currentViewport;
     private Map<String, Color> seriesColors;
     private List<String> visibleSeries;
     private boolean autoYMode = false;
+
+    // Transform settings (per-tab)
+    private AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
+    private AggregationMethod aggregationMethod = AggregationMethod.SUM;
+    private YAxisScale yAxisScale = YAxisScale.LINEAR;
+
+    // Cache management
+    private String lastTransformKey = null;
 
     // Managers
     private CoordinateDisplayManager coordinateDisplayManager;
@@ -55,7 +69,7 @@ public class PlotPanel extends JPanel {
 
         // Setup manager data access
         plotInteractionManager.setupDataAccess(
-            () -> dataSet,
+            () -> displayDataSet,
             () -> currentViewport,
             viewport -> currentViewport = viewport,
             () -> visibleSeries,
@@ -66,15 +80,18 @@ public class PlotPanel extends JPanel {
     }
     
     public void setDataSet(DataSet dataSet) {
-        this.dataSet = dataSet;
-        
+        this.originalDataSet = dataSet;
+
+        // Rebuild display dataset with current transforms
+        rebuildDisplayDataSet();
+
         // Create initial viewport to show all data
-        if (dataSet != null && !dataSet.isEmpty()) {
+        if (displayDataSet != null && !displayDataSet.isEmpty()) {
             zoomToFitData();
         } else {
             createDefaultViewport();
         }
-        
+
         repaint();
     }
     
@@ -91,15 +108,15 @@ public class PlotPanel extends JPanel {
     }
     
     private void zoomToFitData() {
-        if (dataSet == null || dataSet.isEmpty()) {
+        if (displayDataSet == null || displayDataSet.isEmpty()) {
             createDefaultViewport();
             return;
         }
-        
-        long startTime = dataSet.getGlobalMinTime();
-        long endTime = dataSet.getGlobalMaxTime();
-        Double minValue = dataSet.getGlobalMinValue();
-        Double maxValue = dataSet.getGlobalMaxValue();
+
+        long startTime = displayDataSet.getGlobalMinTime();
+        long endTime = displayDataSet.getGlobalMaxTime();
+        Double minValue = displayDataSet.getGlobalMinValue();
+        Double maxValue = displayDataSet.getGlobalMaxValue();
         
         if (minValue == null || maxValue == null) {
             createDefaultViewport();
@@ -244,8 +261,8 @@ public class PlotPanel extends JPanel {
         }
         
         // Render using the new rendering engine
-        if (dataSet != null && renderer != null) {
-            renderer.render(g2d, dataSet, currentViewport);
+        if (displayDataSet != null && renderer != null) {
+            renderer.render(g2d, displayDataSet, currentViewport);
         } else {
             // Fallback to empty state
             g2d.setColor(Color.LIGHT_GRAY);
@@ -261,7 +278,7 @@ public class PlotPanel extends JPanel {
 
         // Update coordinate display manager and render overlays
         if (coordinateDisplayManager != null) {
-            coordinateDisplayManager.updateCoordinateDisplay(dataSet, currentViewport);
+            coordinateDisplayManager.updateCoordinateDisplay(displayDataSet, currentViewport);
             coordinateDisplayManager.renderCoordinateOverlays(g2d, currentViewport);
         }
 
@@ -369,5 +386,94 @@ public class PlotPanel extends JPanel {
      */
     public PlotLegendManager getLegendManager() {
         return legendManager;
+    }
+
+    /**
+     * Sets the aggregation period and method for this plot.
+     * Triggers rebuild of display dataset.
+     */
+    public void setAggregation(AggregationPeriod period, AggregationMethod method) {
+        if (period == null || method == null) {
+            return;
+        }
+
+        this.aggregationPeriod = period;
+        this.aggregationMethod = method;
+
+        rebuildDisplayDataSet();
+        zoomToFit(); // Refit to new data range
+    }
+
+    /**
+     * Refreshes the display dataset from the original data.
+     * Call this when the original dataset has been modified externally
+     * (e.g., series added or removed).
+     */
+    public void refreshData() {
+        // Invalidate cache to force rebuild with new data
+        lastTransformKey = null;
+
+        rebuildDisplayDataSet();
+
+        // Refit viewport if we have data
+        if (displayDataSet != null && !displayDataSet.isEmpty()) {
+            zoomToFit();
+        }
+
+        repaint();
+    }
+
+    /**
+     * Sets the Y-axis scale for this plot.
+     * Currently logs the change (Y-transform will be applied in Phase 3).
+     */
+    public void setYAxisScale(YAxisScale scale) {
+        if (scale == null) {
+            return;
+        }
+
+        this.yAxisScale = scale;
+        // Phase 3: Apply transform at render time
+        repaint();
+    }
+
+    /**
+     * Rebuilds the display dataset by applying current aggregation settings.
+     * Uses caching to avoid unnecessary recomputation.
+     */
+    private void rebuildDisplayDataSet() {
+        if (originalDataSet == null) {
+            displayDataSet = null;
+            return;
+        }
+
+        // Generate cache key from current transform settings
+        String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name();
+
+        // Check if we can reuse cached result
+        if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
+            return; // Already computed
+        }
+
+        // Build new display dataset
+        displayDataSet = new DataSet();
+
+        for (String seriesName : originalDataSet.getSeriesNames()) {
+            TimeSeriesData originalSeries = originalDataSet.getSeries(seriesName);
+
+            // Apply aggregation
+            TimeSeriesData transformedSeries = TimeSeriesAggregator.aggregate(
+                originalSeries,
+                aggregationPeriod,
+                aggregationMethod
+            );
+
+            if (transformedSeries != null) {
+                displayDataSet.addSeries(transformedSeries);
+            }
+        }
+
+        // Update cache key
+        lastTransformKey = transformKey;
     }
 }
