@@ -82,11 +82,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         if vp == "loc" {
                             n.location = Location::from_str(vvc)?;
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {
@@ -106,11 +104,9 @@ pub fn result_map_to_model_0_0_1(map: HashMap<String, HashMap<String, Option<Str
                         } else if vp == "observed" {
                             n.observed_flow_input = DynamicInput::from_string(vvc, &mut model.data_cache, false)?;
                         } else if vp == "ds_1" {
-                            let outlet = 0_u8; //ds_1 is outlet 0
-                            let inlet = 0_u8; //always inlet 0
                             let ds_node_name= vv.as_ref()
                                 .ok_or(format!("Missing '{}' value for node '{}'", vp, node_name))?;
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, outlet, inlet))
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, &ds_node_name, DS_1_OUTLET, INLET))
                         } else if vp == "type" {
                             // skipping this
                         } else {

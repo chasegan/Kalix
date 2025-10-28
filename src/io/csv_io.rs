@@ -145,16 +145,14 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
 
 
 
-pub fn csv_string_to_f64_vec(s: &str) -> Result<Vec<f64>, CsvError> {
+pub fn csv_string_to_f64_vec(s: &str) -> Result<Vec<f64>, String> {
     let mut result = Vec::new();
-    for (i, part) in s.split(",").enumerate() {
+    let ss = s.trim_end_matches(|c: char| c == ',' || c.is_whitespace()).split(",");
+    for (i, part) in ss.enumerate() {
         match part.trim().parse::<f64>() {
             Ok(val) => result.push(val),
             Err(_) => {
-                return Err(CsvError::ReadError(format!(
-                    "Failed to parse '{}' as f64 at position {} in string '{}'", 
-                    part, i, s
-                )));
+                return Err(format!("Failed to parse '{}' as f64 at position {} in string '{}'", part, i, s));
             }
         }
     }

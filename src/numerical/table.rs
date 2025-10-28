@@ -33,7 +33,8 @@ impl Table {
         let mut answer = Self::new(ncols);
 
         // Split the string at all the commas
-        let ss = s.split(',').map(|x| x.trim()).collect::<Vec<&str>>();
+        let ss = s.trim_end_matches(|c: char| c == ',' || c.is_whitespace())
+            .split(',').map(|x| x.trim()).collect::<Vec<&str>>();
 
         // Check that there the right number of elements
         let n_elements = ss.len();
