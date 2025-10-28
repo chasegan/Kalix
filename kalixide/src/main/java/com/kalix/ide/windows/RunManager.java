@@ -435,10 +435,6 @@ public class RunManager extends JFrame {
     private void handleSessionEvent(SessionManager.SessionEvent event) {
         String sessionKey = event.getSessionKey();
         SessionManager.SessionState newState = event.getNewState();
-        SessionManager.SessionState oldState = event.getOldState();
-
-        logger.info("Session event received: {} | {} -> {} | message: {}",
-            sessionKey, oldState, newState, event.getMessage());
 
         // Get the session to check if it's a RunModelProgram
         Optional<SessionManager.KalixSession> sessionOpt = stdioTaskManager.getSessionManager().getSession(sessionKey);
@@ -654,9 +650,6 @@ public class RunManager extends JFrame {
                     RunInfo runInfo = new RunInfo(runName, session);
                     RunStatus initialStatus = runInfo.getRunStatus();
 
-                    logger.info("New session added: {} | sessionKey: {} | initial status: {}",
-                        runName, sessionKey, initialStatus);
-
                     DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
                     currentRunsNode.add(runNode);
                     sessionToTreeNode.put(sessionKey, runNode);
@@ -668,14 +661,8 @@ public class RunManager extends JFrame {
                         long completionTime = System.currentTimeMillis();
                         completionTimestamps.put(sessionKey, completionTime);
 
-                        logger.info("New session already completed: {} | sessionKey: {} | completionTime: {} | lastRunCompletionTime: {}",
-                            runName, sessionKey, completionTime, lastRunCompletionTime);
-
                         if (completionTime > lastRunCompletionTime) {
-                            logger.info("Updating Last run to: {}", runName);
                             updateLastRun(runInfo, completionTime);
-                        } else {
-                            logger.info("NOT updating Last run - this completion is older");
                         }
                     }
 
@@ -695,8 +682,6 @@ public class RunManager extends JFrame {
                         if (lastStatus == RunStatus.DONE &&
                             (currentStatus == RunStatus.RUNNING || currentStatus == RunStatus.LOADING || currentStatus == RunStatus.STARTING)) {
                             // Session reused for new run - reset completion tracking for this session
-                            logger.info("Session reuse detected: {} | old status: DONE -> new status: {} | Clearing completion timestamp",
-                                runInfo.runName, currentStatus);
                             completionTimestamps.remove(sessionKey);
                         }
 
@@ -708,15 +693,9 @@ public class RunManager extends JFrame {
                             long completionTime = System.currentTimeMillis();
                             completionTimestamps.put(sessionKey, completionTime);
 
-                            logger.info("Run completed: {} | sessionKey: {} | completionTime: {} | lastRunCompletionTime: {}",
-                                runInfo.runName, sessionKey, completionTime, lastRunCompletionTime);
-
                             // Update Last if this is more recent
                             if (completionTime > lastRunCompletionTime) {
-                                logger.info("Updating Last run to: {}", runInfo.runName);
                                 updateLastRun(runInfo, completionTime);
-                            } else {
-                                logger.info("NOT updating Last run - this completion is older");
                             }
                         }
 
@@ -735,10 +714,6 @@ public class RunManager extends JFrame {
                 if (!activeSessions.containsKey(sessionKey)) {
                     // Session removed - remove from tree
                     DefaultMutableTreeNode nodeToRemove = entry.getValue();
-                    RunInfo removedRunInfo = (RunInfo) nodeToRemove.getUserObject();
-
-                    logger.info("Session removed: {} | sessionKey: {}", removedRunInfo.runName, sessionKey);
-
                     currentRunsNode.remove(nodeToRemove);
                     sessionToRunName.remove(sessionKey);
                     lastKnownStatus.remove(sessionKey);
@@ -746,7 +721,6 @@ public class RunManager extends JFrame {
 
                     // If this was the Last run, clear Last node
                     if (lastRunInfo != null && lastRunInfo.session.getSessionKey().equals(sessionKey)) {
-                        logger.info("Removed session was Last run - clearing Last node");
                         lastRunInfo = null;
                         lastRunCompletionTime = 0L;
                         lastRunNode.removeAllChildren();
@@ -772,14 +746,8 @@ public class RunManager extends JFrame {
      * Updates the Last run node to point to the most recently completed run.
      */
     private void updateLastRun(RunInfo newLastRun, long completionTime) {
-        logger.info("updateLastRun called - newLastRun.runName: {} | newLastRun.session: {} | completionTime: {}",
-            newLastRun.runName, newLastRun.session.getSessionKey(), completionTime);
-
         lastRunInfo = newLastRun;
         lastRunCompletionTime = completionTime;
-
-        logger.info("Set lastRunInfo.runName: {} | lastRunInfo.session: {}",
-            lastRunInfo.runName, lastRunInfo.session.getSessionKey());
 
         // Update tree node
         lastRunNode.removeAllChildren();
