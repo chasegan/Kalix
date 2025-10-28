@@ -1253,12 +1253,44 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             targetDirectory = currentFile.getParentFile();
         }
 
-        try {
-            TerminalLauncher.openTerminalAt(targetDirectory);
+        // Determine actual target directory
+        String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
 
-            // Show success message
-            String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
-            updateStatus("Terminal opened at: " + dirPath);
+        try {
+            // Check if we're on Windows and have a custom Python terminal command
+            String osName = System.getProperty("os.name").toLowerCase();
+            String defaultCommand = osName.contains("win") ? PreferenceKeys.DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS : "";
+            String pythonTerminalCommand = PreferenceManager.getFileString(PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, defaultCommand);
+
+            if (osName.contains("win") && !pythonTerminalCommand.isEmpty()) {
+                // Use custom Python terminal command on Windows
+                // Extract the activation script path after "/K"
+                String activationScript = "";
+                if (pythonTerminalCommand.contains("\"/K\"")) {
+                    int kIndex = pythonTerminalCommand.indexOf("\"/K\"");
+                    activationScript = pythonTerminalCommand.substring(kIndex + 4).trim();
+                }
+
+                // Expand environment variables manually
+                activationScript = activationScript.replace("%USERPROFILE%", System.getProperty("user.home"));
+                activationScript = activationScript.replace("%windir%", System.getenv("windir"));
+
+                // Build the command to execute: cd to directory, then run activation script
+                String commandToExecute = "cd /d \"" + dirPath + "\" && " + activationScript;
+
+                logger.info("Executing terminal command: cmd.exe /K {}", commandToExecute);
+
+                // Use 'start' to open a new visible window
+                // cmd.exe /c start "Terminal" cmd.exe /K "command"
+                ProcessBuilder pb = new ProcessBuilder("cmd.exe", "/c", "start", "Kalix Terminal", "cmd.exe", "/K", commandToExecute);
+                pb.start();
+
+                updateStatus("Terminal opened at: " + dirPath);
+            } else {
+                // Use standard terminal launcher for Mac/Linux or Windows without custom command
+                TerminalLauncher.openTerminalAt(targetDirectory);
+                updateStatus("Terminal opened at: " + dirPath);
+            }
 
         } catch (Exception e) {
             String message = "Failed to open terminal: " + e.getMessage();

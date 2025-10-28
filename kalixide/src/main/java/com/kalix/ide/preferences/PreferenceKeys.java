@@ -71,6 +71,9 @@ public class PreferenceKeys {
     /** External editor command template (string, default: "code <folder_path> <file_path>") */
     public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
 
+    /** Python terminal command template (string, default: platform-specific) */
+    public static final String FILE_PYTHON_TERMINAL_COMMAND = "file.pythonTerminalCommand";
+
     /** Enable model linting (boolean, default: true) */
     public static final String LINTER_ENABLED = "linter.enabled";
 
@@ -111,6 +114,9 @@ public class PreferenceKeys {
 
     /** Maximum number of recent files to track - unified with AppConstants.Files.MAX_RECENT_FILES */
     public static final int MAX_RECENT_FILES = 10;
+
+    /** Default Python terminal command for Windows */
+    public static final String DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS = "%windir%\\System32\\cmd.exe \"/K\" %USERPROFILE%\\anaconda3\\Scripts\\activate.bat";
 
     // Private constructor to prevent instantiation
     private PreferenceKeys() {

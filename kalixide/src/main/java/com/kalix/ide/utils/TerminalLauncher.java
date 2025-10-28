@@ -108,7 +108,6 @@ public class TerminalLauncher {
             command.add("wt");
             command.add("-d");
             command.add(directory.getAbsolutePath());
-            command.add("--focus");  // Bring to foreground
             command.add("powershell");
             command.add("-NoExit");
             command.add("-Command");
@@ -226,7 +225,8 @@ public class TerminalLauncher {
      */
     private static boolean isWindowsTerminalAvailable() {
         try {
-            ProcessBuilder pb = new ProcessBuilder("wt", "--help");
+            // Use 'where' command to check if wt.exe exists without executing it
+            ProcessBuilder pb = new ProcessBuilder("where", "wt");
             Process process = pb.start();
             process.waitFor();
             return process.exitValue() == 0;

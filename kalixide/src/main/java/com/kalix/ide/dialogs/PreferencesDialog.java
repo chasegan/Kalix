@@ -456,6 +456,7 @@ public class PreferencesDialog extends JDialog {
      */
     private class FilePreferencePanel extends PreferencePanel {
         private JTextField externalEditorField;
+        private JTextField pythonTerminalField;
 
         public FilePreferencePanel() {
             super("Integrations");
@@ -484,12 +485,41 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(externalEditorField, gbc);
 
+            // Python terminal command
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            formPanel.add(new JLabel("Terminal Command:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            pythonTerminalField = new JTextField(PreferenceManager.getFileString(
+                PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, getDefaultPythonTerminalCommand()));
+            pythonTerminalField.setToolTipText("Command to launch a Python-enabled terminal (e.g., Anaconda). Leave empty to use regular terminal.");
+            pythonTerminalField.addActionListener(e -> savePythonTerminalCommand());
+            pythonTerminalField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
+            });
+            formPanel.add(pythonTerminalField, gbc);
+
             add(formPanel, BorderLayout.NORTH);
         }
 
         private void saveExternalEditorCommand() {
             String command = externalEditorField.getText().trim();
             PreferenceManager.setFileString(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, command);
+        }
+
+        private void savePythonTerminalCommand() {
+            String command = pythonTerminalField.getText().trim();
+            PreferenceManager.setFileString(PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, command);
+        }
+
+        private String getDefaultPythonTerminalCommand() {
+            String osName = System.getProperty("os.name").toLowerCase();
+            if (osName.contains("win")) {
+                return PreferenceKeys.DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS;
+            }
+            return "";
         }
     }
 
