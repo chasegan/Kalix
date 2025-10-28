@@ -6,10 +6,12 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -27,6 +29,9 @@ public class SessionManager {
     private final Consumer<String> statusUpdater;
     private final Consumer<SessionEvent> eventCallback;
     private Consumer<String> timeSeriesResponseHandler;
+
+    // Multi-listener support for session events
+    private final List<Consumer<SessionEvent>> sessionEventListeners = new CopyOnWriteArrayList<>();
     
     /**
      * States a kalixcli session can be in.
@@ -310,7 +315,28 @@ public class SessionManager {
     public Map<String, KalixSession> getActiveSessions() {
         return Map.copyOf(activeSessions);
     }
-    
+
+    /**
+     * Registers a listener to receive session state change events.
+     * Listeners are called from background threads and must handle EDT marshaling if needed.
+     *
+     * @param listener Consumer that will receive SessionEvent notifications
+     */
+    public void addSessionEventListener(Consumer<SessionEvent> listener) {
+        if (listener != null) {
+            sessionEventListeners.add(listener);
+        }
+    }
+
+    /**
+     * Unregisters a previously registered session event listener.
+     *
+     * @param listener The listener to remove
+     */
+    public void removeSessionEventListener(Consumer<SessionEvent> listener) {
+        sessionEventListeners.remove(listener);
+    }
+
     /**
      * Removes a terminated session from the session list.
      * This is for cleanup purposes - only works on TERMINATED or ERROR sessions.
@@ -549,11 +575,26 @@ public class SessionManager {
      * Fires a session event to registered callbacks.
      */
     private void fireSessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
-        try {
-            eventCallback.accept(new SessionEvent(sessionKey, oldState, newState, message));
-        } catch (Exception e) {
-            // Don't let callback exceptions break session management
-            logger.warn("Error in session event callback: {}", e.getMessage());
+        SessionEvent event = new SessionEvent(sessionKey, oldState, newState, message);
+
+        // Fire to legacy single callback (backwards compatible)
+        if (eventCallback != null) {
+            try {
+                eventCallback.accept(event);
+            } catch (Exception e) {
+                // Don't let callback exceptions break session management
+                logger.warn("Error in session event callback: {}", e.getMessage());
+            }
+        }
+
+        // Fire to all registered listeners
+        for (Consumer<SessionEvent> listener : sessionEventListeners) {
+            try {
+                listener.accept(event);
+            } catch (Exception e) {
+                // Don't let listener exceptions break session management or other listeners
+                logger.warn("Error in session event listener: {}", e.getMessage(), e);
+            }
         }
     }
     
