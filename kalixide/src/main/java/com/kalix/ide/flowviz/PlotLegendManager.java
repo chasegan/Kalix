@@ -62,6 +62,9 @@ public class PlotLegendManager {
     private int y = -1;
     private DisplayMode displayMode = DisplayMode.FULL_NAME;
 
+    // Callback for collapsed state changes
+    private Runnable onCollapsedChanged = null;
+
     // Series data
     private final List<LegendEntry> entries = new ArrayList<>();
 
@@ -314,7 +317,7 @@ public class PlotLegendManager {
         // Draw title with clickable area
         g.setFont(new Font("Dialog", Font.BOLD, 11));
         FontMetrics titleFm = g.getFontMetrics();
-        int titleWidth = titleFm.stringWidth("Legend");
+        int titleWidth = titleFm.stringWidth("Key");
         int titleX = x + 6;
         int titleY = y + 2;
 
@@ -329,7 +332,7 @@ public class PlotLegendManager {
 
         // Draw title text
         g.setColor(TITLE_COLOR);
-        g.drawString("Legend", titleX, y + 16);
+        g.drawString("Key", titleX, y + 16);
 
         // Draw collapse button
         String buttonText = collapsed ? "[+]" : "[-]";
@@ -616,10 +619,17 @@ public class PlotLegendManager {
     public void setCollapsed(boolean collapsed) {
         this.collapsed = collapsed;
         savePreferences();
+        if (onCollapsedChanged != null) {
+            onCollapsedChanged.run();
+        }
     }
 
     public boolean isCollapsed() {
         return collapsed;
+    }
+
+    public void setOnCollapsedChanged(Runnable callback) {
+        this.onCollapsedChanged = callback;
     }
 
     public void setPosition(int x, int y) {

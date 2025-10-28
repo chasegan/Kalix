@@ -339,6 +339,17 @@ public class PlotPanel extends JPanel {
         return coordinateDisplayManager != null && coordinateDisplayManager.isShowCoordinates();
     }
 
+    public void setLegendCollapsed(boolean collapsed) {
+        if (legendManager != null) {
+            legendManager.setCollapsed(collapsed);
+            repaint();
+        }
+    }
+
+    public boolean isLegendCollapsed() {
+        return legendManager != null && legendManager.isCollapsed();
+    }
+
     /**
      * Sets the precision preference supplier for export operations.
      * This only affects data export format, not plotting functionality.

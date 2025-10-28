@@ -5,7 +5,7 @@ package com.kalix.ide.flowviz.transform;
  */
 public enum AggregationPeriod {
     /** Original resolution - no aggregation. */
-    ORIGINAL("Original resolution"),
+    ORIGINAL("Original"),
 
     /** Aggregate to monthly values. */
     MONTHLY("Monthly"),

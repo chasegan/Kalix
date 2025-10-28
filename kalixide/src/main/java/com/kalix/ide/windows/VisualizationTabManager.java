@@ -57,7 +57,7 @@ public class VisualizationTabManager {
      * Aggregation period options for time series data.
      */
     private static final String[] AGGREGATION_OPTIONS = {
-        "Original resolution",
+        "Original",
         "Monthly",
         "Annual (Jan-Dec)",
         "Annual (Feb-Jan)",
@@ -178,6 +178,7 @@ public class VisualizationTabManager {
             .addZoomButton()
             .addAutoYToggle(initialAutoY)
             .addCoordinatesToggle(initialShowCoordinates)
+            .addLegendToggle(!plotPanel.isLegendCollapsed())
             .build();
     }
 
@@ -206,6 +207,10 @@ public class VisualizationTabManager {
         }
 
         PlotToolbarBuilder addAggregationControls() {
+            // Resolution label
+            toolbar.add(new JLabel("Resolution:"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
             // Aggregation period dropdown
             aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
                 UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
@@ -280,6 +285,23 @@ public class VisualizationTabManager {
             JToggleButton button = createToggleButton(FontAwesomeSolid.CROSSHAIRS,
                 "Show Coordinates", initialState);
             button.addActionListener(e -> plotPanel.setShowCoordinates(button.isSelected()));
+            toolbar.add(button);
+            return this;
+        }
+
+        PlotToolbarBuilder addLegendToggle(boolean initialState) {
+            JToggleButton button = createToggleButton(FontAwesomeSolid.KEY,
+                "Show Key", initialState);
+
+            // Update collapsed state when button is clicked
+            button.addActionListener(e -> plotPanel.setLegendCollapsed(!button.isSelected()));
+
+            // Set up callback to update button when collapsed state changes from other sources
+            plotPanel.getLegendManager().setOnCollapsedChanged(() -> {
+                boolean collapsed = plotPanel.isLegendCollapsed();
+                button.setSelected(!collapsed);
+            });
+
             toolbar.add(button);
             return this;
         }

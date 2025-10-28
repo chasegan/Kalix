@@ -40,16 +40,18 @@ public class RunManager extends JFrame {
     private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
 
     // Tree components
-    private JTree runTree;
+    private JTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
+    private DefaultMutableTreeNode lastRunNode;
     private DefaultMutableTreeNode currentRunsNode;
     private DefaultMutableTreeNode libraryNode;
+    private DefaultMutableTreeNode loadedDatasetsNode;
 
-    // Outputs tree components
-    private JTree outputsTree;
-    private DefaultTreeModel outputsTreeModel;
-    private JScrollPane outputsScrollPane;
+    // Timeseries tree components
+    private JTree timeseriesTree;
+    private DefaultTreeModel timeseriesTreeModel;
+    private JScrollPane timeseriesScrollPane;
 
     // Visualization tab manager
     private VisualizationTabManager tabManager;
@@ -224,7 +226,7 @@ public class RunManager extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(1000, 600); // Increased width by 25% (800 -> 1000) for better outputs viewing
+        setSize(1100, 600);
 
         if (parentFrame != null) {
             setLocationRelativeTo(parentFrame);
@@ -242,25 +244,30 @@ public class RunManager extends JFrame {
     private void initializeComponents() {
         // Initialize tree structure
         rootNode = new DefaultMutableTreeNode("Runs");
+        lastRunNode = new DefaultMutableTreeNode("Last run");
         currentRunsNode = new DefaultMutableTreeNode("Current runs");
-        libraryNode = new DefaultMutableTreeNode("Library");
+        libraryNode = new DefaultMutableTreeNode("Run library");
+        loadedDatasetsNode = new DefaultMutableTreeNode("Loaded datasets");
 
+        rootNode.add(lastRunNode);
         rootNode.add(currentRunsNode);
         rootNode.add(libraryNode);
+        rootNode.add(loadedDatasetsNode);
 
         treeModel = new DefaultTreeModel(rootNode);
-        runTree = new JTree(treeModel);
-        runTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
-        runTree.setRootVisible(false);
-        runTree.setShowsRootHandles(true);
-        runTree.setCellRenderer(new RunTreeCellRenderer());
+        timeseriesSourceTree = new JTree(treeModel);
+        timeseriesSourceTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
+        timeseriesSourceTree.setRootVisible(false);
+        timeseriesSourceTree.setShowsRootHandles(true);
+        timeseriesSourceTree.setCellRenderer(new RunTreeCellRenderer());
 
         // Expand the tree nodes by default
-        runTree.expandPath(new TreePath(currentRunsNode.getPath()));
-        runTree.expandPath(new TreePath(libraryNode.getPath()));
+        timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
+        timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
+        timeseriesSourceTree.expandPath(new TreePath(libraryNode.getPath()));
 
         // Add tree selection listener to update details panel with outputs
-        runTree.addTreeSelectionListener(this::onRunTreeSelectionChanged);
+        timeseriesSourceTree.addTreeSelectionListener(this::onRunTreeSelectionChanged);
 
         // Add context menu
         setupContextMenu();
@@ -270,24 +277,24 @@ public class RunManager extends JFrame {
     }
 
     private void createDetailsComponents() {
-        // Create outputs tree
+        // Create timeseries tree
         DefaultMutableTreeNode outputsRootNode = new DefaultMutableTreeNode("Outputs");
-        outputsTreeModel = new DefaultTreeModel(outputsRootNode);
-        outputsTree = new JTree(outputsTreeModel);
-        outputsTree.setRootVisible(false);
-        outputsTree.setShowsRootHandles(true);
-        outputsTree.setCellRenderer(new OutputsTreeCellRenderer());
+        timeseriesTreeModel = new DefaultTreeModel(outputsRootNode);
+        timeseriesTree = new JTree(timeseriesTreeModel);
+        timeseriesTree.setRootVisible(false);
+        timeseriesTree.setShowsRootHandles(true);
+        timeseriesTree.setCellRenderer(new OutputsTreeCellRenderer());
 
-        // Enable multiple selection for the outputs tree to allow plotting multiple series
-        outputsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
+        // Enable multiple selection for the timeseries tree to allow plotting multiple series
+        timeseriesTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
 
         // Add selection listener to fetch timeseries data for leaf nodes and update plot
-        outputsTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
+        timeseriesTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
 
         // Add context menu for expand/collapse all
         setupOutputsTreeContextMenu();
 
-        outputsScrollPane = new JScrollPane(outputsTree);
+        timeseriesScrollPane = new JScrollPane(timeseriesTree);
 
         // Create shared dataset and color map
         plotDataSet = new DataSet();
@@ -306,27 +313,27 @@ public class RunManager extends JFrame {
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(190);
+        splitPane.setDividerLocation(240);
         splitPane.setResizeWeight(0);
 
-        // Left side: vertical split with runs tree and outputs tree
+        // Left side: vertical split with timeseries source tree and timeseries tree
         JSplitPane leftSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        leftSplitPane.setDividerLocation(200); // 200px for runs tree
-        leftSplitPane.setResizeWeight(0.5); // Equal space for both trees
+        leftSplitPane.setDividerLocation(200);
+        leftSplitPane.setResizeWeight(0.5);
 
-        // Top of left side: runs tree
+        // Top of left side: timeseries source tree
         JPanel runsPanel = new JPanel(new BorderLayout());
-        runsPanel.setBorder(BorderFactory.createTitledBorder("Runs"));
-        JScrollPane treeScrollPane = new JScrollPane(runTree);
+        runsPanel.setBorder(BorderFactory.createTitledBorder("Kalix"));
+        JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
         runsPanel.add(treeScrollPane, BorderLayout.CENTER);
 
-        // Bottom of left side: outputs tree
-        JPanel outputsPanel = new JPanel(new BorderLayout());
-        outputsPanel.setBorder(BorderFactory.createTitledBorder("Available timeseries"));
-        outputsPanel.add(outputsScrollPane, BorderLayout.CENTER);
+        // Bottom of left side: timeseries tree
+        JPanel timeseriesPanel = new JPanel(new BorderLayout());
+        timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
+        timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
-        leftSplitPane.setBottomComponent(outputsPanel);
+        leftSplitPane.setBottomComponent(timeseriesPanel);
 
         // Right side: tabbed pane for visualizations
         splitPane.setLeftComponent(leftSplitPane);
@@ -407,7 +414,7 @@ public class RunManager extends JFrame {
         contextMenu.add(sessionManagerItem);
 
         // Add mouse listener for right-click
-        runTree.addMouseListener(new MouseAdapter() {
+        timeseriesSourceTree.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (e.isPopupTrigger()) {
@@ -424,15 +431,15 @@ public class RunManager extends JFrame {
 
             private void showContextMenu(MouseEvent e) {
                 // Get the path at the mouse location
-                TreePath path = runTree.getPathForLocation(e.getX(), e.getY());
+                TreePath path = timeseriesSourceTree.getPathForLocation(e.getX(), e.getY());
                 if (path != null) {
                     // Select the node that was right-clicked
-                    runTree.setSelectionPath(path);
+                    timeseriesSourceTree.setSelectionPath(path);
 
                     // Check if it's a run item (not a folder)
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
                     if (node.getUserObject() instanceof RunInfo) {
-                        contextMenu.show(runTree, e.getX(), e.getY());
+                        contextMenu.show(timeseriesSourceTree, e.getX(), e.getY());
                     }
                 }
             }
@@ -440,7 +447,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Sets up the context menu for the outputs tree with expand/collapse operations.
+     * Sets up the context menu for the timeseries tree with expand/collapse operations.
      */
     private void setupOutputsTreeContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
@@ -454,7 +461,7 @@ public class RunManager extends JFrame {
         contextMenu.add(collapseAllItem);
 
         // Add mouse listener for right-click
-        outputsTree.addMouseListener(new MouseAdapter() {
+        timeseriesTree.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (e.isPopupTrigger()) {
@@ -471,16 +478,16 @@ public class RunManager extends JFrame {
 
             private void showContextMenu(MouseEvent e) {
                 // Get the path at the mouse location
-                TreePath path = outputsTree.getPathForLocation(e.getX(), e.getY());
+                TreePath path = timeseriesTree.getPathForLocation(e.getX(), e.getY());
                 if (path != null) {
                     // Select the node that was right-clicked if not already selected
-                    if (!outputsTree.isPathSelected(path)) {
-                        outputsTree.setSelectionPath(path);
+                    if (!timeseriesTree.isPathSelected(path)) {
+                        timeseriesTree.setSelectionPath(path);
                     }
-                    contextMenu.show(outputsTree, e.getX(), e.getY());
+                    contextMenu.show(timeseriesTree, e.getX(), e.getY());
                 } else {
                     // Right-clicked on empty space - still show menu (applies to root)
-                    contextMenu.show(outputsTree, e.getX(), e.getY());
+                    contextMenu.show(timeseriesTree, e.getX(), e.getY());
                 }
             }
         });
@@ -490,10 +497,10 @@ public class RunManager extends JFrame {
      * Expands all nodes recursively from the selected node(s).
      */
     private void expandAllFromSelected() {
-        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
             // No selection - expand all from root
-            expandAllChildren(new TreePath(outputsTreeModel.getRoot()));
+            expandAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
         } else {
             // Expand all from each selected node
             for (TreePath path : selectedPaths) {
@@ -506,7 +513,7 @@ public class RunManager extends JFrame {
      * Recursively expands all children of a given tree path.
      */
     private void expandAllChildren(TreePath path) {
-        outputsTree.expandPath(path);
+        timeseriesTree.expandPath(path);
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         for (int i = 0; i < node.getChildCount(); i++) {
             TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
@@ -518,10 +525,10 @@ public class RunManager extends JFrame {
      * Collapses all nodes recursively from the selected node(s).
      */
     private void collapseAllFromSelected() {
-        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
             // No selection - collapse all from root
-            collapseAllChildren(new TreePath(outputsTreeModel.getRoot()));
+            collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
         } else {
             // Collapse all from each selected node
             for (TreePath path : selectedPaths) {
@@ -540,7 +547,7 @@ public class RunManager extends JFrame {
             TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
             collapseAllChildren(childPath);
         }
-        outputsTree.collapsePath(path);
+        timeseriesTree.collapsePath(path);
     }
 
     public void refreshRuns() {
@@ -585,7 +592,7 @@ public class RunManager extends JFrame {
                         lastKnownStatus.put(sessionKey, currentStatus);
 
                         // Update outputs if this run is currently selected
-                        TreePath selectedPath = runTree.getSelectionPath();
+                        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
                         if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
                             updateOutputsTree(runInfo);
                         }
@@ -611,7 +618,7 @@ public class RunManager extends JFrame {
             // Only notify of structure changes if something actually changed
             if (treeStructureChanged[0]) {
                 treeModel.nodeStructureChanged(currentRunsNode);
-                runTree.expandPath(new TreePath(currentRunsNode.getPath()));
+                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
             }
         });
     }
@@ -622,7 +629,7 @@ public class RunManager extends JFrame {
      * Shows a dialog to rename the selected run.
      */
     private void renameRunFromContextMenu() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
@@ -682,7 +689,7 @@ public class RunManager extends JFrame {
      * Opens the KalixCLI Session Manager window with the selected run's session.
      */
     private void showInSessionManagerFromContextMenu() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
@@ -697,7 +704,7 @@ public class RunManager extends JFrame {
      * Shows the model INI string for the selected run in a MinimalEditorWindow.
      */
     private void showModelFromContextMenu() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
@@ -738,7 +745,7 @@ public class RunManager extends JFrame {
      * Removes a run from the context menu - terminates if active and removes from list.
      */
     private void removeRunFromContextMenu() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
@@ -799,7 +806,7 @@ public class RunManager extends JFrame {
      * Handles save results action from context menu.
      */
     private void saveResultsFromContextMenu() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
@@ -869,7 +876,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Handles tree selection changes to update the outputs tree.
+     * Handles tree selection changes to update the timeseries tree.
      */
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
@@ -881,16 +888,16 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Updates the outputs tree based on current run tree selection.
+     * Updates the timeseries tree based on current run tree selection.
      */
     private void updateOutputsTree() {
-        TreePath[] selectedPaths = runTree.getSelectionPaths();
+        TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear outputs tree when no runs selected
-            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            // Clear timeseries tree when no runs selected
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
             root.removeAllChildren();
-            root.add(new DefaultMutableTreeNode("Select a run to view outputs"));
-            outputsTreeModel.reload();
+            root.add(new DefaultMutableTreeNode("Select one or more datasets"));
+            timeseriesTreeModel.reload();
             return;
         }
 
@@ -904,31 +911,31 @@ public class RunManager extends JFrame {
         }
 
         if (selectedRuns.isEmpty()) {
-            // Selection is on parent nodes only (Current runs, Library)
-            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            // Selection is on parent nodes only (Last run, Current runs, Run library, Loaded datasets)
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
             root.removeAllChildren();
-            root.add(new DefaultMutableTreeNode("Select a run to view outputs"));
-            outputsTreeModel.reload();
+            root.add(new DefaultMutableTreeNode("Select one or more datasets"));
+            timeseriesTreeModel.reload();
         } else {
-            // Update outputs tree with all selected runs
+            // Update timeseries tree with all selected runs
             updateOutputsTreeForMultipleRuns(selectedRuns);
         }
     }
 
     /**
-     * Updates the outputs tree based on the selected run.
+     * Updates the timeseries tree based on the selected run.
      */
     private void updateOutputsTree(RunInfo runInfo) {
         // Remember current expansion state
         List<TreePath> expandedPaths = new ArrayList<>();
-        for (int i = 0; i < outputsTree.getRowCount(); i++) {
-            TreePath path = outputsTree.getPathForRow(i);
-            if (outputsTree.isExpanded(path)) {
+        for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+            TreePath path = timeseriesTree.getPathForRow(i);
+            if (timeseriesTree.isExpanded(path)) {
                 expandedPaths.add(path);
             }
         }
 
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
         root.removeAllChildren();
 
         // Get outputs from the run's program
@@ -954,13 +961,13 @@ public class RunManager extends JFrame {
             root.add(new DefaultMutableTreeNode(message));
         }
 
-        outputsTreeModel.reload();
+        timeseriesTreeModel.reload();
 
         // Restore expansion state or expand all if first time
         if (expandedPaths.isEmpty()) {
             // First time - expand all nodes
-            for (int i = 0; i < outputsTree.getRowCount(); i++) {
-                outputsTree.expandRow(i);
+            for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                timeseriesTree.expandRow(i);
             }
         } else {
             // Restore previous expansion state
@@ -968,28 +975,28 @@ public class RunManager extends JFrame {
                 // Try to find equivalent path in new tree
                 TreePath newPath = findEquivalentPath(expandedPath);
                 if (newPath != null) {
-                    outputsTree.expandPath(newPath);
+                    timeseriesTree.expandPath(newPath);
                 }
             }
         }
     }
 
     /**
-     * Updates the outputs tree for multiple selected runs using smart hybrid structure.
+     * Updates the timeseries tree for multiple selected runs using smart hybrid structure.
      * Series available in multiple runs become parent nodes with run children.
      * Series available in only one run become simple leaf nodes.
      */
     private void updateOutputsTreeForMultipleRuns(List<RunInfo> selectedRuns) {
         // Remember current expansion state
         List<TreePath> expandedPaths = new ArrayList<>();
-        for (int i = 0; i < outputsTree.getRowCount(); i++) {
-            TreePath path = outputsTree.getPathForRow(i);
-            if (outputsTree.isExpanded(path)) {
+        for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+            TreePath path = timeseriesTree.getPathForRow(i);
+            if (timeseriesTree.isExpanded(path)) {
                 expandedPaths.add(path);
             }
         }
 
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
         root.removeAllChildren();
 
         // If only one run selected, use the original simple tree structure
@@ -1000,20 +1007,20 @@ public class RunManager extends JFrame {
             updateOutputsTreeMultiRun(root, selectedRuns);
         }
 
-        outputsTreeModel.reload();
+        timeseriesTreeModel.reload();
 
         // Restore expansion state or expand all if first time
         if (expandedPaths.isEmpty()) {
             // First time - expand all nodes
-            for (int i = 0; i < outputsTree.getRowCount(); i++) {
-                outputsTree.expandRow(i);
+            for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                timeseriesTree.expandRow(i);
             }
         } else {
             // Restore previous expansion state
             for (TreePath expandedPath : expandedPaths) {
                 TreePath newPath = findEquivalentPath(expandedPath);
                 if (newPath != null) {
-                    outputsTree.expandPath(newPath);
+                    timeseriesTree.expandPath(newPath);
                 }
             }
         }
@@ -1215,12 +1222,12 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Handles selection changes in the outputs tree.
+     * Handles selection changes in the timeseries tree.
      * Supports recursive selection: selecting a parent node plots all its leaf children.
      * Fetches timeseries data for leaf nodes and updates plot and stats.
      */
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        TreePath[] selectedPaths = outputsTree.getSelectionPaths();
+        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
             // Clear plot and stats when nothing is selected
             clearPlotAndStats();
@@ -1390,7 +1397,7 @@ public class RunManager extends JFrame {
         // For regular folder nodes (String user objects), check depth
         if (!node.isLeaf() && userObject instanceof String) {
             // Check if this is a top-level folder (direct child of invisible root)
-            DefaultMutableTreeNode root = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
             if (node.getParent() == root) {
                 // Top-level folder - don't recurse to prevent accidental mass plotting
                 // User must select specific sub-folders or series
@@ -1438,7 +1445,7 @@ public class RunManager extends JFrame {
      * Get the currently selected run information
      */
     private RunInfo getSelectedRunInfo() {
-        TreePath selectedPath = runTree.getSelectionPath();
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
         if (selectedPath == null) {
             return null;
         }
@@ -1501,7 +1508,7 @@ public class RunManager extends JFrame {
         }
 
         // Try to find equivalent path in current tree
-        DefaultMutableTreeNode currentNode = (DefaultMutableTreeNode) outputsTreeModel.getRoot();
+        DefaultMutableTreeNode currentNode = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
         List<Object> newPathComponents = new ArrayList<>();
         newPathComponents.add(currentNode);
 
@@ -1537,17 +1544,17 @@ public class RunManager extends JFrame {
                 TreePath pathToRun = new TreePath(runNode.getPath());
 
                 // Expand parent nodes to make the run visible
-                runTree.expandPath(new TreePath(currentRunsNode.getPath()));
+                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
                 // Select the run
                 isUpdatingSelection = true;
-                runTree.setSelectionPath(pathToRun);
+                timeseriesSourceTree.setSelectionPath(pathToRun);
                 isUpdatingSelection = false;
 
                 // Scroll to make the selection visible
-                runTree.scrollPathToVisible(pathToRun);
+                timeseriesSourceTree.scrollPathToVisible(pathToRun);
 
-                // Update outputs tree
+                // Update timeseries tree
                 updateOutputsTree();
             }
         });
@@ -1705,7 +1712,7 @@ public class RunManager extends JFrame {
 
 
     /**
-     * Custom tree cell renderer for outputs tree.
+     * Custom tree cell renderer for timeseries tree.
      */
     private static class OutputsTreeCellRenderer extends DefaultTreeCellRenderer {
         @Override
@@ -1773,6 +1780,7 @@ public class RunManager extends JFrame {
                 if (userObject instanceof RunInfo) {
                     RunInfo runInfo = (RunInfo) userObject;
                     setText(runInfo.runName);
+                    setToolTipText("UID: " + runInfo.session.getKalixcliUid());
 
                     RunStatus runStatus = runInfo.getRunStatus();
 
@@ -1824,6 +1832,9 @@ public class RunManager extends JFrame {
                             setIcon(null);
                             break;
                     }
+                } else {
+                    // Clear tooltip for non-RunInfo nodes (parent nodes)
+                    setToolTipText(null);
                 }
             }
 
