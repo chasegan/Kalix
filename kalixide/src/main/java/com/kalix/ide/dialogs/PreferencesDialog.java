@@ -54,6 +54,7 @@ public class PreferencesDialog extends JDialog {
     private LinterPreferencesPanel linterPanel;
     private SystemPreferencePanel systemPanel;
     private NodeDiagramPreferencePanel nodeDiagramPanel;
+    private FontPreferencePanel fontPanel;
 
     // Panel identifiers
     private static final String THEME_PANEL = "theme";
@@ -64,6 +65,7 @@ public class PreferencesDialog extends JDialog {
     private static final String LINTER_PANEL = "linter";
     private static final String SYSTEM_PANEL = "system";
     private static final String NODE_DIAGRAM_PANEL = "nodediagram";
+    private static final String FONT_PANEL = "font";
 
     /**
      * Creates a new professional preferences dialog.
@@ -154,6 +156,7 @@ public class PreferencesDialog extends JDialog {
         DefaultMutableTreeNode editor = new DefaultMutableTreeNode("Editor");
         editor.add(new DefaultMutableTreeNode("Load and Save"));
         editor.add(new DefaultMutableTreeNode("Themes"));
+        editor.add(new DefaultMutableTreeNode("Font"));
         editor.add(new DefaultMutableTreeNode("Model Linting"));
         editor.add(new DefaultMutableTreeNode("Node Diagram"));
         root.add(editor);
@@ -193,6 +196,9 @@ public class PreferencesDialog extends JDialog {
                     break;
                 case "Themes":
                     cardLayout.show(contentPanel, THEME_PANEL);
+                    break;
+                case "Font":
+                    cardLayout.show(contentPanel, FONT_PANEL);
                     break;
                 case "Integrations":
                     cardLayout.show(contentPanel, FILE_PANEL);
@@ -239,6 +245,7 @@ public class PreferencesDialog extends JDialog {
 
         systemPanel = new SystemPreferencePanel();
         nodeDiagramPanel = new NodeDiagramPreferencePanel();
+        fontPanel = new FontPreferencePanel();
 
         contentPanel.add(themePanel, THEME_PANEL);
         contentPanel.add(filePanel, FILE_PANEL);
@@ -248,6 +255,7 @@ public class PreferencesDialog extends JDialog {
         contentPanel.add(linterPanel, LINTER_PANEL);
         contentPanel.add(systemPanel, SYSTEM_PANEL);
         contentPanel.add(nodeDiagramPanel, NODE_DIAGRAM_PANEL);
+        contentPanel.add(fontPanel, FONT_PANEL);
     }
 
     /**
@@ -880,6 +888,65 @@ public class PreferencesDialog extends JDialog {
                 }
             });
             formPanel.add(gridlinesCheckBox, gbc);
+
+            add(formPanel, BorderLayout.NORTH);
+        }
+    }
+
+    /**
+     * Font preferences panel.
+     */
+    private class FontPreferencePanel extends PreferencePanel {
+        private JSpinner fontSizeSpinner;
+
+        public FontPreferencePanel() {
+            super("Font");
+            initializePanel();
+        }
+
+        private void initializePanel() {
+            JPanel formPanel = createFormPanel();
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.anchor = GridBagConstraints.WEST;
+
+            // Font size setting
+            gbc.gridx = 0; gbc.gridy = 0;
+            formPanel.add(new JLabel("Font Size:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            SpinnerNumberModel spinnerModel = new SpinnerNumberModel(
+                PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12), // current value
+                8,    // minimum
+                24,   // maximum
+                1     // step
+            );
+            fontSizeSpinner = new JSpinner(spinnerModel);
+            fontSizeSpinner.setToolTipText("Set the font size for the text editor (8-24 points)");
+
+            // Set a reasonable width for the spinner
+            JComponent editor = fontSizeSpinner.getEditor();
+            if (editor instanceof JSpinner.DefaultEditor) {
+                ((JSpinner.DefaultEditor) editor).getTextField().setColumns(3);
+            }
+
+            fontSizeSpinner.addChangeListener(e -> {
+                int fontSize = (Integer) fontSizeSpinner.getValue();
+                PreferenceManager.setFileInt(PreferenceKeys.EDITOR_FONT_SIZE, fontSize);
+
+                // Update the text editor font immediately
+                if (textEditor != null) {
+                    textEditor.updateFontSize(fontSize);
+                }
+            });
+            formPanel.add(fontSizeSpinner, gbc);
+
+            gbc.gridx = 2; gbc.weightx = 0;
+            formPanel.add(new JLabel("pt"), gbc);
+
+            // Add a filler to push everything to the left
+            gbc.gridx = 3; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            formPanel.add(Box.createHorizontalGlue(), gbc);
 
             add(formPanel, BorderLayout.NORTH);
         }

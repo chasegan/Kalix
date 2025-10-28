@@ -53,6 +53,9 @@ public class PreferenceKeys {
     /** Syntax theme selection (string, default: "LIGHT") */
     public static final String UI_SYNTAX_THEME = "ui.syntaxTheme";
 
+    /** Editor font size (int, default: 12) */
+    public static final String EDITOR_FONT_SIZE = "editor.fontSize";
+
     /** Map gridlines visibility toggle (boolean, default: true) */
     public static final String MAP_SHOW_GRIDLINES = "map.showGridlines";
 

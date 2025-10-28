@@ -21,6 +21,7 @@ import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.managers.FontManager;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -76,15 +77,19 @@ public class EnhancedTextEditor extends JPanel {
     
     private void initializeComponents() {
         undoManager = new UndoManager();
-        
+
         textArea = new RSyntaxTextArea();
         textArea.setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI); // Test simplified custom TokenMaker
         textArea.setLineWrap(false); // Disable line wrapping
         textArea.setWrapStyleWord(false);
-        
+
+        // CRITICAL: Set monospace font to prevent cursor position mismatch
+        // Without this, proportional fonts cause cursor to appear ahead of actual typing position
+        configureMonospaceFont();
+
         // Enable bracket matching
         textArea.setBracketMatchingEnabled(true);
-        
+
         // Apply theme-aware colors
         updateThemeColors();
 
@@ -108,7 +113,38 @@ public class EnhancedTextEditor extends JPanel {
         setLayout(new BorderLayout());
         add(scrollPane, BorderLayout.CENTER);
     }
-    
+
+    /**
+     * Configures a monospace font for the text area.
+     * This is critical to prevent cursor position misalignment issues where the cursor
+     * appears ahead of the actual typing position due to proportional font usage.
+     *
+     * Uses the embedded JetBrains Mono font with automatic fallback to system fonts.
+     */
+    private void configureMonospaceFont() {
+        // Get the saved font size from preferences (default: 12pt)
+        int fontSize = PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12);
+
+        // Use FontManager to get the best available monospace font
+        // This will use embedded JetBrains Mono if available, otherwise fall back to system fonts
+        Font monoFont = FontManager.getMonospaceFont(fontSize);
+        textArea.setFont(monoFont);
+
+        logger.info("Configured text editor with font: {} (size {})", monoFont.getFontName(), monoFont.getSize());
+    }
+
+    /**
+     * Updates the font size of the text editor.
+     * This method can be called at runtime to change the font size dynamically.
+     *
+     * @param fontSize The new font size in points
+     */
+    public void updateFontSize(int fontSize) {
+        Font monoFont = FontManager.getMonospaceFont(fontSize);
+        textArea.setFont(monoFont);
+        logger.debug("Updated text editor font size to: {}", fontSize);
+    }
+
     /**
      * Initializes the manager instances.
      */

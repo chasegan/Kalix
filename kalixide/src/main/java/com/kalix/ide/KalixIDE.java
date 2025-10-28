@@ -29,6 +29,7 @@ import com.kalix.ide.managers.TitleBarManager;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.FileWatcherManager;
 import com.kalix.ide.managers.IconManager;
+import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
 import com.kalix.ide.preferences.PreferenceManager;
@@ -1437,6 +1438,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public static void main(String[] args) {
         // Configure system properties for better macOS integration
         ThemeManager.configureSystemProperties();
+
+        // Initialize embedded fonts early to ensure they're available
+        FontManager.initialize();
 
         SwingUtilities.invokeLater(() -> {
             try {
