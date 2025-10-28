@@ -13,6 +13,8 @@ import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
@@ -31,6 +33,8 @@ import java.util.function.Consumer;
  * Replaces the debugging-focused CLI Sessions window with a more intuitive interface.
  */
 public class RunManager extends JFrame {
+
+    private static final Logger logger = LoggerFactory.getLogger(RunManager.class);
 
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
@@ -70,6 +74,12 @@ public class RunManager extends JFrame {
     private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
     private Map<String, RunStatus> lastKnownStatus = new HashMap<>();
     private int runCounter = 1;
+
+    // Last run tracking
+    private RunInfo lastRunInfo = null;
+    private DefaultMutableTreeNode lastRunChildNode = null;
+    private Map<String, Long> completionTimestamps = new HashMap<>();
+    private long lastRunCompletionTime = 0L;
 
     // Flag to prevent selection listener from firing during programmatic updates
     private boolean isUpdatingSelection = false;
@@ -255,16 +265,44 @@ public class RunManager extends JFrame {
         rootNode.add(loadedDatasetsNode);
 
         treeModel = new DefaultTreeModel(rootNode);
-        timeseriesSourceTree = new JTree(treeModel);
+        timeseriesSourceTree = new JTree(treeModel) {
+            @Override
+            public String getToolTipText(MouseEvent evt) {
+                if (getRowForLocation(evt.getX(), evt.getY()) == -1) {
+                    return null;
+                }
+                TreePath curPath = getPathForLocation(evt.getX(), evt.getY());
+                if (curPath == null) {
+                    return null;
+                }
+                Object component = curPath.getLastPathComponent();
+
+                if (component instanceof DefaultMutableTreeNode) {
+                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) component;
+                    Object userObject = node.getUserObject();
+
+                    if (userObject instanceof RunInfo) {
+                        RunInfo runInfo = (RunInfo) userObject;
+                        String uid = runInfo.session.getKalixcliUid();
+                        return "UID: " + uid;
+                    }
+                }
+                return null;
+            }
+        };
         timeseriesSourceTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
         timeseriesSourceTree.setRootVisible(false);
         timeseriesSourceTree.setShowsRootHandles(true);
         timeseriesSourceTree.setCellRenderer(new RunTreeCellRenderer());
 
+        // Enable tooltips for the tree
+        ToolTipManager.sharedInstance().registerComponent(timeseriesSourceTree);
+
         // Expand the tree nodes by default
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
         timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
         timeseriesSourceTree.expandPath(new TreePath(libraryNode.getPath()));
+        timeseriesSourceTree.expandPath(new TreePath(loadedDatasetsNode.getPath()));
 
         // Add tree selection listener to update details panel with outputs
         timeseriesSourceTree.addTreeSelectionListener(this::onRunTreeSelectionChanged);
@@ -591,6 +629,18 @@ public class RunManager extends JFrame {
                         treeModel.nodeChanged(existingNode);
                         lastKnownStatus.put(sessionKey, currentStatus);
 
+                        // Check if run just completed
+                        if (currentStatus == RunStatus.DONE && lastStatus != RunStatus.DONE) {
+                            // Record completion timestamp
+                            long completionTime = System.currentTimeMillis();
+                            completionTimestamps.put(sessionKey, completionTime);
+
+                            // Update Last if this is more recent
+                            if (completionTime > lastRunCompletionTime) {
+                                updateLastRun(runInfo, completionTime);
+                            }
+                        }
+
                         // Update outputs if this run is currently selected
                         TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
                         if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
@@ -609,6 +659,17 @@ public class RunManager extends JFrame {
                     currentRunsNode.remove(nodeToRemove);
                     sessionToRunName.remove(sessionKey);
                     lastKnownStatus.remove(sessionKey);
+                    completionTimestamps.remove(sessionKey);
+
+                    // If this was the Last run, clear Last node
+                    if (lastRunInfo != null && lastRunInfo.session.getSessionKey().equals(sessionKey)) {
+                        lastRunInfo = null;
+                        lastRunCompletionTime = 0L;
+                        lastRunNode.removeAllChildren();
+                        lastRunChildNode = null;
+                        treeModel.nodeStructureChanged(lastRunNode);
+                    }
+
                     treeStructureChanged[0] = true;
                     return true;
                 }
@@ -623,7 +684,127 @@ public class RunManager extends JFrame {
         });
     }
 
+    /**
+     * Updates the Last run node to point to the most recently completed run.
+     */
+    private void updateLastRun(RunInfo newLastRun, long completionTime) {
+        lastRunInfo = newLastRun;
+        lastRunCompletionTime = completionTime;
 
+        // Update tree node
+        lastRunNode.removeAllChildren();
+        lastRunChildNode = new DefaultMutableTreeNode(
+            new RunInfo("Last", newLastRun.session)
+        );
+        lastRunNode.add(lastRunChildNode);
+        treeModel.nodeStructureChanged(lastRunNode);
+
+        // Expand the Last run node to show the new child
+        timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
+
+        // Refresh any plotted "[Last]" series to use the new Last run's data
+        refreshLastSeries();
+    }
+
+    /**
+     * Resolves a RunInfo to its actual session.
+     * If the run is "Last", returns the session of the actual last completed run.
+     */
+    private SessionManager.KalixSession resolveRunInfoSession(RunInfo runInfo) {
+        if ("Last".equals(runInfo.runName) && lastRunInfo != null) {
+            return lastRunInfo.session;
+        }
+        return runInfo.session;
+    }
+
+    /**
+     * Extracts the base series name from a series key.
+     * Series keys have format: "seriesName [RunName]"
+     */
+    private String extractSeriesName(String seriesKey) {
+        int bracketIndex = seriesKey.lastIndexOf(" [");
+        if (bracketIndex > 0) {
+            return seriesKey.substring(0, bracketIndex);
+        }
+        return seriesKey;
+    }
+
+    /**
+     * Refreshes all series that reference "[Last]" to use the new Last run's data.
+     * Called when the Last run changes to a new completed run.
+     */
+    private void refreshLastSeries() {
+        if (lastRunInfo == null) {
+            return;
+        }
+
+        // Find all series keys that end with " [Last]"
+        List<String> lastSeriesKeys = selectedSeries.stream()
+            .filter(key -> key.endsWith(" [Last]"))
+            .collect(java.util.stream.Collectors.toList());
+
+        if (lastSeriesKeys.isEmpty()) {
+            return;
+        }
+
+        String newSessionKey = lastRunInfo.session.getSessionKey();
+
+        // Refresh each "[Last]" series
+        for (String seriesKey : lastSeriesKeys) {
+            String seriesName = extractSeriesName(seriesKey);
+            Color seriesColor = seriesColorMap.get(seriesKey);
+
+            // Remove old data from plot
+            plotDataSet.removeSeries(seriesKey);
+
+            // Check if we have cached data from the new Last run
+            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(newSessionKey, seriesName);
+            if (cachedData != null) {
+                // Add immediately with cached data
+                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
+                addSeriesToPlot(renamedData, seriesColor);
+
+                // Update all stats tables
+                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                    model.addOrUpdateSeries(renamedData);
+                }
+            } else if (!timeSeriesRequestManager.isRequestInProgress(newSessionKey, seriesName)) {
+                // Request the new data
+                timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
+                    .thenAccept(timeSeriesData -> {
+                        SwingUtilities.invokeLater(() -> {
+                            // Check if this series is still selected
+                            if (selectedSeries.contains(seriesKey)) {
+                                TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
+                                addSeriesToPlot(renamedData, seriesColor);
+
+                                // Update all stats tables
+                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                                    model.addOrUpdateSeries(renamedData);
+                                }
+
+                                // Zoom to fit in all plot panels
+                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                                    panel.zoomToFit();
+                                }
+                            }
+                        });
+                    })
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            logger.error("Failed to fetch timeseries for Last run: {} from session {}",
+                                seriesName, newSessionKey, throwable);
+                        });
+                        return null;
+                    });
+            }
+        }
+
+        // Refresh all plot panels
+        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+            panel.refreshData();
+        }
+    }
 
     /**
      * Shows a dialog to rename the selected run.
@@ -1282,72 +1463,110 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Add new series
+        // Group series by their underlying data source (sessionKey + seriesName)
+        // This handles the case where multiple series (e.g., "Run_1" and "Last") reference the same data
+        Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
+
         for (String seriesKey : seriesToAdd) {
             SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
             if (leaf == null) continue;
 
-            String sessionKey = leaf.runInfo.session.getSessionKey();
+            // Resolve actual session (handles "Last" run)
+            SessionManager.KalixSession resolvedSession = resolveRunInfoSession(leaf.runInfo);
+            if (resolvedSession == null) {
+                // Can happen if "Last" is selected but no run has completed yet
+                continue;
+            }
+
+            String sessionKey = resolvedSession.getSessionKey();
             String seriesName = leaf.seriesName;
+            String dataSourceKey = sessionKey + "|" + seriesName;
+
+            dataSourceToSeriesKeys.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(seriesKey);
 
             // Assign consistent color to new series
             Color seriesColor = getColorForSeries(seriesKey);
             seriesColorMap.put(seriesKey, seriesColor);
+        }
+
+        // Process each unique data source once
+        for (Map.Entry<String, List<String>> entry : dataSourceToSeriesKeys.entrySet()) {
+            String dataSourceKey = entry.getKey();
+            List<String> seriesKeys = entry.getValue();
+
+            String[] parts = dataSourceKey.split("\\|", 2);
+            String sessionKey = parts[0];
+            String seriesName = parts[1];
 
             // Check if we already have this data cached
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
-                // Add immediately with cached data, using seriesKey as display name
-                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                addSeriesToPlot(renamedData, seriesColor);
+                // Add immediately with cached data for ALL series keys that reference it
+                for (String seriesKey : seriesKeys) {
+                    TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
+                    addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
 
-                // Add to all stats tables
-                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                    model.addOrUpdateSeries(renamedData);
+                    // Add to all stats tables
+                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                        model.addOrUpdateSeries(renamedData);
+                    }
                 }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                // Show loading state for this series in all stats tables
-                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                    model.addLoadingSeries(seriesKey);
+                // Show loading state for ALL series that reference this data
+                for (String seriesKey : seriesKeys) {
+                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                        model.addLoadingSeries(seriesKey);
+                    }
                 }
 
-                // Request the timeseries data
+                // Capture series keys for use in callback
+                final List<String> capturedSeriesKeys = new ArrayList<>(seriesKeys);
+
+                // Request the timeseries data ONCE for all series that reference it
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
-                            // Check if this series is still selected
-                            if (selectedSeries.contains(seriesKey)) {
-                                // Rename series to include run label
-                                TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
-                                addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
+                            // Add data for ALL series keys that reference this data source
+                            for (String capturedSeriesKey : capturedSeriesKeys) {
+                                // Check if this series is still selected
+                                if (selectedSeries.contains(capturedSeriesKey)) {
+                                    // Rename series to include run label
+                                    TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
+                                    addSeriesToPlot(renamedData, seriesColorMap.get(capturedSeriesKey));
 
-                                // Update all stats tables
-                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                                    model.addOrUpdateSeries(renamedData);
+                                    // Update all stats tables
+                                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                                        model.addOrUpdateSeries(renamedData);
+                                    }
                                 }
+                            }
 
-                                // Zoom to fit in all plot panels
-                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                                    panel.zoomToFit();
-                                }
+                            // Zoom to fit in all plot panels (once for all series)
+                            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                                panel.zoomToFit();
                             }
                         });
                     })
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            if (selectedSeries.contains(seriesKey)) {
-                                // Add error to all stats tables
-                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                                    model.addErrorSeries(seriesKey, throwable.getMessage());
+                            // Add error for ALL series that reference this data source
+                            for (String capturedSeriesKey : capturedSeriesKeys) {
+                                if (selectedSeries.contains(capturedSeriesKey)) {
+                                    // Add error to all stats tables
+                                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                                        model.addErrorSeries(capturedSeriesKey, throwable.getMessage());
+                                    }
                                 }
                             }
                         });
                         return null;
                     });
             } else {
-                // Request already in progress, show loading state in all stats tables
-                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                    model.addLoadingSeries(seriesKey);
+                // Request already in progress, show loading state for ALL series that reference this data
+                for (String seriesKey : seriesKeys) {
+                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                        model.addLoadingSeries(seriesKey);
+                    }
                 }
             }
         }
@@ -1780,7 +1999,6 @@ public class RunManager extends JFrame {
                 if (userObject instanceof RunInfo) {
                     RunInfo runInfo = (RunInfo) userObject;
                     setText(runInfo.runName);
-                    setToolTipText("UID: " + runInfo.session.getKalixcliUid());
 
                     RunStatus runStatus = runInfo.getRunStatus();
 
