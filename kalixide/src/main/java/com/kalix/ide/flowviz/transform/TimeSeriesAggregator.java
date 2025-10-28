@@ -46,20 +46,34 @@ public class TimeSeriesAggregator {
         double[] values = original.getValues();
         boolean[] validPoints = original.getValidPoints();
 
+        if (timestamps.length == 0) {
+            return original;
+        }
+
+        // Get series temporal bounds
+        LocalDateTime seriesStart = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[0]), ZoneOffset.UTC);
+        LocalDateTime seriesEnd = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[timestamps.length - 1]), ZoneOffset.UTC);
+
         // Group data points by year-month
         Map<YearMonth, List<Double>> monthlyBuckets = new TreeMap<>();
+        Set<YearMonth> bucketsWithMissingData = new java.util.HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
-            if (!validPoints[i]) {
-                continue; // Skip invalid points
-            }
-
             LocalDateTime dateTime = LocalDateTime.ofInstant(
                 java.time.Instant.ofEpochMilli(timestamps[i]),
                 ZoneOffset.UTC
             );
 
             YearMonth yearMonth = new YearMonth(dateTime.getYear(), dateTime.getMonthValue());
+
+            if (!validPoints[i]) {
+                // Mark this period as containing missing data
+                bucketsWithMissingData.add(yearMonth);
+                continue;
+            }
+
             monthlyBuckets.computeIfAbsent(yearMonth, k -> new ArrayList<>()).add(values[i]);
         }
 
@@ -71,12 +85,19 @@ public class TimeSeriesAggregator {
             YearMonth ym = entry.getKey();
             List<Double> monthValues = entry.getValue();
 
-            // Use start of month (1st at 00:00:00) as timestamp
-            // Follows convention: timestamp represents start of aggregation period
-            LocalDateTime startOfMonth = LocalDateTime.of(ym.year, ym.month, 1, 0, 0);
-            double aggregatedValue = method.aggregate(monthValues);
+            // Define aggregation period bounds
+            LocalDateTime periodStart = LocalDateTime.of(ym.year, ym.month, 1, 0, 0);
+            LocalDateTime periodEnd = periodStart.plusMonths(1).minusDays(1);
 
-            aggregatedDates.add(startOfMonth);
+            // Check if period extends beyond series temporal bounds
+            boolean isComplete = !periodStart.isBefore(seriesStart) && !periodEnd.isAfter(seriesEnd);
+
+            // If period is incomplete or contains missing data, result is NaN
+            double aggregatedValue = (bucketsWithMissingData.contains(ym) || !isComplete)
+                ? Double.NaN
+                : method.aggregate(monthValues);
+
+            aggregatedDates.add(periodStart);
             aggregatedValues.add(aggregatedValue);
         }
 
@@ -101,14 +122,21 @@ public class TimeSeriesAggregator {
         double[] values = original.getValues();
         boolean[] validPoints = original.getValidPoints();
 
+        if (timestamps.length == 0) {
+            return original;
+        }
+
+        // Get series temporal bounds
+        LocalDateTime seriesStart = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[0]), ZoneOffset.UTC);
+        LocalDateTime seriesEnd = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[timestamps.length - 1]), ZoneOffset.UTC);
+
         // Group data points by water year
         Map<Integer, List<Double>> annualBuckets = new TreeMap<>();
+        Set<Integer> bucketsWithMissingData = new java.util.HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
-            if (!validPoints[i]) {
-                continue; // Skip invalid points
-            }
-
             LocalDateTime dateTime = LocalDateTime.ofInstant(
                 java.time.Instant.ofEpochMilli(timestamps[i]),
                 ZoneOffset.UTC
@@ -116,6 +144,13 @@ public class TimeSeriesAggregator {
 
             // Calculate water year based on start month
             int waterYear = calculateWaterYear(dateTime, startMonth);
+
+            if (!validPoints[i]) {
+                // Mark this period as containing missing data
+                bucketsWithMissingData.add(waterYear);
+                continue;
+            }
+
             annualBuckets.computeIfAbsent(waterYear, k -> new ArrayList<>()).add(values[i]);
         }
 
@@ -127,14 +162,20 @@ public class TimeSeriesAggregator {
             int waterYear = entry.getKey();
             List<Double> yearValues = entry.getValue();
 
-            // Use start of water year (1st of start month at 00:00:00) as timestamp
-            // Follows convention: timestamp represents start of aggregation period
-            // E.g., for Jul-Jun water year 2020, timestamp is 2020-07-01 00:00:00
-            LocalDateTime startOfWaterYear = LocalDateTime.of(waterYear, startMonth, 1, 0, 0);
+            // Define aggregation period bounds
+            // E.g., for Jul-Jun water year 2020: 2020-07-01 to 2021-06-30
+            LocalDateTime periodStart = LocalDateTime.of(waterYear, startMonth, 1, 0, 0);
+            LocalDateTime periodEnd = periodStart.plusYears(1).minusDays(1);
 
-            double aggregatedValue = method.aggregate(yearValues);
+            // Check if period extends beyond series temporal bounds
+            boolean isComplete = !periodStart.isBefore(seriesStart) && !periodEnd.isAfter(seriesEnd);
 
-            aggregatedDates.add(startOfWaterYear);
+            // If period is incomplete or contains missing data, result is NaN
+            double aggregatedValue = (bucketsWithMissingData.contains(waterYear) || !isComplete)
+                ? Double.NaN
+                : method.aggregate(yearValues);
+
+            aggregatedDates.add(periodStart);
             aggregatedValues.add(aggregatedValue);
         }
 
