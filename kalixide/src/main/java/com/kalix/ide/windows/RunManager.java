@@ -10,6 +10,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.diff.DiffWindow;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -41,6 +42,7 @@ public class RunManager extends JFrame {
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private static RunManager instance;
     private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
+    private static java.util.function.Supplier<String> editorTextSupplier;
 
     // Tree components
     private JTree timeseriesSourceTree;
@@ -196,6 +198,16 @@ public class RunManager extends JFrame {
      */
     public static void setBaseDirectorySupplier(java.util.function.Supplier<java.io.File> supplier) {
         baseDirectorySupplier = supplier;
+    }
+
+    /**
+     * Sets the editor text supplier for diff operations.
+     * This should be called to provide access to the main editor's text.
+     *
+     * @param supplier Supplier that returns the current editor text (null if no text is loaded)
+     */
+    public static void setEditorTextSupplier(java.util.function.Supplier<String> supplier) {
+        editorTextSupplier = supplier;
     }
 
     /**
@@ -492,6 +504,10 @@ public class RunManager extends JFrame {
         JMenuItem showModelItem = new JMenuItem("Show Model");
         showModelItem.addActionListener(e -> showModelFromContextMenu());
         contextMenu.add(showModelItem);
+
+        JMenuItem diffItem = new JMenuItem("Diff");
+        diffItem.addActionListener(e -> diffModelFromContextMenu());
+        contextMenu.add(diffItem);
 
         JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
         sessionManagerItem.addActionListener(e -> showInSessionManagerFromContextMenu());
@@ -1261,6 +1277,69 @@ public class RunManager extends JFrame {
                     JOptionPane.INFORMATION_MESSAGE
                 );
             }
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "This run does not contain model information.",
+                "Not a Model Run",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Opens a diff window comparing the run's model with the main editor's model.
+     */
+    private void diffModelFromContextMenu() {
+        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+
+        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+
+        // Get the model text from the RunModelProgram
+        if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+            RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+            String runModelText = program.getModelText();
+
+            if (runModelText == null || runModelText.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Model text is not available for this run.",
+                    "Model Not Available",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+                return;
+            }
+
+            // Get the reference model text from the main editor
+            if (editorTextSupplier == null) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Cannot access main editor text.",
+                    "Editor Not Available",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            String referenceModelText = editorTextSupplier.get();
+            if (referenceModelText == null || referenceModelText.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "No model is loaded in the main editor.",
+                    "No Reference Model",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+                return;
+            }
+
+            // Open diff window (run model vs reference model)
+            String title = "Diff: " + runInfo.runName + " vs Reference Model";
+            new DiffWindow(runModelText, referenceModelText, title, "Reference Model", runInfo.runName);
+
         } else {
             JOptionPane.showMessageDialog(
                 this,

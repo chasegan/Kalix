@@ -41,6 +41,7 @@ import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
+import com.kalix.ide.diff.DiffWindow;
 
 import javax.swing.*;
 import java.awt.*;
@@ -259,6 +260,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         RunManager.setBaseDirectorySupplier(() -> {
             if (fileOperations != null) {
                 return fileOperations.getCurrentWorkingDirectory();
+            }
+            return null;
+        });
+
+        // Set up RunManager editor text supplier for diff operations
+        RunManager.setEditorTextSupplier(() -> {
+            if (textEditor != null) {
+                return textEditor.getText();
             }
             return null;
         });
@@ -993,6 +1002,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             public void onFontSizeChanged(int fontSize) {
                 // Update all open MinimalEditorWindow instances with new font size
                 MinimalEditorWindow.updateAllFontSizes(fontSize);
+
+                // Update all open DiffWindow instances with new font size
+                DiffWindow.updateAllFontSizes(fontSize);
             }
         };
 
