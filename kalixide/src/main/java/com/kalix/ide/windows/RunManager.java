@@ -928,7 +928,7 @@ public class RunManager extends JFrame {
             if (targetKeys.contains(seriesKey)) {
                 TreePath path = new TreePath(node.getPath());
                 results.add(path);
-                logger.info("restoreTimeseriesTreeSelection - Found matching series: {}", seriesKey);
+                logger.info("searchAndCollectPaths - Found matching series: {}", seriesKey);
             }
         }
 
@@ -936,6 +936,42 @@ public class RunManager extends JFrame {
         for (int i = 0; i < node.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
             searchAndCollectPaths(child, targetKeys, results);
+        }
+    }
+
+    /**
+     * Restores tree selection to match the current selectedSeries set.
+     * This ensures the tree visually reflects what's plotted, even after tree rebuilds.
+     * Uses isUpdatingSelection flag to prevent triggering selection events.
+     */
+    private void restoreTreeSelectionFromSelectedSeries() {
+        if (selectedSeries.isEmpty()) {
+            // Nothing to restore
+            logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries is empty, nothing to restore");
+            return;
+        }
+
+        logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries has {} entries: {}",
+            selectedSeries.size(), selectedSeries);
+
+        List<TreePath> pathsToSelect = new ArrayList<>();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
+
+        // Search tree for nodes matching selectedSeries
+        searchAndCollectPaths(root, selectedSeries, pathsToSelect);
+
+        if (!pathsToSelect.isEmpty()) {
+            logger.info("restoreTreeSelectionFromSelectedSeries - Restoring {} selections", pathsToSelect.size());
+
+            // Note: Caller should have isUpdatingSelection set to block events
+            // We don't set it here to avoid nesting issues
+            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
+            timeseriesTree.setSelectionPaths(pathsArray);
+
+            logger.info("restoreTreeSelectionFromSelectedSeries - Selection restored, tree now has {} selected paths",
+                timeseriesTree.getSelectionPaths() == null ? 0 : timeseriesTree.getSelectionPaths().length);
+        } else {
+            logger.info("restoreTreeSelectionFromSelectedSeries - No matching series found in rebuilt tree (model outputs may have changed)");
         }
     }
 
@@ -1366,7 +1402,10 @@ public class RunManager extends JFrame {
             selectedPaths == null ? "null" : selectedPaths.length,
             e.getNewLeadSelectionPath());
 
+        // Block timeseries tree selection events during rebuild and restoration
+        isUpdatingSelection = true;
         updateOutputsTree();
+        isUpdatingSelection = false;
     }
 
     /**
@@ -1461,6 +1500,10 @@ public class RunManager extends JFrame {
                 }
             }
         }
+
+        // Restore selection to match what's currently plotted
+        // This ensures plots stay visible when tree rebuilds (e.g., adding Run_2)
+        restoreTreeSelectionFromSelectedSeries();
     }
 
     /**
@@ -1506,6 +1549,10 @@ public class RunManager extends JFrame {
                 }
             }
         }
+
+        // Restore selection to match what's currently plotted
+        // This ensures plots stay visible when tree rebuilds (e.g., adding Run_2)
+        restoreTreeSelectionFromSelectedSeries();
     }
 
     /**
