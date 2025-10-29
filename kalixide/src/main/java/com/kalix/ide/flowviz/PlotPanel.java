@@ -17,9 +17,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PlotPanel extends JPanel {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(PlotPanel.class);
+
     // Plot margins
     private static final int MARGIN_LEFT = 80;
     private static final int MARGIN_RIGHT = 20;
@@ -303,6 +307,14 @@ public class PlotPanel extends JPanel {
     }
     
     public void zoomToFit() {
+        // Log stack trace to see who's calling this
+        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+        if (stackTrace.length > 2) {
+            logger.info("zoomToFit() called from: {}.{}() line {}",
+                stackTrace[2].getClassName(),
+                stackTrace[2].getMethodName(),
+                stackTrace[2].getLineNumber());
+        }
         zoomToFitData();
         repaint();
     }
@@ -421,13 +433,22 @@ public class PlotPanel extends JPanel {
      * (e.g., series added or removed).
      */
     public void refreshData() {
+        refreshData(true);
+    }
+
+    /**
+     * Refreshes the display dataset from the original data.
+     *
+     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
+     */
+    public void refreshData(boolean resetZoom) {
         // Invalidate cache to force rebuild with new data
         lastTransformKey = null;
 
         rebuildDisplayDataSet();
 
-        // Refit viewport if we have data
-        if (displayDataSet != null && !displayDataSet.isEmpty()) {
+        // Refit viewport if we have data and resetZoom is requested
+        if (resetZoom && displayDataSet != null && !displayDataSet.isEmpty()) {
             zoomToFit();
         }
 

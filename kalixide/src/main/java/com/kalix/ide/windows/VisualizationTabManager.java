@@ -591,7 +591,28 @@ public class VisualizationTabManager {
                 tab.plotPanel.setVisibleSeries(visibleSeries);
 
                 // CRITICAL: Rebuild display dataset when underlying data changes
-                tab.plotPanel.refreshData();
+                tab.plotPanel.refreshData(true); // Default: reset zoom
+            }
+            // Stats tabs update automatically through their DataSet listeners
+        }
+    }
+
+    /**
+     * Updates all tabs with the current data from the shared dataset.
+     *
+     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
+     */
+    public void updateAllTabs(boolean resetZoom) {
+        List<String> visibleSeries = getVisibleSeriesFromDataSet();
+
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+                // Update plot tabs
+                tab.plotPanel.setSeriesColors(sharedColorMap);
+                tab.plotPanel.setVisibleSeries(visibleSeries);
+
+                // CRITICAL: Rebuild display dataset when underlying data changes
+                tab.plotPanel.refreshData(resetZoom);
             }
             // Stats tabs update automatically through their DataSet listeners
         }

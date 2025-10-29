@@ -809,7 +809,6 @@ public class RunManager extends JFrame {
         DefaultMutableTreeNode oldChildNode = null;
         int oldChildIndex = -1;
         boolean wasLastSelected = false;
-        Set<String> selectedTimeseriesKeys = new HashSet<>();
 
         if (lastRunChildNode != null) {
             oldChildIndex = lastRunNode.getIndex(lastRunChildNode);
@@ -822,22 +821,7 @@ public class RunManager extends JFrame {
                 for (TreePath path : selectedPaths) {
                     if (path.equals(oldLastPath)) {
                         wasLastSelected = true;
-                        logger.info("updateLastRun - Last was selected, will restore selection");
-
-                        // Save current timeseries tree selection BEFORE any tree operations
-                        TreePath[] timeseriesSelectedPaths = timeseriesTree.getSelectionPaths();
-                        if (timeseriesSelectedPaths != null) {
-                            for (TreePath tsPath : timeseriesSelectedPaths) {
-                                DefaultMutableTreeNode node = (DefaultMutableTreeNode) tsPath.getLastPathComponent();
-                                Object userObject = node.getUserObject();
-                                if (userObject instanceof SeriesLeafNode) {
-                                    SeriesLeafNode leaf = (SeriesLeafNode) userObject;
-                                    String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
-                                    selectedTimeseriesKeys.add(seriesKey);
-                                    logger.info("updateLastRun - Saving timeseries selection: {}", seriesKey);
-                                }
-                            }
-                        }
+                        logger.info("updateLastRun - Last was selected, will update in-place");
                         break;
                     }
                 }
@@ -880,26 +864,16 @@ public class RunManager extends JFrame {
             // Restore dataset tree selection
             timeseriesSourceTree.addSelectionPath(newLastPath);
 
-            // Manually rebuild the timeseries tree since we blocked the selection event
-            logger.info("updateLastRun - Manually rebuilding timeseries tree for new Last");
-            updateOutputsTree();
-
-            // Restore timeseries tree selection (gracefully skips missing series)
-            int restoredCount = 0;
-            if (!selectedTimeseriesKeys.isEmpty()) {
-                logger.info("updateLastRun - Restoring timeseries tree selection: {} series", selectedTimeseriesKeys.size());
-                restoredCount = restoreTimeseriesTreeSelection(selectedTimeseriesKeys);
-            }
+            // Update RunInfo references in the existing tree without rebuilding
+            // This preserves the tree structure and selection
+            logger.info("updateLastRun - Updating RunInfo references in timeseries tree");
+            updateRunInfoInTimeseriesTree(lastRunInfo);
 
             isUpdatingSelection = false;
             logger.info("updateLastRun - Unblocking selection events");
 
-            // If we restored any series, manually trigger the selection changed handler
-            // since we blocked it during restoration
-            if (restoredCount > 0) {
-                logger.info("updateLastRun - Manually triggering plot update for {} restored series", restoredCount);
-                onOutputsTreeSelectionChanged(null);
-            }
+            // Selection is automatically preserved since we updated in-place without reload()
+            // No need to manually restore or trigger events
         }
 
         TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
@@ -962,6 +936,67 @@ public class RunManager extends JFrame {
         for (int i = 0; i < node.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
             searchAndCollectPaths(child, targetKeys, results);
+        }
+    }
+
+    /**
+     * Updates RunInfo references in the timeseries tree without rebuilding.
+     * Used when "Last" updates to point to a new run - the tree structure stays
+     * the same, but the RunInfo objects need to be updated.
+     *
+     * @param newRunInfo The new RunInfo to replace old "Last" references
+     */
+    private void updateRunInfoInTimeseriesTree(RunInfo newRunInfo) {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
+        updateRunInfoInNode(root, newRunInfo);
+    }
+
+    /**
+     * Recursively updates RunInfo references in a tree node and its children.
+     */
+    private void updateRunInfoInNode(DefaultMutableTreeNode node, RunInfo newRunInfo) {
+        Object userObject = node.getUserObject();
+
+        // Update SeriesLeafNode if it references "Last"
+        if (userObject instanceof SeriesLeafNode) {
+            SeriesLeafNode leaf = (SeriesLeafNode) userObject;
+            if ("Last".equals(leaf.runInfo.runName)) {
+                // Replace with new RunInfo
+                SeriesLeafNode newLeaf = new SeriesLeafNode(leaf.seriesName, newRunInfo, leaf.showSeriesName);
+                node.setUserObject(newLeaf);
+                timeseriesTreeModel.nodeChanged(node);
+                logger.info("updateRunInfoInNode - Updated SeriesLeafNode: {} -> session {}",
+                    leaf.seriesName, newRunInfo.session.getSessionKey());
+            }
+        }
+        // Update SeriesParentNode if it contains "Last"
+        else if (userObject instanceof SeriesParentNode) {
+            SeriesParentNode parent = (SeriesParentNode) userObject;
+            // Check if this parent contains "Last" run
+            boolean containsLast = parent.runsWithSeries.stream()
+                .anyMatch(r -> "Last".equals(r.runName));
+
+            if (containsLast) {
+                // Create new list with updated RunInfo
+                List<RunInfo> newRuns = new ArrayList<>();
+                for (RunInfo runInfo : parent.runsWithSeries) {
+                    if ("Last".equals(runInfo.runName)) {
+                        newRuns.add(newRunInfo);
+                    } else {
+                        newRuns.add(runInfo);
+                    }
+                }
+                SeriesParentNode newParent = new SeriesParentNode(parent.seriesName, newRuns);
+                node.setUserObject(newParent);
+                timeseriesTreeModel.nodeChanged(node);
+                logger.info("updateRunInfoInNode - Updated SeriesParentNode: {}", parent.seriesName);
+            }
+        }
+
+        // Recurse into children
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+            updateRunInfoInNode(child, newRunInfo);
         }
     }
 
@@ -1059,9 +1094,10 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Refresh all plot panels
+        // Repaint all plot panels to show the updated data
+        // Don't call refreshData() as it would reset the zoom
         for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-            panel.refreshData();
+            panel.repaint();
         }
     }
 
@@ -1716,9 +1752,10 @@ public class RunManager extends JFrame {
         }
 
         // Check if there's overlap between old and new selections
-        // Only reset zoom if selection completely changed (no overlap)
+        // Reset zoom if: (1) first selection (old empty), OR (2) selection completely changed (no overlap)
+        // Don't reset zoom if: there's overlap (adding series or Last updating)
         boolean hasOverlap = selectedSeries.stream().anyMatch(newSelectedSeries::contains);
-        final boolean shouldResetZoom = !hasOverlap && !selectedSeries.isEmpty();
+        final boolean shouldResetZoom = selectedSeries.isEmpty() || !hasOverlap;
         logger.info("onOutputsTreeSelectionChanged - hasOverlap: {} | shouldResetZoom: {} | old: {} | new: {}",
             hasOverlap, shouldResetZoom, selectedSeries.size(), newSelectedSeries.size());
 
@@ -1859,8 +1896,10 @@ public class RunManager extends JFrame {
         // Update the selected series set
         selectedSeries = newSelectedSeries;
 
-        // Update plot visibility and auto-zoom if we have any series and selection completely changed
-        updatePlotVisibility();
+        // Update plot visibility, passing zoom reset flag
+        updatePlotVisibility(shouldResetZoom);
+
+        // If selection completely changed and we don't have the new data yet, zoom after data loads
         if (!plotDataSet.isEmpty() && shouldResetZoom) {
             logger.info("Resetting zoom (selection completely changed)");
             for (PlotPanel panel : tabManager.getAllPlotPanels()) {
@@ -2174,7 +2213,7 @@ public class RunManager extends JFrame {
     private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
         plotDataSet.addSeries(timeSeriesData);
         seriesColorMap.put(timeSeriesData.getName(), seriesColor);
-        updateAllTabs();
+        updateAllTabs(false); // Don't reset zoom when adding series
 
         // Add to legend in all plot panels
         for (PlotPanel panel : tabManager.getAllPlotPanels()) {
@@ -2184,16 +2223,20 @@ public class RunManager extends JFrame {
 
     /**
      * Updates all visualization tabs with current data.
+     *
+     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
-    private void updatePlotVisibility() {
-        updateAllTabs();
+    private void updatePlotVisibility(boolean resetZoom) {
+        updateAllTabs(resetZoom);
     }
 
     /**
      * Updates all tabs with the current dataset and color map.
+     *
+     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
-    private void updateAllTabs() {
-        tabManager.updateAllTabs();
+    private void updateAllTabs(boolean resetZoom) {
+        tabManager.updateAllTabs(resetZoom);
     }
 
     /**
@@ -2202,7 +2245,7 @@ public class RunManager extends JFrame {
     private void clearPlotAndStats() {
         plotDataSet.removeAllSeries();
         seriesColorMap.clear();
-        updateAllTabs();
+        updateAllTabs(true); // Reset zoom when clearing (though no data to zoom)
 
         // Clear legend in all plot panels
         for (PlotPanel panel : tabManager.getAllPlotPanels()) {
