@@ -102,7 +102,6 @@ public class FileDropManager {
                         }
                         dtde.dropComplete(true);
                     } else {
-                        logger.info("Rejected file: {} (only .ini files are accepted)", fileName);
                         dtde.dropComplete(false);
                     }
                 } else {

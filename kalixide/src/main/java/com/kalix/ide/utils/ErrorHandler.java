@@ -79,7 +79,6 @@ public class ErrorHandler {
      * @param context description of the operation
      */
     public static void logInfo(String message, String context) {
-        logger.info("{}: {}", context, message);
     }
     
     /**

@@ -77,8 +77,7 @@ public class VersionChecker {
                 }
                 
                 KalixCliLocator.CliLocation cli = cliLocation.get();
-                logger.info("Getting version from kalixcli at: " + cli.getPath());
-                
+
                 // Execute version command
                 return executeVersionCommand(cli);
                 
@@ -110,8 +109,7 @@ public class VersionChecker {
         try {
             // Configure process execution with short timeout for version check
             ProcessExecutor.ProcessConfig config = new ProcessExecutor.ProcessConfig()
-                .timeout(10) // 10 seconds should be more than enough for version check
-                .onStderr(line -> logger.debug("CLI stderr: " + line));
+                .timeout(10); // 10 seconds should be more than enough for version check
             
             // Execute kalixcli --version
             ProcessExecutor.ProcessResult result = processExecutor.execute(
@@ -122,7 +120,6 @@ public class VersionChecker {
             
             if (result.isSuccess()) {
                 String version = result.getStdout().trim();
-                logger.info("CLI version retrieved: " + version);
                 return VersionResult.success(version, cli.getPath().toString());
             } else {
                 logger.error("Version command failed with exit code: " + result.getExitCode());
@@ -151,7 +148,6 @@ public class VersionChecker {
         
         if (result.isSuccess()) {
             String statusMsg = "kalixcli version: " + result.getVersion();
-            logger.info("Version check completed: " + statusMsg);
             statusUpdateCallback.accept(statusMsg);
         } else {
             String errorMsg = result.getException() != null ? 

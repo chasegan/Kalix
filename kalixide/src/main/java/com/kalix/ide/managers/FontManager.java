@@ -28,17 +28,13 @@ public class FontManager {
      */
     public static void initialize() {
         if (initialized) {
-            logger.debug("FontManager already initialized");
             return;
         }
 
-        logger.info("Initializing FontManager - loading embedded fonts");
         jetBrainsMonoFont = loadFont(JETBRAINS_MONO_REGULAR);
         initialized = true;
 
-        if (jetBrainsMonoFont != null) {
-            logger.info("Successfully loaded JetBrains Mono font");
-        } else {
+        if (jetBrainsMonoFont == null) {
             logger.warn("Failed to load JetBrains Mono font - will use system fallback");
         }
     }
@@ -111,7 +107,6 @@ public class FontManager {
 
         for (String fontName : preferredFonts) {
             if (availableSet.contains(fontName)) {
-                logger.info("Using fallback monospace font: {}", fontName);
                 return new Font(fontName, Font.PLAIN, size);
             }
         }
@@ -142,9 +137,7 @@ public class FontManager {
             GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
             boolean registered = ge.registerFont(font);
 
-            if (registered) {
-                logger.debug("Successfully registered font: {}", font.getFontName());
-            } else {
+            if (!registered) {
                 logger.warn("Font loaded but registration failed: {}", font.getFontName());
             }
 

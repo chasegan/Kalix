@@ -128,13 +128,11 @@ public class ApiDiscovery {
                 String cacheKey = cliPath.toString();
                 CachedApiSpec cached = apiCache.get(cacheKey);
                 if (cached != null && !cached.isExpired(cacheExpirationMinutes)) {
-                    logger.debug("Using cached API spec for " + cliPath);
-                    return DiscoveryResult.success(cached.getApiSpec(), cached.getCliVersion(), 
+                    return DiscoveryResult.success(cached.getApiSpec(), cached.getCliVersion(),
                                                  cached.getCliPath(), true);
                 }
-                
+
                 // Discover API from CLI
-                logger.info("Discovering API from kalixcli at: " + cliPath);
                 return discoverApiFromCli(cliPath, cliVersion);
                 
             } catch (Exception e) {
@@ -162,8 +160,7 @@ public class ApiDiscovery {
                 String cacheKey = cliPath.toString();
                 CachedApiSpec cached = apiCache.get(cacheKey);
                 if (cached != null && !cached.isExpired(cacheExpirationMinutes)) {
-                    logger.debug("Using cached API spec for " + cliPath);
-                    return DiscoveryResult.success(cached.getApiSpec(), cached.getCliVersion(), 
+                    return DiscoveryResult.success(cached.getApiSpec(), cached.getCliVersion(),
                                                  cached.getCliPath(), true);
                 }
                 
@@ -182,11 +179,8 @@ public class ApiDiscovery {
      */
     private DiscoveryResult discoverApiFromCli(Path cliPath, String cliVersion) {
         try {
-            logger.debug("Calling 'kalixcli get-api' at " + cliPath);
-            
             ProcessExecutor.ProcessConfig config = new ProcessExecutor.ProcessConfig()
-                .timeout(30) // 30 seconds should be plenty
-                .onStderr(line -> logger.debug("CLI stderr: " + line));
+                .timeout(30); // 30 seconds should be plenty
             
             ProcessExecutor.ProcessResult result = processExecutor.execute(
                 cliPath.toString(), 
@@ -204,9 +198,7 @@ public class ApiDiscovery {
             if (jsonOutput.isEmpty()) {
                 return DiscoveryResult.failure(new RuntimeException("kalixcli get-api returned empty output"));
             }
-            
-            logger.debug("Received JSON output: " + jsonOutput.substring(0, Math.min(100, jsonOutput.length())) + "...");
-            
+
             // Parse JSON response
             ApiModel.ApiSpec apiSpec = objectMapper.readValue(jsonOutput, ApiModel.ApiSpec.class);
             
@@ -214,9 +206,7 @@ public class ApiDiscovery {
             if (apiSpec.getName() == null || apiSpec.getSubcommands() == null) {
                 return DiscoveryResult.failure(new RuntimeException("Invalid API specification received"));
             }
-            
-            logger.info("Successfully discovered API: " + apiSpec.toString());
-            
+
             // Cache the result
             CachedApiSpec cached = new CachedApiSpec(apiSpec, cliVersion, cliPath);
             apiCache.put(cliPath.toString(), cached);
@@ -244,9 +234,7 @@ public class ApiDiscovery {
             if (result.isSuccess()) {
                 return result.getStdout().trim();
             }
-        } catch (Exception e) {
-            logger.debug("Could not get version for " + cliPath, e);
-        }
+        } catch (Exception e) {        }
         return "unknown";
     }
     
@@ -280,7 +268,6 @@ public class ApiDiscovery {
      */
     public void clearCache() {
         apiCache.clear();
-        logger.debug("API cache cleared");
     }
     
     /**

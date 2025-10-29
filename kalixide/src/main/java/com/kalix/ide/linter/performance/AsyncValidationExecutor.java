@@ -123,7 +123,6 @@ public class AsyncValidationExecutor {
         Future<?> current = currentValidation.getAndSet(null);
         if (current != null && !current.isDone()) {
             current.cancel(true);
-            logger.debug("Cancelled validation task");
         }
     }
 
@@ -177,6 +176,5 @@ public class AsyncValidationExecutor {
             Thread.currentThread().interrupt();
         }
 
-        logger.debug("AsyncValidationExecutor shutdown completed");
     }
 }

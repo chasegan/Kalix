@@ -1270,7 +1270,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 // Build the command to execute: cd to directory, then run activation script
                 String commandToExecute = "cd /d \"" + dirPath + "\" && " + activationScript;
 
-                logger.info("Executing terminal command: cmd.exe /K {}", commandToExecute);
 
                 // Use 'start' to open a new visible window
                 // cmd.exe /c start "Terminal" cmd.exe /K "command"
@@ -1369,7 +1368,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             Process process = processBuilder.start();
 
             updateStatus("External editor launched: " + currentFile.getName());
-            logger.info("External editor command executed: {}", command);
 
         } catch (Exception e) {
             String message = "Failed to launch external editor: " + e.getMessage();

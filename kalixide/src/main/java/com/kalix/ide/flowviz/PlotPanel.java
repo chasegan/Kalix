@@ -307,14 +307,6 @@ public class PlotPanel extends JPanel {
     }
     
     public void zoomToFit() {
-        // Log stack trace to see who's calling this
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-        if (stackTrace.length > 2) {
-            logger.info("zoomToFit() called from: {}.{}() line {}",
-                stackTrace[2].getClassName(),
-                stackTrace[2].getMethodName(),
-                stackTrace[2].getLineNumber());
-        }
         zoomToFitData();
         repaint();
     }

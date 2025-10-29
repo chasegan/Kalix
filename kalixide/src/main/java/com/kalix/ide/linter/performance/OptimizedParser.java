@@ -39,10 +39,8 @@ public class OptimizedParser {
         boolean isLargeFile = lineCount > LARGE_FILE_THRESHOLD_LINES;
 
         if (isLargeFile) {
-            logger.debug("Parsing large file with {} lines using optimized parser", lineCount);
             return parseWithStreamingOptimization(content, lineCount);
         } else {
-            logger.debug("Parsing small file with {} lines using standard parser", lineCount);
             return INIModelParser.parse(content);
         }
     }
@@ -87,10 +85,7 @@ public class OptimizedParser {
             // Parse using optimized line-by-line processing
             INIModelParser.ParsedModel result = parseLines(lines);
 
-            long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-            logger.debug("Optimized parsing completed in {} ms for {} lines", durationMs, lines.size());
-
-            return result;
+            long durationMs = (System.nanoTime() - startTime) / 1_000_000;            return result;
 
         } catch (Exception e) {
             logger.warn("Optimized parsing failed, falling back to standard parser", e);

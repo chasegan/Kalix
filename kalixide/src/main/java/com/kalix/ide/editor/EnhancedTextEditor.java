@@ -129,8 +129,6 @@ public class EnhancedTextEditor extends JPanel {
         // This will use embedded JetBrains Mono if available, otherwise fall back to system fonts
         Font monoFont = FontManager.getMonospaceFont(fontSize);
         textArea.setFont(monoFont);
-
-        logger.info("Configured text editor with font: {} (size {})", monoFont.getFontName(), monoFont.getSize());
     }
 
     /**
@@ -142,7 +140,6 @@ public class EnhancedTextEditor extends JPanel {
     public void updateFontSize(int fontSize) {
         Font monoFont = FontManager.getMonospaceFont(fontSize);
         textArea.setFont(monoFont);
-        logger.debug("Updated text editor font size to: {}", fontSize);
     }
 
     /**
@@ -167,7 +164,6 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
         }
         linterManager = new LinterManager(textArea, schemaManager);
-        logger.debug("Linter manager initialized");
     }
     
     private void setupKeyBindings() {
@@ -413,7 +409,6 @@ public class EnhancedTextEditor extends JPanel {
 
             // Check if normalization is needed
             if (!currentText.contains("\r")) {
-                logger.debug("No line ending normalization needed");
                 return; // Already normalized
             }
 
@@ -436,11 +431,6 @@ public class EnhancedTextEditor extends JPanel {
 
             // Mark as dirty since we modified the content
             setDirty(true);
-
-            // Log the normalization
-            if (crlfCount > 0 || crCount > 0) {
-                logger.info("Normalized {} CRLF and {} CR line endings to LF", crlfCount, crCount);
-            }
 
         } catch (Exception ex) {
             logger.error("Error normalizing line endings", ex);
@@ -677,7 +667,6 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
             linterManager = null;
         }
-        logger.debug("EnhancedTextEditor disposed");
     }
 
     /**
@@ -688,7 +677,6 @@ public class EnhancedTextEditor extends JPanel {
         try {
             AbstractTokenMakerFactory factory = (AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance();
             factory.putMapping(SYNTAX_STYLE_KALIX_INI, "com.kalix.ide.editor.KalixIniTokenMaker");
-            logger.info("Custom Kalix INI TokenMaker registered successfully");
         } catch (Exception e) {
             logger.error("Failed to register custom Kalix INI TokenMaker", e);
         }
@@ -707,7 +695,6 @@ public class EnhancedTextEditor extends JPanel {
             // Apply the saved theme
             updateSyntaxTheme(savedTheme);
 
-            logger.debug("Applied saved syntax theme: {}", savedTheme.getDisplayName());
         } catch (Exception e) {
             logger.warn("Failed to apply saved syntax theme, using default: {}", e.getMessage());
             // Fallback to Light theme if anything goes wrong
@@ -742,7 +729,5 @@ public class EnhancedTextEditor extends JPanel {
             // Refresh the text area to apply the new colors
             textArea.repaint();
         }
-
-        logger.debug("Syntax theme updated to: {}", syntaxTheme.getDisplayName());
     }
 }

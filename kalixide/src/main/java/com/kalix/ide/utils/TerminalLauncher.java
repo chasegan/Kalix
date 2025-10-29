@@ -27,8 +27,6 @@ public class TerminalLauncher {
         // Determine the target directory
         File targetDir = getValidDirectory(directory);
 
-        logger.debug("Opening terminal at directory: {}", targetDir.getAbsolutePath());
-
         // Get the operating system
         String osName = System.getProperty("os.name").toLowerCase();
 
@@ -41,8 +39,6 @@ public class TerminalLauncher {
                 // Assume Linux/Unix
                 openLinuxTerminal(targetDir);
             }
-
-            logger.info("Successfully opened terminal at: {}", targetDir.getAbsolutePath());
 
         } catch (IOException e) {
             logger.error("Failed to open terminal at directory: {}", targetDir.getAbsolutePath(), e);
@@ -206,11 +202,8 @@ public class TerminalLauncher {
                     pb.start();
                     return; // Success!
 
-                } else {
-                    logger.debug("Terminal '{}' not available", terminal);
                 }
             } catch (IOException e) {
-                logger.debug("Failed to launch terminal '{}': {}", terminal, e.getMessage());
                 lastException = e;
             }
         }

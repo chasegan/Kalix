@@ -94,14 +94,12 @@ public class TimeSeriesRequestManager {
         // Check if already in cache or being processed
         CompletableFuture<TimeSeriesData> existingRequest = cache.get(cacheKey);
         if (existingRequest != null) {
-            logger.debug("TimeSeries request for {} already in progress, returning existing future", seriesName);
             return existingRequest;
         }
 
         // Check completed cache
         TimeSeriesData cachedData = completedCache.get(cacheKey);
         if (cachedData != null) {
-            logger.debug("TimeSeries data for {} found in completed cache", seriesName);
             return CompletableFuture.completedFuture(cachedData);
         }
 
@@ -113,7 +111,6 @@ public class TimeSeriesRequestManager {
 
         try {
             requestQueue.put(request);
-            logger.info("Queued timeseries request for {}", seriesName);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             future.completeExceptionally(e);
@@ -199,18 +196,11 @@ public class TimeSeriesRequestManager {
         String cacheKey = kalixcliUid + ":" + request.seriesName;
 
         try {
-            logger.info("Processing timeseries request for {}", request.seriesName);
-
             // Create the get_result command
             String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv");
 
             // Send command
             sessionManager.sendCommand(request.sessionKey, command)
-                .thenRun(() -> {
-                    // This is a simplified version. Maybe we want to set up response handling
-                    // TODO: Implement proper response handling mechanism
-                    logger.info("Sent get_result command for {}, waiting for response...", request.seriesName);
-                })
                 .exceptionally(throwable -> {
                     logger.error("Failed to send timeseries request for {}", request.seriesName, throwable);
                     cache.remove(cacheKey);
@@ -239,7 +229,6 @@ public class TimeSeriesRequestManager {
                 // Compact protocol format
                 String command = response.path("cmd").asText();
                 if (!"get_result".equals(command)) {
-                    logger.debug("Ignoring non-get_result command: {}", command);
                     return;
                 }
 
@@ -255,13 +244,11 @@ public class TimeSeriesRequestManager {
                 String dataString = result.path("data").asText();
                 String kalixcliUid = response.path("uid").asText();
 
-                logger.debug("Successfully parsed compact protocol get_result response for series: {}", seriesName);
                 handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
                 return;
             }
 
             // No legacy protocol support - all messages should be compact format
-            logger.debug("Message does not match compact protocol format, ignoring");
 
         } catch (Exception e) {
             logger.error("Failed to handle JSON response", e);

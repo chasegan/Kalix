@@ -139,7 +139,6 @@ public class KalixStdioSession {
      */
     public void sendCommand(String command) throws IOException {
         checkNotClosed();
-        logger.info("Sending command: " + command);
         runningProcess.sendInput(command);
     }
     
@@ -152,11 +151,10 @@ public class KalixStdioSession {
      */
     public void sendModelDefinition(String modelText) throws IOException {
         checkNotClosed();
-        logger.info("Sending JSON load_model_string command (" + modelText.length() + " characters)");
-        
+
         // Create JSON command using the new protocol
         String jsonCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
-        
+
         // Send the JSON command
         runningProcess.sendInput(jsonCommand);
     }
@@ -169,7 +167,6 @@ public class KalixStdioSession {
      */
     public void sendLines(List<String> lines) throws IOException {
         checkNotClosed();
-        logger.info("Sending " + lines.size() + " lines");
         runningProcess.sendLines(lines);
     }
     
@@ -183,9 +180,6 @@ public class KalixStdioSession {
     public Optional<String> readOutputLine() throws IOException {
         checkNotClosed();
         String line = runningProcess.readOutputLine();
-        if (line != null) {
-            logger.debug("Received output: " + line);
-        }
         return Optional.ofNullable(line);
     }
     
@@ -199,9 +193,6 @@ public class KalixStdioSession {
     public Optional<String> readErrorLine() throws IOException {
         checkNotClosed();
         String line = runningProcess.readErrorLine();
-        if (line != null) {
-            logger.warn("Received error: " + line);
-        }
         return Optional.ofNullable(line);
     }
     
@@ -252,7 +243,6 @@ public class KalixStdioSession {
                     // Check if this looks like a prompt
                     Prompt prompt = parsePrompt(line.get());
                     if (prompt.getType() != PromptType.UNKNOWN) {
-                        logger.info("Detected prompt: " + prompt);
                         return Optional.of(prompt);
                     }
                 }
@@ -282,7 +272,6 @@ public class KalixStdioSession {
      */
     public void respondToPrompt(Prompt prompt, String response) throws IOException {
         checkNotClosed();
-        logger.info("Responding to prompt " + prompt.getType() + " with: " + response);
         runningProcess.sendInput(response);
     }
     
@@ -302,7 +291,6 @@ public class KalixStdioSession {
      */
     public void close(boolean forceKill) {
         if (closed.compareAndSet(false, true)) {
-            logger.info("Closing InteractiveKalixProcess");
             runningProcess.cancel(forceKill);
         }
     }

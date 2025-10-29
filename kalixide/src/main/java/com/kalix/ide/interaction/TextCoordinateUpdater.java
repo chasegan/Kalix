@@ -78,10 +78,7 @@ public class TextCoordinateUpdater {
                 
                 // Use document replace operation (preserves undo/redo)
                 doc.remove(coordStart, coordEnd - coordStart);
-                doc.insertString(coordStart, coordReplacement, null);
-                
-                logger.debug("Updated {} to ({}, {})", nodeName, formattedX, formattedY);
-            } else {
+                doc.insertString(coordStart, coordReplacement, null);            } else {
                 logger.warn("Could not find node section for: {}", nodeName);
             }
             
@@ -207,12 +204,9 @@ public class TextCoordinateUpdater {
             // Delete each section using document operations
             for (NodeSection section : sectionsToDelete) {
                 doc.remove(section.start, section.length);
-                logger.debug("Removed section for node: {}", section.nodeName);
             }
             
-            if (!sectionsToDelete.isEmpty()) {
-                logger.debug("Deleted {} node sections from text", sectionsToDelete.size());
-            }
+            if (!sectionsToDelete.isEmpty()) {            }
             
         } catch (BadLocationException e) {
             logger.error("Bad location error deleting nodes from text: {}", e.getMessage());

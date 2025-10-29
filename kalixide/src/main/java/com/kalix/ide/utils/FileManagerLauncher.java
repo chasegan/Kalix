@@ -26,15 +26,12 @@ public class FileManagerLauncher {
         // Determine the target directory
         File targetDir = getValidDirectory(directory);
 
-        logger.debug("Opening file manager at directory: {}", targetDir.getAbsolutePath());
-
         // Try using Desktop API first (cross-platform)
         if (Desktop.isDesktopSupported()) {
             Desktop desktop = Desktop.getDesktop();
             if (desktop.isSupported(Desktop.Action.OPEN)) {
                 try {
                     desktop.open(targetDir);
-                    logger.info("Successfully opened file manager at: {}", targetDir.getAbsolutePath());
                     return;
                 } catch (IOException e) {
                     logger.warn("Desktop.open() failed, trying platform-specific approach", e);
@@ -54,8 +51,6 @@ public class FileManagerLauncher {
                 // Assume Linux/Unix
                 openLinuxFileManager(targetDir);
             }
-
-            logger.info("Successfully opened file manager at: {}", targetDir.getAbsolutePath());
 
         } catch (IOException e) {
             logger.error("Failed to open file manager at directory: {}", targetDir.getAbsolutePath(), e);

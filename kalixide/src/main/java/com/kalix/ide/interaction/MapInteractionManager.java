@@ -206,11 +206,7 @@ public class MapInteractionManager {
         
         if (nodesToDelete.isEmpty()) {
             return; // Nothing to delete
-        }
-        
-        logger.debug("Deleting {} selected nodes", nodesToDelete.size());
-        
-        // Delete from the data model first
+        }        // Delete from the data model first
         model.deleteSelectedNodes();
         
         // Delete corresponding sections from text if updater is available
@@ -218,6 +214,5 @@ public class MapInteractionManager {
             textUpdater.deleteNodesFromText(nodesToDelete);
         }
         
-        logger.debug("Node deletion completed");
     }
 }

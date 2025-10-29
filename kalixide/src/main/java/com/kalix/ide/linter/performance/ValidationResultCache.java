@@ -93,9 +93,7 @@ public class ValidationResultCache {
         }
 
         entry.updateAccess();
-        hits++;
-        logger.debug("Cache hit for content hash: {}", contentHash.substring(0, 8));
-        return cloneValidationResult(entry.result); // Return defensive copy
+        hits++;        return cloneValidationResult(entry.result); // Return defensive copy
     }
 
     /**
@@ -114,10 +112,7 @@ public class ValidationResultCache {
         // Enforce size limit with LRU eviction
         if (cache.size() > maxSize) {
             evictOldest();
-        }
-
-        logger.debug("Cached validation result for content hash: {}", contentHash.substring(0, 8));
-    }
+        }    }
 
     /**
      * Clear all cached results.
@@ -125,7 +120,6 @@ public class ValidationResultCache {
     public void clear() {
         int size = cache.size();
         cache.clear();
-        logger.debug("Cleared {} cached validation results", size);
     }
 
     /**
@@ -175,7 +169,6 @@ public class ValidationResultCache {
             int removed = initialSize - cache.size();
             if (removed > 0) {
                 evictions += removed;
-                logger.debug("Cleaned up {} expired cache entries", removed);
             }
         } catch (Exception e) {
             logger.warn("Error during cache cleanup", e);
@@ -196,9 +189,7 @@ public class ValidationResultCache {
 
         if (oldestKey != null) {
             cache.remove(oldestKey);
-            evictions++;
-            logger.debug("Evicted oldest cache entry: {}", oldestKey.substring(0, 8));
-        }
+            evictions++;        }
     }
 
     private String computeContentHash(String content) {
@@ -230,6 +221,5 @@ public class ValidationResultCache {
             Thread.currentThread().interrupt();
         }
         clear();
-        logger.debug("ValidationResultCache shutdown completed");
     }
 }

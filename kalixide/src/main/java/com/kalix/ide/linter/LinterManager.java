@@ -108,7 +108,6 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         // Set up orchestrator callback
         orchestrator.setValidationResultHandler(this);
 
-        logger.debug("LinterManager initialized for text area");
     }
 
     /**
@@ -151,12 +150,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         }
 
         // Update visual feedback
-        highlighter.updateHighlights(result);
-
-        logger.debug("Validation completed: {} errors, {} warnings",
-                    result.getErrors().size(), result.getWarnings().size());
-
-        // Notify external listeners
+        highlighter.updateHighlights(result);        // Notify external listeners
         long validationTime = orchestrator.getLastValidationTimeMs();
         for (ValidationCompletionListener listener : validationListeners) {
             try {
@@ -254,7 +248,6 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     @Override
     public void onLintingEnabledChanged(boolean enabled) {
         setValidationEnabled(enabled);
-        logger.debug("Linting enabled state changed to: {}", enabled);
     }
 
     /**
@@ -270,6 +263,5 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         orchestrator.dispose();
         highlighter.dispose();
 
-        logger.debug("LinterManager disposed");
     }
 }

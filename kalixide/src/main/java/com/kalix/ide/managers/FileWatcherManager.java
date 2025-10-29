@@ -60,13 +60,8 @@ public class FileWatcherManager {
         // Stop any existing watch
         stopWatching();
 
-        logger.info("watchFile called with: {} (auto-reload enabled: {})",
-            file != null ? file.getName() : "null", isAutoReloadEnabled());
-
         // Don't start watching if disabled or no file
         if (!isAutoReloadEnabled() || file == null || watchService_ == null) {
-            logger.info("Skipping file watch - auto-reload disabled: {}, file null: {}, watchService null: {}",
-                !isAutoReloadEnabled(), file == null, watchService_ == null);
             return;
         }
 
@@ -90,8 +85,6 @@ public class FileWatcherManager {
             // Start watching in background thread
             watchService.submit(this::watchLoop);
 
-            logger.debug("Started watching file: {}", file.getAbsolutePath());
-
         } catch (IOException e) {
             logger.error("Failed to start watching file: {}", file, e);
         }
@@ -105,8 +98,6 @@ public class FileWatcherManager {
         isWatching = false;
         currentWatchedFile = null;
         currentWatchedDirectory = null;
-
-        logger.debug("Stopped file watching");
     }
 
     /**
@@ -142,8 +133,6 @@ public class FileWatcherManager {
             File fileToWatch = currentWatchedFile;
             watchFile(fileToWatch);
         }
-
-        logger.info("Auto-reload preference changed to: {}", enabled);
     }
 
     /**
@@ -172,8 +161,6 @@ public class FileWatcherManager {
                         if (currentWatchedFile != null &&
                             modifiedFile.equals(currentWatchedFile.toPath())) {
 
-                            logger.debug("Detected change in watched file: {}", currentWatchedFile);
-
                             // Skip reload if we should ignore this change (e.g., from our own save)
                             if (ignoreNextChange) {
                                 ignoreNextChange = false;
@@ -181,7 +168,6 @@ public class FileWatcherManager {
                             }
 
                             // Trigger reload on EDT
-                            logger.info("File change detected, triggering reload callback");
                             javax.swing.SwingUtilities.invokeLater(() -> {
                                 if (currentWatchedFile != null && isWatching) {
                                     fileReloadCallback.accept(currentWatchedFile);
@@ -199,8 +185,10 @@ public class FileWatcherManager {
                 }
 
             } catch (InterruptedException e) {
-                logger.debug("File watch interrupted");
                 Thread.currentThread().interrupt();
+                break;
+            } catch (java.nio.file.ClosedWatchServiceException e) {
+                // Expected during shutdown when watch service is closed while thread is blocked
                 break;
             } catch (Exception e) {
                 logger.error("Error in file watch loop", e);
@@ -224,6 +212,5 @@ public class FileWatcherManager {
         }
 
         watchService.shutdown();
-        logger.debug("FileWatcherManager shut down");
     }
 }

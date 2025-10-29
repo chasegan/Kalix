@@ -662,8 +662,6 @@ public class RunManager extends JFrame {
                     RunInfo runInfo = new RunInfo(runName, session);
                     RunStatus initialStatus = runInfo.getRunStatus();
 
-                    logger.info("Adding new run: {} | sessionKey: {}", runName, sessionKey);
-
                     DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
                     int insertIndex = currentRunsNode.getChildCount();
                     currentRunsNode.add(runNode);
@@ -727,17 +725,9 @@ public class RunManager extends JFrame {
 
             // Notify tree model of inserted nodes (preserves selection)
             if (!insertedIndices.isEmpty()) {
-                TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
-                logger.info("BEFORE nodesWereInserted - selection: {}",
-                    selectedBefore == null ? "null" : selectedBefore.length);
-
                 int[] indices = insertedIndices.stream().mapToInt(Integer::intValue).toArray();
                 Object[] children = insertedNodes.toArray();
                 treeModel.nodesWereInserted(currentRunsNode, indices);
-
-                TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
-                logger.info("AFTER nodesWereInserted - selection: {}",
-                    selectedAfter == null ? "null" : selectedAfter.length);
 
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
             }
@@ -763,10 +753,6 @@ public class RunManager extends JFrame {
 
             // Remove sessions and notify tree
             if (!removedIndices.isEmpty()) {
-                TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
-                logger.info("BEFORE nodesWereRemoved - selection: {}",
-                    selectedBefore == null ? "null" : selectedBefore.length);
-
                 // Remove nodes from tree
                 for (Object child : removedChildren) {
                     currentRunsNode.remove((DefaultMutableTreeNode) child);
@@ -799,10 +785,6 @@ public class RunManager extends JFrame {
                 int[] indices = removedIndices.stream().mapToInt(Integer::intValue).toArray();
                 Object[] children = removedChildren.toArray();
                 treeModel.nodesWereRemoved(currentRunsNode, indices, children);
-
-                TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
-                logger.info("AFTER nodesWereRemoved - selection: {}",
-                    selectedAfter == null ? "null" : selectedAfter.length);
             }
         });
     }
@@ -830,7 +812,6 @@ public class RunManager extends JFrame {
                 for (TreePath path : selectedPaths) {
                     if (path.equals(oldLastPath)) {
                         wasLastSelected = true;
-                        logger.info("updateLastRun - Last was selected, will update in-place");
                         break;
                     }
                 }
@@ -840,7 +821,6 @@ public class RunManager extends JFrame {
         // If Last was selected, block all selection events during the entire update
         if (wasLastSelected) {
             isUpdatingSelection = true;
-            logger.info("updateLastRun - Blocking selection events for restoration");
         }
 
         // Create new child node
@@ -849,8 +829,6 @@ public class RunManager extends JFrame {
         );
 
         TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
-        logger.info("updateLastRun - BEFORE tree update - selection: {} | wasLastSelected: {}",
-            selectedBefore == null ? "null" : selectedBefore.length, wasLastSelected);
 
         if (oldChildNode != null) {
             // Replacing existing child - remove old, add new
@@ -868,7 +846,6 @@ public class RunManager extends JFrame {
         // If Last was previously selected, restore everything
         if (wasLastSelected) {
             TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
-            logger.info("updateLastRun - Restoring selection to new Last node");
 
             // Restore dataset tree selection
             timeseriesSourceTree.addSelectionPath(newLastPath);
@@ -878,19 +855,15 @@ public class RunManager extends JFrame {
             // IMPORTANT: Create a RunInfo with name "Last" (not the actual run name)
             // so timeseries display as "ds_1 [Last]" not "ds_1 [Run_3]"
             RunInfo lastRunInfoWrapper = new RunInfo("Last", newLastRun.session);
-            logger.info("updateLastRun - Updating RunInfo references in timeseries tree");
             updateRunInfoInTimeseriesTree(lastRunInfoWrapper);
 
             isUpdatingSelection = false;
-            logger.info("updateLastRun - Unblocking selection events");
 
             // Selection is automatically preserved since we updated in-place without reload()
             // No need to manually restore or trigger events
         }
 
         TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
-        logger.info("updateLastRun - AFTER tree update - selection: {}",
-            selectedAfter == null ? "null" : selectedAfter.length);
 
         // Expand the Last run node to show the new child
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
@@ -914,13 +887,11 @@ public class RunManager extends JFrame {
         searchAndCollectPaths(root, selectedTimeseriesKeys, pathsToSelect);
 
         if (!pathsToSelect.isEmpty()) {
-            logger.info("restoreTimeseriesTreeSelection - Found {} matching series to restore", pathsToSelect.size());
             // Restore selection without triggering events
             TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
             timeseriesTree.setSelectionPaths(pathsArray);
             return pathsToSelect.size();
         } else {
-            logger.info("restoreTimeseriesTreeSelection - No matching series found (model outputs may have changed)");
             return 0;
         }
     }
@@ -940,7 +911,6 @@ public class RunManager extends JFrame {
             if (targetKeys.contains(seriesKey)) {
                 TreePath path = new TreePath(node.getPath());
                 results.add(path);
-                logger.info("searchAndCollectPaths - Found matching series: {}", seriesKey);
             }
         }
 
@@ -960,12 +930,8 @@ public class RunManager extends JFrame {
     private Set<String> restoreTreeSelectionFromSelectedSeries() {
         if (selectedSeries.isEmpty()) {
             // Nothing to restore
-            logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries is empty, nothing to restore");
             return Collections.emptySet();
         }
-
-        logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries has {} entries: {}",
-            selectedSeries.size(), selectedSeries);
 
         List<TreePath> pathsToSelect = new ArrayList<>();
         Set<String> restoredSeriesKeys = new HashSet<>();
@@ -982,27 +948,15 @@ public class RunManager extends JFrame {
         }
 
         if (!pathsToSelect.isEmpty()) {
-            logger.info("restoreTreeSelectionFromSelectedSeries - Restoring {} of {} selections",
-                restoredSeriesKeys.size(), selectedSeries.size());
-
             // Note: Caller should have isUpdatingSelection set to block events
             // We don't set it here to avoid nesting issues
             TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
             timeseriesTree.setSelectionPaths(pathsArray);
-
-            logger.info("restoreTreeSelectionFromSelectedSeries - Selection restored, tree now has {} selected paths",
-                timeseriesTree.getSelectionPaths() == null ? 0 : timeseriesTree.getSelectionPaths().length);
-        } else {
-            logger.info("restoreTreeSelectionFromSelectedSeries - No matching series found in rebuilt tree (all series removed)");
         }
 
         // Log any series that couldn't be restored
         Set<String> notRestored = new HashSet<>(selectedSeries);
         notRestored.removeAll(restoredSeriesKeys);
-        if (!notRestored.isEmpty()) {
-            logger.info("restoreTreeSelectionFromSelectedSeries - {} series not found in tree (will be removed from plot): {}",
-                notRestored.size(), notRestored);
-        }
 
         return restoredSeriesKeys;
     }
@@ -1019,12 +973,8 @@ public class RunManager extends JFrame {
         seriesToRemove.removeAll(restoredSeries);
 
         if (seriesToRemove.isEmpty()) {
-            logger.info("reconcileSelectedSeriesWithTree - All series still available, no reconciliation needed");
             return;
         }
-
-        logger.info("reconcileSelectedSeriesWithTree - Removing {} series that are no longer available: {}",
-            seriesToRemove.size(), seriesToRemove);
 
         // Remove from selectedSeries
         selectedSeries.removeAll(seriesToRemove);
@@ -1075,8 +1025,6 @@ public class RunManager extends JFrame {
                 SeriesLeafNode newLeaf = new SeriesLeafNode(leaf.seriesName, newRunInfo, leaf.showSeriesName);
                 node.setUserObject(newLeaf);
                 timeseriesTreeModel.nodeChanged(node);
-                logger.info("updateRunInfoInNode - Updated SeriesLeafNode: {} -> session {}",
-                    leaf.seriesName, newRunInfo.session.getSessionKey());
             }
         }
         // Update SeriesParentNode if it contains "Last"
@@ -1099,7 +1047,6 @@ public class RunManager extends JFrame {
                 SeriesParentNode newParent = new SeriesParentNode(parent.seriesName, newRuns);
                 node.setUserObject(newParent);
                 timeseriesTreeModel.nodeChanged(node);
-                logger.info("updateRunInfoInNode - Updated SeriesParentNode: {}", parent.seriesName);
             }
         }
 
@@ -1116,8 +1063,6 @@ public class RunManager extends JFrame {
      */
     private SessionManager.KalixSession resolveRunInfoSession(RunInfo runInfo) {
         if ("Last".equals(runInfo.runName) && lastRunInfo != null) {
-            logger.info("Resolving Last -> lastRunInfo.runName: {} | session: {}",
-                lastRunInfo.runName, lastRunInfo.session.getSessionKey());
             return lastRunInfo.session;
         }
         return runInfo.session;
@@ -1467,14 +1412,10 @@ public class RunManager extends JFrame {
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
         if (isUpdatingSelection) {
-            logger.info("Selection change IGNORED (isUpdatingSelection=true)");
             return;
         }
 
         TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-        logger.info("Selection changed - paths: {} | event: {}",
-            selectedPaths == null ? "null" : selectedPaths.length,
-            e.getNewLeadSelectionPath());
 
         // Block timeseries tree selection events during rebuild and restoration
         isUpdatingSelection = true;
@@ -1838,17 +1779,13 @@ public class RunManager extends JFrame {
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
         if (isUpdatingSelection) {
-            logger.info("onOutputsTreeSelectionChanged - IGNORED (isUpdatingSelection=true)");
             return;
         }
 
         TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
-        logger.info("onOutputsTreeSelectionChanged - paths: {}",
-            selectedPaths == null ? "null" : selectedPaths.length);
 
         if (selectedPaths == null || selectedPaths.length == 0) {
             // Clear plot and stats when nothing is selected
-            logger.info("onOutputsTreeSelectionChanged - Clearing plot (no selection)");
             clearPlotAndStats();
             selectedSeries.clear();
             return;
@@ -1883,8 +1820,6 @@ public class RunManager extends JFrame {
         // Don't reset zoom if: there's overlap (adding series or Last updating)
         boolean hasOverlap = selectedSeries.stream().anyMatch(newSelectedSeries::contains);
         final boolean shouldResetZoom = selectedSeries.isEmpty() || !hasOverlap;
-        logger.info("onOutputsTreeSelectionChanged - hasOverlap: {} | shouldResetZoom: {} | old: {} | new: {}",
-            hasOverlap, shouldResetZoom, selectedSeries.size(), newSelectedSeries.size());
 
         // Determine which series to add and which to remove
         Set<String> seriesToAdd = new HashSet<>(newSelectedSeries);
@@ -1989,7 +1924,6 @@ public class RunManager extends JFrame {
 
                             // Zoom to fit in all plot panels (once for all series) if selection completely changed
                             if (shouldResetZoom) {
-                                logger.info("Resetting zoom after loading new data (selection completely changed)");
                                 for (PlotPanel panel : tabManager.getAllPlotPanels()) {
                                     panel.zoomToFit();
                                 }
@@ -2028,7 +1962,6 @@ public class RunManager extends JFrame {
 
         // If selection completely changed and we don't have the new data yet, zoom after data loads
         if (!plotDataSet.isEmpty() && shouldResetZoom) {
-            logger.info("Resetting zoom (selection completely changed)");
             for (PlotPanel panel : tabManager.getAllPlotPanels()) {
                 panel.zoomToFit();
             }

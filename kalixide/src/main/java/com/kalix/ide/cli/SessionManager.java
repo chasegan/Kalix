@@ -483,7 +483,6 @@ public class SessionManager {
                 try {
                     // Convert the message back to JSON string for the TimeSeriesRequestManager
                     String jsonResponse = convertMessageToJsonString(message);
-                    logger.debug("Routing get_result response to TimeSeriesRequestManager");
                     timeSeriesResponseHandler.accept(jsonResponse);
                     return; // Message was handled by TimeSeriesRequestManager
                 } catch (Exception e) {

@@ -52,7 +52,6 @@ public class SchemaManager {
         List<String> disabledRulesList = PreferenceManager.getFileStringList(PreferenceKeys.LINTER_DISABLED_RULES, List.of());
         disabledRules.addAll(disabledRulesList);
 
-        logger.debug("Loaded linter preferences: enabled={}, disabled rules={}", lintingEnabled, disabledRules);
     }
 
     /**
@@ -65,13 +64,11 @@ public class SchemaManager {
             if (customSchemaPath.isEmpty()) {
                 // Use default embedded schema
                 currentSchema = LinterSchema.loadDefault();
-                logger.debug("Loaded default embedded schema");
             } else {
                 // Try to load custom schema
                 Path schemaPath = Paths.get(customSchemaPath);
                 if (Files.exists(schemaPath) && Files.isRegularFile(schemaPath)) {
                     currentSchema = LinterSchema.loadFromFile(schemaPath);
-                    logger.debug("Loaded custom schema from: {}", customSchemaPath);
                 } else {
                     logger.warn("Custom schema file not found: {}, falling back to default", customSchemaPath);
                     currentSchema = LinterSchema.loadDefault();
@@ -103,7 +100,6 @@ public class SchemaManager {
             ValidationRule rule = currentSchema.getValidationRule(ruleName);
             if (rule != null) {
                 rule.setEnabled(false);
-                logger.debug("Disabled rule: {}", ruleName);
             }
         }
     }
@@ -131,7 +127,6 @@ public class SchemaManager {
             notifyLintingStateChanged(enabled);
         }
 
-        logger.debug("Updated linter preferences and reloaded schema");
     }
 
     /**

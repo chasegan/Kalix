@@ -60,18 +60,13 @@ public class MemoryMonitor {
         monitorExecutor.scheduleAtFixedRate(this::checkMemoryUsage,
                                           monitoringIntervalMs,
                                           monitoringIntervalMs,
-                                          TimeUnit.MILLISECONDS);
-
-        logger.info("Memory monitoring started (interval: {}ms, warning threshold: {}MB)",
-                   monitoringIntervalMs, memoryWarningThresholdMB);
-    }
+                                          TimeUnit.MILLISECONDS);    }
 
     /**
      * Stop monitoring memory usage.
      */
     public void stopMonitoring() {
         monitoring = false;
-        logger.info("Memory monitoring stopped");
     }
 
     /**
@@ -79,9 +74,7 @@ public class MemoryMonitor {
      */
     public void startValidationMemoryTracking() {
         MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
-        validationStartMemory = heapUsage.getUsed();
-        logger.debug("Validation started - heap usage: {} MB", bytesToMB(validationStartMemory));
-    }
+        validationStartMemory = heapUsage.getUsed();    }
 
     /**
      * Mark the end of a validation operation and report memory delta.
@@ -91,11 +84,7 @@ public class MemoryMonitor {
         long currentMemory = heapUsage.getUsed();
         long memoryDelta = currentMemory - validationStartMemory;
 
-        if (memoryDelta > 0) {
-            logger.debug("Validation completed - memory delta: +{} MB", bytesToMB(memoryDelta));
-        } else {
-            logger.debug("Validation completed - memory delta: {} MB", bytesToMB(memoryDelta));
-        }
+        if (memoryDelta > 0) {        } else {        }
 
         // Update peak tracking
         peakHeapUsed.updateAndGet(current -> Math.max(current, currentMemory));
@@ -136,11 +125,7 @@ public class MemoryMonitor {
 
         MemoryUsage afterGC = memoryBean.getHeapMemoryUsage();
         long afterUsed = afterGC.getUsed();
-        long reclaimed = beforeUsed - afterUsed;
-
-        logger.info("Forced GC - reclaimed: {} MB, remaining: {} MB",
-                   bytesToMB(reclaimed), bytesToMB(afterUsed));
-    }
+        long reclaimed = beforeUsed - afterUsed;    }
 
     /**
      * Reset peak memory tracking.
@@ -148,7 +133,6 @@ public class MemoryMonitor {
     public void resetPeakTracking() {
         peakHeapUsed.set(0);
         peakNonHeapUsed.set(0);
-        logger.debug("Peak memory tracking reset");
     }
 
     public static class MemoryStats {
@@ -237,6 +221,5 @@ public class MemoryMonitor {
             monitorExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        logger.debug("MemoryMonitor shutdown completed");
     }
 }
