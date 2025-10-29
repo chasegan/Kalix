@@ -64,22 +64,24 @@ public class ViewPort {
 
     /**
      * Returns a valid minimum transformed value when viewport min is invalid for the scale.
+     * Only LOG scale can produce NaN (for non-positive values).
      */
     private double getValidMinForScale(YAxisScale scale) {
         return switch(scale) {
             case LOG -> -6.0;  // log10(0.000001) - represents very small positive values
-            case SQRT -> 0.0;  // sqrt(0)
+            case SQRT -> yAxisScale.transform(minValue);  // Signed sqrt handles all values
             case LINEAR -> minValue; // Should never be NaN
         };
     }
 
     /**
      * Returns a valid maximum transformed value when viewport max is invalid for the scale.
+     * Only LOG scale can produce NaN (for non-positive values).
      */
     private double getValidMaxForScale(YAxisScale scale, double validMin) {
         return switch(scale) {
             case LOG -> validMin + 6.0;  // Reasonable range
-            case SQRT -> 10.0;  // sqrt(100)
+            case SQRT -> yAxisScale.transform(maxValue);  // Signed sqrt handles all values
             case LINEAR -> maxValue; // Should never be NaN
         };
     }
@@ -143,18 +145,25 @@ public class ViewPort {
     
     // Viewport manipulation
     public ViewPort zoom(double factor, long centerTimeMs, double centerValue) {
+        // Time zoom (always linear)
         long timeRange = endTimeMs - startTimeMs;
-        double valueRange = maxValue - minValue;
-
         long newTimeRange = (long) (timeRange / factor);
-        double newValueRange = valueRange / factor;
-
-        // Center zoom on specified point
         long newStartTime = centerTimeMs - newTimeRange / 2;
         long newEndTime = centerTimeMs + newTimeRange / 2;
 
-        double newMinValue = centerValue - newValueRange / 2;
-        double newMaxValue = centerValue + newValueRange / 2;
+        // Value zoom in transformed space for correct behavior with non-linear scales
+        double transformedCenter = yAxisScale.transform(centerValue);
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        double transformedRange = transformedMax - transformedMin;
+
+        double newTransformedRange = transformedRange / factor;
+        double newTransformedMin = transformedCenter - newTransformedRange / 2;
+        double newTransformedMax = transformedCenter + newTransformedRange / 2;
+
+        // Inverse transform back to data space
+        double newMinValue = yAxisScale.inverseTransform(newTransformedMin);
+        double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
 
         return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale);

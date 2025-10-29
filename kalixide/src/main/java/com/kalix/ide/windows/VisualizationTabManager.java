@@ -274,7 +274,8 @@ public class VisualizationTabManager {
                 boolean enabled = button.isSelected();
                 plotPanel.setAutoYMode(enabled);
                 if (enabled) {
-                    plotPanel.zoomToFit();
+                    // Fit Y-axis to visible data in current X range (don't change X zoom)
+                    plotPanel.fitYAxis();
                 }
             });
             toolbar.add(button);

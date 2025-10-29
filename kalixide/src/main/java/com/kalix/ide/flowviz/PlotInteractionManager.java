@@ -2,6 +2,7 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.KalixTimeSeriesWriter;
 
@@ -201,6 +202,39 @@ public class PlotInteractionManager {
     }
 
     /**
+     * Fits the Y-axis to the data visible in the current X (time) range.
+     * Keeps the X zoom unchanged.
+     */
+    public void fitYAxisToCurrentXRange() {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return;
+
+        long startTime = currentViewport.getStartTimeMs();
+        long endTime = currentViewport.getEndTimeMs();
+        updateViewportWithFittedY(startTime, endTime);
+        parentComponent.repaint();
+    }
+
+    /**
+     * Helper method: Updates viewport with specified time range and Y fitted to visible data.
+     * Used by Auto-Y mode zoom operations.
+     */
+    private void updateViewportWithFittedY(long startTime, long endTime) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return;
+
+        // Calculate Y range for visible data in the time range
+        double[] yRange = calculateVisibleYRange(startTime, endTime);
+
+        // Create new viewport
+        Rectangle plotArea = plotAreaSupplier.get();
+        ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
+                                          plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                          currentViewport.getYAxisScale());
+        viewportUpdater.accept(newViewport);
+    }
+
+    /**
      * Zooms in at the center of the plot area.
      */
     public void zoomIn() {
@@ -216,14 +250,7 @@ public class PlotInteractionManager {
             long startTime = centerTime - newTimeRange / 2;
             long endTime = centerTime + newTimeRange / 2;
 
-            // Calculate Y range for visible data in new X range
-            double[] yRange = calculateVisibleYRange(startTime, endTime);
-
-            Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale());
-            viewportUpdater.accept(newViewport);
+            updateViewportWithFittedY(startTime, endTime);
         } else {
             // Standard zoom: zoom both axes
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
@@ -251,14 +278,7 @@ public class PlotInteractionManager {
             long startTime = centerTime - newTimeRange / 2;
             long endTime = centerTime + newTimeRange / 2;
 
-            // Calculate Y range for visible data in new X range
-            double[] yRange = calculateVisibleYRange(startTime, endTime);
-
-            Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale());
-            viewportUpdater.accept(newViewport);
+            updateViewportWithFittedY(startTime, endTime);
         } else {
             // Standard zoom: zoom both axes
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
@@ -283,6 +303,8 @@ public class PlotInteractionManager {
 
     /**
      * Handles mouse wheel zoom events.
+     * Ctrl+Scroll (Windows/Linux) or Cmd+Scroll (Mac): Y-axis only
+     * Scroll alone: Both axes
      */
     private void handleZoom(MouseWheelEvent e) {
         ViewPort currentViewport = viewportSupplier.get();
@@ -291,6 +313,9 @@ public class PlotInteractionManager {
         // Use smaller zoom factor for mouse wheel (less sensitive)
         double wheelZoomFactor = Math.pow(1.1, -e.getWheelRotation());
 
+        // Check for modifier keys: Ctrl (Windows/Linux) or Cmd (Mac)
+        boolean isYAxisOnlyZoom = e.isControlDown() || e.isMetaDown();
+
         if (autoYMode) {
             // Auto-Y mode: only zoom X-axis centered on mouse, then auto-fit Y
             long mouseTime = currentViewport.screenXToTime(e.getX());
@@ -298,19 +323,41 @@ public class PlotInteractionManager {
             long currentEndTime = currentViewport.getEndTimeMs();
             long currentTimeRange = currentEndTime - currentStartTime;
 
-            // Calculate new time range
+            // Calculate new time range centered on mouse
             long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
-
-            // Center the new range on the mouse position
             double mouseRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
             long startTime = mouseTime - (long) (newTimeRange * mouseRatio);
             long endTime = startTime + newTimeRange;
 
-            // Calculate Y range for visible data in new X range
-            double[] yRange = calculateVisibleYRange(startTime, endTime);
+            updateViewportWithFittedY(startTime, endTime);
+        } else if (isYAxisOnlyZoom) {
+            // Ctrl/Cmd+Scroll: Y-axis only zoom centered on mouse Y position
+            double mouseValue = currentViewport.screenYToValue(e.getY());
+
+            // Keep time range unchanged
+            long startTime = currentViewport.getStartTimeMs();
+            long endTime = currentViewport.getEndTimeMs();
+
+            // Zoom Y-axis in transformed space to keep mouse point stationary
+            double transformedMouseValue = currentViewport.getYAxisScale().transform(mouseValue);
+            double transformedMin = currentViewport.getTransformedMin();
+            double transformedMax = currentViewport.getTransformedMax();
+            double transformedRange = transformedMax - transformedMin;
+
+            // Calculate new transformed range
+            double newTransformedRange = transformedRange / wheelZoomFactor;
+
+            // Center transformed range on mouse position in transformed space
+            double mouseTransformedRatio = (transformedMouseValue - transformedMin) / transformedRange;
+            double newTransformedMin = transformedMouseValue - (newTransformedRange * mouseTransformedRatio);
+            double newTransformedMax = newTransformedMin + newTransformedRange;
+
+            // Inverse transform back to data space
+            double minValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMin);
+            double maxValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMax);
 
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
+            ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
                                               plotArea.x, plotArea.y, plotArea.width, plotArea.height,
                                               currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
@@ -319,28 +366,36 @@ public class PlotInteractionManager {
             long mouseTime = currentViewport.screenXToTime(e.getX());
             double mouseValue = currentViewport.screenYToValue(e.getY());
 
-            // Get current ranges
+            // Get current ranges (time in data space, as it's always linear)
             long currentStartTime = currentViewport.getStartTimeMs();
             long currentEndTime = currentViewport.getEndTimeMs();
-            double currentMinValue = currentViewport.getMinValue();
-            double currentMaxValue = currentViewport.getMaxValue();
-
             long currentTimeRange = currentEndTime - currentStartTime;
-            double currentValueRange = currentMaxValue - currentMinValue;
 
-            // Calculate new ranges
+            // Calculate new time range
             long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
-            double newValueRange = currentValueRange / wheelZoomFactor;
 
-            // Center the new ranges on mouse position
+            // Center time range on mouse position (linear, so data space is fine)
             double mouseTimeRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
-            double mouseValueRatio = (mouseValue - currentMinValue) / currentValueRange;
-
             long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
             long endTime = startTime + newTimeRange;
 
-            double minValue = mouseValue - (newValueRange * mouseValueRatio);
-            double maxValue = minValue + newValueRange;
+            // For Y-axis: work in TRANSFORMED space to keep mouse point stationary
+            double transformedMouseValue = currentViewport.getYAxisScale().transform(mouseValue);
+            double transformedMin = currentViewport.getTransformedMin();
+            double transformedMax = currentViewport.getTransformedMax();
+            double transformedRange = transformedMax - transformedMin;
+
+            // Calculate new transformed range
+            double newTransformedRange = transformedRange / wheelZoomFactor;
+
+            // Center transformed range on mouse position in transformed space
+            double mouseTransformedRatio = (transformedMouseValue - transformedMin) / transformedRange;
+            double newTransformedMin = transformedMouseValue - (newTransformedRange * mouseTransformedRatio);
+            double newTransformedMax = newTransformedMin + newTransformedRange;
+
+            // Inverse transform back to data space
+            double minValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMin);
+            double maxValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMax);
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
@@ -367,18 +422,10 @@ public class PlotInteractionManager {
             long timeRange = currentViewport.getTimeRangeMs();
             long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
 
-            // Calculate new time range
             long newStartTime = currentViewport.getStartTimeMs() + deltaTime;
             long newEndTime = currentViewport.getEndTimeMs() + deltaTime;
 
-            // Calculate Y range for visible data in new X range
-            double[] yRange = calculateVisibleYRange(newStartTime, newEndTime);
-
-            Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(newStartTime, newEndTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale());
-            viewportUpdater.accept(newViewport);
+            updateViewportWithFittedY(newStartTime, newEndTime);
         } else {
             // Standard pan: pan both axes using pixel-based panning for correct non-linear scale behavior
             ViewPort newViewport = currentViewport.panByPixels(dx, dy);
@@ -400,6 +447,10 @@ public class PlotInteractionManager {
             return new double[]{-1.0, 1.0}; // Default range
         }
 
+        // Get current scale to filter invalid values
+        ViewPort currentViewport = viewportSupplier.get();
+        YAxisScale yAxisScale = currentViewport != null ? currentViewport.getYAxisScale() : YAxisScale.LINEAR;
+
         double minValue = Double.POSITIVE_INFINITY;
         double maxValue = Double.NEGATIVE_INFINITY;
         boolean hasValidData = false;
@@ -417,11 +468,14 @@ public class PlotInteractionManager {
             for (int i = 0; i < timestamps.length; i++) {
                 if (timestamps[i] >= startTime && timestamps[i] <= endTime && validPoints[i]) {
                     double value = values[i];
-                    if (!Double.isNaN(value)) {
-                        minValue = Math.min(minValue, value);
-                        maxValue = Math.max(maxValue, value);
-                        hasValidData = true;
-                    }
+
+                    // Skip NaN and values invalid for current scale
+                    if (Double.isNaN(value)) continue;
+                    if (yAxisScale == YAxisScale.LOG && value <= 0) continue; // LOG requires positive values
+
+                    minValue = Math.min(minValue, value);
+                    maxValue = Math.max(maxValue, value);
+                    hasValidData = true;
                 }
             }
         }
@@ -430,16 +484,25 @@ public class PlotInteractionManager {
             return new double[]{-1.0, 1.0}; // Default range when no data
         }
 
-        // Add 5% padding
+        // Add 5% padding appropriate for the current Y-axis scale
         double valueRange = maxValue - minValue;
         if (valueRange < 0.001) { // Very small range
             double center = (minValue + maxValue) / 2;
             minValue = center - 0.5;
             maxValue = center + 0.5;
         } else {
-            double padding = valueRange * 0.05;
-            minValue -= padding;
-            maxValue += padding;
+            // Apply padding in transformed space for correct visual spacing
+            double transformedMin = yAxisScale.transform(minValue);
+            double transformedMax = yAxisScale.transform(maxValue);
+            double transformedRange = transformedMax - transformedMin;
+
+            double padding = transformedRange * 0.05;
+            transformedMin -= padding;
+            transformedMax += padding;
+
+            // Inverse transform back to data space
+            minValue = yAxisScale.inverseTransform(transformedMin);
+            maxValue = yAxisScale.inverseTransform(transformedMax);
         }
 
         return new double[]{minValue, maxValue};

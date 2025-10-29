@@ -33,7 +33,16 @@ public enum YAxisScale {
         return switch(this) {
             case LINEAR -> y;
             case LOG -> y > 0 ? Math.log10(y) : Double.NaN;
-            case SQRT -> y >= 0 ? Math.sqrt(y) : Double.NaN;
+            case SQRT -> {
+                // Signed sqrt: sign(x) × √|x|
+                // Standard approach used by matplotlib and ggplot2
+                // Allows viewport to pan through negative space
+                if (y >= 0) {
+                    yield Math.sqrt(y);
+                } else {
+                    yield -Math.sqrt(-y);
+                }
+            }
         };
     }
 
@@ -47,7 +56,14 @@ public enum YAxisScale {
         return switch(this) {
             case LINEAR -> transformedY;
             case LOG -> Math.pow(10, transformedY);
-            case SQRT -> transformedY * transformedY;
+            case SQRT -> {
+                // Inverse of signed sqrt: sign(t) × t²
+                if (transformedY >= 0) {
+                    yield transformedY * transformedY;
+                } else {
+                    yield -(transformedY * transformedY);
+                }
+            }
         };
     }
 

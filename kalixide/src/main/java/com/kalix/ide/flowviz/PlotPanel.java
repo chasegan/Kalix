@@ -318,7 +318,13 @@ public class PlotPanel extends JPanel {
         zoomToFitData();
         repaint();
     }
-    
+
+    public void fitYAxis() {
+        if (plotInteractionManager != null) {
+            plotInteractionManager.fitYAxisToCurrentXRange();
+        }
+    }
+
     public void resetView() {
         zoomToFitData();
         repaint();
@@ -424,7 +430,14 @@ public class PlotPanel extends JPanel {
         this.aggregationMethod = method;
 
         rebuildDisplayDataSet();
-        zoomToFit(); // Refit to new data range
+
+        // If Auto-Y mode is enabled, preserve X zoom and fit Y-axis to new data
+        // Otherwise, zoom to fit both axes (user expects to see all the new data)
+        if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
     }
 
     /**
@@ -471,7 +484,12 @@ public class PlotPanel extends JPanel {
             currentViewport = currentViewport.withYAxisScale(scale);
         }
 
-        repaint();
+        // If Auto-Y mode is enabled, re-fit Y-axis to data in the new scale
+        if (autoYMode) {
+            fitYAxis();
+        } else {
+            repaint();
+        }
     }
 
     /**
