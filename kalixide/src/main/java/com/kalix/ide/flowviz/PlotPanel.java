@@ -151,9 +151,9 @@ public class PlotPanel extends JPanel {
         
         Rectangle plotArea = getPlotArea();
         currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale);
     }
-    
+
     private void createDefaultViewport() {
         // Default viewport showing current time ± 1 hour
         long now = System.currentTimeMillis();
@@ -162,7 +162,7 @@ public class PlotPanel extends JPanel {
 
         Rectangle plotArea = getPlotArea();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale);
     }
 
     private void setupMouseListeners() {
@@ -457,7 +457,7 @@ public class PlotPanel extends JPanel {
 
     /**
      * Sets the Y-axis scale for this plot.
-     * Currently logs the change (Y-transform will be applied in Phase 3).
+     * Updates the viewport to use the new transformation.
      */
     public void setYAxisScale(YAxisScale scale) {
         if (scale == null) {
@@ -465,7 +465,12 @@ public class PlotPanel extends JPanel {
         }
 
         this.yAxisScale = scale;
-        // Phase 3: Apply transform at render time
+
+        // Update viewport with new scale
+        if (currentViewport != null) {
+            currentViewport = currentViewport.withYAxisScale(scale);
+        }
+
         repaint();
     }
 

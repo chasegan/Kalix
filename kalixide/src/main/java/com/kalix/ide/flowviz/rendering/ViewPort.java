@@ -1,26 +1,33 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.transform.YAxisScale;
+
 public class ViewPort {
     private long startTimeMs;
     private long endTimeMs;
     private double minValue;
     private double maxValue;
-    
+
     // Plot area dimensions
     private int plotX;
     private int plotY;
     private int plotWidth;
     private int plotHeight;
+
+    // Y-axis transformation
+    private YAxisScale yAxisScale;
     
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue) {
-        this.startTimeMs = startTimeMs;
-        this.endTimeMs = endTimeMs;
-        this.minValue = minValue;
-        this.maxValue = maxValue;
+        this(startTimeMs, endTimeMs, minValue, maxValue, 0, 0, 0, 0, YAxisScale.LINEAR);
     }
-    
+
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
                    int plotX, int plotY, int plotWidth, int plotHeight) {
+        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, YAxisScale.LINEAR);
+    }
+
+    public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
+                   int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale) {
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
         this.minValue = minValue;
@@ -29,6 +36,7 @@ public class ViewPort {
         this.plotY = plotY;
         this.plotWidth = plotWidth;
         this.plotHeight = plotHeight;
+        this.yAxisScale = yAxisScale != null ? yAxisScale : YAxisScale.LINEAR;
     }
     
     // Transform coordinates between data space and screen space
@@ -38,8 +46,67 @@ public class ViewPort {
     }
     
     public int valueToScreenY(double value) {
-        if (maxValue == minValue) return plotY + plotHeight / 2;
-        return (int) (plotY + plotHeight - ((value - minValue) / (maxValue - minValue)) * plotHeight);
+        // Apply Y-axis transformation
+        double transformedValue = yAxisScale.transform(value);
+
+        // NaN values (invalid for the current scale) return a screen coordinate off-plot
+        if (Double.isNaN(transformedValue)) {
+            return plotY + plotHeight + 1000; // Far below visible area - won't be drawn
+        }
+
+        // Get transformed bounds (handles invalid bounds gracefully)
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+
+        if (transformedMax == transformedMin) return plotY + plotHeight / 2;
+        return (int) (plotY + plotHeight - ((transformedValue - transformedMin) / (transformedMax - transformedMin)) * plotHeight);
+    }
+
+    /**
+     * Returns a valid minimum transformed value when viewport min is invalid for the scale.
+     */
+    private double getValidMinForScale(YAxisScale scale) {
+        return switch(scale) {
+            case LOG -> -6.0;  // log10(0.000001) - represents very small positive values
+            case SQRT -> 0.0;  // sqrt(0)
+            case LINEAR -> minValue; // Should never be NaN
+        };
+    }
+
+    /**
+     * Returns a valid maximum transformed value when viewport max is invalid for the scale.
+     */
+    private double getValidMaxForScale(YAxisScale scale, double validMin) {
+        return switch(scale) {
+            case LOG -> validMin + 6.0;  // Reasonable range
+            case SQRT -> 10.0;  // sqrt(100)
+            case LINEAR -> maxValue; // Should never be NaN
+        };
+    }
+
+    /**
+     * Gets the transformed min value, clamping to valid range if needed.
+     * Public helper for axis rendering.
+     */
+    public double getTransformedMin() {
+        double transformedMin = yAxisScale.transform(minValue);
+        if (Double.isNaN(transformedMin)) {
+            return getValidMinForScale(yAxisScale);
+        }
+        return transformedMin;
+    }
+
+    /**
+     * Gets the transformed max value, clamping to valid range if needed.
+     * Public helper for axis rendering.
+     */
+    public double getTransformedMax() {
+        double transformedMax = yAxisScale.transform(maxValue);
+        if (Double.isNaN(transformedMax)) {
+            double validMin = getTransformedMin();
+            return getValidMaxForScale(yAxisScale, validMin);
+        }
+        return transformedMax;
     }
     
     public long screenXToTime(int screenX) {
@@ -51,7 +118,14 @@ public class ViewPort {
     public double screenYToValue(int screenY) {
         if (plotHeight == 0) return minValue;
         double ratio = (double)(plotY + plotHeight - screenY) / plotHeight;
-        return minValue + ratio * (maxValue - minValue);
+
+        // Work in transformed space (handles invalid bounds gracefully)
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        double transformedValue = transformedMin + ratio * (transformedMax - transformedMin);
+
+        // Apply inverse transformation to get back to data space
+        return yAxisScale.inverseTransform(transformedValue);
     }
     
     // Check if point is visible
@@ -71,30 +145,74 @@ public class ViewPort {
     public ViewPort zoom(double factor, long centerTimeMs, double centerValue) {
         long timeRange = endTimeMs - startTimeMs;
         double valueRange = maxValue - minValue;
-        
+
         long newTimeRange = (long) (timeRange / factor);
         double newValueRange = valueRange / factor;
-        
+
         // Center zoom on specified point
         long newStartTime = centerTimeMs - newTimeRange / 2;
         long newEndTime = centerTimeMs + newTimeRange / 2;
-        
+
         double newMinValue = centerValue - newValueRange / 2;
         double newMaxValue = centerValue + newValueRange / 2;
-        
-        return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue, 
-                          plotX, plotY, plotWidth, plotHeight);
+
+        return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
     }
-    
+
+    /**
+     * Pans the viewport by the specified deltas in data space.
+     * @deprecated Use panByPixels for correct behavior with non-linear scales
+     */
+    @Deprecated
     public ViewPort pan(long deltaTimeMs, double deltaValue) {
         return new ViewPort(startTimeMs + deltaTimeMs, endTimeMs + deltaTimeMs,
                           minValue + deltaValue, maxValue + deltaValue,
-                          plotX, plotY, plotWidth, plotHeight);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
     }
-    
+
+    /**
+     * Pans the viewport by screen pixel distances.
+     * Works correctly with non-linear Y-axis scales by computing deltas in transformed space.
+     *
+     * @param deltaPixelsX Horizontal pan distance in pixels (negative = pan left)
+     * @param deltaPixelsY Vertical pan distance in pixels (positive = pan up)
+     * @return New viewport after panning
+     */
+    public ViewPort panByPixels(int deltaPixelsX, int deltaPixelsY) {
+        // Calculate time delta (unchanged)
+        long timeRange = endTimeMs - startTimeMs;
+        long deltaTime = (long) (-deltaPixelsX * timeRange / (double) plotWidth);
+        long newStartTime = startTimeMs + deltaTime;
+        long newEndTime = endTimeMs + deltaTime;
+
+        // Calculate value delta in transformed space for correct scaling
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        double transformedRange = transformedMax - transformedMin;
+
+        // Delta in transformed space (positive deltaPixelsY = pan up = increase values)
+        double deltaTransformed = deltaPixelsY * transformedRange / (double) plotHeight;
+
+        double newTransformedMin = transformedMin + deltaTransformed;
+        double newTransformedMax = transformedMax + deltaTransformed;
+
+        // Inverse transform back to data space
+        double newMinValue = yAxisScale.inverseTransform(newTransformedMin);
+        double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
+
+        return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+    }
+
     public ViewPort withPlotArea(int plotX, int plotY, int plotWidth, int plotHeight) {
         return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
-                          plotX, plotY, plotWidth, plotHeight);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+    }
+
+    public ViewPort withYAxisScale(YAxisScale yAxisScale) {
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
     }
     
     // Calculate how many pixels per data point
@@ -126,6 +244,7 @@ public class ViewPort {
     public int getPlotY() { return plotY; }
     public int getPlotWidth() { return plotWidth; }
     public int getPlotHeight() { return plotHeight; }
+    public YAxisScale getYAxisScale() { return yAxisScale; }
     
     @Override
     public String toString() {

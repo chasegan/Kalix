@@ -221,7 +221,8 @@ public class PlotInteractionManager {
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                              currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
         } else {
             // Standard zoom: zoom both axes
@@ -255,7 +256,8 @@ public class PlotInteractionManager {
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                              currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
         } else {
             // Standard zoom: zoom both axes
@@ -309,7 +311,8 @@ public class PlotInteractionManager {
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                              currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
         } else {
             // Standard zoom: zoom both axes centered on mouse position
@@ -341,7 +344,8 @@ public class PlotInteractionManager {
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                              currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
         }
 
@@ -372,18 +376,12 @@ public class PlotInteractionManager {
 
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(newStartTime, newEndTime, yRange[0], yRange[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                              currentViewport.getYAxisScale());
             viewportUpdater.accept(newViewport);
         } else {
-            // Standard pan: pan both axes
-            long timeRange = currentViewport.getTimeRangeMs();
-            double valueRange = currentViewport.getValueRange();
-
-            long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
-            double deltaValue = dy * valueRange / currentViewport.getPlotHeight();
-
-            // Pan the viewport
-            ViewPort newViewport = currentViewport.pan(deltaTime, deltaValue);
+            // Standard pan: pan both axes using pixel-based panning for correct non-linear scale behavior
+            ViewPort newViewport = currentViewport.panByPixels(dx, dy);
             viewportUpdater.accept(newViewport);
         }
 

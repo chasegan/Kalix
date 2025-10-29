@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.transform.YAxisScale;
+
 import java.awt.*;
 import java.time.format.DateTimeFormatter;
 import java.time.Instant;
@@ -69,25 +71,35 @@ public class AxisRenderer {
 
     /**
      * Calculates optimal value axis tick positions.
+     * Works in transformed space to ensure even distribution on screen.
      *
      * @param viewport The current viewport
-     * @return List of value tick positions
+     * @return List of value tick positions (in data space)
      */
     public List<Double> calculateValueTicks(ViewPort viewport) {
         List<Double> ticks = new ArrayList<>();
-        double valueRange = viewport.getValueRange();
-        if (valueRange <= 0) return ticks;
 
-        // Calculate appropriate value tick interval
+        // Get transformed bounds (viewport handles invalid bounds gracefully)
+        double transformedMin = viewport.getTransformedMin();
+        double transformedMax = viewport.getTransformedMax();
+
+        double transformedRange = transformedMax - transformedMin;
+        if (transformedRange <= 0) return ticks;
+
+        // Calculate appropriate tick interval in transformed space
         int numTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotHeight() / VALUE_AXIS_MIN_SPACING));
-        double tickInterval = valueRange / (numTicks - 1);
+        double tickInterval = transformedRange / (numTicks - 1);
         tickInterval = roundToNiceValueInterval(tickInterval);
 
-        double currentValue = Math.floor(viewport.getMinValue() / tickInterval) * tickInterval;
+        // Generate ticks in transformed space
+        double currentTransformedValue = Math.floor(transformedMin / tickInterval) * tickInterval;
 
-        while (currentValue <= viewport.getMaxValue() + tickInterval / 2) {
-            ticks.add(currentValue);
-            currentValue += tickInterval;
+        YAxisScale yAxisScale = viewport.getYAxisScale();
+        while (currentTransformedValue <= transformedMax + tickInterval / 2) {
+            // Inverse transform back to data space for storage and display
+            double dataSpaceValue = yAxisScale.inverseTransform(currentTransformedValue);
+            ticks.add(dataSpaceValue);
+            currentTransformedValue += tickInterval;
         }
 
         return ticks;
