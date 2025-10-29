@@ -61,9 +61,18 @@ public class RunManager extends JFrame {
     private DataSet plotDataSet;
 
     // Series color management
+    // Categorical 10 color palette - optimized for visibility and distinction
     private static final Color[] SERIES_COLORS = {
-        Color.BLUE, Color.RED, Color.GREEN, Color.ORANGE,
-        Color.MAGENTA, Color.CYAN, Color.PINK, Color.YELLOW
+        new Color(0x1f77b4),  // Blue
+        new Color(0xff7f0e),  // Orange
+        new Color(0x2ca02c),  // Green
+        new Color(0xd62728),  // Red
+        new Color(0x9467bd),  // Purple
+        new Color(0x8c564b),  // Brown
+        new Color(0xe377c2),  // Pink
+        new Color(0x7f7f7f),  // Gray
+        new Color(0xbcbd22),  // Yellow-green
+        new Color(0x17becf)   // Cyan
     };
     private Map<String, Color> seriesColorMap = new HashMap<>();
     private Set<String> selectedSeries = new HashSet<>();
@@ -866,8 +875,11 @@ public class RunManager extends JFrame {
 
             // Update RunInfo references in the existing tree without rebuilding
             // This preserves the tree structure and selection
+            // IMPORTANT: Create a RunInfo with name "Last" (not the actual run name)
+            // so timeseries display as "ds_1 [Last]" not "ds_1 [Run_3]"
+            RunInfo lastRunInfoWrapper = new RunInfo("Last", newLastRun.session);
             logger.info("updateLastRun - Updating RunInfo references in timeseries tree");
-            updateRunInfoInTimeseriesTree(lastRunInfo);
+            updateRunInfoInTimeseriesTree(lastRunInfoWrapper);
 
             isUpdatingSelection = false;
             logger.info("updateLastRun - Unblocking selection events");
@@ -942,26 +954,36 @@ public class RunManager extends JFrame {
     /**
      * Restores tree selection to match the current selectedSeries set.
      * This ensures the tree visually reflects what's plotted, even after tree rebuilds.
-     * Uses isUpdatingSelection flag to prevent triggering selection events.
+     * Also reconciles selectedSeries - removes series that are no longer available in the tree.
+     * Returns the set of series that were successfully restored.
      */
-    private void restoreTreeSelectionFromSelectedSeries() {
+    private Set<String> restoreTreeSelectionFromSelectedSeries() {
         if (selectedSeries.isEmpty()) {
             // Nothing to restore
             logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries is empty, nothing to restore");
-            return;
+            return Collections.emptySet();
         }
 
         logger.info("restoreTreeSelectionFromSelectedSeries - selectedSeries has {} entries: {}",
             selectedSeries.size(), selectedSeries);
 
         List<TreePath> pathsToSelect = new ArrayList<>();
+        Set<String> restoredSeriesKeys = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
-        // Search tree for nodes matching selectedSeries
-        searchAndCollectPaths(root, selectedSeries, pathsToSelect);
+        // Search tree for nodes matching selectedSeries, collect which ones we found
+        for (String seriesKey : selectedSeries) {
+            List<TreePath> foundPaths = new ArrayList<>();
+            searchAndCollectPaths(root, Collections.singleton(seriesKey), foundPaths);
+            if (!foundPaths.isEmpty()) {
+                pathsToSelect.addAll(foundPaths);
+                restoredSeriesKeys.add(seriesKey);
+            }
+        }
 
         if (!pathsToSelect.isEmpty()) {
-            logger.info("restoreTreeSelectionFromSelectedSeries - Restoring {} selections", pathsToSelect.size());
+            logger.info("restoreTreeSelectionFromSelectedSeries - Restoring {} of {} selections",
+                restoredSeriesKeys.size(), selectedSeries.size());
 
             // Note: Caller should have isUpdatingSelection set to block events
             // We don't set it here to avoid nesting issues
@@ -971,8 +993,60 @@ public class RunManager extends JFrame {
             logger.info("restoreTreeSelectionFromSelectedSeries - Selection restored, tree now has {} selected paths",
                 timeseriesTree.getSelectionPaths() == null ? 0 : timeseriesTree.getSelectionPaths().length);
         } else {
-            logger.info("restoreTreeSelectionFromSelectedSeries - No matching series found in rebuilt tree (model outputs may have changed)");
+            logger.info("restoreTreeSelectionFromSelectedSeries - No matching series found in rebuilt tree (all series removed)");
         }
+
+        // Log any series that couldn't be restored
+        Set<String> notRestored = new HashSet<>(selectedSeries);
+        notRestored.removeAll(restoredSeriesKeys);
+        if (!notRestored.isEmpty()) {
+            logger.info("restoreTreeSelectionFromSelectedSeries - {} series not found in tree (will be removed from plot): {}",
+                notRestored.size(), notRestored);
+        }
+
+        return restoredSeriesKeys;
+    }
+
+    /**
+     * Reconciles selectedSeries and plots with what's actually in the tree.
+     * Removes series that couldn't be restored (e.g., when a run is deselected).
+     *
+     * @param restoredSeries Set of series that were successfully found and restored in the tree
+     */
+    private void reconcileSelectedSeriesWithTree(Set<String> restoredSeries) {
+        // Find series that need to be removed (in selectedSeries but not restored)
+        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
+        seriesToRemove.removeAll(restoredSeries);
+
+        if (seriesToRemove.isEmpty()) {
+            logger.info("reconcileSelectedSeriesWithTree - All series still available, no reconciliation needed");
+            return;
+        }
+
+        logger.info("reconcileSelectedSeriesWithTree - Removing {} series that are no longer available: {}",
+            seriesToRemove.size(), seriesToRemove);
+
+        // Remove from selectedSeries
+        selectedSeries.removeAll(seriesToRemove);
+
+        // Remove from plot dataset
+        for (String seriesKey : seriesToRemove) {
+            plotDataSet.removeSeries(seriesKey);
+            seriesColorMap.remove(seriesKey);
+
+            // Remove from all stats tables
+            for (StatsTableModel model : tabManager.getAllStatsModels()) {
+                model.removeSeries(seriesKey);
+            }
+
+            // Remove from legend in all plots
+            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                panel.removeLegendSeries(seriesKey);
+            }
+        }
+
+        // Update plot visibility (don't reset zoom - we're just removing series)
+        updatePlotVisibility(false);
     }
 
     /**
@@ -1503,7 +1577,10 @@ public class RunManager extends JFrame {
 
         // Restore selection to match what's currently plotted
         // This ensures plots stay visible when tree rebuilds (e.g., adding Run_2)
-        restoreTreeSelectionFromSelectedSeries();
+        Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+
+        // Reconcile: remove series that are no longer in the tree from plots
+        reconcileSelectedSeriesWithTree(restoredSeries);
     }
 
     /**
@@ -1552,7 +1629,10 @@ public class RunManager extends JFrame {
 
         // Restore selection to match what's currently plotted
         // This ensures plots stay visible when tree rebuilds (e.g., adding Run_2)
-        restoreTreeSelectionFromSelectedSeries();
+        Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+
+        // Reconcile: remove series that are no longer in the tree from plots
+        reconcileSelectedSeriesWithTree(restoredSeries);
     }
 
     /**
@@ -2246,12 +2326,32 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Gets a consistent color for a series based on its name hash.
-     * This ensures the same series always gets the same color.
+     * Assigns the first unused color from the palette.
+     * When a series is removed, its color becomes available for reuse.
+     * Colors are assigned sequentially: Blue, Orange, Green, etc.
+     * If a gap exists (e.g., Blue removed), new series fills that gap.
      */
     private Color getColorForSeries(String seriesName) {
-        int hash = Math.abs(seriesName.hashCode());
-        return SERIES_COLORS[hash % SERIES_COLORS.length];
+        // Find which color indices are currently in use
+        Set<Integer> usedIndices = new HashSet<>();
+        for (Color color : seriesColorMap.values()) {
+            for (int i = 0; i < SERIES_COLORS.length; i++) {
+                if (SERIES_COLORS[i].equals(color)) {
+                    usedIndices.add(i);
+                    break;
+                }
+            }
+        }
+
+        // Find first available color index
+        for (int i = 0; i < SERIES_COLORS.length; i++) {
+            if (!usedIndices.contains(i)) {
+                return SERIES_COLORS[i];
+            }
+        }
+
+        // All colors used (10+ series), wrap around
+        return SERIES_COLORS[seriesColorMap.size() % SERIES_COLORS.length];
     }
 
     /**
