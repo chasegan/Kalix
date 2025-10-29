@@ -292,7 +292,7 @@ public class RunManager extends JFrame {
                     if (userObject instanceof RunInfo) {
                         RunInfo runInfo = (RunInfo) userObject;
                         String uid = runInfo.session.getKalixcliUid();
-                        return "UID: " + uid;
+                        return uid;
                     }
                 }
                 return null;
@@ -1249,10 +1249,9 @@ public class RunManager extends JFrame {
             String modelText = program.getModelText();
 
             if (modelText != null && !modelText.isEmpty()) {
-                // Create and show MinimalEditorWindow with the model text
-                MinimalEditorWindow editorWindow = new MinimalEditorWindow(modelText);
-                editorWindow.setTitle("Model - " + runInfo.runName);
-                editorWindow.setSyntaxEditingStyle(org.fife.ui.rsyntaxtextarea.SyntaxConstants.SYNTAX_STYLE_NONE);
+                // Create and show MinimalEditorWindow with the model text in INI mode
+                MinimalEditorWindow editorWindow = new MinimalEditorWindow(modelText, true);
+                editorWindow.setTitle(runInfo.runName);
                 editorWindow.setVisible(true);
             } else {
                 JOptionPane.showMessageDialog(

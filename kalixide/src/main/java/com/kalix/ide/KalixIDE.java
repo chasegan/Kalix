@@ -988,6 +988,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     clearAppData();
                 }
             }
+
+            @Override
+            public void onFontSizeChanged(int fontSize) {
+                // Update all open MinimalEditorWindow instances with new font size
+                MinimalEditorWindow.updateAllFontSizes(fontSize);
+            }
         };
 
         PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, schemaManager, callback);

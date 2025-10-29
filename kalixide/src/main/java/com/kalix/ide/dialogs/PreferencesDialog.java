@@ -36,6 +36,7 @@ public class PreferencesDialog extends JDialog {
         void onFlowVizPreferencesChanged();
         void onMapPreferencesChanged();
         void onSystemActionRequested(String action);
+        void onFontSizeChanged(int fontSize);
     }
 
     private PreferenceChangeCallback changeCallback;
@@ -967,6 +968,11 @@ public class PreferencesDialog extends JDialog {
                 // Update the text editor font immediately
                 if (textEditor != null) {
                     textEditor.updateFontSize(fontSize);
+                }
+
+                // Notify callback listeners (e.g., to update MinimalEditorWindows)
+                if (changeCallback != null) {
+                    changeCallback.onFontSizeChanged(fontSize);
                 }
             });
             formPanel.add(fontSizeSpinner, gbc);
