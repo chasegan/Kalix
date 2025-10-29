@@ -1183,14 +1183,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                     if (!RunManager.isWindowOpen()) {
                         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
                     }
-
-                    // Select the newly created run after a brief delay to allow Run Manager to refresh
-                    Timer selectionTimer = new Timer(500, e -> {
-                        RunManager.selectRunIfOpen(sessionKey);
-                        ((Timer) e.getSource()).stop();
-                    });
-                    selectionTimer.setRepeats(false);
-                    selectionTimer.start();
                 });
             })
             .exceptionally(throwable -> {

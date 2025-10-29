@@ -630,7 +630,10 @@ public class RunManager extends JFrame {
 
         SwingUtilities.invokeLater(() -> {
             Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
-            boolean[] treeStructureChanged = {false};
+
+            // Track nodes that were inserted for proper tree notification
+            List<Integer> insertedIndices = new ArrayList<>();
+            List<DefaultMutableTreeNode> insertedNodes = new ArrayList<>();
 
             // Check for new sessions
             for (SessionManager.KalixSession session : activeSessions.values()) {
@@ -650,10 +653,17 @@ public class RunManager extends JFrame {
                     RunInfo runInfo = new RunInfo(runName, session);
                     RunStatus initialStatus = runInfo.getRunStatus();
 
+                    logger.info("Adding new run: {} | sessionKey: {}", runName, sessionKey);
+
                     DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
+                    int insertIndex = currentRunsNode.getChildCount();
                     currentRunsNode.add(runNode);
                     sessionToTreeNode.put(sessionKey, runNode);
                     lastKnownStatus.put(sessionKey, initialStatus);
+
+                    // Track insertion for tree notification
+                    insertedIndices.add(insertIndex);
+                    insertedNodes.add(runNode);
 
                     // If session is already DONE when first discovered, treat it as a completion
                     // (This handles fast-completing runs that finish before refreshRuns() is called)
@@ -665,8 +675,6 @@ public class RunManager extends JFrame {
                             updateLastRun(runInfo, completionTime);
                         }
                     }
-
-                    treeStructureChanged[0] = true;
                 } else {
                     // Existing session - check for status changes
                     DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionKey);
@@ -708,13 +716,56 @@ public class RunManager extends JFrame {
                 }
             }
 
+            // Notify tree model of inserted nodes (preserves selection)
+            if (!insertedIndices.isEmpty()) {
+                TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
+                logger.info("BEFORE nodesWereInserted - selection: {}",
+                    selectedBefore == null ? "null" : selectedBefore.length);
+
+                int[] indices = insertedIndices.stream().mapToInt(Integer::intValue).toArray();
+                Object[] children = insertedNodes.toArray();
+                treeModel.nodesWereInserted(currentRunsNode, indices);
+
+                TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
+                logger.info("AFTER nodesWereInserted - selection: {}",
+                    selectedAfter == null ? "null" : selectedAfter.length);
+
+                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
+            }
+
             // Check for removed sessions
-            sessionToTreeNode.entrySet().removeIf(entry -> {
+            // Need to capture indices BEFORE removal
+            List<Integer> removedIndices = new ArrayList<>();
+            List<Object> removedChildren = new ArrayList<>();
+            List<String> sessionsToRemove = new ArrayList<>();
+
+            for (Map.Entry<String, DefaultMutableTreeNode> entry : sessionToTreeNode.entrySet()) {
                 String sessionKey = entry.getKey();
                 if (!activeSessions.containsKey(sessionKey)) {
-                    // Session removed - remove from tree
                     DefaultMutableTreeNode nodeToRemove = entry.getValue();
-                    currentRunsNode.remove(nodeToRemove);
+                    int indexToRemove = currentRunsNode.getIndex(nodeToRemove);
+                    if (indexToRemove >= 0) {
+                        removedIndices.add(indexToRemove);
+                        removedChildren.add(nodeToRemove);
+                        sessionsToRemove.add(sessionKey);
+                    }
+                }
+            }
+
+            // Remove sessions and notify tree
+            if (!removedIndices.isEmpty()) {
+                TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
+                logger.info("BEFORE nodesWereRemoved - selection: {}",
+                    selectedBefore == null ? "null" : selectedBefore.length);
+
+                // Remove nodes from tree
+                for (Object child : removedChildren) {
+                    currentRunsNode.remove((DefaultMutableTreeNode) child);
+                }
+
+                // Clean up tracking maps
+                for (String sessionKey : sessionsToRemove) {
+                    sessionToTreeNode.remove(sessionKey);
                     sessionToRunName.remove(sessionKey);
                     lastKnownStatus.remove(sessionKey);
                     completionTimestamps.remove(sessionKey);
@@ -723,21 +774,26 @@ public class RunManager extends JFrame {
                     if (lastRunInfo != null && lastRunInfo.session.getSessionKey().equals(sessionKey)) {
                         lastRunInfo = null;
                         lastRunCompletionTime = 0L;
-                        lastRunNode.removeAllChildren();
-                        lastRunChildNode = null;
-                        treeModel.nodeStructureChanged(lastRunNode);
+
+                        // Properly remove the Last child node
+                        if (lastRunChildNode != null) {
+                            int childIndex = lastRunNode.getIndex(lastRunChildNode);
+                            Object[] removedChild = new Object[]{lastRunChildNode};
+                            lastRunNode.removeAllChildren();
+                            treeModel.nodesWereRemoved(lastRunNode, new int[]{childIndex}, removedChild);
+                            lastRunChildNode = null;
+                        }
                     }
-
-                    treeStructureChanged[0] = true;
-                    return true;
                 }
-                return false;
-            });
 
-            // Only notify of structure changes if something actually changed
-            if (treeStructureChanged[0]) {
-                treeModel.nodeStructureChanged(currentRunsNode);
-                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
+                // Notify tree model of removals
+                int[] indices = removedIndices.stream().mapToInt(Integer::intValue).toArray();
+                Object[] children = removedChildren.toArray();
+                treeModel.nodesWereRemoved(currentRunsNode, indices, children);
+
+                TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
+                logger.info("AFTER nodesWereRemoved - selection: {}",
+                    selectedAfter == null ? "null" : selectedAfter.length);
             }
         });
     }
@@ -749,19 +805,164 @@ public class RunManager extends JFrame {
         lastRunInfo = newLastRun;
         lastRunCompletionTime = completionTime;
 
-        // Update tree node
-        lastRunNode.removeAllChildren();
+        // Check if we're replacing an existing Last child or creating the first one
+        DefaultMutableTreeNode oldChildNode = null;
+        int oldChildIndex = -1;
+        boolean wasLastSelected = false;
+        Set<String> selectedTimeseriesKeys = new HashSet<>();
+
+        if (lastRunChildNode != null) {
+            oldChildIndex = lastRunNode.getIndex(lastRunChildNode);
+            oldChildNode = lastRunChildNode;
+
+            // Check if the old Last child was selected
+            TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
+            if (selectedPaths != null) {
+                TreePath oldLastPath = new TreePath(lastRunChildNode.getPath());
+                for (TreePath path : selectedPaths) {
+                    if (path.equals(oldLastPath)) {
+                        wasLastSelected = true;
+                        logger.info("updateLastRun - Last was selected, will restore selection");
+
+                        // Save current timeseries tree selection BEFORE any tree operations
+                        TreePath[] timeseriesSelectedPaths = timeseriesTree.getSelectionPaths();
+                        if (timeseriesSelectedPaths != null) {
+                            for (TreePath tsPath : timeseriesSelectedPaths) {
+                                DefaultMutableTreeNode node = (DefaultMutableTreeNode) tsPath.getLastPathComponent();
+                                Object userObject = node.getUserObject();
+                                if (userObject instanceof SeriesLeafNode) {
+                                    SeriesLeafNode leaf = (SeriesLeafNode) userObject;
+                                    String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
+                                    selectedTimeseriesKeys.add(seriesKey);
+                                    logger.info("updateLastRun - Saving timeseries selection: {}", seriesKey);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If Last was selected, block all selection events during the entire update
+        if (wasLastSelected) {
+            isUpdatingSelection = true;
+            logger.info("updateLastRun - Blocking selection events for restoration");
+        }
+
+        // Create new child node
         lastRunChildNode = new DefaultMutableTreeNode(
             new RunInfo("Last", newLastRun.session)
         );
-        lastRunNode.add(lastRunChildNode);
-        treeModel.nodeStructureChanged(lastRunNode);
+
+        TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
+        logger.info("updateLastRun - BEFORE tree update - selection: {} | wasLastSelected: {}",
+            selectedBefore == null ? "null" : selectedBefore.length, wasLastSelected);
+
+        if (oldChildNode != null) {
+            // Replacing existing child - remove old, add new
+            lastRunNode.remove(oldChildNode);
+            treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
+
+            lastRunNode.add(lastRunChildNode);
+            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
+        } else {
+            // First time - just add
+            lastRunNode.add(lastRunChildNode);
+            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
+        }
+
+        // If Last was previously selected, restore everything
+        if (wasLastSelected) {
+            TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
+            logger.info("updateLastRun - Restoring selection to new Last node");
+
+            // Restore dataset tree selection
+            timeseriesSourceTree.addSelectionPath(newLastPath);
+
+            // Manually rebuild the timeseries tree since we blocked the selection event
+            logger.info("updateLastRun - Manually rebuilding timeseries tree for new Last");
+            updateOutputsTree();
+
+            // Restore timeseries tree selection (gracefully skips missing series)
+            int restoredCount = 0;
+            if (!selectedTimeseriesKeys.isEmpty()) {
+                logger.info("updateLastRun - Restoring timeseries tree selection: {} series", selectedTimeseriesKeys.size());
+                restoredCount = restoreTimeseriesTreeSelection(selectedTimeseriesKeys);
+            }
+
+            isUpdatingSelection = false;
+            logger.info("updateLastRun - Unblocking selection events");
+
+            // If we restored any series, manually trigger the selection changed handler
+            // since we blocked it during restoration
+            if (restoredCount > 0) {
+                logger.info("updateLastRun - Manually triggering plot update for {} restored series", restoredCount);
+                onOutputsTreeSelectionChanged(null);
+            }
+        }
+
+        TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
+        logger.info("updateLastRun - AFTER tree update - selection: {}",
+            selectedAfter == null ? "null" : selectedAfter.length);
 
         // Expand the Last run node to show the new child
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
 
         // Refresh any plotted "[Last]" series to use the new Last run's data
         refreshLastSeries();
+    }
+
+    /**
+     * Restores timeseries tree selection by searching for matching series keys.
+     * Gracefully skips series that no longer exist in the rebuilt tree.
+     *
+     * @param selectedTimeseriesKeys Set of series keys to restore (format: "seriesName [RunName]")
+     * @return Number of series successfully restored
+     */
+    private int restoreTimeseriesTreeSelection(Set<String> selectedTimeseriesKeys) {
+        List<TreePath> pathsToSelect = new ArrayList<>();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
+
+        // Recursively search tree for matching series keys
+        searchAndCollectPaths(root, selectedTimeseriesKeys, pathsToSelect);
+
+        if (!pathsToSelect.isEmpty()) {
+            logger.info("restoreTimeseriesTreeSelection - Found {} matching series to restore", pathsToSelect.size());
+            // Restore selection without triggering events
+            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
+            timeseriesTree.setSelectionPaths(pathsArray);
+            return pathsToSelect.size();
+        } else {
+            logger.info("restoreTimeseriesTreeSelection - No matching series found (model outputs may have changed)");
+            return 0;
+        }
+    }
+
+    /**
+     * Recursively searches tree nodes for matching series keys and collects their paths.
+     */
+    private void searchAndCollectPaths(DefaultMutableTreeNode node, Set<String> targetKeys, List<TreePath> results) {
+        if (node == null) return;
+
+        Object userObject = node.getUserObject();
+
+        // Check if this is a SeriesLeafNode that matches one of our target keys
+        if (userObject instanceof SeriesLeafNode) {
+            SeriesLeafNode leaf = (SeriesLeafNode) userObject;
+            String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
+            if (targetKeys.contains(seriesKey)) {
+                TreePath path = new TreePath(node.getPath());
+                results.add(path);
+                logger.info("restoreTimeseriesTreeSelection - Found matching series: {}", seriesKey);
+            }
+        }
+
+        // Recurse into children
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+            searchAndCollectPaths(child, targetKeys, results);
+        }
     }
 
     /**
@@ -843,10 +1044,8 @@ public class RunManager extends JFrame {
                                     model.addOrUpdateSeries(renamedData);
                                 }
 
-                                // Zoom to fit in all plot panels
-                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                                    panel.zoomToFit();
-                                }
+                                // Don't reset zoom when Last updates - series keys haven't changed,
+                                // just the data they point to
                             }
                         });
                     })
@@ -1122,8 +1321,14 @@ public class RunManager extends JFrame {
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
         if (isUpdatingSelection) {
+            logger.info("Selection change IGNORED (isUpdatingSelection=true)");
             return;
         }
+
+        TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
+        logger.info("Selection changed - paths: {} | event: {}",
+            selectedPaths == null ? "null" : selectedPaths.length,
+            e.getNewLeadSelectionPath());
 
         updateOutputsTree();
     }
@@ -1468,9 +1673,19 @@ public class RunManager extends JFrame {
      * Fetches timeseries data for leaf nodes and updates plot and stats.
      */
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
+        // Ignore selection changes during programmatic updates
+        if (isUpdatingSelection) {
+            logger.info("onOutputsTreeSelectionChanged - IGNORED (isUpdatingSelection=true)");
+            return;
+        }
+
         TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
+        logger.info("onOutputsTreeSelectionChanged - paths: {}",
+            selectedPaths == null ? "null" : selectedPaths.length);
+
         if (selectedPaths == null || selectedPaths.length == 0) {
             // Clear plot and stats when nothing is selected
+            logger.info("onOutputsTreeSelectionChanged - Clearing plot (no selection)");
             clearPlotAndStats();
             selectedSeries.clear();
             return;
@@ -1499,6 +1714,13 @@ public class RunManager extends JFrame {
             newSelectedSeries.add(seriesKey);
             seriesKeyToLeaf.put(seriesKey, leaf);
         }
+
+        // Check if there's overlap between old and new selections
+        // Only reset zoom if selection completely changed (no overlap)
+        boolean hasOverlap = selectedSeries.stream().anyMatch(newSelectedSeries::contains);
+        final boolean shouldResetZoom = !hasOverlap && !selectedSeries.isEmpty();
+        logger.info("onOutputsTreeSelectionChanged - hasOverlap: {} | shouldResetZoom: {} | old: {} | new: {}",
+            hasOverlap, shouldResetZoom, selectedSeries.size(), newSelectedSeries.size());
 
         // Determine which series to add and which to remove
         Set<String> seriesToAdd = new HashSet<>(newSelectedSeries);
@@ -1601,9 +1823,12 @@ public class RunManager extends JFrame {
                                 }
                             }
 
-                            // Zoom to fit in all plot panels (once for all series)
-                            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                                panel.zoomToFit();
+                            // Zoom to fit in all plot panels (once for all series) if selection completely changed
+                            if (shouldResetZoom) {
+                                logger.info("Resetting zoom after loading new data (selection completely changed)");
+                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                                    panel.zoomToFit();
+                                }
                             }
                         });
                     })
@@ -1634,9 +1859,10 @@ public class RunManager extends JFrame {
         // Update the selected series set
         selectedSeries = newSelectedSeries;
 
-        // Update plot visibility and auto-zoom if we have any series
+        // Update plot visibility and auto-zoom if we have any series and selection completely changed
         updatePlotVisibility();
-        if (!plotDataSet.isEmpty()) {
+        if (!plotDataSet.isEmpty() && shouldResetZoom) {
+            logger.info("Resetting zoom (selection completely changed)");
             for (PlotPanel panel : tabManager.getAllPlotPanels()) {
                 panel.zoomToFit();
             }
