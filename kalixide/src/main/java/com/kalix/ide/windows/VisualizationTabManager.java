@@ -15,9 +15,11 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +85,58 @@ public class VisualizationTabManager {
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
 
     /**
+     * Settings that can be copied between tabs.
+     * Makes it explicit what settings are shareable and provides a clean interface for copying.
+     */
+    public static class TabSettings {
+        // Aggregation settings (common to both plot and stats tabs)
+        public AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
+        public AggregationMethod aggregationMethod = AggregationMethod.SUM;
+
+        // Plot-specific settings (ignored when creating stats tabs)
+        public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
+        public YAxisScale yAxisScale = YAxisScale.LINEAR;
+        public boolean autoYMode = true;
+        public boolean showCoordinates = false;
+        public boolean legendCollapsed = false;
+
+        /**
+         * Extract settings from a plot tab.
+         */
+        public static TabSettings fromPlotTab(PlotPanel plotPanel) {
+            TabSettings settings = new TabSettings();
+            settings.aggregationPeriod = plotPanel.getAggregationPeriod();
+            settings.aggregationMethod = plotPanel.getAggregationMethod();
+            settings.plotType = plotPanel.getPlotType();
+            settings.yAxisScale = plotPanel.getYAxisScale();
+            settings.autoYMode = plotPanel.isAutoYMode();
+            settings.showCoordinates = plotPanel.isShowCoordinates();
+            settings.legendCollapsed = plotPanel.isLegendCollapsed();
+            return settings;
+        }
+
+        /**
+         * Extract settings from a stats tab.
+         */
+        public static TabSettings fromStatsTab(TabInfo statsTabInfo) {
+            TabSettings settings = new TabSettings();
+            settings.aggregationPeriod = statsTabInfo.statsPeriod;
+            settings.aggregationMethod = statsTabInfo.statsMethod;
+            return settings;
+        }
+
+        /**
+         * Get default settings from preferences.
+         */
+        public static TabSettings getDefaults() {
+            TabSettings settings = new TabSettings();
+            settings.showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
+            settings.autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+            return settings;
+        }
+    }
+
+    /**
      * Represents a visualization tab with its type and components.
      */
     private static class TabInfo {
@@ -93,6 +147,10 @@ public class VisualizationTabManager {
         final JComponent component;
         final PlotPanel plotPanel; // null for stats tabs
         final RunManager.StatsTableModel statsModel; // null for plot tabs
+
+        // Aggregation settings for stats tabs
+        AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
+        AggregationMethod statsMethod = AggregationMethod.SUM;
 
         TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, RunManager.StatsTableModel statsModel) {
             this.type = type;
@@ -168,6 +226,61 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Adds a new plot tab with settings copied from another tab.
+     * The new plot tab will have the same settings and all series from the source tab.
+     *
+     * @param settings The settings to apply to the new plot tab
+     * @return The created PlotPanel
+     */
+    public PlotPanel addPlotTabFromSettings(TabSettings settings) {
+        // Create new plot panel with shared dataset
+        PlotPanel plotPanel = new PlotPanel();
+        plotPanel.setDataSet(sharedDataSet);
+        plotPanel.setSeriesColors(sharedColorMap);
+
+        // Get all series from dataset (copy all series from source tab)
+        List<String> allSeries = new ArrayList<>(sharedDataSet.getSeriesNames());
+        plotPanel.setVisibleSeries(allSeries);
+
+        // Apply all settings from TabSettings (must be done AFTER setVisibleSeries)
+        plotPanel.setAggregation(settings.aggregationPeriod, settings.aggregationMethod);
+        plotPanel.setPlotType(settings.plotType);
+        plotPanel.setYAxisScale(settings.yAxisScale);
+        plotPanel.setAutoYMode(settings.autoYMode);
+        plotPanel.setShowCoordinates(settings.showCoordinates);
+        if (settings.legendCollapsed) {
+            plotPanel.setLegendCollapsed(true);
+        }
+
+        // Populate legend with all series
+        for (String seriesName : sharedDataSet.getSeriesNames()) {
+            Color color = sharedColorMap.get(seriesName);
+            if (color != null) {
+                plotPanel.addLegendSeries(seriesName, color);
+            }
+        }
+
+        // Create container panel with toolbar
+        JPanel containerPanel = new JPanel(new BorderLayout());
+        JToolBar toolbar = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
+        containerPanel.add(toolbar, BorderLayout.NORTH);
+        containerPanel.add(plotPanel, BorderLayout.CENTER);
+
+        // Add tab
+        TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
+        tabs.add(tabInfo);
+
+        int index = tabbedPane.getTabCount();
+        tabbedPane.addTab("", containerPanel);
+        setupTabIcon(index, TabInfo.TabType.PLOT);
+
+        // Select the new tab
+        tabbedPane.setSelectedIndex(index);
+
+        return plotPanel;
+    }
+
+    /**
      * Creates a toolbar for a plot tab.
      */
     private JToolBar createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
@@ -184,6 +297,17 @@ public class VisualizationTabManager {
             .addAutoYToggle(initialAutoY)
             .addCoordinatesToggle(initialShowCoordinates)
             .addLegendToggle(!plotPanel.isLegendCollapsed())
+            .build();
+    }
+
+    /**
+     * Creates a toolbar for a stats tab.
+     */
+    private JToolBar createStatsToolbar(TabInfo tabInfo, JTable statsTable) {
+        return new StatsToolbarBuilder(tabInfo, statsTable, sharedDataSet)
+            .addSaveButton()
+            .addSeparator()
+            .addAggregationControls()
             .build();
     }
 
@@ -219,6 +343,8 @@ public class VisualizationTabManager {
             // Aggregation period dropdown
             aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
                 UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
+            // Set initial value from current PlotPanel state
+            aggregationPeriodCombo.setSelectedItem(plotPanel.getAggregationPeriod().getDisplayName());
             aggregationPeriodCombo.addActionListener(e -> applyAggregation());
             toolbar.add(aggregationPeriodCombo);
 
@@ -230,6 +356,8 @@ public class VisualizationTabManager {
             // Aggregation method dropdown
             aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
                 UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
+            // Set initial value from current PlotPanel state
+            aggregationMethodCombo.setSelectedItem(plotPanel.getAggregationMethod().getDisplayName());
             aggregationMethodCombo.addActionListener(e -> applyAggregation());
             toolbar.add(aggregationMethodCombo);
 
@@ -260,10 +388,8 @@ public class VisualizationTabManager {
             // Plot type dropdown
             JComboBox<String> plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
                 UIConstants.WIDE_DROPDOWN_SIZE, "Plot type");
-
             // Set initial value from current PlotPanel state
             plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
-
             plotTypeCombo.addActionListener(e -> {
                 String selected = (String) plotTypeCombo.getSelectedItem();
                 if (selected != null) {
@@ -279,6 +405,8 @@ public class VisualizationTabManager {
         PlotToolbarBuilder addYSpaceDropdown() {
             JComboBox<String> ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
                 UIConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
+            // Set initial value from current PlotPanel state
+            ySpaceCombo.setSelectedItem(plotPanel.getYAxisScale().getDisplayName());
             ySpaceCombo.addActionListener(e -> {
                 String selected = (String) ySpaceCombo.getSelectedItem();
                 if (selected != null) {
@@ -373,6 +501,177 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Builder for creating stats toolbars with consistent styling.
+     */
+    private static class StatsToolbarBuilder {
+        private final JToolBar toolbar;
+        private final TabInfo tabInfo;
+        private final JTable statsTable;
+        private final DataSet dataSet;
+
+        // Store dropdown references for coordinated updates
+        private JComboBox<String> aggregationPeriodCombo;
+        private JComboBox<String> aggregationMethodCombo;
+
+        StatsToolbarBuilder(TabInfo tabInfo, JTable statsTable, DataSet dataSet) {
+            this.tabInfo = tabInfo;
+            this.statsTable = statsTable;
+            this.dataSet = dataSet;
+            this.toolbar = new JToolBar();
+            this.toolbar.setFloatable(false);
+            this.toolbar.setRollover(true);
+        }
+
+        StatsToolbarBuilder addSaveButton() {
+            JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", this::saveStatsData);
+            toolbar.add(button);
+            return this;
+        }
+
+        StatsToolbarBuilder addAggregationControls() {
+            // Resolution label
+            toolbar.add(new JLabel("Resolution:"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
+            // Aggregation period dropdown
+            aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
+                UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
+            // Set initial selection from tab info
+            aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
+            aggregationPeriodCombo.addActionListener(e -> applyAggregation());
+            toolbar.add(aggregationPeriodCombo);
+
+            // "by" label
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+            toolbar.add(new JLabel("by"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
+            // Aggregation method dropdown
+            aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
+                UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
+            // Set initial selection from tab info
+            aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
+            aggregationMethodCombo.addActionListener(e -> applyAggregation());
+            toolbar.add(aggregationMethodCombo);
+
+            return this;
+        }
+
+        /** Applies current aggregation settings to stats. */
+        private void applyAggregation() {
+            if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
+                return;
+            }
+
+            String periodStr = (String) aggregationPeriodCombo.getSelectedItem();
+            String methodStr = (String) aggregationMethodCombo.getSelectedItem();
+
+            if (periodStr != null && methodStr != null) {
+                AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
+                AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
+
+                // Update tab info aggregation settings
+                tabInfo.statsPeriod = period;
+                tabInfo.statsMethod = method;
+
+                // Recompute stats with aggregated data
+                recomputeStats();
+            }
+        }
+
+        /** Recomputes stats with current aggregation settings. */
+        private void recomputeStats() {
+            if (tabInfo.statsModel == null || dataSet == null) {
+                return;
+            }
+
+            // Clear and rebuild stats with aggregated data
+            tabInfo.statsModel.clear();
+
+            for (String seriesName : dataSet.getSeriesNames()) {
+                TimeSeriesData originalSeries = dataSet.getSeries(seriesName);
+                if (originalSeries != null) {
+                    // Apply aggregation
+                    TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                        originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
+
+                    // Update stats with aggregated data
+                    if (aggregatedSeries != null) {
+                        tabInfo.statsModel.addOrUpdateSeries(aggregatedSeries);
+                    }
+                }
+            }
+        }
+
+        /** Saves stats data to CSV. */
+        private void saveStatsData() {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Save Statistics");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+
+            int result = fileChooser.showSaveDialog(statsTable);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".csv")) {
+                    file = new File(file.getAbsolutePath() + ".csv");
+                }
+
+                try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
+                    // Write header
+                    writer.write("Series,Min,Max,Mean,Points\n");
+
+                    // Write data rows
+                    for (int row = 0; row < statsTable.getRowCount(); row++) {
+                        for (int col = 0; col < statsTable.getColumnCount(); col++) {
+                            if (col > 0) writer.write(",");
+                            Object value = statsTable.getValueAt(row, col);
+                            writer.write(value != null ? value.toString() : "");
+                        }
+                        writer.write("\n");
+                    }
+
+                    JOptionPane.showMessageDialog(statsTable,
+                        "Statistics saved successfully to:\n" + file.getAbsolutePath(),
+                        "Save Complete",
+                        JOptionPane.INFORMATION_MESSAGE);
+
+                } catch (java.io.IOException ex) {
+                    JOptionPane.showMessageDialog(statsTable,
+                        "Error saving statistics: " + ex.getMessage(),
+                        "Save Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+
+        StatsToolbarBuilder addSeparator() {
+            toolbar.addSeparator();
+            return this;
+        }
+
+        JToolBar build() {
+            return toolbar;
+        }
+
+        /** Creates a standard icon button. */
+        private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
+            JButton button = new JButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
+            button.setToolTipText(tooltip);
+            button.setFocusable(false);
+            button.addActionListener(e -> action.run());
+            return button;
+        }
+
+        /** Creates a standard dropdown. */
+        private JComboBox<String> createDropdown(String[] options, Dimension size, String tooltip) {
+            JComboBox<String> combo = new JComboBox<>(options);
+            combo.setMaximumSize(size);
+            combo.setToolTipText(tooltip);
+            return combo;
+        }
+    }
+
+    /**
      * Adds a new statistics tab.
      *
      * @return The created StatsTableModel
@@ -386,13 +685,79 @@ public class VisualizationTabManager {
 
         JScrollPane scrollPane = new JScrollPane(table);
 
-        // Add tab
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", scrollPane, null, model);
+        // Create container panel with toolbar
+        JPanel containerPanel = new JPanel(new BorderLayout());
+
+        // Create tab info so we can reference it in toolbar builder
+        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
         tabs.add(tabInfo);
 
+        JToolBar toolbar = createStatsToolbar(tabInfo, table);
+        containerPanel.add(toolbar, BorderLayout.NORTH);
+        containerPanel.add(scrollPane, BorderLayout.CENTER);
+
         int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", scrollPane);
+        tabbedPane.addTab("", containerPanel);
         setupTabIcon(index, TabInfo.TabType.STATS);
+
+        return model;
+    }
+
+    /**
+     * Adds a new statistics tab with settings copied from another tab.
+     * The new stats tab will have the same settings and all series from the source tab.
+     *
+     * @param settings The settings to apply to the new stats tab
+     * @return The created StatsTableModel
+     */
+    public RunManager.StatsTableModel addStatsTabFromSettings(TabSettings settings) {
+        // Create new stats table
+        RunManager.StatsTableModel model = new RunManager.StatsTableModel();
+        JTable table = new JTable(model);
+        table.setFillsViewportHeight(true);
+        table.setRowSelectionAllowed(false);
+
+        JScrollPane scrollPane = new JScrollPane(table);
+
+        // Create container panel with toolbar
+        JPanel containerPanel = new JPanel(new BorderLayout());
+
+        // Create tab info so we can reference it in toolbar builder
+        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
+
+        // Apply aggregation settings from TabSettings
+        tabInfo.statsPeriod = settings.aggregationPeriod;
+        tabInfo.statsMethod = settings.aggregationMethod;
+
+        tabs.add(tabInfo);
+
+        JToolBar toolbar = createStatsToolbar(tabInfo, table);
+        containerPanel.add(toolbar, BorderLayout.NORTH);
+        containerPanel.add(scrollPane, BorderLayout.CENTER);
+
+        int index = tabbedPane.getTabCount();
+        tabbedPane.addTab("", containerPanel);
+        setupTabIcon(index, TabInfo.TabType.STATS);
+
+        // Populate stats with all series from dataset, applying aggregation
+        if (sharedDataSet != null) {
+            for (String seriesName : sharedDataSet.getSeriesNames()) {
+                TimeSeriesData originalSeries = sharedDataSet.getSeries(seriesName);
+                if (originalSeries != null) {
+                    // Apply aggregation
+                    TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                        originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
+
+                    // Update stats with aggregated data
+                    if (aggregatedSeries != null) {
+                        model.addOrUpdateSeries(aggregatedSeries);
+                    }
+                }
+            }
+        }
+
+        // Select the new tab
+        tabbedPane.setSelectedIndex(index);
 
         return model;
     }
@@ -509,18 +874,61 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, JLabel label, TabInfo.TabType tabType) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // "Duplicate" menu item - always shown
-        JMenuItem duplicateItem = new JMenuItem("Duplicate");
-        duplicateItem.addActionListener(e -> {
-            if (tabType == TabInfo.TabType.PLOT) {
-                addPlotTab();
+        // "Add Plot" menu item - always shown
+        JMenuItem addPlotItem = new JMenuItem("Add Plot");
+        addPlotItem.addActionListener(e -> {
+            // Find the TabInfo for this tab
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1 && tabIndex < tabs.size()) {
+                TabInfo sourceTab = tabs.get(tabIndex);
+
+                // Extract settings from source tab
+                TabSettings settings;
+                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
+                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel);
+                } else if (sourceTab.type == TabInfo.TabType.STATS) {
+                    settings = TabSettings.fromStatsTab(sourceTab);
+                } else {
+                    settings = TabSettings.getDefaults();
+                }
+
+                // Create new plot tab with copied settings
+                addPlotTabFromSettings(settings);
             } else {
+                // Fallback: create with default settings
+                addPlotTab();
+            }
+        });
+        contextMenu.add(addPlotItem);
+
+        // "Add Stats" menu item - always shown
+        JMenuItem addStatsItem = new JMenuItem("Add Stats");
+        addStatsItem.addActionListener(e -> {
+            // Find the TabInfo for this tab
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1 && tabIndex < tabs.size()) {
+                TabInfo sourceTab = tabs.get(tabIndex);
+
+                // Extract settings from source tab
+                TabSettings settings;
+                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
+                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel);
+                } else if (sourceTab.type == TabInfo.TabType.STATS) {
+                    settings = TabSettings.fromStatsTab(sourceTab);
+                } else {
+                    settings = TabSettings.getDefaults();
+                }
+
+                // Create new stats tab with copied settings
+                addStatsTabFromSettings(settings);
+            } else {
+                // Fallback: create with default settings
                 addStatsTab();
             }
         });
-        contextMenu.add(duplicateItem);
+        contextMenu.add(addStatsItem);
 
-        // "Remove" menu item - only shown if there are 2+ tabs of this type
+        // "Remove" menu item - only shown if there is more than one tab
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> {
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -547,16 +955,11 @@ public class VisualizationTabManager {
             }
 
             private void showContextMenu(MouseEvent e) {
-                // Count tabs of this type
-                int count = 0;
-                for (TabInfo tab : tabs) {
-                    if (tab.type == tabType) {
-                        count++;
-                    }
-                }
+                // Count total tabs
+                int totalCount = tabs.size();
 
-                // Only show remove if there are 2+ tabs of this type
-                removeItem.setVisible(count >= 2);
+                // Only show remove if there is more than one tab
+                removeItem.setVisible(totalCount > 1);
 
                 contextMenu.show(e.getComponent(), e.getX(), e.getY());
             }
@@ -700,5 +1103,66 @@ public class VisualizationTabManager {
             return tabs.get(index);
         }
         return null;
+    }
+
+    /**
+     * Updates a series in all stats tabs, applying aggregation settings.
+     * This should be called instead of directly calling model.addOrUpdateSeries().
+     *
+     * @param seriesName The name of the series
+     * @param data The original (unaggregated) time series data
+     */
+    public void updateSeriesInStatsTabsWithAggregation(String seriesName, TimeSeriesData data) {
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                // Apply aggregation based on tab settings
+                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                    data, tab.statsPeriod, tab.statsMethod);
+
+                if (aggregatedData != null) {
+                    tab.statsModel.addOrUpdateSeries(aggregatedData);
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a loading series entry to all stats tabs.
+     *
+     * @param seriesName The name of the series being loaded
+     */
+    public void addLoadingSeriesInStatsTabs(String seriesName) {
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                tab.statsModel.addLoadingSeries(seriesName);
+            }
+        }
+    }
+
+    /**
+     * Adds an error series entry to all stats tabs.
+     *
+     * @param seriesName The name of the series
+     * @param errorMessage The error message
+     */
+    public void addErrorSeriesInStatsTabs(String seriesName, String errorMessage) {
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                tab.statsModel.addErrorSeries(seriesName, errorMessage);
+            }
+        }
+    }
+
+    /**
+     * Removes a series from all stats tabs.
+     *
+     * @param seriesName The name of the series to remove
+     */
+    public void removeSeriesFromStatsTabs(String seriesName) {
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                tab.statsModel.removeSeries(seriesName);
+            }
+        }
     }
 }

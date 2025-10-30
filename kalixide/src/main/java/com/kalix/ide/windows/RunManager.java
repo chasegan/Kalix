@@ -1001,9 +1001,7 @@ public class RunManager extends JFrame {
             seriesColorMap.remove(seriesKey);
 
             // Remove from all stats tables
-            for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                model.removeSeries(seriesKey);
-            }
+            tabManager.removeSeriesFromStatsTabs(seriesKey);
 
             // Remove from legend in all plots
             for (PlotPanel panel : tabManager.getAllPlotPanels()) {
@@ -1131,10 +1129,8 @@ public class RunManager extends JFrame {
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
                 addSeriesToPlot(renamedData, seriesColor);
 
-                // Update all stats tables
-                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                    model.addOrUpdateSeries(renamedData);
-                }
+                // Update all stats tables with aggregation
+                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
             } else if (!timeSeriesRequestManager.isRequestInProgress(newSessionKey, seriesName)) {
                 // Request the new data
                 timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
@@ -1145,10 +1141,8 @@ public class RunManager extends JFrame {
                                 TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
                                 addSeriesToPlot(renamedData, seriesColor);
 
-                                // Update all stats tables
-                                for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                                    model.addOrUpdateSeries(renamedData);
-                                }
+                                // Update all stats tables with aggregation
+                                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
 
                                 // Don't reset zoom when Last updates - series keys haven't changed,
                                 // just the data they point to
@@ -1912,9 +1906,7 @@ public class RunManager extends JFrame {
             seriesColorMap.remove(seriesKey);
 
             // Remove from all stats tables
-            for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                model.removeSeries(seriesKey);
-            }
+            tabManager.removeSeriesFromStatsTabs(seriesKey);
 
             // Remove from legend in all plots
             for (PlotPanel panel : tabManager.getAllPlotPanels()) {
@@ -1965,17 +1957,13 @@ public class RunManager extends JFrame {
                     TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
                     addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
 
-                    // Add to all stats tables
-                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                        model.addOrUpdateSeries(renamedData);
-                    }
+                    // Add to all stats tables with aggregation
+                    tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
                 }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
                 // Show loading state for ALL series that reference this data
                 for (String seriesKey : seriesKeys) {
-                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                        model.addLoadingSeries(seriesKey);
-                    }
+                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
                 }
 
                 // Capture series keys for use in callback
@@ -1993,10 +1981,8 @@ public class RunManager extends JFrame {
                                     TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
                                     addSeriesToPlot(renamedData, seriesColorMap.get(capturedSeriesKey));
 
-                                    // Update all stats tables
-                                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                                        model.addOrUpdateSeries(renamedData);
-                                    }
+                                    // Update all stats tables with aggregation
+                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedSeriesKey, renamedData);
                                 }
                             }
 
@@ -2014,9 +2000,7 @@ public class RunManager extends JFrame {
                             for (String capturedSeriesKey : capturedSeriesKeys) {
                                 if (selectedSeries.contains(capturedSeriesKey)) {
                                     // Add error to all stats tables
-                                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                                        model.addErrorSeries(capturedSeriesKey, throwable.getMessage());
-                                    }
+                                    tabManager.addErrorSeriesInStatsTabs(capturedSeriesKey, throwable.getMessage());
                                 }
                             }
                         });
@@ -2025,9 +2009,7 @@ public class RunManager extends JFrame {
             } else {
                 // Request already in progress, show loading state for ALL series that reference this data
                 for (String seriesKey : seriesKeys) {
-                    for (StatsTableModel model : tabManager.getAllStatsModels()) {
-                        model.addLoadingSeries(seriesKey);
-                    }
+                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
                 }
             }
         }

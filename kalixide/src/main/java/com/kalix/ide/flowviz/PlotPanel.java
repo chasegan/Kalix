@@ -459,6 +459,22 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Gets the current aggregation period.
+     * @return The current aggregation period
+     */
+    public AggregationPeriod getAggregationPeriod() {
+        return aggregationPeriod;
+    }
+
+    /**
+     * Gets the current aggregation method.
+     * @return The current aggregation method
+     */
+    public AggregationMethod getAggregationMethod() {
+        return aggregationMethod;
+    }
+
+    /**
      * Refreshes the display dataset from the original data.
      * Call this when the original dataset has been modified externally
      * (e.g., series added or removed).
@@ -508,6 +524,14 @@ public class PlotPanel extends JPanel {
         } else {
             repaint();
         }
+    }
+
+    /**
+     * Gets the current Y-axis scale.
+     * @return the current Y-axis scale
+     */
+    public YAxisScale getYAxisScale() {
+        return yAxisScale;
     }
 
     /**
