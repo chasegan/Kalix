@@ -57,9 +57,16 @@ public class AxisRenderer {
      * @return AxisInfo containing tick positions and time range
      */
     public AxisInfo calculateAxisInfo(ViewPort viewport) {
-        // Calculate time ticks using temporal boundaries
-        List<Long> timeTicks = temporalCalculator.calculateTemporalBoundaryTicks(
-            viewport.getStartTimeMs(), viewport.getEndTimeMs(), viewport.getPlotWidth());
+        List<Long> timeTicks;
+
+        // Calculate X-axis ticks based on axis type
+        if (viewport.getXAxisType() == XAxisType.PERCENTILE) {
+            timeTicks = calculatePercentileTicks(viewport);
+        } else {
+            // TIME: Calculate time ticks using temporal boundaries
+            timeTicks = temporalCalculator.calculateTemporalBoundaryTicks(
+                viewport.getStartTimeMs(), viewport.getEndTimeMs(), viewport.getPlotWidth());
+        }
 
         // Calculate value ticks using nice intervals
         List<Double> valueTicks = calculateValueTicks(viewport);
@@ -67,6 +74,46 @@ public class AxisRenderer {
         long timeRangeMs = viewport.getTimeRangeMs();
 
         return new AxisInfo(timeTicks, valueTicks, timeRangeMs);
+    }
+
+    /**
+     * Calculates optimal percentile tick positions for exceedance plots.
+     * Returns fake timestamps that represent percentile values.
+     */
+    private List<Long> calculatePercentileTicks(ViewPort viewport) {
+        List<Long> ticks = new ArrayList<>();
+
+        // Convert fake timestamps back to percentiles
+        double startPercentile = viewport.getStartTimeMs() / 1_000_000.0;
+        double endPercentile = viewport.getEndTimeMs() / 1_000_000.0;
+        double range = endPercentile - startPercentile;
+
+        // Choose tick interval based on zoom level
+        double tickInterval;
+        if (range > 80) {
+            tickInterval = 20.0;  // 0, 20, 40, 60, 80, 100
+        } else if (range > 40) {
+            tickInterval = 10.0;  // 0, 10, 20, ..., 100
+        } else if (range > 20) {
+            tickInterval = 5.0;   // 0, 5, 10, ..., 100
+        } else if (range > 10) {
+            tickInterval = 2.0;   // 0, 2, 4, ..., 100
+        } else {
+            tickInterval = 1.0;   // 0, 1, 2, ..., 100
+        }
+
+        // Generate ticks
+        double currentPercentile = Math.floor(startPercentile / tickInterval) * tickInterval;
+        while (currentPercentile <= endPercentile + tickInterval / 2) {
+            if (currentPercentile >= 0 && currentPercentile <= 100) {
+                // Convert percentile to fake timestamp
+                long fakeTimestamp = (long)(currentPercentile * 1_000_000);
+                ticks.add(fakeTimestamp);
+            }
+            currentPercentile += tickInterval;
+        }
+
+        return ticks;
     }
 
     /**
@@ -174,7 +221,7 @@ public class AxisRenderer {
                 g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + TICK_MARK_LENGTH);
 
                 // Draw label
-                String timeLabel = formatTime(tickTime, axisInfo.timeRangeMs);
+                String timeLabel = formatXAxisLabel(tickTime, axisInfo.timeRangeMs, viewport.getXAxisType());
                 int labelWidth = fm.stringWidth(timeLabel);
                 g2d.drawString(timeLabel, screenX - labelWidth / 2,
                              plotY + plotHeight + TIME_LABEL_OFFSET);
@@ -222,6 +269,17 @@ public class AxisRenderer {
     }
 
     /**
+     * Formats an X-axis label based on axis type.
+     */
+    private String formatXAxisLabel(long value, long rangeMs, XAxisType xAxisType) {
+        if (xAxisType == XAxisType.PERCENTILE) {
+            return formatPercentile(value);
+        } else {
+            return formatTime(value, rangeMs);
+        }
+    }
+
+    /**
      * Formats a timestamp for axis labels.
      */
     private String formatTime(long timeMs, long timeRangeMs) {
@@ -232,6 +290,20 @@ public class AxisRenderer {
             return dateTime.format(DateTimeFormatter.ofPattern("HH:mm"));
         } else {  // 1 day or more - always show year with date
             return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        }
+    }
+
+    /**
+     * Formats a fake timestamp as a percentile label.
+     */
+    private String formatPercentile(long fakeTimestamp) {
+        double percentile = fakeTimestamp / 1_000_000.0;
+
+        // Format with appropriate precision
+        if (percentile == Math.floor(percentile)) {
+            return String.format("%.0f%%", percentile);
+        } else {
+            return String.format("%.1f%%", percentile);
         }
     }
 
@@ -270,8 +342,8 @@ public class AxisRenderer {
         int plotWidth = viewport.getPlotWidth();
         int plotHeight = viewport.getPlotHeight();
 
-        // Draw X-axis title "Time"
-        String xTitle = "Time";
+        // Draw X-axis title (dynamic based on axis type)
+        String xTitle = (viewport.getXAxisType() == XAxisType.PERCENTILE) ? "Exceedance Probability (%)" : "Time";
         int xTitleWidth = titleFm.stringWidth(xTitle);
         int xTitleX = plotX + (plotWidth - xTitleWidth) / 2;
         int xTitleY = plotY + plotHeight + TIME_TITLE_OFFSET;

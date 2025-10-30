@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.rendering.XAxisType;
 
 import javax.swing.*;
 import java.awt.*;
@@ -404,9 +405,23 @@ public class CoordinateDisplayManager {
     }
 
     /**
-     * Formats timestamp for display based on precision requirements.
+     * Formats timestamp for display based on axis type and precision requirements.
      */
     private String formatTimeForDisplay(long timestampMs) {
+        // Check if we're in percentile mode (exceedance plots)
+        if (currentViewport != null && currentViewport.getXAxisType() == XAxisType.PERCENTILE) {
+            // Convert fake timestamp to percentile
+            double percentile = timestampMs / 1_000_000.0;
+
+            // Format with appropriate precision
+            if (percentile == Math.floor(percentile)) {
+                return String.format("%.0f%%", percentile);
+            } else {
+                return String.format("%.2f%%", percentile);
+            }
+        }
+
+        // Standard time formatting
         LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneOffset.UTC);
 
         // Check if it's a whole day (midnight UTC)

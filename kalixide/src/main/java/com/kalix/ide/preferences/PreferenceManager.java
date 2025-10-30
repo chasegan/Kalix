@@ -127,6 +127,31 @@ public class PreferenceManager {
     }
 
     /**
+     * Gets a double preference from the file-based preference system.
+     * If the value is missing or invalid, returns the default and saves it to the file.
+     */
+    public static double getFileDouble(String key, double defaultValue) {
+        ensureLoaded();
+        Object value = filePreferences.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        // Missing/invalid - use default and save it
+        setFileDouble(key, defaultValue);
+        return defaultValue;
+    }
+
+    /**
+     * Sets a double preference in the file-based preference system.
+     * Changes are immediately saved to disk.
+     */
+    public static void setFileDouble(String key, double value) {
+        ensureLoaded();
+        filePreferences.put(key, value);
+        saveToFile();
+    }
+
+    /**
      * Gets a string list preference from the file-based preference system.
      * If the value is missing or invalid, returns the default and saves it to the file.
      */

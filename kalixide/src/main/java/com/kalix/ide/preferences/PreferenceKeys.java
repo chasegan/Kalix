@@ -38,6 +38,9 @@ public class PreferenceKeys {
     /** Plot legend display mode (string, default: "FULL_NAME") */
     public static final String PLOT_LEGEND_DISPLAY_MODE = "plot.legend.display.mode";
 
+    /** Log scale auto-zoom minimum value threshold (double, default: 0.001) */
+    public static final String PLOT_LOG_SCALE_MIN_THRESHOLD = "plot.logScale.minThreshold";
+
     /** UI theme selection (string, default: "Light") */
     public static final String UI_THEME = "ui.theme";
 

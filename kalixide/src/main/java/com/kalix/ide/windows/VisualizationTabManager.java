@@ -76,6 +76,9 @@ public class VisualizationTabManager {
     /** Aggregation method options. */
     private static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
 
+    /** Plot type options. */
+    private static final String[] PLOT_TYPE_OPTIONS = {"Values", "Cumulative Values", "Difference", "Cumulative Difference", "Exceedance"};
+
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
 
@@ -173,6 +176,8 @@ public class VisualizationTabManager {
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
+            .addPlotTypeDropdown()
+            .addSeparator()
             .addYSpaceDropdown()
             .addSeparator()
             .addZoomButton()
@@ -245,6 +250,30 @@ public class VisualizationTabManager {
                 AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
                 plotPanel.setAggregation(period, method);
             }
+        }
+
+        PlotToolbarBuilder addPlotTypeDropdown() {
+            // Plot Type label
+            toolbar.add(new JLabel("Plot Type:"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
+            // Plot type dropdown
+            JComboBox<String> plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
+                UIConstants.WIDE_DROPDOWN_SIZE, "Plot type");
+
+            // Set initial value from current PlotPanel state
+            plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
+
+            plotTypeCombo.addActionListener(e -> {
+                String selected = (String) plotTypeCombo.getSelectedItem();
+                if (selected != null) {
+                    com.kalix.ide.flowviz.transform.PlotType type =
+                        com.kalix.ide.flowviz.transform.PlotType.fromDisplayName(selected);
+                    plotPanel.setPlotType(type);
+                }
+            });
+            toolbar.add(plotTypeCombo);
+            return this;
         }
 
         PlotToolbarBuilder addYSpaceDropdown() {

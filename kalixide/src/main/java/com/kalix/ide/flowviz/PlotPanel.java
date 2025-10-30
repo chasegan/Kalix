@@ -4,8 +4,11 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
@@ -17,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +53,11 @@ public class PlotPanel extends JPanel {
     // Transform settings (per-tab)
     private AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
     private AggregationMethod aggregationMethod = AggregationMethod.SUM;
+    private PlotType plotType = PlotType.VALUES;
     private YAxisScale yAxisScale = YAxisScale.LINEAR;
+
+    // Reference series tracking for DIFFERENCE plot types
+    private String lastReferenceSeries = null;
 
     // Cache management
     private String lastTransformKey = null;
@@ -80,6 +89,9 @@ public class PlotPanel extends JPanel {
             this::getPlotArea
         );
 
+        // Setup plot type supplier for format-aware export
+        plotInteractionManager.setPlotTypeSupplier(() -> plotType);
+
         setupMouseListeners();
     }
     
@@ -108,6 +120,10 @@ public class PlotPanel extends JPanel {
     public void setVisibleSeries(List<String> visibleSeries) {
         this.visibleSeries.clear();
         this.visibleSeries.addAll(visibleSeries);
+
+        // Check if reference series changed for DIFFERENCE plot types
+        checkReferenceSeriesChange();
+
         repaint();
     }
     
@@ -126,7 +142,15 @@ public class PlotPanel extends JPanel {
             createDefaultViewport();
             return;
         }
-        
+
+        // Clamp minimum value for log scale to prevent zooming too far out
+        // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
+        // This only affects auto-zoom; manual zoom/pan can still access the full range
+        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001);
+        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
+            minValue = logScaleMin;
+        }
+
         // Add 5% padding
         long timePadding = (long) ((endTime - startTime) * 0.05);
         double valuePadding = (maxValue - minValue) * 0.05;
@@ -148,10 +172,11 @@ public class PlotPanel extends JPanel {
             minValue = center - 0.5;
             maxValue = center + 0.5;
         }
-        
+
         Rectangle plotArea = getPlotArea();
+        XAxisType xAxisType = (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
         currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale);
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
     }
 
     private void createDefaultViewport() {
@@ -161,8 +186,9 @@ public class PlotPanel extends JPanel {
         long endTime = now + 3600000;   // 1 hour from now
 
         Rectangle plotArea = getPlotArea();
+        XAxisType xAxisType = (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale);
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
     }
 
     private void setupMouseListeners() {
@@ -485,7 +511,69 @@ public class PlotPanel extends JPanel {
     }
 
     /**
-     * Rebuilds the display dataset by applying current aggregation settings.
+     * Sets the plot type for this plot.
+     * Triggers rebuild of display dataset to apply the transformation.
+     */
+    public void setPlotType(PlotType type) {
+        if (type == null || type == this.plotType) {
+            return;
+        }
+
+        PlotType oldPlotType = this.plotType;
+        this.plotType = type;
+        lastReferenceSeries = null; // Reset reference tracking
+
+        rebuildDisplayDataSet();
+
+        // Check if X-axis domain changed (switching to/from EXCEEDANCE)
+        boolean xAxisDomainChanged = (oldPlotType == PlotType.EXCEEDANCE) != (type == PlotType.EXCEEDANCE);
+
+        // If X-axis domain changed, must recalculate entire viewport (can't preserve X zoom)
+        // Otherwise, follow same logic as aggregation changes
+        if (xAxisDomainChanged) {
+            zoomToFit();  // Full recalculation - X domain is completely different
+        } else if (autoYMode) {
+            fitYAxis();   // Preserve X zoom, fit Y to new data
+        } else {
+            zoomToFit();  // Zoom to fit both axes
+        }
+    }
+
+    /**
+     * Gets the current plot type.
+     */
+    public PlotType getPlotType() {
+        return plotType;
+    }
+
+    /**
+     * Checks if the reference series (first visible series) has changed
+     * for DIFFERENCE plot types. If so, triggers recalculation.
+     */
+    private void checkReferenceSeriesChange() {
+        // Only check if current plot type requires reference series
+        if (!plotType.requiresReferenceSeries()) {
+            lastReferenceSeries = null;
+            return;
+        }
+
+        // Determine new reference series
+        String newReference = visibleSeries.isEmpty() ? null : visibleSeries.get(0);
+
+        // Check if reference changed
+        if (!java.util.Objects.equals(lastReferenceSeries, newReference)) {
+            // Reference series changed - need to recalculate
+            rebuildDisplayDataSet();
+
+            if (autoYMode) {
+                fitYAxis();
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the display dataset by applying current transformation settings.
+     * Pipeline: Aggregation → Plot Type Transform → (Y-axis scale applied during render)
      * Uses caching to avoid unnecessary recomputation.
      */
     private void rebuildDisplayDataSet() {
@@ -495,29 +583,46 @@ public class PlotPanel extends JPanel {
         }
 
         // Generate cache key from current transform settings
-        String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name();
+        String referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
+            ? visibleSeries.get(0) : "none";
+        String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
+            + "_" + plotType.name() + "_" + referenceKey;
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
             return; // Already computed
         }
 
-        // Build new display dataset
-        displayDataSet = new DataSet();
+        // Step 1: Build aggregated dataset
+        DataSet aggregatedDataSet = new DataSet();
 
         for (String seriesName : originalDataSet.getSeriesNames()) {
             TimeSeriesData originalSeries = originalDataSet.getSeries(seriesName);
 
             // Apply aggregation
-            TimeSeriesData transformedSeries = TimeSeriesAggregator.aggregate(
+            TimeSeriesData aggregatedSeries = TimeSeriesAggregator.aggregate(
                 originalSeries,
                 aggregationPeriod,
                 aggregationMethod
             );
 
-            if (transformedSeries != null) {
-                displayDataSet.addSeries(transformedSeries);
+            if (aggregatedSeries != null) {
+                aggregatedDataSet.addSeries(aggregatedSeries);
             }
+        }
+
+        // Step 2: Apply plot type transformation
+        displayDataSet = PlotTypeTransformer.transform(
+            aggregatedDataSet,
+            plotType,
+            visibleSeries
+        );
+
+        // Update reference tracking
+        if (plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()) {
+            lastReferenceSeries = visibleSeries.get(0);
+        } else {
+            lastReferenceSeries = null;
         }
 
         // Update cache key

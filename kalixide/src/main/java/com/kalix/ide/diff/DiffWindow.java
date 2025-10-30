@@ -58,10 +58,15 @@ public class DiffWindow extends JFrame {
     private Color deletedBackgroundColor;
     private Color changedBackgroundColor;
     private Color paddingBackgroundColor;
+    private Color inlineChangeColor;
 
     // Header labels
     private String leftHeaderLabel;
     private String rightHeaderLabel;
+
+    // Inline change ranges
+    private List<InlineChange> leftInlineChanges;
+    private List<InlineChange> rightInlineChanges;
 
     /**
      * Creates a diff window with default title and headers.
@@ -118,6 +123,9 @@ public class DiffWindow extends JFrame {
         // Apply diff highlighting
         applyDiffHighlighting();
 
+        // Apply inline change highlighting
+        applyInlineHighlighting();
+
         // Setup synchronized scrolling
         setupSynchronizedScrolling();
 
@@ -150,6 +158,10 @@ public class DiffWindow extends JFrame {
     private void initializeComponents(String referenceModel, String thisModel) {
         // Create aligned text versions with padding for proper visual alignment
         AlignedTexts alignedTexts = createAlignedTexts();
+
+        // Store inline changes for highlighting
+        this.leftInlineChanges = alignedTexts.leftInlineChanges;
+        this.rightInlineChanges = alignedTexts.rightInlineChanges;
 
         // Create left text area (Reference Model)
         leftTextArea = createTextArea();
@@ -312,11 +324,13 @@ public class DiffWindow extends JFrame {
             deletedBackgroundColor = new Color(80, 40, 40);      // Dark red
             changedBackgroundColor = new Color(80, 80, 40);      // Dark yellow
             paddingBackgroundColor = new Color(60, 60, 60);      // Medium grey for padding
+            inlineChangeColor = new Color(100, 100, 60);         // Darker yellow for inline changes
         } else {
             addedBackgroundColor = new Color(200, 255, 200);     // Light green
             deletedBackgroundColor = new Color(255, 200, 200);   // Light red
             changedBackgroundColor = new Color(255, 255, 200);   // Light yellow
             paddingBackgroundColor = new Color(240, 240, 240);   // Light grey for padding
+            inlineChangeColor = new Color(255, 230, 150);        // Darker yellow for inline changes
         }
     }
 
@@ -370,6 +384,33 @@ public class DiffWindow extends JFrame {
         }
     }
 
+    /**
+     * Applies character-level highlighting for inline changes within modified lines.
+     * This provides finer-grained visual feedback than full-line highlighting.
+     */
+    private void applyInlineHighlighting() {
+        try {
+            // Create a custom highlight painter with our inline change color
+            javax.swing.text.DefaultHighlighter.DefaultHighlightPainter painter =
+                new javax.swing.text.DefaultHighlighter.DefaultHighlightPainter(inlineChangeColor);
+
+            // Apply inline highlights to left text area
+            javax.swing.text.Highlighter leftHighlighter = leftTextArea.getHighlighter();
+            for (InlineChange change : leftInlineChanges) {
+                leftHighlighter.addHighlight(change.startOffset, change.endOffset, painter);
+            }
+
+            // Apply inline highlights to right text area
+            javax.swing.text.Highlighter rightHighlighter = rightTextArea.getHighlighter();
+            for (InlineChange change : rightInlineChanges) {
+                rightHighlighter.addHighlight(change.startOffset, change.endOffset, painter);
+            }
+
+        } catch (Exception e) {
+            logger.error("Error applying inline highlighting", e);
+        }
+    }
+
     private void setupSynchronizedScrolling() {
         JScrollBar leftVertical = leftScrollPane.getVerticalScrollBar();
         JScrollBar rightVertical = rightScrollPane.getVerticalScrollBar();
@@ -400,10 +441,9 @@ public class DiffWindow extends JFrame {
             String changeText = totalChanges == 1 ? "change" : "changes";
             statsLabel.setText(totalChanges + " " + changeText);
 
-            // Enable navigation buttons based on current position
-            List<Integer> changeLines = diffResult.getChangeLineNumbers();
-            prevButton.setEnabled(currentDifferenceIndex > 0);
-            nextButton.setEnabled(currentDifferenceIndex < changeLines.size() - 1);
+            // Enable navigation buttons when there are changes (wrap-around enabled)
+            prevButton.setEnabled(true);
+            nextButton.setEnabled(true);
         }
     }
 
@@ -415,7 +455,7 @@ public class DiffWindow extends JFrame {
 
         currentDifferenceIndex++;
         if (currentDifferenceIndex >= changeLines.size()) {
-            currentDifferenceIndex = changeLines.size() - 1;
+            currentDifferenceIndex = 0;  // Wrap to first change
         }
 
         scrollToLine(changeLines.get(currentDifferenceIndex));
@@ -430,7 +470,7 @@ public class DiffWindow extends JFrame {
 
         currentDifferenceIndex--;
         if (currentDifferenceIndex < 0) {
-            currentDifferenceIndex = 0;
+            currentDifferenceIndex = changeLines.size() - 1;  // Wrap to last change
         }
 
         scrollToLine(changeLines.get(currentDifferenceIndex));
@@ -461,10 +501,13 @@ public class DiffWindow extends JFrame {
     /**
      * Creates aligned text versions with blank lines inserted for proper visual alignment.
      * This ensures that matching content stays aligned even when there are insertions/deletions.
+     * Also parses inline change markers (~...~) and returns clean text with highlight ranges.
      */
     private AlignedTexts createAlignedTexts() {
         StringBuilder leftText = new StringBuilder();
         StringBuilder rightText = new StringBuilder();
+        List<InlineChange> leftInlineChanges = new ArrayList<>();
+        List<InlineChange> rightInlineChanges = new ArrayList<>();
 
         List<DiffRow> rows = diffResult.getRows();
 
@@ -477,11 +520,15 @@ public class DiffWindow extends JFrame {
             if (oldLine == null) oldLine = "";
             if (newLine == null) newLine = "";
 
-            // Append lines to respective sides
-            // DiffRowGenerator with mergeOriginalRevised(false) provides empty strings
-            // for the missing side (INSERT: oldLine="", DELETE: newLine="")
-            leftText.append(oldLine);
-            rightText.append(newLine);
+            // Parse and remove inline markers from left side, tracking ranges
+            int leftStartOffset = leftText.length();
+            String cleanedOldLine = parseInlineChanges(oldLine, leftStartOffset, leftInlineChanges);
+            leftText.append(cleanedOldLine);
+
+            // Parse and remove inline markers from right side, tracking ranges
+            int rightStartOffset = rightText.length();
+            String cleanedNewLine = parseInlineChanges(newLine, rightStartOffset, rightInlineChanges);
+            rightText.append(cleanedNewLine);
 
             // Add newline if not the last line
             if (i < rows.size() - 1) {
@@ -490,19 +537,81 @@ public class DiffWindow extends JFrame {
             }
         }
 
-        return new AlignedTexts(leftText.toString(), rightText.toString());
+        return new AlignedTexts(leftText.toString(), rightText.toString(),
+                                leftInlineChanges, rightInlineChanges);
     }
 
     /**
-     * Container for aligned left and right text.
+     * Parses a line to find inline change markers (~...~), removes them,
+     * and records the character ranges that should be highlighted.
+     *
+     * @param line The line with potential ~...~ markers
+     * @param baseOffset The offset in the document where this line starts
+     * @param inlineChanges List to add discovered inline change ranges to
+     * @return The line with markers removed
+     */
+    private String parseInlineChanges(String line, int baseOffset, List<InlineChange> inlineChanges) {
+        StringBuilder cleaned = new StringBuilder();
+        int currentOffset = 0;
+        boolean inChange = false;
+        int changeStart = -1;
+
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+
+            if (c == '~') {
+                if (!inChange) {
+                    // Start of inline change
+                    inChange = true;
+                    changeStart = currentOffset;
+                } else {
+                    // End of inline change
+                    inChange = false;
+                    // Record the range (start to current position in cleaned text)
+                    inlineChanges.add(new InlineChange(
+                        baseOffset + changeStart,
+                        baseOffset + currentOffset
+                    ));
+                }
+                // Don't add ~ to cleaned text
+            } else {
+                cleaned.append(c);
+                currentOffset++;
+            }
+        }
+
+        return cleaned.toString();
+    }
+
+    /**
+     * Container for aligned left and right text with inline change ranges.
      */
     private static class AlignedTexts {
         final String leftText;
         final String rightText;
+        final List<InlineChange> leftInlineChanges;
+        final List<InlineChange> rightInlineChanges;
 
-        AlignedTexts(String leftText, String rightText) {
+        AlignedTexts(String leftText, String rightText,
+                     List<InlineChange> leftInlineChanges,
+                     List<InlineChange> rightInlineChanges) {
             this.leftText = leftText;
             this.rightText = rightText;
+            this.leftInlineChanges = leftInlineChanges;
+            this.rightInlineChanges = rightInlineChanges;
+        }
+    }
+
+    /**
+     * Represents a character range that should be highlighted for inline changes.
+     */
+    private static class InlineChange {
+        final int startOffset;
+        final int endOffset;
+
+        InlineChange(int startOffset, int endOffset) {
+            this.startOffset = startOffset;
+            this.endOffset = endOffset;
         }
     }
 

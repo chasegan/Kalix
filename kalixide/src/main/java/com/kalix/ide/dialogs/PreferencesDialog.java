@@ -725,6 +725,7 @@ public class PreferencesDialog extends JDialog {
         private JCheckBox precision64CheckBox;
         private JCheckBox showCoordinatesCheckBox;
         private JCheckBox autoYModeCheckBox;
+        private JTextField logScaleMinField;
 
         public CompressionPreferencePanel() {
             super("Data & Visualization");
@@ -782,7 +783,39 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(autoYModeCheckBox, gbc);
 
+            // Log scale minimum threshold setting
+            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+            formPanel.add(new JLabel("Log scale auto-zoom minimum:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            logScaleMinField = new JTextField(String.valueOf(
+                PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001)), 10);
+            logScaleMinField.setToolTipText("Minimum Y value for log scale auto-zoom (prevents excessive zoom-out from tiny values)");
+            logScaleMinField.addActionListener(e -> saveLogScaleMinimum());
+            logScaleMinField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
+            });
+            formPanel.add(logScaleMinField, gbc);
+
             add(formPanel, BorderLayout.NORTH);
+        }
+
+        private void saveLogScaleMinimum() {
+            try {
+                double value = Double.parseDouble(logScaleMinField.getText().trim());
+                if (value > 0) {
+                    PreferenceManager.setFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, value);
+
+                    // Notify callback to update FlowViz windows
+                    if (changeCallback != null) {
+                        changeCallback.onFlowVizPreferencesChanged();
+                    }
+                }
+            } catch (NumberFormatException ex) {
+                // Invalid input - don't save
+            }
         }
     }
 

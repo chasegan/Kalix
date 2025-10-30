@@ -14,20 +14,26 @@ public class ViewPort {
     private int plotWidth;
     private int plotHeight;
 
-    // Y-axis transformation
+    // Axis transformations
     private YAxisScale yAxisScale;
+    private XAxisType xAxisType;
     
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue) {
-        this(startTimeMs, endTimeMs, minValue, maxValue, 0, 0, 0, 0, YAxisScale.LINEAR);
+        this(startTimeMs, endTimeMs, minValue, maxValue, 0, 0, 0, 0, YAxisScale.LINEAR, XAxisType.TIME);
     }
 
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
                    int plotX, int plotY, int plotWidth, int plotHeight) {
-        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, YAxisScale.LINEAR);
+        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, YAxisScale.LINEAR, XAxisType.TIME);
     }
 
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
                    int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale) {
+        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, yAxisScale, XAxisType.TIME);
+    }
+
+    public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
+                   int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale, XAxisType xAxisType) {
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
         this.minValue = minValue;
@@ -37,6 +43,7 @@ public class ViewPort {
         this.plotWidth = plotWidth;
         this.plotHeight = plotHeight;
         this.yAxisScale = yAxisScale != null ? yAxisScale : YAxisScale.LINEAR;
+        this.xAxisType = xAxisType != null ? xAxisType : XAxisType.TIME;
     }
     
     // Transform coordinates between data space and screen space
@@ -166,7 +173,7 @@ public class ViewPort {
         double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
 
         return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     /**
@@ -177,7 +184,7 @@ public class ViewPort {
     public ViewPort pan(long deltaTimeMs, double deltaValue) {
         return new ViewPort(startTimeMs + deltaTimeMs, endTimeMs + deltaTimeMs,
                           minValue + deltaValue, maxValue + deltaValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     /**
@@ -211,17 +218,22 @@ public class ViewPort {
         double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
 
         return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     public ViewPort withPlotArea(int plotX, int plotY, int plotWidth, int plotHeight) {
         return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     public ViewPort withYAxisScale(YAxisScale yAxisScale) {
         return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale);
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+    }
+
+    public ViewPort withXAxisType(XAxisType xAxisType) {
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
     
     // Calculate how many pixels per data point
@@ -254,6 +266,7 @@ public class ViewPort {
     public int getPlotWidth() { return plotWidth; }
     public int getPlotHeight() { return plotHeight; }
     public YAxisScale getYAxisScale() { return yAxisScale; }
+    public XAxisType getXAxisType() { return xAxisType; }
     
     @Override
     public String toString() {

@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 /**
  * Manages all plot interaction functionality including mouse handling, zooming,
@@ -57,6 +59,7 @@ public class PlotInteractionManager {
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
+    private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
 
     /**
      * Creates a new plot interaction manager for handling all user interactions with the plot.
@@ -122,6 +125,16 @@ public class PlotInteractionManager {
      */
     public void setBaseDirectorySupplier(Supplier<java.io.File> baseDirectorySupplier) {
         this.baseDirectorySupplier = baseDirectorySupplier;
+    }
+
+    /**
+     * Sets the plot type supplier for format-aware data export.
+     * This allows the exporter to format data appropriately based on the plot type.
+     *
+     * @param plotTypeSupplier Supplier that returns the current plot type
+     */
+    public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
+        this.plotTypeSupplier = plotTypeSupplier;
     }
 
     /**
@@ -226,11 +239,11 @@ public class PlotInteractionManager {
         // Calculate Y range for visible data in the time range
         double[] yRange = calculateVisibleYRange(startTime, endTime);
 
-        // Create new viewport
+        // Create new viewport (preserve XAxisType for exceedance plots)
         Rectangle plotArea = plotAreaSupplier.get();
         ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
                                           plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                          currentViewport.getYAxisScale());
+                                          currentViewport.getYAxisScale(), currentViewport.getXAxisType());
         viewportUpdater.accept(newViewport);
     }
 
@@ -359,7 +372,7 @@ public class PlotInteractionManager {
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
                                               plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale());
+                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
             viewportUpdater.accept(newViewport);
         } else {
             // Standard zoom: zoom both axes centered on mouse position
@@ -400,7 +413,7 @@ public class PlotInteractionManager {
             Rectangle plotArea = plotAreaSupplier.get();
             ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
                                               plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale());
+                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
             viewportUpdater.accept(newViewport);
         }
 
@@ -482,6 +495,14 @@ public class PlotInteractionManager {
 
         if (!hasValidData) {
             return new double[]{-1.0, 1.0}; // Default range when no data
+        }
+
+        // Clamp minimum value for log scale to prevent zooming too far out
+        // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
+        // This only affects auto-zoom; manual zoom/pan can still access the full range
+        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001);
+        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
+            minValue = logScaleMin;
         }
 
         // Add 5% padding appropriate for the current Y-axis scale
@@ -613,7 +634,9 @@ public class PlotInteractionManager {
 
         try {
             DataSet dataSet = dataSetSupplier.get();
-            TimeSeriesCsvExporter.export(dataSet, file);
+            com.kalix.ide.flowviz.transform.PlotType plotType =
+                (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
+            TimeSeriesCsvExporter.export(dataSet, file, plotType);
             JOptionPane.showMessageDialog(parentComponent,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
@@ -703,7 +726,9 @@ public class PlotInteractionManager {
             }
 
             try {
-                TimeSeriesCsvExporter.export(dataSet, file);
+                com.kalix.ide.flowviz.transform.PlotType plotType =
+                    (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
+                TimeSeriesCsvExporter.export(dataSet, file, plotType);
                 JOptionPane.showMessageDialog(parentComponent,
                     "Data saved successfully to " + file.getName(),
                     "Save Data",

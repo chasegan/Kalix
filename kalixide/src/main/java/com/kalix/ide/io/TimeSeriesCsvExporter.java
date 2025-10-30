@@ -2,6 +2,7 @@ package com.kalix.ide.io;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.transform.PlotType;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -83,9 +84,25 @@ public class TimeSeriesCsvExporter {
      * @throws IOException if an I/O error occurs while writing the file
      * @throws IllegalArgumentException if dataSet is null or empty
      *
-     * @see #exportDataToCsv(DataSet, File)
+     * @see #exportDataToCsv(DataSet, File, PlotType)
      */
     public static void export(DataSet dataSet, File outputFile) throws IOException {
+        export(dataSet, outputFile, null);
+    }
+
+    /**
+     * Exports a dataset to a CSV file with plot type awareness.
+     *
+     * <p>For EXCEEDANCE plot type, the first column will be "Percentile" with percentages.
+     * For other plot types, the first column will be "Datetime" with timestamps.</p>
+     *
+     * @param dataSet the dataset to export; must not be null
+     * @param outputFile the target CSV file; will be created or overwritten
+     * @param plotType the plot type (null or VALUES for standard temporal export)
+     * @throws IOException if an I/O error occurs while writing the file
+     * @throws IllegalArgumentException if dataSet is null or empty
+     */
+    public static void export(DataSet dataSet, File outputFile, PlotType plotType) throws IOException {
         if (dataSet == null) {
             throw new IllegalArgumentException("DataSet cannot be null");
         }
@@ -96,7 +113,7 @@ public class TimeSeriesCsvExporter {
             throw new IllegalArgumentException("Output file cannot be null");
         }
 
-        exportDataToCsv(dataSet, outputFile);
+        exportDataToCsv(dataSet, outputFile, plotType);
     }
 
     /**
@@ -109,9 +126,10 @@ public class TimeSeriesCsvExporter {
      *
      * @param dataSet the dataset to export
      * @param file the output file
+     * @param plotType the plot type (null for default behavior)
      * @throws IOException if writing fails
      */
-    private static void exportDataToCsv(DataSet dataSet, File file) throws IOException {
+    private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType) throws IOException {
         List<TimeSeriesData> allSeries = dataSet.getAllSeries();
         if (allSeries.isEmpty()) {
             return;
@@ -120,9 +138,11 @@ public class TimeSeriesCsvExporter {
         // Collect all unique timestamps across all series
         Set<Long> allTimestamps = collectAllTimestamps(allSeries);
 
+        boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
+
         try (FileWriter writer = new FileWriter(file)) {
-            writeHeader(writer, allSeries);
-            writeDataRows(writer, allSeries, allTimestamps);
+            writeHeader(writer, allSeries, isExceedance);
+            writeDataRows(writer, allSeries, allTimestamps, isExceedance);
         }
     }
 
@@ -148,16 +168,17 @@ public class TimeSeriesCsvExporter {
     /**
      * Writes the CSV header row with column names.
      *
-     * <p>The header includes "Datetime" as the first column, followed by
-     * each time series name. Series names are properly escaped for CSV format.</p>
+     * <p>The header includes "Datetime" (or "Percentile" for exceedance) as the first column,
+     * followed by each time series name. Series names are properly escaped for CSV format.</p>
      *
      * @param writer the file writer
      * @param allSeries list of all time series data
+     * @param isExceedance true if this is exceedance data
      * @throws IOException if writing fails
      */
-    private static void writeHeader(FileWriter writer, List<TimeSeriesData> allSeries)
+    private static void writeHeader(FileWriter writer, List<TimeSeriesData> allSeries, boolean isExceedance)
             throws IOException {
-        writer.write("Datetime");
+        writer.write(isExceedance ? "Percentile" : "Datetime");
         for (TimeSeriesData series : allSeries) {
             writer.write(",");
             writer.write(escapeCsvField(series.getName()));
@@ -175,16 +196,24 @@ public class TimeSeriesCsvExporter {
      * @param writer the file writer
      * @param allSeries list of all time series data
      * @param allTimestamps sorted set of all unique timestamps
+     * @param isExceedance true if this is exceedance data (format first column as percentile)
      * @throws IOException if writing fails
      */
     private static void writeDataRows(FileWriter writer, List<TimeSeriesData> allSeries,
-                                    Set<Long> allTimestamps) throws IOException {
+                                    Set<Long> allTimestamps, boolean isExceedance) throws IOException {
         for (Long timestamp : allTimestamps) {
-            // Format datetime
-            LocalDateTime dateTime = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-            String dateTimeStr = formatDateTime(dateTime);
-            writer.write(dateTimeStr);
+            // Format first column based on plot type
+            if (isExceedance) {
+                // Convert fake timestamp to percentile
+                double percentile = timestamp / 1_000_000.0;
+                writer.write(String.format("%.2f", percentile));
+            } else {
+                // Format datetime
+                LocalDateTime dateTime = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
+                String dateTimeStr = formatDateTime(dateTime);
+                writer.write(dateTimeStr);
+            }
 
             // Write values for each series
             for (TimeSeriesData series : allSeries) {
