@@ -57,6 +57,7 @@ public class DiffWindow extends JFrame {
     private Color addedBackgroundColor;
     private Color deletedBackgroundColor;
     private Color changedBackgroundColor;
+    private Color paddingBackgroundColor;
 
     // Header labels
     private String leftHeaderLabel;
@@ -147,16 +148,19 @@ public class DiffWindow extends JFrame {
     }
 
     private void initializeComponents(String referenceModel, String thisModel) {
+        // Create aligned text versions with padding for proper visual alignment
+        AlignedTexts alignedTexts = createAlignedTexts();
+
         // Create left text area (Reference Model)
         leftTextArea = createTextArea();
-        leftTextArea.setText(referenceModel);
+        leftTextArea.setText(alignedTexts.leftText);
         leftTextArea.setCaretPosition(0);
         leftScrollPane = new RTextScrollPane(leftTextArea);
         leftScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 
         // Create right text area (This Model)
         rightTextArea = createTextArea();
-        rightTextArea.setText(thisModel);
+        rightTextArea.setText(alignedTexts.rightText);
         rightTextArea.setCaretPosition(0);
         rightScrollPane = new RTextScrollPane(rightTextArea);
         rightScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
@@ -307,10 +311,12 @@ public class DiffWindow extends JFrame {
             addedBackgroundColor = new Color(40, 80, 40);        // Dark green
             deletedBackgroundColor = new Color(80, 40, 40);      // Dark red
             changedBackgroundColor = new Color(80, 80, 40);      // Dark yellow
+            paddingBackgroundColor = new Color(60, 60, 60);      // Medium grey for padding
         } else {
             addedBackgroundColor = new Color(200, 255, 200);     // Light green
             deletedBackgroundColor = new Color(255, 200, 200);   // Light red
             changedBackgroundColor = new Color(255, 255, 200);   // Light yellow
+            paddingBackgroundColor = new Color(240, 240, 240);   // Light grey for padding
         }
     }
 
@@ -329,18 +335,24 @@ public class DiffWindow extends JFrame {
             for (int i = 0; i < rows.size(); i++) {
                 DiffRow row = rows.get(i);
                 DiffRow.Tag tag = row.getTag();
+                String oldLine = row.getOldLine();
+                String newLine = row.getNewLine();
+
+                // Check for padding lines (empty strings indicate added padding for alignment)
+                boolean leftIsPadding = (oldLine == null || oldLine.isEmpty());
+                boolean rightIsPadding = (newLine == null || newLine.isEmpty());
 
                 Color color = null;
                 switch (tag) {
                     case INSERT:
-                        color = addedBackgroundColor;
-                        // Highlight in right pane only
-                        rightTextArea.addLineHighlight(i, color);
+                        // Left side is padding (grey), right side is added (green)
+                        leftTextArea.addLineHighlight(i, paddingBackgroundColor);
+                        rightTextArea.addLineHighlight(i, addedBackgroundColor);
                         break;
                     case DELETE:
-                        color = deletedBackgroundColor;
-                        // Highlight in left pane only
-                        leftTextArea.addLineHighlight(i, color);
+                        // Left side is deleted (red), right side is padding (grey)
+                        leftTextArea.addLineHighlight(i, deletedBackgroundColor);
+                        rightTextArea.addLineHighlight(i, paddingBackgroundColor);
                         break;
                     case CHANGE:
                         color = changedBackgroundColor;
@@ -443,6 +455,54 @@ public class DiffWindow extends JFrame {
 
         } catch (Exception e) {
             logger.error("Error scrolling to line " + lineNumber, e);
+        }
+    }
+
+    /**
+     * Creates aligned text versions with blank lines inserted for proper visual alignment.
+     * This ensures that matching content stays aligned even when there are insertions/deletions.
+     */
+    private AlignedTexts createAlignedTexts() {
+        StringBuilder leftText = new StringBuilder();
+        StringBuilder rightText = new StringBuilder();
+
+        List<DiffRow> rows = diffResult.getRows();
+
+        for (int i = 0; i < rows.size(); i++) {
+            DiffRow row = rows.get(i);
+            String oldLine = row.getOldLine();
+            String newLine = row.getNewLine();
+
+            // Handle null values (shouldn't happen, but be defensive)
+            if (oldLine == null) oldLine = "";
+            if (newLine == null) newLine = "";
+
+            // Append lines to respective sides
+            // DiffRowGenerator with mergeOriginalRevised(false) provides empty strings
+            // for the missing side (INSERT: oldLine="", DELETE: newLine="")
+            leftText.append(oldLine);
+            rightText.append(newLine);
+
+            // Add newline if not the last line
+            if (i < rows.size() - 1) {
+                leftText.append("\n");
+                rightText.append("\n");
+            }
+        }
+
+        return new AlignedTexts(leftText.toString(), rightText.toString());
+    }
+
+    /**
+     * Container for aligned left and right text.
+     */
+    private static class AlignedTexts {
+        final String leftText;
+        final String rightText;
+
+        AlignedTexts(String leftText, String rightText) {
+            this.leftText = leftText;
+            this.rightText = rightText;
         }
     }
 

@@ -505,7 +505,7 @@ public class RunManager extends JFrame {
         showModelItem.addActionListener(e -> showModelFromContextMenu());
         contextMenu.add(showModelItem);
 
-        JMenuItem diffItem = new JMenuItem("Diff");
+        JMenuItem diffItem = new JMenuItem("Show Model Changes");
         diffItem.addActionListener(e -> diffModelFromContextMenu());
         contextMenu.add(diffItem);
 
@@ -1337,7 +1337,7 @@ public class RunManager extends JFrame {
             }
 
             // Open diff window (run model vs reference model)
-            String title = "Diff: " + runInfo.runName + " vs Reference Model";
+            String title = "Changes: " + runInfo.runName + " vs Reference Model";
             new DiffWindow(runModelText, referenceModelText, title, "Reference Model", runInfo.runName);
 
         } else {
