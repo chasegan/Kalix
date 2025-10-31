@@ -191,8 +191,9 @@ public class NodeValidator implements ValidationStrategy {
             return; // No count constraint specified
         }
 
-        // Count the actual number of values
-        String[] values = prop.getValue().split("\\s*,\\s*");
+        // Count the actual number of values (trim trailing commas and whitespace first)
+        String trimmedValue = prop.getValue().replaceAll("[,\\s]+$", "");
+        String[] values = trimmedValue.split("\\s*,\\s*");
         int actualCount = values.length;
         int expectedCount = paramDef.count;
 
