@@ -15,7 +15,7 @@ pub struct IniSection {
     pub line_number: usize,            // Line where [section] appears
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IniDocument {
     pub sections: HashMap<String, IniSection>,
     pub trailing_comments: Vec<String>, // Comments at end of file
@@ -207,6 +207,111 @@ impl IniDocument {
         None
     }
 
+    /// Set a property value in a section
+    /// Creates the section and/or property if it doesn't exist
+    /// Updates the value while preserving line numbers for unchanged properties
+    pub fn set_property(&mut self, section_name: &str, key: &str, new_value: &str) -> Result<(), String> {
+        // Get or create the section
+        let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
+            IniSection {
+                properties: HashMap::new(),
+                leading_comments: Vec::new(),
+                line_number: 0, // New sections don't have a line number from original file
+            }
+        });
+
+        // Get or create the property
+        if let Some(property) = section.properties.get_mut(key) {
+            // Update existing property - preserve line_number, clear raw_lines
+            property.value = new_value.to_string();
+            property.raw_lines.clear(); // Clear raw_lines to indicate this was modified
+            property.comments.clear(); // Clear comments as value has changed
+        } else {
+            // Create new property
+            section.properties.insert(key.to_string(), IniProperty {
+                value: new_value.to_string(),
+                line_number: 0, // New properties don't have a line number from original file
+                raw_lines: Vec::new(), // Empty indicates newly created
+                comments: Vec::new(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Get a property value from a section
+    pub fn get_property(&self, section_name: &str, key: &str) -> Option<&str> {
+        self.sections.get(section_name)
+            .and_then(|section| section.properties.get(key))
+            .map(|property| property.value.as_str())
+    }
+
+    /// Convert the IniDocument back to an INI string
+    /// Uses raw_lines for unchanged properties to preserve original formatting
+    /// Formats modified properties in a canonical way
+    pub fn to_string(&self) -> String {
+        let mut result = String::new();
+
+        // Sort sections for consistent output
+        // Put [attributes] first if it exists, then alphabetically
+        let mut section_names: Vec<&String> = self.sections.keys().collect();
+        section_names.sort_by(|a, b| {
+            if *a == "attributes" { std::cmp::Ordering::Less }
+            else if *b == "attributes" { std::cmp::Ordering::Greater }
+            else { a.cmp(b) }
+        });
+
+        for section_name in section_names {
+            let section = &self.sections[section_name];
+
+            // Add leading comments
+            for comment in &section.leading_comments {
+                result.push_str(comment);
+                result.push('\n');
+            }
+
+            // Add section header
+            result.push_str(&format!("[{}]\n", section_name));
+
+            // Sort properties for consistent output (alphabetically)
+            let mut prop_names: Vec<&String> = section.properties.keys().collect();
+            prop_names.sort();
+
+            for prop_name in prop_names {
+                let property = &section.properties[prop_name];
+
+                if property.raw_lines.is_empty() {
+                    // Property was modified or newly created - format canonically
+                    // Check if this is a list item (key == value)
+                    if prop_name == &property.value {
+                        // List item (no key=value syntax)
+                        result.push_str(&property.value);
+                        result.push('\n');
+                    } else {
+                        // Regular property
+                        result.push_str(&format!("{} = {}\n", prop_name, property.value));
+                    }
+                } else {
+                    // Property unchanged - use original raw_lines
+                    for raw_line in &property.raw_lines {
+                        result.push_str(raw_line);
+                        result.push('\n');
+                    }
+                }
+            }
+
+            result.push('\n'); // Blank line after each section
+        }
+
+        // Add trailing comments
+        for comment in &self.trailing_comments {
+            result.push_str(comment);
+            result.push('\n');
+        }
+
+        result
+    }
+
     /// Convert to the HashMap format expected by existing model loading code
     pub fn to_legacy_format(&self) -> HashMap<String, HashMap<String, Option<String>>> {
         let mut result = HashMap::new();
@@ -364,35 +469,52 @@ params = 1.0, 2.0, 3.0
     }
 
     #[test]
-    fn test_line_continuation_integration() {
-        use crate::io::ini_model_io::IniModelIO;
-
+    fn test_set_property() {
         let content = r#"
-[attributes]
-ini_version = 0.0.1
-
-[inputs]
-/Users/chas/github/Kalix/src/tests/example_models/1/flows.csv
-
-[node.test_node]
-type = sacramento
-params = 0.01, 40.0, 23.0,
-         0.009, 0.043, 130.0,
-         0.01, 0.063, 1.0, 0.01, 0.0, 0.0,
-         40.0, 0.245, 50.0, 40.0, 0.1
+[node.test]
+type = gr4j
+params = 100.0, 2.0, 50.0, 0.5
 "#;
 
-        let io = IniModelIO::new();
-        let result = io.read_model_string(content);
+        let mut doc = IniDocument::parse(content).unwrap();
 
-        // Should parse successfully (though may fail model validation due to incomplete model)
-        match result {
-            Ok(_) => println!("✅ Line continuation parsing successful!"),
-            Err(e) => {
-                // Expected to fail at model building stage, not parsing stage
-                assert!(!e.contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
-                println!("✅ Parsing succeeded, model building failed as expected: {}", e);
-            }
-        }
+        // Test updating existing property
+        doc.set_property("node.test", "params", "200.0, 3.0, 60.0, 0.6").unwrap();
+        assert_eq!(doc.get_property("node.test", "params"), Some("200.0, 3.0, 60.0, 0.6"));
+
+        // Verify raw_lines was cleared (indicates modification)
+        let section = &doc.sections["node.test"];
+        let property = &section.properties["params"];
+        assert!(property.raw_lines.is_empty());
+        assert_eq!(property.line_number, 4); // Original line number preserved
+
+        // Test adding new property to existing section
+        doc.set_property("node.test", "new_param", "42").unwrap();
+        assert_eq!(doc.get_property("node.test", "new_param"), Some("42"));
+
+        // Test creating new section with property
+        doc.set_property("node.new_node", "type", "inflow").unwrap();
+        assert_eq!(doc.get_property("node.new_node", "type"), Some("inflow"));
+
+        // Verify unchanged property still has raw_lines
+        let type_property = &doc.sections["node.test"].properties["type"];
+        assert!(!type_property.raw_lines.is_empty()); // Not modified, should have raw_lines
+        assert_eq!(type_property.value, "gr4j");
+    }
+
+    #[test]
+    fn test_get_property() {
+        let content = r#"
+[section1]
+key1 = value1
+key2 = value2
+"#;
+
+        let doc = IniDocument::parse(content).unwrap();
+
+        assert_eq!(doc.get_property("section1", "key1"), Some("value1"));
+        assert_eq!(doc.get_property("section1", "key2"), Some("value2"));
+        assert_eq!(doc.get_property("section1", "nonexistent"), None);
+        assert_eq!(doc.get_property("nonexistent", "key1"), None);
     }
 }

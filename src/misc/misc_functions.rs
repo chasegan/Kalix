@@ -84,3 +84,13 @@ pub fn parse_csv_to_bool_option_u32(input: &str) -> Result<(bool, Option<u32>), 
     };
     Ok((bool_val, u32_val))
 }
+
+
+/// Helper for checking property values
+pub fn require_non_empty<'a>(value: &'a str, name: &str, line_number: usize) -> Result<&'a str, String> {
+    if value.is_empty() {
+        Err(format!("Error on line {}: Missing value for {}", line_number, name))
+    } else {
+        Ok(value)
+    }
+}

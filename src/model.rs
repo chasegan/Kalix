@@ -3,6 +3,7 @@ use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
+use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
@@ -31,6 +32,9 @@ pub struct Model {
 
     // Fast node name lookup
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name] = node index
+
+    // INI document for round-trip serialization
+    pub ini_document: Option<IniDocument>,
 }
 
 
@@ -485,5 +489,37 @@ impl Model {
 
         write_ts(filename, vec_ts)
             .map_err(|_| format!("Could not write file {}", filename))
+    }
+
+    /// Update a node's parameter in the attached INI document
+    /// This is typically used after parameter optimization
+    pub fn update_node_parameter_in_ini(&mut self, node_name: &str, param_name: &str, value: &str) -> Result<(), String> {
+        if let Some(ref mut ini_doc) = self.ini_document {
+            let section_name = format!("node.{}", node_name);
+            ini_doc.set_property(&section_name, param_name, value)
+        } else {
+            Err("Model does not have an attached INI document".to_string())
+        }
+    }
+
+    /// Save the model's INI document to a file
+    /// This preserves the original formatting for unchanged properties
+    pub fn save_ini_to_file(&self, path: &str) -> Result<(), String> {
+        if let Some(ref ini_doc) = self.ini_document {
+            let content = ini_doc.to_string();
+            std::fs::write(path, content)
+                .map_err(|e| format!("Failed to write INI file '{}': {}", path, e))
+        } else {
+            Err("Model does not have an attached INI document".to_string())
+        }
+    }
+
+    /// Get the INI document as a string
+    pub fn get_ini_string(&self) -> Result<String, String> {
+        if let Some(ref ini_doc) = self.ini_document {
+            Ok(ini_doc.to_string())
+        } else {
+            Err("Model does not have an attached INI document".to_string())
+        }
     }
 }

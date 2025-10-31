@@ -60,3 +60,6 @@ mod test_constants_cache;
 
 #[cfg(test)]
 mod test_model_constant_optimisation;
+
+#[cfg(test)]
+mod test_ini_document;
