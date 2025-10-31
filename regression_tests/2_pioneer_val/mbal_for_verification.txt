@@ -1,0 +1,90 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 62
+  Timesteps: 47662
+  Stepsize (s): 86400
+  Period: 1889-01-01T00:00:00.000Z, 2019-06-30T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  palmtree_pipeline_inf_05b, 1.2957983037045029
+  reach01_predmm, 146.88778599877693
+  reach02_predmm, 477.22583318754516
+  reach03_predmm, 375.6449778335999
+  reach04_predmm, 149.36767744774298
+  reach05a_predmm, 461.94223362610376
+  reach05b_predmm_owens, 249.6528294424091
+  reach05b_predmm_palmtree, 55.576424928875674
+  reach06_predmm, 258.2343345453725
+  reach07_predmm, 365.82847541778375
+  silver_pipeline_in_07, 0.4829020749136645
+  tannalo_pipeline_inf_05b, 0.9158074147103563
+
+USER NODES
+  abovemarian_supp_div_07, -0.13230897570391428
+  cattle_supp_06, -0.024996574210062822
+  cc_ds_tan_supp_div_05b, -0.09655771893751887
+  cc_unsupp_div_dsfh_05a, -0.0006846754227686621
+  cc_unsupp_div_usfh_05a, -0.09111499727246035
+  cc_unsupp_div_ustan_05b, -0.0019537157483949506
+  cc_us_gar_supp_div_05b, -0.04755004499958056
+  fh_unsupp_div_05a, -0.01568681549242574
+  marian_mill_supp_hp_div_07, -0.28702515630901526
+  marian_supp_div_07, 0
+  mcgregor_supp_div_07, -0.0399250155259956
+  owens_unsupp_div_05b, -0.008527233435441204
+  palmtree_supp_div_05b, -0.0008596089376442437
+  pion_supp_div_03, -0.2901757823064172
+  septimus_supp_06, -0.7927351290336097
+  silver_pipeline_out_05b, -0.4829020749136645
+  silver_supp_div_07, -0.09437392283160566
+  silvermcgregor_supp_div_07, -0.02213362259242156
+  tannalo_supp_div_05b, -0.4570388989131807
+
+LOSS NODES
+  reach03_loss, -8.292011591386785
+  reach06_loss, -9.99196568152451
+  reach07_loss, -9.61295750338741
+  reach2_loss, -16.144673372274642
+
+STORAGE NODES
+  marianweir, -1.1598655129011382
+  mirani, -3.6290507013256437
+  teemburra, 0.515248191498116
+  waterhole, -6.466113010463176
+
+ROUTING NODES
+  bigmodrouting, -0.08427380938987845
+  pwlr2, -0.000000000028608236147272255
+
+CONFLUENCE NODES
+  fhccconfluence, 0
+  ow_cc_conf, 0
+  pccconfluence, 0
+  pmconfluence, 0
+  pt_cc_conf, 0
+  pt_conf, 0
+  tan_cc_conf, 0
+
+GAUGE NODES
+  dumbletonsid, 0
+  gauge125002c, 0
+  gauge125004ab, 0
+  gauge125006a, 0
+  gauge125007a, 0
+  gauge125009a, 0
+  gs125005a_whitefords, 0
+  miranisid, 0
+  palmtree_pipeline_gauge_05b, 0
+  silver_pipeline_gauge_05b, 0
+  tannalo_pipeline_gauge_05b, 0
+  teemburrainflow, 0
+  teemburratw, 0
+
+BLACKHOLE NODES
+  eos, -2485.302867267741
+
+----------------------------------
+TOTAL = 0.000000000027485569376040075
+----------------------------------
