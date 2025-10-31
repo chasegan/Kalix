@@ -13,6 +13,7 @@ use crate::timeseries_input::TimeseriesInput;
 pub struct Model {
     pub configuration: Configuration,
     pub inputs: Vec<TimeseriesInput>,
+    pub input_file_paths: Vec<String>,
     pub outputs: Vec<String>,
     pub data_cache: DataCache,
 
@@ -43,6 +44,7 @@ impl Model {
         Model {
             configuration: Configuration::new(),
             inputs: vec![],
+            input_file_paths: vec![],
             outputs: vec![],
             ..Default::default()
         }
@@ -322,6 +324,10 @@ impl Model {
 
 
     pub fn load_input_data(&mut self, file_path: &str) -> Result<usize, String> {
+        // Remember the input file path
+        self.input_file_paths.push(file_path.to_string());
+
+        // And load all the data
         let mut x = TimeseriesInput::load(file_path)?;
         self.inputs.append(&mut x);
         Ok(x.len())
@@ -496,7 +502,8 @@ impl Model {
     pub fn update_node_parameter_in_ini(&mut self, node_name: &str, param_name: &str, value: &str) -> Result<(), String> {
         if let Some(ref mut ini_doc) = self.ini_document {
             let section_name = format!("node.{}", node_name);
-            ini_doc.set_property(&section_name, param_name, value)
+            ini_doc.set_property(&section_name, param_name, value);
+            Ok(())
         } else {
             Err("Model does not have an attached INI document".to_string())
         }

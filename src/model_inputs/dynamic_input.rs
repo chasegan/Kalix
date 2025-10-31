@@ -190,36 +190,45 @@ impl OptimizedExpressionNode {
 /// - `DirectConstantReference`: Pure constant reference (zero overhead)
 /// - `Constant`: Constant value (zero overhead)
 /// - `Function`: Complex expression (minimal overhead)
+///
+/// All variants store the original expression string for round-trip serialization
 #[derive(Clone, Debug)]
 pub enum DynamicInput {
     /// No input specified
-    None,
+    None {
+        original: String
+    },
 
     /// Direct reference to a data cache series
     DirectReference {
-        idx: usize
+        idx: usize,
+        original: String
     },
 
     /// Direct reference to a constant cache value
     DirectConstantReference {
-        idx: usize
+        idx: usize,
+        original: String
     },
 
     /// Constant value (evaluated once at initialization)
     Constant {
-        value: f64
+        value: f64,
+        original: String
     },
 
     /// Function expression (optimized for performance)
     Function {
-        expression: String,  // Original expression for error messages
+        expression: String,  // Original expression for error messages and serialization
         optimized_ast: OptimizedExpressionNode
     },
 }
 
 impl Default for DynamicInput {
     fn default() -> Self {
-        DynamicInput::None
+        DynamicInput::None {
+            original: String::new()
+        }
     }
 }
 
@@ -240,7 +249,9 @@ impl DynamicInput {
         let trimmed = expression.trim();
 
         if trimmed.is_empty() {
-            return Ok(DynamicInput::None);
+            return Ok(DynamicInput::None {
+                original: String::new()
+            });
         }
 
         // Parse the expression
@@ -280,16 +291,25 @@ impl DynamicInput {
             let value = parsed.evaluate(&context)
                 .map_err(|e| format!("Failed to evaluate constant expression: {}", e))?;
 
-            Ok(DynamicInput::Constant { value })
+            Ok(DynamicInput::Constant {
+                value,
+                original: trimmed.to_string()
+            })
 
         } else if let Some(var_name) = parsed.is_single_variable() {
             // It's a direct reference to a single variable (no operations)
             // Check if it's a constant or data reference
             let lower_var = var_name.to_lowercase();
             if let Some(&idx) = constant_variable_map.get(&lower_var) {
-                Ok(DynamicInput::DirectConstantReference { idx })
+                Ok(DynamicInput::DirectConstantReference {
+                    idx,
+                    original: trimmed.to_string()
+                })
             } else if let Some(&idx) = data_variable_map.get(&lower_var) {
-                Ok(DynamicInput::DirectReference { idx })
+                Ok(DynamicInput::DirectReference {
+                    idx,
+                    original: trimmed.to_string()
+                })
             } else {
                 Err(format!("Variable '{}' not found in variable maps", var_name))
             }
@@ -323,20 +343,31 @@ impl DynamicInput {
     /// error to stderr and returns 0.0 to allow the simulation to continue.
     pub fn get_value(&self, data_cache: &DataCache) -> f64 {
         match self {
-            DynamicInput::None => 0.0,
-            DynamicInput::DirectReference { idx } => {
+            DynamicInput::None { .. } => 0.0,
+            DynamicInput::DirectReference { idx, .. } => {
                 data_cache.get_current_value(*idx)
             }
-            DynamicInput::DirectConstantReference { idx } => {
+            DynamicInput::DirectConstantReference { idx, .. } => {
                 data_cache.constants.get_value(*idx)
             }
-            DynamicInput::Constant { value } => *value,
+            DynamicInput::Constant { value, .. } => *value,
             DynamicInput::Function { expression, optimized_ast } => {
                 optimized_ast.evaluate(data_cache).unwrap_or_else(|e| {
                     eprintln!("ERROR: Critical evaluation failure in expression '{}': {}. Returning 0.0. This indicates a parser bug.", expression, e);
                     0.0
                 })
             }
+        }
+    }
+
+    /// Get the original expression string for serialization
+    pub fn to_string(&self) -> &str {
+        match self {
+            DynamicInput::None { original } => original.as_str(),
+            DynamicInput::DirectReference { original, .. } => original.as_str(),
+            DynamicInput::DirectConstantReference { original, .. } => original.as_str(),
+            DynamicInput::Constant { original, .. } => original.as_str(),
+            DynamicInput::Function { expression, .. } => expression.as_str(),
         }
     }
 }

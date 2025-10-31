@@ -68,7 +68,7 @@ params = 100.0, 2.0, 50.0, 0.5
     let mut doc = IniDocument::parse(content).unwrap();
 
     // Modify params
-    doc.set_property("node.test", "params", "200.0, 3.0, 60.0, 0.6").unwrap();
+    doc.set_property("node.test", "params", "200.0, 3.0, 60.0, 0.6");
 
     let output = doc.to_string();
     println!("Output:\n{}", output);
@@ -139,7 +139,7 @@ ds_1 = gr4j_node
     let mut doc = IniDocument::parse(content).unwrap();
 
     // Modify GR4J parameters (like after optimization)
-    doc.set_property("node.gr4j_node", "params", "150.0, 2.5, 55.0, 0.6").unwrap();
+    doc.set_property("node.gr4j_node", "params", "150.0, 2.5, 55.0, 0.6");
 
     // Convert back to string
     let output = doc.to_string();

@@ -1,3 +1,4 @@
+use std::path::absolute;
 use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_management::data_cache::DataCache;
@@ -61,6 +62,7 @@ impl RoutingNode {
             name: "".to_string(),
             pwl_divs: 1,
             x: 0.0,
+            lag: 0,
             ..Default::default()
         }
     }
@@ -71,6 +73,7 @@ impl RoutingNode {
             name: name.to_string(),
             pwl_divs: 1,
             x: 0.0,
+            lag: 0,
             ..Default::default()
         }
     }
@@ -78,13 +81,25 @@ impl RoutingNode {
     pub fn set_x(&mut self, value: f64) {
         self.x = value;
     }
+    pub fn get_x(&self) -> f64 { self.x }
     
     pub  fn set_divs(&mut self, value: usize) {
         self.pwl_divs = value;
     }
-    
+    pub fn get_divs(&self) -> usize { self.pwl_divs }
+
     pub  fn set_lag(&mut self, value: i32) {
         self.lag = value;
+    }
+    pub fn get_lag(&self) -> i32 { self.lag }
+
+    pub fn get_routing_table_as_vec(&self) -> Vec<f64> {
+        let mut answer = vec![];
+        for i in 0..self.pwl_segs {
+            answer.push(self.pwl_qq[i]);
+            answer.push(self.pwl_tt[i]);
+        }
+        answer
     }
 
     pub  fn set_routing_table(&mut self, index_flows: Vec<f64>, travel_times: Vec<f64>) {

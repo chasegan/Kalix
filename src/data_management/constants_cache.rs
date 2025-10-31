@@ -98,4 +98,15 @@ impl ConstantsCache {
     pub fn list_names(&self) -> Vec<String> {
         self.names.clone()
     }
+
+    /// Get all constants as (name, value) tuples
+    ///
+    /// Helper for saving the model to INI. Do NOT use in simulation-time code - this is slow
+    /// due to cloning. Use `get_value(idx)` instead for performance-critical code.
+    pub fn get_name_value_pairs(&self) -> Vec<(String, f64)> {
+        self.names.iter()
+            .zip(self.value.iter())
+            .map(|(name, &value)| (name.clone(), value))
+            .collect()
+    }
 }

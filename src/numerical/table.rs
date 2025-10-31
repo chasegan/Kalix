@@ -112,6 +112,20 @@ impl Table {
     }
 
 
+    /// Creates a new vector populated with values of the table
+    /// row by row.
+    pub fn get_values_as_vec(&self) -> Vec<f64> {
+        let mut answer = Vec::new();
+        for row in 0..self.nrows() {
+            for col in 0..self.ncols() {
+                let v = self.get_value(row, col);
+                answer.push(v);
+            }
+        }
+        answer
+    }
+
+
     /// Get a single value out of the table.
     pub fn get_value(&self, row: usize, col: usize) -> f64 {
         let i = row * self.ncols + col;
@@ -167,6 +181,12 @@ impl Table {
     /// the data divided by the ncols.
     pub fn nrows(&self) -> usize {
         self.data.len() / self.ncols
+    }
+
+
+    /// Gets the number of cols in the table.
+    pub fn ncols(&self) -> usize {
+        self.ncols
     }
 
 

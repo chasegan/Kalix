@@ -94,3 +94,47 @@ pub fn require_non_empty<'a>(value: &'a str, name: &str, line_number: usize) -> 
         Ok(value)
     }
 }
+
+
+/// Format a vector of f64 values as a multi-line table for INI files
+///
+/// # Arguments
+///
+/// * `values` - The vector of values to format
+/// * `n_cols` - Number of columns per line
+/// * `n_spaces` - Number of spaces to indent continuation lines
+///
+/// # Returns
+///
+/// A formatted string with values separated by ", " and wrapped to n_cols per line.
+/// Each value is followed by ", " including the last value.
+///
+/// # Example
+///
+/// ```
+/// let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+/// let result = format_vec_as_multiline_table(&values, 3, 9);
+/// // Returns: "1.0, 2.0, 3.0, \n         4.0, 5.0, 6.0, "
+/// ```
+pub fn format_vec_as_multiline_table(values: &[f64], n_cols: usize, n_spaces: usize) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+
+    let mut result = String::new();
+    let indent = " ".repeat(n_spaces);
+
+    for (i, value) in values.iter().enumerate() {
+        // Add indentation for continuation lines (not the first line)
+        if i > 0 && i % n_cols == 0 {
+            result.push('\n');
+            result.push_str(&indent);
+        }
+
+        // Add the value with comma and space
+        result.push_str(&value.to_string());
+        result.push_str(", ");
+    }
+
+    result
+}

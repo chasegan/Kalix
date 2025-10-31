@@ -6,6 +6,7 @@ pub struct IniProperty {
     pub line_number: usize,      // Line where property starts
     pub raw_lines: Vec<String>,  // Original lines for round-tripping
     pub comments: Vec<String>,   // Comments from all continuation lines
+    pub valid: bool,             // Used for mark-and-sweep updates
 }
 
 #[derive(Debug, Clone)]
@@ -13,6 +14,7 @@ pub struct IniSection {
     pub properties: HashMap<String, IniProperty>,
     pub leading_comments: Vec<String>, // Comments before [section]
     pub line_number: usize,            // Line where [section] appears
+    pub valid: bool,                   // Used for mark-and-sweep updates
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +30,14 @@ enum ParseState {
 }
 
 impl IniDocument {
+    /// Create a new empty IniDocument
+    pub fn new() -> Self {
+        IniDocument {
+            sections: HashMap::new(),
+            trailing_comments: Vec::new(),
+        }
+    }
+
     pub fn parse(content: &str) -> Result<Self, String> {
         let mut sections = HashMap::new();
         let mut trailing_comments = Vec::new();
@@ -63,6 +73,7 @@ impl IniDocument {
                     properties: HashMap::new(),
                     leading_comments: pending_comments.clone(),
                     line_number,
+                    valid: true,
                 });
 
                 pending_comments.clear();
@@ -134,6 +145,7 @@ impl IniDocument {
                     line_number,
                     raw_lines,
                     comments,
+                    valid: true,
                 };
 
                 // Add to current section
@@ -154,14 +166,15 @@ impl IniDocument {
                 // Handle list items (lines without = in sections like [inputs] or [outputs])
                 match &state {
                     ParseState::InSection(section_name) => {
-                        // Use the line content itself as the key (matching configparser behavior)
+                        // Use the line content as the key, empty value indicates list item
                         let section = sections.get_mut(section_name).unwrap();
 
                         let property = IniProperty {
-                            value: trimmed.to_string(),
+                            value: String::new(),  // Empty value for list items
                             line_number,
                             raw_lines: vec![line.to_string()],
                             comments: Vec::new(),
+                            valid: true,
                         };
 
                         section.properties.insert(trimmed.to_string(), property);
@@ -210,15 +223,21 @@ impl IniDocument {
     /// Set a property value in a section
     /// Creates the section and/or property if it doesn't exist
     /// Updates the value while preserving line numbers for unchanged properties
-    pub fn set_property(&mut self, section_name: &str, key: &str, new_value: &str) -> Result<(), String> {
+    /// Marks both section and property as valid
+    /// Returns a mutable reference to the section for further modifications
+    pub fn set_property(&mut self, section_name: &str, key: &str, new_value: &str) -> &mut IniSection {
         // Get or create the section
         let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
             IniSection {
                 properties: HashMap::new(),
                 leading_comments: Vec::new(),
                 line_number: 0, // New sections don't have a line number from original file
+                valid: true,
             }
         });
+
+        // Mark section as valid
+        section.valid = true;
 
         // Get or create the property
         if let Some(property) = section.properties.get_mut(key) {
@@ -226,6 +245,7 @@ impl IniDocument {
             property.value = new_value.to_string();
             property.raw_lines.clear(); // Clear raw_lines to indicate this was modified
             property.comments.clear(); // Clear comments as value has changed
+            property.valid = true; // Mark as valid
         } else {
             // Create new property
             section.properties.insert(key.to_string(), IniProperty {
@@ -233,10 +253,11 @@ impl IniDocument {
                 line_number: 0, // New properties don't have a line number from original file
                 raw_lines: Vec::new(), // Empty indicates newly created
                 comments: Vec::new(),
+                valid: true,
             });
         }
 
-        Ok(())
+        section
     }
 
     /// Get a property value from a section
@@ -244,6 +265,29 @@ impl IniDocument {
         self.sections.get(section_name)
             .and_then(|section| section.properties.get(key))
             .map(|property| property.value.as_str())
+    }
+
+    /// Mark all sections and properties as invalid
+    /// Used for mark-and-sweep updates: invalidate all, update what you need, then remove invalids
+    pub fn invalidate_all(&mut self) {
+        for section in self.sections.values_mut() {
+            section.valid = false;
+            for property in section.properties.values_mut() {
+                property.valid = false;
+            }
+        }
+    }
+
+    /// Remove all sections and properties marked as invalid
+    /// Used after invalidate_all() and selective updates via set_property()
+    pub fn remove_invalid_sections_and_properties(&mut self) {
+        // Remove invalid properties from each section
+        for section in self.sections.values_mut() {
+            section.properties.retain(|_, property| property.valid);
+        }
+
+        // Remove invalid sections (or sections that are now empty)
+        self.sections.retain(|_, section| section.valid && !section.properties.is_empty());
     }
 
     /// Convert the IniDocument back to an INI string
@@ -282,10 +326,10 @@ impl IniDocument {
 
                 if property.raw_lines.is_empty() {
                     // Property was modified or newly created - format canonically
-                    // Check if this is a list item (key == value)
-                    if prop_name == &property.value {
+                    // Check if this is a list item (empty value = no key=value syntax)
+                    if property.value.is_empty() {
                         // List item (no key=value syntax)
-                        result.push_str(&property.value);
+                        result.push_str(prop_name);
                         result.push('\n');
                     } else {
                         // Regular property
@@ -322,8 +366,8 @@ impl IniDocument {
             for (key, property) in &section.properties {
                 // For list sections (inputs/outputs), use None like configparser
                 // For regular properties, use Some(value)
-                if key == &property.value {
-                    // This is a list item (key equals value)
+                if property.value.is_empty() {
+                    // This is a list item (empty value)
                     section_map.insert(key.clone(), None);
                 } else {
                     // This is a regular key=value property
@@ -479,7 +523,7 @@ params = 100.0, 2.0, 50.0, 0.5
         let mut doc = IniDocument::parse(content).unwrap();
 
         // Test updating existing property
-        doc.set_property("node.test", "params", "200.0, 3.0, 60.0, 0.6").unwrap();
+        doc.set_property("node.test", "params", "200.0, 3.0, 60.0, 0.6");
         assert_eq!(doc.get_property("node.test", "params"), Some("200.0, 3.0, 60.0, 0.6"));
 
         // Verify raw_lines was cleared (indicates modification)
@@ -489,11 +533,11 @@ params = 100.0, 2.0, 50.0, 0.5
         assert_eq!(property.line_number, 4); // Original line number preserved
 
         // Test adding new property to existing section
-        doc.set_property("node.test", "new_param", "42").unwrap();
+        doc.set_property("node.test", "new_param", "42");
         assert_eq!(doc.get_property("node.test", "new_param"), Some("42"));
 
         // Test creating new section with property
-        doc.set_property("node.new_node", "type", "inflow").unwrap();
+        doc.set_property("node.new_node", "type", "inflow");
         assert_eq!(doc.get_property("node.new_node", "type"), Some("inflow"));
 
         // Verify unchanged property still has raw_lines

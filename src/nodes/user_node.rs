@@ -93,9 +93,9 @@ impl UserNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            demand_input: DynamicInput::None,
-            pump_capacity: DynamicInput::None,
-            flow_threshold: DynamicInput::None,
+            demand_input: DynamicInput::default(),
+            pump_capacity: DynamicInput::default(),
+            flow_threshold: DynamicInput::default(),
             annual_cap: None,
             annual_cap_reset_month: 7,
             demand_carryover_allowed: false,
@@ -181,7 +181,7 @@ impl Node for UserNode {
 
         // Work out availability considering flow threshold
         let mut available = match self.flow_threshold {
-            DynamicInput::None => { self.usflow }
+            DynamicInput::None { .. } => { self.usflow }
             _ => {
                 self.flow_threshold_value = self.flow_threshold.get_value(data_cache);
                 (self.usflow - self.flow_threshold_value).max(0.0)
@@ -190,7 +190,7 @@ impl Node for UserNode {
 
         // Restrict for pump capacity
         match self.pump_capacity {
-            DynamicInput::None => {}
+            DynamicInput::None { .. } => {}
             _ => {
                 self.pump_capacity_value = self.pump_capacity.get_value(data_cache);
                 available = available.min(self.pump_capacity_value) //Limited by pump rate

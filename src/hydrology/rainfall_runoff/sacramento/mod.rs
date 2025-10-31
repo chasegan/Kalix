@@ -135,6 +135,30 @@ impl Sacramento {
         self.set_laguh(vec_params[16]);
     }
 
+    //
+    pub fn get_params_as_vec(&self) -> Vec<f64> {
+        let mut answer = Vec::new();
+        //answer.push(self.rserv);
+        answer.push(self.adimp);
+        answer.push(self.lzfpm);
+        answer.push(self.lzfsm);
+        answer.push(self.lzpk);
+        answer.push(self.lzsk);
+        answer.push(self.lztwm);
+        answer.push(self.pctim);
+        answer.push(self.pfree);
+        answer.push(self.rexp);
+        answer.push(self.sarva);
+        answer.push(self.side);
+        answer.push(self.ssout);
+        answer.push(self.uzfwm);
+        answer.push(self.uzk);
+        answer.push(self.uztwm);
+        answer.push(self.zperc);
+        answer.push(self.laguh);
+        answer
+    }
+
     pub fn set_uh_ordinates_using_laguh(&mut self) -> &mut Self {
         // How big does the kernel need to be?
         let high_ordinate_position = ceil(self.laguh) as usize;
