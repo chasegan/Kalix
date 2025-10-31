@@ -96,6 +96,17 @@ pub fn require_non_empty<'a>(value: &'a str, name: &str, line_number: usize) -> 
 }
 
 
+/// Set a property in an INI document only if the value is not empty
+pub fn set_property_if_not_empty(ini_doc: &mut crate::io::custom_ini_parser::IniDocument,
+                                   section: &str,
+                                   property: &str,
+                                   value: &str) {
+    if !value.is_empty() {
+        ini_doc.set_property(section, property, value);
+    }
+}
+
+
 /// Format a vector of f64 values as a multi-line table for INI files
 ///
 /// # Arguments
@@ -112,9 +123,11 @@ pub fn require_non_empty<'a>(value: &'a str, name: &str, line_number: usize) -> 
 /// # Example
 ///
 /// ```
+/// use kalix::misc::misc_functions::format_vec_as_multiline_table;
+///
 /// let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
 /// let result = format_vec_as_multiline_table(&values, 3, 9);
-/// // Returns: "1.0, 2.0, 3.0, \n         4.0, 5.0, 6.0, "
+/// assert_eq!(result, "1, 2, 3, \n         4, 5, 6, ");
 /// ```
 pub fn format_vec_as_multiline_table(values: &[f64], n_cols: usize, n_spaces: usize) -> String {
     if values.is_empty() {

@@ -88,10 +88,12 @@ impl IniModelIO {
     }
 
 
-    ///
+    /// Convert a Model to an INI string
     pub fn model_to_string(&self, model: &Model) -> String {
         // Get the ini doc
         let ini_doc = model_to_ini_doc_0_0_1(model);
 
+        // Convert to string
+        ini_doc.to_string()
     }
 }

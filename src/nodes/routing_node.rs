@@ -95,14 +95,15 @@ impl RoutingNode {
 
     pub fn get_routing_table_as_vec(&self) -> Vec<f64> {
         let mut answer = vec![];
-        for i in 0..self.pwl_segs {
+        let n_rows = self.pwl_segs + 1;
+        for i in 0..n_rows {
             answer.push(self.pwl_qq[i]);
             answer.push(self.pwl_tt[i]);
         }
         answer
     }
 
-    pub  fn set_routing_table(&mut self, index_flows: Vec<f64>, travel_times: Vec<f64>) {
+    pub fn set_routing_table(&mut self, index_flows: Vec<f64>, travel_times: Vec<f64>) {
         self.pwl_segs = index_flows.len() - 1;
         for i in 0..=self.pwl_segs {
             self.pwl_qq[i] = index_flows[i];

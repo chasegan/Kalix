@@ -177,3 +177,34 @@ fn test_model_4() {
         }
     };
 }
+
+#[test]
+fn test_model_with_every_node_type_save() {
+    let ini_io = IniModelIO::new();
+
+    // Load the model
+    let model_filename = "./src/tests/example_models/6/model_with_every_node_type.ini";
+    println!("Loading model from: {}", model_filename);
+    let mut m = ini_io.read_model_file(model_filename)
+        .expect("Failed to load model");
+
+    println!("Model loaded successfully");
+    println!("Number of nodes: {}", m.nodes.len());
+
+    // Configure the model
+    m.configure().expect("Failed to configure model");
+    println!("Model configured successfully");
+
+    // Run the model
+    m.run().expect("Failed to run model");
+    println!("Model ran successfully");
+
+    // Save the model to a new file
+    let output_filename = "./src/tests/example_models/6/model_with_every_node_type_saved.ini";
+    let ini_string = ini_io.model_to_string(&m);
+
+    std::fs::write(output_filename, ini_string)
+        .expect("Failed to write model file");
+
+    println!("Model saved to: {}", output_filename);
+}

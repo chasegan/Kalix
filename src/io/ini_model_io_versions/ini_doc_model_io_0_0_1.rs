@@ -5,7 +5,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u32, require_non_empty, format_vec_as_multiline_table};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u32, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, Node};
 
 const INLET: u8 = 0; //always inlet 0
@@ -478,10 +478,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument) -> Result<Model, String> {
 
 
 
-pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
+pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 
     // Start by cloning the model's ini_doc if it has one. Otherwise we make a new one.
-    let mut ini_doc = match model.ini_document {
+    let mut ini_doc = match &model.ini_document {
         Some(doc) => doc.clone(),
         None => IniDocument::new(),
     };
@@ -493,8 +493,8 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
     ini_doc.set_property("attributes", "ini_version", "0.0.1");
 
     // List all input files
-    for file_path in model.input_file_paths {
-        ini_doc.set_property("input", file_path.as_str(), "");
+    for file_path in &model.input_file_paths {
+        ini_doc.set_property("inputs", file_path.as_str(), "");
     }
 
     // List all constants
@@ -519,14 +519,14 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "gauge");
-                ini_doc.set_property(section_name.as_str(), "observed", n.observed_flow_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "observed", &n.observed_flow_input.to_string());
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "gr4j");
-                ini_doc.set_property(section_name.as_str(), "evap", n.evap_mm_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "rain", n.rain_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
                 let params_str = format!("{}, {}, {}, {}", n.gr4j_model.x1, n.gr4j_model.x2, n.gr4j_model.x3, n.gr4j_model.x4);
                 ini_doc.set_property(section_name.as_str(), "params", params_str.as_str());
@@ -535,7 +535,7 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "inflow");
-                ini_doc.set_property(section_name.as_str(), "inflow", n.inflow_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "inflow", &n.inflow_input.to_string());
             }
             NodeEnum::LossNode(n) => {
                 let section_name = format!("node.{}", n.name);
@@ -562,8 +562,8 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "sacramento");
-                ini_doc.set_property(section_name.as_str(), "evap", n.evap_mm_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "rain", n.rain_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
                 let params = n.sacramento_model.get_params_as_vec();
                 let params_str = format_vec_as_multiline_table(&params, 4, 4);
@@ -581,10 +581,10 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "storage");
-                ini_doc.set_property(section_name.as_str(), "evap", n.evap_mm_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "rain", n.rain_mm_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "seep", n.seep_mm_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "pond_demand", n.demand_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.demand_input.to_string());
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
@@ -593,9 +593,9 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "user");
-                ini_doc.set_property(section_name.as_str(), "demand", n.demand_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "pump", n.pump_capacity.to_string());
-                ini_doc.set_property(section_name.as_str(), "flow_threshold", n.flow_threshold.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "demand", &n.demand_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "flow_threshold", &n.flow_threshold.to_string());
                 match n.annual_cap {
                     Some(cap) => {
                         let value_str = format!("{},{}", cap, n.annual_cap_reset_month);
@@ -627,7 +627,7 @@ pub fn model_to_ini_doc_0_0_1(model: Model) -> IniDocument {
     }
 
     // List all the recorders
-    for name in model.outputs {
+    for name in &model.outputs {
         ini_doc.set_property("outputs", name.as_str(), "");
     }
 

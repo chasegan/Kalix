@@ -1,0 +1,46 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 12
+  Timesteps: 3652
+  Stepsize (s): 86400
+  Period: 1990-01-01T00:00:00.000Z, 1999-12-31T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  node1_inflow, 85.11407289372443
+
+SACRAMENTO NODES
+  Node2_sacramento, 287.45307448574795
+
+GR4J NODES
+  node6_gr4j, 164.62097526525642
+
+USER NODES
+  node3_user, -19.65516463963266
+
+LOSS NODES
+  node11_loss, -22.58617419756627
+
+STORAGE NODES
+  node4_storage, -0.027382256777266804
+
+ROUTING NODES
+  node5_routing, -15.610094783725032
+
+SPLITTER NODES
+  node8_splitter, 0
+
+CONFLUENCE NODES
+  node7_confluence, 0
+
+GAUGE NODES
+  node10_gauge, 0
+
+BLACKHOLE NODES
+  node12_blackhole, -203.27556777809616
+  node9_blackhole, -276.0337389889305
+
+----------------------------------
+TOTAL = 0.0000000000009094947017729282
+----------------------------------

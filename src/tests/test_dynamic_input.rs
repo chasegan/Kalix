@@ -18,7 +18,7 @@ fn test_dynamic_input_constant() {
 
     // Should be optimized to Constant variant
     match input {
-        DynamicInput::Constant { value } => {
+        DynamicInput::Constant { value, .. } => {
             assert_eq!(value, 5.0);
         }
         _ => panic!("Expected Constant variant"),
@@ -37,7 +37,7 @@ fn test_dynamic_input_constant_expression() {
 
     // Should be optimized to Constant variant (no variables)
     match input {
-        DynamicInput::Constant { value } => {
+        DynamicInput::Constant { value, .. } => {
             assert_eq!(value, 14.0); // 2 + (3 * 4) = 14
         }
         _ => panic!("Expected Constant variant for expression with no variables"),
@@ -67,7 +67,7 @@ fn test_dynamic_input_direct_reference() {
 
     // Should be optimized to DirectReference variant
     match input {
-        DynamicInput::DirectReference { idx: _ } => {
+        DynamicInput::DirectReference { .. } => {
             // Correct optimization!
         }
         _ => panic!("Expected DirectReference variant for single variable"),
@@ -203,7 +203,7 @@ fn test_dynamic_input_none() {
 
     // Should be None variant
     match input {
-        DynamicInput::None => {
+        DynamicInput::None { .. } => {
             // Correct!
         }
         _ => panic!("Expected None variant for empty string"),
@@ -323,7 +323,7 @@ fn test_dynamic_input_direct_constant_reference() {
 
     // Should be optimized to DirectConstantReference variant
     match input {
-        DynamicInput::DirectConstantReference { idx: _ } => {
+        DynamicInput::DirectConstantReference { .. } => {
             // Correct optimization!
         }
         _ => panic!("Expected DirectConstantReference variant for single constant"),
