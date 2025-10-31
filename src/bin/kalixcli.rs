@@ -53,6 +53,9 @@ enum Commands {
     Optimise {
         /// Path to the optimisation configuration file (.ini)
         config_file: String,
+        /// Path to save the optimized model file (.ini)
+        #[arg(short = 's', long = "save-model")]
+        save_model: Option<String>,
     },
 }
 
@@ -192,10 +195,10 @@ fn main() {
 
             println!("Done!");
         }
-        Commands::Optimise { config_file } => {
+        Commands::Optimise { config_file, save_model } => {
             use kalix::numerical::opt::{
                 OptimisationConfig, AlgorithmParams, OptimisationProblem,
-                DifferentialEvolution, DEConfig, DEProgress
+                DifferentialEvolution, DEConfig, DEProgress, Optimisable
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
             use kalix::terminal_plot::optimization_plot::OptimizationPlot;
@@ -339,6 +342,21 @@ fn main() {
             println!("\nOptimized Parameters (physical values):");
             for (target, value) in &param_values {
                 println!("  {} = {:.6}", target, value);
+            }
+
+            // Apply best parameters to model one final time to ensure it's in the optimal state
+            if let Err(e) = problem_mut.set_params(&result.best_params) {
+                eprintln!("Warning: Failed to apply final parameters: {}", e);
+            }
+
+            // Save optimized model to file if specified
+            if let Some(model_path) = save_model {
+                let ini_io = IniModelIO::new();
+                let model_string = ini_io.model_to_string(&problem_mut.model);
+                match fs::write(&model_path, model_string) {
+                    Ok(_) => println!("\nOptimized model written to: {}", model_path),
+                    Err(e) => eprintln!("Error writing model: {}", e),
+                }
             }
 
             // Write results to file if specified

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct IniProperty {
@@ -11,7 +12,7 @@ pub struct IniProperty {
 
 #[derive(Debug, Clone)]
 pub struct IniSection {
-    pub properties: HashMap<String, IniProperty>,
+    pub properties: IndexMap<String, IniProperty>,
     pub leading_comments: Vec<String>, // Comments before [section]
     pub line_number: usize,            // Line where [section] appears
     pub valid: bool,                   // Used for mark-and-sweep updates
@@ -19,7 +20,7 @@ pub struct IniSection {
 
 #[derive(Debug, Clone)]
 pub struct IniDocument {
-    pub sections: HashMap<String, IniSection>,
+    pub sections: IndexMap<String, IniSection>,
     pub trailing_comments: Vec<String>, // Comments at end of file
 }
 
@@ -33,13 +34,13 @@ impl IniDocument {
     /// Create a new empty IniDocument
     pub fn new() -> Self {
         IniDocument {
-            sections: HashMap::new(),
+            sections: IndexMap::new(),
             trailing_comments: Vec::new(),
         }
     }
 
     pub fn parse(content: &str) -> Result<Self, String> {
-        let mut sections = HashMap::new();
+        let mut sections = IndexMap::new();
         let mut trailing_comments = Vec::new();
         let mut state = ParseState::BetweenSections;
         let mut pending_comments = Vec::new();
@@ -70,7 +71,7 @@ impl IniDocument {
                 let section_name = trimmed[1..trimmed.len()-1].to_string();
 
                 sections.insert(section_name.clone(), IniSection {
-                    properties: HashMap::new(),
+                    properties: IndexMap::new(),
                     leading_comments: pending_comments.clone(),
                     line_number,
                     valid: true,
@@ -229,7 +230,7 @@ impl IniDocument {
         // Get or create the section
         let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
             IniSection {
-                properties: HashMap::new(),
+                properties: IndexMap::new(),
                 leading_comments: Vec::new(),
                 line_number: 0, // New sections don't have a line number from original file
                 valid: true,
@@ -241,10 +242,10 @@ impl IniDocument {
 
         // Get or create the property
         if let Some(property) = section.properties.get_mut(key) {
-            // Update existing property - preserve line_number, clear raw_lines
+            // Update existing property - preserve line_number and comments
             property.value = new_value.to_string();
             property.raw_lines.clear(); // Clear raw_lines to indicate this was modified
-            property.comments.clear(); // Clear comments as value has changed
+            // Preserve comments for round-trip
             property.valid = true; // Mark as valid
         } else {
             // Create new property
@@ -297,15 +298,8 @@ impl IniDocument {
         let mut result = String::new();
 
         // Sort sections for consistent output
-        // Put [attributes] first if it exists, then alphabetically
-        let mut section_names: Vec<&String> = self.sections.keys().collect();
-        section_names.sort_by(|a, b| {
-            if *a == "attributes" { std::cmp::Ordering::Less }
-            else if *b == "attributes" { std::cmp::Ordering::Greater }
-            else { a.cmp(b) }
-        });
-
-        for section_name in section_names {
+        // Iterate in insertion order (preserved by IndexMap)
+        for section_name in self.sections.keys() {
             let section = &self.sections[section_name];
 
             // Add leading comments
@@ -317,11 +311,8 @@ impl IniDocument {
             // Add section header
             result.push_str(&format!("[{}]\n", section_name));
 
-            // Sort properties for consistent output (alphabetically)
-            let mut prop_names: Vec<&String> = section.properties.keys().collect();
-            prop_names.sort();
-
-            for prop_name in prop_names {
+            // Iterate properties in insertion order (preserved by IndexMap)
+            for prop_name in section.properties.keys() {
                 let property = &section.properties[prop_name];
 
                 if property.raw_lines.is_empty() {
@@ -333,7 +324,13 @@ impl IniDocument {
                         result.push('\n');
                     } else {
                         // Regular property
-                        result.push_str(&format!("{} = {}\n", prop_name, property.value));
+                        result.push_str(&format!("{} = {}", prop_name, property.value));
+                        // Add inline comment if present
+                        if !property.comments.is_empty() {
+                            result.push_str(" ");
+                            result.push_str(&property.comments[0]);
+                        }
+                        result.push('\n');
                     }
                 } else {
                     // Property unchanged - use original raw_lines
