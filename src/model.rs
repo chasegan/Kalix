@@ -498,7 +498,7 @@ impl Model {
     }
 
     /// Update a node's parameter in the attached INI document
-    /// This is typically used after parameter optimization
+    /// This is typically used after parameter optimisation
     pub fn update_node_parameter_in_ini(&mut self, node_name: &str, param_name: &str, value: &str) -> Result<(), String> {
         if let Some(ref mut ini_doc) = self.ini_document {
             let section_name = format!("node.{}", node_name);

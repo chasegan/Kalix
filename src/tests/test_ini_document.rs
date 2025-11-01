@@ -138,7 +138,7 @@ ds_1 = gr4j_node
 
     let mut doc = IniDocument::parse(content).unwrap();
 
-    // Modify GR4J parameters (like after optimization)
+    // Modify GR4J parameters (like after optimisation)
     doc.set_property("node.gr4j_node", "params", "150.0, 2.5, 55.0, 0.6");
 
     // Convert back to string
@@ -172,9 +172,9 @@ ds_1 = gr4j_node
 
 #[test]
 fn test_full_model_round_trip() {
-    // This test simulates the optimization workflow:
+    // This test simulates the optimisation workflow:
     // 1. Load model from INI
-    // 2. Modify parameters (like after optimization)
+    // 2. Modify parameters (like after optimisation)
     // 3. Save to new INI file
     // 4. Reload and verify changes
 
@@ -210,7 +210,7 @@ node.gr4j_node.dsflow
     // Verify INI document is attached
     assert!(model.ini_document.is_some());
 
-    // Step 2: Modify parameters (simulating optimization)
+    // Step 2: Modify parameters (simulating optimisation)
     model.update_node_parameter_in_ini("gr4j_node", "params", "150.0, 2.5, 55.0, 0.6").unwrap();
 
     // Step 3: Get the updated INI as a string

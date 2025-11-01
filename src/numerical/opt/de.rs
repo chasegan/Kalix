@@ -1,4 +1,4 @@
-/// Differential Evolution (DE) global optimization algorithm
+/// Differential Evolution (DE) global optimisation algorithm
 ///
 /// Classic DE/rand/1/bin strategy with tournament selection.
 ///
@@ -51,17 +51,17 @@ pub struct DEResult {
     /// History of best objective per generation
     pub objective_history: Vec<f64>,
 
-    /// Whether optimization terminated successfully
+    /// Whether optimisation terminated successfully
     pub success: bool,
 
     /// Termination message
     pub message: String,
 
-    /// Total elapsed time for optimization
+    /// Total elapsed time for optimisation
     pub elapsed: Duration,
 }
 
-/// Differential Evolution optimizer configuration
+/// Differential Evolution optimiser configuration
 pub struct DEConfig {
     /// Population size (NP)
     pub population_size: usize,
@@ -99,24 +99,24 @@ impl Default for DEConfig {
     }
 }
 
-/// Differential Evolution optimizer
+/// Differential Evolution optimiser
 pub struct DifferentialEvolution {
     config: DEConfig,
 }
 
 impl DifferentialEvolution {
-    /// Create a new DE optimizer with given configuration
+    /// Create a new DE optimiser with given configuration
     pub fn new(config: DEConfig) -> Self {
         Self { config }
     }
 
-    /// Create a new DE optimizer with default configuration
+    /// Create a new DE optimiser with default configuration
     pub fn with_defaults() -> Self {
         Self::new(DEConfig::default())
     }
 
-    /// Run optimization on the given problem
-    pub fn optimize(&self, problem: &mut dyn Optimisable) -> DEResult {
+    /// Run optimisation on the given problem
+    pub fn optimise(&self, problem: &mut dyn Optimisable) -> DEResult {
         let start_time = Instant::now();
         let n_params = problem.n_params();
 
@@ -263,7 +263,7 @@ impl DifferentialEvolution {
             n_evaluations,
             objective_history,
             success: true,
-            message: "Optimization completed successfully".to_string(),
+            message: "Optimisation completed successfully".to_string(),
             elapsed: start_time.elapsed(),
         }
     }

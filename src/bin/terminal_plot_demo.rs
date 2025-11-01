@@ -70,7 +70,7 @@ fn main() {
     println!("{}", plot.render());
 
     println!("\n\nDemo of animation (clear and redraw):");
-    println!("In your optimizer, use plot.clear_and_render() to update the plot in place.");
+    println!("In your optimiser, use plot.clear_and_render() to update the plot in place.");
 
     // Show a simple animation example
     println!("\nSimulating 3 updates...\n");

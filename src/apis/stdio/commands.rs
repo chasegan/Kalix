@@ -807,7 +807,7 @@ impl Command for RunOptimisationCommand {
             });
         });
 
-        // Create DE optimizer
+        // Create DE optimiser
         let de_config = DEConfig {
             population_size,
             termination_evaluations: config.termination_evaluations,
@@ -818,10 +818,10 @@ impl Command for RunOptimisationCommand {
             progress_callback: Some(progress_callback),
         };
 
-        let optimizer = DifferentialEvolution::new(de_config);
+        let optimiser = DifferentialEvolution::new(de_config);
 
-        // Run optimization
-        let result = optimizer.optimize(&mut problem);
+        // Run optimisation
+        let result = optimiser.optimise(&mut problem);
 
         // Check if interrupted
         if session.check_interrupt() {

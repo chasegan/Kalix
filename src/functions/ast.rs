@@ -186,7 +186,7 @@ impl ASTNode for ExpressionNode {
 
 /// Evaluate a binary operation
 ///
-/// This function is public to allow reuse in optimized evaluation contexts.
+/// This function is public to allow reuse in optimised evaluation contexts.
 pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f64, EvaluationError> {
     match op {
         BinaryOperator::Add => Ok(left + right),
@@ -208,7 +208,7 @@ pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f
 
 /// Evaluate a unary operation
 ///
-/// This function is public to allow reuse in optimized evaluation contexts.
+/// This function is public to allow reuse in optimised evaluation contexts.
 pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, EvaluationError> {
     match op {
         UnaryOperator::Plus => Ok(operand),

@@ -59,7 +59,7 @@ pub enum OptimizedExpressionNode {
         operand: Box<OptimizedExpressionNode>,
     },
 
-    /// Function call with optimized arguments
+    /// Function call with optimised arguments
     FunctionCall {
         name: String,
         args: Vec<Box<OptimizedExpressionNode>>,
@@ -184,7 +184,7 @@ impl OptimizedExpressionNode {
 
 /// DynamicInput supports constants, data references, and function expressions
 ///
-/// This enum is optimized for performance with five variants:
+/// This enum is optimised for performance with five variants:
 /// - `None`: No input (returns 0.0)
 /// - `DirectReference`: Pure data reference (zero overhead)
 /// - `DirectConstantReference`: Pure constant reference (zero overhead)
@@ -217,10 +217,10 @@ pub enum DynamicInput {
         original: String
     },
 
-    /// Function expression (optimized for performance)
+    /// Function expression (optimised for performance)
     Function {
         expression: String,  // Original expression for error messages and serialization
-        optimized_ast: OptimizedExpressionNode
+        optimised_ast: OptimizedExpressionNode
     },
 }
 
@@ -315,10 +315,10 @@ impl DynamicInput {
             }
         } else {
             // Multiple variables or complex expression -> function expression
-            let optimized_ast = transform_to_optimized_ast(&parsed, &data_variable_map, &constant_variable_map)?;
+            let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map)?;
             Ok(DynamicInput::Function {
                 expression: trimmed.to_string(),
-                optimized_ast
+                optimised_ast
             })
         }
     }
@@ -351,8 +351,8 @@ impl DynamicInput {
                 data_cache.constants.get_value(*idx)
             }
             DynamicInput::Constant { value, .. } => *value,
-            DynamicInput::Function { expression, optimized_ast } => {
-                optimized_ast.evaluate(data_cache).unwrap_or_else(|e| {
+            DynamicInput::Function { expression, optimised_ast } => {
+                optimised_ast.evaluate(data_cache).unwrap_or_else(|e| {
                     eprintln!("ERROR: Critical evaluation failure in expression '{}': {}. Returning 0.0. This indicates a parser bug.", expression, e);
                     0.0
                 })
@@ -373,7 +373,7 @@ impl DynamicInput {
 }
 
 /// Transform a ParsedFunction to an OptimizedExpressionNode
-fn transform_to_optimized_ast(
+fn transform_to_optimised_ast(
     parsed: &crate::functions::parser::ParsedFunction,
     data_variable_map: &HashMap<String, usize>,
     constant_variable_map: &HashMap<String, usize>

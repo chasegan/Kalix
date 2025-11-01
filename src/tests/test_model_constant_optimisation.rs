@@ -40,7 +40,7 @@ fn test_model_constant_optimisation() {
     let mut problem = OptimisationProblem::new(m,
             par_map, observed_data, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe);
 
-    // Create DE optimizer
+    // Create DE optimiser
     let de_config = DEConfig {
         population_size: 50,
         termination_evaluations: 200,
@@ -50,10 +50,10 @@ fn test_model_constant_optimisation() {
         n_threads: 1,
         progress_callback: None,
     };
-    let optimizer = DifferentialEvolution::new(de_config);
+    let optimiser = DifferentialEvolution::new(de_config);
 
-    // Run optimization
-    let result = optimizer.optimize(&mut problem);
+    // Run optimisation
+    let result = optimiser.optimise(&mut problem);
 
     println!("evaluations: {}", result.n_evaluations);
     println!("best_objective: {}", result.best_objective);

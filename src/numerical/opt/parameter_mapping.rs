@@ -1,7 +1,7 @@
-/// Gene-based parameter mapping system for optimization
+/// Gene-based parameter mapping system for optimisation
 ///
 /// This module implements a flexible parameter system where:
-/// - "Genes" g(1), g(2), ... are the actual optimization parameters (normalized [0,1])
+/// - "Genes" g(1), g(2), ... are the actual optimisation parameters (normalised [0,1])
 /// - Model parameters are derived from genes via mapping expressions
 /// - Multiple model parameters can share the same gene (parameter tying)
 /// - Each mapping has its own bounds and transform space (linear/log)
@@ -205,7 +205,7 @@ impl ParameterMappingConfig {
         self.mappings.push(mapping);
     }
 
-    /// Get number of genes (optimization parameters)
+    /// Get number of genes (optimisation parameters)
     pub fn n_genes(&self) -> usize {
         self.n_genes
     }

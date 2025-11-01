@@ -1,7 +1,7 @@
 /// Objective functions for model optimisation
 ///
 /// All objective functions return values where **LOWER IS BETTER** (minimization).
-/// Goodness-of-fit metrics (NSE, KGE) are negated so that optimization minimizes them.
+/// Goodness-of-fit metrics (NSE, KGE) are negated so that optimisation minimises them.
 
 /// Objective function types
 #[derive(Clone, Copy, Debug, PartialEq)]

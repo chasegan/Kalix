@@ -300,7 +300,7 @@ impl ParsedFunction {
     /// Get a reference to the internal AST.
     ///
     /// This method exposes the internal AST for advanced use cases like
-    /// optimization and transformation.
+    /// optimisation and transformation.
     ///
     /// # Returns
     ///
@@ -314,7 +314,7 @@ impl ParsedFunction {
     /// Returns `Some(&variable_name)` if the expression is just a simple variable
     /// reference like "data.evap", otherwise returns `None`.
     ///
-    /// This is useful for optimization - a single variable can be optimized to
+    /// This is useful for optimisation - a single variable can be optimised to
     /// a direct data cache lookup instead of AST evaluation.
     ///
     /// # Returns

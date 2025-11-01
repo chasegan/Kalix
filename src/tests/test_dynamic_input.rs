@@ -16,7 +16,7 @@ fn test_dynamic_input_constant() {
     let input = DynamicInput::from_string("5.0", &mut data_cache, true)
         .expect("Failed to parse constant");
 
-    // Should be optimized to Constant variant
+    // Should be optimised to Constant variant
     match input {
         DynamicInput::Constant { value, .. } => {
             assert_eq!(value, 5.0);
@@ -35,7 +35,7 @@ fn test_dynamic_input_constant_expression() {
     let input = DynamicInput::from_string("2 + 3 * 4", &mut data_cache, true)
         .expect("Failed to parse expression");
 
-    // Should be optimized to Constant variant (no variables)
+    // Should be optimised to Constant variant (no variables)
     match input {
         DynamicInput::Constant { value, .. } => {
             assert_eq!(value, 14.0); // 2 + (3 * 4) = 14
@@ -65,10 +65,10 @@ fn test_dynamic_input_direct_reference() {
     let input = DynamicInput::from_string("data.test", &mut data_cache, true)
         .expect("Failed to parse reference");
 
-    // Should be optimized to DirectReference variant
+    // Should be optimised to DirectReference variant
     match input {
         DynamicInput::DirectReference { .. } => {
-            // Correct optimization!
+            // Correct optimisation!
         }
         _ => panic!("Expected DirectReference variant for single variable"),
     }
@@ -321,10 +321,10 @@ fn test_dynamic_input_direct_constant_reference() {
     let input = DynamicInput::from_string("c.gravity", &mut data_cache, true)
         .expect("Failed to parse constant reference");
 
-    // Should be optimized to DirectConstantReference variant
+    // Should be optimised to DirectConstantReference variant
     match input {
         DynamicInput::DirectConstantReference { .. } => {
-            // Correct optimization!
+            // Correct optimisation!
         }
         _ => panic!("Expected DirectConstantReference variant for single constant"),
     }

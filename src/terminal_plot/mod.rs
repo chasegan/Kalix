@@ -26,7 +26,7 @@
 //! println!("{}", plot.render());
 //! ```
 
-pub mod optimization_plot;
+pub mod optimisation_plot;
 
 use std::fmt;
 
@@ -126,7 +126,7 @@ pub enum Color {
     BrightWhite,
 }
 
-/// Progress bar for showing optimization progress
+/// Progress bar for showing optimisation progress
 pub struct ProgressBar {
     pub current: usize,
     pub total: usize,

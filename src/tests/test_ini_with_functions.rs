@@ -9,7 +9,7 @@ use crate::io::ini_model_io::IniModelIO;
 fn test_ini_with_constant_function() {
     // This test uses example model 4 which now uses DynamicInput for evap parameter
     // The INI file specifies: evap = data.rex_mpot_csv.by_name.value
-    // This gets parsed as a function expression and optimized to DirectReference
+    // This gets parsed as a function expression and optimised to DirectReference
 
     let ini_reader = IniModelIO::new();
     let ini_path = "./src/tests/example_models/4/linked_model.ini";

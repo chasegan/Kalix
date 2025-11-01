@@ -19,7 +19,7 @@ use crate::numerical::opt::parameter_mapping::ParameterMappingConfig;
 use crate::numerical::opt::objectives::ObjectiveFunction;
 use crate::timeseries_input::TimeseriesInput;
 
-/// Algorithm-specific parameters for optimization
+/// Algorithm-specific parameters for optimisation
 #[derive(Debug, Clone, PartialEq)]
 pub enum AlgorithmParams {
     /// Differential Evolution algorithm

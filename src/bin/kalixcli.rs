@@ -54,7 +54,7 @@ enum Commands {
         config_file: String,
         /// Path to the model file (.ini). Overrides model_file in config if specified
         model_file: Option<String>,
-        /// Path to save the optimized model file (.ini)
+        /// Path to save the optimised model file (.ini)
         #[arg(short = 's', long = "save-model")]
         save_model: Option<String>,
     },
@@ -185,7 +185,7 @@ fn main() {
                 DifferentialEvolution, DEConfig, DEProgress, Optimisable
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
-            use kalix::terminal_plot::optimization_plot::OptimizationPlot;
+            use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
             use std::sync::{Arc, Mutex};
 
             // Load optimisation configuration
@@ -250,7 +250,7 @@ fn main() {
                 config.simulated_series.clone(),
             ).with_objective(config.objective_function);
 
-            // Setup optimizer based on algorithm type
+            // Setup optimiser based on algorithm type
             let (population_size, de_f, de_cr) = match &config.algorithm {
                 AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
                 _ => {
@@ -264,15 +264,15 @@ fn main() {
             println!("Algorithm: Differential Evolution");
             println!("Population size: {}", population_size);
             println!("Termination evaluations: {}", config.termination_evaluations);
-            println!("Parameters to optimize: {}", problem.config.n_genes());
+            println!("Parameters to optimise: {}", problem.config.n_genes());
             println!("Objective: {} (minimize)\n", config.objective_function.name());
 
-            // Create optimization plot
+            // Create optimisation plot
             let opt_plot = Arc::new(Mutex::new(
-                OptimizationPlot::new("KALIX//OPTIMISER", config.termination_evaluations, 50, 12)
+                OptimisationPlot::new("KALIX//OPTIMISER", config.termination_evaluations, 50, 12)
             ));
 
-            // Create DE optimizer with progress callback
+            // Create DE optimiser with progress callback
             let report_freq = config.report_frequency;  // Capture value before moving
             let n_threads = config.n_threads;  // Capture value before moving
             let plot_clone = Arc::clone(&opt_plot);
@@ -298,11 +298,11 @@ fn main() {
                 },
             };
 
-            let optimizer = DifferentialEvolution::new(de_config);
+            let optimiser = DifferentialEvolution::new(de_config);
 
-            // Run optimization
-            let mut problem_mut = problem;  // Make mutable for optimization
-            let result = optimizer.optimize(&mut problem_mut);
+            // Run optimisation
+            let mut problem_mut = problem;  // Make mutable for optimisation
+            let result = optimiser.optimise(&mut problem_mut);
 
             // Render final plot if verbose mode is enabled
             if config.verbose {
@@ -336,7 +336,7 @@ fn main() {
                 eprintln!("Warning: Failed to apply final parameters: {}", e);
             }
 
-            // Save optimized model to file if specified
+            // Save optimised model to file if specified
             if let Some(model_path) = save_model {
                 let ini_io = IniModelIO::new();
                 let model_string = ini_io.model_to_string(&problem_mut.model);

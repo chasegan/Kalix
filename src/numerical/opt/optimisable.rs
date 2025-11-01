@@ -1,19 +1,19 @@
-/// Trait for problems that can be optimized
+/// Trait for problems that can be optimised
 ///
-/// This trait provides a generic interface for optimization algorithms.
-/// The optimizer only sees normalized parameters [0,1] and a fitness value.
+/// This trait provides a generic interface for optimisation algorithms.
+/// The optimiser only sees normalised parameters [0,1] and a fitness value.
 /// It knows nothing about the underlying problem domain (hydrology, etc.)
 pub trait Optimisable: Send {
-    /// Number of parameters to optimize
+    /// Number of parameters to optimise
     fn n_params(&self) -> usize;
 
-    /// Set parameters (normalized [0,1])
+    /// Set parameters (normalised [0,1])
     ///
     /// # Arguments
-    /// * `params` - Slice of normalized parameter values, one per optimization parameter
+    /// * `params` - Slice of normalised parameter values, one per optimisation parameter
     fn set_params(&mut self, params: &[f64]) -> Result<(), String>;
 
-    /// Get current parameters (normalized [0,1])
+    /// Get current parameters (normalised [0,1])
     ///
     /// Used for warm starts - returns the current parameter values
     fn get_params(&self) -> Vec<f64>;
@@ -36,7 +36,7 @@ pub trait Optimisable: Send {
     /// Clone for parallel evaluation
     ///
     /// Creates an independent copy that can be evaluated in parallel.
-    /// Essential for population-based optimizers (DE, SCE-UA, etc.)
+    /// Essential for population-based optimisers (DE, SCE-UA, etc.)
     fn clone_for_parallel(&self) -> Box<dyn Optimisable>;
 }
 

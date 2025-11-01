@@ -1,6 +1,6 @@
-//! Optimization progress visualization
+//! Optimisation progress visualisation
 //!
-//! Provides a specialized plot for visualizing optimization progress with:
+//! Provides a specialised plot for visualising optimisation progress with:
 //! - Best objective function evolution over time
 //! - Current generation population scatter points
 //! - Progress tracking and timing information
@@ -8,16 +8,16 @@
 use super::*;
 use crate::numerical::opt::DEProgress;
 
-/// Specialized plot for tracking optimization progress
-pub struct OptimizationPlot {
+/// Specialised plot for tracking optimisation progress
+pub struct OptimisationPlot {
     plot: TerminalPlot,
     history: Vec<(f64, f64)>,  // (evaluation, objective) pairs
     all_scatter_points: Vec<ScatterPoint>,  // All generation scatter points
     termination_evaluations: usize,
 }
 
-impl OptimizationPlot {
-    /// Create a new optimization plot
+impl OptimisationPlot {
+    /// Create a new optimisation plot
     pub fn new(
         title: impl Into<String>,
         termination_evaluations: usize,
@@ -66,7 +66,7 @@ impl OptimizationPlot {
         (0.0, x_max)  // Always start at 0
     }
 
-    /// Update the plot with progress from the optimizer
+    /// Update the plot with progress from the optimiser
     pub fn update_from_progress(&mut self, progress: &DEProgress) {
         // Clear previous elements and footer
         self.plot.clear_elements();
@@ -124,7 +124,7 @@ impl OptimizationPlot {
         self.plot.add_footer_line(format!("Time: {:.1}s", progress.elapsed.as_secs_f64()));
     }
 
-    /// Render the final optimization result
+    /// Render the final optimisation result
     pub fn render_final(&mut self, best_objective: f64, n_evaluations: usize, elapsed: std::time::Duration) {
         // Clear previous elements and footer
         self.plot.clear_elements();
