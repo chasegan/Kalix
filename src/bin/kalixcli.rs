@@ -35,10 +35,9 @@ enum Commands {
     /// Return API spec as JSON on STDOUT
     GetAPI,
     /// Run a simulation
-    Sim {
-        /// Path to the model file. If this argument is not used, Kalix will
-        /// ask for the model via STDIO.
-        model_file: Option<String>,
+    Simulate {
+        /// Path to the model file
+        model_file: String,
         /// Path to the output file
         #[arg(short, long)]
         output_file: Option<String>,
@@ -53,6 +52,8 @@ enum Commands {
     Optimise {
         /// Path to the optimisation configuration file (.ini)
         config_file: String,
+        /// Path to the model file (.ini). Overrides model_file in config if specified
+        model_file: Option<String>,
         /// Path to save the optimized model file (.ini)
         #[arg(short = 's', long = "save-model")]
         save_model: Option<String>,
@@ -107,32 +108,15 @@ fn main() {
                 }
             }
         }
-        Commands::Sim { model_file, output_file,
+        Commands::Simulate { model_file, output_file,
             mass_balance, verify_mass_balance} => {
 
-            // Read model either from a file (if provided) or from STDIN
-            let mut m = match model_file {
-                Some(filename) => {
-                    println!("Loading model file: {}", filename);
-                    match IniModelIO::new().read_model_file(filename.as_str()) {
-                        Ok(model) => model,
-                        Err(s) => {
-                            panic!("Error: {}", s); // TODO: handle error properly
-                        }
-                    }
-                }
-                None => {
-                    println!("Waiting for model...");
-                    use std::io::{self, Read};
-                    let mut buffer = String::new();
-                    io::stdin().read_to_string(&mut buffer).expect("Failed to read from STDIN");
-                    println!("Reading model from STDIN ({} bytes)...", buffer.len());
-                    match IniModelIO::new().read_model_string(buffer.as_str()) {
-                        Ok(model) => model,
-                        Err(e) => {
-                            panic!("Error: {}", e); // TODO: handle error properly
-                        }
-                    }
+            // Load model from file
+            println!("Loading model file: {}", model_file);
+            let mut m = match IniModelIO::new().read_model_file(model_file.as_str()) {
+                Ok(model) => model,
+                Err(s) => {
+                    panic!("Error: {}", s); // TODO: handle error properly
                 }
             };
 
@@ -195,7 +179,7 @@ fn main() {
 
             println!("Done!");
         }
-        Commands::Optimise { config_file, save_model } => {
+        Commands::Optimise { config_file, model_file, save_model } => {
             use kalix::numerical::opt::{
                 OptimisationConfig, AlgorithmParams, OptimisationProblem,
                 DifferentialEvolution, DEConfig, DEProgress, Optimisable
@@ -222,17 +206,20 @@ fn main() {
                 println!("Number of parameters: {}", config.parameter_config.n_genes());
             }
 
-            // Load model
-            let model_file = match &config.model_file {
-                Some(path) => path,
-                None => {
-                    eprintln!("Error: model_file must be specified in optimisation config");
-                    std::process::exit(1);
+            // Determine model file: CLI argument takes precedence over config file
+            let model_file_path = match model_file {
+                Some(ref path) => path,
+                None => match &config.model_file {
+                    Some(path) => path,
+                    None => {
+                        eprintln!("Error: model_file must be specified either as a CLI argument or in optimisation config");
+                        std::process::exit(1);
+                    }
                 }
             };
 
-            println!("Loading model: {}", model_file);
-            let model = match IniModelIO::new().read_model_file(model_file) {
+            println!("Loading model: {}", model_file_path);
+            let model = match IniModelIO::new().read_model_file(model_file_path) {
                 Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error loading model: {}", e);
@@ -365,7 +352,7 @@ fn main() {
                 let mut output = String::new();
                 writeln!(&mut output, "=== Kalix Optimisation Results ===").unwrap();
                 writeln!(&mut output, "Configuration file: {}", config_file).unwrap();
-                writeln!(&mut output, "Model file: {}", model_file).unwrap();
+                writeln!(&mut output, "Model file: {}", model_file_path).unwrap();
                 writeln!(&mut output, "Observed data: {}", config.observed_data_series).unwrap();
                 writeln!(&mut output, "Simulated series: {}\n", config.simulated_series).unwrap();
                 writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
