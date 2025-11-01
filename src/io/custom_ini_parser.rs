@@ -3,11 +3,11 @@ use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct IniProperty {
-    pub value: String,           // Clean, joined value
-    pub line_number: usize,      // Line where property starts
-    pub raw_lines: Vec<String>,  // Original lines for round-tripping
-    pub comments: Vec<String>,   // Comments from all continuation lines
-    pub valid: bool,             // Used for mark-and-sweep updates
+    pub value: String,                // Clean, joined value
+    pub line_number: usize,           // Line where property starts
+    pub raw_lines: Vec<String>,       // Original lines for round-tripping
+    pub comments: Vec<Option<String>>, // Comments indexed by continuation line (0=first line, 1=second line, etc.)
+    pub valid: bool,                  // Used for mark-and-sweep updates
 }
 
 #[derive(Debug, Clone)]
@@ -98,9 +98,8 @@ impl IniDocument {
 
                 let mut raw_lines = vec![line.to_string()];
                 let mut comments = Vec::new();
-                if let Some(comment) = inline_comment {
-                    comments.push(comment);
-                }
+                // Store comment for first line (Some if exists, None if not)
+                comments.push(inline_comment.map(|s| s.to_string()));
                 let mut joined_value = value_part.to_string();
 
                 // Look for continuation lines
@@ -115,15 +114,17 @@ impl IniDocument {
                         // Skip empty continuation lines
                         if continued_trimmed.is_empty() {
                             raw_lines.push(next_line.to_string());
+                            comments.push(None); // Empty line has no comment
                             next_line_idx += 1;
                             continue;
                         }
 
                         let mut continued_value = continued_trimmed;
+                        let mut line_comment = None;
 
                         // Check for inline comment on continuation line
                         if let Some(comment_pos) = Self::find_comment_start(continued_trimmed) {
-                            comments.push(continued_trimmed[comment_pos..].trim().to_string());
+                            line_comment = Some(continued_trimmed[comment_pos..].trim().to_string());
                             continued_value = continued_trimmed[..comment_pos].trim();
                         }
 
@@ -134,6 +135,7 @@ impl IniDocument {
                         joined_value.push_str(continued_value);
 
                         raw_lines.push(next_line.to_string());
+                        comments.push(line_comment); // Store comment (or None) for this continuation line
                         next_line_idx += 1;
                     } else {
                         break;
@@ -323,14 +325,28 @@ impl IniDocument {
                         result.push_str(prop_name);
                         result.push('\n');
                     } else {
-                        // Regular property
-                        result.push_str(&format!("{} = {}", prop_name, property.value));
-                        // Add inline comment if present
-                        if !property.comments.is_empty() {
-                            result.push_str(" ");
-                            result.push_str(&property.comments[0]);
+                        // Regular property - may be multi-line
+                        let value_lines: Vec<&str> = property.value.split('\n').collect();
+
+                        for (i, value_line) in value_lines.iter().enumerate() {
+                            if i == 0 {
+                                // First line: "key = value"
+                                result.push_str(&format!("{} = {}", prop_name, value_line));
+                            } else {
+                                // Continuation lines: just the value (already indented)
+                                result.push_str(value_line);
+                            }
+
+                            // Add comment if one exists for this line
+                            if i < property.comments.len() {
+                                if let Some(ref comment) = property.comments[i] {
+                                    result.push_str("  ");  // Add spacing before comment
+                                    result.push_str(comment);
+                                }
+                            }
+
+                            result.push('\n');
                         }
-                        result.push('\n');
                     }
                 } else {
                     // Property unchanged - use original raw_lines
@@ -442,11 +458,13 @@ key2 = value2,  # First part
 
         let prop1 = &section.properties["key1"];
         assert_eq!(prop1.comments.len(), 1);
-        assert_eq!(prop1.comments[0], "# Inline comment");
+        assert_eq!(prop1.comments[0], Some("# Inline comment".to_string()));
 
         let prop2 = &section.properties["key2"];
         assert_eq!(prop2.value, "value2, value3");
         assert_eq!(prop2.comments.len(), 2);
+        assert_eq!(prop2.comments[0], Some("# First part".to_string()));
+        assert_eq!(prop2.comments[1], Some("# Second part".to_string()));
     }
 
     #[test]
@@ -557,5 +575,86 @@ key2 = value2
         assert_eq!(doc.get_property("section1", "key2"), Some("value2"));
         assert_eq!(doc.get_property("section1", "nonexistent"), None);
         assert_eq!(doc.get_property("nonexistent", "key1"), None);
+    }
+
+    #[test]
+    fn test_comment_preservation_on_multiline_property() {
+        let content = r#"
+[node.catchment]
+params = 100.0, 2.0, 50.0,  # Production store capacity
+         0.5, 0.8,          # Groundwater exchange
+         200.0              # Routing store capacity
+"#;
+
+        let mut doc = IniDocument::parse(content).unwrap();
+
+        // Verify original parsing captured comments
+        let section = &doc.sections["node.catchment"];
+        let property = &section.properties["params"];
+        assert_eq!(property.comments.len(), 3);
+        assert_eq!(property.comments[0], Some("# Production store capacity".to_string()));
+        assert_eq!(property.comments[1], Some("# Groundwater exchange".to_string()));
+        assert_eq!(property.comments[2], Some("# Routing store capacity".to_string()));
+
+        // Modify to a new multi-line value (3 lines, same as original)
+        let new_value = "150.0, 3.0, 60.0,\n         0.7, 1.2,\n         250.0";
+        doc.set_property("node.catchment", "params", new_value);
+
+        // Convert back to string
+        let output = doc.to_string();
+
+        // Verify all three comments are preserved on their respective lines
+        assert!(output.contains("150.0, 3.0, 60.0,  # Production store capacity"));
+        assert!(output.contains("0.7, 1.2,  # Groundwater exchange"));
+        assert!(output.contains("250.0  # Routing store capacity"));
+    }
+
+    #[test]
+    fn test_comment_preservation_fewer_lines_than_comments() {
+        let content = r#"
+[node.test]
+params = 100.0, 2.0,  # First comment
+         50.0,        # Second comment
+         0.5          # Third comment
+"#;
+
+        let mut doc = IniDocument::parse(content).unwrap();
+
+        // Modify to a value with only 2 lines (fewer than the 3 comments)
+        let new_value = "200.0, 4.0,\n         75.0";
+        doc.set_property("node.test", "params", new_value);
+
+        let output = doc.to_string();
+
+        // First two comments should be preserved
+        assert!(output.contains("200.0, 4.0,  # First comment"));
+        assert!(output.contains("75.0  # Second comment"));
+
+        // Third comment should be discarded (not appear in output)
+        let param_section = output.split("[node.test]").nth(1).unwrap();
+        let param_section = param_section.split("\n\n").next().unwrap(); // Get just this section
+        assert_eq!(param_section.matches("# Third comment").count(), 0);
+    }
+
+    #[test]
+    fn test_comment_preservation_more_lines_than_comments() {
+        let content = r#"
+[node.test]
+params = 100.0, 2.0,  # First comment
+         50.0         # Second comment
+"#;
+
+        let mut doc = IniDocument::parse(content).unwrap();
+
+        // Modify to a value with 3 lines (more than the 2 comments)
+        let new_value = "200.0, 4.0,\n         75.0,\n         1.5";
+        doc.set_property("node.test", "params", new_value);
+
+        let output = doc.to_string();
+
+        // First two lines should have comments, third line should not
+        assert!(output.contains("200.0, 4.0,  # First comment"));
+        assert!(output.contains("75.0,  # Second comment"));
+        assert!(output.contains("1.5\n")); // Third line with no comment
     }
 }

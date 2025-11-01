@@ -41,7 +41,7 @@ def verify_model(model_path, mbal_filename='mbal_for_verification.txt'):
     try:
         # Run kalixcli with verification
         result = subprocess.run(
-            ['kalixcli', 'sim', model_file, '-v', mbal_filename],
+            ['kalixcli', 'simulate', model_file, '-v', mbal_filename],
             cwd=model_dir,
             capture_output=True,
             text=True,
