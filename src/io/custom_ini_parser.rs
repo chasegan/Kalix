@@ -6,14 +6,15 @@ pub struct IniProperty {
     pub value: String,                // Clean, joined value
     pub line_number: usize,           // Line where property starts
     pub raw_lines: Vec<String>,       // Original lines for round-tripping
-    pub comments: Vec<Option<String>>, // Comments indexed by continuation line (0=first line, 1=second line, etc.)
+    pub leading_lines: Vec<String>,    // Comments and blank lines before this property
+    pub comments: Vec<Option<String>>, // Inline comments indexed by continuation line (0=first line, 1=second line, etc.)
     pub valid: bool,                  // Used for mark-and-sweep updates
 }
 
 #[derive(Debug, Clone)]
 pub struct IniSection {
     pub properties: IndexMap<String, IniProperty>,
-    pub leading_comments: Vec<String>, // Comments before [section]
+    pub leading_lines: Vec<String>,    // Comments and blank lines before [section]
     pub line_number: usize,            // Line where [section] appears
     pub valid: bool,                   // Used for mark-and-sweep updates
 }
@@ -53,15 +54,16 @@ impl IniDocument {
             let line_number = line_idx + 1;
             let trimmed = line.trim();
 
-            // Skip empty lines
+            // Handle empty lines - store as blank leading lines
             if trimmed.is_empty() {
+                pending_comments.push(line.to_string());
                 line_idx += 1;
                 continue;
             }
 
             // Handle comments
             if trimmed.starts_with('#') || trimmed.starts_with(';') {
-                pending_comments.push(trimmed.to_string());
+                pending_comments.push(line.to_string());
                 line_idx += 1;
                 continue;
             }
@@ -72,7 +74,7 @@ impl IniDocument {
 
                 sections.insert(section_name.clone(), IniSection {
                     properties: IndexMap::new(),
-                    leading_comments: pending_comments.clone(),
+                    leading_lines: pending_comments.clone(),
                     line_number,
                     valid: true,
                 });
@@ -147,6 +149,7 @@ impl IniDocument {
                     value: joined_value,
                     line_number,
                     raw_lines,
+                    leading_lines: pending_comments.clone(),
                     comments,
                     valid: true,
                 };
@@ -163,6 +166,7 @@ impl IniDocument {
                     }
                 }
 
+                pending_comments.clear();
                 line_idx = next_line_idx;
                 continue;
             } else {
@@ -176,11 +180,13 @@ impl IniDocument {
                             value: String::new(),  // Empty value for list items
                             line_number,
                             raw_lines: vec![line.to_string()],
+                            leading_lines: pending_comments.clone(),
                             comments: Vec::new(),
                             valid: true,
                         };
 
                         section.properties.insert(trimmed.to_string(), property);
+                        pending_comments.clear();
                         line_idx += 1;
                         continue;
                     }
@@ -233,7 +239,7 @@ impl IniDocument {
         let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
             IniSection {
                 properties: IndexMap::new(),
-                leading_comments: Vec::new(),
+                leading_lines: Vec::new(),
                 line_number: 0, // New sections don't have a line number from original file
                 valid: true,
             }
@@ -255,6 +261,7 @@ impl IniDocument {
                 value: new_value.to_string(),
                 line_number: 0, // New properties don't have a line number from original file
                 raw_lines: Vec::new(), // Empty indicates newly created
+                leading_lines: Vec::new(),
                 comments: Vec::new(),
                 valid: true,
             });
@@ -305,7 +312,7 @@ impl IniDocument {
             let section = &self.sections[section_name];
 
             // Add leading comments
-            for comment in &section.leading_comments {
+            for comment in &section.leading_lines {
                 result.push_str(comment);
                 result.push('\n');
             }
@@ -316,6 +323,12 @@ impl IniDocument {
             // Iterate properties in insertion order (preserved by IndexMap)
             for prop_name in section.properties.keys() {
                 let property = &section.properties[prop_name];
+
+                // Add leading comments before this property
+                for comment in &property.leading_lines {
+                    result.push_str(comment);
+                    result.push('\n');
+                }
 
                 if property.raw_lines.is_empty() {
                     // Property was modified or newly created - format canonically
@@ -356,8 +369,6 @@ impl IniDocument {
                     }
                 }
             }
-
-            result.push('\n'); // Blank line after each section
         }
 
         // Add trailing comments
@@ -453,8 +464,9 @@ key2 = value2,  # First part
         let doc = IniDocument::parse(content).unwrap();
         let section = &doc.sections["section1"];
 
-        assert_eq!(section.leading_comments.len(), 1);
-        assert_eq!(section.leading_comments[0], "# Leading comment");
+        assert_eq!(section.leading_lines.len(), 2);
+        assert_eq!(section.leading_lines[0], ""); // Blank line at start
+        assert_eq!(section.leading_lines[1], "# Leading comment");
 
         let prop1 = &section.properties["key1"];
         assert_eq!(prop1.comments.len(), 1);
@@ -656,5 +668,41 @@ params = 100.0, 2.0,  # First comment
         assert!(output.contains("200.0, 4.0,  # First comment"));
         assert!(output.contains("75.0,  # Second comment"));
         assert!(output.contains("1.5\n")); // Third line with no comment
+    }
+
+    #[test]
+    fn test_property_leading_lines() {
+        let content = r#"
+[section1]
+# This is a leading comment for param1
+# It spans multiple lines
+param1 = 100
+
+# Leading comment for param2
+param2 = 200
+"#;
+
+        let doc = IniDocument::parse(content).unwrap();
+        let section = &doc.sections["section1"];
+
+        // Check param1 leading comments
+        let param1 = &section.properties["param1"];
+        assert_eq!(param1.leading_lines.len(), 2);
+        assert_eq!(param1.leading_lines[0], "# This is a leading comment for param1");
+        assert_eq!(param1.leading_lines[1], "# It spans multiple lines");
+        assert_eq!(param1.value, "100");
+
+        // Check param2 leading comments
+        let param2 = &section.properties["param2"];
+        assert_eq!(param2.leading_lines.len(), 2);
+        assert_eq!(param2.leading_lines[0], ""); // Blank line between param1 and param2
+        assert_eq!(param2.leading_lines[1], "# Leading comment for param2");
+        assert_eq!(param2.value, "200");
+
+        // Verify round-trip preserves leading comments
+        let output = doc.to_string();
+        assert!(output.contains("# This is a leading comment for param1"));
+        assert!(output.contains("# It spans multiple lines"));
+        assert!(output.contains("# Leading comment for param2"));
     }
 }
