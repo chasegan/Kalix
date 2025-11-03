@@ -14,23 +14,38 @@ public class ProgressParser {
         private final String description;
         private final String rawLine;
         private final ProgressType type;
-        
+
+        // Optimisation-specific data (null for non-optimization progress)
+        private final Integer evaluationCount;         // Current evaluation number (e.g., 50 out of 10000)
+        private final java.util.List<Double> objectiveValues;  // Array of objective values from population
+
         public enum ProgressType {
             PERCENTAGE, FRACTION, STEP, ITERATION, TIME_STEP, PHASE, COMPLETION, UNKNOWN
         }
-        
+
         public ProgressInfo(double percentage, String description, String rawLine, ProgressType type) {
+            this(percentage, description, rawLine, type, null, null);
+        }
+
+        public ProgressInfo(double percentage, String description, String rawLine, ProgressType type,
+                           Integer evaluationCount, java.util.List<Double> objectiveValues) {
             this.percentage = Math.max(0.0, Math.min(100.0, percentage));
             this.description = description != null ? description : "";
             this.rawLine = rawLine != null ? rawLine : "";
             this.type = type != null ? type : ProgressType.UNKNOWN;
+            this.evaluationCount = evaluationCount;
+            this.objectiveValues = objectiveValues;
         }
-        
+
         public double getPercentage() { return percentage; }
         public String getDescription() { return description; }
         public String getRawLine() { return rawLine; }
         public ProgressType getType() { return type; }
         public boolean isCompletion() { return type == ProgressType.COMPLETION || percentage >= 100.0; }
+
+        // Optimisation-specific getters
+        public Integer getEvaluationCount() { return evaluationCount; }
+        public java.util.List<Double> getObjectiveValues() { return objectiveValues; }
         
         @Override
         public String toString() {

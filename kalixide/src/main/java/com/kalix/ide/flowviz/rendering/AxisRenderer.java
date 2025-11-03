@@ -62,6 +62,8 @@ public class AxisRenderer {
         // Calculate X-axis ticks based on axis type
         if (viewport.getXAxisType() == XAxisType.PERCENTILE) {
             timeTicks = calculatePercentileTicks(viewport);
+        } else if (viewport.getXAxisType() == XAxisType.COUNT) {
+            timeTicks = calculateCountTicks(viewport);
         } else {
             // TIME: Calculate time ticks using temporal boundaries
             timeTicks = temporalCalculator.calculateTemporalBoundaryTicks(
@@ -114,6 +116,62 @@ public class AxisRenderer {
         }
 
         return ticks;
+    }
+
+    /**
+     * Calculates optimal count tick positions for iteration/evaluation plots.
+     * For COUNT axis type, timestamps represent actual count values.
+     */
+    private List<Long> calculateCountTicks(ViewPort viewport) {
+        List<Long> ticks = new ArrayList<>();
+
+        long startCount = viewport.getStartTimeMs();
+        long endCount = viewport.getEndTimeMs();
+        long range = endCount - startCount;
+
+        if (range <= 0) return ticks;
+
+        // Choose tick interval based on range
+        long tickInterval;
+        if (range > 10000) {
+            tickInterval = roundToNiceCount(range / 5);  // ~5 ticks
+        } else if (range > 1000) {
+            tickInterval = roundToNiceCount(range / 8);  // ~8 ticks
+        } else if (range > 100) {
+            tickInterval = roundToNiceCount(range / 10); // ~10 ticks
+        } else if (range > 20) {
+            tickInterval = 10;
+        } else if (range > 10) {
+            tickInterval = 5;
+        } else {
+            tickInterval = 1;
+        }
+
+        // Generate ticks
+        long currentCount = (startCount / tickInterval) * tickInterval;
+        while (currentCount <= endCount) {
+            if (currentCount >= 0) {
+                ticks.add(currentCount);
+            }
+            currentCount += tickInterval;
+        }
+
+        return ticks;
+    }
+
+    /**
+     * Rounds a count interval to a nice number (1, 2, 5, 10, 20, 50, 100, ...).
+     */
+    private long roundToNiceCount(long interval) {
+        if (interval <= 0) return 1;
+
+        long magnitude = (long) Math.pow(10, Math.floor(Math.log10(interval)));
+        long normalizedInterval = interval / magnitude;
+
+        if (normalizedInterval <= 1) return magnitude;
+        if (normalizedInterval <= 2) return 2 * magnitude;
+        if (normalizedInterval <= 5) return 5 * magnitude;
+        return 10 * magnitude;
     }
 
     /**
@@ -274,6 +332,8 @@ public class AxisRenderer {
     private String formatXAxisLabel(long value, long rangeMs, XAxisType xAxisType) {
         if (xAxisType == XAxisType.PERCENTILE) {
             return formatPercentile(value);
+        } else if (xAxisType == XAxisType.COUNT) {
+            return formatCount(value);
         } else {
             return formatTime(value, rangeMs);
         }
@@ -304,6 +364,18 @@ public class AxisRenderer {
             return String.format("%.0f%%", percentile);
         } else {
             return String.format("%.1f%%", percentile);
+        }
+    }
+
+    /**
+     * Formats a count value for axis labels.
+     */
+    private String formatCount(long count) {
+        // Use thousands separator for large numbers
+        if (count >= 1000) {
+            return String.format("%,d", count);
+        } else {
+            return String.format("%d", count);
         }
     }
 
@@ -343,7 +415,14 @@ public class AxisRenderer {
         int plotHeight = viewport.getPlotHeight();
 
         // Draw X-axis title (dynamic based on axis type)
-        String xTitle = (viewport.getXAxisType() == XAxisType.PERCENTILE) ? "Exceedance Probability (%)" : "Time";
+        String xTitle;
+        if (viewport.getXAxisType() == XAxisType.PERCENTILE) {
+            xTitle = "Exceedance Probability (%)";
+        } else if (viewport.getXAxisType() == XAxisType.COUNT) {
+            xTitle = "Count";
+        } else {
+            xTitle = "Time";
+        }
         int xTitleWidth = titleFm.stringWidth(xTitle);
         int xTitleX = plotX + (plotWidth - xTitleWidth) / 2;
         int xTitleY = plotY + plotHeight + TIME_TITLE_OFFSET;

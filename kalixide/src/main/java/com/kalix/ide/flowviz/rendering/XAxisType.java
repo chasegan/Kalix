@@ -8,5 +8,8 @@ public enum XAxisType {
     TIME,
 
     /** Percentile X-axis for exceedance probability plots (0-100%). */
-    PERCENTILE
+    PERCENTILE,
+
+    /** Count-based X-axis for iteration/evaluation counts, event counts, etc. */
+    COUNT
 }

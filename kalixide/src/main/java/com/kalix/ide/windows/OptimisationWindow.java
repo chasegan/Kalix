@@ -8,6 +8,9 @@ import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
+import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -59,6 +62,8 @@ public class OptimisationWindow extends JFrame {
     private OptimisationGuiBuilder guiBuilder;
     private RSyntaxTextArea configEditor;
     private JTextArea resultsDisplayArea;  // Results/progress display
+    private PlotPanel convergencePlot;     // Convergence plot
+    private DataSet convergenceDataSet;    // Dataset for convergence plot
     private JButton runButton;
     private JButton loadConfigButton;
     private JButton saveConfigButton;
@@ -286,13 +291,32 @@ public class OptimisationWindow extends JFrame {
 
         mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG_INI, configIniPanel);
 
-        // Tab 3: Results (always present)
+        // Tab 3: Results (always present) - Plot above text area
+        JPanel resultsPanel = new JPanel(new BorderLayout(0, 5));
+
+        // Create convergence plot
+        convergenceDataSet = new DataSet();
+        convergencePlot = new PlotPanel();
+        convergencePlot.setDataSet(convergenceDataSet);
+        convergencePlot.setXAxisType(com.kalix.ide.flowviz.rendering.XAxisType.COUNT); // Use COUNT x-axis for evaluation numbers
+        convergencePlot.setPreferredSize(new Dimension(0, 300)); // 300px height for plot
+
+        // Create text area for summary
         resultsDisplayArea = new JTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
                                            OptimisationUIConstants.TEXT_AREA_COLUMNS);
         resultsDisplayArea.setEditable(false);
         resultsDisplayArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JScrollPane resultsScrollPane = new JScrollPane(resultsDisplayArea);
-        mainTabbedPane.addTab(OptimisationUIConstants.TAB_RESULTS, resultsScrollPane);
+
+        // Use split pane: plot on top, text on bottom
+        JSplitPane resultsSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        resultsSplitPane.setTopComponent(convergencePlot);
+        resultsSplitPane.setBottomComponent(resultsScrollPane);
+        resultsSplitPane.setDividerLocation(300);
+        resultsSplitPane.setResizeWeight(0.5); // Equal resizing
+
+        resultsPanel.add(resultsSplitPane, BorderLayout.CENTER);
+        mainTabbedPane.addTab(OptimisationUIConstants.TAB_RESULTS, resultsPanel);
 
         optimisationPanel.add(mainTabbedPane, BorderLayout.CENTER);
 
@@ -503,8 +527,15 @@ public class OptimisationWindow extends JFrame {
         // Update results display (Results tab is always present)
         if (optInfo.hasStartedRunning) {
             updateResultsDisplay(optInfo);
+            // Update convergence plot with current data
+            updateConvergencePlot(optInfo.result);
         } else {
             resultsDisplayArea.setText("");
+            // Clear convergence plot
+            if (convergenceDataSet != null) {
+                convergenceDataSet.removeAllSeries();
+                convergencePlot.repaint();
+            }
         }
 
         // Disable Run button once optimization has started
@@ -938,6 +969,20 @@ public class OptimisationWindow extends JFrame {
             if (result != null) {
                 result.currentProgress = (int) progressInfo.getPercentage();
                 result.progressDescription = progressInfo.getDescription();
+
+                // Store convergence data if available (optimization-specific progress)
+                if (progressInfo.getEvaluationCount() != null && progressInfo.getObjectiveValues() != null) {
+                    java.util.List<Double> objectiveValues = progressInfo.getObjectiveValues();
+                    if (!objectiveValues.isEmpty()) {
+                        // Store evaluation count and best objective (first element)
+                        result.convergenceEvaluations.add(progressInfo.getEvaluationCount());
+                        result.convergenceBestObjective.add(objectiveValues.get(0));
+                        result.convergencePopulation.add(new java.util.ArrayList<>(objectiveValues));
+
+                        // Update convergence plot if this optimization is currently displayed
+                        updateConvergencePlotIfSelected(sessionKey);
+                    }
+                }
             }
 
             // Update tree node to show progress percentage
@@ -1016,6 +1061,105 @@ public class OptimisationWindow extends JFrame {
                 }
             }
         }
+    }
+
+    /**
+     * Updates the convergence plot if the given session is currently selected.
+     */
+    private void updateConvergencePlotIfSelected(String sessionKey) {
+        TreePath selectedPath = optTree.getSelectionPath();
+        if (selectedPath != null) {
+            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+            if (selectedNode.getUserObject() instanceof OptimisationInfo) {
+                OptimisationInfo selectedInfo = (OptimisationInfo) selectedNode.getUserObject();
+                if (selectedInfo.session.getSessionKey().equals(sessionKey)) {
+                    // Update the convergence plot with latest data
+                    updateConvergencePlot(selectedInfo.result);
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates the convergence plot with data from the given result.
+     * Creates two series: best objective (purple line) and population samples (orange dots).
+     */
+    private void updateConvergencePlot(OptimisationResult result) {
+        if (result == null || convergenceDataSet == null || convergencePlot == null) {
+            return;
+        }
+
+        // Clear existing data
+        convergenceDataSet.removeAllSeries();
+
+        if (result.convergenceEvaluations.isEmpty()) {
+            convergencePlot.repaint();
+            return;
+        }
+
+        // Create time series data for best objective (purple line)
+        // For COUNT x-axis, we use evaluation counts directly as "timestamps"
+        int n = result.convergenceEvaluations.size();
+        java.time.LocalDateTime[] timestamps = new java.time.LocalDateTime[n];
+        double[] bestValues = new double[n];
+
+        // Convert evaluation counts to fake timestamps for TimeSeriesData
+        // TimeSeriesData expects LocalDateTime, so we convert count to milliseconds
+        java.time.LocalDateTime epoch = java.time.LocalDateTime.of(1970, 1, 1, 0, 0, 0);
+        for (int i = 0; i < n; i++) {
+            // Evaluation count is stored directly as milliseconds from epoch
+            long evalCount = result.convergenceEvaluations.get(i);
+            timestamps[i] = epoch.plusNanos(evalCount * 1_000_000); // Convert to nanoseconds
+            bestValues[i] = result.convergenceBestObjective.get(i);
+        }
+
+        TimeSeriesData bestSeries = new TimeSeriesData("Best Objective", timestamps, bestValues);
+        convergenceDataSet.addSeries(bestSeries);
+
+        // Create time series data for population samples (orange dots)
+        // Flatten all population values across all evaluations
+        java.util.List<java.time.LocalDateTime> popTimestamps = new java.util.ArrayList<>();
+        java.util.List<Double> popValues = new java.util.ArrayList<>();
+
+        for (int i = 0; i < n; i++) {
+            java.time.LocalDateTime evalTime = timestamps[i];
+            java.util.List<Double> populationAtEval = result.convergencePopulation.get(i);
+
+            for (Double objValue : populationAtEval) {
+                popTimestamps.add(evalTime);
+                popValues.add(objValue);
+            }
+        }
+
+        if (!popTimestamps.isEmpty()) {
+            java.time.LocalDateTime[] popTimestampsArray = popTimestamps.toArray(new java.time.LocalDateTime[0]);
+            double[] popValuesArray = new double[popValues.size()];
+            for (int i = 0; i < popValues.size(); i++) {
+                popValuesArray[i] = popValues.get(i);
+            }
+
+            TimeSeriesData popSeries = new TimeSeriesData("Population", popTimestampsArray, popValuesArray);
+            convergenceDataSet.addSeries(popSeries);
+        }
+
+        // Set colors and visibility
+        Map<String, Color> colors = new HashMap<>();
+        colors.put("Best Objective", new Color(0, 100, 200));  // Blue
+        colors.put("Population", new Color(255, 140, 0));      // Orange
+
+        // Add series in rendering order: Population first (back), then Best Objective (front)
+        java.util.List<String> visibleSeries = new java.util.ArrayList<>();
+        visibleSeries.add("Population");
+        visibleSeries.add("Best Objective");
+
+        convergencePlot.setSeriesColors(colors);
+        convergencePlot.setVisibleSeries(visibleSeries);
+
+        // Configure rendering modes: Best Objective as LINE, Population as POINTS only
+        convergencePlot.setSeriesRenderMode("Best Objective", com.kalix.ide.flowviz.rendering.SeriesRenderMode.LINE);
+        convergencePlot.setSeriesRenderMode("Population", com.kalix.ide.flowviz.rendering.SeriesRenderMode.POINTS);
+
+        convergencePlot.refreshData(true);  // Zoom to fit new data
     }
 
     /**
@@ -1291,6 +1435,11 @@ public class OptimisationWindow extends JFrame {
         // Progress tracking (updated during PROGRESS messages)
         Integer currentProgress;       // e.g., 47 (percent)
         String progressDescription;    // e.g., "Generation 47/100"
+
+        // Convergence data for plotting
+        java.util.List<Integer> convergenceEvaluations = new java.util.ArrayList<>();     // Evaluation counts
+        java.util.List<Double> convergenceBestObjective = new java.util.ArrayList<>();    // Best objective at each point
+        java.util.List<java.util.List<Double>> convergencePopulation = new java.util.ArrayList<>(); // All population values at each point
 
         // Metadata
         String configUsed;             // INI config text

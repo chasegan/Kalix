@@ -13,7 +13,7 @@ Best objective value: -0.766216
 Function evaluations: 5000
 
 Optimized Parameters:
-  node.mygr4jnode.x3 = 351.501584
-  node.mygr4jnode.x4 = 2.437720
   node.mygr4jnode.x2 = -8.000000
-  node.mygr4jnode.x1 = 107.751669
+  node.mygr4jnode.x4 = 2.437771
+  node.mygr4jnode.x3 = 351.488045
+  node.mygr4jnode.x1 = 107.765458

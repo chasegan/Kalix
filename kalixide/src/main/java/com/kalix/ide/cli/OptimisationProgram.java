@@ -264,14 +264,64 @@ public class OptimisationProgram extends AbstractSessionProgram {
     }
 
     /**
+     * Handles optimisation-specific progress updates that include objective values.
+     * Extracts the "d" array from the PROGRESS message and passes it to the callback.
+     */
+    private void handleOptimisationProgressUpdate(JsonMessage.SystemMessage message) {
+        try {
+            Integer current = message.getCurrent();  // Evaluation count (i)
+            Integer total = message.getTotal();      // Total evaluations (n)
+            com.fasterxml.jackson.databind.JsonNode dataNode = message.getProgressData();  // Objective values (d)
+
+            if (current != null && total != null && progressCallback != null) {
+                // Calculate percentage
+                double percentage = (current * 100.0) / total;
+
+                // Extract objective values array
+                java.util.List<Double> objectiveValues = new java.util.ArrayList<>();
+                if (dataNode != null && dataNode.isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode valueNode : dataNode) {
+                        if (valueNode.isNumber()) {
+                            objectiveValues.add(valueNode.asDouble());
+                        }
+                    }
+                }
+
+                // Create description
+                String description = String.format("Evaluation %d/%d", current, total);
+
+                // Create ProgressInfo with optimisation data
+                ProgressParser.ProgressInfo progressInfo = new ProgressParser.ProgressInfo(
+                    percentage,
+                    description,
+                    "run_optimisation",
+                    ProgressParser.ProgressInfo.ProgressType.ITERATION,
+                    current,
+                    objectiveValues
+                );
+
+                // Invoke callback
+                progressCallback.accept(progressInfo);
+            }
+        } catch (Exception e) {
+            statusUpdater.accept("Warning: Could not parse optimisation progress: " + e.getMessage());
+        }
+    }
+
+    /**
      * Handles messages while optimisation is running.
      */
     private boolean handleOptimisingState(JsonStdioTypes.SystemMessageType msgType,
                                           JsonMessage.SystemMessage message) {
         switch (msgType) {
             case BUSY:
-                // Progress update using base class utility
+                // Legacy progress update (fallback)
                 handleProgressUpdate(message, "run_optimisation");
+                return true;
+
+            case PROGRESS:
+                // Optimisation-specific progress with objective values
+                handleOptimisationProgressUpdate(message);
                 return true;
 
             case RESULT:

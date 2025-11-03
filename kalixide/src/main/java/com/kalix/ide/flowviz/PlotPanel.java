@@ -55,6 +55,7 @@ public class PlotPanel extends JPanel {
     private AggregationMethod aggregationMethod = AggregationMethod.SUM;
     private PlotType plotType = PlotType.VALUES;
     private YAxisScale yAxisScale = YAxisScale.LINEAR;
+    private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
     private String lastReferenceSeries = null;
@@ -174,7 +175,7 @@ public class PlotPanel extends JPanel {
         }
 
         Rectangle plotArea = getPlotArea();
-        XAxisType xAxisType = (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
+        XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
     }
@@ -186,9 +187,19 @@ public class PlotPanel extends JPanel {
         long endTime = now + 3600000;   // 1 hour from now
 
         Rectangle plotArea = getPlotArea();
-        XAxisType xAxisType = (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
+        XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+    }
+
+    /**
+     * Determines the X-axis type based on override or plot type.
+     */
+    private XAxisType determineXAxisType() {
+        if (xAxisTypeOverride != null) {
+            return xAxisTypeOverride;
+        }
+        return (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
     }
 
     private void setupMouseListeners() {
@@ -394,6 +405,58 @@ public class PlotPanel extends JPanel {
         if (plotInteractionManager != null) {
             plotInteractionManager.setPrecision64Supplier(precision64Supplier);
         }
+    }
+
+    /**
+     * Sets the render mode for a specific series (LINE, POINTS, or LINE_AND_POINTS).
+     */
+    public void setSeriesRenderMode(String seriesName, com.kalix.ide.flowviz.rendering.SeriesRenderMode renderMode) {
+        if (renderer != null) {
+            renderer.setSeriesRenderMode(seriesName, renderMode);
+            repaint();
+        }
+    }
+
+    /**
+     * Gets the render mode for a specific series.
+     */
+    public com.kalix.ide.flowviz.rendering.SeriesRenderMode getSeriesRenderMode(String seriesName) {
+        if (renderer != null) {
+            return renderer.getSeriesRenderMode(seriesName);
+        }
+        return com.kalix.ide.flowviz.rendering.SeriesRenderMode.LINE;
+    }
+
+    /**
+     * Sets the X-axis type override (COUNT, TIME, or PERCENTILE).
+     * Set to null to use automatic detection based on plot type.
+     */
+    public void setXAxisType(XAxisType xAxisType) {
+        this.xAxisTypeOverride = xAxisType;
+
+        // Update viewport with new axis type
+        if (currentViewport != null) {
+            XAxisType newAxisType = determineXAxisType();
+            Rectangle plotArea = getPlotArea();
+            currentViewport = new ViewPort(
+                currentViewport.getStartTimeMs(),
+                currentViewport.getEndTimeMs(),
+                currentViewport.getMinValue(),
+                currentViewport.getMaxValue(),
+                plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                yAxisScale,
+                newAxisType
+            );
+        }
+
+        repaint();
+    }
+
+    /**
+     * Gets the current X-axis type (considering override).
+     */
+    public XAxisType getXAxisType() {
+        return determineXAxisType();
     }
 
     // Legend management methods

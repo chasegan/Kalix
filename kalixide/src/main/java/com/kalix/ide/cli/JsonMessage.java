@@ -61,6 +61,9 @@ public class JsonMessage {
         @JsonProperty("t")
         private String taskType;
 
+        @JsonProperty("d")
+        private JsonNode progressData;  // Array of progress-specific data (e.g., objective values)
+
         // Result message fields
         @JsonProperty("exec_ms")
         private Double executionTimeMs;
@@ -93,6 +96,9 @@ public class JsonMessage {
 
         public String getTaskType() { return taskType; }
         public void setTaskType(String taskType) { this.taskType = taskType; }
+
+        public JsonNode getProgressData() { return progressData; }
+        public void setProgressData(JsonNode progressData) { this.progressData = progressData; }
 
         public Double getExecutionTimeMs() { return executionTimeMs; }
         public void setExecutionTimeMs(Double executionTimeMs) { this.executionTimeMs = executionTimeMs; }
