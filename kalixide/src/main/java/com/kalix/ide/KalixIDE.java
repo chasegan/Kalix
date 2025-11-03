@@ -827,6 +827,44 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Checks if the main editor has unsaved changes.
+     * @return true if there are unsaved changes
+     */
+    public boolean hasUnsavedChanges() {
+        return textEditor != null && textEditor.isDirty();
+    }
+
+    /**
+     * Gets the current model text from the main editor.
+     * @return the model text
+     */
+    public String getModelText() {
+        return textEditor != null ? textEditor.getText() : "";
+    }
+
+    /**
+     * Sets the model text in the main editor.
+     * @param text the text to set
+     */
+    public void setModelText(String text) {
+        if (textEditor != null) {
+            textEditor.setText(text);
+        }
+    }
+
+    /**
+     * Sets the model text in the main editor and marks it as dirty (unsaved).
+     * Use this when programmatically inserting content that should be saved.
+     * @param text the text to set
+     */
+    public void setModelTextAndMarkDirty(String text) {
+        if (textEditor != null) {
+            textEditor.setText(text);
+            textEditor.setDirty(true);
+        }
+    }
+
+    /**
      * Performs an undo operation in the text editor.
      * Updates the status bar with the result of the operation.
      */

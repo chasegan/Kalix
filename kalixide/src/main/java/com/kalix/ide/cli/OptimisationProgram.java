@@ -329,6 +329,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 currentState = ProgramState.COMPLETED;
                 statusUpdater.accept("Optimisation completed");
                 if (resultCallback != null) {
+                    // Pass the entire result JSON for detailed parsing
                     resultCallback.accept(extractResultMessage(message));
                 }
                 return true;

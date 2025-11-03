@@ -6,6 +6,7 @@ use crate::io::ini_model_io::IniModelIO;
 use crate::io::csv_io;
 use chrono;
 use crate::tid;
+use crate::numerical::opt::Optimisable;
 
 pub trait Command: Send + Sync {
     fn name(&self) -> &str;
@@ -831,6 +832,13 @@ impl Command for RunOptimisationCommand {
         // Get physical parameter values
         let params_physical = problem.config.evaluate(&result.best_params);
 
+        // Apply best parameters to the model to get the optimized model
+        problem.set_params(&result.best_params)
+            .map_err(|e| CommandError::ExecutionError(format!("Failed to apply best parameters: {}", e)))?;
+
+        // Serialize the optimized model to INI string
+        let optimised_model_ini = IniModelIO::new().model_to_string(&problem.model);
+
         // Build result
         Ok(serde_json::json!({
             "best_objective": result.best_objective,
@@ -838,6 +846,7 @@ impl Command for RunOptimisationCommand {
             "evaluations": result.n_evaluations,
             "params_normalized": result.best_params,
             "params_physical": params_physical.into_iter().collect::<std::collections::HashMap<_, _>>(),
+            "optimised_model_ini": optimised_model_ini,
             "success": result.success,
             "message": result.message
         }))
