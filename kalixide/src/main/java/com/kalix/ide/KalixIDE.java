@@ -1038,11 +1038,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
             @Override
             public void onFontSizeChanged(int fontSize) {
-                // Update all open MinimalEditorWindow instances with new font size
-                MinimalEditorWindow.updateAllFontSizes(fontSize);
-
-                // Update all open DiffWindow instances with new font size
-                DiffWindow.updateAllFontSizes(fontSize);
+                // Use centralized ThemeManager to update all components
+                ThemeManager.notifyFontSizeChanged(fontSize);
             }
         };
 

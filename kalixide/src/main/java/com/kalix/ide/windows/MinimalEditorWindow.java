@@ -472,4 +472,52 @@ public class MinimalEditorWindow extends JFrame {
             }
         }
     }
+
+    /**
+     * Updates the syntax theme for all open MinimalEditorWindow instances.
+     * Called when syntax theme preference changes.
+     *
+     * @param syntaxTheme The new syntax theme to apply
+     */
+    public static void updateAllSyntaxThemes(SyntaxTheme.Theme syntaxTheme) {
+        synchronized (openWindows) {
+            Iterator<WeakReference<MinimalEditorWindow>> iterator = openWindows.iterator();
+            while (iterator.hasNext()) {
+                WeakReference<MinimalEditorWindow> ref = iterator.next();
+                MinimalEditorWindow window = ref.get();
+
+                if (window == null) {
+                    // Window has been garbage collected, remove the reference
+                    iterator.remove();
+                } else {
+                    // Update the syntax theme
+                    window.updateSyntaxTheme(syntaxTheme);
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates theme-dependent colors for all open MinimalEditorWindow instances.
+     * Called when the application theme changes (e.g., light to dark).
+     */
+    public static void updateAllForThemeChange() {
+        synchronized (openWindows) {
+            Iterator<WeakReference<MinimalEditorWindow>> iterator = openWindows.iterator();
+            while (iterator.hasNext()) {
+                WeakReference<MinimalEditorWindow> ref = iterator.next();
+                MinimalEditorWindow window = ref.get();
+
+                if (window == null) {
+                    // Window has been garbage collected, remove the reference
+                    iterator.remove();
+                } else {
+                    // Update current line highlight color based on new theme
+                    if (window.useIniMode) {
+                        window.updateCurrentLineHighlight();
+                    }
+                }
+            }
+        }
+    }
 }

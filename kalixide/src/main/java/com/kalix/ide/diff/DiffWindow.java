@@ -648,4 +648,28 @@ public class DiffWindow extends JFrame {
             }
         }
     }
+
+    /**
+     * Updates the syntax theme for all open DiffWindow instances.
+     * Called when syntax theme preference changes.
+     *
+     * @param syntaxTheme The new syntax theme to apply
+     */
+    public static void updateAllSyntaxThemes(com.kalix.ide.themes.SyntaxTheme.Theme syntaxTheme) {
+        synchronized (openWindows) {
+            Iterator<WeakReference<DiffWindow>> iterator = openWindows.iterator();
+            while (iterator.hasNext()) {
+                WeakReference<DiffWindow> ref = iterator.next();
+                DiffWindow window = ref.get();
+
+                if (window == null) {
+                    iterator.remove();
+                } else {
+                    // Update syntax theme for both text areas
+                    window.updateSyntaxTheme(window.leftTextArea, syntaxTheme);
+                    window.updateSyntaxTheme(window.rightTextArea, syntaxTheme);
+                }
+            }
+        }
+    }
 }

@@ -9,13 +9,12 @@ import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.components.StatusProgressBar;
+import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -64,8 +63,8 @@ public class OptimisationWindow extends JFrame {
 
     // Tab components
     private OptimisationGuiBuilder guiBuilder;
-    private RSyntaxTextArea configEditor;
-    private RSyntaxTextArea optimisedModelEditor;  // Editor showing optimised model INI
+    private KalixIniTextArea configEditor;
+    private KalixIniTextArea optimisedModelEditor;  // Editor showing optimised model INI
     private PlotPanel convergencePlot;     // Convergence plot
     private DataSet convergenceDataSet;    // Dataset for convergence plot
     private JLabel bestObjectiveLabel;     // Label showing best objective value
@@ -212,13 +211,8 @@ public class OptimisationWindow extends JFrame {
         mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG, guiBuilder);
 
         // Tab 2: Config INI (Text Editor)
-        configEditor = new RSyntaxTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
-                                           OptimisationUIConstants.TEXT_AREA_COLUMNS);
-        configEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI);
-        configEditor.setCodeFoldingEnabled(true);
-        configEditor.setAntiAliasingEnabled(true);
-        configEditor.setTabSize(4);
-        configEditor.setTabsEmulated(true);
+        configEditor = new KalixIniTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
+                                            OptimisationUIConstants.TEXT_AREA_COLUMNS);
 
         // Start with empty text - user can generate or type manually
         configEditor.setText("");
@@ -355,13 +349,8 @@ public class OptimisationWindow extends JFrame {
         plotWithLabelsPanel.add(convergencePlot, BorderLayout.CENTER);
 
         // Create syntax-highlighted editor for optimised model
-        optimisedModelEditor = new RSyntaxTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
-                                                   OptimisationUIConstants.TEXT_AREA_COLUMNS);
-        optimisedModelEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_INI);
-        optimisedModelEditor.setCodeFoldingEnabled(true);
-        optimisedModelEditor.setAntiAliasingEnabled(true);
-        optimisedModelEditor.setTabSize(4);
-        optimisedModelEditor.setTabsEmulated(true);
+        optimisedModelEditor = new KalixIniTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
+                                                     OptimisationUIConstants.TEXT_AREA_COLUMNS);
         optimisedModelEditor.setEditable(false); // Read-only display
         RTextScrollPane optimisedModelScrollPane = new RTextScrollPane(optimisedModelEditor);
 
@@ -875,7 +864,7 @@ public class OptimisationWindow extends JFrame {
 
         // Open DiffWindow for comparison
         new DiffWindow(optimisedModelText, mainModelText,
-            "Model Comparison - " + optInfo.optName, "Reference Model", "Optimised Model");
+            "Changes: " + optInfo.optName + " vs Reference Model", "Reference Model", optInfo.optName);
     }
 
     /**
@@ -1860,6 +1849,14 @@ public class OptimisationWindow extends JFrame {
             return;
         }
 
+        // Get current optimization name
+        String optimisationName = "Optimised Model"; // Default fallback
+        if (currentlyDisplayedNode != null &&
+            currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+            OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+            optimisationName = optInfo.optName;
+        }
+
         String optimisedModelText = optimisedModelEditor.getText();
         if (optimisedModelText == null || optimisedModelText.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this,
@@ -1881,9 +1878,9 @@ public class OptimisationWindow extends JFrame {
 
         // Open diff window (optimised model vs main window model)
         new DiffWindow(optimisedModelText, mainModelText,
-            "Model Comparison",
+            "Changes: " + optimisationName + " vs Reference Model",
             "Reference Model",
-            "Optimised Model");
+            optimisationName);
     }
 
     /**

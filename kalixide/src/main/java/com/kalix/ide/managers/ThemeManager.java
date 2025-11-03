@@ -221,10 +221,10 @@ public class ThemeManager {
         if (parentComponent != null) {
             SwingUtilities.updateComponentTreeUI(parentComponent);
         }
-        
+
         // Update custom theme-aware components
         updateCustomComponents();
-        
+
         // Update all open FlowViz windows
         for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
             SwingUtilities.updateComponentTreeUI(window);
@@ -235,13 +235,17 @@ public class ThemeManager {
         if (runManager != null) {
             SwingUtilities.updateComponentTreeUI(runManager);
         }
-        
+
         // Update all open dialogs (iterate through all windows to find dialogs)
         for (Window window : Window.getWindows()) {
             if (window instanceof JDialog && window.isDisplayable()) {
                 SwingUtilities.updateComponentTreeUI(window);
             }
         }
+
+        // Notify all text editor components about the application theme change
+        // This updates colors that aren't automatically handled by SwingUtilities.updateComponentTreeUI
+        notifyApplicationThemeChanged();
     }
     
     /**
@@ -313,12 +317,47 @@ public class ThemeManager {
             SwingUtilities.invokeLater(() -> textEditor.updateSyntaxTheme(syntaxTheme));
         }
 
-        // Update all open FlowViz windows (if they have text editors)
-        for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
-            SwingUtilities.invokeLater(() -> {
-                // FlowViz windows don't currently have text editors, but if they do in the future
-                // we would update them here
-            });
-        }
+        // Update all instances globally using static methods
+        notifySyntaxThemeChanged(syntaxTheme);
+    }
+
+    // ========== Static Global Update Methods ==========
+
+    /**
+     * Notifies all text editor components about an application theme change.
+     * This should be called after switching the FlatLaf theme.
+     * Components will update their UI to match the new theme colors.
+     */
+    public static void notifyApplicationThemeChanged() {
+        // MinimalEditorWindow instances need to update current line highlight colors
+        com.kalix.ide.windows.MinimalEditorWindow.updateAllForThemeChange();
+
+        // KalixIniTextArea instances need to update current line highlight colors
+        com.kalix.ide.components.KalixIniTextArea.updateAllForThemeChange();
+
+        // DiffWindow instances may need theme updates (if they track themes separately)
+        // Currently DiffWindow relies on SwingUtilities.updateComponentTreeUI
+    }
+
+    /**
+     * Notifies all text editor components about a syntax theme change.
+     *
+     * @param syntaxTheme The new syntax theme to apply
+     */
+    public static void notifySyntaxThemeChanged(SyntaxTheme.Theme syntaxTheme) {
+        com.kalix.ide.windows.MinimalEditorWindow.updateAllSyntaxThemes(syntaxTheme);
+        com.kalix.ide.components.KalixIniTextArea.updateAllSyntaxThemes(syntaxTheme);
+        com.kalix.ide.diff.DiffWindow.updateAllSyntaxThemes(syntaxTheme);
+    }
+
+    /**
+     * Notifies all text editor components about a font size change.
+     *
+     * @param fontSize The new font size in points
+     */
+    public static void notifyFontSizeChanged(int fontSize) {
+        com.kalix.ide.windows.MinimalEditorWindow.updateAllFontSizes(fontSize);
+        com.kalix.ide.components.KalixIniTextArea.updateAllFontSizes(fontSize);
+        com.kalix.ide.diff.DiffWindow.updateAllFontSizes(fontSize);
     }
 }
