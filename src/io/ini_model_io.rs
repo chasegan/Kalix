@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::model::Model;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io_versions::ini_doc_model_io_0_0_1::{ini_doc_to_model_0_0_1, model_to_ini_doc_0_0_1};
