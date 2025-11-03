@@ -11,6 +11,7 @@ pub mod parameter_mapping;
 pub mod objectives;
 pub mod optimisation;
 pub mod optimizer_trait;
+pub mod factory;
 
 // Re-exports for convenience
 pub use optimisable::{Optimisable, clone_multi};
@@ -20,6 +21,7 @@ pub use objectives::ObjectiveFunction;
 pub use optimisation::OptimisationProblem;
 pub use optimizer_trait::{Optimizer, OptimizationProgress, OptimizationResult};
 pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
+pub use factory::{create_optimizer, create_de_optimizer, create_de_optimizer_with_callback, create_optimizer_instance, OptimizerInstance, OptimizerFactoryError};
 
 // Re-export IO types for convenience
 pub use crate::io::optimisation_config_io::{OptimisationConfig, AlgorithmParams};

@@ -8,41 +8,6 @@ use chrono;
 use crate::tid;
 use crate::numerical::opt::Optimisable;
 
-/// Factory function to create an optimizer based on the algorithm configuration
-fn create_optimizer(
-    config: &crate::numerical::opt::OptimisationConfig,
-) -> Result<Box<dyn crate::numerical::opt::Optimizer>, CommandError> {
-    use crate::numerical::opt::{AlgorithmParams, DifferentialEvolution};
-
-    match &config.algorithm {
-        AlgorithmParams::DE { population_size, f, cr } => {
-            use crate::numerical::opt::de::DEConfig;
-
-            let de_config = DEConfig {
-                population_size: *population_size,
-                termination_evaluations: config.termination_evaluations,
-                f: *f,
-                cr: *cr,
-                seed: config.random_seed,
-                n_threads: config.n_threads,
-                progress_callback: None, // Will be wrapped by trait implementation
-            };
-
-            Ok(Box::new(DifferentialEvolution::new(de_config)))
-        }
-        AlgorithmParams::CMAES { .. } => {
-            Err(CommandError::ExecutionError(
-                "CMA-ES algorithm is not yet implemented. Use 'DE' for now.".to_string()
-            ))
-        }
-        AlgorithmParams::SCEUA { .. } => {
-            Err(CommandError::ExecutionError(
-                "SCE-UA algorithm is not yet implemented. Use 'DE' for now.".to_string()
-            ))
-        }
-    }
-}
-
 pub trait Command: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
@@ -735,8 +700,8 @@ impl Command for RunOptimisationCommand {
         progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::{
-            OptimisationConfig, AlgorithmParams, OptimisationProblem,
-            Optimizer, OptimizationProgress
+            OptimisationConfig, OptimisationProblem,
+            Optimizer, OptimizationProgress, create_optimizer
         };
         use crate::io::optimisation_config_io::load_observed_timeseries;
 
@@ -834,7 +799,8 @@ impl Command for RunOptimisationCommand {
         });
 
         // Create optimizer based on algorithm configuration
-        let optimiser: Box<dyn Optimizer> = create_optimizer(&config)?;
+        let optimiser: Box<dyn Optimizer> = create_optimizer(&config)
+            .map_err(|e| CommandError::ExecutionError(e.to_string()))?;
 
         // Run optimisation with progress callback
         let result = optimiser.optimize(&mut problem, Some(progress_callback));

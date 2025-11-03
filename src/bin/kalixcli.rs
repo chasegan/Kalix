@@ -181,8 +181,8 @@ fn main() {
         }
         Commands::Optimise { config_file, model_file, save_model } => {
             use kalix::numerical::opt::{
-                OptimisationConfig, AlgorithmParams, OptimisationProblem,
-                DifferentialEvolution, DEConfig, DEProgress, Optimisable
+                OptimisationConfig, OptimisationProblem, AlgorithmParams,
+                create_de_optimizer_with_callback, DEProgress, Optimisable
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
             use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
@@ -250,8 +250,8 @@ fn main() {
                 config.simulated_series.clone(),
             ).with_objective(config.objective_function);
 
-            // Setup optimiser based on algorithm type
-            let (population_size, de_f, de_cr) = match &config.algorithm {
+            // Extract algorithm parameters (currently only DE is supported)
+            let (population_size, f, cr) = match &config.algorithm {
                 AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
                 _ => {
                     eprintln!("Error: Only 'DE' algorithm is currently supported");
@@ -272,37 +272,36 @@ fn main() {
                 OptimisationPlot::new("KALIX//OPTIMISER", config.termination_evaluations, 50, 12)
             ));
 
-            // Create DE optimiser with progress callback
-            let report_freq = config.report_frequency;  // Capture value before moving
-            let n_threads = config.n_threads;  // Capture value before moving
+            // Create progress callback for terminal plot
+            let report_freq = config.report_frequency;
             let plot_clone = Arc::clone(&opt_plot);
-
-            let de_config = DEConfig {
-                population_size,
-                termination_evaluations: config.termination_evaluations,
-                f: de_f,
-                cr: de_cr,
-                seed: config.random_seed,
-                n_threads,
-                progress_callback: if config.verbose {
-                    Some(Box::new(move |progress: &DEProgress| {
-                        if progress.generation % report_freq == 0 {
-                            let mut plot = plot_clone.lock().unwrap();
-                            plot.update_from_progress(progress);
-                            print!("{}", plot.render());
-                            io::stdout().flush().unwrap();
-                        }
-                    }))
-                } else {
-                    None
-                },
+            let progress_callback = if config.verbose {
+                Some(Box::new(move |progress: &DEProgress| {
+                    if progress.generation % report_freq == 0 {
+                        let mut plot = plot_clone.lock().unwrap();
+                        plot.update_from_progress(progress);
+                        print!("{}", plot.render());
+                        io::stdout().flush().unwrap();
+                    }
+                }) as Box<dyn Fn(&DEProgress) + Send + Sync>)
+            } else {
+                None
             };
 
-            let optimiser = DifferentialEvolution::new(de_config);
+            // Create optimizer using factory with callback
+            let de = create_de_optimizer_with_callback(
+                population_size,
+                config.termination_evaluations,
+                f,
+                cr,
+                config.random_seed,
+                config.n_threads,
+                progress_callback,
+            );
 
-            // Run optimisation
+            // Run optimization
             let mut problem_mut = problem;  // Make mutable for optimisation
-            let result = optimiser.optimise(&mut problem_mut);
+            let result = de.optimise(&mut problem_mut);
 
             // Render final plot if verbose mode is enabled
             if config.verbose {
@@ -357,7 +356,7 @@ fn main() {
                 writeln!(&mut output, "Simulated series: {}\n", config.simulated_series).unwrap();
                 writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
                 writeln!(&mut output, "Objective function: {}", config.objective_function.name()).unwrap();
-                writeln!(&mut output, "Population size: {}", population_size).unwrap();
+                writeln!(&mut output, "Population size: {}", config.algorithm.population_size()).unwrap();
                 writeln!(&mut output, "Generations: {}\n", result.generations).unwrap();
                 writeln!(&mut output, "Best objective value: {:.6}", result.best_objective).unwrap();
                 writeln!(&mut output, "Function evaluations: {}\n", result.n_evaluations).unwrap();
