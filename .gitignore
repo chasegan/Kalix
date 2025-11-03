@@ -53,6 +53,7 @@ Thumbs.db
 # Gradle
 .gradle/
 */build/
+*/bin/
 */out/
 *.log
 !gradle-wrapper.jar
