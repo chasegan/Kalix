@@ -10,6 +10,7 @@ pub mod optimisable_component;
 pub mod parameter_mapping;
 pub mod objectives;
 pub mod optimisation;
+pub mod optimizer_trait;
 
 // Re-exports for convenience
 pub use optimisable::{Optimisable, clone_multi};
@@ -17,6 +18,7 @@ pub use optimisable_component::OptimisableComponent;
 pub use parameter_mapping::{ParameterMapping, ParameterMappingConfig, Transform};
 pub use objectives::ObjectiveFunction;
 pub use optimisation::OptimisationProblem;
+pub use optimizer_trait::{Optimizer, OptimizationProgress, OptimizationResult};
 pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
 
 // Re-export IO types for convenience

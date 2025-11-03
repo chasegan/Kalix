@@ -8,6 +8,41 @@ use chrono;
 use crate::tid;
 use crate::numerical::opt::Optimisable;
 
+/// Factory function to create an optimizer based on the algorithm configuration
+fn create_optimizer(
+    config: &crate::numerical::opt::OptimisationConfig,
+) -> Result<Box<dyn crate::numerical::opt::Optimizer>, CommandError> {
+    use crate::numerical::opt::{AlgorithmParams, DifferentialEvolution};
+
+    match &config.algorithm {
+        AlgorithmParams::DE { population_size, f, cr } => {
+            use crate::numerical::opt::de::DEConfig;
+
+            let de_config = DEConfig {
+                population_size: *population_size,
+                termination_evaluations: config.termination_evaluations,
+                f: *f,
+                cr: *cr,
+                seed: config.random_seed,
+                n_threads: config.n_threads,
+                progress_callback: None, // Will be wrapped by trait implementation
+            };
+
+            Ok(Box::new(DifferentialEvolution::new(de_config)))
+        }
+        AlgorithmParams::CMAES { .. } => {
+            Err(CommandError::ExecutionError(
+                "CMA-ES algorithm is not yet implemented. Use 'DE' for now.".to_string()
+            ))
+        }
+        AlgorithmParams::SCEUA { .. } => {
+            Err(CommandError::ExecutionError(
+                "SCE-UA algorithm is not yet implemented. Use 'DE' for now.".to_string()
+            ))
+        }
+    }
+}
+
 pub trait Command: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
@@ -18,7 +53,7 @@ pub trait Command: Send + Sync {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError>;
 
     fn get_spec(&self) -> CommandSpec {
@@ -122,7 +157,7 @@ impl Command for GetVersionCommand {
         &self,
         _session: &mut Session,
         _params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         Ok(serde_json::json!({
             "version": "0.1.0",
@@ -155,7 +190,7 @@ impl Command for GetStateCommand {
         &self,
         session: &mut Session,
         _params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         let state_info = session.get_state_info();
         Ok(serde_json::to_value(state_info).unwrap())
@@ -192,7 +227,7 @@ impl Command for TestProgressCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         let duration = params.get("duration_seconds")
             .and_then(|v| v.as_i64())
@@ -269,7 +304,7 @@ impl Command for LoadModelFileCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let model_path = params.get("model_path")
@@ -330,7 +365,7 @@ impl Command for LoadModelStringCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let model_ini = params.get("model_ini")
@@ -391,7 +426,7 @@ impl Command for EchoCommand {
         &self,
         _session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let string = params.get("string")
@@ -441,7 +476,7 @@ impl Command for GetResultCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         // Extract parameters
         let series_name = params.get("series_name")
@@ -517,7 +552,7 @@ impl Command for RunSimulationCommand {
         &self,
         session: &mut Session,
         _params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use std::time::Instant;
         use std::sync::Arc;
@@ -697,11 +732,11 @@ impl Command for RunOptimisationCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::{
             OptimisationConfig, AlgorithmParams, OptimisationProblem,
-            DifferentialEvolution, DEConfig, DEProgress
+            Optimizer, OptimizationProgress
         };
         use crate::io::optimisation_config_io::load_observed_timeseries;
 
@@ -744,22 +779,12 @@ impl Command for RunOptimisationCommand {
             config.simulated_series.clone(),
         ).with_objective(config.objective_function);
 
-        // Extract algorithm parameters
-        let (population_size, de_f, de_cr) = match config.algorithm {
-            AlgorithmParams::DE { population_size, f, cr } => (population_size, f, cr),
-            _ => {
-                return Err(CommandError::ExecutionError(
-                    format!("Only 'DE' algorithm is currently supported, got: {}", config.algorithm.name())
-                ));
-            }
-        };
-
         // Get interrupt flag
         let interrupt_flag = std::sync::Arc::clone(&session.interrupt_flag);
 
         // Create progress callback that sends STDIO progress messages
         let termination_evals = config.termination_evaluations;
-        let progress_callback = Box::new(move |progress: &DEProgress| {
+        let progress_callback = Box::new(move |progress: &OptimizationProgress| {
             // Check for interrupt
             if interrupt_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 return;
@@ -808,21 +833,11 @@ impl Command for RunOptimisationCommand {
             });
         });
 
-        // Create DE optimiser
-        let de_config = DEConfig {
-            population_size,
-            termination_evaluations: config.termination_evaluations,
-            f: de_f,
-            cr: de_cr,
-            seed: config.random_seed,
-            n_threads: config.n_threads,
-            progress_callback: Some(progress_callback),
-        };
+        // Create optimizer based on algorithm configuration
+        let optimiser: Box<dyn Optimizer> = create_optimizer(&config)?;
 
-        let optimiser = DifferentialEvolution::new(de_config);
-
-        // Run optimisation
-        let result = optimiser.optimise(&mut problem);
+        // Run optimisation with progress callback
+        let result = optimiser.optimize(&mut problem, Some(progress_callback));
 
         // Check if interrupted
         if session.check_interrupt() {
@@ -839,17 +854,25 @@ impl Command for RunOptimisationCommand {
         // Serialize the optimized model to INI string
         let optimised_model_ini = IniModelIO::new().model_to_string(&problem.model);
 
-        // Build result
-        Ok(serde_json::json!({
+        // Build result JSON
+        let mut result_json = serde_json::json!({
             "best_objective": result.best_objective,
-            "generations": result.generations,
             "evaluations": result.n_evaluations,
             "params_normalized": result.best_params,
             "params_physical": params_physical.into_iter().collect::<std::collections::HashMap<_, _>>(),
             "optimised_model_ini": optimised_model_ini,
             "success": result.success,
             "message": result.message
-        }))
+        });
+
+        // Add algorithm-specific data (e.g., generations for DE)
+        if let Some(obj) = result_json.as_object_mut() {
+            for (key, value) in result.algorithm_data {
+                obj.insert(key, value);
+            }
+        }
+
+        Ok(result_json)
     }
 }
 
@@ -876,7 +899,7 @@ impl Command for GetOptimisableParamsCommand {
         &self,
         session: &mut Session,
         _params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::OptimisableComponent;
         use crate::nodes::NodeEnum;
@@ -954,7 +977,7 @@ impl Command for SaveResultsCommand {
         &self,
         session: &mut Session,
         params: serde_json::Value,
-        _progress_sender: Box<dyn Fn(ProgressInfo) + Send>,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use std::path::Path;
 

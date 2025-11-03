@@ -82,7 +82,7 @@ pub struct DEConfig {
     pub n_threads: usize,
 
     /// Optional callback for progress reporting
-    pub progress_callback: Option<Box<dyn Fn(&DEProgress)>>,
+    pub progress_callback: Option<Box<dyn Fn(&DEProgress) + Send + Sync>>,
 }
 
 impl Default for DEConfig {
@@ -348,6 +348,86 @@ impl DifferentialEvolution {
         *n_evaluations += eval_counter.load(Ordering::Relaxed);
 
         objectives
+    }
+}
+
+// Implement common Optimizer trait for DifferentialEvolution
+impl super::optimizer_trait::Optimizer for DifferentialEvolution {
+    fn optimize(
+        &self,
+        problem: &mut dyn Optimisable,
+        progress_callback: Option<Box<dyn Fn(&super::optimizer_trait::OptimizationProgress) + Send + Sync>>,
+    ) -> super::optimizer_trait::OptimizationResult {
+        use std::collections::HashMap;
+
+        // Wrap the progress callback to convert DEProgress -> OptimizationProgress
+        let wrapped_config = if let Some(callback) = progress_callback {
+            let mut config = self.config.clone();
+            config.progress_callback = Some(Box::new(move |de_progress: &DEProgress| {
+                // Convert DEProgress to OptimizationProgress
+                let mut algorithm_data = HashMap::new();
+                algorithm_data.insert("generation".to_string(), de_progress.generation as f64);
+
+                let opt_progress = super::optimizer_trait::OptimizationProgress {
+                    n_evaluations: de_progress.n_evaluations,
+                    best_objective: de_progress.best_objective,
+                    population_objectives: de_progress.population_objectives.clone(),
+                    elapsed: de_progress.elapsed,
+                    algorithm_data,
+                };
+
+                callback(&opt_progress);
+            }));
+            config
+        } else {
+            self.config.clone()
+        };
+
+        // Create temporary DE with wrapped config
+        let temp_de = DifferentialEvolution::new(wrapped_config);
+
+        // Run the DE algorithm
+        let de_result = temp_de.optimise(problem);
+
+        // Convert DEResult to OptimizationResult
+        let mut algorithm_data = HashMap::new();
+        algorithm_data.insert(
+            "generations".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(de_result.generations)),
+        );
+        algorithm_data.insert(
+            "objective_history".to_string(),
+            serde_json::to_value(&de_result.objective_history).unwrap(),
+        );
+
+        super::optimizer_trait::OptimizationResult {
+            best_params: de_result.best_params,
+            best_objective: de_result.best_objective,
+            n_evaluations: de_result.n_evaluations,
+            success: de_result.success,
+            message: de_result.message,
+            elapsed: de_result.elapsed,
+            algorithm_data,
+        }
+    }
+
+    fn name(&self) -> &str {
+        "DE"
+    }
+}
+
+// Implement Clone for DEConfig to support wrapping
+impl Clone for DEConfig {
+    fn clone(&self) -> Self {
+        Self {
+            population_size: self.population_size,
+            termination_evaluations: self.termination_evaluations,
+            f: self.f,
+            cr: self.cr,
+            seed: self.seed,
+            n_threads: self.n_threads,
+            progress_callback: None, // Callbacks can't be cloned
+        }
     }
 }
 
