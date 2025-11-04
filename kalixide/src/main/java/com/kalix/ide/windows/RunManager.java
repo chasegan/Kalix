@@ -5,6 +5,8 @@ import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.RunContextMenuManager;
+import com.kalix.ide.managers.SeriesDataCoordinator;
+import com.kalix.ide.managers.RunSessionCoordinator;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.utils.DialogUtils;
@@ -77,8 +79,10 @@ public class RunManager extends JFrame {
     private OutputsTreeBuilder outputsTreeBuilder;
     private DatasetLoaderManager datasetLoaderManager;
     private RunContextMenuManager runContextMenuManager;
+    private SeriesDataCoordinator seriesDataCoordinator;
+    private RunSessionCoordinator runSessionCoordinator;
 
-    // Series color management
+    // Series color management (now managed by SeriesDataCoordinator)
     // Categorical 10 color palette - optimized for visibility and distinction
     private static final Color[] SERIES_COLORS = {
         new Color(0x1f77b4),  // Blue
@@ -92,23 +96,6 @@ public class RunManager extends JFrame {
         new Color(0xbcbd22),  // Yellow-green
         new Color(0x17becf)   // Cyan
     };
-    private Map<String, Color> seriesColorMap = new HashMap<>();
-    private Set<String> selectedSeries = new HashSet<>();
-
-    // Run tracking
-    private Map<String, String> sessionToRunName = new HashMap<>();
-    private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
-    private Map<String, RunStatus> lastKnownStatus = new HashMap<>();
-    private int runCounter = 1;
-
-    // Last run tracking
-    private RunInfo lastRunInfo = null;
-    private DefaultMutableTreeNode lastRunChildNode = null;
-    private Map<String, Long> completionTimestamps = new HashMap<>();
-    private long lastRunCompletionTime = 0L;
-
-    // Flag to prevent selection listener from firing during programmatic updates
-    private boolean isUpdatingSelection = false;
 
     /**
      * Natural sorting comparator that is case-insensitive and number-aware.
@@ -263,10 +250,11 @@ public class RunManager extends JFrame {
 
     /**
      * Gets the run name for a session key, if available.
+     * Uses RunSessionCoordinator.
      */
     public static String getRunNameForSession(String sessionKey) {
-        if (instance != null) {
-            return instance.sessionToRunName.get(sessionKey);
+        if (instance != null && instance.runSessionCoordinator != null) {
+            return instance.runSessionCoordinator.getSessionToRunName().get(sessionKey);
         }
         return null;
     }
@@ -364,16 +352,15 @@ public class RunManager extends JFrame {
         // Enable multiple selection for the timeseries tree to allow plotting multiple series
         timeseriesTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
 
-        // Add selection listener to fetch timeseries data for leaf nodes and update plot
-        timeseriesTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
+        // Note: Selection listener is set up by SeriesDataCoordinator in initializeManagers()
 
         timeseriesScrollPane = new JScrollPane(timeseriesTree);
 
-        // Create shared dataset and color map
+        // Create shared dataset
         plotDataSet = new DataSet();
 
-        // Create tab manager with shared data
-        tabManager = new VisualizationTabManager(plotDataSet, seriesColorMap);
+        // Create tab manager with shared data (color map will be empty initially, updated by coordinator)
+        tabManager = new VisualizationTabManager(plotDataSet, new HashMap<>());
 
         // Add default tabs (settings are applied by the tab manager)
         tabManager.addPlotTab();
@@ -437,6 +424,20 @@ public class RunManager extends JFrame {
             this::onDatasetLoaded             // Callback after load
         );
 
+        // RunSessionCoordinator - handles run/session lifecycle (MUST BE BEFORE RunContextMenuManager)
+        runSessionCoordinator = new RunSessionCoordinator(
+            stdioTaskManager,                    // Task manager
+            currentRunsNode,                     // Current runs node
+            lastRunNode,                         // Last run node
+            treeModel,                           // Tree model
+            timeseriesSourceTree,                // Run tree
+            this::updateOutputsTree,             // Update outputs callback
+            this::refreshLastSeries,             // Refresh last series callback
+            this::createRunInfo,                 // Create RunInfo callback
+            this::getRunStatusFromRunInfo,       // Get status callback
+            (runInfo, ignored) -> updateRunInfoInTimeseriesTree((RunInfo) runInfo)  // Update tree callback
+        );
+
         // RunContextMenuManager - handles context menus
         runContextMenuManager = new RunContextMenuManager(
             this,                             // Parent frame
@@ -447,13 +448,27 @@ public class RunManager extends JFrame {
             statusUpdater,                    // Status updater
             () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null,  // Base directory supplier
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
-            sessionToRunName,                 // Session to run name map
+            runSessionCoordinator.getSessionToRunName(),  // Session to run name map
             this::refreshRuns                 // Refresh callback
         );
 
         // Set up context menus
         runContextMenuManager.setupRunTreeContextMenu();
         runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected, this::collapseAllFromSelected);
+
+        // SeriesDataCoordinator - handles series data management and plotting
+        seriesDataCoordinator = new SeriesDataCoordinator(
+            timeseriesTree,                      // Timeseries tree
+            timeSeriesRequestManager,            // Data fetcher
+            tabManager,                          // Visualization manager
+            plotDataSet,                         // Plot dataset
+            datasetSeriesCache,                  // Dataset cache
+            outputsTreeBuilder,                  // Tree builder
+            this::resolveRunInfoSession,         // Session resolver
+            this::clearPlotAndStats,             // Clear callback
+            () -> updatePlotVisibility(false)    // Update callback
+        );
+        seriesDataCoordinator.setupSelectionListener();
     }
 
     /**
@@ -500,6 +515,34 @@ public class RunManager extends JFrame {
     private void onDatasetLoaded() {
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
+    }
+
+    /**
+     * Helper to create RunInfo objects. Used by RunSessionCoordinator.
+     */
+    private Object createRunInfo(Object params) {
+        Object[] arr = (Object[]) params;
+        String name = (String) arr[0];
+        SessionManager.KalixSession session = (SessionManager.KalixSession) arr[1];
+        return new RunInfo(name, session);
+    }
+
+    /**
+     * Helper to get RunStatus from RunInfo. Used by RunSessionCoordinator.
+     */
+    private RunSessionCoordinator.RunStatus getRunStatusFromRunInfo(Object runInfo) {
+        RunInfo info = (RunInfo) runInfo;
+        RunStatus status = info.getLocalRunStatus();
+        // Map to coordinator's enum
+        switch (status) {
+            case STARTING: return RunSessionCoordinator.RunStatus.STARTING;
+            case LOADING: return RunSessionCoordinator.RunStatus.LOADING;
+            case RUNNING: return RunSessionCoordinator.RunStatus.RUNNING;
+            case DONE: return RunSessionCoordinator.RunStatus.DONE;
+            case ERROR: return RunSessionCoordinator.RunStatus.ERROR;
+            case STOPPED: return RunSessionCoordinator.RunStatus.STOPPED;
+            default: return RunSessionCoordinator.RunStatus.STARTING;
+        }
     }
 
     /**
@@ -553,48 +596,20 @@ public class RunManager extends JFrame {
      * Subscribes to SessionManager events for immediate notification of state changes.
      */
     private void setupSessionEventListener() {
-        // Subscribe to session events from SessionManager
         stdioTaskManager.getSessionManager().addSessionEventListener(event -> {
-            // Marshal to EDT for UI updates
             SwingUtilities.invokeLater(() -> handleSessionEvent(event));
         });
-
-        // Do initial population of runs
-        refreshRuns();
     }
 
     /**
      * Handles session state change events from SessionManager.
      * Called on EDT after marshaling from background thread.
+     * Delegates to RunSessionCoordinator.
      *
      * @param event The session event containing state change information
      */
     private void handleSessionEvent(SessionManager.SessionEvent event) {
-        String sessionKey = event.getSessionKey();
-        SessionManager.SessionState newState = event.getNewState();
-
-        // Get the session to check if it's a RunModelProgram
-        Optional<SessionManager.KalixSession> sessionOpt = stdioTaskManager.getSessionManager().getSession(sessionKey);
-        if (sessionOpt.isEmpty()) {
-            return;
-        }
-
-        SessionManager.KalixSession session = sessionOpt.get();
-
-        // Only handle RunModelProgram sessions (filter out optimisation, etc.)
-        if (!(session.getActiveProgram() instanceof RunModelProgram)) {
-            return;
-        }
-
-        // Check if we need to refresh the tree (new session or state changed to READY/ERROR/TERMINATED)
-        if (!sessionToTreeNode.containsKey(sessionKey) ||
-            newState == SessionManager.SessionState.READY ||
-            newState == SessionManager.SessionState.ERROR ||
-            newState == SessionManager.SessionState.TERMINATED) {
-
-            // Refresh the runs tree to show the new/updated session
-            refreshRuns();
-        }
+        runSessionCoordinator.handleSessionEvent(event);
     }
 
     /**
@@ -870,377 +885,15 @@ public class RunManager extends JFrame {
         timeseriesTree.collapsePath(path);
     }
 
+    /**
+     * Refreshes the run list by syncing with active sessions.
+     * Delegates to RunSessionCoordinator.
+     */
     public void refreshRuns() {
-        if (stdioTaskManager == null) return;
-
-        SwingUtilities.invokeLater(() -> {
-            Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
-
-            // Track nodes that were inserted for proper tree notification
-            List<Integer> insertedIndices = new ArrayList<>();
-            List<DefaultMutableTreeNode> insertedNodes = new ArrayList<>();
-
-            // Check for new sessions
-            for (SessionManager.KalixSession session : activeSessions.values()) {
-                // FILTER: Only show simulation runs (RunModelProgram)
-                // Other session types (OptimisationProgram, etc.) are managed elsewhere
-                if (!(session.getActiveProgram() instanceof RunModelProgram)) {
-                    continue; // Skip non-simulation sessions
-                }
-
-                String sessionKey = session.getSessionKey();
-
-                if (!sessionToTreeNode.containsKey(sessionKey)) {
-                    // New session - add to tree
-                    String runName = "Run_" + runCounter++;
-                    sessionToRunName.put(sessionKey, runName);
-
-                    RunInfo runInfo = new RunInfo(runName, session);
-                    RunStatus initialStatus = runInfo.getLocalRunStatus();
-
-                    DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
-                    int insertIndex = currentRunsNode.getChildCount();
-                    currentRunsNode.add(runNode);
-                    sessionToTreeNode.put(sessionKey, runNode);
-                    lastKnownStatus.put(sessionKey, initialStatus);
-
-                    // Track insertion for tree notification
-                    insertedIndices.add(insertIndex);
-                    insertedNodes.add(runNode);
-
-                    // If session is already DONE when first discovered, treat it as a completion
-                    // (This handles fast-completing runs that finish before refreshRuns() is called)
-                    if (initialStatus == RunStatus.DONE) {
-                        long completionTime = System.currentTimeMillis();
-                        completionTimestamps.put(sessionKey, completionTime);
-
-                        if (completionTime > lastRunCompletionTime) {
-                            updateLastRun(runInfo, completionTime);
-                        }
-                    }
-                } else {
-                    // Existing session - check for status changes
-                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionKey);
-                    RunInfo runInfo = (RunInfo) existingNode.getUserObject();
-                    RunStatus currentStatus = runInfo.getLocalRunStatus();
-                    RunStatus lastStatus = lastKnownStatus.get(sessionKey);
-
-                    if (lastStatus != currentStatus) {
-                        // Status changed - refresh this node's display
-                        treeModel.nodeChanged(existingNode);
-
-                        // Detect session reuse: if session was DONE and is now RUNNING/LOADING, it's a new run
-                        if (lastStatus == RunStatus.DONE &&
-                            (currentStatus == RunStatus.RUNNING || currentStatus == RunStatus.LOADING || currentStatus == RunStatus.STARTING)) {
-                            // Session reused for new run - reset completion tracking for this session
-                            completionTimestamps.remove(sessionKey);
-                        }
-
-                        lastKnownStatus.put(sessionKey, currentStatus);
-
-                        // Check if run just completed
-                        if (currentStatus == RunStatus.DONE && lastStatus != RunStatus.DONE) {
-                            // Record completion timestamp
-                            long completionTime = System.currentTimeMillis();
-                            completionTimestamps.put(sessionKey, completionTime);
-
-                            // Update Last if this is more recent
-                            if (completionTime > lastRunCompletionTime) {
-                                updateLastRun(runInfo, completionTime);
-                            }
-                        }
-
-                        // Update outputs if this run is currently selected
-                        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
-                        if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
-                            updateOutputsTree();
-                        }
-                    }
-                }
-            }
-
-            // Notify tree model of inserted nodes (preserves selection)
-            if (!insertedIndices.isEmpty()) {
-                int[] indices = insertedIndices.stream().mapToInt(Integer::intValue).toArray();
-                Object[] children = insertedNodes.toArray();
-                treeModel.nodesWereInserted(currentRunsNode, indices);
-
-                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
-            }
-
-            // Check for removed sessions
-            // Need to capture indices BEFORE removal
-            List<Integer> removedIndices = new ArrayList<>();
-            List<Object> removedChildren = new ArrayList<>();
-            List<String> sessionsToRemove = new ArrayList<>();
-
-            for (Map.Entry<String, DefaultMutableTreeNode> entry : sessionToTreeNode.entrySet()) {
-                String sessionKey = entry.getKey();
-                if (!activeSessions.containsKey(sessionKey)) {
-                    DefaultMutableTreeNode nodeToRemove = entry.getValue();
-                    int indexToRemove = currentRunsNode.getIndex(nodeToRemove);
-                    if (indexToRemove >= 0) {
-                        removedIndices.add(indexToRemove);
-                        removedChildren.add(nodeToRemove);
-                        sessionsToRemove.add(sessionKey);
-                    }
-                }
-            }
-
-            // Remove sessions and notify tree
-            if (!removedIndices.isEmpty()) {
-                // Remove nodes from tree
-                for (Object child : removedChildren) {
-                    currentRunsNode.remove((DefaultMutableTreeNode) child);
-                }
-
-                // Clean up tracking maps
-                for (String sessionKey : sessionsToRemove) {
-                    sessionToTreeNode.remove(sessionKey);
-                    sessionToRunName.remove(sessionKey);
-                    lastKnownStatus.remove(sessionKey);
-                    completionTimestamps.remove(sessionKey);
-
-                    // If this was the Last run, clear Last node
-                    if (lastRunInfo != null && lastRunInfo.session.getSessionKey().equals(sessionKey)) {
-                        lastRunInfo = null;
-                        lastRunCompletionTime = 0L;
-
-                        // Properly remove the Last child node
-                        if (lastRunChildNode != null) {
-                            int childIndex = lastRunNode.getIndex(lastRunChildNode);
-                            Object[] removedChild = new Object[]{lastRunChildNode};
-                            lastRunNode.removeAllChildren();
-                            treeModel.nodesWereRemoved(lastRunNode, new int[]{childIndex}, removedChild);
-                            lastRunChildNode = null;
-                        }
-                    }
-                }
-
-                // Notify tree model of removals
-                int[] indices = removedIndices.stream().mapToInt(Integer::intValue).toArray();
-                Object[] children = removedChildren.toArray();
-                treeModel.nodesWereRemoved(currentRunsNode, indices, children);
-            }
-        });
+        runSessionCoordinator.refreshRuns();
     }
 
-    /**
-     * Updates the Last run node to point to the most recently completed run.
-     */
-    private void updateLastRun(RunInfo newLastRun, long completionTime) {
-        lastRunInfo = newLastRun;
-        lastRunCompletionTime = completionTime;
 
-        // Check if we're replacing an existing Last child or creating the first one
-        DefaultMutableTreeNode oldChildNode = null;
-        int oldChildIndex = -1;
-        boolean wasLastSelected = false;
-
-        if (lastRunChildNode != null) {
-            oldChildIndex = lastRunNode.getIndex(lastRunChildNode);
-            oldChildNode = lastRunChildNode;
-
-            // Check if the old Last child was selected
-            TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-            if (selectedPaths != null) {
-                TreePath oldLastPath = new TreePath(lastRunChildNode.getPath());
-                for (TreePath path : selectedPaths) {
-                    if (path.equals(oldLastPath)) {
-                        wasLastSelected = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // If Last was selected, block all selection events during the entire update
-        if (wasLastSelected) {
-            isUpdatingSelection = true;
-        }
-
-        // Create new child node
-        lastRunChildNode = new DefaultMutableTreeNode(
-            new RunInfo("Last", newLastRun.session)
-        );
-
-        TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
-
-        if (oldChildNode != null) {
-            // Replacing existing child - remove old, add new
-            lastRunNode.remove(oldChildNode);
-            treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
-
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        } else {
-            // First time - just add
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        }
-
-        // If Last was previously selected, restore everything
-        if (wasLastSelected) {
-            TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
-
-            // Restore dataset tree selection
-            timeseriesSourceTree.addSelectionPath(newLastPath);
-
-            // Update RunInfo references in the existing tree without rebuilding
-            // This preserves the tree structure and selection
-            // IMPORTANT: Create a RunInfo with name "Last" (not the actual run name)
-            // so timeseries display as "ds_1 [Last]" not "ds_1 [Run_3]"
-            RunInfo lastRunInfoWrapper = new RunInfo("Last", newLastRun.session);
-            updateRunInfoInTimeseriesTree(lastRunInfoWrapper);
-
-            isUpdatingSelection = false;
-
-            // Selection is automatically preserved since we updated in-place without reload()
-            // No need to manually restore or trigger events
-        }
-
-        TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
-
-        // Expand the Last run node to show the new child
-        timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
-
-        // Refresh any plotted "[Last]" series to use the new Last run's data
-        refreshLastSeries();
-    }
-
-    /**
-     * Restores timeseries tree selection by searching for matching series keys.
-     * Gracefully skips series that no longer exist in the rebuilt tree.
-     *
-     * @param selectedTimeseriesKeys Set of series keys to restore (format: "seriesName [RunName]")
-     * @return Number of series successfully restored
-     */
-    private int restoreTimeseriesTreeSelection(Set<String> selectedTimeseriesKeys) {
-        List<TreePath> pathsToSelect = new ArrayList<>();
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-
-        // Recursively search tree for matching series keys
-        searchAndCollectPaths(root, selectedTimeseriesKeys, pathsToSelect);
-
-        if (!pathsToSelect.isEmpty()) {
-            // Restore selection without triggering events
-            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
-            timeseriesTree.setSelectionPaths(pathsArray);
-            return pathsToSelect.size();
-        } else {
-            return 0;
-        }
-    }
-
-    /**
-     * Recursively searches tree nodes for matching series keys and collects their paths.
-     */
-    private void searchAndCollectPaths(DefaultMutableTreeNode node, Set<String> targetKeys, List<TreePath> results) {
-        if (node == null) return;
-
-        Object userObject = node.getUserObject();
-
-        // Check if this is a SeriesLeafNode that matches one of our target keys
-        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = (OutputsTreeBuilder.SeriesLeafNode) userObject;
-            String seriesKey;
-            if (leaf.source instanceof RunInfo) {
-                // Run series: add run name suffix
-                String runName = ((RunInfo) leaf.source).runName;
-                seriesKey = leaf.seriesName + " [" + runName + "]";
-            } else {
-                // Dataset series: add filename suffix
-                DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) leaf.source;
-                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
-            }
-            if (targetKeys.contains(seriesKey)) {
-                TreePath path = new TreePath(node.getPath());
-                results.add(path);
-            }
-        }
-
-        // Recurse into children
-        for (int i = 0; i < node.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
-            searchAndCollectPaths(child, targetKeys, results);
-        }
-    }
-
-    /**
-     * Restores tree selection to match the current selectedSeries set.
-     * This ensures the tree visually reflects what's plotted, even after tree rebuilds.
-     * Also reconciles selectedSeries - removes series that are no longer available in the tree.
-     * Returns the set of series that were successfully restored.
-     */
-    private Set<String> restoreTreeSelectionFromSelectedSeries() {
-        if (selectedSeries.isEmpty()) {
-            // Nothing to restore
-            return Collections.emptySet();
-        }
-
-        List<TreePath> pathsToSelect = new ArrayList<>();
-        Set<String> restoredSeriesKeys = new HashSet<>();
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-
-        // Search tree for nodes matching selectedSeries, collect which ones we found
-        for (String seriesKey : selectedSeries) {
-            List<TreePath> foundPaths = new ArrayList<>();
-            searchAndCollectPaths(root, Collections.singleton(seriesKey), foundPaths);
-            if (!foundPaths.isEmpty()) {
-                pathsToSelect.addAll(foundPaths);
-                restoredSeriesKeys.add(seriesKey);
-            }
-        }
-
-        if (!pathsToSelect.isEmpty()) {
-            // Note: Caller should have isUpdatingSelection set to block events
-            // We don't set it here to avoid nesting issues
-            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
-            timeseriesTree.setSelectionPaths(pathsArray);
-        }
-
-        // Log any series that couldn't be restored
-        Set<String> notRestored = new HashSet<>(selectedSeries);
-        notRestored.removeAll(restoredSeriesKeys);
-
-        return restoredSeriesKeys;
-    }
-
-    /**
-     * Reconciles selectedSeries and plots with what's actually in the tree.
-     * Removes series that couldn't be restored (e.g., when a run is deselected).
-     *
-     * @param restoredSeries Set of series that were successfully found and restored in the tree
-     */
-    private void reconcileSelectedSeriesWithTree(Set<String> restoredSeries) {
-        // Find series that need to be removed (in selectedSeries but not restored)
-        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
-        seriesToRemove.removeAll(restoredSeries);
-
-        if (seriesToRemove.isEmpty()) {
-            return;
-        }
-
-        // Remove from selectedSeries
-        selectedSeries.removeAll(seriesToRemove);
-
-        // Remove from plot dataset
-        for (String seriesKey : seriesToRemove) {
-            plotDataSet.removeSeries(seriesKey);
-            seriesColorMap.remove(seriesKey);
-
-            // Remove from all stats tables
-            tabManager.removeSeriesFromStatsTabs(seriesKey);
-
-            // Remove from legend in all plots
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.removeLegendSeries(seriesKey);
-            }
-        }
-
-        // Update plot visibility (don't reset zoom - we're just removing series)
-        updatePlotVisibility(false);
-    }
 
     /**
      * Updates RunInfo references in the timeseries tree without rebuilding.
@@ -1304,12 +957,26 @@ public class RunManager extends JFrame {
     /**
      * Resolves a RunInfo to its actual session.
      * If the run is "Last", returns the session of the actual last completed run.
+     * Uses RunSessionCoordinator to get last run info.
      */
-    private SessionManager.KalixSession resolveRunInfoSession(RunInfo runInfo) {
-        if ("Last".equals(runInfo.runName) && lastRunInfo != null) {
-            return lastRunInfo.session;
+    private SessionManager.KalixSession resolveRunInfoSession(Object runInfo) {
+        if (runInfo instanceof RunInfo) {
+            RunInfo info = (RunInfo) runInfo;
+
+            // Check if this is "Last" (name check)
+            if (info.runName.equals("Last")) {
+                // Resolve to the actual last completed run
+                Object actualLastRunInfo = runSessionCoordinator.getLastRunInfo();
+                if (actualLastRunInfo != null && actualLastRunInfo instanceof RunInfo) {
+                    return ((RunInfo) actualLastRunInfo).session;
+                }
+                return null;  // No run has completed yet
+            }
+
+            // Regular run - return its session directly
+            return info.session;
         }
-        return runInfo.session;
+        return null;
     }
 
     /**
@@ -1329,9 +996,14 @@ public class RunManager extends JFrame {
      * Called when the Last run changes to a new completed run.
      */
     private void refreshLastSeries() {
+        Object lastRunInfo = runSessionCoordinator.getLastRunInfo();
         if (lastRunInfo == null) {
             return;
         }
+
+        // Get selected series and color map from coordinator
+        Set<String> selectedSeries = seriesDataCoordinator.getSelectedSeries();
+        Map<String, Color> seriesColorMap = seriesDataCoordinator.getSeriesColorMap();
 
         // Find all series keys that end with " [Last]"
         List<String> lastSeriesKeys = selectedSeries.stream()
@@ -1342,7 +1014,8 @@ public class RunManager extends JFrame {
             return;
         }
 
-        String newSessionKey = lastRunInfo.session.getSessionKey();
+        SessionManager.KalixSession session = ((RunInfo) lastRunInfo).session;
+        String newSessionKey = session.getSessionKey();
 
         // Refresh each "[Last]" series
         for (String seriesKey : lastSeriesKeys) {
@@ -1357,19 +1030,28 @@ public class RunManager extends JFrame {
             if (cachedData != null) {
                 // Add immediately with cached data
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                addSeriesToPlot(renamedData, seriesColor);
+                plotDataSet.addSeries(renamedData);
+                updateAllTabs(false);
+                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                    panel.addLegendSeries(renamedData.getName(), seriesColor);
+                }
 
                 // Update all stats tables with aggregation
                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
             } else if (!timeSeriesRequestManager.isRequestInProgress(newSessionKey, seriesName)) {
                 // Request the new data
+                final Set<String> capturedSelectedSeries = selectedSeries;
                 timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
                             // Check if this series is still selected
-                            if (selectedSeries.contains(seriesKey)) {
+                            if (capturedSelectedSeries.contains(seriesKey)) {
                                 TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
-                                addSeriesToPlot(renamedData, seriesColor);
+                                plotDataSet.addSeries(renamedData);
+                                updateAllTabs(false);
+                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
+                                    panel.addLegendSeries(renamedData.getName(), seriesColor);
+                                }
 
                                 // Update all stats tables with aggregation
                                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
@@ -1401,17 +1083,12 @@ public class RunManager extends JFrame {
      * Handles tree selection changes to update the timeseries tree.
      */
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
-        // Ignore selection changes during programmatic updates
-        if (isUpdatingSelection) {
-            return;
-        }
-
         TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
 
         // Block timeseries tree selection events during rebuild and restoration
-        isUpdatingSelection = true;
+        seriesDataCoordinator.setUpdatingSelection(true);
         updateOutputsTree();
-        isUpdatingSelection = false;
+        seriesDataCoordinator.setUpdatingSelection(false);
     }
 
     /**
@@ -1465,234 +1142,6 @@ public class RunManager extends JFrame {
         return new TimeSeriesData(newName, dateTimes, original.getValues());
     }
 
-    /**
-     * Handles selection changes in the timeseries tree.
-     * Supports recursive selection: selecting a parent node plots all its leaf children.
-     * Fetches timeseries data for leaf nodes and updates plot and stats.
-     */
-    private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        // Ignore selection changes during programmatic updates
-        if (isUpdatingSelection) {
-            return;
-        }
-
-        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
-
-        if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear plot and stats when nothing is selected
-            clearPlotAndStats();
-            selectedSeries.clear();
-            return;
-        }
-
-        // Collect all leaf nodes recursively (parent selection = all children)
-        List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
-        for (TreePath path : selectedPaths) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            collectLeafNodes(node, allLeaves);
-        }
-
-        // If no valid leaves found, clear everything
-        if (allLeaves.isEmpty()) {
-            clearPlotAndStats();
-            selectedSeries.clear();
-            return;
-        }
-
-        // Build new set of selected series (with unique keys)
-        // For runs: "seriesName [RunName]"
-        // For datasets: "seriesName [filename]"
-        Set<String> newSelectedSeries = new HashSet<>();
-        Map<String, OutputsTreeBuilder.SeriesLeafNode> seriesKeyToLeaf = new HashMap<>();
-
-        for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
-            String seriesKey;
-            if (leaf.source instanceof RunInfo) {
-                // Run series: add run name suffix
-                String runName = ((RunInfo) leaf.source).runName;
-                seriesKey = leaf.seriesName + " [" + runName + "]";
-            } else {
-                // Dataset series: add filename suffix for display
-                DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) leaf.source;
-                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
-            }
-            newSelectedSeries.add(seriesKey);
-            seriesKeyToLeaf.put(seriesKey, leaf);
-        }
-
-        // Check if there's overlap between old and new selections
-        // Reset zoom if: (1) first selection (old empty), OR (2) selection completely changed (no overlap)
-        // Don't reset zoom if: there's overlap (adding series or Last updating)
-        boolean hasOverlap = selectedSeries.stream().anyMatch(newSelectedSeries::contains);
-        final boolean shouldResetZoom = selectedSeries.isEmpty() || !hasOverlap;
-
-        // Determine which series to add and which to remove
-        Set<String> seriesToAdd = new HashSet<>(newSelectedSeries);
-        seriesToAdd.removeAll(selectedSeries);
-
-        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
-        seriesToRemove.removeAll(newSelectedSeries);
-
-        // Remove series that are no longer selected
-        for (String seriesKey : seriesToRemove) {
-            plotDataSet.removeSeries(seriesKey);
-            seriesColorMap.remove(seriesKey);
-
-            // Remove from all stats tables
-            tabManager.removeSeriesFromStatsTabs(seriesKey);
-
-            // Remove from legend in all plots
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.removeLegendSeries(seriesKey);
-            }
-        }
-
-        // Group series by their underlying data source
-        // For runs: sessionKey + seriesName (handles multiple series referencing same data)
-        // For datasets: just seriesName (already loaded in plotDataSet)
-        Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
-        Set<String> datasetSeriesKeys = new HashSet<>();  // Track dataset series separately
-
-        for (String seriesKey : seriesToAdd) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
-            if (leaf == null) continue;
-
-            // Assign consistent color to new series
-            Color seriesColor = getColorForSeries(seriesKey);
-            seriesColorMap.put(seriesKey, seriesColor);
-
-            if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                // Dataset series - already loaded, just track for later processing
-                datasetSeriesKeys.add(seriesKey);
-            } else {
-                // Run series - need to fetch from session
-                RunInfo runInfo = (RunInfo) leaf.source;
-
-                // Resolve actual session (handles "Last" run)
-                SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
-                if (resolvedSession == null) {
-                    // Can happen if "Last" is selected but no run has completed yet
-                    continue;
-                }
-
-                String sessionKey = resolvedSession.getSessionKey();
-                String seriesName = leaf.seriesName;
-                String dataSourceKey = sessionKey + "|" + seriesName;
-
-                dataSourceToSeriesKeys.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(seriesKey);
-            }
-        }
-
-        // Process each unique data source once
-        for (Map.Entry<String, List<String>> entry : dataSourceToSeriesKeys.entrySet()) {
-            String dataSourceKey = entry.getKey();
-            List<String> seriesKeys = entry.getValue();
-
-            String[] parts = dataSourceKey.split("\\|", 2);
-            String sessionKey = parts[0];
-            String seriesName = parts[1];
-
-            // Check if we already have this data cached
-            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
-            if (cachedData != null) {
-                // Add immediately with cached data for ALL series keys that reference it
-                for (String seriesKey : seriesKeys) {
-                    TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                    addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
-
-                    // Add to all stats tables with aggregation
-                    tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
-                }
-            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                // Show loading state for ALL series that reference this data
-                for (String seriesKey : seriesKeys) {
-                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
-                }
-
-                // Capture series keys for use in callback
-                final List<String> capturedSeriesKeys = new ArrayList<>(seriesKeys);
-
-                // Request the timeseries data ONCE for all series that reference it
-                timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
-                    .thenAccept(timeSeriesData -> {
-                        SwingUtilities.invokeLater(() -> {
-                            // Add data for ALL series keys that reference this data source
-                            for (String capturedSeriesKey : capturedSeriesKeys) {
-                                // Check if this series is still selected
-                                if (selectedSeries.contains(capturedSeriesKey)) {
-                                    // Rename series to include run label
-                                    TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
-                                    addSeriesToPlot(renamedData, seriesColorMap.get(capturedSeriesKey));
-
-                                    // Update all stats tables with aggregation
-                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedSeriesKey, renamedData);
-                                }
-                            }
-
-                            // Zoom to fit in all plot panels (once for all series) if selection completely changed
-                            if (shouldResetZoom) {
-                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                                    panel.zoomToFit();
-                                }
-                            }
-                        });
-                    })
-                    .exceptionally(throwable -> {
-                        SwingUtilities.invokeLater(() -> {
-                            // Add error for ALL series that reference this data source
-                            for (String capturedSeriesKey : capturedSeriesKeys) {
-                                if (selectedSeries.contains(capturedSeriesKey)) {
-                                    // Add error to all stats tables
-                                    tabManager.addErrorSeriesInStatsTabs(capturedSeriesKey, throwable.getMessage());
-                                }
-                            }
-                        });
-                        return null;
-                    });
-            } else {
-                // Request already in progress, show loading state for ALL series that reference this data
-                for (String seriesKey : seriesKeys) {
-                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
-                }
-            }
-        }
-
-        // Process dataset series (stored in datasetSeriesCache, not plotDataSet yet)
-        for (String seriesKey : datasetSeriesKeys) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
-            if (leaf == null) continue;
-
-            // Get cached data (like runs do)
-            TimeSeriesData cachedData = datasetSeriesCache.get(leaf.seriesName);
-            if (cachedData != null) {
-                // Rename to add display suffix for legend/export
-                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-
-                // Add to plotDataSet and plot panels (just like runs)
-                addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
-
-                // Add to stats tables with aggregation
-                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
-            } else {
-                // Shouldn't happen, but handle gracefully
-                logger.warn("Dataset series not found in cache: " + leaf.seriesName);
-                tabManager.addErrorSeriesInStatsTabs(seriesKey, "Series not found");
-            }
-        }
-
-        // Update the selected series set
-        selectedSeries = newSelectedSeries;
-
-        // Update plot visibility, passing zoom reset flag
-        updatePlotVisibility(shouldResetZoom);
-
-        // If selection completely changed and we don't have the new data yet, zoom after data loads
-        if (!plotDataSet.isEmpty() && shouldResetZoom) {
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.zoomToFit();
-            }
-        }
-    }
 
     /**
      * Recursively collects all SeriesLeafNode objects from a tree node.
@@ -1797,7 +1246,7 @@ public class RunManager extends JFrame {
      */
     private void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionKey);
+            DefaultMutableTreeNode runNode = runSessionCoordinator.getSessionToTreeNode().get(sessionKey);
             if (runNode != null) {
                 TreePath pathToRun = new TreePath(runNode.getPath());
 
@@ -1805,9 +1254,9 @@ public class RunManager extends JFrame {
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
                 // Select the run
-                isUpdatingSelection = true;
+                seriesDataCoordinator.setUpdatingSelection(true);
                 timeseriesSourceTree.setSelectionPath(pathToRun);
-                isUpdatingSelection = false;
+                seriesDataCoordinator.setUpdatingSelection(false);
 
                 // Scroll to make the selection visible
                 timeseriesSourceTree.scrollPathToVisible(pathToRun);
@@ -1849,12 +1298,14 @@ public class RunManager extends JFrame {
     /**
      * Data class to hold run information.
      * Implements RunContextMenuManager.RunInfo interface for compatibility with the context menu manager.
+     * Implements SeriesDataCoordinator.RunInfo interface for series data coordination.
+     * Made public static to allow reflection access from managers.
      */
-    private static class RunInfo implements RunContextMenuManager.RunInfo {
-        String runName; // Made non-final to allow renaming
-        final SessionManager.KalixSession session;
+    public static class RunInfo implements RunContextMenuManager.RunInfo, SeriesDataCoordinator.RunInfo {
+        public String runName; // Made non-final to allow renaming
+        public final SessionManager.KalixSession session;
 
-        RunInfo(String runName, SessionManager.KalixSession session) {
+        public RunInfo(String runName, SessionManager.KalixSession session) {
             this.runName = runName;
             this.session = session;
         }
@@ -1944,49 +1395,6 @@ public class RunManager extends JFrame {
     // These reference the manager's versions but provide simplified access
 
 
-    /**
-     * Assigns the first unused color from the palette.
-     * When a series is removed, its color becomes available for reuse.
-     * Colors are assigned sequentially: Blue, Orange, Green, etc.
-     * If a gap exists (e.g., Blue removed), new series fills that gap.
-     */
-    private Color getColorForSeries(String seriesName) {
-        // Find which color indices are currently in use
-        Set<Integer> usedIndices = new HashSet<>();
-        for (Color color : seriesColorMap.values()) {
-            for (int i = 0; i < SERIES_COLORS.length; i++) {
-                if (SERIES_COLORS[i].equals(color)) {
-                    usedIndices.add(i);
-                    break;
-                }
-            }
-        }
-
-        // Find first available color index
-        for (int i = 0; i < SERIES_COLORS.length; i++) {
-            if (!usedIndices.contains(i)) {
-                return SERIES_COLORS[i];
-            }
-        }
-
-        // All colors used (10+ series), wrap around
-        return SERIES_COLORS[seriesColorMap.size() % SERIES_COLORS.length];
-    }
-
-    /**
-     * Adds a series to plotDataSet and all plot panels with the specified color.
-     * Used for both run series (from session) and dataset series (from cache).
-     */
-    private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
-        plotDataSet.addSeries(timeSeriesData);
-        seriesColorMap.put(timeSeriesData.getName(), seriesColor);
-        updateAllTabs(false); // Don't reset zoom when adding series
-
-        // Add to legend in all plot panels
-        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-            panel.addLegendSeries(timeSeriesData.getName(), seriesColor);
-        }
-    }
 
     /**
      * Updates all visualization tabs with current data.
@@ -2011,7 +1419,6 @@ public class RunManager extends JFrame {
      */
     private void clearPlotAndStats() {
         plotDataSet.removeAllSeries();
-        seriesColorMap.clear();
         updateAllTabs(true); // Reset zoom when clearing (though no data to zoom)
 
         // Clear legend in all plot panels
