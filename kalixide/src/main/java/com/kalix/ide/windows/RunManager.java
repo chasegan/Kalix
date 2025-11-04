@@ -11,6 +11,8 @@ import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.io.TimeSeriesCsvImporter;
+import com.kalix.ide.io.KalixTimeSeriesReader;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -61,6 +63,12 @@ public class RunManager extends JFrame {
     // Visualization tab manager
     private VisualizationTabManager tabManager;
     private DataSet plotDataSet;
+
+    // Cache for loaded dataset series (base names without display suffix)
+    // Key: base series name (e.g., "file.mydata_csv.column1")
+    // Value: TimeSeriesData
+    // This mirrors how runs store data in TimeSeriesRequestManager cache
+    private final Map<String, TimeSeriesData> datasetSeriesCache = new HashMap<>();
 
     // Series color management
     // Categorical 10 color palette - optimized for visibility and distinction
@@ -174,6 +182,7 @@ public class RunManager extends JFrame {
         setupLayout();
         setupWindowListeners();
         setupSessionEventListener();
+        setupDragAndDrop();
     }
 
     /**
@@ -305,6 +314,9 @@ public class RunManager extends JFrame {
                         RunInfo runInfo = (RunInfo) userObject;
                         String uid = runInfo.session.getKalixcliUid();
                         return uid;
+                    } else if (userObject instanceof LoadedDatasetInfo) {
+                        LoadedDatasetInfo datasetInfo = (LoadedDatasetInfo) userObject;
+                        return datasetInfo.file.getAbsolutePath();
                     }
                 }
                 return null;
@@ -591,6 +603,515 @@ public class RunManager extends JFrame {
                 }
             }
         });
+    }
+
+    /**
+     * Sets up drag-and-drop functionality for loading dataset files.
+     * Supports CSV files and Kalix compressed timeseries files (KAI/KAZ).
+     */
+    private void setupDragAndDrop() {
+        new java.awt.dnd.DropTarget(this, new java.awt.dnd.DropTargetListener() {
+            @Override
+            public void dragEnter(java.awt.dnd.DropTargetDragEvent dtde) {
+                if (isDragAcceptable(dtde)) {
+                    dtde.acceptDrag(java.awt.dnd.DnDConstants.ACTION_COPY);
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Drop CSV or KAI/KAZ files to load them...");
+                    }
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragOver(java.awt.dnd.DropTargetDragEvent dtde) {
+                if (isDragAcceptable(dtde)) {
+                    dtde.acceptDrag(java.awt.dnd.DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragExit(java.awt.dnd.DropTargetEvent dte) {
+                if (statusUpdater != null) {
+                    statusUpdater.accept("Ready");
+                }
+            }
+
+            @Override
+            public void dropActionChanged(java.awt.dnd.DropTargetDragEvent dtde) {
+                if (isDragAcceptable(dtde)) {
+                    dtde.acceptDrag(java.awt.dnd.DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void drop(java.awt.dnd.DropTargetDropEvent dtde) {
+                if (isDropAcceptable(dtde)) {
+                    dtde.acceptDrop(java.awt.dnd.DnDConstants.ACTION_COPY);
+
+                    try {
+                        java.awt.datatransfer.Transferable transferable = dtde.getTransferable();
+                        @SuppressWarnings("unchecked")
+                        List<File> files = (List<File>) transferable.getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
+
+                        // Filter for supported files (CSV, KAI, and KAZ)
+                        List<File> supportedFiles = files.stream()
+                            .filter(file -> {
+                                String name = file.getName().toLowerCase();
+                                return name.endsWith(".csv") || name.endsWith(".kai") || name.endsWith(".kaz");
+                            })
+                            .toList();
+
+                        if (supportedFiles.isEmpty()) {
+                            if (statusUpdater != null) {
+                                statusUpdater.accept("No supported files found in drop");
+                            }
+                            JOptionPane.showMessageDialog(RunManager.this,
+                                "Please drop CSV or KAI/KAZ files only.",
+                                "Invalid File Type",
+                                JOptionPane.WARNING_MESSAGE);
+                        } else {
+                            // Load all dropped files
+                            for (File file : supportedFiles) {
+                                loadDatasetFile(file);
+                            }
+                        }
+
+                        dtde.dropComplete(true);
+                    } catch (Exception e) {
+                        dtde.dropComplete(false);
+                        if (statusUpdater != null) {
+                            statusUpdater.accept("Failed to load dropped files");
+                        }
+                        JOptionPane.showMessageDialog(RunManager.this,
+                            "Failed to load dropped files: " + e.getMessage(),
+                            "Drop Error",
+                            JOptionPane.ERROR_MESSAGE);
+                        logger.error("Failed to load dropped files", e);
+                    }
+                } else {
+                    dtde.rejectDrop();
+                }
+            }
+
+            private boolean isDragAcceptable(java.awt.dnd.DropTargetDragEvent dtde) {
+                return dtde.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
+            }
+
+            private boolean isDropAcceptable(java.awt.dnd.DropTargetDropEvent dtde) {
+                return dtde.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
+            }
+        });
+    }
+
+    /**
+     * Loads a dataset file (CSV or KAI/KAZ) and adds it to the loaded datasets tree.
+     * Automatically detects file type and uses the appropriate importer.
+     *
+     * @param file The dataset file to load (.csv, .kai, or .kaz)
+     */
+    private void loadDatasetFile(File file) {
+        // Check if this file is already loaded
+        if (isFileAlreadyLoaded(file)) {
+            logger.info("File already loaded, skipping: {}", file.getName());
+            if (statusUpdater != null) {
+                statusUpdater.accept("File already loaded: " + file.getName());
+            }
+            JOptionPane.showMessageDialog(this,
+                "This file is already loaded:\n" + file.getName(),
+                "File Already Loaded",
+                JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String fileName = file.getName().toLowerCase();
+
+        if (fileName.endsWith(".csv")) {
+            loadCsvDataset(file);
+        } else if (fileName.endsWith(".kai") || fileName.endsWith(".kaz")) {
+            loadKalixDataset(file);
+        } else {
+            logger.warn("Unsupported file type: " + fileName);
+            if (statusUpdater != null) {
+                statusUpdater.accept("Unsupported file type: " + fileName);
+            }
+        }
+    }
+
+    /**
+     * Checks if a file is already loaded in the dataset tree.
+     */
+    private boolean isFileAlreadyLoaded(File file) {
+        String absolutePath = file.getAbsolutePath();
+        DefaultMutableTreeNode loadedDatasetsRoot = (DefaultMutableTreeNode) treeModel.getRoot();
+
+        // Find the "Loaded datasets" node
+        for (int i = 0; i < loadedDatasetsRoot.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsRoot.getChildAt(i);
+            if (child.getUserObject() instanceof String && "Loaded datasets".equals(child.getUserObject())) {
+                // Check all children of "Loaded datasets"
+                for (int j = 0; j < child.getChildCount(); j++) {
+                    DefaultMutableTreeNode datasetNode = (DefaultMutableTreeNode) child.getChildAt(j);
+                    if (datasetNode.getUserObject() instanceof LoadedDatasetInfo) {
+                        LoadedDatasetInfo info = (LoadedDatasetInfo) datasetNode.getUserObject();
+                        if (info.file.getAbsolutePath().equals(absolutePath)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Loads a CSV dataset file with progress dialog.
+     *
+     * @param csvFile The CSV file to load
+     */
+    private void loadCsvDataset(File csvFile) {
+        if (statusUpdater != null) {
+            statusUpdater.accept("Loading CSV dataset...");
+        }
+
+        // Create progress dialog
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Parsing CSV...");
+
+        JDialog progressDialog = new JDialog(this, "Loading Data", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.add(new JLabel("Loading: " + csvFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(this);
+
+        // Create CSV import task
+        TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
+            @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int progress = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(progress);
+                    progressBar.setString(String.format("Importing CSV... %d%%", progress));
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                try {
+                    TimeSeriesCsvImporter.CsvImportResult importResult = get();
+                    handleCsvImportResult(csvFile, importResult);
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(RunManager.this,
+                        "Error loading CSV file:\n" + e.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE);
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Error loading CSV file");
+                    }
+                    logger.error("Error loading CSV file: " + csvFile.getName(), e);
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            importTask.cancel(true);
+            progressDialog.dispose();
+            if (statusUpdater != null) {
+                statusUpdater.accept("CSV import cancelled");
+            }
+        });
+
+        importTask.execute();
+        progressDialog.setVisible(true);
+    }
+
+    /**
+     * Handles the result of a CSV import operation.
+     *
+     * @param csvFile The CSV file that was imported
+     * @param importResult The import result containing data and statistics
+     */
+    private void handleCsvImportResult(File csvFile, TimeSeriesCsvImporter.CsvImportResult importResult) {
+        if (importResult.hasErrors()) {
+            StringBuilder errorMessage = new StringBuilder("Failed to load CSV file:\n\n");
+            for (String error : importResult.getErrors()) {
+                errorMessage.append("• ").append(error).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(this, errorMessage.toString(),
+                "CSV Load Error", JOptionPane.ERROR_MESSAGE);
+            if (statusUpdater != null) {
+                statusUpdater.accept("Failed to load CSV file");
+            }
+            return;
+        }
+
+        // Add new data to plot dataset using hierarchical naming scheme
+        String fileName = csvFile.getName();
+        int seriesAdded = 0;
+
+        for (TimeSeriesData series : importResult.getDataSet().getAllSeries()) {
+            // Create hierarchical series name: file.sanitized_filename.sanitized_column
+            String columnName = series.getName();
+            String seriesName = createDatasetSeriesName(csvFile, columnName);
+
+            logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", columnName, seriesName);
+
+            // Create new series with hierarchical name
+            TimeSeriesData namedSeries = new TimeSeriesData(
+                seriesName,
+                convertTimestampsToLocalDateTime(series.getTimestamps()),
+                series.getValues()
+            );
+
+            // Store in cache (NOT in plotDataSet yet - added when plotted, like runs)
+            datasetSeriesCache.put(seriesName, namedSeries);
+            seriesAdded++;
+        }
+
+        // Add file to loaded datasets tree
+        addLoadedDatasetToTree(csvFile);
+
+        // Show warnings if any
+        if (importResult.hasWarnings()) {
+            StringBuilder warningMessage = new StringBuilder("CSV loaded successfully with warnings:\n\n");
+            for (String warning : importResult.getWarnings()) {
+                warningMessage.append("• ").append(warning).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(this, warningMessage.toString(),
+                "Load Warnings", JOptionPane.WARNING_MESSAGE);
+        }
+
+        // Update status with statistics
+        TimeSeriesCsvImporter.ImportStatistics stats = importResult.getStatistics();
+        if (statusUpdater != null) {
+            statusUpdater.accept(String.format("Loaded %s: %d series, %,d total points in %d ms",
+                fileName, seriesAdded, importResult.getDataSet().getTotalPointCount(), stats.getParseTimeMs()));
+        }
+    }
+
+    /**
+     * Loads a Kalix compressed dataset file (.kai + .kaz) with progress dialog.
+     *
+     * @param ktmFile The KAI metadata file to load (or KAZ file, will find the .kai)
+     */
+    private void loadKalixDataset(File ktmFile) {
+        if (statusUpdater != null) {
+            statusUpdater.accept("Loading Kalix dataset...");
+        }
+
+        // Ensure we're working with the .kai file
+        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.(kai|kaz)$", "");
+        File kaiFile = new File(basePath + ".kai");
+        File kazFile = new File(basePath + ".kaz");
+
+        // Verify both files exist
+        if (!kaiFile.exists() || !kazFile.exists()) {
+            JOptionPane.showMessageDialog(this,
+                "Both .kai and .kaz files are required.\n" +
+                "Missing: " + (!kaiFile.exists() ? kaiFile.getName() : kazFile.getName()),
+                "Load Error",
+                JOptionPane.ERROR_MESSAGE);
+            if (statusUpdater != null) {
+                statusUpdater.accept("Failed to load Kalix dataset");
+            }
+            return;
+        }
+
+        // Create progress dialog
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Loading Kalix dataset...");
+
+        JDialog progressDialog = new JDialog(this, "Loading Data", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.add(new JLabel("Loading: " + kaiFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(this);
+
+        // Create background loading task
+        SwingWorker<List<TimeSeriesData>, Integer> loadTask = new SwingWorker<List<TimeSeriesData>, Integer>() {
+            @Override
+            protected List<TimeSeriesData> doInBackground() throws Exception {
+                publish(25);
+                KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+                publish(50);
+                List<TimeSeriesData> seriesList = reader.readAllSeries(basePath);
+                publish(100);
+                return seriesList;
+            }
+
+            @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int progress = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(progress);
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                try {
+                    List<TimeSeriesData> seriesList = get();
+
+                    // Add all series to cache using hierarchical naming scheme
+                    for (TimeSeriesData series : seriesList) {
+                        // Create hierarchical series name: file.sanitized_filename.sanitized_series
+                        String originalSeriesName = series.getName();
+                        String seriesName = createDatasetSeriesName(kaiFile, originalSeriesName);
+
+                        logger.info("Loading KAI series: originalName='{}' -> seriesName='{}'", originalSeriesName, seriesName);
+
+                        TimeSeriesData namedSeries = new TimeSeriesData(
+                            seriesName,
+                            convertTimestampsToLocalDateTime(series.getTimestamps()),
+                            series.getValues()
+                        );
+
+                        // Store in cache (NOT in plotDataSet yet - added when plotted, like runs)
+                        datasetSeriesCache.put(seriesName, namedSeries);
+                    }
+
+                    // Add file to loaded datasets tree
+                    addLoadedDatasetToTree(kaiFile);
+
+                    // Update status
+                    if (statusUpdater != null) {
+                        statusUpdater.accept(String.format("Loaded %s: %d series",
+                            kaiFile.getName(), seriesList.size()));
+                    }
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(RunManager.this,
+                        "Error loading Kalix dataset:\n" + e.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE);
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Error loading Kalix dataset");
+                    }
+                    logger.error("Error loading Kalix dataset: " + kaiFile.getName(), e);
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            loadTask.cancel(true);
+            progressDialog.dispose();
+            if (statusUpdater != null) {
+                statusUpdater.accept("Kalix dataset load cancelled");
+            }
+        });
+
+        loadTask.execute();
+        progressDialog.setVisible(true);
+    }
+
+    /**
+     * Generates a unique series name by appending a number if the name already exists.
+     *
+     * @param baseName The base name to make unique
+     * @return A unique series name
+     */
+    private String getUniqueSeriesName(String baseName) {
+        if (!plotDataSet.hasSeries(baseName)) {
+            return baseName;
+        }
+
+        int counter = 2;
+        String uniqueName;
+        do {
+            uniqueName = baseName + " (" + counter + ")";
+            counter++;
+        } while (plotDataSet.hasSeries(uniqueName));
+
+        return uniqueName;
+    }
+
+    /**
+     * Converts millisecond timestamps to LocalDateTime array.
+     *
+     * @param timestampsMillis Array of timestamps in milliseconds since epoch
+     * @return Array of LocalDateTime objects in UTC
+     */
+    private java.time.LocalDateTime[] convertTimestampsToLocalDateTime(long[] timestampsMillis) {
+        java.time.LocalDateTime[] result = new java.time.LocalDateTime[timestampsMillis.length];
+        for (int i = 0; i < timestampsMillis.length; i++) {
+            result[i] = java.time.LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(timestampsMillis[i]),
+                java.time.ZoneOffset.UTC);
+        }
+        return result;
+    }
+
+    /**
+     * Sanitizes a string by converting all non-alphanumeric characters to underscores.
+     * Used for creating valid hierarchical series names from filenames and column headers.
+     *
+     * @param input The string to sanitize
+     * @return Sanitized string with only alphanumeric characters and underscores
+     */
+    private String sanitizeToIdentifier(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replaceAll("[^a-zA-Z0-9]", "_");
+    }
+
+    /**
+     * Creates a hierarchical series name from a file and column name.
+     * Format: file.{sanitized_filename}.{sanitized_column}
+     *
+     * @param file The data file
+     * @param columnName The column name (will be trimmed and sanitized)
+     * @return Hierarchical series name in format: file.filename_csv.column_name
+     */
+    private String createDatasetSeriesName(File file, String columnName) {
+        String sanitizedFilename = sanitizeToIdentifier(file.getName());
+        String sanitizedColumn = sanitizeToIdentifier(columnName.trim());
+        return "file." + sanitizedFilename + "." + sanitizedColumn;
+    }
+
+    /**
+     * Adds a loaded dataset file to the loaded datasets tree.
+     * Uses treeModel.nodesWereInserted to preserve current selection.
+     *
+     * @param file The dataset file that was loaded
+     */
+    private void addLoadedDatasetToTree(File file) {
+        // Create new dataset info and tree node
+        LoadedDatasetInfo datasetInfo = new LoadedDatasetInfo(file.getName(), file);
+        DefaultMutableTreeNode datasetNode = new DefaultMutableTreeNode(datasetInfo);
+
+        // Add to loadedDatasetsNode
+        int insertIndex = loadedDatasetsNode.getChildCount();
+        loadedDatasetsNode.add(datasetNode);
+
+        // Notify tree model to preserve selection
+        int[] childIndices = new int[] { insertIndex };
+        Object[] children = new Object[] { datasetNode };
+        treeModel.nodesWereInserted(loadedDatasetsNode, childIndices);
+
+        logger.info("Added dataset to tree: " + file.getName());
     }
 
     /**
@@ -923,7 +1444,16 @@ public class RunManager extends JFrame {
         // Check if this is a SeriesLeafNode that matches one of our target keys
         if (userObject instanceof SeriesLeafNode) {
             SeriesLeafNode leaf = (SeriesLeafNode) userObject;
-            String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
+            String seriesKey;
+            if (leaf.source instanceof RunInfo) {
+                // Run series: add run name suffix
+                String runName = ((RunInfo) leaf.source).runName;
+                seriesKey = leaf.seriesName + " [" + runName + "]";
+            } else {
+                // Dataset series: add filename suffix
+                LoadedDatasetInfo datasetInfo = (LoadedDatasetInfo) leaf.source;
+                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
+            }
             if (targetKeys.contains(seriesKey)) {
                 TreePath path = new TreePath(node.getPath());
                 results.add(path);
@@ -1034,7 +1564,7 @@ public class RunManager extends JFrame {
         // Update SeriesLeafNode if it references "Last"
         if (userObject instanceof SeriesLeafNode) {
             SeriesLeafNode leaf = (SeriesLeafNode) userObject;
-            if ("Last".equals(leaf.runInfo.runName)) {
+            if (leaf.source instanceof RunInfo && "Last".equals(((RunInfo) leaf.source).runName)) {
                 // Replace with new RunInfo
                 SeriesLeafNode newLeaf = new SeriesLeafNode(leaf.seriesName, newRunInfo, leaf.showSeriesName);
                 node.setUserObject(newLeaf);
@@ -1045,20 +1575,21 @@ public class RunManager extends JFrame {
         else if (userObject instanceof SeriesParentNode) {
             SeriesParentNode parent = (SeriesParentNode) userObject;
             // Check if this parent contains "Last" run
-            boolean containsLast = parent.runsWithSeries.stream()
-                .anyMatch(r -> "Last".equals(r.runName));
+            boolean containsLast = parent.sourcesWithSeries.stream()
+                .filter(s -> s instanceof RunInfo)
+                .anyMatch(s -> "Last".equals(((RunInfo) s).runName));
 
             if (containsLast) {
-                // Create new list with updated RunInfo
-                List<RunInfo> newRuns = new ArrayList<>();
-                for (RunInfo runInfo : parent.runsWithSeries) {
-                    if ("Last".equals(runInfo.runName)) {
-                        newRuns.add(newRunInfo);
+                // Create new list with updated sources
+                List<Object> newSources = new ArrayList<>();
+                for (Object source : parent.sourcesWithSeries) {
+                    if (source instanceof RunInfo && "Last".equals(((RunInfo) source).runName)) {
+                        newSources.add(newRunInfo);
                     } else {
-                        newRuns.add(runInfo);
+                        newSources.add(source);
                     }
                 }
-                SeriesParentNode newParent = new SeriesParentNode(parent.seriesName, newRuns);
+                SeriesParentNode newParent = new SeriesParentNode(parent.seriesName, newSources);
                 node.setUserObject(newParent);
                 timeseriesTreeModel.nodeChanged(node);
             }
@@ -1501,32 +2032,38 @@ public class RunManager extends JFrame {
     private void updateOutputsTree() {
         TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear timeseries tree when no runs selected
+            // Clear timeseries tree when nothing selected
             DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
             root.removeAllChildren();
-            root.add(new DefaultMutableTreeNode("Select one or more datasets"));
+            root.add(new DefaultMutableTreeNode("Select one or more runs or datasets"));
             timeseriesTreeModel.reload();
             return;
         }
 
-        // Collect all selected RunInfo objects
+        // Collect all selected RunInfo and LoadedDatasetInfo objects
         List<RunInfo> selectedRuns = new ArrayList<>();
+        List<LoadedDatasetInfo> selectedDatasets = new ArrayList<>();
+
         for (TreePath path : selectedPaths) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            if (node.getUserObject() instanceof RunInfo) {
-                selectedRuns.add((RunInfo) node.getUserObject());
+            Object userObject = node.getUserObject();
+
+            if (userObject instanceof RunInfo) {
+                selectedRuns.add((RunInfo) userObject);
+            } else if (userObject instanceof LoadedDatasetInfo) {
+                selectedDatasets.add((LoadedDatasetInfo) userObject);
             }
         }
 
-        if (selectedRuns.isEmpty()) {
+        if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
             // Selection is on parent nodes only (Last run, Current runs, Run library, Loaded datasets)
             DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
             root.removeAllChildren();
-            root.add(new DefaultMutableTreeNode("Select one or more datasets"));
+            root.add(new DefaultMutableTreeNode("Select one or more runs or datasets"));
             timeseriesTreeModel.reload();
         } else {
-            // Update timeseries tree with all selected runs
-            updateOutputsTreeForMultipleRuns(selectedRuns);
+            // Update timeseries tree with all selected runs and datasets
+            updateOutputsTreeForMultipleSources(selectedRuns, selectedDatasets);
         }
     }
 
@@ -1594,6 +2131,209 @@ public class RunManager extends JFrame {
 
         // Reconcile: remove series that are no longer in the tree from plots
         reconcileSelectedSeriesWithTree(restoredSeries);
+    }
+
+    /**
+     * Gets all series names from a loaded dataset file.
+     * Series names follow the format: file.sanitized_filename.sanitized_column
+     *
+     * @param datasetInfo The dataset to get series names from
+     * @return List of series names from this dataset
+     */
+    private List<String> getSeriesNamesFromDataset(LoadedDatasetInfo datasetInfo) {
+        String sanitizedFilename = sanitizeToIdentifier(datasetInfo.fileName);
+        String prefix = "file." + sanitizedFilename + ".";
+
+        // Get series from cache (NOT plotDataSet) - mirrors how runs work
+        return datasetSeriesCache.keySet().stream()
+            .filter(name -> name.startsWith(prefix))
+            .sorted(RunManager::naturalCompare)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Updates the timeseries tree for multiple selected sources (runs and/or datasets).
+     * Series available in multiple sources become parent nodes with source children.
+     * Series available in only one source become simple leaf nodes.
+     */
+    private void updateOutputsTreeForMultipleSources(List<RunInfo> selectedRuns, List<LoadedDatasetInfo> selectedDatasets) {
+        // Remember current expansion state
+        List<TreePath> expandedPaths = new ArrayList<>();
+        boolean hadDatasetPaths = false;  // Track if previous tree had "file" nodes
+        for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+            TreePath path = timeseriesTree.getPathForRow(i);
+            if (timeseriesTree.isExpanded(path)) {
+                expandedPaths.add(path);
+                // Check if this path contains "file" node (dataset tree)
+                for (Object component : path.getPath()) {
+                    if (component instanceof DefaultMutableTreeNode) {
+                        Object userObj = ((DefaultMutableTreeNode) component).getUserObject();
+                        if (userObj instanceof String && "file".equals(userObj)) {
+                            hadDatasetPaths = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
+        root.removeAllChildren();
+
+        // If only one source selected, use simplified structure
+        boolean isDatasetTree = false;
+        if (selectedRuns.size() + selectedDatasets.size() == 1) {
+            if (selectedRuns.size() == 1) {
+                updateOutputsTreeSingleRun(root, selectedRuns.get(0));
+            } else {
+                updateOutputsTreeSingleDataset(root, selectedDatasets.get(0));
+                isDatasetTree = true;
+            }
+        } else {
+            // Build multi-source hybrid tree
+            updateOutputsTreeMultiSource(root, selectedRuns, selectedDatasets);
+            isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
+        }
+
+        timeseriesTreeModel.reload();
+
+        // Expand all if: (1) first time (no previous paths), OR (2) switching between run/dataset trees
+        boolean switchedContext = (isDatasetTree != hadDatasetPaths);
+        if (expandedPaths.isEmpty() || switchedContext) {
+            // First time or switched context - expand all nodes
+            for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                timeseriesTree.expandRow(i);
+            }
+        } else {
+            // Restore previous expansion state (same context)
+            for (TreePath expandedPath : expandedPaths) {
+                TreePath newPath = findEquivalentPath(expandedPath);
+                if (newPath != null) {
+                    timeseriesTree.expandPath(newPath);
+                }
+            }
+        }
+
+        // Restore selection to match what's currently plotted
+        Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+
+        // Reconcile: remove series that are no longer in the tree from plots
+        reconcileSelectedSeriesWithTree(restoredSeries);
+    }
+
+    /**
+     * Populates the tree for a single dataset using SeriesLeafNode objects.
+     */
+    private void updateOutputsTreeSingleDataset(DefaultMutableTreeNode root, LoadedDatasetInfo datasetInfo) {
+        List<String> seriesNames = getSeriesNamesFromDataset(datasetInfo);
+
+        logger.info("Building tree for dataset: {}, found {} series", datasetInfo.fileName, seriesNames.size());
+        for (String name : seriesNames) {
+            logger.info("  Series: {}", name);
+        }
+
+        if (!seriesNames.isEmpty()) {
+            for (String seriesName : seriesNames) {
+                // Create standalone leaf node with showSeriesName=true
+                SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, datasetInfo, true);
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
+                addHierarchicalNodeToTree(root, seriesName, node);
+            }
+
+            // Debug: log the tree structure
+            logger.info("Tree structure after building:");
+            logTreeStructure(root, 0);
+        } else {
+            root.add(new DefaultMutableTreeNode("No series available from this dataset"));
+        }
+    }
+
+    /**
+     * Debug helper to log tree structure.
+     */
+    private void logTreeStructure(DefaultMutableTreeNode node, int depth) {
+        String indent = "  ".repeat(depth);
+        Object userObj = node.getUserObject();
+        String nodeDesc;
+        if (userObj instanceof SeriesLeafNode) {
+            SeriesLeafNode leaf = (SeriesLeafNode) userObj;
+            nodeDesc = "SeriesLeafNode: displayString='" + leaf.toString() + "', fullName='" + leaf.seriesName + "'";
+        } else if (userObj instanceof SeriesParentNode) {
+            nodeDesc = "SeriesParentNode: " + userObj.toString();
+        } else {
+            nodeDesc = "String: '" + userObj + "'";
+        }
+        logger.info("{}└─ {}", indent, nodeDesc);
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+            logTreeStructure(child, depth + 1);
+        }
+    }
+
+    /**
+     * Populates the tree for multiple sources (runs and/or datasets) using smart hybrid structure.
+     */
+    private void updateOutputsTreeMultiSource(DefaultMutableTreeNode root, List<RunInfo> selectedRuns, List<LoadedDatasetInfo> selectedDatasets) {
+        // Map: series name -> list of sources (RunInfo or LoadedDatasetInfo) that have this series
+        Map<String, List<Object>> seriesAvailability = new LinkedHashMap<>();
+
+        // Collect all outputs from all selected runs
+        for (RunInfo runInfo : selectedRuns) {
+            List<String> outputs = null;
+            if (runInfo.session.getActiveProgram() instanceof RunModelProgram) {
+                RunModelProgram program = (RunModelProgram) runInfo.session.getActiveProgram();
+                outputs = program.getOutputsGenerated();
+            }
+
+            if (outputs != null) {
+                for (String output : outputs) {
+                    seriesAvailability.computeIfAbsent(output, k -> new ArrayList<>()).add(runInfo);
+                }
+            }
+        }
+
+        // Collect all series from all selected datasets
+        for (LoadedDatasetInfo datasetInfo : selectedDatasets) {
+            List<String> seriesNames = getSeriesNamesFromDataset(datasetInfo);
+            for (String seriesName : seriesNames) {
+                seriesAvailability.computeIfAbsent(seriesName, k -> new ArrayList<>()).add(datasetInfo);
+            }
+        }
+
+        if (seriesAvailability.isEmpty()) {
+            root.add(new DefaultMutableTreeNode("No outputs available from selected sources"));
+            return;
+        }
+
+        // Sort series names using natural sorting
+        List<String> sortedSeries = new ArrayList<>(seriesAvailability.keySet());
+        sortedSeries.sort(RunManager::naturalCompare);
+
+        // Build hybrid tree structure
+        for (String seriesName : sortedSeries) {
+            List<Object> sourcesWithSeries = seriesAvailability.get(seriesName);
+
+            if (sourcesWithSeries.size() == 1) {
+                // Only one source has this series - create standalone leaf node
+                Object singleSource = sourcesWithSeries.get(0);
+                SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, singleSource, true);
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
+                addHierarchicalNodeToTree(root, seriesName, node);
+            } else {
+                // Multiple sources have this series - create parent with children
+                SeriesParentNode parentNode = new SeriesParentNode(seriesName, sourcesWithSeries);
+                DefaultMutableTreeNode parentTreeNode = new DefaultMutableTreeNode(parentNode);
+
+                // Add children for each source
+                for (Object source : sourcesWithSeries) {
+                    SeriesLeafNode childLeafNode = new SeriesLeafNode(seriesName, source, false);
+                    parentTreeNode.add(new DefaultMutableTreeNode(childLeafNode));
+                }
+
+                addHierarchicalNodeToTree(root, seriesName, parentTreeNode);
+            }
+        }
     }
 
     /**
@@ -1717,7 +2457,7 @@ public class RunManager extends JFrame {
                 addHierarchicalNodeToTree(root, seriesName, node);
             } else {
                 // Multiple runs have this series - create parent with children
-                SeriesParentNode parentNode = new SeriesParentNode(seriesName, runsWithSeries);
+                SeriesParentNode parentNode = new SeriesParentNode(seriesName, new ArrayList<>(runsWithSeries));
                 DefaultMutableTreeNode parentTreeNode = new DefaultMutableTreeNode(parentNode);
 
                 // Add children for each run
@@ -1771,44 +2511,48 @@ public class RunManager extends JFrame {
     // Helper classes to track series nodes with run information
 
     /**
-     * Represents a leaf node that is a plottable series from a specific run.
+     * Represents a leaf node that is a plottable series from a specific source (run or dataset).
      */
     private static class SeriesLeafNode {
         final String seriesName;
-        final RunInfo runInfo;
+        final Object source;  // Either RunInfo or LoadedDatasetInfo
         final boolean showSeriesName;  // If true, show "ds_1 [Run_1]", else just "Run_1"
 
-        SeriesLeafNode(String seriesName, RunInfo runInfo, boolean showSeriesName) {
+        SeriesLeafNode(String seriesName, Object source, boolean showSeriesName) {
             this.seriesName = seriesName;
-            this.runInfo = runInfo;
+            this.source = source;
             this.showSeriesName = showSeriesName;
         }
 
         @Override
         public String toString() {
+            String sourceName = source instanceof RunInfo
+                ? ((RunInfo) source).runName
+                : ((LoadedDatasetInfo) source).fileName;
+
             if (showSeriesName) {
-                // Standalone leaf: show "ds_1 [Run_1]"
+                // Standalone leaf: show "ds_1 [Run_1]" or "ds_1 [data.csv]"
                 String lastSegment = seriesName.contains(".")
                     ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
                     : seriesName;
-                return lastSegment + " [" + runInfo.runName + "]";
+                return lastSegment + " [" + sourceName + "]";
             } else {
-                // Child of parent node: just show "Run_1"
-                return runInfo.runName;
+                // Child of parent node: just show "Run_1" or "data.csv"
+                return sourceName;
             }
         }
     }
 
     /**
-     * Represents a parent node for a series available in multiple runs.
+     * Represents a parent node for a series available in multiple sources (runs and/or datasets).
      */
     private static class SeriesParentNode {
         final String seriesName;
-        final List<RunInfo> runsWithSeries;
+        final List<Object> sourcesWithSeries;  // List of RunInfo and/or LoadedDatasetInfo
 
-        SeriesParentNode(String seriesName, List<RunInfo> runsWithSeries) {
+        SeriesParentNode(String seriesName, List<Object> sourcesWithSeries) {
             this.seriesName = seriesName;
-            this.runsWithSeries = runsWithSeries;
+            this.sourcesWithSeries = sourcesWithSeries;
         }
 
         @Override
@@ -1818,10 +2562,10 @@ public class RunManager extends JFrame {
                 ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
                 : seriesName;
 
-            String[] runLabels = runsWithSeries.stream()
-                .map(r -> r.runName)
+            String[] sourceLabels = sourcesWithSeries.stream()
+                .map(s -> s instanceof RunInfo ? ((RunInfo) s).runName : ((LoadedDatasetInfo) s).fileName)
                 .toArray(String[]::new);
-            return lastSegment + " [" + String.join(", ", runLabels) + "]";
+            return lastSegment + " [" + String.join(", ", sourceLabels) + "]";
         }
     }
 
@@ -1877,12 +2621,23 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Build new set of selected series (with unique keys: "seriesName [RunName]")
+        // Build new set of selected series (with unique keys)
+        // For runs: "seriesName [RunName]"
+        // For datasets: "seriesName [filename]"
         Set<String> newSelectedSeries = new HashSet<>();
         Map<String, SeriesLeafNode> seriesKeyToLeaf = new HashMap<>();
 
         for (SeriesLeafNode leaf : allLeaves) {
-            String seriesKey = leaf.seriesName + " [" + leaf.runInfo.runName + "]";
+            String seriesKey;
+            if (leaf.source instanceof RunInfo) {
+                // Run series: add run name suffix
+                String runName = ((RunInfo) leaf.source).runName;
+                seriesKey = leaf.seriesName + " [" + runName + "]";
+            } else {
+                // Dataset series: add filename suffix for display
+                LoadedDatasetInfo datasetInfo = (LoadedDatasetInfo) leaf.source;
+                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
+            }
             newSelectedSeries.add(seriesKey);
             seriesKeyToLeaf.put(seriesKey, leaf);
         }
@@ -1914,30 +2669,40 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Group series by their underlying data source (sessionKey + seriesName)
-        // This handles the case where multiple series (e.g., "Run_1" and "Last") reference the same data
+        // Group series by their underlying data source
+        // For runs: sessionKey + seriesName (handles multiple series referencing same data)
+        // For datasets: just seriesName (already loaded in plotDataSet)
         Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
+        Set<String> datasetSeriesKeys = new HashSet<>();  // Track dataset series separately
 
         for (String seriesKey : seriesToAdd) {
             SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
             if (leaf == null) continue;
 
-            // Resolve actual session (handles "Last" run)
-            SessionManager.KalixSession resolvedSession = resolveRunInfoSession(leaf.runInfo);
-            if (resolvedSession == null) {
-                // Can happen if "Last" is selected but no run has completed yet
-                continue;
-            }
-
-            String sessionKey = resolvedSession.getSessionKey();
-            String seriesName = leaf.seriesName;
-            String dataSourceKey = sessionKey + "|" + seriesName;
-
-            dataSourceToSeriesKeys.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(seriesKey);
-
             // Assign consistent color to new series
             Color seriesColor = getColorForSeries(seriesKey);
             seriesColorMap.put(seriesKey, seriesColor);
+
+            if (leaf.source instanceof LoadedDatasetInfo) {
+                // Dataset series - already loaded, just track for later processing
+                datasetSeriesKeys.add(seriesKey);
+            } else {
+                // Run series - need to fetch from session
+                RunInfo runInfo = (RunInfo) leaf.source;
+
+                // Resolve actual session (handles "Last" run)
+                SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
+                if (resolvedSession == null) {
+                    // Can happen if "Last" is selected but no run has completed yet
+                    continue;
+                }
+
+                String sessionKey = resolvedSession.getSessionKey();
+                String seriesName = leaf.seriesName;
+                String dataSourceKey = sessionKey + "|" + seriesName;
+
+                dataSourceToSeriesKeys.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(seriesKey);
+            }
         }
 
         // Process each unique data source once
@@ -2011,6 +2776,29 @@ public class RunManager extends JFrame {
                 for (String seriesKey : seriesKeys) {
                     tabManager.addLoadingSeriesInStatsTabs(seriesKey);
                 }
+            }
+        }
+
+        // Process dataset series (stored in datasetSeriesCache, not plotDataSet yet)
+        for (String seriesKey : datasetSeriesKeys) {
+            SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
+            if (leaf == null) continue;
+
+            // Get cached data (like runs do)
+            TimeSeriesData cachedData = datasetSeriesCache.get(leaf.seriesName);
+            if (cachedData != null) {
+                // Rename to add display suffix for legend/export
+                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
+
+                // Add to plotDataSet and plot panels (just like runs)
+                addSeriesToPlot(renamedData, seriesColorMap.get(seriesKey));
+
+                // Add to stats tables with aggregation
+                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+            } else {
+                // Shouldn't happen, but handle gracefully
+                logger.warn("Dataset series not found in cache: " + leaf.seriesName);
+                tabManager.addErrorSeriesInStatsTabs(seriesKey, "Series not found");
             }
         }
 
@@ -2319,6 +3107,24 @@ public class RunManager extends JFrame {
     }
 
     /**
+     * Data class to hold loaded dataset information.
+     */
+    private static class LoadedDatasetInfo {
+        final String fileName;
+        final File file;
+
+        LoadedDatasetInfo(String fileName, File file) {
+            this.fileName = fileName;
+            this.file = file;
+        }
+
+        @Override
+        public String toString() {
+            return fileName;
+        }
+    }
+
+    /**
      * Assigns the first unused color from the palette.
      * When a series is removed, its color becomes available for reuse.
      * Colors are assigned sequentially: Blue, Orange, Green, etc.
@@ -2348,7 +3154,8 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Adds a series to all tabs with the specified color.
+     * Adds a series to plotDataSet and all plot panels with the specified color.
+     * Used for both run series (from session) and dataset series (from cache).
      */
     private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
         plotDataSet.addSeries(timeSeriesData);
@@ -2519,9 +3326,18 @@ public class RunManager extends JFrame {
                             setIcon(null);
                             break;
                     }
-                } else {
-                    // Clear tooltip for non-RunInfo nodes (parent nodes)
-                    setToolTipText(null);
+                } else if (userObject instanceof LoadedDatasetInfo) {
+                    LoadedDatasetInfo datasetInfo = (LoadedDatasetInfo) userObject;
+                    setText(datasetInfo.fileName);
+
+                    // Color loaded datasets blue
+                    if (!sel) {
+                        setForeground(new Color(0, 0, 200)); // Blue
+                    }
+
+                    // Set layer-group icon for loaded datasets
+                    int treeIconSize = 12; // 75% of AppConstants.TOOLBAR_ICON_SIZE (16px)
+                    setIcon(FontIcon.of(FontAwesomeSolid.LAYER_GROUP, treeIconSize));
                 }
             }
 
