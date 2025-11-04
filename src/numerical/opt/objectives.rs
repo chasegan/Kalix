@@ -10,30 +10,35 @@ use std::sync::{Arc, OnceLock};
 pub enum ObjectiveFunction {
     /// Nash-Sutcliffe Efficiency (NSE) - negated for minimization
     /// Returned range: -1 to ∞ (lower is better, -1 = perfect)
-    NashSutcliffe,
+    NashSutcliffe(NseObjective),
 
     /// Nash-Sutcliffe Efficiency with log-transformed values - negated for minimization
     /// Better for low flows. Returned range: -1 to ∞ (lower is better)
-    NashSutcliffeLog,
+    NashSutcliffeLog(LnseObjective),
 
     /// Root Mean Square Error (lower is better)
-    RMSE,
+    RMSE(RmseObjective),
 
     /// Mean Absolute Error (lower is better)
-    MAE,
+    MAE(MaeObjective),
 
     /// Kling-Gupta Efficiency - negated for minimization
     /// Returned range: -1 to ∞ (lower is better, -1 = perfect)
-    KlingGupta,
+    KlingGupta(KgeObjective),
 
     /// Percent Bias - absolute value (lower is better)
     /// PBIAS near 0 is better
-    PercentBias,
+    PercentBias(PbiasObjective),
 
     /// SDEB - Sorted Data Error with Bias
     /// Combines temporal error (SD) with distributional/ranked error (SE) and bias penalty
     /// Lower is better (0 = perfect)
     SDEB(SdebObjective),
+
+    /// Pearson's Correlation Coefficient (R) - negated for minimization
+    /// Measures linear correlation between observed and simulated
+    /// Returned range: -1 to 1 (negated: -1 to 1, where -1 = perfect positive correlation)
+    PEARS_R(PearsObjective),
 }
 
 /// SDEB objective with lazy-initialized cache for parallel processing
@@ -167,6 +172,619 @@ impl SdebObjective {
     }
 }
 
+/// Pearson's R objective with lazy-initialized cache for parallel processing
+///
+/// Pearson's correlation coefficient measures linear correlation between
+/// observed and simulated values.
+///
+/// Formula: R = sum((QO[i] - MEAN_QO) * (QM[i] - MEAN_QM)) / sqrt(sum((QO[i] - MEAN_QO)^2) * sum((QM[i] - MEAN_QM)^2))
+#[derive(Clone, Debug)]
+pub struct PearsObjective {
+    /// Shared cache across all clones, initialized on first evaluation
+    cache: Arc<OnceLock<PearsCache>>,
+}
+
+#[derive(Debug)]
+struct PearsCache {
+    /// Mask indicating which timesteps have valid data in both series
+    mask: Vec<bool>,
+
+    /// Masked observed values (QO)
+    masked_observed: Vec<f64>,
+
+    /// Mean of observed values
+    mean_observed: f64,
+
+    /// Sum of squared deviations from mean: sum((QO[i] - MEAN_QO)^2)
+    ss_observed: f64,
+}
+
+impl PearsObjective {
+    /// Create a new Pearson's R objective
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+}
+
+impl PearsObjective {
+    /// Calculate Pearson's R objective (negated for minimization)
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        // Get or initialize cache (happens once, thread-safe)
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        // Apply mask to simulated data (happens every evaluation)
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        // Calculate mean of simulated
+        let mean_simulated: f64 = masked_simulated.iter().sum::<f64>() / masked_simulated.len() as f64;
+
+        // Calculate sum of squared deviations for simulated: sum((QM[i] - MEAN_QM)^2)
+        let ss_simulated: f64 = masked_simulated.iter()
+            .map(|&qm| (qm - mean_simulated).powi(2))
+            .sum();
+
+        // Calculate covariance: sum((QO[i] - MEAN_QO) * (QM[i] - MEAN_QM))
+        let covariance: f64 = cache.masked_observed.iter()
+            .zip(&masked_simulated)
+            .map(|(&qo, &qm)| (qo - cache.mean_observed) * (qm - mean_simulated))
+            .sum();
+
+        // Calculate Pearson's R
+        let denominator = (cache.ss_observed * ss_simulated).sqrt();
+
+        if denominator == 0.0 {
+            return Err("Cannot calculate Pearson's R: zero variance in data".to_string());
+        }
+
+        let r = covariance / denominator;
+
+        // Negate for minimization (perfect correlation R=1 becomes -1 for minimizer)
+        Ok(-r)
+    }
+
+    /// Initialize cache on first evaluation
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PearsCache {
+        // Create mask: true where both series have valid (non-NaN) values
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        // Apply mask to observed data (QO)
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        // Calculate mean of observed
+        let mean_observed: f64 = if masked_observed.is_empty() {
+            0.0
+        } else {
+            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+        };
+
+        // Calculate sum of squared deviations: sum((QO[i] - MEAN_QO)^2)
+        let ss_observed: f64 = masked_observed.iter()
+            .map(|&qo| (qo - mean_observed).powi(2))
+            .sum();
+
+        PearsCache {
+            mask,
+            masked_observed,
+            mean_observed,
+            ss_observed,
+        }
+    }
+
+    /// Apply mask to data, keeping only valid timesteps
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// NSE objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct NseObjective {
+    cache: Arc<OnceLock<NseCache>>,
+}
+
+#[derive(Debug)]
+struct NseCache {
+    mask: Vec<bool>,
+    masked_observed: Vec<f64>,
+    mean_observed: f64,
+    ss_tot: f64,  // sum((obs[i] - mean_obs)^2)
+}
+
+impl NseObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        // Calculate sum of squared residuals
+        let ss_res: f64 = cache.masked_observed.iter()
+            .zip(&masked_simulated)
+            .map(|(o, s)| (o - s).powi(2))
+            .sum();
+
+        let nse = 1.0 - (ss_res / cache.ss_tot);
+
+        // Negate for minimization
+        Ok(-nse)
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> NseCache {
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        let mean_observed: f64 = if masked_observed.is_empty() {
+            0.0
+        } else {
+            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+        };
+
+        let ss_tot: f64 = masked_observed.iter()
+            .map(|o| (o - mean_observed).powi(2))
+            .sum();
+
+        NseCache {
+            mask,
+            masked_observed,
+            mean_observed,
+            ss_tot,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// LNSE objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct LnseObjective {
+    cache: Arc<OnceLock<LnseCache>>,
+}
+
+#[derive(Debug)]
+struct LnseCache {
+    mask: Vec<bool>,
+    log_masked_observed: Vec<f64>,
+    mean_log_observed: f64,
+    ss_tot_log: f64,
+}
+
+impl LnseObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        const EPSILON: f64 = 0.01;
+
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.log_masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        // Log transform simulated
+        let log_masked_simulated: Vec<f64> = masked_simulated.iter()
+            .map(|x| (x + EPSILON).ln())
+            .collect();
+
+        // Calculate sum of squared residuals
+        let ss_res: f64 = cache.log_masked_observed.iter()
+            .zip(&log_masked_simulated)
+            .map(|(o, s)| (o - s).powi(2))
+            .sum();
+
+        let lnse = 1.0 - (ss_res / cache.ss_tot_log);
+
+        // Negate for minimization
+        Ok(-lnse)
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> LnseCache {
+        const EPSILON: f64 = 0.01;
+
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        // Log transform observed
+        let log_masked_observed: Vec<f64> = masked_observed.iter()
+            .map(|x| (x + EPSILON).ln())
+            .collect();
+
+        let mean_log_observed: f64 = if log_masked_observed.is_empty() {
+            0.0
+        } else {
+            log_masked_observed.iter().sum::<f64>() / log_masked_observed.len() as f64
+        };
+
+        let ss_tot_log: f64 = log_masked_observed.iter()
+            .map(|o| (o - mean_log_observed).powi(2))
+            .sum();
+
+        LnseCache {
+            mask,
+            log_masked_observed,
+            mean_log_observed,
+            ss_tot_log,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// RMSE objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct RmseObjective {
+    cache: Arc<OnceLock<RmseCache>>,
+}
+
+#[derive(Debug)]
+struct RmseCache {
+    mask: Vec<bool>,
+    masked_observed: Vec<f64>,
+}
+
+impl RmseObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        let mse: f64 = cache.masked_observed.iter()
+            .zip(&masked_simulated)
+            .map(|(o, s)| (o - s).powi(2))
+            .sum::<f64>()
+            / cache.masked_observed.len() as f64;
+
+        Ok(mse.sqrt())
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> RmseCache {
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        RmseCache {
+            mask,
+            masked_observed,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// MAE objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct MaeObjective {
+    cache: Arc<OnceLock<MaeCache>>,
+}
+
+#[derive(Debug)]
+struct MaeCache {
+    mask: Vec<bool>,
+    masked_observed: Vec<f64>,
+}
+
+impl MaeObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        let mae: f64 = cache.masked_observed.iter()
+            .zip(&masked_simulated)
+            .map(|(o, s)| (o - s).abs())
+            .sum::<f64>()
+            / cache.masked_observed.len() as f64;
+
+        Ok(mae)
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> MaeCache {
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        MaeCache {
+            mask,
+            masked_observed,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// KGE objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct KgeObjective {
+    cache: Arc<OnceLock<KgeCache>>,
+}
+
+#[derive(Debug)]
+struct KgeCache {
+    mask: Vec<bool>,
+    masked_observed: Vec<f64>,
+    mean_observed: f64,
+    std_observed: f64,
+}
+
+impl KgeObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        // Calculate simulated statistics
+        let mean_simulated: f64 = masked_simulated.iter().sum::<f64>() / masked_simulated.len() as f64;
+        let std_simulated: f64 = {
+            let variance: f64 = masked_simulated.iter()
+                .map(|x| (x - mean_simulated).powi(2))
+                .sum::<f64>() / masked_simulated.len() as f64;
+            variance.sqrt()
+        };
+
+        if cache.std_observed == 0.0 {
+            return Err("Observed data has zero variance".to_string());
+        }
+
+        // Calculate correlation
+        let r = if std_simulated == 0.0 {
+            0.0
+        } else {
+            let cov: f64 = cache.masked_observed.iter()
+                .zip(&masked_simulated)
+                .map(|(o, s)| (o - cache.mean_observed) * (s - mean_simulated))
+                .sum::<f64>()
+                / cache.masked_observed.len() as f64;
+            cov / (cache.std_observed * std_simulated)
+        };
+
+        let alpha = std_simulated / cache.std_observed;
+        let beta = mean_simulated / cache.mean_observed;
+
+        let kge = 1.0 - ((r - 1.0).powi(2) + (alpha - 1.0).powi(2) + (beta - 1.0).powi(2)).sqrt();
+
+        // Negate for minimization
+        Ok(-kge)
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> KgeCache {
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+
+        let mean_observed: f64 = if masked_observed.is_empty() {
+            0.0
+        } else {
+            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+        };
+
+        let std_observed: f64 = if masked_observed.is_empty() {
+            0.0
+        } else {
+            let variance: f64 = masked_observed.iter()
+                .map(|x| (x - mean_observed).powi(2))
+                .sum::<f64>() / masked_observed.len() as f64;
+            variance.sqrt()
+        };
+
+        KgeCache {
+            mask,
+            masked_observed,
+            mean_observed,
+            std_observed,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
+/// PBIAS objective with lazy-initialized cache for parallel processing
+#[derive(Clone, Debug)]
+pub struct PbiasObjective {
+    cache: Arc<OnceLock<PbiasCache>>,
+}
+
+#[derive(Debug)]
+struct PbiasCache {
+    mask: Vec<bool>,
+    masked_observed: Vec<f64>,
+    sum_observed: f64,
+}
+
+impl PbiasObjective {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| {
+            Self::initialize_cache(observed, simulated)
+        });
+
+        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+
+        if masked_simulated.len() != cache.masked_observed.len() {
+            return Err("Masked data length mismatch".to_string());
+        }
+
+        if masked_simulated.is_empty() {
+            return Err("No valid data points after masking".to_string());
+        }
+
+        if cache.sum_observed == 0.0 {
+            return Ok(0.0);
+        }
+
+        let sum_diff: f64 = masked_simulated.iter()
+            .zip(&cache.masked_observed)
+            .map(|(s, o)| s - o)
+            .sum();
+
+        let pbias = 100.0 * sum_diff / cache.sum_observed;
+
+        // Return absolute value for minimization
+        Ok(pbias.abs())
+    }
+
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PbiasCache {
+        let mask: Vec<bool> = observed.iter()
+            .zip(simulated)
+            .map(|(o, s)| o.is_finite() && s.is_finite())
+            .collect();
+
+        let masked_observed = Self::apply_mask(observed, &mask);
+        let sum_observed: f64 = masked_observed.iter().sum();
+
+        PbiasCache {
+            mask,
+            masked_observed,
+            sum_observed,
+        }
+    }
+
+    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
+        data.iter()
+            .zip(mask)
+            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+            .collect()
+    }
+}
+
 impl ObjectiveFunction {
     /// Calculate objective (LOWER IS BETTER - minimization)
     ///
@@ -190,42 +808,44 @@ impl ObjectiveFunction {
         }
 
         match self {
-            ObjectiveFunction::NashSutcliffe => Ok(-nash_sutcliffe(observed, simulated)?),      // Negate for minimization
-            ObjectiveFunction::NashSutcliffeLog => Ok(-nash_sutcliffe_log(observed, simulated)?),  // Negate for minimization
-            ObjectiveFunction::RMSE => Ok(rmse(observed, simulated)),                            // Already minimization
-            ObjectiveFunction::MAE => Ok(mae(observed, simulated)),                              // Already minimization
-            ObjectiveFunction::KlingGupta => Ok(-kling_gupta(observed, simulated)?),             // Negate for minimization
-            ObjectiveFunction::PercentBias => Ok(percent_bias(observed, simulated).abs()),       // Absolute value, minimize
-            ObjectiveFunction::SDEB(obj) => obj.calculate(observed, simulated),                  // Already minimization
+            ObjectiveFunction::NashSutcliffe(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::NashSutcliffeLog(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::RMSE(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::MAE(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::KlingGupta(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::PercentBias(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::SDEB(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::PEARS_R(obj) => obj.calculate(observed, simulated),
         }
     }
 
     /// Get name of objective function
     pub fn name(&self) -> &str {
         match self {
-            ObjectiveFunction::NashSutcliffe => "NSE",
-            ObjectiveFunction::NashSutcliffeLog => "NSE-Log",
-            ObjectiveFunction::RMSE => "RMSE",
-            ObjectiveFunction::MAE => "MAE",
-            ObjectiveFunction::KlingGupta => "KGE",
-            ObjectiveFunction::PercentBias => "PBIAS",
+            ObjectiveFunction::NashSutcliffe(_) => "NSE",
+            ObjectiveFunction::NashSutcliffeLog(_) => "NSE-Log",
+            ObjectiveFunction::RMSE(_) => "RMSE",
+            ObjectiveFunction::MAE(_) => "MAE",
+            ObjectiveFunction::KlingGupta(_) => "KGE",
+            ObjectiveFunction::PercentBias(_) => "PBIAS",
             ObjectiveFunction::SDEB(_) => "SDEB",
+            ObjectiveFunction::PEARS_R(_) => "PEARS_R",
         }
     }
 }
 
 impl PartialEq for ObjectiveFunction {
     fn eq(&self, other: &Self) -> bool {
-        // For simple variants, use discriminant comparison
-        // For SDEB, we can't really compare cache contents, so just check type
+        // All stateful objectives - we can't compare cache contents, so just check type
         match (self, other) {
-            (Self::NashSutcliffe, Self::NashSutcliffe) => true,
-            (Self::NashSutcliffeLog, Self::NashSutcliffeLog) => true,
-            (Self::RMSE, Self::RMSE) => true,
-            (Self::MAE, Self::MAE) => true,
-            (Self::KlingGupta, Self::KlingGupta) => true,
-            (Self::PercentBias, Self::PercentBias) => true,
-            (Self::SDEB(_), Self::SDEB(_)) => true,  // Consider all SDEB instances equal
+            (Self::NashSutcliffe(_), Self::NashSutcliffe(_)) => true,
+            (Self::NashSutcliffeLog(_), Self::NashSutcliffeLog(_)) => true,
+            (Self::RMSE(_), Self::RMSE(_)) => true,
+            (Self::MAE(_), Self::MAE(_)) => true,
+            (Self::KlingGupta(_), Self::KlingGupta(_)) => true,
+            (Self::PercentBias(_), Self::PercentBias(_)) => true,
+            (Self::SDEB(_), Self::SDEB(_)) => true,
+            (Self::PEARS_R(_), Self::PEARS_R(_)) => true,
             _ => false,
         }
     }
@@ -376,7 +996,7 @@ mod tests {
         assert!((nse - 1.0).abs() < 1e-10, "Perfect fit should give NSE=1");
 
         // Through ObjectiveFunction (negated for minimization)
-        let obj = ObjectiveFunction::NashSutcliffe.calculate(&obs, &sim).unwrap();
+        let obj = ObjectiveFunction::NashSutcliffe(NseObjective::new()).calculate(&obs, &sim).unwrap();
         assert!((obj + 1.0).abs() < 1e-10, "Perfect fit should give objective=-1");
     }
 
@@ -389,7 +1009,7 @@ mod tests {
         assert!((nse - 0.0).abs() < 1e-10, "Predicting mean should give NSE=0");
 
         // Through ObjectiveFunction (negated for minimization)
-        let obj = ObjectiveFunction::NashSutcliffe.calculate(&obs, &sim).unwrap();
+        let obj = ObjectiveFunction::NashSutcliffe(NseObjective::new()).calculate(&obs, &sim).unwrap();
         assert!((obj - 0.0).abs() < 1e-10, "Predicting mean should give objective=0");
     }
 
@@ -429,7 +1049,7 @@ mod tests {
         assert!((kge - 1.0).abs() < 1e-10, "Perfect fit should give KGE=1");
 
         // Through ObjectiveFunction (negated for minimization)
-        let obj = ObjectiveFunction::KlingGupta.calculate(&obs, &sim).unwrap();
+        let obj = ObjectiveFunction::KlingGupta(KgeObjective::new()).calculate(&obs, &sim).unwrap();
         assert!((obj + 1.0).abs() < 1e-10, "Perfect fit should give objective=-1");
     }
 

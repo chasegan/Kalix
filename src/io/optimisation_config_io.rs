@@ -282,15 +282,17 @@ impl OptimisationConfig {
 
     /// Parse objective function string to enum (case-insensitive)
     fn parse_objective_function(s: &str) -> Result<ObjectiveFunction, String> {
+        use crate::numerical::opt::objectives::*;
         match s.to_uppercase().as_str() {
-            "NSE" => Ok(ObjectiveFunction::NashSutcliffe),
-            "LNSE" => Ok(ObjectiveFunction::NashSutcliffeLog),
-            "RMSE" => Ok(ObjectiveFunction::RMSE),
-            "MAE" => Ok(ObjectiveFunction::MAE),
-            "KGE" => Ok(ObjectiveFunction::KlingGupta),
-            "PBIAS" => Ok(ObjectiveFunction::PercentBias),
-            "SDEB" => Ok(ObjectiveFunction::SDEB(crate::numerical::opt::objectives::SdebObjective::new())),
-            _ => Err(format!("Unknown objective function: {}. Valid options: NSE, LNSE, RMSE, MAE, KGE, PBIAS, SDEB", s)),
+            "NSE" => Ok(ObjectiveFunction::NashSutcliffe(NseObjective::new())),
+            "LNSE" => Ok(ObjectiveFunction::NashSutcliffeLog(LnseObjective::new())),
+            "RMSE" => Ok(ObjectiveFunction::RMSE(RmseObjective::new())),
+            "MAE" => Ok(ObjectiveFunction::MAE(MaeObjective::new())),
+            "KGE" => Ok(ObjectiveFunction::KlingGupta(KgeObjective::new())),
+            "PBIAS" => Ok(ObjectiveFunction::PercentBias(PbiasObjective::new())),
+            "SDEB" => Ok(ObjectiveFunction::SDEB(SdebObjective::new())),
+            "PEARS_R" => Ok(ObjectiveFunction::PEARS_R(PearsObjective::new())),
+            _ => Err(format!("Unknown objective function: {}. Valid options: NSE, LNSE, RMSE, MAE, KGE, PBIAS, SDEB, PEARS_R", s)),
         }
     }
 }
@@ -391,7 +393,7 @@ verbose = true
         assert_eq!(config.model_file, Some("test.kai".to_string()));
         assert_eq!(config.observed_data_series, "obs.csv.flow");
         assert_eq!(config.simulated_series, "node.gr4j.dsflow");
-        assert_eq!(config.objective_function, ObjectiveFunction::NashSutcliffe);
+        assert_eq!(config.objective_function.name(), "NSE");
         assert_eq!(config.algorithm.name(), "DE");
         assert_eq!(config.algorithm.population_size(), 30);
         assert_eq!(config.termination_evaluations, 50);
@@ -440,7 +442,7 @@ VERBOSE = TRUE
         assert_eq!(config.simulated_series, "node.GR4J.dsflow");
 
         // Objective function parsing is case-insensitive
-        assert_eq!(config.objective_function, ObjectiveFunction::NashSutcliffe);
+        assert_eq!(config.objective_function.name(), "NSE");
 
         // Algorithm is normalized to uppercase
         assert_eq!(config.algorithm.name(), "DE");
@@ -452,20 +454,20 @@ VERBOSE = TRUE
     #[test]
     fn test_parse_objective_functions() {
         assert_eq!(
-            OptimisationConfig::parse_objective_function("NSE").unwrap(),
-            ObjectiveFunction::NashSutcliffe
+            OptimisationConfig::parse_objective_function("NSE").unwrap().name(),
+            "NSE"
         );
         assert_eq!(
-            OptimisationConfig::parse_objective_function("nse").unwrap(),
-            ObjectiveFunction::NashSutcliffe
+            OptimisationConfig::parse_objective_function("nse").unwrap().name(),
+            "NSE"
         );
         assert_eq!(
-            OptimisationConfig::parse_objective_function("KGE").unwrap(),
-            ObjectiveFunction::KlingGupta
+            OptimisationConfig::parse_objective_function("KGE").unwrap().name(),
+            "KGE"
         );
         assert_eq!(
-            OptimisationConfig::parse_objective_function("kge").unwrap(),
-            ObjectiveFunction::KlingGupta
+            OptimisationConfig::parse_objective_function("kge").unwrap().name(),
+            "KGE"
         );
         assert!(OptimisationConfig::parse_objective_function("INVALID").is_err());
     }

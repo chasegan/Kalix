@@ -37,8 +37,9 @@ fn test_model_constant_optimisation() {
     let target_model_output_name = "node.node2.ds_1".to_string();
 
     //
+    use crate::numerical::opt::objectives::{ObjectiveFunction, NseObjective};
     let mut problem = OptimisationProblem::single_comparison(m,
-            par_map, observed_timeseries, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe);
+            par_map, observed_timeseries, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe(NseObjective::new()));
 
     // Create DE optimiser
     let de_config = DEConfig {

@@ -201,7 +201,7 @@ mod tests {
             model_file: None,
             observed_data_series: "test.csv.0".to_string(),
             simulated_series: "node.test.output".to_string(),
-            objective_function: ObjectiveFunction::NashSutcliffe,
+            objective_function: ObjectiveFunction::NashSutcliffe(crate::numerical::opt::objectives::NseObjective::new()),
             output_file: None,
             termination_evaluations: 1000,
             random_seed: Some(42),

@@ -71,11 +71,12 @@ impl OptimisationProblem {
         config: ParameterMappingConfig,
         comparisons: Vec<ComparisonPair>,
     ) -> Self {
+        use crate::numerical::opt::objectives::NseObjective;
         Self {
             model,
             config,
             comparisons,
-            objective: ObjectiveFunction::NashSutcliffe,
+            objective: ObjectiveFunction::NashSutcliffe(NseObjective::new()),
         }
     }
 
@@ -307,7 +308,7 @@ mod tests {
             "node.test.output".to_string(),
         );
 
-        assert_eq!(problem.objective, ObjectiveFunction::NashSutcliffe);
+        assert_eq!(problem.objective.name(), "NSE");
     }
 
     #[test]
@@ -319,14 +320,15 @@ mod tests {
         observed.push(1, 2.0);
         observed.push(2, 3.0);
 
+        use crate::numerical::opt::objectives::KgeObjective;
         let problem = OptimisationProblem::single_comparison(
             model,
             config,
             observed,
             "node.test.output".to_string(),
         )
-        .with_objective(ObjectiveFunction::KlingGupta);
+        .with_objective(ObjectiveFunction::KlingGupta(KgeObjective::new()));
 
-        assert_eq!(problem.objective, ObjectiveFunction::KlingGupta);
+        assert_eq!(problem.objective.name(), "KGE");
     }
 }
