@@ -74,11 +74,19 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
 
         // Parse each data column into the respective timeseries
         for i in 0..n_data_cols {
+            // Get the field value (might be empty for missing data)
+            let field = record.get(i + 1)
+                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?;
+
             // Parse the data value as a float
-            let value: f64 = record.get(i + 1)
-                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?
-                .parse()
-                .map_err(|_| format!("Invalid number in '{}' line {} column {}", filename, file_line, i + 1))?;
+            // If empty or whitespace-only, treat as missing data (NaN)
+            let value: f64 = if field.trim().is_empty() {
+                f64::NAN
+            } else {
+                field.parse()
+                    .map_err(|_| format!("Invalid number '{}' in '{}' line {} column {}",
+                        field, filename, file_line, i + 1))?
+            };
 
             answer[i].push(t_u64, value);
         }

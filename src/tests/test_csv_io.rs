@@ -20,6 +20,33 @@ fn test_csv_reader_2() {
 
 
 #[test]
+fn test_csv_reader_with_missing_data() {
+    let mpot = "./src/tests/example_data/formatted_11000A.csv";
+    let r = read_ts(mpot).unwrap();
+    let ts = &r[0];
+
+    // Verify that we successfully read the timeseries
+    assert!(ts.len() > 0, "Timeseries should have data");
+
+    // Count NaN values (missing data)
+    let nan_count = ts.values.iter().filter(|v| v.is_nan()).count();
+
+    // We know from the file inspection that there are missing values
+    assert!(nan_count > 0, "Expected some NaN values for missing data, found {}", nan_count);
+
+    // Count finite values
+    let finite_count = ts.values.iter().filter(|v| v.is_finite()).count();
+
+    // Verify both NaN and finite values exist
+    assert!(finite_count > 0, "Should have some finite values");
+    assert!(nan_count + finite_count == ts.len(), "All values should be either finite or NaN");
+
+    println!("Successfully read {} values: {} finite, {} missing (NaN)",
+             ts.len(), finite_count, nan_count);
+}
+
+
+#[test]
 fn test_csv_reader() {
     let filename = "./src/tests/example_data/output_31d6f6b4.csv";
     let r = read_ts(filename);

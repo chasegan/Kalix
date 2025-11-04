@@ -33,12 +33,12 @@ fn test_model_constant_optimisation() {
 
     // Set optimisation target
     let all_data = read_ts("./src/tests/example_models/5/data.csv").unwrap();
-    let observed_data = all_data[0].values.clone();
+    let observed_timeseries = all_data[0].clone();
     let target_model_output_name = "node.node2.ds_1".to_string();
 
     //
-    let mut problem = OptimisationProblem::new(m,
-            par_map, observed_data, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe);
+    let mut problem = OptimisationProblem::single_comparison(m,
+            par_map, observed_timeseries, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe);
 
     // Create DE optimiser
     let de_config = DEConfig {

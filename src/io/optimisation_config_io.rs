@@ -289,7 +289,8 @@ impl OptimisationConfig {
             "MAE" => Ok(ObjectiveFunction::MAE),
             "KGE" => Ok(ObjectiveFunction::KlingGupta),
             "PBIAS" => Ok(ObjectiveFunction::PercentBias),
-            _ => Err(format!("Unknown objective function: {}. Valid options: NSE, LNSE, RMSE, MAE, KGE, PBIAS", s)),
+            "SDEB" => Ok(ObjectiveFunction::SDEB(crate::numerical::opt::objectives::SdebObjective::new())),
+            _ => Err(format!("Unknown objective function: {}. Valid options: NSE, LNSE, RMSE, MAE, KGE, PBIAS, SDEB", s)),
         }
     }
 }

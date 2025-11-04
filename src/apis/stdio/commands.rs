@@ -734,15 +734,13 @@ impl Command for RunOptimisationCommand {
         let observed_timeseries = load_observed_timeseries(&config.observed_data_series)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to load observed data: {}", e)))?;
 
-        let observed_data = observed_timeseries.timeseries.values.clone();
-
-        // Create optimisation problem
-        let mut problem = OptimisationProblem::new(
+        // Create optimisation problem with temporal alignment
+        let mut problem = OptimisationProblem::single_comparison(
             model,
             config.parameter_config.clone(),
-            observed_data,
+            observed_timeseries.timeseries,
             config.simulated_series.clone(),
-        ).with_objective(config.objective_function);
+        ).with_objective(config.objective_function.clone());
 
         // Get interrupt flag
         let interrupt_flag = std::sync::Arc::clone(&session.interrupt_flag);

@@ -237,18 +237,17 @@ fn main() {
                 }
             };
 
-            let observed_data = observed_timeseries.timeseries.values.clone();
             if config.verbose {
-                println!("Observed data points: {}", observed_data.len());
+                println!("Observed data points: {}", observed_timeseries.timeseries.len());
             }
 
-            // Create calibration problem
-            let problem = OptimisationProblem::new(
+            // Create calibration problem with temporal alignment
+            let problem = OptimisationProblem::single_comparison(
                 model,
                 config.parameter_config.clone(),
-                observed_data,
+                observed_timeseries.timeseries,
                 config.simulated_series.clone(),
-            ).with_objective(config.objective_function);
+            ).with_objective(config.objective_function.clone());
 
             // Extract algorithm parameters (currently only DE is supported)
             let (population_size, f, cr) = match &config.algorithm {

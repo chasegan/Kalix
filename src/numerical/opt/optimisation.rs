@@ -2,7 +2,7 @@
 ///
 /// This module wraps a hydrological Model with optimisation-specific information:
 /// - Parameter mappings (genes -> model parameters)
-/// - Observed data for comparison
+/// - Observed data for comparison (with temporal alignment)
 /// - Objective function selection
 ///
 /// The wrapper implements the Optimisable trait, presenting a simple normalised
@@ -10,10 +10,24 @@
 
 use crate::model::Model;
 use crate::nodes::NodeEnum;
+use crate::timeseries::Timeseries;
 use super::optimisable::Optimisable;
 use super::optimisable_component::OptimisableComponent;
 use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
+
+/// A pair of observed and simulated series for comparison
+///
+/// Stores observed timeseries (with timestamps) and the name of the
+/// simulated series to extract from the model for comparison.
+#[derive(Clone)]
+pub struct ComparisonPair {
+    /// Observed timeseries (includes timestamps and values)
+    pub observed: Timeseries,
+
+    /// Name of simulated series to compare (e.g., "node.sacramento_a.dsflow")
+    pub simulated_series_name: String,
+}
 
 /// Wraps a Model to make it Optimisable
 ///
@@ -24,11 +38,15 @@ use super::objectives::ObjectiveFunction;
 ///     "node.sacramento_a.uzk = log_range(g(2), 0.1, 0.7)",
 /// ])?;
 ///
+/// let comparison = ComparisonPair {
+///     observed: observed_timeseries,
+///     simulated_series_name: "node.sacramento_a.dsflow".to_string(),
+/// };
+///
 /// let problem = OptimisationProblem::new(
 ///     model,
 ///     config,
-///     observed_data,
-///     "node.sacramento_a.dsflow".to_string()
+///     vec![comparison],
 /// );
 /// ```
 pub struct OptimisationProblem {
@@ -38,11 +56,9 @@ pub struct OptimisationProblem {
     /// Gene-based parameter configuration
     pub config: ParameterMappingConfig,
 
-    /// Observed data for comparison
-    pub observed_data: Vec<f64>,
-
-    /// Name of simulated series to compare (e.g., "node.sacramento_a.dsflow")
-    pub simulated_series_name: String,
+    /// Comparison pairs (observed vs simulated series)
+    /// Supports multiple pairs for multi-objective optimization
+    pub comparisons: Vec<ComparisonPair>,
 
     /// Objective function to use
     pub objective: ObjectiveFunction,
@@ -53,16 +69,31 @@ impl OptimisationProblem {
     pub fn new(
         model: Model,
         config: ParameterMappingConfig,
-        observed_data: Vec<f64>,
-        simulated_series_name: String,
+        comparisons: Vec<ComparisonPair>,
     ) -> Self {
         Self {
             model,
             config,
-            observed_data,
-            simulated_series_name,
+            comparisons,
             objective: ObjectiveFunction::NashSutcliffe,
         }
+    }
+
+    /// Create a single-comparison problem (convenience method for backward compatibility)
+    pub fn single_comparison(
+        model: Model,
+        config: ParameterMappingConfig,
+        observed: Timeseries,
+        simulated_series_name: String,
+    ) -> Self {
+        Self::new(
+            model,
+            config,
+            vec![ComparisonPair {
+                observed,
+                simulated_series_name,
+            }],
+        )
     }
 
     /// Set the objective function
@@ -129,20 +160,46 @@ impl OptimisationProblem {
         Ok(())
     }
 
-    /// Extract simulated data from model after run
-    fn extract_simulated(&mut self) -> Result<Vec<f64>, String> {
-        let idx = self
-            .model
-            .data_cache
-            .get_series_idx(&self.simulated_series_name, false)
-            .ok_or_else(|| {
-                format!(
-                    "Simulated series not found: {}",
-                    self.simulated_series_name
-                )
-            })?;
+    /// Align observed and simulated timeseries temporally
+    ///
+    /// Returns aligned (observed, simulated) vectors that only include timesteps
+    /// where both series have data.
+    fn align_timeseries(
+        &self,
+        observed: &Timeseries,
+        simulated: &Timeseries,
+    ) -> Result<(Vec<f64>, Vec<f64>), String> {
+        let mut aligned_obs = Vec::new();
+        let mut aligned_sim = Vec::new();
 
-        Ok(self.model.data_cache.series[idx].values.clone())
+        // Create lookup map for simulated data
+        let sim_map: std::collections::HashMap<u64, f64> = simulated
+            .timestamps
+            .iter()
+            .zip(&simulated.values)
+            .map(|(&t, &v)| (t, v))
+            .collect();
+
+        // Iterate through observed timestamps and find matches
+        for (&obs_time, &obs_value) in observed.timestamps.iter().zip(&observed.values) {
+            // Look for matching timestamp in simulated
+            if let Some(&sim_value) = sim_map.get(&obs_time) {
+                aligned_obs.push(obs_value);
+                aligned_sim.push(sim_value);
+            }
+        }
+
+        if aligned_obs.is_empty() {
+            return Err(format!(
+                "No overlapping timestamps found between observed ({}..{}) and simulated ({}..{}) data",
+                observed.timestamps.first().unwrap_or(&0),
+                observed.timestamps.last().unwrap_or(&0),
+                simulated.timestamps.first().unwrap_or(&0),
+                simulated.timestamps.last().unwrap_or(&0),
+            ));
+        }
+
+        Ok((aligned_obs, aligned_sim))
     }
 
     /// Extract current parameter values from model
@@ -177,8 +234,6 @@ impl Optimisable for OptimisationProblem {
     }
 
     fn evaluate(&mut self) -> Result<f64, String> {
-
-
         // Configure model if needed (first time)
         if self.model.execution_order.is_empty() {
             self.model.configure()?;
@@ -187,20 +242,35 @@ impl Optimisable for OptimisationProblem {
         // Run the model
         self.model.run()?;
 
-        // Extract simulated data
-        let simulated = self.extract_simulated()?; //TODO: this is a clone
-
-        // Check lengths match
-        if simulated.len() != self.observed_data.len() {
+        // For now, only support single comparison (multi-objective in future)
+        if self.comparisons.len() != 1 {
             return Err(format!(
-                "Simulated and observed data length mismatch ({} vs {})",
-                simulated.len(),
-                self.observed_data.len()
+                "Currently only single comparison is supported, got {} comparisons",
+                self.comparisons.len()
             ));
         }
 
-        // Calculate objective
-        self.objective.calculate(&self.observed_data, &simulated)
+        let comparison = &self.comparisons[0];
+
+        // Extract simulated timeseries from model
+        let sim_idx = self
+            .model
+            .data_cache
+            .get_series_idx(&comparison.simulated_series_name, false)
+            .ok_or_else(|| {
+                format!(
+                    "Simulated series not found: {}",
+                    comparison.simulated_series_name
+                )
+            })?;
+
+        let simulated_ts = &self.model.data_cache.series[sim_idx];
+
+        // Align observed and simulated temporally
+        let (aligned_obs, aligned_sim) = self.align_timeseries(&comparison.observed, simulated_ts)?;
+
+        // Calculate objective using aligned data
+        self.objective.calculate(&aligned_obs, &aligned_sim)
     }
 
     fn param_names(&self) -> Vec<String> {
@@ -211,9 +281,8 @@ impl Optimisable for OptimisationProblem {
         Box::new(Self {
             model: self.model.clone(),
             config: self.config.clone(),
-            observed_data: self.observed_data.clone(),
-            simulated_series_name: self.simulated_series_name.clone(),
-            objective: self.objective,
+            comparisons: self.comparisons.clone(),
+            objective: self.objective.clone(),
         })
     }
 }
@@ -226,9 +295,12 @@ mod tests {
     fn test_optimisation_problem_creation() {
         let model = Model::new();
         let config = ParameterMappingConfig::new();
-        let observed = vec![1.0, 2.0, 3.0];
+        let mut observed = Timeseries::new_daily();
+        observed.push(0, 1.0);
+        observed.push(1, 2.0);
+        observed.push(2, 3.0);
 
-        let problem = OptimisationProblem::new(
+        let problem = OptimisationProblem::single_comparison(
             model,
             config,
             observed,
@@ -242,9 +314,12 @@ mod tests {
     fn test_with_objective() {
         let model = Model::new();
         let config = ParameterMappingConfig::new();
-        let observed = vec![1.0, 2.0, 3.0];
+        let mut observed = Timeseries::new_daily();
+        observed.push(0, 1.0);
+        observed.push(1, 2.0);
+        observed.push(2, 3.0);
 
-        let problem = OptimisationProblem::new(
+        let problem = OptimisationProblem::single_comparison(
             model,
             config,
             observed,
