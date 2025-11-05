@@ -3,6 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.YAxisScale;
@@ -146,13 +147,13 @@ public class VisualizationTabManager {
         final String name;
         final JComponent component;
         final PlotPanel plotPanel; // null for stats tabs
-        final RunManager.StatsTableModel statsModel; // null for plot tabs
+        final StatsTableModel statsModel; // null for plot tabs
 
         // Aggregation settings for stats tabs
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
         AggregationMethod statsMethod = AggregationMethod.SUM;
 
-        TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, RunManager.StatsTableModel statsModel) {
+        TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
             this.type = type;
             this.name = name;
             this.component = component;
@@ -676,9 +677,9 @@ public class VisualizationTabManager {
      *
      * @return The created StatsTableModel
      */
-    public RunManager.StatsTableModel addStatsTab() {
+    public StatsTableModel addStatsTab() {
         // Create new stats table
-        RunManager.StatsTableModel model = new RunManager.StatsTableModel();
+        StatsTableModel model = new StatsTableModel();
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
@@ -710,9 +711,9 @@ public class VisualizationTabManager {
      * @param settings The settings to apply to the new stats tab
      * @return The created StatsTableModel
      */
-    public RunManager.StatsTableModel addStatsTabFromSettings(TabSettings settings) {
+    public StatsTableModel addStatsTabFromSettings(TabSettings settings) {
         // Create new stats table
-        RunManager.StatsTableModel model = new RunManager.StatsTableModel();
+        StatsTableModel model = new StatsTableModel();
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
@@ -1084,8 +1085,8 @@ public class VisualizationTabManager {
     /**
      * Gets all stats models from stats tabs.
      */
-    public List<RunManager.StatsTableModel> getAllStatsModels() {
-        List<RunManager.StatsTableModel> models = new ArrayList<>();
+    public List<StatsTableModel> getAllStatsModels() {
+        List<StatsTableModel> models = new ArrayList<>();
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
                 models.add(tab.statsModel);
