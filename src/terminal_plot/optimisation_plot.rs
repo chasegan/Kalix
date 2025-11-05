@@ -6,7 +6,7 @@
 //! - Progress tracking and timing information
 
 use super::*;
-use crate::numerical::opt::DEProgress;
+use crate::numerical::opt::OptimizationProgress;
 
 /// Specialised plot for tracking optimisation progress
 pub struct OptimisationPlot {
@@ -67,7 +67,7 @@ impl OptimisationPlot {
     }
 
     /// Update the plot with progress from the optimiser
-    pub fn update_from_progress(&mut self, progress: &DEProgress) {
+    pub fn update_from_progress(&mut self, progress: &OptimizationProgress) {
         // Clear previous elements and footer
         self.plot.clear_elements();
         self.plot.clear_footer();
@@ -91,7 +91,7 @@ impl OptimisationPlot {
             });
         }
 
-        // Add current generation scatter points to accumulated collection
+        // Add current generation/iteration scatter points to accumulated collection
         if let Some(ref pop_objectives) = progress.population_objectives {
             let new_scatter_points: Vec<ScatterPoint> = pop_objectives
                 .iter()
@@ -119,9 +119,16 @@ impl OptimisationPlot {
             label: Some(format!("← BEST: {:.6}", progress.best_objective)),
         });
 
-        // Add footer information
+        // Add footer information with algorithm-specific data if available
         self.plot.add_footer_line(format!("Best: {:.6}", progress.best_objective));
         self.plot.add_footer_line(format!("Time: {:.1}s", progress.elapsed.as_secs_f64()));
+
+        // Display generation/iteration if available
+        if let Some(&gen) = progress.algorithm_data.get("generation") {
+            self.plot.add_footer_line(format!("Generation: {}", gen as usize));
+        } else if let Some(&iter) = progress.algorithm_data.get("iteration") {
+            self.plot.add_footer_line(format!("Iteration: {}", iter as usize));
+        }
     }
 
     /// Render the final optimisation result

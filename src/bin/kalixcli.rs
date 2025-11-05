@@ -181,8 +181,8 @@ fn main() {
         }
         Commands::Optimise { config_file, model_file, save_model } => {
             use kalix::numerical::opt::{
-                OptimisationConfig, OptimisationProblem, AlgorithmParams,
-                create_de_optimizer_with_callback, DEProgress, Optimisable
+                OptimisationConfig, OptimisationProblem,
+                create_optimizer, OptimizationProgress, Optimisable
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
             use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
@@ -249,19 +249,9 @@ fn main() {
                 config.simulated_series.clone(),
             ).with_objective(config.objective_function.clone());
 
-            // Extract algorithm parameters (currently only DE is supported)
-            let (population_size, f, cr) = match &config.algorithm {
-                AlgorithmParams::DE { population_size, f, cr } => (*population_size, *f, *cr),
-                _ => {
-                    eprintln!("Error: Only 'DE' algorithm is currently supported");
-                    eprintln!("Requested algorithm: {}", config.algorithm.name());
-                    std::process::exit(1);
-                }
-            };
-
             println!("\n=== Starting Optimisation ===");
-            println!("Algorithm: Differential Evolution");
-            println!("Population size: {}", population_size);
+            println!("Algorithm: {}", config.algorithm.name());
+            println!("Population size: {}", config.algorithm.population_size());
             println!("Termination evaluations: {}", config.termination_evaluations);
             println!("Parameters to optimise: {}", problem.config.n_genes());
             println!("Objective: {} (minimize)\n", config.objective_function.name());
@@ -272,35 +262,39 @@ fn main() {
             ));
 
             // Create progress callback for terminal plot
+            use std::sync::atomic::{AtomicUsize, Ordering};
             let report_freq = config.report_frequency;
             let plot_clone = Arc::clone(&opt_plot);
+            let last_report_eval = Arc::new(AtomicUsize::new(0));
             let progress_callback = if config.verbose {
-                Some(Box::new(move |progress: &DEProgress| {
-                    if progress.generation % report_freq == 0 {
+                Some(Box::new(move |progress: &OptimizationProgress| {
+                    // Report every N evaluations (since OptimizationProgress doesn't have generation)
+                    let last = last_report_eval.load(Ordering::Relaxed);
+                    let should_report = (progress.n_evaluations / report_freq) > (last / report_freq);
+                    if should_report {
+                        last_report_eval.store(progress.n_evaluations, Ordering::Relaxed);
                         let mut plot = plot_clone.lock().unwrap();
                         plot.update_from_progress(progress);
                         print!("{}", plot.render());
                         io::stdout().flush().unwrap();
                     }
-                }) as Box<dyn Fn(&DEProgress) + Send + Sync>)
+                }) as Box<dyn Fn(&OptimizationProgress) + Send + Sync>)
             } else {
                 None
             };
 
-            // Create optimizer using factory with callback
-            let de = create_de_optimizer_with_callback(
-                population_size,
-                config.termination_evaluations,
-                f,
-                cr,
-                config.random_seed,
-                config.n_threads,
-                progress_callback,
-            );
+            // Create optimizer using factory
+            let optimizer = match create_optimizer(&config) {
+                Ok(opt) => opt,
+                Err(e) => {
+                    eprintln!("Error creating optimizer: {}", e);
+                    std::process::exit(1);
+                }
+            };
 
             // Run optimization
             let mut problem_mut = problem;  // Make mutable for optimisation
-            let result = de.optimise(&mut problem_mut);
+            let result = optimizer.optimize(&mut problem_mut, progress_callback);
 
             // Render final plot if verbose mode is enabled
             if config.verbose {
@@ -314,7 +308,6 @@ fn main() {
             println!("\n\n=== Optimisation Complete ===");
             println!("Status: {}", if result.success { "SUCCESS" } else { "FAILED" });
             println!("Message: {}", result.message);
-            println!("Generations: {}", result.generations);
             println!("Function evaluations: {}", result.n_evaluations);
             println!("Best objective value: {:.6}", result.best_objective);
             println!("\nOptimized Parameters (normalized [0,1]):");
@@ -356,7 +349,6 @@ fn main() {
                 writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
                 writeln!(&mut output, "Objective function: {}", config.objective_function.name()).unwrap();
                 writeln!(&mut output, "Population size: {}", config.algorithm.population_size()).unwrap();
-                writeln!(&mut output, "Generations: {}\n", result.generations).unwrap();
                 writeln!(&mut output, "Best objective value: {:.6}", result.best_objective).unwrap();
                 writeln!(&mut output, "Function evaluations: {}\n", result.n_evaluations).unwrap();
                 writeln!(&mut output, "Optimized Parameters:").unwrap();
