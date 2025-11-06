@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io::IniModelIO;
 
@@ -8,7 +9,7 @@ fn test_line_continuation_integration() {
 ini_version = 0.0.1
 
 [inputs]
-/Users/chas/github/Kalix/src/tests/example_models/1/flows.csv
+./src/tests/example_models/1/flows.csv
 
 [node.test_node]
 type = sacramento
@@ -254,7 +255,7 @@ fn test_save_and_reload_from_file() {
 ini_version = 0.0.1
 
 [inputs]
-./src/tests/example_models/1/rex_rain.csv
+./example_models/1/rex_rain.csv
 
 [node.simple_node]
 type = inflow
@@ -279,7 +280,7 @@ node.simple_node.dsflow
 
     // Load model
     let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(original_ini).unwrap();
+    let mut model = ini_io.read_model_string_with_working_directory(original_ini, Some(PathBuf::from( "./src/tests"))).unwrap();
 
     // Modify a parameter
     model.update_node_parameter_in_ini("simple_node", "loc", "15.0, 25.0").unwrap();

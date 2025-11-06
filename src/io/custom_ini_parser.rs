@@ -481,7 +481,7 @@ key2 = value2,  # First part
 
     #[test]
     fn test_actual_model_file() {
-        let path = "/Users/chas/github/Kalix/kalixide/example_models/model_with_every_node_type.ini";
+        let path = "./kalixide/example_models/model_with_every_node_type.ini";
         if let Ok(content) = std::fs::read_to_string(path) {
             let start = Instant::now();
             let doc = IniDocument::parse(&content).unwrap();
@@ -505,7 +505,7 @@ key2 = value2,  # First part
 
     #[test]
     fn test_large_model_file() {
-        let path = "/Users/chas/github/Kalix/src/tests/example_models/3/model_500_nodes.ini";
+        let path = "./src/tests/example_models/3/model_500_nodes.ini";
         if let Ok(content) = std::fs::read_to_string(path) {
             let start = Instant::now();
             let doc = IniDocument::parse(&content).unwrap();

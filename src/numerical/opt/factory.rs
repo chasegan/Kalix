@@ -329,21 +329,4 @@ mod tests {
             _ => panic!("Expected NotImplemented error for CMA-ES"),
         }
     }
-
-    #[test]
-    fn test_unsupported_algorithm_sceua() {
-        let mut config = create_test_config();
-        config.algorithm = AlgorithmParams::SCEUA {
-            complexes: 5,
-            points_per_complex: 19,
-        };
-
-        let result = create_optimizer(&config);
-        match result {
-            Err(OptimizerFactoryError::NotImplemented(name)) => {
-                assert_eq!(name, "SCE-UA");
-            }
-            _ => panic!("Expected NotImplemented error for SCE-UA"),
-        }
-    }
 }
