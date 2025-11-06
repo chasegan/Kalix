@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
@@ -16,6 +17,11 @@ pub struct Model {
     pub input_file_paths: Vec<String>,
     pub outputs: Vec<String>,
     pub data_cache: DataCache,
+
+    /// Working directory for resolving relative file paths
+    /// - Set to model file's directory when loaded from INI file
+    /// - Set to current working directory when created programmatically
+    pub working_directory: PathBuf,
 
     // Nodes
     pub nodes: Vec<NodeEnum>,
@@ -46,6 +52,7 @@ impl Model {
             inputs: vec![],
             input_file_paths: vec![],
             outputs: vec![],
+            working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             ..Default::default()
         }
     }
@@ -322,13 +329,48 @@ impl Model {
         self.inputs.clear();
     }
 
+    /// Resolve a file path relative to the model's working directory
+    ///
+    /// # Arguments
+    /// * `path` - File path that may be relative or absolute
+    ///
+    /// # Returns
+    /// Resolved absolute path
+    ///
+    /// # Behavior
+    /// - Absolute paths are returned unchanged
+    /// - Relative paths are resolved relative to `working_directory`
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Model loaded from /home/user/models/model.ini
+    /// // working_directory = /home/user/models/
+    /// model.resolve_path("./data/rain.csv")
+    /// // Returns: /home/user/models/data/rain.csv
+    /// ```
+    fn resolve_path(&self, path: &str) -> PathBuf {
+        let path_obj = std::path::Path::new(path);
+
+        if path_obj.is_absolute() {
+            // Absolute path - use as-is
+            path_obj.to_path_buf()
+        } else {
+            // Relative path - resolve relative to working_directory
+            self.working_directory.join(path)
+        }
+    }
 
     pub fn load_input_data(&mut self, file_path: &str) -> Result<usize, String> {
-        // Remember the input file path
+        // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
 
-        // And load all the data
-        let mut x = TimeseriesInput::load(file_path)?;
+        // Resolve the path relative to the model's working directory
+        let resolved_path = self.resolve_path(file_path);
+
+        // Load all the data using the resolved path
+        let resolved_path_str = resolved_path.to_str()
+            .ok_or_else(|| format!("Invalid path: {}", file_path))?;
+        let mut x = TimeseriesInput::load(resolved_path_str)?;
         self.inputs.append(&mut x);
         Ok(x.len())
     }

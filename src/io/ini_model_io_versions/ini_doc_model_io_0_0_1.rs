@@ -16,10 +16,20 @@ const DS_2_OUTLET: u8 = 1; //ds_2 is outlet 1
 
 /// Converts INI-doc to Model struct.
 /// Returns Model on success, error message on failure.
-pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument) -> Result<Model, String> {
+///
+/// # Arguments
+/// * `ini_doc` - The parsed INI document
+/// * `working_directory` - Optional working directory for resolving relative paths.
+///   If None, uses the current working directory.
+pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
 
     // Create a new model
     let mut model = Model::new();
+
+    // Set the working directory if provided (before loading any data!)
+    if let Some(wd) = working_directory {
+        model.working_directory = wd;
+    }
 
     // Store a copy of the ini_doc in the model for later use
     model.ini_document = Some(ini_doc.clone());
