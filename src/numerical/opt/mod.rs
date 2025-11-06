@@ -21,6 +21,7 @@ pub use objectives::{ObjectiveFunction, SdebObjective};
 pub use optimisation::OptimisationProblem;
 pub use optimizer_trait::{Optimizer, OptimizationProgress, OptimizationResult};
 pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
+pub use sce_ua::{SceUa, SceUaConfig};
 pub use factory::{create_optimizer, create_de_optimizer, create_de_optimizer_with_callback, create_optimizer_instance, OptimizerInstance, OptimizerFactoryError};
 
 // Re-export IO types for convenience

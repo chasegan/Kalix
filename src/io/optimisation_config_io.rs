@@ -36,7 +36,7 @@ pub enum AlgorithmParams {
     /// SCE-UA algorithm
     SCEUA {
         complexes: usize,
-        points_per_complex: usize,
+        // Note: points_per_complex is calculated as 2*n_params + 1 (Duan et al. 1994)
     },
 }
 
@@ -51,11 +51,13 @@ impl AlgorithmParams {
     }
 
     /// Get population size (common across all algorithms)
+    ///
+    /// For SCE-UA, returns number of complexes (actual population = complexes * (2*n_params + 1))
     pub fn population_size(&self) -> usize {
         match self {
             AlgorithmParams::DE { population_size, .. } => *population_size,
             AlgorithmParams::CMAES { population_size, .. } => *population_size,
-            AlgorithmParams::SCEUA { complexes, points_per_complex } => complexes * points_per_complex,
+            AlgorithmParams::SCEUA { complexes } => *complexes,
         }
     }
 }
@@ -228,11 +230,10 @@ impl OptimisationConfig {
                     .parse::<usize>()
                     .map_err(|_| "Invalid 'complexes' for SCE-UA")?;
 
-                let points_per_complex = data.get_property("algorithm", "points_per_complex")
-                    .and_then(|p| p.parse::<usize>().ok())
-                    .unwrap_or(19);  // Common default
+                // Note: points_per_complex is automatically calculated as 2*n_params + 1
+                // following Duan et al. (1994). If specified in config, it will be ignored.
 
-                AlgorithmParams::SCEUA { complexes, points_per_complex }
+                AlgorithmParams::SCEUA { complexes }
             },
             _ => return Err(format!(
                 "Unknown algorithm: '{}'. Valid options: DE, CMAES, SCEUA",
