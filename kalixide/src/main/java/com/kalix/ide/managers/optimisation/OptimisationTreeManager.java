@@ -220,7 +220,7 @@ public class OptimisationTreeManager {
     /**
      * Sets up the context menu for the tree.
      */
-    private void setupContextMenu() {
+    public void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
         // Show Model

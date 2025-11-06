@@ -337,12 +337,13 @@ public class OptimisationConfigManager {
             return false;
         }
 
-        // Check for required sections
-        boolean hasOptimiser = config.contains("[optimiser]");
-        boolean hasObjective = config.contains("[objective]");
+        // Check for required sections - these are the actual config sections
+        boolean hasGeneral = config.contains("[General]");
+        boolean hasAlgorithm = config.contains("[Algorithm]");
+        boolean hasParameters = config.contains("[Parameters]");
 
-        if (!hasOptimiser || !hasObjective) {
-            logger.warn("Configuration missing required sections");
+        if (!hasGeneral || !hasAlgorithm || !hasParameters) {
+            logger.warn("Configuration missing required sections [General], [Algorithm], or [Parameters]");
             return false;
         }
 

@@ -13,13 +13,11 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -43,7 +41,6 @@ public class OptimisationSessionManager {
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
     private final Map<String, String> sessionToModelText = new HashMap<>();
     private final Map<String, String> sessionToConfigText = new HashMap<>();
-    private final Map<String, String> sessionToConfigFile = new HashMap<>();
 
     // Callbacks
     private Consumer<String> statusUpdater;
@@ -74,50 +71,37 @@ public class OptimisationSessionManager {
      * Creates a new optimisation session.
      *
      * @param configText The configuration text
-     * @param progressCallback Callback for progress updates
-     * @param parametersCallback Callback for parameters
-     * @param resultCallback Callback for results
+     * @param progressCallback Callback for progress updates (sessionKey, progressInfo)
+     * @param parametersCallback Callback for parameters (sessionKey, parameters)
+     * @param resultCallback Callback for results (sessionKey, result)
      */
     public void createOptimisation(String configText,
-                                  Consumer<ProgressParser.ProgressInfo> progressCallback,
-                                  Consumer<List<String>> parametersCallback,
-                                  Consumer<String> resultCallback) {
+                                  java.util.function.BiConsumer<String, ProgressParser.ProgressInfo> progressCallback,
+                                  java.util.function.BiConsumer<String, List<String>> parametersCallback,
+                                  java.util.function.BiConsumer<String, String> resultCallback) {
         String modelText = modelTextSupplier != null ? modelTextSupplier.get() : null;
         if (modelText == null || modelText.trim().isEmpty()) {
             handleError("No model loaded. Please load a model first.");
             return;
         }
 
-        // Look for kalixcli in parent IDE working directory
-        File cliLocation = workingDirectorySupplier != null ?
-            new File(workingDirectorySupplier.get(), "kalixcli") : null;
-        if (cliLocation == null || !cliLocation.exists()) {
-            // Try fallback locations
-            cliLocation = new File("./kalixcli");
-            if (!cliLocation.exists()) {
-                cliLocation = new File("../kalixcli");
-            }
-        }
+        // Find kalixcli using the same method as simulations
+        Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
+            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences();
 
-        if (!cliLocation.exists()) {
-            handleError("kalixcli not found");
+        if (!cliLocationOpt.isPresent()) {
+            handleError("kalixcli not found. Please configure the path in Preferences.");
             return;
         }
+
+        Path cliPath = cliLocationOpt.get().getPath();
 
         try {
             // Generate optimisation name
             String optName = generateOptimisationName();
 
-            // Create temp files for model and config
-            File tempDir = Files.createTempDirectory("kalix_opt_").toFile();
-            File modelFile = new File(tempDir, "model.ini");
-            File configFile = new File(tempDir, "config.ini");
-
-            Files.writeString(modelFile.toPath(), modelText);
-            Files.writeString(configFile.toPath(), configText);
-
-            // Configure session
-            SessionManager.SessionConfig config = new SessionManager.SessionConfig("optimisation");
+            // Configure session - use "new-session" subcommand for JSON communication
+            SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
 
             // Set working directory if available
             File workingDir = workingDirectorySupplier.get();
@@ -126,16 +110,16 @@ public class OptimisationSessionManager {
             }
 
             // Start session
-            stdioTaskManager.getSessionManager().startSession(cliLocation.toPath(), config)
+            stdioTaskManager.getSessionManager().startSession(cliPath, config)
                 .thenAccept(sessionKey -> {
-                    // Create optimisation program
+                    // Create optimisation program with wrapped callbacks that include sessionKey
                     OptimisationProgram program = new OptimisationProgram(
                         sessionKey,
                         stdioTaskManager.getSessionManager(),
                         statusUpdater != null ? msg -> statusUpdater.accept(msg) : msg -> {},
-                        progressCallback,
-                        parametersCallback,
-                        resultCallback
+                        progressCallback != null ? progress -> progressCallback.accept(sessionKey, progress) : progress -> {},
+                        parametersCallback != null ? params -> parametersCallback.accept(sessionKey, params) : params -> {},
+                        resultCallback != null ? result -> resultCallback.accept(sessionKey, result) : result -> {}
                     );
 
                     // Get the session
@@ -153,7 +137,6 @@ public class OptimisationSessionManager {
                     // Store model and config for later use
                     sessionToModelText.put(sessionKey, modelText);
                     sessionToConfigText.put(sessionKey, configText);
-                    sessionToConfigFile.put(sessionKey, configFile.getAbsolutePath());
 
                     // Create optimisation info
                     OptimisationInfo optInfo = new OptimisationInfo(optName, session);
@@ -231,17 +214,17 @@ public class OptimisationSessionManager {
 
             OptimisationProgram optProgram = (OptimisationProgram) program;
 
-            // Get config file path from session
+            // Get config text from session
             String sessionKey = session.getSessionKey();
-            String configFile = sessionToConfigFile.get(sessionKey);
-            if (configFile == null) {
-                handleError("Configuration file not found in session");
+            String configText = sessionToConfigText.get(sessionKey);
+            if (configText == null) {
+                handleError("Configuration text not found in session");
                 return false;
             }
 
-            // Start optimisation with config file
+            // Start optimisation with config text (not file path!)
             // Note: runOptimisation is void and manages its own async operations
-            optProgram.runOptimisation(configFile);
+            optProgram.runOptimisation(configText);
 
             // The completion will be handled through the resultCallback passed during creation
 
@@ -383,6 +366,16 @@ public class OptimisationSessionManager {
     }
 
     /**
+     * Gets the optimisation result for a session.
+     *
+     * @param sessionKey The session key
+     * @return The optimisation result, or null if not found
+     */
+    public OptimisationResult getOptimisationResult(String sessionKey) {
+        return optimisationResults.get(sessionKey);
+    }
+
+    /**
      * Gets the last known status for a session.
      *
      * @param sessionKey The session key
@@ -475,7 +468,6 @@ public class OptimisationSessionManager {
         optimisationResults.clear();
         sessionToModelText.clear();
         sessionToConfigText.clear();
-        sessionToConfigFile.clear();
         optCounter = 1;
     }
 
@@ -498,5 +490,19 @@ public class OptimisationSessionManager {
 
     public void setOnErrorOccurred(Consumer<String> callback) {
         this.onErrorOccurred = callback;
+    }
+
+    /**
+     * Updates the stored configuration text for a session.
+     * This should be called when the user modifies the config in the UI.
+     *
+     * @param sessionKey The session key
+     * @param configText The updated configuration text
+     */
+    public void updateOptimisationConfig(String sessionKey, String configText) {
+        if (sessionKey != null && configText != null) {
+            sessionToConfigText.put(sessionKey, configText);
+            logger.debug("Updated config for session: {}", sessionKey);
+        }
     }
 }

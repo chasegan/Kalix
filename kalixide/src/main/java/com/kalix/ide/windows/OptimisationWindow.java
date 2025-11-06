@@ -4,17 +4,17 @@ import com.kalix.ide.KalixIDE;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.cli.SessionManager;
-import com.kalix.ide.cli.KalixCliLocator;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.managers.StdioTaskManager;
+import com.kalix.ide.managers.optimisation.*;
+import com.kalix.ide.models.optimisation.*;
+import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.flowviz.PlotPanel;
-import com.kalix.ide.flowviz.data.DataSet;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -49,6 +49,14 @@ public class OptimisationWindow extends JFrame {
     private final Supplier<String> modelTextSupplier;
     private KalixIDE parentIDE;  // Reference to parent IDE window
 
+    // Manager instances
+    private OptimisationTreeManager treeManager;
+    private OptimisationConfigManager configManager;
+    private OptimisationProgressManager progressManager;
+    private OptimisationResultsManager resultsManager;
+    private OptimisationPlotManager plotManager;
+    private OptimisationSessionManager sessionManager;
+
     // Tree components
     private JTree optTree;
     private DefaultTreeModel treeModel;
@@ -66,7 +74,6 @@ public class OptimisationWindow extends JFrame {
     private KalixIniTextArea configEditor;
     private KalixIniTextArea optimisedModelEditor;  // Editor showing optimised model INI
     private PlotPanel convergencePlot;     // Convergence plot
-    private DataSet convergenceDataSet;    // Dataset for convergence plot
     private JLabel bestObjectiveLabel;     // Label showing best objective value
     private JLabel evaluationProgressLabel; // Label showing evaluation count and progress
     private JLabel startTimeLabel;         // Label showing optimization start time
@@ -87,7 +94,6 @@ public class OptimisationWindow extends JFrame {
     private Map<String, String> sessionToOptName = new HashMap<>();
     private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
     private Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
-    private Map<String, OptimisationResult> optimisationResults = new HashMap<>();
     private int optCounter = 1;
 
     // Flag to prevent selection listener from firing during programmatic updates
@@ -115,10 +121,188 @@ public class OptimisationWindow extends JFrame {
             this.parentIDE = (KalixIDE) parentFrame;
         }
 
+        // Initialize managers
+        initializeManagers();
+        setupManagerCallbacks();
+
         setupWindow(parentFrame);
         initializeComponents();
         setupLayout();
         setupWindowListeners();
+    }
+
+    /**
+     * Initializes all manager instances.
+     */
+    private void initializeManagers() {
+        // Initialize session manager first as others may depend on it
+        this.sessionManager = new OptimisationSessionManager(
+            stdioTaskManager,
+            workingDirectorySupplier,
+            modelTextSupplier
+        );
+
+        // Initialize other managers
+        this.treeManager = new OptimisationTreeManager();
+        this.configManager = new OptimisationConfigManager(
+            workingDirectorySupplier,
+            modelTextSupplier
+        );
+        this.progressManager = new OptimisationProgressManager(progressBar);
+        this.resultsManager = new OptimisationResultsManager();
+        this.plotManager = new OptimisationPlotManager();
+
+        // Set up basic dependencies
+        resultsManager.setWorkingDirectorySupplier(workingDirectorySupplier);
+        resultsManager.setOriginalModelSupplier(modelTextSupplier);
+        resultsManager.setStatusUpdater(statusUpdater);
+
+        configManager.setStatusUpdater(statusUpdater);
+        sessionManager.setStatusUpdater(statusUpdater);
+    }
+
+    /**
+     * Sets up callbacks between managers and this window.
+     */
+    private void setupManagerCallbacks() {
+        // Session manager callbacks
+        sessionManager.setOnOptimisationCreated(optInfo -> {
+            SwingUtilities.invokeLater(() -> {
+                treeManager.addOptimisation(optInfo.getName(), optInfo);
+                // Auto-select the new optimisation
+                DefaultMutableTreeNode node = sessionManager.getTreeNode(optInfo.getSessionKey());
+                if (node != null) {
+                    TreePath path = new TreePath(treeModel.getPathToRoot(node));
+                    optTree.setSelectionPath(path);
+                    optTree.scrollPathToVisible(path);
+                }
+            });
+        });
+
+        sessionManager.setOnSessionCompleted(sessionKey -> {
+            SwingUtilities.invokeLater(() -> {
+                updateTreeNodeForSession(sessionKey);
+                // Refresh displays if this is the current optimisation
+                if (currentlyDisplayedNode != null) {
+                    Object userObject = currentlyDisplayedNode.getUserObject();
+                    if (userObject instanceof OptimisationInfo) {
+                        OptimisationInfo optInfo = (OptimisationInfo) userObject;
+                        if (optInfo.getSessionKey().equals(sessionKey)) {
+                            displayOptimisation(optInfo);
+                        }
+                    }
+                }
+            });
+        });
+
+        sessionManager.setOnErrorOccurred(errorMessage -> {
+            SwingUtilities.invokeLater(() -> {
+                JOptionPane.showMessageDialog(this, errorMessage, "Error", JOptionPane.ERROR_MESSAGE);
+            });
+        });
+
+        // Tree manager action callbacks
+        treeManager.setShowModelAction(optInfo -> {
+            // Show the original model used for optimisation
+            if (optInfo.getSession() != null &&
+                optInfo.getSession().getActiveProgram() instanceof OptimisationProgram) {
+                OptimisationProgram program = (OptimisationProgram) optInfo.getSession().getActiveProgram();
+                String modelText = program.getModelText();
+
+                if (modelText != null && !modelText.isEmpty()) {
+                    MinimalEditorWindow editorWindow = new MinimalEditorWindow(modelText, true);
+                    editorWindow.setTitle(optInfo.getName() + " - Original Model");
+                    editorWindow.setVisible(true);
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                        "Model text is not available for this optimisation.",
+                        "Model Not Available",
+                        JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "Model text is not available for this optimisation.",
+                    "Model Not Available",
+                    JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        treeManager.setShowOptimisedModelAction(optInfo -> {
+            resultsManager.showOptimisedModel(optInfo, this);
+        });
+
+        treeManager.setCompareModelAction(optInfo -> {
+            resultsManager.compareModels(optInfo, this);
+        });
+
+        treeManager.setSaveResultsAction(optInfo -> {
+            resultsManager.saveResults(optInfo, this);
+        });
+
+        treeManager.setRenameAction(optInfo -> {
+            String newName = JOptionPane.showInputDialog(this, "Enter new name:", optInfo.getName());
+            if (newName != null && !newName.trim().isEmpty()) {
+                boolean renamed = sessionManager.renameOptimisation(optInfo.getSessionKey(), newName);
+                if (renamed) {
+                    optInfo.setName(newName.trim());
+                    treeModel.nodeChanged(sessionManager.getTreeNode(optInfo.getSessionKey()));
+                }
+            }
+        });
+
+        treeManager.setRemoveAction(optInfo -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove optimisation '" + optInfo.getName() + "'?",
+                "Confirm Remove",
+                JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                sessionManager.removeOptimisation(
+                    optInfo.getSessionKey(),
+                    optInfo.getStatus() == OptimisationStatus.RUNNING
+                );
+                DefaultMutableTreeNode node = sessionManager.getTreeNode(optInfo.getSessionKey());
+                if (node != null && node.getParent() != null) {
+                    treeModel.removeNodeFromParent(node);
+                }
+                // Clear selection
+                optTree.clearSelection();
+            }
+        });
+
+        // Config manager doesn't need complex callbacks as it's mostly self-contained
+    }
+
+    /**
+     * Displays an optimisation's information in the UI.
+     */
+    private void displayOptimisation(OptimisationInfo optInfo) {
+        if (optInfo == null) {
+            rightPanelLayout.show(rightPanel, "message");
+            currentlyDisplayedNode = null;
+            return;
+        }
+
+        // Update displays using managers
+        configManager.loadConfiguration(optInfo);
+        resultsManager.displayResults(optInfo);
+        plotManager.updatePlot(optInfo.getResult());
+        progressManager.setCurrentOptimisation(optInfo);
+
+        // Update UI state
+        boolean canRun = optInfo.getStatus() == OptimisationStatus.CONFIGURING;
+        runButton.setEnabled(canRun);
+        loadConfigButton.setEnabled(canRun);
+        saveConfigButton.setEnabled(true);
+
+        // Show optimisation panel
+        rightPanelLayout.show(rightPanel, "optimisation");
+        currentlyDisplayedNode = sessionManager.getTreeNode(optInfo.getSessionKey());
+
+        // Switch to appropriate tab based on status
+        if (optInfo.getStatus() == OptimisationStatus.DONE) {
+            mainTabbedPane.setSelectedIndex(2); // Results tab
+        }
     }
 
     /**
@@ -163,21 +347,25 @@ public class OptimisationWindow extends JFrame {
     }
 
     private void initializeComponents() {
-        // ===== Tree Structure =====
-        rootNode = new DefaultMutableTreeNode("Optimisations");
-        currentOptimisationsNode = new DefaultMutableTreeNode("Optimisation runs");
+        // ===== Tree Structure (now managed by TreeManager) =====
+        optTree = treeManager.getTree();
 
-        rootNode.add(currentOptimisationsNode);
+        // Get tree model from the tree component
+        treeModel = (DefaultTreeModel) optTree.getModel();
+        TreeNode root = (TreeNode) treeModel.getRoot();
+        rootNode = (DefaultMutableTreeNode) root;
 
-        treeModel = new DefaultTreeModel(rootNode);
-        optTree = new JTree(treeModel);
-        optTree.setRootVisible(false);
-        optTree.setShowsRootHandles(true);
+        // Get the Current Optimisations node (first child)
+        if (rootNode.getChildCount() > 0) {
+            currentOptimisationsNode = (DefaultMutableTreeNode) rootNode.getChildAt(0);
+        }
+
+        // Set custom renderer and selection listener
         optTree.setCellRenderer(new OptimisationTreeCellRenderer());
         optTree.addTreeSelectionListener(this::onOptTreeSelectionChanged);
 
-        // Setup context menu
-        setupContextMenu();
+        // Setup tree manager's popup menu
+        treeManager.setupContextMenu();
 
         // Expand "Optimisation runs" node by default
         optTree.expandRow(0);
@@ -201,53 +389,16 @@ public class OptimisationWindow extends JFrame {
         // Create main tabbed pane
         mainTabbedPane = new JTabbedPane();
 
-        // Tab 1: Config (GUI Builder)
-        guiBuilder = new OptimisationGuiBuilder(generatedConfig -> {
-            // Set the generated config in the text editor
-            configEditor.setText(generatedConfig);
-            // Switch to the Config INI tab
-            mainTabbedPane.setSelectedIndex(1);
-        }, workingDirectorySupplier);
+        // Tab 1: Config (GUI Builder from ConfigManager)
+        guiBuilder = configManager.getGuiBuilder();
         mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG, guiBuilder);
 
-        // Tab 2: Config INI (Text Editor)
-        configEditor = new KalixIniTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
-                                            OptimisationUIConstants.TEXT_AREA_COLUMNS);
+        // Tab 2: Config INI (Text Editor from ConfigManager)
+        configEditor = configManager.getConfigEditor();
+        RTextScrollPane configScrollPane = configManager.getConfigScrollPane();
 
-        // Start with empty text - user can generate or type manually
-        configEditor.setText("");
-
-        // Add document listener to detect manual edits
-        configEditor.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override
-            public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                updateConfigStatus();
-            }
-
-            @Override
-            public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                updateConfigStatus();
-            }
-
-            @Override
-            public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                updateConfigStatus();
-            }
-
-            private void updateConfigStatus() {
-                if (!isUpdatingConfigEditor) {
-                    configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_MODIFIED);
-                    // Also update the current node's modification state
-                    if (currentlyDisplayedNode != null &&
-                        currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
-                        OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                        optInfo.isConfigModified = true;
-                    }
-                }
-            }
-        });
-
-        RTextScrollPane configScrollPane = new RTextScrollPane(configEditor);
+        // Get the status label from config manager
+        configStatusLabel = configManager.getConfigStatusLabel();
 
         // Create container panel for Config INI tab with button at top
         JPanel configIniPanel = new JPanel(new GridBagLayout());
@@ -273,7 +424,7 @@ public class OptimisationWindow extends JFrame {
             if (currentlyDisplayedNode != null &&
                 currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
                 OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                optInfo.isConfigModified = false;
+                optInfo.setConfigModified(false);
             }
             isUpdatingConfigEditor = false;
         });
@@ -302,6 +453,12 @@ public class OptimisationWindow extends JFrame {
         // Tab 3: Results (always present) - Plot above text area
         JPanel resultsPanel = new JPanel(new BorderLayout(0, 5));
 
+        // Get progress labels from progress manager
+        startTimeLabel = progressManager.getStartTimeLabel();
+        elapsedTimeLabel = progressManager.getElapsedTimeLabel();
+        evaluationProgressLabel = progressManager.getEvaluationProgressLabel();
+        bestObjectiveLabel = progressManager.getBestObjectiveLabel();
+
         // Create combined labels panel with timing on left, convergence on right
         JPanel allLabelsPanel = new JPanel(new BorderLayout());
         allLabelsPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -309,26 +466,12 @@ public class OptimisationWindow extends JFrame {
         // Left side: timing labels (vertical stack)
         JPanel timingLabelsPanel = new JPanel();
         timingLabelsPanel.setLayout(new BoxLayout(timingLabelsPanel, BoxLayout.Y_AXIS));
-
-        startTimeLabel = new JLabel("Start: —");
-        startTimeLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-
-        elapsedTimeLabel = new JLabel("Elapsed: —");
-        elapsedTimeLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-
         timingLabelsPanel.add(startTimeLabel);
         timingLabelsPanel.add(elapsedTimeLabel);
 
         // Right side: convergence labels (vertical stack)
         JPanel convergenceLabelsPanel = new JPanel();
         convergenceLabelsPanel.setLayout(new BoxLayout(convergenceLabelsPanel, BoxLayout.Y_AXIS));
-
-        evaluationProgressLabel = new JLabel("Evaluations: —");
-        evaluationProgressLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-
-        bestObjectiveLabel = new JLabel("Best: —");
-        bestObjectiveLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-
         convergenceLabelsPanel.add(evaluationProgressLabel);
         convergenceLabelsPanel.add(bestObjectiveLabel);
 
@@ -336,23 +479,20 @@ public class OptimisationWindow extends JFrame {
         allLabelsPanel.add(timingLabelsPanel, BorderLayout.WEST);
         allLabelsPanel.add(convergenceLabelsPanel, BorderLayout.EAST);
 
-        // Create convergence plot
-        convergenceDataSet = new DataSet();
-        convergencePlot = new PlotPanel();
-        convergencePlot.setDataSet(convergenceDataSet);
-        convergencePlot.setXAxisType(com.kalix.ide.flowviz.rendering.XAxisType.COUNT); // Use COUNT x-axis for evaluation numbers
-        convergencePlot.setPreferredSize(new Dimension(0, 300)); // 300px height for plot
+        // Get plot panel from plot manager
+        convergencePlot = plotManager.getPlotPanel();
 
         // Combine labels and plot into a single panel
-        JPanel plotWithLabelsPanel = new JPanel(new BorderLayout(0, 0));
+        JPanel plotWithLabelsPanel = plotManager.createPlotPanelWithLabels();
+        // Override with our custom labels panel
+        plotWithLabelsPanel.removeAll();
+        plotWithLabelsPanel.setLayout(new BorderLayout(0, 0));
         plotWithLabelsPanel.add(allLabelsPanel, BorderLayout.NORTH);
         plotWithLabelsPanel.add(convergencePlot, BorderLayout.CENTER);
 
-        // Create syntax-highlighted editor for optimised model
-        optimisedModelEditor = new KalixIniTextArea(OptimisationUIConstants.TEXT_AREA_ROWS,
-                                                     OptimisationUIConstants.TEXT_AREA_COLUMNS);
-        optimisedModelEditor.setEditable(false); // Read-only display
-        RTextScrollPane optimisedModelScrollPane = new RTextScrollPane(optimisedModelEditor);
+        // Get results editor from results manager
+        optimisedModelEditor = resultsManager.getOptimisedModelEditor();
+        RTextScrollPane optimisedModelScrollPane = resultsManager.getScrollPane();
 
         // Use split pane: plot with labels on top, optimised model editor on bottom
         JSplitPane resultsSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
@@ -365,15 +505,33 @@ public class OptimisationWindow extends JFrame {
         JPanel resultsButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
         JButton copyToMainButton = new JButton("Copy to Main Window");
-        copyToMainButton.addActionListener(e -> copyOptimisedModelToMain());
+        copyToMainButton.addActionListener(e -> {
+            if (currentlyDisplayedNode != null &&
+                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                copyOptimisedModelToMain(optInfo);
+            }
+        });
         resultsButtonPanel.add(copyToMainButton);
 
         JButton compareButton = new JButton("Show Model Changes");
-        compareButton.addActionListener(e -> compareOptimisedModelWithMain());
+        compareButton.addActionListener(e -> {
+            if (currentlyDisplayedNode != null &&
+                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                resultsManager.compareModels(optInfo, this);
+            }
+        });
         resultsButtonPanel.add(compareButton);
 
         JButton saveAsButton = new JButton("Save As");
-        saveAsButton.addActionListener(e -> saveOptimisedModelAs());
+        saveAsButton.addActionListener(e -> {
+            if (currentlyDisplayedNode != null &&
+                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                resultsManager.saveResults(optInfo, this);
+            }
+        });
         resultsButtonPanel.add(saveAsButton);
 
         resultsPanel.add(resultsButtonPanel, BorderLayout.SOUTH);
@@ -386,11 +544,11 @@ public class OptimisationWindow extends JFrame {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
         loadConfigButton = new JButton("Load Config");
-        loadConfigButton.addActionListener(e -> loadConfig());
+        loadConfigButton.addActionListener(e -> configManager.loadConfigFromFile(getRootPane()));
         buttonPanel.add(loadConfigButton);
 
         saveConfigButton = new JButton("Save Config");
-        saveConfigButton.addActionListener(e -> saveConfig());
+        saveConfigButton.addActionListener(e -> configManager.saveConfigToFile(getRootPane(), configManager.getCurrentConfig()));
         buttonPanel.add(saveConfigButton);
 
         runButton = new JButton("Start");
@@ -399,9 +557,7 @@ public class OptimisationWindow extends JFrame {
 
         optimisationPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Initialize elapsed time timer (50ms updates for smooth display)
-        elapsedTimer = new javax.swing.Timer(50, e -> updateElapsedTime());
-        elapsedTimer.setRepeats(true);
+        // Note: Elapsed timer is now managed by progressManager
 
         // Add both panels to rightPanel CardLayout
         rightPanel.add(messagePanel, OptimisationUIConstants.CARD_MESSAGE);
@@ -447,98 +603,16 @@ public class OptimisationWindow extends JFrame {
      * This is called when the user clicks the "+ New Optimisation" button.
      */
     private void createNewOptimisation() {
-        // Get model from the main editor
-        String modelText = modelTextSupplier != null ? modelTextSupplier.get() : null;
-        if (modelText == null || modelText.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No model loaded in the editor.\nPlease load a model first.",
-                "No Model",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
+        // Get default config from GUI
+        String configText = configManager.generateConfigFromGui();
 
-        final String finalModelText = modelText;
-
-        // Start new session
-        SwingUtilities.invokeLater(() -> {
-            try {
-                // Locate kalixcli
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences();
-                if (cliLocation.isEmpty()) {
-                    handleError("kalixcli not found");
-                    return;
-                }
-
-                // Configure session
-                SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
-
-                // Set working directory if available
-                File workingDir = workingDirectorySupplier.get();
-                if (workingDir != null) {
-                    config.workingDirectory(workingDir.toPath());
-                }
-
-                // Start session
-                stdioTaskManager.getSessionManager().startSession(cliLocation.get().getPath(), config)
-                    .thenAccept(sessionKey -> {
-                        // Create optimisation program
-                        OptimisationProgram program = new OptimisationProgram(
-                            sessionKey,
-                            stdioTaskManager.getSessionManager(),
-                            statusMsg -> handleStatusUpdate(sessionKey, statusMsg),
-                            progressInfo -> handleOptimisationProgress(sessionKey, progressInfo),
-                            parameters -> handleOptimisableParameters(sessionKey, parameters),
-                            result -> handleOptimisationResult(sessionKey, result)
-                        );
-
-                        // Register program with session
-                        stdioTaskManager.getSessionManager().getSession(sessionKey).ifPresent(session -> {
-                            session.setActiveProgram(program);
-
-                            // Create optimisation info
-                            String optName = "Optimisation_" + optCounter++;
-                            OptimisationInfo optInfo = new OptimisationInfo(optName, session);
-                            optInfo.configSnapshot = configEditor.getText(); // Use current default config
-                            optInfo.result = new OptimisationResult();  // Create empty result for tracking
-
-                            // Add to tracking maps
-                            sessionToOptName.put(sessionKey, optName);
-                            optimisationResults.put(sessionKey, optInfo.result);
-                            lastKnownStatus.put(sessionKey, OptimisationStatus.STARTING);
-
-                            // Add to tree
-                            DefaultMutableTreeNode optNode = new DefaultMutableTreeNode(optInfo);
-                            currentOptimisationsNode.add(optNode);
-                            sessionToTreeNode.put(sessionKey, optNode);
-
-                            // Update tree
-                            treeModel.nodeStructureChanged(currentOptimisationsNode);
-                            optTree.expandPath(new TreePath(currentOptimisationsNode.getPath()));
-
-                            // Select the new optimisation
-                            TreePath optPath = new TreePath(optNode.getPath());
-                            optTree.setSelectionPath(optPath);
-
-                            // Show the optimisation panel (selection handler will do this)
-                            // optimisationPanel.setVisible(true); -- now handled by tree selection
-
-                            // Initialize the optimisation (load model)
-                            program.initialize(finalModelText);
-
-                            if (statusUpdater != null) {
-                                statusUpdater.accept("Created " + optName);
-                            }
-                        });
-                    })
-                    .exceptionally(throwable -> {
-                        handleError("Failed to start session: " + throwable.getMessage());
-                        return null;
-                    });
-
-            } catch (Exception e) {
-                handleError("Error creating optimisation: " + e.getMessage());
-            }
-        });
+        // Create optimisation through session manager with sessionKey passed to callbacks
+        sessionManager.createOptimisation(
+            configText,
+            (sessionKey, progressInfo) -> handleOptimisationProgress(sessionKey, progressInfo),
+            (sessionKey, parameters) -> handleOptimisableParameters(sessionKey, parameters),
+            (sessionKey, result) -> handleOptimisationResult(sessionKey, result)
+        );
     }
 
     /**
@@ -553,11 +627,16 @@ public class OptimisationWindow extends JFrame {
         OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
 
         // Only save if the optimization hasn't started running yet
-        if (!optInfo.hasStartedRunning) {
+        if (!optInfo.hasStartedRunning()) {
             // Save the config text from the editor (it's the source of truth)
-            optInfo.configSnapshot = configEditor.getText();
-            // Save the modification state
-            optInfo.isConfigModified = OptimisationUIConstants.CONFIG_STATUS_MODIFIED.equals(configStatusLabel.getText());
+            String configText = configEditor.getText();
+            optInfo.setConfigSnapshot(configText);
+
+            // Also update the stored config in session manager
+            if (optInfo.getSession() != null) {
+                String sessionKey = optInfo.getSession().getSessionKey();
+                sessionManager.updateOptimisationConfig(sessionKey, configText);
+            }
         }
     }
 
@@ -570,20 +649,11 @@ public class OptimisationWindow extends JFrame {
 
         OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();
 
-        // Load config into text editor (disable listener during load)
-        isUpdatingConfigEditor = true;
-        if (optInfo.configSnapshot != null) {
-            configEditor.setText(optInfo.configSnapshot);
-        } else {
-            configEditor.setText("");
-        }
-        // Restore the modification state for this node
-        configStatusLabel.setText(optInfo.isConfigModified ?
-            OptimisationUIConstants.CONFIG_STATUS_MODIFIED : OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
-        isUpdatingConfigEditor = false;
+        // Load configuration through config manager
+        configManager.loadConfiguration(optInfo);
 
         // Set editable state based on whether optimization has started
-        boolean isEditable = !optInfo.hasStartedRunning;
+        boolean isEditable = !optInfo.hasStartedRunning();
         configEditor.setEditable(isEditable);
         guiBuilder.setComponentsEnabled(isEditable);
 
@@ -591,17 +661,14 @@ public class OptimisationWindow extends JFrame {
         loadConfigButton.setEnabled(isEditable);
 
         // Update results display (Results tab is always present)
-        if (optInfo.hasStartedRunning) {
+        if (optInfo.hasStartedRunning()) {
             updateOptimisedModelDisplay(optInfo);
             // Update convergence plot with current data
-            updateConvergencePlot(optInfo.result);
+            plotManager.updatePlot(optInfo.getResult());
         } else {
             optimisedModelEditor.setText("");
             // Clear convergence plot and labels
-            if (convergenceDataSet != null) {
-                convergenceDataSet.removeAllSeries();
-                convergencePlot.repaint();
-            }
+            plotManager.clearPlot();
             if (bestObjectiveLabel != null) {
                 bestObjectiveLabel.setText("Best: —");
             }
@@ -611,7 +678,7 @@ public class OptimisationWindow extends JFrame {
         }
 
         // Disable Run button once optimization has started
-        runButton.setEnabled(!optInfo.hasStartedRunning);
+        runButton.setEnabled(!optInfo.hasStartedRunning());
 
         // Update currently displayed node
         currentlyDisplayedNode = node;
@@ -638,14 +705,15 @@ public class OptimisationWindow extends JFrame {
         // Update timing labels
         updateTimingLabels(optInfo);
 
-        if (optInfo.result != null && status == OptimisationStatus.DONE) {
+        OptimisationResult result = optInfo.getResult();
+        if (result != null && status == OptimisationStatus.DONE) {
             // Show optimised model if available
-            if (optInfo.result.optimisedModelIni != null && !optInfo.result.optimisedModelIni.isEmpty()) {
-                optimisedModelEditor.setText(optInfo.result.optimisedModelIni);
+            if (result.getOptimisedModelIni() != null && !result.getOptimisedModelIni().isEmpty()) {
+                optimisedModelEditor.setText(result.getOptimisedModelIni());
                 optimisedModelEditor.setCaretPosition(0); // Scroll to top
             } else {
                 // Fallback: show summary if no model available
-                optimisedModelEditor.setText(optInfo.result.formatSummary());
+                optimisedModelEditor.setText(result.formatSummary());
             }
         } else if (status == OptimisationStatus.RUNNING || status == OptimisationStatus.LOADING) {
             // Show simple quote while optimization is running
@@ -654,8 +722,8 @@ public class OptimisationWindow extends JFrame {
             // Show error
             StringBuilder errorText = new StringBuilder();
             errorText.append("# OPTIMISATION FAILED\n\n");
-            if (optInfo.result != null && optInfo.result.message != null) {
-                errorText.append("# Error: ").append(optInfo.result.message).append("\n");
+            if (result != null && result.getMessage() != null) {
+                errorText.append("# Error: ").append(result.getMessage()).append("\n");
             } else {
                 errorText.append("# Optimisation failed with unknown error\n");
             }
@@ -676,63 +744,6 @@ public class OptimisationWindow extends JFrame {
     }
 
     /**
-     * Sets up the right-click context menu for optimisation nodes.
-     */
-    private void setupContextMenu() {
-        JPopupMenu contextMenu = new JPopupMenu();
-
-        JMenuItem showModelItem = new JMenuItem("Show Model");
-        showModelItem.addActionListener(e -> showSelectedOptimisationModel());
-
-        JMenuItem showChangesItem = new JMenuItem("Show Model Changes");
-        showChangesItem.addActionListener(e -> showSelectedOptimisationChanges());
-
-        JMenuItem renameItem = new JMenuItem("Rename");
-        renameItem.addActionListener(e -> renameSelectedOptimisation());
-
-        JMenuItem viewInSessionMgrItem = new JMenuItem("View in Session Manager");
-        viewInSessionMgrItem.addActionListener(e -> viewSelectedInSessionManager());
-
-        JMenuItem removeItem = new JMenuItem("Remove");
-        removeItem.addActionListener(e -> removeSelectedOptimisation());
-
-        contextMenu.add(renameItem);
-        contextMenu.add(removeItem);
-        contextMenu.addSeparator();
-        contextMenu.add(showModelItem);
-        contextMenu.add(showChangesItem);
-        contextMenu.addSeparator();
-        contextMenu.add(viewInSessionMgrItem);
-
-        optTree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
-                }
-            }
-
-            private void showContextMenu(MouseEvent e, JPopupMenu menu) {
-                TreePath path = optTree.getPathForLocation(e.getX(), e.getY());
-                if (path != null) {
-                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-                    if (node.getUserObject() instanceof OptimisationInfo) {
-                        optTree.setSelectionPath(path);
-                        menu.show(e.getComponent(), e.getX(), e.getY());
-                    }
-                }
-            }
-        });
-    }
-
-    /**
      * Renames the selected optimisation.
      */
     private void renameSelectedOptimisation() {
@@ -743,7 +754,7 @@ public class OptimisationWindow extends JFrame {
         if (!(selectedNode.getUserObject() instanceof OptimisationInfo)) return;
 
         OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
-        String currentName = optInfo.optName;
+        String currentName = optInfo.getName();
 
         String newName = (String) JOptionPane.showInputDialog(
             this,
@@ -771,8 +782,8 @@ public class OptimisationWindow extends JFrame {
             }
 
             // Update the name
-            optInfo.optName = trimmedName;
-            String sessionKey = optInfo.session.getSessionKey();
+            optInfo.setName(trimmedName);
+            String sessionKey = optInfo.getSession().getSessionKey();
             sessionToOptName.put(sessionKey, trimmedName);
 
             // Update tree display
@@ -795,7 +806,7 @@ public class OptimisationWindow extends JFrame {
         if (!(selectedNode.getUserObject() instanceof OptimisationInfo)) return;
 
         OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
-        String sessionKey = optInfo.session.getSessionKey();
+        String sessionKey = optInfo.getSession().getSessionKey();
 
         // Open Session Manager window and select this session
         SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, statusUpdater, sessionKey);
@@ -814,7 +825,8 @@ public class OptimisationWindow extends JFrame {
         OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
 
         // Check if optimisation has completed and has a result
-        if (optInfo.result == null || optInfo.result.optimisedModelIni == null) {
+        OptimisationResult result = optInfo.getResult();
+        if (result == null || result.getOptimisedModelIni() == null) {
             JOptionPane.showMessageDialog(this,
                 "No optimised model available.\n\nThe optimisation must complete successfully before the model can be viewed.",
                 "Model Not Available",
@@ -823,8 +835,8 @@ public class OptimisationWindow extends JFrame {
         }
 
         // Create and show MinimalEditorWindow with the optimised model
-        MinimalEditorWindow editorWindow = new MinimalEditorWindow(optInfo.result.optimisedModelIni, true);
-        editorWindow.setTitle("Optimised Model - " + optInfo.optName);
+        MinimalEditorWindow editorWindow = new MinimalEditorWindow(result.getOptimisedModelIni(), true);
+        editorWindow.setTitle("Optimised Model - " + optInfo.getName());
         editorWindow.setVisible(true);
     }
 
@@ -841,7 +853,8 @@ public class OptimisationWindow extends JFrame {
         OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
 
         // Check if optimisation has completed and has a result
-        if (optInfo.result == null || optInfo.result.optimisedModelIni == null) {
+        OptimisationResult result = optInfo.getResult();
+        if (result == null || result.getOptimisedModelIni() == null) {
             JOptionPane.showMessageDialog(this,
                 "No optimised model available.\n\nThe optimisation must complete successfully before model changes can be viewed.",
                 "Model Not Available",
@@ -860,11 +873,11 @@ public class OptimisationWindow extends JFrame {
 
         // Get main window's model text
         String mainModelText = parentIDE.getModelText();
-        String optimisedModelText = optInfo.result.optimisedModelIni;
+        String optimisedModelText = result.getOptimisedModelIni();
 
         // Open DiffWindow for comparison
         new DiffWindow(optimisedModelText, mainModelText,
-            "Changes: " + optInfo.optName + " vs Reference Model", "Reference Model", optInfo.optName);
+            "Changes: " + optInfo.getName() + " vs Reference Model", "Reference Model", optInfo.getName());
     }
 
     /**
@@ -878,16 +891,16 @@ public class OptimisationWindow extends JFrame {
         if (!(selectedNode.getUserObject() instanceof OptimisationInfo)) return;
 
         OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
-        String sessionKey = optInfo.session.getSessionKey();
+        String sessionKey = optInfo.getSession().getSessionKey();
         boolean isActive = optInfo.getStatus() == OptimisationStatus.RUNNING ||
                           optInfo.getStatus() == OptimisationStatus.LOADING ||
                           optInfo.getStatus() == OptimisationStatus.STARTING;
 
         // Confirm removal
         String message = isActive
-            ? "Optimisation '" + optInfo.optName + "' is still running.\n" +
+            ? "Optimisation '" + optInfo.getName() + "' is still running.\n" +
               "Removing it will terminate the session.\n\nAre you sure?"
-            : "Remove optimisation '" + optInfo.optName + "' from the list?\n" +
+            : "Remove optimisation '" + optInfo.getName() + "' from the list?\n" +
               "(This will not delete any saved results)";
 
         int result = JOptionPane.showConfirmDialog(this,
@@ -905,7 +918,6 @@ public class OptimisationWindow extends JFrame {
             sessionToOptName.remove(sessionKey);
             sessionToTreeNode.remove(sessionKey);
             lastKnownStatus.remove(sessionKey);
-            // Keep result in optimisationResults for history
 
             // Terminate session if active
             if (isActive) {
@@ -913,7 +925,7 @@ public class OptimisationWindow extends JFrame {
             }
 
             if (statusUpdater != null) {
-                statusUpdater.accept("Removed: " + optInfo.optName);
+                statusUpdater.accept("Removed: " + optInfo.getName());
             }
 
             // Clear selection (will trigger onOptTreeSelectionChanged to hide panel)
@@ -962,93 +974,51 @@ public class OptimisationWindow extends JFrame {
     private void runOptimisation() {
         if (currentlyDisplayedNode == null) return;
 
-        if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo)) return;
+        Object userObject = currentlyDisplayedNode.getUserObject();
+        if (!(userObject instanceof OptimisationInfo)) return;
 
-        OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+        OptimisationInfo optInfo = (OptimisationInfo) userObject;
 
-        // Check if already started
-        if (optInfo.hasStartedRunning) {
-            JOptionPane.showMessageDialog(this,
-                "This optimisation has already been started.",
-                "Already Running",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        // Determine config to use based on selected tab
+        // Get config from appropriate source
         String configText;
         int selectedTabIndex = mainTabbedPane.getSelectedIndex();
-        String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
-
-        if (OptimisationUIConstants.TAB_CONFIG.equals(selectedTabTitle)) {
-            // Generate config from GUI and update the Config INI editor
-            configText = guiBuilder.generateConfigText();
-            isUpdatingConfigEditor = true;
-            configEditor.setText(configText);
-            configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
-            optInfo.isConfigModified = false;
-            isUpdatingConfigEditor = false;
-        } else {
-            // Use text from Config INI editor
-            configText = configEditor.getText();
+        if (selectedTabIndex == 0) { // Config tab
+            configText = configManager.generateConfigFromGui();
+            // Update the config editor with generated config
+            configManager.setConfiguration(configText);
+        } else { // Config INI tab
+            configText = configManager.getCurrentConfig();
         }
 
         // Validate config
-        if (configText == null || configText.trim().isEmpty()) {
+        if (!configManager.validateConfiguration()) {
             JOptionPane.showMessageDialog(this,
-                "Configuration cannot be empty",
+                "Invalid configuration. Please check the configuration.",
                 "Invalid Configuration",
                 JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        final String finalConfigText = configText;
+        // Update config snapshot
+        optInfo.setConfigSnapshot(configText);
 
-        SwingUtilities.invokeLater(() -> {
-            try {
-                // Get the optimisation program from the session
-                if (!(optInfo.session.getActiveProgram() instanceof OptimisationProgram)) {
-                    handleError("Session does not have an OptimisationProgram");
-                    return;
-                }
+        // Update the stored config in session manager
+        if (optInfo.getSession() != null) {
+            String sessionKey = optInfo.getSession().getSessionKey();
+            sessionManager.updateOptimisationConfig(sessionKey, configText);
+        }
 
-                OptimisationProgram program = (OptimisationProgram) optInfo.session.getActiveProgram();
+        // Run optimisation through manager
+        boolean started = sessionManager.runOptimisation(optInfo);
 
-                // Save final config
-                saveCurrentConfigToNode();
-                optInfo.configSnapshot = finalConfigText;
-                optInfo.hasStartedRunning = true;
+        if (started) {
+            // Switch to results tab
+            mainTabbedPane.setSelectedIndex(2); // Results tab
+            progressManager.startProgress(optInfo);
 
-                // Initialize result for tracking
-                if (optInfo.result == null) {
-                    optInfo.result = new OptimisationResult();
-                }
-                optInfo.result.configUsed = finalConfigText;
-                optInfo.result.startTime = java.time.LocalDateTime.now();
-
-                // Start the optimisation
-                program.runOptimisation(finalConfigText);
-
-                // Update UI state
-                loadConfigFromNode(currentlyDisplayedNode);
-
-                // Switch to Results tab after starting
-                int resultsTabIndex = getResultsTabIndex();
-                if (resultsTabIndex != -1) {
-                    mainTabbedPane.setSelectedIndex(resultsTabIndex);
-                }
-
-                // Update tree display
-                treeModel.nodeChanged(currentlyDisplayedNode);
-
-                if (statusUpdater != null) {
-                    statusUpdater.accept("Started " + optInfo.optName);
-                }
-
-            } catch (Exception e) {
-                handleError("Error starting optimisation: " + e.getMessage());
-            }
-        });
+            // Update tree display
+            treeModel.nodeChanged(currentlyDisplayedNode);
+        }
     }
 
     /**
@@ -1103,27 +1073,27 @@ public class OptimisationWindow extends JFrame {
             }
 
             // Update progress in result
-            OptimisationResult result = optimisationResults.get(sessionKey);
+            OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
             if (result != null) {
-                result.currentProgress = (int) progressInfo.getPercentage();
-                result.progressDescription = progressInfo.getDescription();
+                result.setCurrentProgress((int) progressInfo.getPercentage());
+                result.setProgressDescription(progressInfo.getDescription());
 
                 // Store convergence data if available (optimization-specific progress)
                 if (progressInfo.getEvaluationCount() != null && progressInfo.getObjectiveValues() != null) {
                     java.util.List<Double> objectiveValues = progressInfo.getObjectiveValues();
                     if (!objectiveValues.isEmpty()) {
                         // Store evaluation count and best objective (first element)
-                        result.convergenceEvaluations.add(progressInfo.getEvaluationCount());
-                        result.convergenceBestObjective.add(objectiveValues.get(0));
-                        result.convergencePopulation.add(new java.util.ArrayList<>(objectiveValues));
+                        result.addConvergencePoint(progressInfo.getEvaluationCount(),
+                                                  objectiveValues.get(0),
+                                                  new java.util.ArrayList<>(objectiveValues));
 
                         // Store total evaluations from progress info (if not already set)
                         // This comes from the "n" field in PROGRESS messages
-                        if (result.evaluations == null && progressInfo.getPercentage() > 0) {
+                        if (result.getEvaluations() == null && progressInfo.getPercentage() > 0) {
                             // Calculate total from current count and percentage
                             int currentEval = progressInfo.getEvaluationCount();
                             double percentage = progressInfo.getPercentage();
-                            result.evaluations = (int) Math.round(currentEval * 100.0 / percentage);
+                            result.setEvaluations((int) Math.round(currentEval * 100.0 / percentage));
                         }
 
                         // Update convergence plot and labels if this optimization is currently displayed
@@ -1145,7 +1115,7 @@ public class OptimisationWindow extends JFrame {
      */
     private void handleOptimisationResult(String sessionKey, String resultJson) {
         SwingUtilities.invokeLater(() -> {
-            OptimisationResult result = optimisationResults.get(sessionKey);
+            OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
             if (result != null) {
                 // Parse the result JSON to extract all fields
                 try {
@@ -1154,60 +1124,62 @@ public class OptimisationWindow extends JFrame {
 
                     // Extract fields from the result object
                     if (rootNode.has("best_objective")) {
-                        result.bestObjective = rootNode.get("best_objective").asDouble();
+                        result.setBestObjective(rootNode.get("best_objective").asDouble());
                     }
                     if (rootNode.has("evaluations")) {
-                        result.evaluations = rootNode.get("evaluations").asInt();
+                        result.setEvaluations(rootNode.get("evaluations").asInt());
                     }
                     if (rootNode.has("generations")) {
-                        result.generations = rootNode.get("generations").asInt();
+                        result.setGenerations(rootNode.get("generations").asInt());
                     }
                     if (rootNode.has("message")) {
-                        result.message = rootNode.get("message").asText();
+                        result.setMessage(rootNode.get("message").asText());
                     }
                     if (rootNode.has("success")) {
-                        result.success = rootNode.get("success").asBoolean();
+                        result.setSuccess(rootNode.get("success").asBoolean());
                     }
 
                     // Extract the optimised model INI
                     if (rootNode.has("optimised_model_ini")) {
-                        result.optimisedModelIni = rootNode.get("optimised_model_ini").asText();
+                        result.setOptimisedModelIni(rootNode.get("optimised_model_ini").asText());
                     }
 
                     // Extract parameter maps
                     if (rootNode.has("params_physical")) {
-                        result.paramsPhysical = new HashMap<>();
+                        Map<String, Double> paramsPhysical = new HashMap<>();
                         com.fasterxml.jackson.databind.JsonNode paramsNode = rootNode.get("params_physical");
                         paramsNode.fields().forEachRemaining(entry -> {
-                            result.paramsPhysical.put(entry.getKey(), entry.getValue().asDouble());
+                            paramsPhysical.put(entry.getKey(), entry.getValue().asDouble());
                         });
+                        result.setParametersPhysical(paramsPhysical);
                     }
 
                     if (rootNode.has("params_normalized")) {
-                        result.paramsNormalized = new HashMap<>();
+                        Map<String, Double> paramsNormalized = new HashMap<>();
                         com.fasterxml.jackson.databind.JsonNode paramsNode = rootNode.get("params_normalized");
                         if (paramsNode.isArray()) {
                             // Handle array format
                             int i = 0;
                             for (com.fasterxml.jackson.databind.JsonNode node : paramsNode) {
-                                result.paramsNormalized.put("param_" + i, node.asDouble());
+                                paramsNormalized.put("param_" + i, node.asDouble());
                                 i++;
                             }
                         } else {
                             // Handle object format
                             paramsNode.fields().forEachRemaining(entry -> {
-                                result.paramsNormalized.put(entry.getKey(), entry.getValue().asDouble());
+                                paramsNormalized.put(entry.getKey(), entry.getValue().asDouble());
                             });
                         }
+                        result.setParametersNormalized(paramsNormalized);
                     }
 
                 } catch (Exception e) {
                     // If parsing fails, store raw JSON as message
-                    result.message = "Error parsing result: " + e.getMessage();
-                    result.success = false;
+                    result.setMessage("Error parsing result: " + e.getMessage());
+                    result.setSuccess(false);
                 }
 
-                result.endTime = java.time.LocalDateTime.now();
+                result.setEndTime(java.time.LocalDateTime.now());
             }
 
             // Update tree node to show completion
@@ -1257,9 +1229,9 @@ public class OptimisationWindow extends JFrame {
             DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
             if (selectedNode.getUserObject() instanceof OptimisationInfo) {
                 OptimisationInfo selectedInfo = (OptimisationInfo) selectedNode.getUserObject();
-                if (selectedInfo.session.getSessionKey().equals(sessionKey)) {
+                if (selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
                     // Only update results if optimization has started
-                    if (selectedInfo.hasStartedRunning) {
+                    if (selectedInfo.hasStartedRunning()) {
                         updateOptimisedModelDisplay(selectedInfo);
                     }
                 }
@@ -1276,100 +1248,16 @@ public class OptimisationWindow extends JFrame {
             DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
             if (selectedNode.getUserObject() instanceof OptimisationInfo) {
                 OptimisationInfo selectedInfo = (OptimisationInfo) selectedNode.getUserObject();
-                if (selectedInfo.session.getSessionKey().equals(sessionKey)) {
+                if (selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
                     // Update the convergence plot with latest data
-                    updateConvergencePlot(selectedInfo.result);
+                    plotManager.updatePlot(selectedInfo.getResult());
                     // Also update labels in real-time
-                    updateConvergenceLabels(selectedInfo.result);
+                    updateConvergenceLabels(selectedInfo.getResult());
                 }
             }
         }
     }
 
-    /**
-     * Updates the convergence plot with data from the given result.
-     * Creates two series: best objective (purple line) and population samples (orange dots).
-     */
-    private void updateConvergencePlot(OptimisationResult result) {
-        if (result == null || convergenceDataSet == null || convergencePlot == null) {
-            return;
-        }
-
-        // Clear existing data
-        convergenceDataSet.removeAllSeries();
-
-        if (result.convergenceEvaluations.isEmpty()) {
-            convergencePlot.repaint();
-            return;
-        }
-
-        // Create time series data for best objective (purple line)
-        // For COUNT x-axis, we use evaluation counts directly as "timestamps"
-        int n = result.convergenceEvaluations.size();
-        java.time.LocalDateTime[] timestamps = new java.time.LocalDateTime[n];
-        double[] bestValues = new double[n];
-
-        // Convert evaluation counts to fake timestamps for TimeSeriesData
-        // TimeSeriesData expects LocalDateTime, so we convert count to milliseconds
-        java.time.LocalDateTime epoch = java.time.LocalDateTime.of(1970, 1, 1, 0, 0, 0);
-        for (int i = 0; i < n; i++) {
-            // Evaluation count is stored directly as milliseconds from epoch
-            long evalCount = result.convergenceEvaluations.get(i);
-            timestamps[i] = epoch.plusNanos(evalCount * 1_000_000); // Convert to nanoseconds
-            bestValues[i] = result.convergenceBestObjective.get(i);
-        }
-
-        TimeSeriesData bestSeries = new TimeSeriesData("Best Objective", timestamps, bestValues);
-        convergenceDataSet.addSeries(bestSeries);
-
-        // Create time series data for population samples (orange dots)
-        // Flatten all population values across all evaluations
-        java.util.List<java.time.LocalDateTime> popTimestamps = new java.util.ArrayList<>();
-        java.util.List<Double> popValues = new java.util.ArrayList<>();
-
-        for (int i = 0; i < n; i++) {
-            java.time.LocalDateTime evalTime = timestamps[i];
-            java.util.List<Double> populationAtEval = result.convergencePopulation.get(i);
-
-            for (Double objValue : populationAtEval) {
-                popTimestamps.add(evalTime);
-                popValues.add(objValue);
-            }
-        }
-
-        if (!popTimestamps.isEmpty()) {
-            java.time.LocalDateTime[] popTimestampsArray = popTimestamps.toArray(new java.time.LocalDateTime[0]);
-            double[] popValuesArray = new double[popValues.size()];
-            for (int i = 0; i < popValues.size(); i++) {
-                popValuesArray[i] = popValues.get(i);
-            }
-
-            TimeSeriesData popSeries = new TimeSeriesData("Population", popTimestampsArray, popValuesArray);
-            convergenceDataSet.addSeries(popSeries);
-        }
-
-        // Set colors and visibility
-        Map<String, Color> colors = new HashMap<>();
-        colors.put("Best Objective", new Color(0, 100, 200));  // Blue
-        colors.put("Population", new Color(255, 140, 0));      // Orange
-
-        // Add series in rendering order: Population first (back), then Best Objective (front)
-        java.util.List<String> visibleSeries = new java.util.ArrayList<>();
-        visibleSeries.add("Population");
-        visibleSeries.add("Best Objective");
-
-        convergencePlot.setSeriesColors(colors);
-        convergencePlot.setVisibleSeries(visibleSeries);
-
-        // Configure rendering modes: Best Objective as LINE, Population as POINTS only
-        convergencePlot.setSeriesRenderMode("Best Objective", com.kalix.ide.flowviz.rendering.SeriesRenderMode.LINE);
-        convergencePlot.setSeriesRenderMode("Population", com.kalix.ide.flowviz.rendering.SeriesRenderMode.POINTS);
-
-        convergencePlot.refreshData(true);  // Zoom to fit new data
-
-        // Update labels with latest values
-        updateConvergenceLabels(result);
-    }
 
     /**
      * Updates the elapsed time label based on the currently displayed optimization.
@@ -1386,12 +1274,13 @@ public class OptimisationWindow extends JFrame {
         }
 
         OptimisationInfo optInfo = (OptimisationInfo) userObject;
-        if (optInfo.result == null || optInfo.result.startTime == null) {
+        OptimisationResult result = optInfo.getResult();
+        if (result == null || result.getStartTime() == null) {
             return;
         }
 
-        java.time.LocalDateTime startTime = optInfo.result.startTime;
-        java.time.LocalDateTime endTime = optInfo.result.endTime;
+        java.time.LocalDateTime startTime = result.getStartTime();
+        java.time.LocalDateTime endTime = result.getEndTime();
 
         java.time.LocalDateTime currentTime = (endTime != null) ? endTime : java.time.LocalDateTime.now();
         java.time.Duration duration = java.time.Duration.between(startTime, currentTime);
@@ -1409,7 +1298,8 @@ public class OptimisationWindow extends JFrame {
      * Updates the timing labels (start, elapsed) for the displayed optimization.
      */
     private void updateTimingLabels(OptimisationInfo optInfo) {
-        if (optInfo == null || optInfo.result == null) {
+        OptimisationResult result = optInfo == null ? null : optInfo.getResult();
+        if (result == null) {
             startTimeLabel.setText("Start: —");
             elapsedTimeLabel.setText("Elapsed: —");
             if (elapsedTimer != null && elapsedTimer.isRunning()) {
@@ -1419,15 +1309,15 @@ public class OptimisationWindow extends JFrame {
         }
 
         // Format start time with milliseconds
-        if (optInfo.result.startTime != null) {
+        if (result.getStartTime() != null) {
             java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-            startTimeLabel.setText("Start: " + optInfo.result.startTime.format(formatter));
+            startTimeLabel.setText("Start: " + result.getStartTime().format(formatter));
         } else {
             startTimeLabel.setText("Start: —");
         }
 
         // Handle elapsed time timer
-        if (optInfo.result.endTime != null) {
+        if (result.getEndTime() != null) {
             // Stop timer if optimization is finished
             if (elapsedTimer != null && elapsedTimer.isRunning()) {
                 elapsedTimer.stop();
@@ -1437,7 +1327,7 @@ public class OptimisationWindow extends JFrame {
             updateElapsedTime();
         } else {
             // Start timer if optimization is running
-            if (elapsedTimer != null && !elapsedTimer.isRunning() && optInfo.result.startTime != null) {
+            if (elapsedTimer != null && !elapsedTimer.isRunning() && result.getStartTime() != null) {
                 elapsedTimer.start();
             }
         }
@@ -1458,19 +1348,20 @@ public class OptimisationWindow extends JFrame {
         }
 
         // Update best objective label
-        if (bestObjectiveLabel != null && !result.convergenceBestObjective.isEmpty()) {
-            double bestValue = result.convergenceBestObjective.get(result.convergenceBestObjective.size() - 1);
+        if (bestObjectiveLabel != null && !result.getConvergenceBestObjective().isEmpty()) {
+            double bestValue = result.getConvergenceBestObjective().get(result.getConvergenceBestObjective().size() - 1);
             bestObjectiveLabel.setText(String.format("Best: %.6f", bestValue));
         }
 
         // Update evaluation progress label
-        if (evaluationProgressLabel != null && !result.convergenceEvaluations.isEmpty()) {
-            int currentEval = result.convergenceEvaluations.get(result.convergenceEvaluations.size() - 1);
+        if (evaluationProgressLabel != null && !result.getConvergenceEvaluations().isEmpty()) {
+            int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
 
             // Calculate percentage if we know the total evaluations
             String progressText;
-            if (result.evaluations != null && result.evaluations > 0) {
-                double percentComplete = (currentEval * 100.0) / result.evaluations;
+            Integer evaluations = result.getEvaluations();
+            if (evaluations != null && evaluations > 0) {
+                double percentComplete = (currentEval * 100.0) / evaluations;
                 progressText = String.format("Evaluations: %,d (%.1f%%)", currentEval, percentComplete);
             } else {
                 // No total available yet, just show count
@@ -1497,128 +1388,7 @@ public class OptimisationWindow extends JFrame {
         });
     }
 
-    /**
-     * Loads optimisation configuration from a file.
-     */
-    private void loadConfig() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Load Optimisation Configuration");
 
-        // Set initial directory to current model's directory if available
-        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
-        if (workingDir != null) {
-            fileChooser.setCurrentDirectory(workingDir);
-        }
-
-        // Set file filter for INI files
-        javax.swing.filechooser.FileNameExtensionFilter filter =
-            new javax.swing.filechooser.FileNameExtensionFilter("INI Files (*.ini)", "ini");
-        fileChooser.setFileFilter(filter);
-
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            try {
-                String content = java.nio.file.Files.readString(selectedFile.toPath());
-                isUpdatingConfigEditor = true;
-                configEditor.setText(content);
-                configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
-                // Update the current node's modification state
-                if (currentlyDisplayedNode != null &&
-                    currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
-                    OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                    optInfo.isConfigModified = false;
-                }
-                isUpdatingConfigEditor = false;
-                if (statusUpdater != null) {
-                    statusUpdater.accept("Loaded configuration from " + selectedFile.getName());
-                }
-            } catch (java.io.IOException e) {
-                JOptionPane.showMessageDialog(this,
-                    "Error loading configuration: " + e.getMessage(),
-                    "Load Error",
-                    JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    /**
-     * Saves optimisation configuration to a file.
-     * Behavior depends on which tab is currently selected:
-     * - Config tab: Generate config from GUI and save directly
-     * - Config INI tab: Save text from editor
-     */
-    private void saveConfig() {
-        // Determine what to save based on selected tab
-        String configToSave;
-        int selectedTabIndex = mainTabbedPane.getSelectedIndex();
-        String selectedTabTitle = mainTabbedPane.getTitleAt(selectedTabIndex);
-
-        if (OptimisationUIConstants.TAB_CONFIG.equals(selectedTabTitle)) {
-            // Check if Config INI tab has been modified
-            if (OptimisationUIConstants.CONFIG_STATUS_MODIFIED.equals(configStatusLabel.getText())) {
-                int result = JOptionPane.showConfirmDialog(this,
-                    "The config on this tab is not consistent with that on the 'Config INI' tab.\nAre you sure you want to continue?",
-                    "Config Inconsistency Warning",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-                if (result != JOptionPane.YES_OPTION) {
-                    return; // User chose No, cancel the save
-                }
-            }
-            // Generate config from GUI without modifying the text editor
-            configToSave = guiBuilder.generateConfigText();
-        } else {
-            // Use text from Config INI editor
-            configToSave = configEditor.getText();
-        }
-
-        // Check if config is empty
-        if (configToSave == null || configToSave.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "Configuration is empty. Nothing to save.",
-                "Empty Configuration",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Optimisation Configuration");
-
-        // Set initial directory to current model's directory if available
-        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
-        if (workingDir != null) {
-            fileChooser.setCurrentDirectory(workingDir);
-        }
-
-        // Set file filter for INI files
-        javax.swing.filechooser.FileNameExtensionFilter filter =
-            new javax.swing.filechooser.FileNameExtensionFilter("INI Files (*.ini)", "ini");
-        fileChooser.setFileFilter(filter);
-
-        int result = fileChooser.showSaveDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-
-            // Ensure .ini extension
-            if (!selectedFile.getName().endsWith(".ini")) {
-                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
-            }
-
-            try {
-                java.nio.file.Files.writeString(selectedFile.toPath(), configToSave);
-                if (statusUpdater != null) {
-                    statusUpdater.accept("Saved configuration to " + selectedFile.getName());
-                }
-            } catch (java.io.IOException e) {
-                JOptionPane.showMessageDialog(this,
-                    "Error saving configuration: " + e.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
 
     /**
      * Updates the simulated series combo box options from the current model's [outputs] section.
@@ -1676,135 +1446,22 @@ public class OptimisationWindow extends JFrame {
 
     // ==================== Helper Classes ====================
 
-    /**
-     * Status enum for tracking optimisation progress.
-     */
-    public enum OptimisationStatus {
-        STARTING("Starting"),
-        LOADING("Loading Model"),
-        RUNNING("Optimising"),
-        DONE("Complete"),
-        ERROR("Failed"),
-        STOPPED("Stopped");
-
-        private final String displayName;
-
-        OptimisationStatus(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-    }
-
-    /**
-     * Tracks information about a single optimisation run.
-     */
-    private static class OptimisationInfo {
-        String optName;  // Mutable, allows renaming
-        final SessionManager.KalixSession session;
-        String configSnapshot;  // Store config text at time of run
-        OptimisationResult result;  // Cached result (null if not complete)
-        boolean hasStartedRunning = false;  // True once runOptimisation() has been called
-        boolean isConfigModified = false;  // True if config was manually edited
-
-        public OptimisationInfo(String optName, SessionManager.KalixSession session) {
-            this.optName = optName;
-            this.session = session;
-        }
-
-        public OptimisationStatus getStatus() {
-            if (session.getActiveProgram() instanceof OptimisationProgram) {
-                OptimisationProgram program = (OptimisationProgram) session.getActiveProgram();
-                if (program.isFailed()) return OptimisationStatus.ERROR;
-                if (program.isCompleted()) return OptimisationStatus.DONE;
-                String stateDesc = program.getStateDescription();
-                if (stateDesc.contains("Ready")) return OptimisationStatus.STARTING; // Ready for config
-                if (stateDesc.contains("Loading")) return OptimisationStatus.LOADING;
-                if (stateDesc.contains("Optimising")) return OptimisationStatus.RUNNING;
-            }
-            return OptimisationStatus.STARTING;
-        }
-
-        public String getDisplayText() {
-            // Only show progress percentage while running
-            if (getStatus() == OptimisationStatus.RUNNING && result != null && result.currentProgress != null) {
-                return String.format("%s - %d%%", optName, result.currentProgress);
-            }
-            // For all other states (including DONE), just show the name
-            return optName;
-        }
-    }
-
-    /**
-     * Stores results from a completed optimisation.
-     */
-    private static class OptimisationResult {
-        // From run_optimisation RESULT message
-        Double bestObjective;          // e.g., -0.7662164642516522
-        Integer evaluations;           // e.g., 5000
-        Integer generations;           // e.g., 99
-        String message;                // "Optimization completed successfully"
-        Map<String, Double> paramsPhysical;  // Final parameter values
-        Map<String, Double> paramsNormalized; // Normalized [0,1] values
-        String optimisedModelIni;      // The optimised model with parameters updated
-        boolean success;
-
-        // Progress tracking (updated during PROGRESS messages)
-        Integer currentProgress;       // e.g., 47 (percent)
-        String progressDescription;    // e.g., "Generation 47/100"
-
-        // Convergence data for plotting
-        java.util.List<Integer> convergenceEvaluations = new java.util.ArrayList<>();     // Evaluation counts
-        java.util.List<Double> convergenceBestObjective = new java.util.ArrayList<>();    // Best objective at each point
-        java.util.List<java.util.List<Double>> convergencePopulation = new java.util.ArrayList<>(); // All population values at each point
-
-        // Metadata
-        String configUsed;             // INI config text
-        java.time.LocalDateTime startTime;
-        java.time.LocalDateTime endTime;
-
-        public String formatSummary() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("=== OPTIMISATION RESULT ===\n");
-            sb.append(String.format("Status: %s\n", success ? "SUCCESS" : "FAILED"));
-            if (bestObjective != null) {
-                sb.append(String.format("Best Objective: %.8f\n", bestObjective));
-            }
-            if (evaluations != null) {
-                sb.append(String.format("Evaluations: %d\n", evaluations));
-            }
-            if (generations != null) {
-                sb.append(String.format("Generations: %d\n", generations));
-            }
-            if (message != null) {
-                sb.append(String.format("Message: %s\n", message));
-            }
-            sb.append("\nOptimized Parameters:\n");
-            if (paramsPhysical != null) {
-                paramsPhysical.forEach((param, value) -> {
-                    sb.append(String.format("  %s = %.8f\n", param, value));
-                });
-            }
-            sb.append("=========================\n");
-            return sb.toString();
-        }
-    }
+    // Note: OptimisationInfo, OptimisationResult, and OptimisationStatus classes
+    // have been extracted to separate files in the models/optimisation package
 
     /**
      * Copies the optimised model to the main window.
      */
-    private void copyOptimisedModelToMain() {
-        if (parentIDE == null) {
+    private void copyOptimisedModelToMain(OptimisationInfo optInfo) {
+        if (parentIDE == null || optInfo == null || optInfo.getResult() == null) {
             JOptionPane.showMessageDialog(this,
-                "Cannot access main window.",
+                "Cannot access main window or no results available.",
                 "Error",
                 JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        String optimisedModelText = optimisedModelEditor.getText();
+        String optimisedModelText = optInfo.getResult().getOptimisedModelIni();
         if (optimisedModelText == null || optimisedModelText.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this,
                 "No optimised model available to copy.",
@@ -1854,7 +1511,7 @@ public class OptimisationWindow extends JFrame {
         if (currentlyDisplayedNode != null &&
             currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
             OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-            optimisationName = optInfo.optName;
+            optimisationName = optInfo.getName();
         }
 
         String optimisedModelText = optimisedModelEditor.getText();
@@ -1953,54 +1610,4 @@ public class OptimisationWindow extends JFrame {
         }
     }
 
-    /**
-     * Custom tree cell renderer for optimisation nodes with status colors and icons.
-     */
-    private static class OptimisationTreeCellRenderer extends DefaultTreeCellRenderer {
-        @Override
-        public Component getTreeCellRendererComponent(JTree tree, Object value,
-                boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
-            super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus);
-
-            if (value instanceof DefaultMutableTreeNode) {
-                DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
-                Object userObject = node.getUserObject();
-
-                if (userObject instanceof OptimisationInfo) {
-                    OptimisationInfo optInfo = (OptimisationInfo) userObject;
-                    OptimisationStatus status = optInfo.getStatus();
-
-                    // Set display text with objective value or progress
-                    setText(optInfo.getDisplayText());
-
-                    // Set color and icon based on status
-                    switch (status) {
-                        case DONE:
-                            setForeground(new Color(0, 120, 0));  // Dark green
-                            setIcon(FontIcon.of(FontAwesomeSolid.CHECK_CIRCLE, 16, new Color(0, 120, 0)));
-                            break;
-                        case RUNNING:
-                            setForeground(new Color(0, 0, 200));  // Blue
-                            setIcon(FontIcon.of(FontAwesomeSolid.COG, 16, new Color(0, 0, 200)));
-                            break;
-                        case ERROR:
-                            setForeground(new Color(200, 0, 0));  // Red
-                            setIcon(FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 16, new Color(200, 0, 0)));
-                            break;
-                        case STARTING:
-                        case LOADING:
-                            setForeground(new Color(150, 150, 0));  // Dark yellow
-                            setIcon(FontIcon.of(FontAwesomeSolid.HOURGLASS_HALF, 16, new Color(150, 150, 0)));
-                            break;
-                        case STOPPED:
-                            setForeground(Color.GRAY);
-                            setIcon(FontIcon.of(FontAwesomeSolid.STOP_CIRCLE, 16, Color.GRAY));
-                            break;
-                    }
-                }
-            }
-
-            return this;
-        }
-    }
 }

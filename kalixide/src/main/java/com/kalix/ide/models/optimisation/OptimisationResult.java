@@ -188,6 +188,48 @@ public class OptimisationResult {
     }
 
     /**
+     * Gets the list of evaluation counts from convergence history.
+     * This is a convenience method for backwards compatibility.
+     *
+     * @return List of evaluation counts
+     */
+    public List<Integer> getConvergenceEvaluations() {
+        List<Integer> evaluations = new ArrayList<>();
+        for (ConvergencePoint point : convergenceHistory) {
+            evaluations.add(point.getEvaluation());
+        }
+        return evaluations;
+    }
+
+    /**
+     * Gets the list of best objective values from convergence history.
+     * This is a convenience method for backwards compatibility.
+     *
+     * @return List of best objective values
+     */
+    public List<Double> getConvergenceBestObjective() {
+        List<Double> objectives = new ArrayList<>();
+        for (ConvergencePoint point : convergenceHistory) {
+            objectives.add(point.getBestObjective());
+        }
+        return objectives;
+    }
+
+    /**
+     * Gets the list of population values from convergence history.
+     * This is a convenience method for backwards compatibility.
+     *
+     * @return List of lists of population values
+     */
+    public List<List<Double>> getConvergencePopulation() {
+        List<List<Double>> population = new ArrayList<>();
+        for (ConvergencePoint point : convergenceHistory) {
+            population.add(point.getPopulationValues());
+        }
+        return population;
+    }
+
+    /**
      * Formats the result as a human-readable summary.
      *
      * @return Formatted string summary of the optimisation result

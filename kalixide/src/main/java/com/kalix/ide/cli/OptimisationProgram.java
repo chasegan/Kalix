@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 public class OptimisationProgram extends AbstractSessionProgram {
 
     private enum ProgramState {
+        WAITING_FOR_INITIAL_READY,  // Waiting for initial "rdy" from CLI before sending any commands
         STARTING,           // Sent load_model_string, waiting for RESULT
         MODEL_LOADING,      // Received RESULT from load, waiting for READY
         FETCHING_PARAMS,    // Sent get_optimisable_params, waiting for RESULT
@@ -25,7 +26,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
 
     private final Consumer<String> resultCallback;
     private final Consumer<java.util.List<String>> parametersCallback;
-    private ProgramState currentState = ProgramState.STARTING;
+    private ProgramState currentState = ProgramState.WAITING_FOR_INITIAL_READY;
     private String configText;
     private String modelIni;
 
@@ -50,27 +51,16 @@ public class OptimisationProgram extends AbstractSessionProgram {
     }
 
     /**
-     * Initializes the Optimisation program by loading the model.
-     * Sends load_model_string command and waits for model to be ready.
-     * After this completes, the program enters READY state and waits for runOptimisation() to be called.
+     * Initializes the Optimisation program by storing the model.
+     * Waits for the initial "rdy" message from CLI before sending any commands.
+     * After model loads, the program enters READY state and waits for runOptimisation() to be called.
      *
      * @param modelIni the model definition (INI format)
      */
     public void initialize(String modelIni) {
         this.modelIni = modelIni;
-
-        // Step 1: Send load_model_string command
-        // We stay in STARTING state and wait for RESULT message to know model is loaded
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
-        sessionManager.sendCommand(sessionKey, loadCommand)
-            .thenRun(() -> {
-                statusUpdater.accept("Loading model for optimisation");
-            })
-            .exceptionally(throwable -> {
-                currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to send model: " + throwable.getMessage());
-                return null;
-            });
+        statusUpdater.accept("Waiting for CLI to be ready...");
+        // Don't send any commands yet - wait for the initial READY message from CLI
     }
 
     /**
@@ -103,6 +93,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
         }
 
         return switch (currentState) {
+            case WAITING_FOR_INITIAL_READY -> handleWaitingForInitialReady(msgType, message);
             case STARTING -> handleStartingState(msgType, message);
             case MODEL_LOADING -> handleModelLoadingState(msgType, message);
             case FETCHING_PARAMS -> handleFetchingParamsState(msgType, message);
@@ -130,6 +121,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
     @Override
     public String getStateDescription() {
         return switch (currentState) {
+            case WAITING_FOR_INITIAL_READY -> "Waiting for CLI";
             case STARTING -> "Starting";
             case MODEL_LOADING -> "Loading Model";
             case FETCHING_PARAMS -> "Fetching Parameters";
@@ -138,6 +130,50 @@ public class OptimisationProgram extends AbstractSessionProgram {
             case COMPLETED -> "Completed";
             case FAILED -> "Failed";
         };
+    }
+
+    /**
+     * Handles messages while waiting for initial READY from CLI.
+     * Once received, sends the load_model_string command.
+     */
+    private boolean handleWaitingForInitialReady(JsonStdioTypes.SystemMessageType msgType,
+                                                  JsonMessage.SystemMessage message) {
+        switch (msgType) {
+            case READY:
+                // CLI is ready, now send load_model_string command
+                currentState = ProgramState.STARTING;
+                String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
+                sessionManager.sendCommand(sessionKey, loadCommand)
+                    .thenRun(() -> {
+                        statusUpdater.accept("Loading model for optimisation");
+                    })
+                    .exceptionally(throwable -> {
+                        currentState = ProgramState.FAILED;
+                        statusUpdater.accept("Failed to send model: " + throwable.getMessage());
+                        return null;
+                    });
+                return true;
+
+            case ERROR:
+                // Unexpected error during initialization
+                currentState = ProgramState.FAILED;
+                String errorMsg = extractErrorMessage(message);
+                statusUpdater.accept("Failed to initialize: " + errorMsg);
+                return true;
+
+            default:
+                // Ignore other messages while waiting for initial READY
+                return false;
+        }
+    }
+
+    /**
+     * Gets the model text that was loaded for this optimisation.
+     *
+     * @return The model INI text, or null if not yet loaded
+     */
+    public String getModelText() {
+        return modelIni;
     }
 
     /**

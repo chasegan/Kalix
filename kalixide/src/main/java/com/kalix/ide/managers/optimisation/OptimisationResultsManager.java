@@ -199,6 +199,8 @@ public class OptimisationResultsManager {
 
     /**
      * Compares original and optimised models.
+     * Shows the difference between the model used to start the optimisation
+     * and the resulting optimised model.
      *
      * @param info The optimisation info
      * @param parentFrame The parent frame
@@ -221,23 +223,32 @@ public class OptimisationResultsManager {
             return;
         }
 
-        String originalModel = originalModelSupplier != null ?
-            originalModelSupplier.get() : null;
+        // Get the original model from the OptimisationProgram
+        String originalModel = null;
+        if (info.getSession() != null &&
+            info.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram) {
+            com.kalix.ide.cli.OptimisationProgram program =
+                (com.kalix.ide.cli.OptimisationProgram) info.getSession().getActiveProgram();
+            originalModel = program.getModelText();
+        }
+
         if (originalModel == null || originalModel.isEmpty()) {
             JOptionPane.showMessageDialog(parentFrame,
-                "Original model not available.",
+                "Original model not available from optimisation session.",
                 "No Original Model",
                 JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // Create diff window
+        // DiffWindow constructor takes: (thisModel, referenceModel, title, leftHeader, rightHeader)
+        // It displays referenceModel on the left and thisModel on the right
         DiffWindow diffWindow = new DiffWindow(
-            optimisedModel,
-            originalModel,
+            optimisedModel,  // thisModel - displayed on right
+            originalModel,   // referenceModel - displayed on left
             "Compare Models - " + info.getName(),
-            "Original Model",
-            "Optimised Model"
+            "Original Model (Before Optimisation)",  // left header
+            "Optimised Model (After Optimisation)"   // right header
         );
         diffWindow.setLocationRelativeTo(parentFrame);
         diffWindow.setVisible(true);
