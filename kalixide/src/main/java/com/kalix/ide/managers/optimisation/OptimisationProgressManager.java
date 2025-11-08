@@ -110,8 +110,14 @@ public class OptimisationProgressManager {
         LocalDateTime startTime = LocalDateTime.now();
         sessionStartTimes.put(info.getSessionKey(), startTime);
 
-        // Update start time label
-        startTimeLabel.setText("Start: " + startTime.format(TIME_FORMATTER));
+        // Set start time on the result object so it's available everywhere
+        OptimisationResult result = info.getResult();
+        if (result != null) {
+            result.setStartTime(startTime);
+        }
+
+        // Update start time label with milliseconds
+        startTimeLabel.setText("Start: " + startTime.format(TIME_WITH_MILLIS));
 
         // Reset progress displays
         elapsedTimeLabel.setText("Elapsed: 00:00:00");
@@ -245,21 +251,29 @@ public class OptimisationProgressManager {
      * Updates the elapsed time display.
      * Called by the timer for real-time updates.
      */
-    private void updateElapsedTime() {
+    public void updateElapsedTime() {
         if (currentOptimisation == null) {
             return;
         }
 
-        LocalDateTime startTime = sessionStartTimes.get(currentOptimisation.getSessionKey());
-        if (startTime == null) {
+        OptimisationResult result = currentOptimisation.getResult();
+        if (result == null || result.getStartTime() == null) {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        Duration duration = Duration.between(startTime, now);
+        java.time.LocalDateTime startTime = result.getStartTime();
+        java.time.LocalDateTime endTime = result.getEndTime();
 
-        String elapsed = formatDuration(duration);
-        elapsedTimeLabel.setText(String.format("Elapsed: %s", elapsed));
+        java.time.LocalDateTime currentTime = (endTime != null) ? endTime : java.time.LocalDateTime.now();
+        java.time.Duration duration = java.time.Duration.between(startTime, currentTime);
+
+        double seconds = duration.toMillis() / 1000.0;
+
+        // Format current/finish time with milliseconds
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+        String timestamp = currentTime.format(formatter);
+
+        elapsedTimeLabel.setText(String.format("Elapsed: %s (%.3fs)", timestamp, seconds));
     }
 
     /**
@@ -285,7 +299,7 @@ public class OptimisationProgressManager {
         if (result != null) {
             // Update start time
             if (result.getStartTime() != null) {
-                startTimeLabel.setText("Start: " + result.getStartTime().format(TIME_FORMATTER));
+                startTimeLabel.setText("Start: " + result.getStartTime().format(TIME_WITH_MILLIS));
             }
 
             // Update progress labels
@@ -331,6 +345,45 @@ public class OptimisationProgressManager {
         long minutes = duration.toMinutesPart();
         long seconds = duration.toSecondsPart();
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    /**
+     * Updates the timing labels (start time and elapsed time) for an optimisation.
+     *
+     * @param optInfo The optimisation info
+     */
+    public void updateTimingLabels(OptimisationInfo optInfo) {
+        if (optInfo == null || optInfo.getResult() == null) {
+            startTimeLabel.setText("Start: Not started");
+            elapsedTimeLabel.setText("Elapsed: N/A");
+            return;
+        }
+
+        OptimisationResult result = optInfo.getResult();
+
+        // Update start time with milliseconds
+        if (result.getStartTime() != null) {
+            startTimeLabel.setText("Start: " + result.getStartTime().format(TIME_WITH_MILLIS));
+        } else {
+            startTimeLabel.setText("Start: Not started");
+        }
+
+        // Update elapsed time
+        if (result.getStartTime() != null) {
+            java.time.LocalDateTime endTime = result.getEndTime();
+            if (endTime != null) {
+                // Completed - show final elapsed time
+                java.time.Duration duration = java.time.Duration.between(result.getStartTime(), endTime);
+                double seconds = duration.toMillis() / 1000.0;
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+                elapsedTimeLabel.setText(String.format("Elapsed: %s (%.3fs)", endTime.format(formatter), seconds));
+            } else {
+                // Still running - updateElapsedTime() will handle real-time updates
+                updateElapsedTime();
+            }
+        } else {
+            elapsedTimeLabel.setText("Elapsed: N/A");
+        }
     }
 
     /**

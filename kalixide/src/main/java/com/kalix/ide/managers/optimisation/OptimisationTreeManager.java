@@ -366,4 +366,27 @@ public class OptimisationTreeManager {
     public void setRemoveAction(Consumer<OptimisationInfo> action) {
         this.removeAction = action;
     }
+
+    /**
+     * Updates the tree node display for a specific session.
+     * Triggers a refresh of the node's visual representation.
+     *
+     * @param node The tree node to update
+     * @param currentStatus The current status
+     * @param previousStatus The previous status
+     */
+    public void updateTreeNodeForSession(DefaultMutableTreeNode node,
+                                         OptimisationStatus currentStatus,
+                                         OptimisationStatus previousStatus) {
+        if (node != null && treeModel != null) {
+            // Notify tree model of change (triggers renderer update)
+            treeModel.nodeChanged(node);
+
+            // If this was a significant status change, expand the tree
+            if (previousStatus != currentStatus &&
+                (currentStatus == OptimisationStatus.DONE || currentStatus == OptimisationStatus.ERROR)) {
+                tree.expandPath(new TreePath(currentOptimisationsNode.getPath()));
+            }
+        }
+    }
 }

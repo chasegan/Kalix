@@ -90,12 +90,6 @@ public class OptimisationWindow extends JFrame {
     // Flag to prevent DocumentListener from triggering during programmatic updates
     private boolean isUpdatingConfigEditor = false;
 
-    // Optimisation tracking
-    private Map<String, String> sessionToOptName = new HashMap<>();
-    private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
-    private Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
-    private int optCounter = 1;
-
     // Flag to prevent selection listener from firing during programmatic updates
     private boolean isUpdatingSelection = false;
 
@@ -770,7 +764,7 @@ public class OptimisationWindow extends JFrame {
             String trimmedName = newName.trim();
 
             // Check for duplicate names
-            boolean isDuplicate = sessionToOptName.values().stream()
+            boolean isDuplicate = sessionManager.getAllSessions().values().stream()
                 .anyMatch(name -> name.equals(trimmedName));
 
             if (isDuplicate) {
@@ -784,7 +778,8 @@ public class OptimisationWindow extends JFrame {
             // Update the name
             optInfo.setName(trimmedName);
             String sessionKey = optInfo.getSession().getSessionKey();
-            sessionToOptName.put(sessionKey, trimmedName);
+            // Update name in session manager
+            boolean renamed = sessionManager.renameOptimisation(sessionKey, trimmedName);
 
             // Update tree display
             treeModel.nodeChanged(selectedNode);
@@ -914,15 +909,8 @@ public class OptimisationWindow extends JFrame {
             currentOptimisationsNode.remove(selectedNode);
             treeModel.nodeStructureChanged(currentOptimisationsNode);
 
-            // Remove from tracking maps
-            sessionToOptName.remove(sessionKey);
-            sessionToTreeNode.remove(sessionKey);
-            lastKnownStatus.remove(sessionKey);
-
-            // Terminate session if active
-            if (isActive) {
-                stdioTaskManager.terminateSession(sessionKey);
-            }
+            // Remove from session manager (handles termination if active)
+            sessionManager.removeOptimisation(sessionKey, isActive);
 
             if (statusUpdater != null) {
                 statusUpdater.accept("Removed: " + optInfo.getName());
@@ -1028,7 +1016,7 @@ public class OptimisationWindow extends JFrame {
         SwingUtilities.invokeLater(() -> {
             // Update main status bar
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
+                String optName = sessionManager.getOptimisationName(sessionKey);
                 if (optName != null) {
                     statusUpdater.accept(optName + ": " + statusMessage);
                 } else {
@@ -1189,7 +1177,7 @@ public class OptimisationWindow extends JFrame {
             updateDetailsIfSelected(sessionKey);
 
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
+                String optName = sessionManager.getOptimisationName(sessionKey);
                 statusUpdater.accept(optName + " completed");
             }
         });
@@ -1199,24 +1187,18 @@ public class OptimisationWindow extends JFrame {
      * Updates the tree node for a specific session (status, icon, display text).
      */
     private void updateTreeNodeForSession(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
+        DefaultMutableTreeNode node = sessionManager.getTreeNode(sessionKey);
         if (node != null) {
             // Get current status
             OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();
             OptimisationStatus currentStatus = optInfo.getStatus();
-            OptimisationStatus previousStatus = lastKnownStatus.get(sessionKey);
+            OptimisationStatus previousStatus = sessionManager.getLastKnownStatus(sessionKey);
 
             // Update last known status
-            lastKnownStatus.put(sessionKey, currentStatus);
+            sessionManager.updateStatus(sessionKey, currentStatus);
 
-            // Notify tree model of change (triggers renderer update)
-            treeModel.nodeChanged(node);
-
-            // If this was a significant status change, expand the tree
-            if (previousStatus != currentStatus &&
-                (currentStatus == OptimisationStatus.DONE || currentStatus == OptimisationStatus.ERROR)) {
-                optTree.expandPath(new TreePath(currentOptimisationsNode.getPath()));
-            }
+            // Delegate to tree manager for display update
+            treeManager.updateTreeNodeForSession(node, currentStatus, previousStatus);
         }
     }
 
@@ -1264,67 +1246,28 @@ public class OptimisationWindow extends JFrame {
      * Called by the timer to provide real-time elapsed time updates.
      */
     private void updateElapsedTime() {
-        if (currentlyDisplayedNode == null) {
-            return;
-        }
-
-        Object userObject = currentlyDisplayedNode.getUserObject();
-        if (!(userObject instanceof OptimisationInfo)) {
-            return;
-        }
-
-        OptimisationInfo optInfo = (OptimisationInfo) userObject;
-        OptimisationResult result = optInfo.getResult();
-        if (result == null || result.getStartTime() == null) {
-            return;
-        }
-
-        java.time.LocalDateTime startTime = result.getStartTime();
-        java.time.LocalDateTime endTime = result.getEndTime();
-
-        java.time.LocalDateTime currentTime = (endTime != null) ? endTime : java.time.LocalDateTime.now();
-        java.time.Duration duration = java.time.Duration.between(startTime, currentTime);
-
-        double seconds = duration.toMillis() / 1000.0;
-
-        // Format current/finish time with milliseconds
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-        String timestamp = currentTime.format(formatter);
-
-        elapsedTimeLabel.setText(String.format("Elapsed: %s (%.3fs)", timestamp, seconds));
+        // Delegate to progress manager
+        progressManager.updateElapsedTime();
     }
 
     /**
      * Updates the timing labels (start, elapsed) for the displayed optimization.
      */
     private void updateTimingLabels(OptimisationInfo optInfo) {
+        // Delegate to progress manager
+        progressManager.updateTimingLabels(optInfo);
+
+        // Handle elapsed time timer
         OptimisationResult result = optInfo == null ? null : optInfo.getResult();
         if (result == null) {
-            startTimeLabel.setText("Start: —");
-            elapsedTimeLabel.setText("Elapsed: —");
             if (elapsedTimer != null && elapsedTimer.isRunning()) {
                 elapsedTimer.stop();
             }
-            return;
-        }
-
-        // Format start time with milliseconds
-        if (result.getStartTime() != null) {
-            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-            startTimeLabel.setText("Start: " + result.getStartTime().format(formatter));
-        } else {
-            startTimeLabel.setText("Start: —");
-        }
-
-        // Handle elapsed time timer
-        if (result.getEndTime() != null) {
+        } else if (result.getEndTime() != null) {
             // Stop timer if optimization is finished
             if (elapsedTimer != null && elapsedTimer.isRunning()) {
                 elapsedTimer.stop();
             }
-
-            // Update elapsed time one final time
-            updateElapsedTime();
         } else {
             // Start timer if optimization is running
             if (elapsedTimer != null && !elapsedTimer.isRunning() && result.getStartTime() != null) {
