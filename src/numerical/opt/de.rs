@@ -7,31 +7,13 @@
 /// Journal of global optimization, 11(4), 341-359.
 
 use super::optimisable::Optimisable;
+use super::optimizer_trait::OptimizationProgress;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::distributions::Uniform;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-
-/// Progress information for callback reporting
-#[derive(Debug, Clone)]
-pub struct DEProgress {
-    /// Current generation number
-    pub generation: usize,
-
-    /// Best objective value so far (lower is better)
-    pub best_objective: f64,
-
-    /// Total number of function evaluations performed
-    pub n_evaluations: usize,
-
-    /// Elapsed time since optimisation started
-    pub elapsed: Duration,
-
-    /// Current population objective values (for diversity reporting)
-    /// Contains the objective value for each member of the population
-    pub population_objectives: Option<Vec<f64>>,
-}
+use std::collections::HashMap;
 
 /// Result of a Differential Evolution optimisation run
 #[derive(Debug, Clone)]
@@ -82,7 +64,7 @@ pub struct DEConfig {
     pub n_threads: usize,
 
     /// Optional callback for progress reporting
-    pub progress_callback: Option<Box<dyn Fn(&DEProgress) + Send + Sync>>,
+    pub progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
 }
 
 impl Default for DEConfig {
@@ -180,12 +162,15 @@ impl DifferentialEvolution {
 
             // Progress callback
             if let Some(ref callback) = self.config.progress_callback {
-                let progress = DEProgress {
-                    generation,
-                    best_objective,
+                let mut algorithm_data = HashMap::new();
+                algorithm_data.insert("generation".to_string(), generation as f64);
+
+                let progress = OptimizationProgress {
                     n_evaluations,
-                    elapsed: start_time.elapsed(),
+                    best_objective,
                     population_objectives: Some(objective.clone()),
+                    elapsed: start_time.elapsed(),
+                    algorithm_data,
                 };
                 callback(&progress);
             }
@@ -244,17 +229,8 @@ impl DifferentialEvolution {
             generation += 1;
         }
 
-        // Final callback
-        if let Some(ref callback) = self.config.progress_callback {
-            let progress = DEProgress {
-                generation,
-                best_objective,
-                n_evaluations,
-                elapsed: start_time.elapsed(),
-                population_objectives: Some(objective.clone()),
-            };
-            callback(&progress);
-        }
+        // Note: No final callback here - the CLI handles final rendering via render_final()
+        // This matches SCE-UA behavior and prevents duplicate headers
 
         DEResult {
             best_params,
@@ -360,34 +336,17 @@ impl super::optimizer_trait::Optimizer for DifferentialEvolution {
     ) -> super::optimizer_trait::OptimizationResult {
         use std::collections::HashMap;
 
-        // Wrap the progress callback to convert DEProgress -> OptimizationProgress
-        let wrapped_config = if let Some(callback) = progress_callback {
-            let mut config = self.config.clone();
-            config.progress_callback = Some(Box::new(move |de_progress: &DEProgress| {
-                // Convert DEProgress to OptimizationProgress
-                let mut algorithm_data = HashMap::new();
-                algorithm_data.insert("generation".to_string(), de_progress.generation as f64);
-
-                let opt_progress = super::optimizer_trait::OptimizationProgress {
-                    n_evaluations: de_progress.n_evaluations,
-                    best_objective: de_progress.best_objective,
-                    population_objectives: de_progress.population_objectives.clone(),
-                    elapsed: de_progress.elapsed,
-                    algorithm_data,
-                };
-
-                callback(&opt_progress);
-            }));
-            config
-        } else {
-            self.config.clone()
-        };
-
-        // Create temporary DE with wrapped config
-        let temp_de = DifferentialEvolution::new(wrapped_config);
-
         // Run the DE algorithm
-        let de_result = temp_de.optimise(problem);
+        let de_result = if let Some(callback) = progress_callback {
+            // If callback provided via parameter, use it (overrides config callback)
+            let mut config = self.config.clone();
+            config.progress_callback = Some(callback);
+            let temp_de = DifferentialEvolution::new(config);
+            temp_de.optimise(problem)
+        } else {
+            // Use callback from config (if any)
+            self.optimise(problem)
+        };
 
         // Convert DEResult to OptimizationResult
         let mut algorithm_data = HashMap::new();

@@ -182,7 +182,7 @@ fn main() {
         Commands::Optimise { config_file, model_file, save_model } => {
             use kalix::numerical::opt::{
                 OptimisationConfig, OptimisationProblem,
-                create_optimizer, OptimizationProgress, Optimisable
+                create_optimizer_with_callback, OptimizationProgress, Optimisable
             };
             use kalix::io::optimisation_config_io::load_observed_timeseries;
             use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
@@ -283,8 +283,8 @@ fn main() {
                 None
             };
 
-            // Create optimizer using factory
-            let optimizer = match create_optimizer(&config) {
+            // Create optimizer with progress callback configured
+            let optimizer = match create_optimizer_with_callback(&config, progress_callback) {
                 Ok(opt) => opt,
                 Err(e) => {
                     eprintln!("Error creating optimizer: {}", e);
@@ -292,9 +292,9 @@ fn main() {
                 }
             };
 
-            // Run optimization
+            // Run optimization (callback already configured in optimizer)
             let mut problem_mut = problem;  // Make mutable for optimisation
-            let result = optimizer.optimize(&mut problem_mut, progress_callback);
+            let result = optimizer.optimize(&mut problem_mut, None);
 
             // Render final plot if verbose mode is enabled
             if config.verbose {

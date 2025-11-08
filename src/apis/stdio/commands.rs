@@ -701,7 +701,7 @@ impl Command for RunOptimisationCommand {
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::{
             OptimisationConfig, OptimisationProblem,
-            Optimizer, OptimizationProgress, create_optimizer
+            Optimizer, OptimizationProgress, create_optimizer_with_callback
         };
         use crate::io::optimisation_config_io::load_observed_timeseries;
 
@@ -796,12 +796,12 @@ impl Command for RunOptimisationCommand {
             });
         });
 
-        // Create optimizer based on algorithm configuration
-        let optimiser: Box<dyn Optimizer> = create_optimizer(&config)
+        // Create optimizer with progress callback configured
+        let optimiser: Box<dyn Optimizer> = create_optimizer_with_callback(&config, Some(progress_callback))
             .map_err(|e| CommandError::ExecutionError(e.to_string()))?;
 
-        // Run optimisation with progress callback
-        let result = optimiser.optimize(&mut problem, Some(progress_callback));
+        // Run optimisation (callback already configured in optimizer)
+        let result = optimiser.optimize(&mut problem, None);
 
         // Check if interrupted
         if session.check_interrupt() {

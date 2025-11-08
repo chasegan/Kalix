@@ -38,24 +38,51 @@ pub enum OptimizerFactoryError {
 pub fn create_optimizer(
     config: &OptimisationConfig,
 ) -> Result<Box<dyn Optimizer>, OptimizerFactoryError> {
+    create_optimizer_with_callback(config, None)
+}
+
+/// Create an optimizer with a progress callback
+///
+/// This returns a trait object suitable for algorithm-agnostic code.
+/// Used by STDIO API where progress is reported via OptimizationProgress.
+///
+/// # Arguments
+/// * `config` - The optimization configuration
+/// * `progress_callback` - Optional progress callback receiving OptimizationProgress
+///
+/// # Returns
+/// A boxed Optimizer trait object with the callback configured
+///
+/// # Example
+/// ```ignore
+/// let optimizer = create_optimizer_with_callback(&config, Some(callback))?;
+/// let result = optimizer.optimize(&mut problem, None);
+/// ```
+pub fn create_optimizer_with_callback(
+    config: &OptimisationConfig,
+    progress_callback: Option<Box<dyn Fn(&super::optimizer_trait::OptimizationProgress) + Send + Sync>>,
+) -> Result<Box<dyn Optimizer>, OptimizerFactoryError> {
     match &config.algorithm {
         AlgorithmParams::DE { population_size, f, cr } => {
-            let de = create_de_optimizer(
-                *population_size,
-                config.termination_evaluations,
-                *f,
-                *cr,
-                config.random_seed,
-                config.n_threads,
-            );
-            Ok(Box::new(de))
+            // DE now uses OptimizationProgress directly
+            let de_config = DEConfig {
+                population_size: *population_size,
+                termination_evaluations: config.termination_evaluations,
+                f: *f,
+                cr: *cr,
+                seed: config.random_seed,
+                n_threads: config.n_threads,
+                progress_callback,
+            };
+            Ok(Box::new(DifferentialEvolution::new(de_config)))
         }
         AlgorithmParams::SCEUA { complexes } => {
-            let sce_ua = create_sceua_optimizer(
+            let sce_ua = create_sceua_optimizer_with_callback(
                 *complexes,
                 config.termination_evaluations,
                 config.random_seed,
                 config.n_threads,
+                progress_callback,
             );
             Ok(Box::new(sce_ua))
         }
@@ -106,8 +133,8 @@ pub fn create_de_optimizer(
 
 /// Create a Differential Evolution optimizer with a progress callback
 ///
-/// This is useful for CLI applications that need DE-specific progress
-/// information for terminal plotting.
+/// This is useful for CLI applications that need progress reporting
+/// for terminal plotting.
 ///
 /// # Arguments
 /// * `population_size` - Size of the population
@@ -116,7 +143,7 @@ pub fn create_de_optimizer(
 /// * `cr` - Crossover rate (typically 0.8-0.95)
 /// * `seed` - Optional random seed
 /// * `n_threads` - Number of threads for parallel evaluation
-/// * `progress_callback` - Optional progress callback receiving DEProgress
+/// * `progress_callback` - Optional progress callback receiving OptimizationProgress
 ///
 /// # Returns
 /// A DifferentialEvolution optimizer with the callback configured
@@ -127,7 +154,7 @@ pub fn create_de_optimizer_with_callback(
     cr: f64,
     seed: Option<u64>,
     n_threads: usize,
-    progress_callback: Option<Box<dyn Fn(&super::DEProgress) + Send + Sync>>,
+    progress_callback: Option<Box<dyn Fn(&super::optimizer_trait::OptimizationProgress) + Send + Sync>>,
 ) -> DifferentialEvolution {
     let de_config = DEConfig {
         population_size,

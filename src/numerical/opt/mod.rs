@@ -20,9 +20,9 @@ pub use parameter_mapping::{ParameterMapping, ParameterMappingConfig, Transform}
 pub use objectives::{ObjectiveFunction, SdebObjective};
 pub use optimisation::OptimisationProblem;
 pub use optimizer_trait::{Optimizer, OptimizationProgress, OptimizationResult};
-pub use de::{DifferentialEvolution, DEConfig, DEResult, DEProgress};
+pub use de::{DifferentialEvolution, DEConfig, DEResult};
 pub use sce_ua::{SceUa, SceUaConfig};
-pub use factory::{create_optimizer, create_de_optimizer, create_de_optimizer_with_callback, create_optimizer_instance, OptimizerInstance, OptimizerFactoryError};
+pub use factory::{create_optimizer, create_optimizer_with_callback, create_de_optimizer, create_de_optimizer_with_callback, create_optimizer_instance, OptimizerInstance, OptimizerFactoryError};
 
 // Re-export IO types for convenience
 pub use crate::io::optimisation_config_io::{OptimisationConfig, AlgorithmParams};

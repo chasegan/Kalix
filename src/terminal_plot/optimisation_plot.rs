@@ -119,16 +119,9 @@ impl OptimisationPlot {
             label: Some(format!("← BEST: {:.6}", progress.best_objective)),
         });
 
-        // Add footer information with algorithm-specific data if available
+        // Add footer information (generic across all algorithms)
         self.plot.add_footer_line(format!("Best: {:.6}", progress.best_objective));
         self.plot.add_footer_line(format!("Time: {:.1}s", progress.elapsed.as_secs_f64()));
-
-        // Display generation/iteration if available
-        if let Some(&gen) = progress.algorithm_data.get("generation") {
-            self.plot.add_footer_line(format!("Generation: {}", gen as usize));
-        } else if let Some(&iter) = progress.algorithm_data.get("iteration") {
-            self.plot.add_footer_line(format!("Iteration: {}", iter as usize));
-        }
     }
 
     /// Render the final optimisation result
