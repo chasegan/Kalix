@@ -180,12 +180,15 @@ public class OptimisationSessionManager {
     }
 
     /**
-     * Runs an optimisation.
+     * Runs an optimisation with configuration from the specified source.
      *
      * @param optInfo The optimisation info
+     * @param configText The configuration text to use
+     * @param configValidator Validator for the configuration
      * @return true if started successfully, false otherwise
      */
-    public boolean runOptimisation(OptimisationInfo optInfo) {
+    public boolean runOptimisation(OptimisationInfo optInfo, String configText,
+                                  java.util.function.Predicate<String> configValidator) {
         if (optInfo == null || optInfo.getSession() == null) {
             handleError("No optimisation selected");
             return false;
@@ -204,6 +207,12 @@ public class OptimisationSessionManager {
             return false;
         }
 
+        // Validate configuration
+        if (configValidator != null && !configValidator.test(configText)) {
+            handleError("Invalid configuration. Please check the configuration.");
+            return false;
+        }
+
         try {
             // Get the optimisation program from the session
             Object program = session.getActiveProgram();
@@ -214,13 +223,10 @@ public class OptimisationSessionManager {
 
             OptimisationProgram optProgram = (OptimisationProgram) program;
 
-            // Get config text from session
+            // Update config snapshot and stored config
             String sessionKey = session.getSessionKey();
-            String configText = sessionToConfigText.get(sessionKey);
-            if (configText == null) {
-                handleError("Configuration text not found in session");
-                return false;
-            }
+            optInfo.setConfigSnapshot(configText);
+            sessionToConfigText.put(sessionKey, configText);
 
             // Start optimisation with config text (not file path!)
             // Note: runOptimisation is void and manages its own async operations
@@ -245,6 +251,29 @@ public class OptimisationSessionManager {
             logger.error("Failed to start optimisation", e);
             return false;
         }
+    }
+
+    /**
+     * Runs an optimisation with the stored configuration.
+     *
+     * @param optInfo The optimisation info
+     * @return true if started successfully, false otherwise
+     */
+    public boolean runOptimisation(OptimisationInfo optInfo) {
+        if (optInfo == null || optInfo.getSession() == null) {
+            handleError("No optimisation selected");
+            return false;
+        }
+
+        // Get config text from session
+        String sessionKey = optInfo.getSession().getSessionKey();
+        String configText = sessionToConfigText.get(sessionKey);
+        if (configText == null) {
+            handleError("Configuration text not found in session");
+            return false;
+        }
+
+        return runOptimisation(optInfo, configText, null);
     }
 
     /**

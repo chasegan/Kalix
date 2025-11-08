@@ -385,4 +385,28 @@ public class OptimisationConfigManager {
     public boolean isUpdatingEditor() {
         return isUpdatingEditor;
     }
+
+    /**
+     * Saves the current configuration to an OptimisationInfo object.
+     * Only saves if the optimization hasn't started running yet.
+     *
+     * @param optInfo The OptimisationInfo to save config to
+     * @param sessionKey The session key
+     * @param sessionManager The session manager to update config in
+     */
+    public void saveCurrentConfigToOptimisation(OptimisationInfo optInfo, String sessionKey,
+                                                OptimisationSessionManager sessionManager) {
+        if (optInfo == null || optInfo.hasStartedRunning()) {
+            return;
+        }
+
+        // Save the config text from the editor (it's the source of truth)
+        String configText = configEditor.getText();
+        optInfo.setConfigSnapshot(configText);
+
+        // Also update the stored config in session manager
+        if (sessionManager != null && sessionKey != null) {
+            sessionManager.updateOptimisationConfig(sessionKey, configText);
+        }
+    }
 }

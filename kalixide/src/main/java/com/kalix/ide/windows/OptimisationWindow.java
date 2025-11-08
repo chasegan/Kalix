@@ -55,6 +55,7 @@ public class OptimisationWindow extends JFrame {
     private OptimisationSessionManager sessionManager;
     private OptimisationPanelBuilder panelBuilder;
     private OptimisationEventHandlers eventHandlers;
+    private OptimisationModelManager modelManager;
 
     // Tree components
     private JTree optTree;
@@ -150,6 +151,15 @@ public class OptimisationWindow extends JFrame {
             progressManager,
             statusUpdater
         );
+        this.modelManager = new OptimisationModelManager(
+            workingDirectorySupplier,
+            modelTextSupplier,
+            modelText -> {
+                if (parentIDE != null) {
+                    parentIDE.setModelText(modelText);
+                }
+            }
+        );
 
         // Set up basic dependencies
         resultsManager.setWorkingDirectorySupplier(workingDirectorySupplier);
@@ -158,6 +168,7 @@ public class OptimisationWindow extends JFrame {
 
         configManager.setStatusUpdater(statusUpdater);
         sessionManager.setStatusUpdater(statusUpdater);
+        modelManager.setStatusUpdater(statusUpdater);
     }
 
     /**
@@ -282,14 +293,12 @@ public class OptimisationWindow extends JFrame {
         treeManager.setOnFolderSelectedCallback(() ->
             rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE));
         treeManager.setSaveCurrentConfigCallback(this::saveCurrentConfigToNode);
-        treeManager.setOnOptimisationSelectedCallback(optInfo -> {
-            loadConfigFromNode(sessionManager.getTreeNode(optInfo.getSessionKey()));
-            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
-        });
+        treeManager.setOnOptimisationSelectedCallback(this::displayOptimisation);
     }
 
     /**
      * Displays an optimisation's information in the UI.
+     * This is the central method for updating all UI elements when an optimisation is selected.
      */
     private void displayOptimisation(OptimisationInfo optInfo) {
         if (optInfo == null) {
@@ -298,17 +307,41 @@ public class OptimisationWindow extends JFrame {
             return;
         }
 
-        // Update displays using managers
+        // Load configuration through managers
         configManager.loadConfiguration(optInfo);
-        resultsManager.displayResults(optInfo);
-        plotManager.updatePlot(optInfo.getResult());
-        progressManager.setCurrentOptimisation(optInfo);
 
-        // Update UI state
-        boolean canRun = optInfo.getStatus() == OptimisationStatus.CONFIGURING;
-        runButton.setEnabled(canRun);
-        loadConfigButton.setEnabled(canRun);
+        // Set editable state based on whether optimization has started
+        boolean isEditable = !optInfo.hasStartedRunning();
+        configEditor.setEditable(isEditable);
+        guiBuilder.setComponentsEnabled(isEditable);
+
+        // Update button states
+        runButton.setEnabled(isEditable);
+        loadConfigButton.setEnabled(isEditable);
         saveConfigButton.setEnabled(true);
+
+        // Update displays based on running state
+        if (optInfo.hasStartedRunning()) {
+            // Update timing labels
+            progressManager.updateTimingLabels(optInfo);
+            // Update results display
+            resultsManager.updateOptimisedModelDisplay(optInfo);
+            // Update convergence plot with current data
+            plotManager.updatePlot(optInfo.getResult());
+        } else {
+            // Clear results displays
+            optimisedModelEditor.setText("");
+            plotManager.clearPlot();
+            if (bestObjectiveLabel != null) {
+                bestObjectiveLabel.setText("Best: —");
+            }
+            if (evaluationProgressLabel != null) {
+                evaluationProgressLabel.setText("Evaluations: —");
+            }
+        }
+
+        // Update progress manager
+        progressManager.setCurrentOptimisation(optInfo);
 
         // Show optimisation panel
         rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
@@ -530,66 +563,10 @@ public class OptimisationWindow extends JFrame {
         if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo)) return;
 
         OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+        String sessionKey = optInfo.getSession() != null ? optInfo.getSession().getSessionKey() : null;
 
-        // Only save if the optimization hasn't started running yet
-        if (!optInfo.hasStartedRunning()) {
-            // Save the config text from the editor (it's the source of truth)
-            String configText = configEditor.getText();
-            optInfo.setConfigSnapshot(configText);
-
-            // Also update the stored config in session manager
-            if (optInfo.getSession() != null) {
-                String sessionKey = optInfo.getSession().getSessionKey();
-                sessionManager.updateOptimisationConfig(sessionKey, configText);
-            }
-        }
-    }
-
-    /**
-     * Loads config from the selected node into the GUI/text editor.
-     * Also updates tab states (editable vs read-only) and button visibility.
-     */
-    private void loadConfigFromNode(DefaultMutableTreeNode node) {
-        if (!(node.getUserObject() instanceof OptimisationInfo)) return;
-
-        OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();
-
-        // Load configuration through config manager
-        configManager.loadConfiguration(optInfo);
-
-        // Set editable state based on whether optimization has started
-        boolean isEditable = !optInfo.hasStartedRunning();
-        configEditor.setEditable(isEditable);
-        guiBuilder.setComponentsEnabled(isEditable);
-
-        // Disable Load button when optimization has started (but keep Save enabled)
-        loadConfigButton.setEnabled(isEditable);
-
-        // Update results display (Results tab is always present)
-        if (optInfo.hasStartedRunning()) {
-            // Update timing labels
-            progressManager.updateTimingLabels(optInfo);
-            // Update results display
-            resultsManager.updateOptimisedModelDisplay(optInfo);
-            // Update convergence plot with current data
-            plotManager.updatePlot(optInfo.getResult());
-        } else {
-            optimisedModelEditor.setText("");
-            // Clear convergence plot and labels
-            plotManager.clearPlot();
-            if (bestObjectiveLabel != null) {
-                bestObjectiveLabel.setText("Best: —");
-            }
-            if (evaluationProgressLabel != null) {
-                evaluationProgressLabel.setText("Evaluations: —");
-            }
-        }
-
-        // Disable Run button once optimization has started
-        runButton.setEnabled(!optInfo.hasStartedRunning());
-
-        // Update currently displayed node
-        currentlyDisplayedNode = node;
+        // Use config manager to save
+        configManager.saveCurrentConfigToOptimisation(optInfo, sessionKey, sessionManager);
     }
 
     /**
@@ -801,10 +778,7 @@ public class OptimisationWindow extends JFrame {
 
     /**
      * Runs the optimisation for the currently selected node.
-     * Calls program.runOptimisation() on the existing session.
-     * Behavior depends on which tab is currently selected:
-     * - Config tab: Generate config from GUI, update Config INI editor, then run
-     * - Config INI tab: Use text from editor directly
+     * Delegates to session manager with appropriate configuration.
      */
     private void runOptimisation() {
         if (currentlyDisplayedNode == null) return;
@@ -825,26 +799,9 @@ public class OptimisationWindow extends JFrame {
             configText = configManager.getCurrentConfig();
         }
 
-        // Validate config
-        if (!configManager.validateConfiguration()) {
-            JOptionPane.showMessageDialog(this,
-                "Invalid configuration. Please check the configuration.",
-                "Invalid Configuration",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        // Update config snapshot
-        optInfo.setConfigSnapshot(configText);
-
-        // Update the stored config in session manager
-        if (optInfo.getSession() != null) {
-            String sessionKey = optInfo.getSession().getSessionKey();
-            sessionManager.updateOptimisationConfig(sessionKey, configText);
-        }
-
-        // Run optimisation through manager
-        boolean started = sessionManager.runOptimisation(optInfo);
+        // Run optimisation through manager with validation
+        boolean started = sessionManager.runOptimisation(optInfo, configText,
+            config -> configManager.validateConfiguration());
 
         if (started) {
             // Switch to results tab
@@ -853,6 +810,11 @@ public class OptimisationWindow extends JFrame {
 
             // Update tree display
             treeModel.nodeChanged(currentlyDisplayedNode);
+        } else if (!configManager.validateConfiguration()) {
+            JOptionPane.showMessageDialog(this,
+                "Invalid configuration. Please check the configuration.",
+                "Invalid Configuration",
+                JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -1018,160 +980,28 @@ public class OptimisationWindow extends JFrame {
      * Copies the optimised model to the main window.
      */
     private void copyOptimisedModelToMain(OptimisationInfo optInfo) {
-        if (parentIDE == null || optInfo == null || optInfo.getResult() == null) {
-            JOptionPane.showMessageDialog(this,
-                "Cannot access main window or no results available.",
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        String optimisedModelText = optInfo.getResult().getOptimisedModelIni();
-        if (optimisedModelText == null || optimisedModelText.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No optimised model available to copy.",
-                "Copy to Main Window",
-                JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        // Check if main window has unsaved changes
-        if (parentIDE.hasUnsavedChanges()) {
-            int choice = JOptionPane.showConfirmDialog(
-                this,
-                "The main window has unsaved changes.\n\nDo you want to replace the current content with the optimised model?",
-                "Unsaved Changes",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-            );
-
-            if (choice != JOptionPane.YES_OPTION) {
-                return; // User cancelled
-            }
-        }
-
-        // Copy optimised model to main window and mark as dirty (unsaved)
-        parentIDE.setModelTextAndMarkDirty(optimisedModelText);
-
-        JOptionPane.showMessageDialog(this,
-            "Optimised model copied to main window successfully.",
-            "Copy Complete",
-            JOptionPane.INFORMATION_MESSAGE);
+        modelManager.copyOptimisedModelToMain(optInfo, getRootPane());
     }
 
     /**
      * Compares the optimised model with the main window using DiffWindow.
      */
     private void compareOptimisedModelWithMain() {
-        if (parentIDE == null) {
-            JOptionPane.showMessageDialog(this,
-                "Cannot access main window.",
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        // Get current optimization name
-        String optimisationName = "Optimised Model"; // Default fallback
         if (currentlyDisplayedNode != null &&
             currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
             OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-            optimisationName = optInfo.getName();
+            modelManager.compareOptimisedModelWithMain(optInfo, getRootPane());
         }
-
-        String optimisedModelText = optimisedModelEditor.getText();
-        if (optimisedModelText == null || optimisedModelText.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No optimised model available to compare.",
-                "Show Model Changes",
-                JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        // Get current model from main window
-        String mainModelText = parentIDE.getModelText();
-        if (mainModelText == null || mainModelText.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "Main window is empty. Nothing to compare.",
-                "Show Model Changes",
-                JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        // Open diff window (optimised model vs main window model)
-        new DiffWindow(optimisedModelText, mainModelText,
-            "Changes: " + optimisationName + " vs Reference Model",
-            "Reference Model",
-            optimisationName);
     }
 
     /**
      * Saves the optimised model to a file.
      */
     private void saveOptimisedModelAs() {
-        String optimisedModelText = optimisedModelEditor.getText();
-        if (optimisedModelText == null || optimisedModelText.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "No optimised model available to save.",
-                "Save As",
-                JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Optimised Model");
-
-        // Set initial directory to current model's directory if available
-        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
-        if (workingDir != null) {
-            fileChooser.setCurrentDirectory(workingDir);
-        }
-
-        // Set file filter for INI files
-        javax.swing.filechooser.FileNameExtensionFilter filter =
-            new javax.swing.filechooser.FileNameExtensionFilter("INI Files (*.ini)", "ini");
-        fileChooser.setFileFilter(filter);
-
-        // Suggest a filename
-        fileChooser.setSelectedFile(new File("optimised_model.ini"));
-
-        int result = fileChooser.showSaveDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-
-            // Ensure .ini extension
-            if (!selectedFile.getName().endsWith(".ini")) {
-                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
-            }
-
-            // Check if file exists
-            if (selectedFile.exists()) {
-                int overwrite = JOptionPane.showConfirmDialog(
-                    this,
-                    "File \"" + selectedFile.getName() + "\" already exists.\n\nDo you want to replace it?",
-                    "File Exists",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-                );
-
-                if (overwrite != JOptionPane.YES_OPTION) {
-                    return; // User chose not to overwrite
-                }
-            }
-
-            // Save the file
-            try {
-                java.nio.file.Files.writeString(selectedFile.toPath(), optimisedModelText);
-                JOptionPane.showMessageDialog(this,
-                    "Optimised model saved successfully to:\n" + selectedFile.getAbsolutePath(),
-                    "Save Complete",
-                    JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(this,
-                    "Failed to save file:\n" + e.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
-            }
+        if (currentlyDisplayedNode != null &&
+            currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+            OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+            modelManager.saveOptimisedModelAs(optInfo, getRootPane());
         }
     }
 
