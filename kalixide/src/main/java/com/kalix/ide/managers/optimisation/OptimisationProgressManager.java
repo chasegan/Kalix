@@ -387,6 +387,43 @@ public class OptimisationProgressManager {
     }
 
     /**
+     * Updates the convergence labels (best objective and evaluation progress) with current values.
+     *
+     * @param result The optimisation result
+     */
+    public void updateConvergenceLabels(OptimisationResult result) {
+        if (result == null) {
+            bestObjectiveLabel.setText("Best: —");
+            evaluationProgressLabel.setText("Evaluations: —");
+            return;
+        }
+
+        // Update best objective label
+        if (!result.getConvergenceBestObjective().isEmpty()) {
+            double bestValue = result.getConvergenceBestObjective().get(result.getConvergenceBestObjective().size() - 1);
+            bestObjectiveLabel.setText(String.format("Best: %.6f", bestValue));
+        }
+
+        // Update evaluation progress label
+        if (!result.getConvergenceEvaluations().isEmpty()) {
+            int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
+
+            // Calculate percentage if we know the total evaluations
+            String progressText;
+            Integer evaluations = result.getEvaluations();
+            if (evaluations != null && evaluations > 0) {
+                double percentComplete = (currentEval * 100.0) / evaluations;
+                progressText = String.format("Evaluations: %,d (%.1f%%)", currentEval, percentComplete);
+            } else {
+                // No total available yet, just show count
+                progressText = String.format("Evaluations: %,d", currentEval);
+            }
+
+            evaluationProgressLabel.setText(progressText);
+        }
+    }
+
+    /**
      * Cleans up resources.
      */
     public void dispose() {

@@ -3,9 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.KalixIDE;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.ProgressParser;
-import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
-import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.optimisation.*;
 import com.kalix.ide.models.optimisation.*;
@@ -56,6 +54,7 @@ public class OptimisationWindow extends JFrame {
     private OptimisationResultsManager resultsManager;
     private OptimisationPlotManager plotManager;
     private OptimisationSessionManager sessionManager;
+    private OptimisationPanelBuilder panelBuilder;
 
     // Tree components
     private JTree optTree;
@@ -66,7 +65,6 @@ public class OptimisationWindow extends JFrame {
     // Main panel components
     private JPanel rightPanel;  // Container that switches between message and optimisation panel
     private CardLayout rightPanelLayout;
-    private JPanel optimisationPanel;
     private JTabbedPane mainTabbedPane;
 
     // Tab components
@@ -145,6 +143,7 @@ public class OptimisationWindow extends JFrame {
         this.progressManager = new OptimisationProgressManager(progressBar);
         this.resultsManager = new OptimisationResultsManager();
         this.plotManager = new OptimisationPlotManager();
+        this.panelBuilder = new OptimisationPanelBuilder();
 
         // Set up basic dependencies
         resultsManager.setWorkingDirectorySupplier(workingDirectorySupplier);
@@ -272,7 +271,7 @@ public class OptimisationWindow extends JFrame {
      */
     private void displayOptimisation(OptimisationInfo optInfo) {
         if (optInfo == null) {
-            rightPanelLayout.show(rightPanel, "message");
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
             currentlyDisplayedNode = null;
             return;
         }
@@ -290,7 +289,7 @@ public class OptimisationWindow extends JFrame {
         saveConfigButton.setEnabled(true);
 
         // Show optimisation panel
-        rightPanelLayout.show(rightPanel, "optimisation");
+        rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
         currentlyDisplayedNode = sessionManager.getTreeNode(optInfo.getSessionKey());
 
         // Switch to appropriate tab based on status
@@ -364,53 +363,21 @@ public class OptimisationWindow extends JFrame {
         // Expand "Optimisation runs" node by default
         optTree.expandRow(0);
 
-        // ===== Right Panel with CardLayout =====
-        rightPanel = new JPanel();
-        rightPanelLayout = new CardLayout();
-        rightPanel.setLayout(rightPanelLayout);
-
-        // --- Message Panel (shown when no optimization selected) ---
-        JPanel messagePanel = new JPanel(new BorderLayout());
-        JLabel messageLabel = new JLabel("<html><center>Click \"New Optimisation\" to create an optimisation<br><br>" +
-            "Or select an existing optimisation from the tree</center></html>");
-        messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        messagePanel.add(messageLabel, BorderLayout.CENTER);
-
-        // ===== Single Optimisation Panel with Tabs =====
-        optimisationPanel = new JPanel(new BorderLayout(10, 10));
-        optimisationPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        // Create main tabbed pane
-        mainTabbedPane = new JTabbedPane();
+        // ===== Build Right Panel using PanelBuilder =====
+        rightPanel = panelBuilder.buildRightPanel();
+        rightPanelLayout = panelBuilder.getRightPanelLayout();
+        mainTabbedPane = panelBuilder.getMainTabbedPane();
 
         // Tab 1: Config (GUI Builder from ConfigManager)
         guiBuilder = configManager.getGuiBuilder();
-        mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG, guiBuilder);
+        panelBuilder.addConfigGuiTab(guiBuilder);
 
         // Tab 2: Config INI (Text Editor from ConfigManager)
         configEditor = configManager.getConfigEditor();
         RTextScrollPane configScrollPane = configManager.getConfigScrollPane();
 
-        // Get the status label from config manager
-        configStatusLabel = configManager.getConfigStatusLabel();
-
-        // Create container panel for Config INI tab with button at top
-        JPanel configIniPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.BOTH;
-
-        // Button panel at top - fixed height, no vertical expansion
-        gbc.gridy = 0;
-        gbc.weighty = 0.0;
-        gbc.insets = new Insets(5, 5, 5, 5);
-        JPanel configIniButtonPanel = new JPanel(new BorderLayout(10, 0));
-
-        // Left side: Generate button
-        JPanel leftButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
-        JButton generateConfigButton = new JButton("Generate Config INI");
-        generateConfigButton.addActionListener(e -> {
+        // Build Config INI tab with generate button
+        configStatusLabel = panelBuilder.buildConfigIniTab(configEditor, configScrollPane, e -> {
             isUpdatingConfigEditor = true;
             guiBuilder.generateAndSwitchToTextEditor();
             configStatusLabel.setText(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
@@ -422,143 +389,61 @@ public class OptimisationWindow extends JFrame {
             }
             isUpdatingConfigEditor = false;
         });
-        leftButtonPanel.add(generateConfigButton);
 
-        // Right side: Status label
-        JPanel rightLabelPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, OptimisationUIConstants.PADDING_SMALL, 0));
-        configStatusLabel = new JLabel(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
-        configStatusLabel.setFont(configStatusLabel.getFont().deriveFont(java.awt.Font.ITALIC));
-        configStatusLabel.setBorder(BorderFactory.createEmptyBorder(
-            OptimisationUIConstants.CONFIG_STATUS_LABEL_TOP_PADDING, 0, 0, 0));
-        rightLabelPanel.add(configStatusLabel);
+        // Tab 3: Results (always present)
+        // Get components from managers
+        optimisedModelEditor = resultsManager.getOptimisedModelEditor();
+        convergencePlot = plotManager.getPlotPanel();
 
-        configIniButtonPanel.add(leftButtonPanel, BorderLayout.WEST);
-        configIniButtonPanel.add(rightLabelPanel, BorderLayout.EAST);
-        configIniPanel.add(configIniButtonPanel, gbc);
-
-        // Text editor - expands to fill remaining vertical space
-        gbc.gridy = 1;
-        gbc.weighty = 1.0;
-        gbc.insets = new Insets(0, 5, 5, 5);
-        configIniPanel.add(configScrollPane, gbc);
-
-        mainTabbedPane.addTab(OptimisationUIConstants.TAB_CONFIG_INI, configIniPanel);
-
-        // Tab 3: Results (always present) - Plot above text area
-        JPanel resultsPanel = new JPanel(new BorderLayout(0, 5));
-
-        // Get progress labels from progress manager
+        // Get labels from progress manager
         startTimeLabel = progressManager.getStartTimeLabel();
         elapsedTimeLabel = progressManager.getElapsedTimeLabel();
         evaluationProgressLabel = progressManager.getEvaluationProgressLabel();
         bestObjectiveLabel = progressManager.getBestObjectiveLabel();
 
-        // Create combined labels panel with timing on left, convergence on right
-        JPanel allLabelsPanel = new JPanel(new BorderLayout());
-        allLabelsPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-
-        // Left side: timing labels (vertical stack)
-        JPanel timingLabelsPanel = new JPanel();
-        timingLabelsPanel.setLayout(new BoxLayout(timingLabelsPanel, BoxLayout.Y_AXIS));
-        timingLabelsPanel.add(startTimeLabel);
-        timingLabelsPanel.add(elapsedTimeLabel);
-
-        // Right side: convergence labels (vertical stack)
-        JPanel convergenceLabelsPanel = new JPanel();
-        convergenceLabelsPanel.setLayout(new BoxLayout(convergenceLabelsPanel, BoxLayout.Y_AXIS));
-        convergenceLabelsPanel.add(evaluationProgressLabel);
-        convergenceLabelsPanel.add(bestObjectiveLabel);
-
-        // Add left and right panels to combined panel
-        allLabelsPanel.add(timingLabelsPanel, BorderLayout.WEST);
-        allLabelsPanel.add(convergenceLabelsPanel, BorderLayout.EAST);
-
-        // Get plot panel from plot manager
-        convergencePlot = plotManager.getPlotPanel();
-
-        // Combine labels and plot into a single panel
+        // Create plot panel with labels
         JPanel plotWithLabelsPanel = plotManager.createPlotPanelWithLabels();
-        // Override with our custom labels panel
-        plotWithLabelsPanel.removeAll();
-        plotWithLabelsPanel.setLayout(new BorderLayout(0, 0));
-        plotWithLabelsPanel.add(allLabelsPanel, BorderLayout.NORTH);
-        plotWithLabelsPanel.add(convergencePlot, BorderLayout.CENTER);
 
-        // Get results editor from results manager
-        optimisedModelEditor = resultsManager.getOptimisedModelEditor();
-        RTextScrollPane optimisedModelScrollPane = resultsManager.getScrollPane();
-
-        // Use split pane: plot with labels on top, optimised model editor on bottom
-        JSplitPane resultsSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        resultsSplitPane.setTopComponent(plotWithLabelsPanel);
-        resultsSplitPane.setBottomComponent(optimisedModelScrollPane);
-        resultsSplitPane.setDividerLocation(330); // Adjusted for labels
-        resultsSplitPane.setResizeWeight(0.5); // Equal resizing
-
-        // Add Results tab-specific buttons at the bottom of the Results tab
-        JPanel resultsButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-
-        JButton copyToMainButton = new JButton("Copy to Main Window");
-        copyToMainButton.addActionListener(e -> {
-            if (currentlyDisplayedNode != null &&
-                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
-                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                copyOptimisedModelToMain(optInfo);
+        // Build Results tab using builder
+        panelBuilder.buildResultsTab(
+            optimisedModelEditor,
+            plotWithLabelsPanel,
+            progressManager,
+            e -> {
+                if (currentlyDisplayedNode != null &&
+                    currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                    OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                    copyOptimisedModelToMain(optInfo);
+                }
+            },
+            e -> {
+                if (currentlyDisplayedNode != null &&
+                    currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                    OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                    resultsManager.compareModels(optInfo, this);
+                }
+            },
+            e -> {
+                if (currentlyDisplayedNode != null &&
+                    currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
+                    OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
+                    resultsManager.saveResults(optInfo, this);
+                }
             }
-        });
-        resultsButtonPanel.add(copyToMainButton);
+        );
 
-        JButton compareButton = new JButton("Show Model Changes");
-        compareButton.addActionListener(e -> {
-            if (currentlyDisplayedNode != null &&
-                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
-                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                resultsManager.compareModels(optInfo, this);
-            }
-        });
-        resultsButtonPanel.add(compareButton);
-
-        JButton saveAsButton = new JButton("Save As");
-        saveAsButton.addActionListener(e -> {
-            if (currentlyDisplayedNode != null &&
-                currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo) {
-                OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
-                resultsManager.saveResults(optInfo, this);
-            }
-        });
-        resultsButtonPanel.add(saveAsButton);
-
-        resultsPanel.add(resultsButtonPanel, BorderLayout.SOUTH);
-        resultsPanel.add(resultsSplitPane, BorderLayout.CENTER);
-        mainTabbedPane.addTab(OptimisationUIConstants.TAB_RESULTS, resultsPanel);
-
-        optimisationPanel.add(mainTabbedPane, BorderLayout.CENTER);
-
-        // Buttons panel at bottom (for Parameters/Config tabs)
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-
-        loadConfigButton = new JButton("Load Config");
+        // Get button references from builder and set action listeners
+        loadConfigButton = panelBuilder.getLoadConfigButton();
         loadConfigButton.addActionListener(e -> configManager.loadConfigFromFile(getRootPane()));
-        buttonPanel.add(loadConfigButton);
 
-        saveConfigButton = new JButton("Save Config");
+        saveConfigButton = panelBuilder.getSaveConfigButton();
         saveConfigButton.addActionListener(e -> configManager.saveConfigToFile(getRootPane(), configManager.getCurrentConfig()));
-        buttonPanel.add(saveConfigButton);
 
-        runButton = new JButton("Start");
+        runButton = panelBuilder.getRunButton();
         runButton.addActionListener(e -> runOptimisation());
-        buttonPanel.add(runButton);
-
-        optimisationPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         // Note: Elapsed timer is now managed by progressManager
-
-        // Add both panels to rightPanel CardLayout
-        rightPanel.add(messagePanel, OptimisationUIConstants.CARD_MESSAGE);
-        rightPanel.add(optimisationPanel, OptimisationUIConstants.CARD_OPTIMISATION);
-
-        // Show message panel by default
-        rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
+        // Note: Right panel and cards are already set up by panelBuilder
     }
 
     private void setupLayout() {
@@ -656,7 +541,10 @@ public class OptimisationWindow extends JFrame {
 
         // Update results display (Results tab is always present)
         if (optInfo.hasStartedRunning()) {
-            updateOptimisedModelDisplay(optInfo);
+            // Update timing labels
+            progressManager.updateTimingLabels(optInfo);
+            // Update results display
+            resultsManager.updateOptimisedModelDisplay(optInfo);
             // Update convergence plot with current data
             plotManager.updatePlot(optInfo.getResult());
         } else {
@@ -688,44 +576,6 @@ public class OptimisationWindow extends JFrame {
             }
         }
         return -1;
-    }
-
-    /**
-     * Updates the optimised model editor with the result.
-     */
-    private void updateOptimisedModelDisplay(OptimisationInfo optInfo) {
-        OptimisationStatus status = optInfo.getStatus();
-
-        // Update timing labels
-        updateTimingLabels(optInfo);
-
-        OptimisationResult result = optInfo.getResult();
-        if (result != null && status == OptimisationStatus.DONE) {
-            // Show optimised model if available
-            if (result.getOptimisedModelIni() != null && !result.getOptimisedModelIni().isEmpty()) {
-                optimisedModelEditor.setText(result.getOptimisedModelIni());
-                optimisedModelEditor.setCaretPosition(0); // Scroll to top
-            } else {
-                // Fallback: show summary if no model available
-                optimisedModelEditor.setText(result.formatSummary());
-            }
-        } else if (status == OptimisationStatus.RUNNING || status == OptimisationStatus.LOADING) {
-            // Show simple quote while optimization is running
-            optimisedModelEditor.setText("# If you optimize everything, you will always be unhappy. - Donald Knuth");
-        } else if (status == OptimisationStatus.ERROR) {
-            // Show error
-            StringBuilder errorText = new StringBuilder();
-            errorText.append("# OPTIMISATION FAILED\n\n");
-            if (result != null && result.getMessage() != null) {
-                errorText.append("# Error: ").append(result.getMessage()).append("\n");
-            } else {
-                errorText.append("# Optimisation failed with unknown error\n");
-            }
-            optimisedModelEditor.setText(errorText.toString());
-        } else {
-            // Starting/Ready state
-            optimisedModelEditor.setText("# Optimisation ready to start...");
-        }
     }
 
     private void setupWindowListeners() {
@@ -1203,21 +1053,29 @@ public class OptimisationWindow extends JFrame {
     }
 
     /**
+     * Gets the currently selected OptimisationInfo if it matches the given session key.
+     *
+     * @param sessionKey The session key to check
+     * @return The matching OptimisationInfo, or null if not selected or doesn't match
+     */
+    private OptimisationInfo getSelectedOptimisationIfMatches(String sessionKey) {
+        OptimisationInfo selectedInfo = treeManager.getSelectedOptimisation();
+        if (selectedInfo != null && selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
+            return selectedInfo;
+        }
+        return null;
+    }
+
+    /**
      * Updates the results display if the given session is currently selected.
      */
     private void updateDetailsIfSelected(String sessionKey) {
-        TreePath selectedPath = optTree.getSelectionPath();
-        if (selectedPath != null) {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-            if (selectedNode.getUserObject() instanceof OptimisationInfo) {
-                OptimisationInfo selectedInfo = (OptimisationInfo) selectedNode.getUserObject();
-                if (selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
-                    // Only update results if optimization has started
-                    if (selectedInfo.hasStartedRunning()) {
-                        updateOptimisedModelDisplay(selectedInfo);
-                    }
-                }
-            }
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null && selectedInfo.hasStartedRunning()) {
+            // Update timing labels
+            progressManager.updateTimingLabels(selectedInfo);
+            // Update results display
+            resultsManager.updateOptimisedModelDisplay(selectedInfo);
         }
     }
 
@@ -1225,18 +1083,12 @@ public class OptimisationWindow extends JFrame {
      * Updates the convergence plot and labels if the given session is currently selected.
      */
     private void updateConvergencePlotIfSelected(String sessionKey) {
-        TreePath selectedPath = optTree.getSelectionPath();
-        if (selectedPath != null) {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-            if (selectedNode.getUserObject() instanceof OptimisationInfo) {
-                OptimisationInfo selectedInfo = (OptimisationInfo) selectedNode.getUserObject();
-                if (selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
-                    // Update the convergence plot with latest data
-                    plotManager.updatePlot(selectedInfo.getResult());
-                    // Also update labels in real-time
-                    updateConvergenceLabels(selectedInfo.getResult());
-                }
-            }
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null && selectedInfo.getResult() != null) {
+            // Update the convergence plot with latest data
+            plotManager.updatePlot(selectedInfo.getResult());
+            // Also update labels in real-time
+            progressManager.updateConvergenceLabels(selectedInfo.getResult());
         }
     }
 
@@ -1273,45 +1125,6 @@ public class OptimisationWindow extends JFrame {
             if (elapsedTimer != null && !elapsedTimer.isRunning() && result.getStartTime() != null) {
                 elapsedTimer.start();
             }
-        }
-    }
-
-    /**
-     * Updates the convergence plot labels with current optimization progress.
-     */
-    private void updateConvergenceLabels(OptimisationResult result) {
-        if (result == null) {
-            if (bestObjectiveLabel != null) {
-                bestObjectiveLabel.setText("Best: —");
-            }
-            if (evaluationProgressLabel != null) {
-                evaluationProgressLabel.setText("Evaluations: —");
-            }
-            return;
-        }
-
-        // Update best objective label
-        if (bestObjectiveLabel != null && !result.getConvergenceBestObjective().isEmpty()) {
-            double bestValue = result.getConvergenceBestObjective().get(result.getConvergenceBestObjective().size() - 1);
-            bestObjectiveLabel.setText(String.format("Best: %.6f", bestValue));
-        }
-
-        // Update evaluation progress label
-        if (evaluationProgressLabel != null && !result.getConvergenceEvaluations().isEmpty()) {
-            int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
-
-            // Calculate percentage if we know the total evaluations
-            String progressText;
-            Integer evaluations = result.getEvaluations();
-            if (evaluations != null && evaluations > 0) {
-                double percentComplete = (currentEval * 100.0) / evaluations;
-                progressText = String.format("Evaluations: %,d (%.1f%%)", currentEval, percentComplete);
-            } else {
-                // No total available yet, just show count
-                progressText = String.format("Evaluations: %,d", currentEval);
-            }
-
-            evaluationProgressLabel.setText(progressText);
         }
     }
 

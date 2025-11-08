@@ -406,4 +406,46 @@ public class OptimisationResultsManager {
     public void setStatusUpdater(Consumer<String> updater) {
         this.statusUpdater = updater;
     }
+
+    /**
+     * Updates the optimised model display based on the optimisation status and result.
+     *
+     * @param optInfo The optimisation info
+     */
+    public void updateOptimisedModelDisplay(OptimisationInfo optInfo) {
+        if (optInfo == null) {
+            optimisedModelEditor.setText(MSG_READY);
+            return;
+        }
+
+        OptimisationStatus status = optInfo.getStatus();
+        OptimisationResult result = optInfo.getResult();
+
+        if (result != null && status == OptimisationStatus.DONE) {
+            // Show optimised model if available
+            if (result.getOptimisedModelIni() != null && !result.getOptimisedModelIni().isEmpty()) {
+                optimisedModelEditor.setText(result.getOptimisedModelIni());
+                optimisedModelEditor.setCaretPosition(0); // Scroll to top
+            } else {
+                // Fallback: show summary if no model available
+                optimisedModelEditor.setText(result.formatSummary());
+            }
+        } else if (status == OptimisationStatus.RUNNING || status == OptimisationStatus.LOADING) {
+            // Show simple quote while optimization is running
+            optimisedModelEditor.setText(MSG_KNUTH);
+        } else if (status == OptimisationStatus.ERROR) {
+            // Show error
+            StringBuilder errorText = new StringBuilder();
+            errorText.append("# OPTIMISATION FAILED\n\n");
+            if (result != null && result.getMessage() != null) {
+                errorText.append("# Error: ").append(result.getMessage()).append("\n");
+            } else {
+                errorText.append("# Optimisation failed with unknown error\n");
+            }
+            optimisedModelEditor.setText(errorText.toString());
+        } else {
+            // Starting/Ready state
+            optimisedModelEditor.setText(MSG_READY);
+        }
+    }
 }
