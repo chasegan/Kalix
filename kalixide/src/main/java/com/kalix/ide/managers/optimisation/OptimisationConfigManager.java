@@ -409,4 +409,59 @@ public class OptimisationConfigManager {
             sessionManager.updateOptimisationConfig(sessionKey, configText);
         }
     }
+
+    /**
+     * Parses the [outputs] section from model text and returns a list of output series names.
+     *
+     * @param modelText The INI model text
+     * @return List of output series names (one per line in [outputs] section)
+     */
+    public java.util.List<String> parseOutputsSection(String modelText) {
+        java.util.List<String> outputs = new java.util.ArrayList<>();
+
+        String[] lines = modelText.split("\\r?\\n");
+        boolean inOutputsSection = false;
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            // Check if we're entering the [outputs] section
+            if (trimmedLine.equalsIgnoreCase("[outputs]")) {
+                inOutputsSection = true;
+                continue;
+            }
+
+            // Check if we're entering a new section (leaving [outputs])
+            if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]") && !trimmedLine.equalsIgnoreCase("[outputs]")) {
+                inOutputsSection = false;
+                continue;
+            }
+
+            // If we're in the outputs section and the line is not empty or a comment
+            if (inOutputsSection && !trimmedLine.isEmpty() && !trimmedLine.startsWith("#") && !trimmedLine.startsWith(";")) {
+                outputs.add(trimmedLine);
+            }
+        }
+
+        return outputs;
+    }
+
+    /**
+     * Updates the simulated series combo box options from the current model's [outputs] section.
+     *
+     * @param modelTextSupplier Supplier for the current model text
+     */
+    public void updateSimulatedSeriesOptionsFromModel(Supplier<String> modelTextSupplier) {
+        if (modelTextSupplier == null || guiBuilder == null) {
+            return;
+        }
+
+        String modelText = modelTextSupplier.get();
+        if (modelText == null || modelText.isEmpty()) {
+            return;
+        }
+
+        java.util.List<String> outputSeries = parseOutputsSection(modelText);
+        guiBuilder.updateSimulatedSeriesOptions(outputSeries);
+    }
 }
