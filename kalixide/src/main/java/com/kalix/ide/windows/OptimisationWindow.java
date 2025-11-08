@@ -19,7 +19,6 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
 import javax.swing.tree.*;
-import javax.swing.event.TreeSelectionEvent;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
@@ -55,6 +54,7 @@ public class OptimisationWindow extends JFrame {
     private OptimisationPlotManager plotManager;
     private OptimisationSessionManager sessionManager;
     private OptimisationPanelBuilder panelBuilder;
+    private OptimisationEventHandlers eventHandlers;
 
     // Tree components
     private JTree optTree;
@@ -144,6 +144,12 @@ public class OptimisationWindow extends JFrame {
         this.resultsManager = new OptimisationResultsManager();
         this.plotManager = new OptimisationPlotManager();
         this.panelBuilder = new OptimisationPanelBuilder();
+        this.eventHandlers = new OptimisationEventHandlers(
+            sessionManager,
+            treeManager,
+            progressManager,
+            statusUpdater
+        );
 
         // Set up basic dependencies
         resultsManager.setWorkingDirectorySupplier(workingDirectorySupplier);
@@ -264,6 +270,22 @@ public class OptimisationWindow extends JFrame {
         });
 
         // Config manager doesn't need complex callbacks as it's mostly self-contained
+
+        // Setup event handler callbacks
+        eventHandlers.setTreeNodeUpdater(this::updateTreeNodeForSession);
+        eventHandlers.setDetailsUpdater(this::updateDetailsIfSelected);
+        eventHandlers.setConvergencePlotUpdater(this::updateConvergencePlotIfSelected);
+
+        // Setup tree selection callbacks
+        treeManager.setOnNoSelectionCallback(() ->
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE));
+        treeManager.setOnFolderSelectedCallback(() ->
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE));
+        treeManager.setSaveCurrentConfigCallback(this::saveCurrentConfigToNode);
+        treeManager.setOnOptimisationSelectedCallback(optInfo -> {
+            loadConfigFromNode(sessionManager.getTreeNode(optInfo.getSessionKey()));
+            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
+        });
     }
 
     /**
@@ -355,7 +377,11 @@ public class OptimisationWindow extends JFrame {
 
         // Set custom renderer and selection listener
         optTree.setCellRenderer(new OptimisationTreeCellRenderer());
-        optTree.addTreeSelectionListener(this::onOptTreeSelectionChanged);
+        optTree.addTreeSelectionListener(e -> {
+            if (!isUpdatingSelection) {
+                treeManager.handleTreeSelection(e);
+            }
+        });
 
         // Setup tree manager's popup menu
         treeManager.setupContextMenu();
@@ -488,9 +514,9 @@ public class OptimisationWindow extends JFrame {
         // Create optimisation through session manager with sessionKey passed to callbacks
         sessionManager.createOptimisation(
             configText,
-            (sessionKey, progressInfo) -> handleOptimisationProgress(sessionKey, progressInfo),
-            (sessionKey, parameters) -> handleOptimisableParameters(sessionKey, parameters),
-            (sessionKey, result) -> handleOptimisationResult(sessionKey, result)
+            (sessionKey, progressInfo) -> eventHandlers.handleOptimisationProgress(sessionKey, progressInfo),
+            (sessionKey, parameters) -> eventHandlers.handleOptimisableParameters(sessionKey, parameters, guiBuilder),
+            (sessionKey, result) -> eventHandlers.handleOptimisationResult(sessionKey, result)
         );
     }
 
@@ -771,35 +797,6 @@ public class OptimisationWindow extends JFrame {
         }
     }
 
-    /**
-     * Handles tree selection changes to save/load config and update UI state.
-     */
-    private void onOptTreeSelectionChanged(TreeSelectionEvent e) {
-        if (isUpdatingSelection) return;
-
-        TreePath selectedPath = optTree.getSelectionPath();
-        if (selectedPath == null) {
-            // No selection - show message panel
-            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
-            return;
-        }
-
-        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-
-        if (selectedNode.getUserObject() instanceof OptimisationInfo) {
-            // Save current config before switching
-            saveCurrentConfigToNode();
-
-            // Load new config and update UI state
-            loadConfigFromNode(selectedNode);
-
-            // Show the optimisation panel
-            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
-        } else {
-            // Folder node selected (like "Optimisation runs")
-            rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
-        }
-    }
 
 
     /**
@@ -859,179 +856,6 @@ public class OptimisationWindow extends JFrame {
         }
     }
 
-    /**
-     * Handles status updates from optimisation program and updates tree.
-     */
-    private void handleStatusUpdate(String sessionKey, String statusMessage) {
-        SwingUtilities.invokeLater(() -> {
-            // Update main status bar
-            if (statusUpdater != null) {
-                String optName = sessionManager.getOptimisationName(sessionKey);
-                if (optName != null) {
-                    statusUpdater.accept(optName + ": " + statusMessage);
-                } else {
-                    statusUpdater.accept(statusMessage);
-                }
-            }
-
-            // Update tree node to reflect status change
-            updateTreeNodeForSession(sessionKey);
-
-            // Update details panel if this optimisation is currently selected
-            updateDetailsIfSelected(sessionKey);
-        });
-    }
-
-    /**
-     * Handles the list of optimisable parameters from kalixcli.
-     */
-    private void handleOptimisableParameters(String sessionKey, java.util.List<String> parameters) {
-        SwingUtilities.invokeLater(() -> {
-            // Update the parameters table in the GUI builder
-            guiBuilder.setOptimisableParameters(parameters);
-
-            // Auto-generate expressions for all parameters
-            guiBuilder.autoGenerateParameterExpressions();
-
-            if (statusUpdater != null) {
-                statusUpdater.accept("Found " + parameters.size() + " optimisable parameters");
-            }
-        });
-    }
-
-    /**
-     * Handles progress updates during optimisation.
-     */
-    private void handleOptimisationProgress(String sessionKey, ProgressParser.ProgressInfo progressInfo) {
-        SwingUtilities.invokeLater(() -> {
-            // Update progress bar
-            if (progressBar != null) {
-                progressBar.setProgressPercentage(progressInfo.getPercentage());
-                progressBar.setProgressText(progressInfo.getDescription());
-            }
-
-            // Update progress in result
-            OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
-            if (result != null) {
-                result.setCurrentProgress((int) progressInfo.getPercentage());
-                result.setProgressDescription(progressInfo.getDescription());
-
-                // Store convergence data if available (optimization-specific progress)
-                if (progressInfo.getEvaluationCount() != null && progressInfo.getObjectiveValues() != null) {
-                    java.util.List<Double> objectiveValues = progressInfo.getObjectiveValues();
-                    if (!objectiveValues.isEmpty()) {
-                        // Store evaluation count and best objective (first element)
-                        result.addConvergencePoint(progressInfo.getEvaluationCount(),
-                                                  objectiveValues.get(0),
-                                                  new java.util.ArrayList<>(objectiveValues));
-
-                        // Store total evaluations from progress info (if not already set)
-                        // This comes from the "n" field in PROGRESS messages
-                        if (result.getEvaluations() == null && progressInfo.getPercentage() > 0) {
-                            // Calculate total from current count and percentage
-                            int currentEval = progressInfo.getEvaluationCount();
-                            double percentage = progressInfo.getPercentage();
-                            result.setEvaluations((int) Math.round(currentEval * 100.0 / percentage));
-                        }
-
-                        // Update convergence plot and labels if this optimization is currently displayed
-                        updateConvergencePlotIfSelected(sessionKey);
-                    }
-                }
-            }
-
-            // Update tree node to show progress percentage
-            updateTreeNodeForSession(sessionKey);
-
-            // Update details if selected
-            updateDetailsIfSelected(sessionKey);
-        });
-    }
-
-    /**
-     * Handles the final optimisation result.
-     */
-    private void handleOptimisationResult(String sessionKey, String resultJson) {
-        SwingUtilities.invokeLater(() -> {
-            OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
-            if (result != null) {
-                // Parse the result JSON to extract all fields
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(resultJson);
-
-                    // Extract fields from the result object
-                    if (rootNode.has("best_objective")) {
-                        result.setBestObjective(rootNode.get("best_objective").asDouble());
-                    }
-                    if (rootNode.has("evaluations")) {
-                        result.setEvaluations(rootNode.get("evaluations").asInt());
-                    }
-                    if (rootNode.has("generations")) {
-                        result.setGenerations(rootNode.get("generations").asInt());
-                    }
-                    if (rootNode.has("message")) {
-                        result.setMessage(rootNode.get("message").asText());
-                    }
-                    if (rootNode.has("success")) {
-                        result.setSuccess(rootNode.get("success").asBoolean());
-                    }
-
-                    // Extract the optimised model INI
-                    if (rootNode.has("optimised_model_ini")) {
-                        result.setOptimisedModelIni(rootNode.get("optimised_model_ini").asText());
-                    }
-
-                    // Extract parameter maps
-                    if (rootNode.has("params_physical")) {
-                        Map<String, Double> paramsPhysical = new HashMap<>();
-                        com.fasterxml.jackson.databind.JsonNode paramsNode = rootNode.get("params_physical");
-                        paramsNode.fields().forEachRemaining(entry -> {
-                            paramsPhysical.put(entry.getKey(), entry.getValue().asDouble());
-                        });
-                        result.setParametersPhysical(paramsPhysical);
-                    }
-
-                    if (rootNode.has("params_normalized")) {
-                        Map<String, Double> paramsNormalized = new HashMap<>();
-                        com.fasterxml.jackson.databind.JsonNode paramsNode = rootNode.get("params_normalized");
-                        if (paramsNode.isArray()) {
-                            // Handle array format
-                            int i = 0;
-                            for (com.fasterxml.jackson.databind.JsonNode node : paramsNode) {
-                                paramsNormalized.put("param_" + i, node.asDouble());
-                                i++;
-                            }
-                        } else {
-                            // Handle object format
-                            paramsNode.fields().forEachRemaining(entry -> {
-                                paramsNormalized.put(entry.getKey(), entry.getValue().asDouble());
-                            });
-                        }
-                        result.setParametersNormalized(paramsNormalized);
-                    }
-
-                } catch (Exception e) {
-                    // If parsing fails, store raw JSON as message
-                    result.setMessage("Error parsing result: " + e.getMessage());
-                    result.setSuccess(false);
-                }
-
-                result.setEndTime(java.time.LocalDateTime.now());
-            }
-
-            // Update tree node to show completion
-            updateTreeNodeForSession(sessionKey);
-
-            // Update details if selected
-            updateDetailsIfSelected(sessionKey);
-
-            if (statusUpdater != null) {
-                String optName = sessionManager.getOptimisationName(sessionKey);
-                statusUpdater.accept(optName + " completed");
-            }
-        });
-    }
 
     /**
      * Updates the tree node for a specific session (status, icon, display text).
@@ -1128,21 +952,6 @@ public class OptimisationWindow extends JFrame {
         }
     }
 
-    /**
-     * Handles errors during optimisation.
-     */
-    private void handleError(String errorMessage) {
-        SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(this,
-                errorMessage,
-                "Optimisation Error",
-                JOptionPane.ERROR_MESSAGE);
-
-            if (statusUpdater != null) {
-                statusUpdater.accept("Error: " + errorMessage);
-            }
-        });
-    }
 
 
 

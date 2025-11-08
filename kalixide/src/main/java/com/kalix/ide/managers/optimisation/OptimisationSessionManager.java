@@ -398,6 +398,20 @@ public class OptimisationSessionManager {
     }
 
     /**
+     * Gets the OptimisationInfo for a session.
+     *
+     * @param sessionKey The session key
+     * @return The OptimisationInfo, or null if not found
+     */
+    public OptimisationInfo getOptimisationInfo(String sessionKey) {
+        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
+        if (node != null && node.getUserObject() instanceof OptimisationInfo) {
+            return (OptimisationInfo) node.getUserObject();
+        }
+        return null;
+    }
+
+    /**
      * Checks if a session exists.
      *
      * @param sessionKey The session key

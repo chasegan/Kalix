@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import javax.swing.tree.*;
 import javax.swing.event.TreeSelectionListener;
+import javax.swing.event.TreeSelectionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashMap;
@@ -38,6 +39,12 @@ public class OptimisationTreeManager {
     private Consumer<OptimisationInfo> stopOptimisationAction;
     private Consumer<OptimisationInfo> renameAction;
     private Consumer<OptimisationInfo> removeAction;
+
+    // Selection handling callbacks
+    private Runnable onNoSelectionCallback;
+    private Consumer<OptimisationInfo> onOptimisationSelectedCallback;
+    private Runnable onFolderSelectedCallback;
+    private Runnable saveCurrentConfigCallback;
 
     /**
      * Creates a new OptimisationTreeManager.
@@ -388,5 +395,60 @@ public class OptimisationTreeManager {
                 tree.expandPath(new TreePath(currentOptimisationsNode.getPath()));
             }
         }
+    }
+
+    /**
+     * Handles tree selection changes.
+     * This method should be called from a TreeSelectionListener.
+     *
+     * @param e The tree selection event
+     */
+    public void handleTreeSelection(TreeSelectionEvent e) {
+        TreePath selectedPath = e.getNewLeadSelectionPath();
+
+        if (selectedPath == null) {
+            // No selection - invoke callback
+            if (onNoSelectionCallback != null) {
+                onNoSelectionCallback.run();
+            }
+            return;
+        }
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+
+        if (selectedNode.getUserObject() instanceof OptimisationInfo) {
+            // Save current config before switching
+            if (saveCurrentConfigCallback != null) {
+                saveCurrentConfigCallback.run();
+            }
+
+            // Optimisation node selected
+            OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
+            if (onOptimisationSelectedCallback != null) {
+                onOptimisationSelectedCallback.accept(optInfo);
+            }
+        } else {
+            // Folder node selected
+            if (onFolderSelectedCallback != null) {
+                onFolderSelectedCallback.run();
+            }
+        }
+    }
+
+    // Setters for selection callbacks
+    public void setOnNoSelectionCallback(Runnable callback) {
+        this.onNoSelectionCallback = callback;
+    }
+
+    public void setOnOptimisationSelectedCallback(Consumer<OptimisationInfo> callback) {
+        this.onOptimisationSelectedCallback = callback;
+    }
+
+    public void setOnFolderSelectedCallback(Runnable callback) {
+        this.onFolderSelectedCallback = callback;
+    }
+
+    public void setSaveCurrentConfigCallback(Runnable callback) {
+        this.saveCurrentConfigCallback = callback;
     }
 }
