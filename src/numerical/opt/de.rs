@@ -110,6 +110,16 @@ impl DifferentialEvolution {
 
         let uniform = Uniform::new(0.0, 1.0);
 
+        // Create thread pool ONCE for entire optimization (reused across all generations)
+        let thread_pool = if self.config.n_threads > 1 {
+            Some(rayon::ThreadPoolBuilder::new()
+                .num_threads(self.config.n_threads)
+                .build()
+                .unwrap())
+        } else {
+            None
+        };
+
         // Initialize population randomly in [0, 1]^n
         let mut population: Vec<Vec<f64>> = (0..self.config.population_size)
             .map(|_| {
@@ -204,9 +214,9 @@ impl DifferentialEvolution {
                 trials.push(trial);
             }
 
-            // Evaluate trials (parallel or sequential based on n_threads)
-            let trial_objectives = if self.config.n_threads > 1 {
-                self.evaluate_parallel(problem, &trials, &mut n_evaluations)
+            // Evaluate trials (parallel or sequential based on thread pool)
+            let trial_objectives = if let Some(ref pool) = thread_pool {
+                self.evaluate_parallel_with_pool(problem, &trials, pool, &mut n_evaluations)
             } else {
                 self.evaluate_sequential(problem, &trials, &mut n_evaluations)
             };
@@ -282,42 +292,52 @@ impl DifferentialEvolution {
         }).collect()
     }
 
-    /// Evaluate trials in parallel using rayon
-    fn evaluate_parallel(&self, problem: &dyn Optimisable, trials: &[Vec<f64>], n_evaluations: &mut usize) -> Vec<f64> {
+    /// Evaluate trials in parallel using a cached thread pool with worker-based approach
+    ///
+    /// Creates n_threads worker problems (not population_size!) and distributes trials
+    /// across workers using round-robin assignment. This dramatically reduces cloning overhead.
+    fn evaluate_parallel_with_pool(
+        &self,
+        problem: &dyn Optimisable,
+        trials: &[Vec<f64>],
+        pool: &rayon::ThreadPool,
+        n_evaluations: &mut usize
+    ) -> Vec<f64> {
         use rayon::prelude::*;
+        use std::sync::{Arc, Mutex};
 
-        // Configure thread pool
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(self.config.n_threads)
-            .build()
-            .unwrap();
+        // Create n_threads worker problems (NOT population_size!)
+        // Each worker will handle multiple trials sequentially
+        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
+            (0..self.config.n_threads)
+                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
+                .collect();
 
-        // Clone problems upfront (one per trial)
-        let mut problems: Vec<Box<dyn Optimisable>> = (0..trials.len())
-            .map(|_| problem.clone_for_parallel())
-            .collect();
-
-        // Atomic counter for evaluations
         let eval_counter = AtomicUsize::new(0);
 
-        // Evaluate in parallel (zip trials with their corresponding problems)
+        // Evaluate trials in parallel with round-robin worker assignment
         let objectives = pool.install(|| {
-            problems.par_iter_mut().zip(trials.par_iter()).map(|(thread_problem, trial)| {
-                let objective = match thread_problem.set_params(trial) {
-                    Ok(_) => {
-                        match thread_problem.evaluate() {
-                            Ok(f) => {
-                                eval_counter.fetch_add(1, Ordering::Relaxed);
-                                f
-                            },
-                            Err(_) => f64::INFINITY,
-                        }
-                    },
-                    Err(_) => f64::INFINITY,
-                };
+            trials.par_iter()
+                  .enumerate()
+                  .map(|(i, trial)| {
+                      // Round-robin assignment to workers
+                      let worker_idx = i % self.config.n_threads;
+                      let worker = &worker_problems[worker_idx];
 
-                objective
-            }).collect()
+                      // Lock worker, evaluate, unlock
+                      let mut prob = worker.lock().unwrap();
+                      match prob.set_params(trial) {
+                          Ok(_) => match prob.evaluate() {
+                              Ok(f) => {
+                                  eval_counter.fetch_add(1, Ordering::Relaxed);
+                                  f
+                              },
+                              Err(_) => f64::INFINITY,
+                          },
+                          Err(_) => f64::INFINITY,
+                      }
+                  })
+                  .collect()
         });
 
         // Update total evaluation count
