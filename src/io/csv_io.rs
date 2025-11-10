@@ -30,23 +30,72 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     let mut reader = csv::Reader::from_path(filename)
         .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
 
-    // Get the headers from the reader
-    let headers = reader.headers()
-        .map_err(|_| format!("Error reading headers from '{}'", filename))?;
+    // Get the first row (what csv crate thinks are headers)
+    let first_row = reader.headers()
+        .map_err(|_| format!("Error reading first row from '{}'", filename))?;
 
-    let headers_len = headers.len();
+    // Check if the first cell is actually a date (meaning no header row exists)
+    let has_header = match first_row.get(0) {
+        Some(first_cell) => {
+            // If it parses as a date, then this is data, not a header
+            date_string_to_u64_flexible(first_cell).is_err()
+        }
+        None => return Err(format!("Empty file '{}'", filename))
+    };
+
+    let headers_len = first_row.len();
     let n_data_cols = headers_len.saturating_sub(1); // exclude the index column
 
-    // Initialize timeseries with column names from headers
-    for i in 1..headers_len {
-        let mut ts = Timeseries::new_daily();
-        ts.name = headers.get(i).unwrap_or("").to_string();
-        answer.push(ts);
+    // Initialize timeseries with column names
+    if has_header {
+        // Use actual column names from the header row
+        for i in 1..headers_len {
+            let mut ts = Timeseries::new_daily();
+            ts.name = first_row.get(i).unwrap_or("").to_string();
+            answer.push(ts);
+        }
+    } else {
+        // Generate default column names (just the column number)
+        for i in 1..headers_len {
+            let mut ts = Timeseries::new_daily();
+            ts.name = format!("{}", i);
+            answer.push(ts);
+        }
     }
 
-    // Detect date format from first row, then reuse for all subsequent rows
+    // Detect date format from first data row, then reuse for all subsequent rows
     let mut detected_format: Option<&str> = None;
     let mut file_line = 1;
+
+    // If there's no header, we need to process the first row as data
+    if !has_header {
+        file_line += 1;
+
+        // Parse the timestamp column (first column)
+        let t_str = first_row.get(0)
+            .ok_or_else(|| format!("Missing timestamp in '{}' line {}", filename, file_line))?;
+
+        // Detect format on first data row
+        let (t_u64, format) = date_string_to_u64_flexible(t_str)
+            .map_err(|e| format!("{} in '{}' line {}", e, filename, file_line))?;
+        detected_format = Some(format);
+
+        // Parse each data column into the respective timeseries
+        for i in 0..n_data_cols {
+            let field = first_row.get(i + 1)
+                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?;
+
+            let value: f64 = if field.trim().is_empty() {
+                f64::NAN
+            } else {
+                field.trim().parse()
+                    .map_err(|_| format!("Invalid number '{}' in '{}' line {} column {}",
+                        field, filename, file_line, i + 1))?
+            };
+
+            answer[i].push(t_u64, value);
+        }
+    }
 
     // Iterate through the records and parse the data
     for result in reader.records() {
@@ -83,7 +132,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
             let value: f64 = if field.trim().is_empty() {
                 f64::NAN
             } else {
-                field.parse()
+                field.trim().parse()
                     .map_err(|_| format!("Invalid number '{}' in '{}' line {} column {}",
                         field, filename, file_line, i + 1))?
             };
