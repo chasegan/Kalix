@@ -328,6 +328,7 @@ impl Model {
     pub fn empty_input_data(&mut self) {
         self.inputs.clear();
     }
+    
 
     /// Resolve a file path relative to the model's working directory
     ///

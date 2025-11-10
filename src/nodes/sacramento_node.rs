@@ -27,6 +27,8 @@ pub struct SacramentoNode {
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
+    recorder_idx_rain_mm: Option<usize>,
+    recorder_idx_evap_mm: Option<usize>,
     recorder_idx_runoff_volume_megs: Option<usize>,
     recorder_idx_runoff_depth_mm: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
@@ -83,6 +85,12 @@ impl Node for SacramentoNode {
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
+        self.recorder_idx_rain_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "rain").as_str(), false
+        );
+        self.recorder_idx_evap_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "evap").as_str(), false
+        );
         self.recorder_idx_runoff_volume_megs = data_cache.get_series_idx(
             make_result_name(&self.name, "runoff_volume").as_str(), false
         );
@@ -120,6 +128,12 @@ impl Node for SacramentoNode {
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
+        }
+        if let Some(idx) = self.recorder_idx_rain_mm {
+            data_cache.add_value_at_index(idx, self.rain);
+        }
+        if let Some(idx) = self.recorder_idx_evap_mm {
+            data_cache.add_value_at_index(idx, self.pet);
         }
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {
             data_cache.add_value_at_index(idx, self.runoff_volume_megs);
