@@ -36,6 +36,6 @@ public class JsonMessageKalixcliUidTest {
         assertEquals("rdy", message.getMessageType());
         assertEquals("test_uid_456", message.getSessionId());
 
-        System.out.println("Deserialized system message: " + message.toString());
+        System.out.println("Deserialized system message: " + message);
     }
 }

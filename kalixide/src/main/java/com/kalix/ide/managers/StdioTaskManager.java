@@ -6,7 +6,6 @@ import com.kalix.ide.windows.RunManager;
 
 import javax.swing.*;
 import java.io.File;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;

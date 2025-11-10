@@ -333,7 +333,7 @@ public class PlotTypeTransformer {
                     percentileTimestamps[i] = (long)(percentile * 1_000_000);
                 } else {
                     // NaN values: assign percentile beyond 100%
-                    percentileTimestamps[i] = (long)(101_000_000 + i);
+                    percentileTimestamps[i] = 101_000_000 + i;
                 }
             }
 

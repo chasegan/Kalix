@@ -22,8 +22,7 @@ public class OutputsTreeCellRenderer extends DefaultTreeCellRenderer {
             boolean expanded, boolean leaf, int row, boolean hasFocus) {
         super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
-        if (value instanceof DefaultMutableTreeNode) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+        if (value instanceof DefaultMutableTreeNode node) {
             String variableName = node.getUserObject().toString();
 
             // Only add icons to leaf nodes (exclude special message nodes)

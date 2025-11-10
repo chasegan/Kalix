@@ -32,7 +32,7 @@ public class CliTest {
 
             if (location.isPresent()) {
                 KalixCliLocator.CliLocation cli = location.get();
-                logger.info("Found kalixcli: " + cli.toString());
+                logger.info("Found kalixcli: " + cli);
                 
                 // Validate the CLI
                 boolean isValid = KalixCliLocator.validateKalixCli(cli.getPath());
@@ -59,7 +59,7 @@ public class CliTest {
             ProcessExecutor executor = new ProcessExecutor();
             
             // Test with a simple system command that should work on all platforms
-            String testCommand = System.getProperty("os.name").toLowerCase().contains("win") ? "echo" : "echo";
+            String testCommand = "echo";
             String testArg = "Hello from ProcessExecutor!";
             
             logger.debug("Executing test command: " + testCommand + " " + testArg);

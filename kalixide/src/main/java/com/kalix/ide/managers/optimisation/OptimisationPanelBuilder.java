@@ -7,7 +7,6 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
-import java.util.function.Consumer;
 
 /**
  * Builds and manages the UI panels for the optimisation window.

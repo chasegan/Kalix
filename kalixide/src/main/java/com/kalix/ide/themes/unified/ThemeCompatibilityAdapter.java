@@ -1,7 +1,6 @@
 package com.kalix.ide.themes.unified;
 
 import com.kalix.ide.themes.NodeTheme;
-import com.kalix.ide.themes.SyntaxTheme;
 import com.formdev.flatlaf.FlatPropertiesLaf;
 import java.awt.Color;
 import java.util.Properties;

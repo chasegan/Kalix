@@ -27,8 +27,8 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
         void onLintingEnabledChanged(boolean enabled);
     }
 
-    private SchemaManager schemaManager;
-    private LinterManager linterManager;
+    private final SchemaManager schemaManager;
+    private final LinterManager linterManager;
     private LintingChangeCallback lintingChangeCallback;
 
     // UI Components
@@ -323,7 +323,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
     // Table model for validation rules
     private class RulesTableModel extends AbstractTableModel {
         private final String[] columnNames = {"Rule Name", "Description", "Severity", "Enabled"};
-        private List<RuleRow> rules = new ArrayList<>();
+        private final List<RuleRow> rules = new ArrayList<>();
 
         public RulesTableModel() {
             refreshData();

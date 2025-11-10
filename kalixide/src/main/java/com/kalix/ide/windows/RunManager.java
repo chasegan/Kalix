@@ -8,34 +8,23 @@ import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.SeriesColorManager;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.RunModelProgram;
-import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.NaturalSortUtils;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.models.RunInfoImpl;
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.diff.DiffWindow;
-import com.kalix.ide.io.TimeSeriesCsvImporter;
-import com.kalix.ide.io.KalixTimeSeriesReader;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.*;
-import javax.swing.table.AbstractTableModel;
 import java.awt.*;
 import java.awt.event.*;
-import java.io.File;
 import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
@@ -89,15 +78,15 @@ public class RunManager extends JFrame {
     private Set<String> selectedSeries = new HashSet<>();
 
     // Run tracking
-    private Map<String, String> sessionToRunName = new HashMap<>();
-    private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
-    private Map<String, RunInfoImpl.DetailedRunStatus> lastKnownStatus = new HashMap<>();
+    private final Map<String, String> sessionToRunName = new HashMap<>();
+    private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
+    private final Map<String, RunInfoImpl.DetailedRunStatus> lastKnownStatus = new HashMap<>();
     private int runCounter = 1;
 
     // Last run tracking
     private RunInfoImpl lastRunInfo = null;
     private DefaultMutableTreeNode lastRunChildNode = null;
-    private Map<String, Long> completionTimestamps = new HashMap<>();
+    private final Map<String, Long> completionTimestamps = new HashMap<>();
     private long lastRunCompletionTime = 0L;
 
     // Flag to prevent selection listener from firing during programmatic updates
@@ -246,16 +235,13 @@ public class RunManager extends JFrame {
                 }
                 Object component = curPath.getLastPathComponent();
 
-                if (component instanceof DefaultMutableTreeNode) {
-                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) component;
+                if (component instanceof DefaultMutableTreeNode node) {
                     Object userObject = node.getUserObject();
 
-                    if (userObject instanceof RunContextMenuManager.RunInfo) {
-                        RunContextMenuManager.RunInfo runInfo = (RunContextMenuManager.RunInfo) userObject;
+                    if (userObject instanceof RunContextMenuManager.RunInfo runInfo) {
                         String uid = runInfo.getSession().getKalixcliUid();
                         return uid;
-                    } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                        DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) userObject;
+                    } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
                         return datasetInfo.file.getAbsolutePath();
                     }
                 }
@@ -395,10 +381,8 @@ public class RunManager extends JFrame {
      * Used by OutputsTreeBuilder.
      */
     private List<String> getSeriesNamesFromSource(Object source) {
-        if (source instanceof RunInfoImpl) {
-            RunInfoImpl runInfo = (RunInfoImpl) source;
-            if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram) {
-                RunModelProgram program = (RunModelProgram) runInfo.getSession().getActiveProgram();
+        if (source instanceof RunInfoImpl runInfo) {
+            if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram program) {
                 List<String> outputs = program.getOutputsGenerated();
                 return (outputs != null) ? outputs : Collections.emptyList();
             }
@@ -862,8 +846,7 @@ public class RunManager extends JFrame {
         Object userObject = node.getUserObject();
 
         // Check if this is a SeriesLeafNode that matches one of our target keys
-        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = (OutputsTreeBuilder.SeriesLeafNode) userObject;
+        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
             String seriesKey;
             if (leaf.source instanceof RunInfoImpl) {
                 // Run series: add run name suffix
@@ -982,8 +965,7 @@ public class RunManager extends JFrame {
         Object userObject = node.getUserObject();
 
         // Update SeriesLeafNode if it references "Last"
-        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = (OutputsTreeBuilder.SeriesLeafNode) userObject;
+        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
             if (leaf.source instanceof RunInfoImpl && "Last".equals(((RunInfoImpl) leaf.source).getRunName())) {
                 // Replace with new RunInfo
                 OutputsTreeBuilder.SeriesLeafNode newLeaf = new OutputsTreeBuilder.SeriesLeafNode(leaf.seriesName, newRunInfo, leaf.showSeriesName);
@@ -992,8 +974,7 @@ public class RunManager extends JFrame {
             }
         }
         // Update SeriesParentNode if it contains "Last"
-        else if (userObject instanceof OutputsTreeBuilder.SeriesParentNode) {
-            OutputsTreeBuilder.SeriesParentNode parent = (OutputsTreeBuilder.SeriesParentNode) userObject;
+        else if (userObject instanceof OutputsTreeBuilder.SeriesParentNode parent) {
             // Check if this parent contains "Last" run
             boolean containsLast = parent.sourcesWithSeries.stream()
                 .filter(s -> s instanceof RunInfoImpl)

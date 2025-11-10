@@ -28,7 +28,7 @@ public class MapInteractionManager {
     private boolean isDragging = false;
     private Point dragStartScreen;
     private Point2D dragStartWorld;
-    private Map<String, Point2D> originalNodePositions;
+    private final Map<String, Point2D> originalNodePositions;
     
     // Reference to text coordinate updater (will be added later)
     private TextCoordinateUpdater textUpdater;

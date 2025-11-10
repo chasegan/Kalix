@@ -32,7 +32,7 @@ public class OptimisationResult {
     private String progressDescription;
 
     // Convergence data for plotting
-    private List<ConvergencePoint> convergenceHistory = new ArrayList<>();
+    private final List<ConvergencePoint> convergenceHistory = new ArrayList<>();
 
     // Metadata
     private String configurationUsed;

@@ -312,7 +312,7 @@ public class FunctionExpressionValidator {
                 while (pos < input.length() && (Character.isLetterOrDigit(input.charAt(pos)) || input.charAt(pos) == '_')) {
                     pos++;
                 }
-                sb.append(input.substring(segStart, pos));
+                sb.append(input, segStart, pos);
             }
 
             return new Token(tokenType, sb.toString(), start);

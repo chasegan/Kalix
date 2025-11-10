@@ -4,9 +4,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Color;
-import java.awt.Container;
 import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
@@ -52,13 +50,13 @@ public class MapPanel extends JPanel implements KeyListener {
 
     // Model integration
     private HydrologicalModel model = null;
-    private NodeTheme nodeTheme = new NodeTheme();
+    private final NodeTheme nodeTheme = new NodeTheme();
 
     // Interaction management
     private MapInteractionManager interactionManager;
 
     // Rendering
-    private MapRenderer mapRenderer = new MapRenderer();
+    private final MapRenderer mapRenderer = new MapRenderer();
 
     // Display settings
     private boolean showGridlines = true;
@@ -774,11 +772,7 @@ public class MapPanel extends JPanel implements KeyListener {
             return true;
         }
         // Right edge
-        if (lineSegmentsIntersect(x1, y1, x2, y2, rectX + rectWidth, rectY, rectX + rectWidth, rectY + rectHeight)) {
-            return true;
-        }
-
-        return false;
+        return lineSegmentsIntersect(x1, y1, x2, y2, rectX + rectWidth, rectY, rectX + rectWidth, rectY + rectHeight);
     }
 
     /**

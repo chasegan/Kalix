@@ -40,8 +40,7 @@ public class OptimisationInfo {
             return OptimisationStatus.CONFIGURING;
         }
 
-        if (session.getActiveProgram() instanceof OptimisationProgram) {
-            OptimisationProgram program = (OptimisationProgram) session.getActiveProgram();
+        if (session.getActiveProgram() instanceof OptimisationProgram program) {
 
             if (program.isFailed()) {
                 return OptimisationStatus.ERROR;

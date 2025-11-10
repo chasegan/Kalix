@@ -59,7 +59,7 @@ public class SessionManagerWindow extends JFrame {
     private String lastLogContent = "";
 
     // Session tracking
-    private Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
+    private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
     private String selectedSessionKey = null;
 
     // Update timer
@@ -416,13 +416,12 @@ public class SessionManagerWindow extends JFrame {
         }
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof SessionInfo)) {
+        if (!(selectedNode.getUserObject() instanceof SessionInfo sessionInfo)) {
             clearDetailsPanel();
             selectedSessionKey = null;
             return;
         }
 
-        SessionInfo sessionInfo = (SessionInfo) selectedNode.getUserObject();
         selectedSessionKey = sessionInfo.session.getSessionKey();
 
         updateDetailsPanel(sessionInfo.session);
@@ -738,12 +737,10 @@ public class SessionManagerWindow extends JFrame {
                 boolean expanded, boolean leaf, int row, boolean hasFocus) {
             super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
-            if (value instanceof DefaultMutableTreeNode) {
-                DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+            if (value instanceof DefaultMutableTreeNode node) {
                 Object userObject = node.getUserObject();
 
-                if (userObject instanceof SessionInfo) {
-                    SessionInfo sessionInfo = (SessionInfo) userObject;
+                if (userObject instanceof SessionInfo sessionInfo) {
                     SessionManager.KalixSession session = sessionInfo.session;
                     SessionManager.SessionState state = session.getState();
 

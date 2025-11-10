@@ -233,9 +233,8 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String currentName = runInfo.getRunName();
 
         // Show input dialog for new name
@@ -295,9 +294,8 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String sessionKey = runInfo.getSession().getSessionKey();
         SessionManagerWindow.showSessionManagerWindow(parentFrame, stdioTaskManager, statusUpdater, sessionKey);
     }
@@ -310,13 +308,10 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
-
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
         // Get the model text from the RunModelProgram
-        if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram) {
-            RunModelProgram program = (RunModelProgram) runInfo.getSession().getActiveProgram();
+        if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram program) {
             String modelText = program.getModelText();
 
             if (modelText != null && !modelText.isEmpty()) {
@@ -350,13 +345,10 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
-
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
         // Get the model text from the RunModelProgram
-        if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram) {
-            RunModelProgram program = (RunModelProgram) runInfo.getSession().getActiveProgram();
+        if (runInfo.getSession().getActiveProgram() instanceof RunModelProgram program) {
             String runModelText = program.getModelText();
 
             if (runModelText == null || runModelText.isEmpty()) {
@@ -413,9 +405,8 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String sessionKey = runInfo.getSession().getSessionKey();
         boolean isActive = runInfo.getSession().isActive();
 
@@ -486,9 +477,8 @@ public class RunContextMenuManager {
         if (selectedPath == null) return;
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo)) return;
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
 
-        RunInfo runInfo = (RunInfo) selectedNode.getUserObject();
         String sessionKey = runInfo.getSession().getSessionKey();
         String kalixcliUid = runInfo.getSession().getKalixcliUid();
 

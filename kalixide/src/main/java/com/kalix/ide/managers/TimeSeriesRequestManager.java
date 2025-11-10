@@ -245,7 +245,6 @@ public class TimeSeriesRequestManager {
                 String kalixcliUid = response.path("uid").asText();
 
                 handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
-                return;
             }
 
             // No legacy protocol support - all messages should be compact format

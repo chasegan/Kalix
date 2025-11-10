@@ -1,6 +1,5 @@
 package com.kalix.ide.docking;
 
-import com.kalix.ide.KalixIDE;
 import com.kalix.ide.constants.AppConstants;
 
 import javax.swing.*;

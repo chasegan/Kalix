@@ -1,6 +1,5 @@
 package com.kalix.ide.managers;
 
-import com.kalix.ide.cli.RunModelProgram;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -313,11 +312,10 @@ public class OutputsTreeBuilder {
         String indent = "  ".repeat(depth);
         Object userObj = node.getUserObject();
         String nodeDesc;
-        if (userObj instanceof SeriesLeafNode) {
-            SeriesLeafNode leaf = (SeriesLeafNode) userObj;
-            nodeDesc = "SeriesLeafNode: displayString='" + leaf.toString() + "', fullName='" + leaf.seriesName + "'";
+        if (userObj instanceof SeriesLeafNode leaf) {
+            nodeDesc = "SeriesLeafNode: displayString='" + leaf + "', fullName='" + leaf.seriesName + "'";
         } else if (userObj instanceof SeriesParentNode) {
-            nodeDesc = "SeriesParentNode: " + userObj.toString();
+            nodeDesc = "SeriesParentNode: " + userObj;
         } else {
             nodeDesc = "String: '" + userObj + "'";
         }

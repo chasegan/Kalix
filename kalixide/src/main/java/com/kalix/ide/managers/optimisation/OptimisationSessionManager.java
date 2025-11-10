@@ -10,7 +10,6 @@ import com.kalix.ide.models.optimisation.OptimisationStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
 import java.nio.file.Path;
@@ -216,12 +215,10 @@ public class OptimisationSessionManager {
         try {
             // Get the optimisation program from the session
             Object program = session.getActiveProgram();
-            if (!(program instanceof OptimisationProgram)) {
+            if (!(program instanceof OptimisationProgram optProgram)) {
                 handleError("Session does not have an OptimisationProgram");
                 return false;
             }
-
-            OptimisationProgram optProgram = (OptimisationProgram) program;
 
             // Update config snapshot and stored config
             String sessionKey = session.getSessionKey();
@@ -468,7 +465,7 @@ public class OptimisationSessionManager {
         String baseName = "Optimisation " + optCounter++;
 
         // Check for duplicates and adjust if needed
-        while (sessionToOptName.values().contains(baseName)) {
+        while (sessionToOptName.containsValue(baseName)) {
             baseName = "Optimisation " + optCounter++;
         }
 

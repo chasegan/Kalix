@@ -7,6 +7,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -26,7 +27,7 @@ import java.util.List;
 public class DataPanel extends JPanel {
     private JPanel seriesListPanel;
     private JScrollPane scrollPane;
-    private List<SeriesDataItem> dataItems;
+    private final List<SeriesDataItem> dataItems;
 
     // Listener interface for visibility changes
     public interface VisibilityChangeListener {
@@ -326,8 +327,7 @@ public class DataPanel extends JPanel {
 
             Component[] components = getAllComponents(this);
             for (Component comp : components) {
-                if (comp instanceof JLabel) {
-                    JLabel label = (JLabel) comp;
+                if (comp instanceof JLabel label) {
                     Color currentColor = label.getForeground();
                     if (currentColor != null) {
                         // Create color with alpha, but ensure we have proper base colors
@@ -354,9 +354,7 @@ public class DataPanel extends JPanel {
             for (Component comp : container.getComponents()) {
                 components.add(comp);
                 if (comp instanceof Container) {
-                    for (Component subComp : getAllComponents((Container) comp)) {
-                        components.add(subComp);
-                    }
+                    Collections.addAll(components, getAllComponents((Container) comp));
                 }
             }
             return components.toArray(new Component[0]);

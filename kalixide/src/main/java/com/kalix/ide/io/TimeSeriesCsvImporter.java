@@ -74,6 +74,7 @@ public class TimeSeriesCsvImporter {
     /**
      * Common date/time patterns supported by the importer.
      * Patterns are tried in order until one succeeds.
+     * Non-standard month-first formats (MM/dd/yyyy) are demoted to the end.
      */
     private static final DateTimeFormatter[] DATE_FORMATTERS = {
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
@@ -82,14 +83,14 @@ public class TimeSeriesCsvImporter {
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy"),
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"),
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"),
         DateTimeFormatter.ofPattern("dd/MM/yyyy"),
         DateTimeFormatter.ISO_LOCAL_DATE_TIME,
-        DateTimeFormatter.ISO_LOCAL_DATE
+        DateTimeFormatter.ISO_LOCAL_DATE,
+        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm"),
+        DateTimeFormatter.ofPattern("MM/dd/yyyy")
     };
 
     /**

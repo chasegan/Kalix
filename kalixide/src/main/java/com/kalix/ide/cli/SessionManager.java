@@ -547,11 +547,7 @@ public class SessionManager {
 
             // Check if the result is for a get_result command
             String command = message.getCommand();
-            if (command != null && "get_result".equals(command)) {
-                return true;
-            }
-
-            return false;
+            return "get_result".equals(command);
         } catch (Exception e) {
             return false;
         }

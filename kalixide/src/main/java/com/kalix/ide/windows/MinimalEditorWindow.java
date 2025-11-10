@@ -48,7 +48,7 @@ public class MinimalEditorWindow extends JFrame {
     private JButton loadButton;
     private JButton saveButton;
     private File currentFile;
-    private boolean useIniMode;
+    private final boolean useIniMode;
 
     /**
      * Sets the base directory supplier for file dialogs.

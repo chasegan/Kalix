@@ -222,8 +222,7 @@ public class DatasetLoaderManager {
         // Check all children of loadedDatasetsNode
         for (int j = 0; j < loadedDatasetsNode.getChildCount(); j++) {
             DefaultMutableTreeNode datasetNode = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(j);
-            if (datasetNode.getUserObject() instanceof LoadedDatasetInfo) {
-                LoadedDatasetInfo info = (LoadedDatasetInfo) datasetNode.getUserObject();
+            if (datasetNode.getUserObject() instanceof LoadedDatasetInfo info) {
                 if (info.file.getAbsolutePath().equals(absolutePath)) {
                     return true;
                 }

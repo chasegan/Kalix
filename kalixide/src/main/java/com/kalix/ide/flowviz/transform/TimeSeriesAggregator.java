@@ -4,7 +4,6 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -217,8 +216,7 @@ public class TimeSeriesAggregator {
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
-            if (!(o instanceof YearMonth)) return false;
-            YearMonth that = (YearMonth) o;
+            if (!(o instanceof YearMonth that)) return false;
             return year == that.year && month == that.month;
         }
 

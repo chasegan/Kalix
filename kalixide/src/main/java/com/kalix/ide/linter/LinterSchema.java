@@ -26,9 +26,9 @@ public class LinterSchema {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private JsonNode schemaRoot;
-    private Map<String, ValidationRule> validationRules = new HashMap<>();
-    private Map<String, NodeTypeDefinition> nodeTypes = new HashMap<>();
-    private Map<String, DataType> dataTypes = new HashMap<>();
+    private final Map<String, ValidationRule> validationRules = new HashMap<>();
+    private final Map<String, NodeTypeDefinition> nodeTypes = new HashMap<>();
+    private final Map<String, DataType> dataTypes = new HashMap<>();
     private String version;
 
     /**

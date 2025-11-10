@@ -50,7 +50,7 @@ public class DiffWindow extends JFrame {
     private JButton nextButton;
 
     // Diff data
-    private DiffResult diffResult;
+    private final DiffResult diffResult;
     private int currentDifferenceIndex = -1;
 
     // Diff colors (theme-aware)
@@ -61,8 +61,8 @@ public class DiffWindow extends JFrame {
     private Color inlineChangeColor;
 
     // Header labels
-    private String leftHeaderLabel;
-    private String rightHeaderLabel;
+    private final String leftHeaderLabel;
+    private final String rightHeaderLabel;
 
     // Inline change ranges
     private List<InlineChange> leftInlineChanges;

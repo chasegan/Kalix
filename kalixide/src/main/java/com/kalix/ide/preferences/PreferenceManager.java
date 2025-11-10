@@ -425,8 +425,7 @@ public class PreferenceManager {
             return value.toString();
         } else if (value instanceof Number) {
             return value.toString();
-        } else if (value instanceof List) {
-            List<?> list = (List<?>) value;
+        } else if (value instanceof List<?> list) {
             StringBuilder sb = new StringBuilder();
             sb.append("[");
             boolean first = true;
@@ -441,7 +440,7 @@ public class PreferenceManager {
             return sb.toString();
         } else {
             // String value
-            return "\"" + value.toString() + "\"";
+            return "\"" + value + "\"";
         }
     }
 }

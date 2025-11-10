@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -226,9 +225,7 @@ public class OptimisationResultsManager {
         // Get the original model from the OptimisationProgram
         String originalModel = null;
         if (info.getSession() != null &&
-            info.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram) {
-            com.kalix.ide.cli.OptimisationProgram program =
-                (com.kalix.ide.cli.OptimisationProgram) info.getSession().getActiveProgram();
+                info.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram program) {
             originalModel = program.getModelText();
         }
 

@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -69,9 +68,7 @@ public class OptimisationModelManager {
 
         // Get original model from the program
         String originalModel = null;
-        if (optInfo.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram) {
-            com.kalix.ide.cli.OptimisationProgram program =
-                (com.kalix.ide.cli.OptimisationProgram) optInfo.getSession().getActiveProgram();
+        if (optInfo.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram program) {
             originalModel = program.getModelText();
         }
 
@@ -84,7 +81,7 @@ public class OptimisationModelManager {
         }
 
         // Create a dialog to show the model
-        JDialog dialog = new JDialog((Window) SwingUtilities.getWindowAncestor(parent),
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parent),
             "Original Model - " + optInfo.getName(), JDialog.ModalityType.MODELESS);
 
         JTextArea textArea = new JTextArea(originalModel);
@@ -125,7 +122,7 @@ public class OptimisationModelManager {
         }
 
         // Create a dialog to show the model
-        JDialog dialog = new JDialog((Window) SwingUtilities.getWindowAncestor(parent),
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parent),
             "Optimised Model - " + optInfo.getName(), JDialog.ModalityType.MODELESS);
 
         JTextArea textArea = new JTextArea(optimisedModel);
@@ -249,9 +246,7 @@ public class OptimisationModelManager {
 
         // Get original model from the program
         String originalModel = null;
-        if (optInfo.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram) {
-            com.kalix.ide.cli.OptimisationProgram program =
-                (com.kalix.ide.cli.OptimisationProgram) optInfo.getSession().getActiveProgram();
+        if (optInfo.getSession().getActiveProgram() instanceof com.kalix.ide.cli.OptimisationProgram program) {
             originalModel = program.getModelText();
         }
         String optimisedModel = optInfo.getResult().getOptimisedModelIni();

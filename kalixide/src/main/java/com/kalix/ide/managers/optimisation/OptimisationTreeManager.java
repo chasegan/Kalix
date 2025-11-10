@@ -156,8 +156,7 @@ public class OptimisationTreeManager {
         DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
         if (node != null) {
             Object userObject = node.getUserObject();
-            if (userObject instanceof OptimisationInfo) {
-                OptimisationInfo info = (OptimisationInfo) userObject;
+            if (userObject instanceof OptimisationInfo info) {
                 info.setResult(result);
                 treeModel.nodeChanged(node);
             }
@@ -328,8 +327,7 @@ public class OptimisationTreeManager {
                     tree.setSelectionPath(path);
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
 
-                    if (node.getUserObject() instanceof OptimisationInfo) {
-                        OptimisationInfo info = (OptimisationInfo) node.getUserObject();
+                    if (node.getUserObject() instanceof OptimisationInfo info) {
                         OptimisationStatus status = info.getStatus();
 
                         // Enable/disable menu items based on status
@@ -416,14 +414,13 @@ public class OptimisationTreeManager {
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
 
-        if (selectedNode.getUserObject() instanceof OptimisationInfo) {
+        if (selectedNode.getUserObject() instanceof OptimisationInfo optInfo) {
             // Save current config before switching
             if (saveCurrentConfigCallback != null) {
                 saveCurrentConfigCallback.run();
             }
 
             // Optimisation node selected
-            OptimisationInfo optInfo = (OptimisationInfo) selectedNode.getUserObject();
             if (onOptimisationSelectedCallback != null) {
                 onOptimisationSelectedCallback.accept(optInfo);
             }

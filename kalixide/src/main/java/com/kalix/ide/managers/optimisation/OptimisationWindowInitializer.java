@@ -7,8 +7,6 @@ import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import com.kalix.ide.windows.MinimalEditorWindow;
-import com.kalix.ide.windows.SessionManagerWindow;
-import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
@@ -179,8 +177,7 @@ public class OptimisationWindowInitializer {
                 DefaultMutableTreeNode currentNode = getCurrentNode();
                 if (currentNode != null) {
                     Object userObject = currentNode.getUserObject();
-                    if (userObject instanceof OptimisationInfo) {
-                        OptimisationInfo optInfo = (OptimisationInfo) userObject;
+                    if (userObject instanceof OptimisationInfo optInfo) {
                         if (optInfo.getSessionKey().equals(sessionKey)) {
                             displayOptimisation.accept(optInfo);
                         }
@@ -213,8 +210,7 @@ public class OptimisationWindowInitializer {
     private void setupTreeManagerActions(JFrame parentFrame, Consumer<String> statusUpdater) {
         treeManager.setShowModelAction(optInfo -> {
             if (optInfo.getSession() != null &&
-                optInfo.getSession().getActiveProgram() instanceof OptimisationProgram) {
-                OptimisationProgram program = (OptimisationProgram) optInfo.getSession().getActiveProgram();
+                    optInfo.getSession().getActiveProgram() instanceof OptimisationProgram program) {
                 String modelText = program.getModelText();
 
                 if (modelText != null && !modelText.isEmpty()) {

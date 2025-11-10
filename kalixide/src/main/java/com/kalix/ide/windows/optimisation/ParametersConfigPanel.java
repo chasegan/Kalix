@@ -158,7 +158,7 @@ public class ParametersConfigPanel extends JPanel {
         // Show dialog if any parameters were unrecognized
         if (unrecognizedParams.length() > 0) {
             JOptionPane.showMessageDialog(this,
-                "Could not recognize parameter types:\n\n" + unrecognizedParams.toString() +
+                "Could not recognize parameter types:\n\n" + unrecognizedParams +
                 "\n\nPlease specify expressions manually for these parameters.",
                 "Unrecognized Parameter Types",
                 JOptionPane.WARNING_MESSAGE);

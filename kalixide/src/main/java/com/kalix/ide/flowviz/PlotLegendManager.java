@@ -83,9 +83,9 @@ public class PlotLegendManager {
     private static final int DRAG_THRESHOLD = 5; // Pixels of movement to count as drag
 
     // Cached bounds
-    private Rectangle bounds = new Rectangle();
-    private Rectangle collapseButtonBounds = new Rectangle();
-    private Rectangle titleBounds = new Rectangle();
+    private final Rectangle bounds = new Rectangle();
+    private final Rectangle collapseButtonBounds = new Rectangle();
+    private final Rectangle titleBounds = new Rectangle();
 
     /**
      * Represents a single series entry in the legend.

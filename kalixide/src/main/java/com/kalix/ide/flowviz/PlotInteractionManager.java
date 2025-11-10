@@ -433,7 +433,7 @@ public class PlotInteractionManager {
         if (autoYMode) {
             // Auto-Y mode: only pan X-axis, then auto-fit Y
             long timeRange = currentViewport.getTimeRangeMs();
-            long deltaTime = (long) (-dx * timeRange / currentViewport.getPlotWidth());
+            long deltaTime = -dx * timeRange / currentViewport.getPlotWidth();
 
             long newStartTime = currentViewport.getStartTimeMs() + deltaTime;
             long newEndTime = currentViewport.getEndTimeMs() + deltaTime;
@@ -560,8 +560,7 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
                 // Sync the checkbox state with the current PlotPanel state
-                if (parentComponent instanceof PlotPanel) {
-                    PlotPanel plotPanel = (PlotPanel) parentComponent;
+                if (parentComponent instanceof PlotPanel plotPanel) {
                     // Get the current auto-Y state from the PlotPanel
                     autoYMenuItem.setSelected(plotPanel.isAutoYMode());
                 }

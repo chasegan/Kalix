@@ -491,7 +491,7 @@ public class NodeTheme {
 
         if (parts.length >= 2) {
             // Multiple words: take first letter of first two words
-            return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+            return ("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
         } else if (clean.length() >= 2) {
             // Single word: take first two letters
             return clean.substring(0, 2).toUpperCase();

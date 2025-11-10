@@ -4,7 +4,6 @@ import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.managers.KeyboardShortcutManager;
 import com.kalix.ide.themes.NodeTheme;
 
-import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -266,7 +265,7 @@ public class MenuBarBuilder {
      * directly to the File menu instead of a submenu.
      */
     private class RecentFilesProxyMenu extends JMenu {
-        private JMenuItem exitMenuItem;
+        private final JMenuItem exitMenuItem;
         private int recentFilesStartIndex = -1;
         
         public RecentFilesProxyMenu() {
@@ -336,8 +335,7 @@ public class MenuBarBuilder {
             if (fileMenu == null) return;
             
             for (int i = fileMenu.getMenuComponentCount() - 1; i >= 0; i--) {
-                if (fileMenu.getMenuComponent(i) instanceof JMenuItem) {
-                    JMenuItem item = (JMenuItem) fileMenu.getMenuComponent(i);
+                if (fileMenu.getMenuComponent(i) instanceof JMenuItem item) {
                     if ("Exit".equals(item.getText())) {
                         fileMenu.remove(i);
                         break;

@@ -20,13 +20,13 @@ public class StatusProgressBar extends JComponent {
     private boolean indeterminate = false;
 
     // Simple colors without command-specific logic
-    private Color backgroundColor = new Color(230, 230, 230);
-    private Color progressColor = new Color(76, 175, 80);  // Simple green
-    private Color borderColor = new Color(200, 200, 200);
-    private Color textColor = Color.BLACK;
+    private final Color backgroundColor = new Color(230, 230, 230);
+    private final Color progressColor = new Color(76, 175, 80);  // Simple green
+    private final Color borderColor = new Color(200, 200, 200);
+    private final Color textColor = Color.BLACK;
 
     // Animation support
-    private Timer animationTimer;
+    private final Timer animationTimer;
     private double targetProgress = 0.0;
     private static final int ANIMATION_DELAY = 16; // ~60 FPS
     private static final double ANIMATION_SPEED = 0.05; // How fast to animate

@@ -1,11 +1,7 @@
 package com.kalix.ide.managers;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.FlatPropertiesLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
-import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
-import com.formdev.flatlaf.intellijthemes.FlatOneDarkIJTheme;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
@@ -31,7 +27,7 @@ public class ThemeManager {
     
     private final Preferences prefs;
     private String currentTheme;
-    private Component parentComponent;
+    private final Component parentComponent;
     
     // Theme-aware components
     private MapPanel mapPanel;

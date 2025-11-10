@@ -1,7 +1,5 @@
 package com.kalix.ide.diff;
 
-import com.github.difflib.patch.AbstractDelta;
-import com.github.difflib.patch.DeltaType;
 import com.github.difflib.patch.Patch;
 import com.github.difflib.text.DiffRow;
 

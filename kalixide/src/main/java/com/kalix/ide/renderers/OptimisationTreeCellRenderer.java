@@ -24,8 +24,7 @@ public class OptimisationTreeCellRenderer extends DefaultTreeCellRenderer {
             boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
         super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus);
 
-        if (value instanceof DefaultMutableTreeNode) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+        if (value instanceof DefaultMutableTreeNode node) {
             Object userObject = node.getUserObject();
 
             if (userObject instanceof OptimisationInfo) {

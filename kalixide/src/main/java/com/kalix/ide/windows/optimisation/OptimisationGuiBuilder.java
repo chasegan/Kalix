@@ -184,7 +184,7 @@ public class OptimisationGuiBuilder extends JPanel {
         // Show warning dialog if any parameters couldn't be generated
         if (warnings.length() > 0) {
             javax.swing.JOptionPane.showMessageDialog(this,
-                "Could not auto-generate expressions for unrecognized parameter types:\n\n" + warnings.toString() +
+                "Could not auto-generate expressions for unrecognized parameter types:\n\n" + warnings +
                 "\n\nThese parameters were omitted from the configuration.\nPlease add them manually in the Text Editor if needed.",
                 "Unrecognized Parameter Types",
                 javax.swing.JOptionPane.WARNING_MESSAGE);

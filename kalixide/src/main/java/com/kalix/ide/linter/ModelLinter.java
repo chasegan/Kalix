@@ -140,12 +140,9 @@ public class ModelLinter {
 
         // Check if model has any meaningful content
         // (sections exist but they're all empty, or only contain empty sections)
-        boolean hasContent = false;
+        boolean hasContent = !model.getInputFiles().isEmpty();
 
         // Check for input files
-        if (!model.getInputFiles().isEmpty()) {
-            hasContent = true;
-        }
 
         // Check for output references
         if (!model.getOutputReferences().isEmpty()) {

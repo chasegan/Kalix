@@ -1,7 +1,6 @@
 package com.kalix.ide.themes.unified;
 
 import com.kalix.ide.themes.NodeTheme;
-import com.kalix.ide.themes.SyntaxTheme;
 import java.awt.Color;
 import java.util.Map;
 import java.util.Properties;

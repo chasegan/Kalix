@@ -44,10 +44,10 @@ public class PlotPanel extends JPanel {
     // Data and rendering
     private DataSet originalDataSet;  // Reference to shared dataset
     private DataSet displayDataSet;   // Transformed for display (cached)
-    private TimeSeriesRenderer renderer;
+    private final TimeSeriesRenderer renderer;
     private ViewPort currentViewport;
-    private Map<String, Color> seriesColors;
-    private List<String> visibleSeries;
+    private final Map<String, Color> seriesColors;
+    private final List<String> visibleSeries;
     private boolean autoYMode = false;
 
     // Transform settings (per-tab)
@@ -64,9 +64,9 @@ public class PlotPanel extends JPanel {
     private String lastTransformKey = null;
 
     // Managers
-    private CoordinateDisplayManager coordinateDisplayManager;
-    private PlotInteractionManager plotInteractionManager;
-    private PlotLegendManager legendManager;
+    private final CoordinateDisplayManager coordinateDisplayManager;
+    private final PlotInteractionManager plotInteractionManager;
+    private final PlotLegendManager legendManager;
 
     public PlotPanel() {
         setBackground(Color.WHITE);

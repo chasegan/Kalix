@@ -31,7 +31,7 @@ public class FlowVizWindow extends JFrame {
     private File currentFile;
 
     // Managers
-    private FlowVizMenuManager menuManager;
+    private final FlowVizMenuManager menuManager;
     private FlowVizDataManager dataManager;
     private FlowVizActionManager actionManager;
     
@@ -72,7 +72,7 @@ public class FlowVizWindow extends JFrame {
         plotPanel = new PlotPanel();
         // Auto-Y mode and precision will be initialized by action manager
         plotPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
-        plotPanel.setPrecision64Supplier(() -> actionManager != null ? actionManager.isPrecision64() : true);
+        plotPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
         
@@ -404,7 +404,7 @@ public class FlowVizWindow extends JFrame {
      * @return true if 64-bit precision is enabled, false for 32-bit
      */
     public boolean isPrecision64() {
-        return actionManager != null ? actionManager.isPrecision64() : true;
+        return actionManager == null || actionManager.isPrecision64();
     }
     
     public static List<FlowVizWindow> getOpenWindows() {

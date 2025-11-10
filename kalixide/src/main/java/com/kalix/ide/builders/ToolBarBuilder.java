@@ -263,8 +263,7 @@ public class ToolBarBuilder {
      */
     private JButton createToolBarButton(String text, String tooltip, Icon icon, ActionListener listener) {
         // Apply theme-appropriate color to the icon if it's a FontIcon
-        if (icon instanceof FontIcon) {
-            FontIcon fontIcon = (FontIcon) icon;
+        if (icon instanceof FontIcon fontIcon) {
             Color iconColor = getThemeAwareIconColor();
             fontIcon.setIconColor(iconColor);
         }

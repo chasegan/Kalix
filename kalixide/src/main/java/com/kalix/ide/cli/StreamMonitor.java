@@ -237,11 +237,7 @@ public class StreamMonitor {
         }
         
         // Look for file/item counts
-        if (lowerLine.matches(".*\\b\\d+\\s*(files?|items?|records?)\\b.*")) {
-            return true;
-        }
-        
-        return false;
+        return lowerLine.matches(".*\\b\\d+\\s*(files?|items?|records?)\\b.*");
     }
     
     /**

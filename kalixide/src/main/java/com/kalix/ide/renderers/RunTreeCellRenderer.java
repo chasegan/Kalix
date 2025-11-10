@@ -31,8 +31,7 @@ public class RunTreeCellRenderer extends DefaultTreeCellRenderer {
             boolean expanded, boolean leaf, int row, boolean hasFocus) {
         super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
-        if (value instanceof DefaultMutableTreeNode) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+        if (value instanceof DefaultMutableTreeNode node) {
             Object userObject = node.getUserObject();
 
             if (userObject instanceof RunContextMenuManager.RunInfo) {

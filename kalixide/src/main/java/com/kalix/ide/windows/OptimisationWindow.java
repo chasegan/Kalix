@@ -1,28 +1,48 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.KalixIDE;
-import com.kalix.ide.cli.OptimisationProgram;
-import com.kalix.ide.cli.ProgressParser;
-import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.managers.StdioTaskManager;
-import com.kalix.ide.managers.optimisation.*;
-import com.kalix.ide.models.optimisation.*;
-import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
+import com.kalix.ide.managers.optimisation.OptimisationConfigManager;
+import com.kalix.ide.managers.optimisation.OptimisationEventHandlers;
+import com.kalix.ide.managers.optimisation.OptimisationModelManager;
+import com.kalix.ide.managers.optimisation.OptimisationPanelBuilder;
+import com.kalix.ide.managers.optimisation.OptimisationPlotManager;
+import com.kalix.ide.managers.optimisation.OptimisationProgressManager;
+import com.kalix.ide.managers.optimisation.OptimisationResultsManager;
+import com.kalix.ide.managers.optimisation.OptimisationSessionManager;
+import com.kalix.ide.managers.optimisation.OptimisationTreeManager;
+import com.kalix.ide.managers.optimisation.OptimisationUpdateCoordinator;
+import com.kalix.ide.managers.optimisation.OptimisationWindowInitializer;
+import com.kalix.ide.models.optimisation.OptimisationInfo;
+import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.flowviz.PlotPanel;
-import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import javax.swing.*;
-import javax.swing.tree.*;
-import java.awt.*;
-import java.awt.event.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTree;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Point;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
-import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -89,10 +109,10 @@ public class OptimisationWindow extends JFrame {
     private DefaultMutableTreeNode currentlyDisplayedNode = null;
 
     // Flag to prevent DocumentListener from triggering during programmatic updates
-    private boolean isUpdatingConfigEditor = false;
+    private final boolean isUpdatingConfigEditor = false;
 
     // Flag to prevent selection listener from firing during programmatic updates
-    private boolean isUpdatingSelection = false;
+    private final boolean isUpdatingSelection = false;
 
     private static OptimisationWindow instance;
 
@@ -296,7 +316,7 @@ public class OptimisationWindow extends JFrame {
 
     private void initializeComponents() {
         OptimisationWindowInitializer.InitializationResult result = windowInitializer.initializeComponents(
-            optInfo -> copyOptimisedModelToMain(optInfo),
+            optInfo -> modelManager.copyOptimisedModelToMain(optInfo, getRootPane()),
             optInfo -> resultsManager.compareModels(optInfo, this),
             optInfo -> resultsManager.saveResults(optInfo, this),
             () -> runOptimisation(),
@@ -386,9 +406,8 @@ public class OptimisationWindow extends JFrame {
     private void saveCurrentConfigToNode() {
         if (currentlyDisplayedNode == null) return;
 
-        if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo)) return;
+        if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo optInfo)) return;
 
-        OptimisationInfo optInfo = (OptimisationInfo) currentlyDisplayedNode.getUserObject();
         String sessionKey = optInfo.getSession() != null ? optInfo.getSession().getSessionKey() : null;
 
         // Use config manager to save
@@ -416,9 +435,7 @@ public class OptimisationWindow extends JFrame {
         if (currentlyDisplayedNode == null) return;
 
         Object userObject = currentlyDisplayedNode.getUserObject();
-        if (!(userObject instanceof OptimisationInfo)) return;
-
-        OptimisationInfo optInfo = (OptimisationInfo) userObject;
+        if (!(userObject instanceof OptimisationInfo optInfo)) return;
 
         // Get config from appropriate source
         String configText;
@@ -448,60 +465,6 @@ public class OptimisationWindow extends JFrame {
                 "Invalid Configuration",
                 JOptionPane.WARNING_MESSAGE);
         }
-    }
-
-
-
-
-    /**
-     * Updates the elapsed time label based on the currently displayed optimization.
-     * Called by the timer to provide real-time elapsed time updates.
-     */
-    private void updateElapsedTime() {
-        // Delegate to progress manager
-        progressManager.updateElapsedTime();
-    }
-
-    /**
-     * Updates the timing labels (start, elapsed) for the displayed optimization.
-     */
-    private void updateTimingLabels(OptimisationInfo optInfo) {
-        // Delegate to progress manager
-        progressManager.updateTimingLabels(optInfo);
-
-        // Handle elapsed time timer
-        OptimisationResult result = optInfo == null ? null : optInfo.getResult();
-        if (result == null) {
-            if (elapsedTimer != null && elapsedTimer.isRunning()) {
-                elapsedTimer.stop();
-            }
-        } else if (result.getEndTime() != null) {
-            // Stop timer if optimization is finished
-            if (elapsedTimer != null && elapsedTimer.isRunning()) {
-                elapsedTimer.stop();
-            }
-        } else {
-            // Start timer if optimization is running
-            if (elapsedTimer != null && !elapsedTimer.isRunning() && result.getStartTime() != null) {
-                elapsedTimer.start();
-            }
-        }
-    }
-
-
-
-
-
-    // ==================== Helper Classes ====================
-
-    // Note: OptimisationInfo, OptimisationResult, and OptimisationStatus classes
-    // have been extracted to separate files in the models/optimisation package
-
-    /**
-     * Copies the optimised model to the main window.
-     */
-    private void copyOptimisedModelToMain(OptimisationInfo optInfo) {
-        modelManager.copyOptimisedModelToMain(optInfo, getRootPane());
     }
 
 

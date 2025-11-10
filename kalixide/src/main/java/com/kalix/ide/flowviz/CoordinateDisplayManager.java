@@ -475,8 +475,7 @@ public class CoordinateDisplayManager {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof CoordinateInfo)) return false;
-            CoordinateInfo other = (CoordinateInfo) obj;
+            if (!(obj instanceof CoordinateInfo other)) return false;
             return seriesName.equals(other.seriesName) &&
                    timestamp == other.timestamp &&
                    Double.compare(value, other.value) == 0;

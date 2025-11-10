@@ -94,8 +94,7 @@ public class RunInfoImpl implements RunContextMenuManager.RunInfo {
      * @return The detailed run status
      */
     public DetailedRunStatus getDetailedRunStatus() {
-        if (session.getActiveProgram() instanceof RunModelProgram) {
-            RunModelProgram program = (RunModelProgram) session.getActiveProgram();
+        if (session.getActiveProgram() instanceof RunModelProgram program) {
 
             if (program.isFailed()) {
                 return DetailedRunStatus.ERROR;

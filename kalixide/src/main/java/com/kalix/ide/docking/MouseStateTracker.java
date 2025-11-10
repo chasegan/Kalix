@@ -3,9 +3,7 @@ package com.kalix.ide.docking;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.AWTEvent;
-import java.awt.MouseInfo;
 import java.awt.Point;
-import java.awt.PointerInfo;
 import java.awt.Toolkit;
 import java.awt.event.MouseEvent;
 

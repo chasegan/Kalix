@@ -3,20 +3,20 @@ package com.kalix.ide.flowviz.rendering;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
 public class ViewPort {
-    private long startTimeMs;
-    private long endTimeMs;
-    private double minValue;
-    private double maxValue;
+    private final long startTimeMs;
+    private final long endTimeMs;
+    private final double minValue;
+    private final double maxValue;
 
     // Plot area dimensions
-    private int plotX;
-    private int plotY;
-    private int plotWidth;
-    private int plotHeight;
+    private final int plotX;
+    private final int plotY;
+    private final int plotWidth;
+    private final int plotHeight;
 
     // Axis transformations
-    private YAxisScale yAxisScale;
-    private XAxisType xAxisType;
+    private final YAxisScale yAxisScale;
+    private final XAxisType xAxisType;
     
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue) {
         this(startTimeMs, endTimeMs, minValue, maxValue, 0, 0, 0, 0, YAxisScale.LINEAR, XAxisType.TIME);

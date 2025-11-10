@@ -41,7 +41,6 @@ import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
-import com.kalix.ide.diff.DiffWindow;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1497,7 +1496,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             if (lastFile.exists() && lastFile.isFile() && fileOperations.isKalixModelFile(lastFile)) {
                 // File exists and is valid, load it
                 fileOperations.loadModelFile(lastFile);
-                return;
             }
         }
 

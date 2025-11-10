@@ -132,9 +132,7 @@ private void runOptimisation() {
     if (currentlyDisplayedNode == null) return;
 
     Object userObject = currentlyDisplayedNode.getUserObject();
-    if (!(userObject instanceof OptimisationInfo)) return;
-
-    OptimisationInfo optInfo = (OptimisationInfo) userObject;
+    if (!(userObject instanceof OptimisationInfo optInfo)) return;
 
     // Get config from appropriate source
     String configText = mainTabbedPane.getSelectedIndex() == 0 ?

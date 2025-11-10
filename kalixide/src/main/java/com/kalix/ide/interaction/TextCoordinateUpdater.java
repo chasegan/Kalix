@@ -130,8 +130,7 @@ public class TextCoordinateUpdater {
 
                 // Smart scroll: position the node at 1/4 from the top of the viewport
                 // This provides good context and matches common editor behavior
-                if (textEditor.getTextArea().getParent() instanceof JViewport) {
-                    JViewport viewport = (JViewport) textEditor.getTextArea().getParent();
+                if (textEditor.getTextArea().getParent() instanceof JViewport viewport) {
                     Rectangle viewRect = viewport.getViewRect();
                     Rectangle caretRect = textEditor.getTextArea().modelToView(section.start);
 
