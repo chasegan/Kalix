@@ -355,7 +355,7 @@ impl Sacramento {
             let duz:f64;
             let dlzp:f64;
             let dlzs:f64;
-            if ninc == 1 && adj >= 1f64 {
+            if (ninc == 1) && (adj >= 1f64) {
                 duz = self.uzk;
                 dlzp = self.lzpk;
                 dlzs = self.lzsk;
@@ -383,23 +383,22 @@ impl Sacramento {
                 let mut addro = pinc * ratio * ratio;
 
                 // Baseflow from the lower zone primary
-                let mut bf = 0f64;
                 if self.alzfpc > 0f64 {
-                    bf = self.alzfpc * dlzp;
+                    let bf = self.alzfpc * dlzp;
                     self.alzfpc -= bf;
+                    self.flobf += bf;
                 } else {
                     self.alzfpc = 0f64;
                 }
-                self.flobf += bf;
 
                 // Baseflow from the lower zone supplemental
                 if self.alzfsc > 0f64 {
-                    bf = self.alzfsc * dlzs;
+                    let bf = self.alzfsc * dlzs;
                     self.alzfsc -= bf;
+                    self.flobf += bf;
                 } else {
                     self.alzfsc = 0f64;
                 }
-                self.flobf += bf;
 
                 // Adjust the upper zone for percolation and interflow
                 if self.uzfwc > 0f64 {
