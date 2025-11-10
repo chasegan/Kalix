@@ -5,12 +5,12 @@ Kalix models are represented as INI files (*.ini) and have a structure that is e
 I may choose to use the Kalix GUI ("KalixIDE") for some work, but you can use the Kalix CLI ("KalixCLI") which has been added to my path environmental varaible so should run from anywhere. When you run a model, you generally want to run from the model file's location since the model may refrence input files using relative paths relative to that location.
 
 Here is how you would run a model called "my_model.ini" and save the output results:
-> kalixcli sim my_model.ini -o my_results.csv
+> kalixcli simulate my_model.ini -o my_results.csv
 
 You can also output a mass balance report like this:
-> kalixcli sim my_model.ini -o my_results.csv -m my_mbal.txt
+> kalixcli simulate my_model.ini -o my_results.csv -m my_mbal.txt
 
 The mass balance report is great for verifying that the simulation hasn't changed (e.g. for new kalix software version or when the user makes a non-functional change in the model file). If a previous mass balance report is available as "previous_mbal.txt" then you can run the model and do the verification in one step like this:
-> kalixcli sim my_model.ini -v my_previous_mbal.txt
+> kalixcli simulate my_model.ini -v my_previous_mbal.txt
 
 If I ask you to do things with the csv files, you may use the python instance which is available in this environment.
