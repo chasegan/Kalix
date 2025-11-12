@@ -22,6 +22,7 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::io::stdout;
 use std::time::{Duration, Instant};
 
 /// Configuration for SCE-UA algorithm
@@ -44,16 +45,16 @@ pub struct SceUaConfig {
 
 /// Individual in the population
 #[derive(Clone)]
-struct Individual {
+pub struct Individual {
     /// Normalized parameters [0,1]
-    params: Vec<f64>,
+    pub params: Vec<f64>,
 
     /// Objective function value (lower is better)
-    objective: f64,
+    pub objective: f64,
 }
 
 impl Individual {
-    fn new(params: Vec<f64>) -> Self {
+    pub fn new(params: Vec<f64>) -> Self {
         Self {
             params,
             objective: f64::INFINITY,
@@ -99,23 +100,22 @@ impl SceUa {
         let start_time = Instant::now();
         let n_params = problem.n_params();
 
+        // Create thread pool ONCE for entire optimization (reused across all shuffles)
+        let thread_pool = if self.config.n_threads > 1 {
+            Some(rayon::ThreadPoolBuilder::new()
+                .num_threads(self.config.n_threads)
+                .build()
+                .unwrap())
+        } else {
+            None
+        };
+
         // Calculate population parameters following Duan et al. (1994)
         let m = 2 * n_params + 1;  // Points per complex
         let s = self.config.complexes * m;  // Total population size
         let p = n_params + 1;  // Number of parents in simplex
         let breeding_iterations = m;  // Number of iterations per complex per shuffle
-
-        // Verify population is divisible by complexes
-        if s % self.config.complexes != 0 {
-            return OptimizationResult::new(
-                vec![0.5; n_params],
-                f64::INFINITY,
-                0,
-                false,
-                "Population size must be divisible by number of complexes".to_string(),
-                Duration::default(),
-            );
-        }
+        let elitism = 1.0;  // Duan et al. (1994) trapezoidal weighting
 
         // Initialize random number generator
         let mut rng = match self.config.seed {
@@ -126,38 +126,29 @@ impl SceUa {
         // Step 1: Generate initial population using Latin Hypercube Sampling
         let mut population = self.latin_hypercube_sampling(s, n_params, &mut rng);
 
-        // Step 2: Evaluate initial population
-        let mut n_evaluations = 0;
-        for individual in &mut population {
-            if let Err(e) = problem.set_params(&individual.params) {
-                return OptimizationResult::new(
-                    vec![0.5; n_params],
-                    f64::INFINITY,
-                    n_evaluations,
-                    false,
-                    format!("Error setting parameters: {}", e),
-                    start_time.elapsed(),
-                );
-            }
-
-            match problem.evaluate() {
-                Ok(obj) => individual.objective = obj,
-                Err(e) => {
-                    return OptimizationResult::new(
-                        vec![0.5; n_params],
-                        f64::INFINITY,
-                        n_evaluations,
-                        false,
-                        format!("Error evaluating objective: {}", e),
-                        start_time.elapsed(),
-                    );
-                }
-            }
-            n_evaluations += 1;
-        }
+        // Step 2: Evaluate initial population (parallel if configured)
+        let mut n_evaluations = if let Some(ref pool) = thread_pool {
+            self.evaluate_population_parallel(&mut population, problem, pool)
+        } else {
+            self.evaluate_population_sequential(&mut population, problem)
+        };
 
         // Sort population by objective (best first)
         population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
+
+        // DEBUG: Log initial population to file
+        {
+            use std::fs::File;
+            use std::io::Write;
+            let mut file = File::create("debug_ipop.txt").expect("Failed to create debug file");
+            for individual in &population {
+                write!(file, "{}", individual.objective).expect("Failed to write objective");
+                for param in &individual.params {
+                    write!(file, ",{}", param).expect("Failed to write parameter");
+                }
+                writeln!(file).expect("Failed to write newline");
+            }
+        }
 
         // Track best solution
         let mut best_params = population[0].params.clone();
@@ -184,19 +175,48 @@ impl SceUa {
             shuffle_count += 1;
 
             // Step 4: Evolve each complex (in parallel if configured)
-            let evolution_result = self.evolve_complexes_parallel(
-                &mut complexes,
-                problem,
-                breeding_iterations,
-                p,
-                &mut rng,
-            );
+            let evolution_result = if let Some(ref pool) = thread_pool {
+                self.evolve_complexes_parallel(
+                    &mut complexes,
+                    problem,
+                    breeding_iterations,
+                    p,
+                    n_params,
+                    elitism,
+                    &mut rng,
+                    pool,
+                )
+            } else {
+                self.evolve_complexes_sequential(
+                    &mut complexes,
+                    problem,
+                    breeding_iterations,
+                    p,
+                    n_params,
+                    elitism,
+                    &mut rng,
+                )
+            };
 
             n_evaluations += evolution_result.evaluations;
 
             // Step 5: Combine and sort all individuals
             population = self.combine_complexes(&complexes);
             population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
+
+            // DEBUG: Log initial population to file
+            {
+                use std::fs::File;
+                use std::io::Write;
+                let mut file = File::create(format!("debug_pop_{}.txt", shuffle_count)).expect("Failed to create debug file");
+                for individual in &population {
+                    write!(file, "{}", individual.objective).expect("Failed to write objective");
+                    for param in &individual.params {
+                        write!(file, ",{}", param).expect("Failed to write parameter");
+                    }
+                    writeln!(file).expect("Failed to write newline");
+                }
+            }
 
             // Update best solution
             if population[0].objective < best_objective {
@@ -305,20 +325,17 @@ impl SceUa {
         population
     }
 
-    /// Evolve all complexes in parallel
-    fn evolve_complexes_parallel(
+    /// Evolve all complexes sequentially (single-threaded)
+    fn evolve_complexes_sequential(
         &self,
         complexes: &mut [Complex],
         problem: &mut dyn Optimisable,
         breeding_iterations: usize,
         p: usize,
+        n_params: usize,
+        elitism: f64,
         rng: &mut StdRng,
     ) -> EvolutionResult {
-        let n_params = problem.n_params();
-        let elitism = 1.0;  // Duan et al. (1994) trapezoidal weighting
-
-        // For now, use single-threaded evolution to avoid Sync issues with trait objects
-        // TODO: Implement parallel evolution by restructuring to avoid trait object sharing
         let mut total_evaluations = 0;
 
         for complex in complexes.iter_mut() {
@@ -340,13 +357,75 @@ impl SceUa {
         }
     }
 
+    /// Evolve all complexes in parallel using worker-based threading
+    ///
+    /// Creates n_threads worker problems and distributes complexes across workers.
+    /// This dramatically reduces cloning overhead compared to cloning per evaluation.
+    fn evolve_complexes_parallel(
+        &self,
+        complexes: &mut [Complex],
+        problem: &dyn Optimisable,
+        breeding_iterations: usize,
+        p: usize,
+        n_params: usize,
+        elitism: f64,
+        rng: &mut StdRng,
+        pool: &rayon::ThreadPool,
+    ) -> EvolutionResult {
+        use std::sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}};
+
+        // Create n_threads worker problems (NOT per-complex!)
+        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
+            (0..self.config.n_threads)
+                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
+                .collect();
+
+        let eval_counter = AtomicUsize::new(0);
+
+        // Generate RNG seeds for each complex upfront
+        let seeds: Vec<u64> = (0..complexes.len())
+            .map(|_| rng.gen())
+            .collect();
+
+        // Evolve complexes in parallel with round-robin worker assignment
+        pool.install(|| {
+            complexes.par_iter_mut()
+                     .enumerate()
+                     .for_each(|(i, complex)| {
+                         // Round-robin assignment to workers
+                         let worker_idx = i % self.config.n_threads;
+                         let worker = &worker_problems[worker_idx];
+
+                         // Lock worker for this complex's evolution
+                         let mut prob = worker.lock().unwrap();
+                         let mut local_rng = StdRng::seed_from_u64(seeds[i]);
+
+                         let evals = self.evolve_one_complex(
+                             complex,
+                             &mut **prob,
+                             breeding_iterations,
+                             p,
+                             n_params,
+                             elitism,
+                             &mut local_rng,
+                         );
+
+                         eval_counter.fetch_add(evals, Ordering::Relaxed);
+                     });
+        });
+
+        EvolutionResult {
+            evaluations: eval_counter.load(Ordering::Relaxed),
+        }
+    }
+
     /// Evolve a single complex using the CCE (Competitive Complex Evolution) algorithm
     ///
     /// Based on Duan et al. (1994) original implementation
     fn evolve_one_complex(
         &self,
         complex: &mut Complex,
-        problem: &dyn Optimisable,
+        problem: &mut dyn Optimisable,
         breeding_iterations: usize,
         p: usize,
         n_params: usize,
@@ -378,7 +457,7 @@ impl SceUa {
             let worst = &parents[worst_idx_in_parents];
 
             // Compute centroid without worst parent
-            let centroid = self.compute_centroid(&parents[..worst_idx_in_parents]);
+            let centroid = Self::compute_centroid(&parents[..worst_idx_in_parents]);
 
             // Try reflection: new = worst * (-1) + centroid * 2
             let mut proposal = self.reflect(&worst.params, &centroid.params, -1.0);
@@ -431,8 +510,14 @@ impl SceUa {
             }
 
             // Replace worst member in complex with proposal
+            // Always replace - this is the SCE-UA algorithm design
+            // Even if proposal is worse, it maintains population diversity
             let worst_idx_in_complex = parent_indices[worst_idx_in_parents];
             complex.members[worst_idx_in_complex] = proposal_individual;
+
+            // Re-sort complex after replacement to maintain sorted order for next iteration
+            // This is critical because weighted selection assumes sorted order
+            complex.members.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
         }
 
         evaluations
@@ -481,7 +566,7 @@ impl SceUa {
     }
 
     /// Compute centroid of a set of individuals
-    fn compute_centroid(&self, individuals: &[Individual]) -> Individual {
+    pub fn compute_centroid(individuals: &[Individual]) -> Individual {
         let n_params = individuals[0].params.len();
         let mut centroid_params = vec![0.0; n_params];
 
@@ -523,11 +608,96 @@ impl SceUa {
     }
 
     /// Evaluate an individual's objective function
-    fn evaluate_individual(&self, problem: &dyn Optimisable, params: &[f64]) -> Result<f64, String> {
-        // Create mutable clone for evaluation
-        let mut prob_clone = problem.clone_for_parallel();
-        prob_clone.set_params(params)?;
-        prob_clone.evaluate()
+    ///
+    /// Now uses mutable reference directly - no cloning!
+    fn evaluate_individual(&self, problem: &mut dyn Optimisable, params: &[f64]) -> Result<f64, String> {
+        problem.set_params(params)?;
+        problem.evaluate()
+    }
+
+    /// Evaluate a population of individuals sequentially
+    fn evaluate_population_sequential(
+        &self,
+        individuals: &mut [Individual],
+        problem: &mut dyn Optimisable,
+    ) -> usize {
+        let mut evals = 0;
+        for individual in individuals.iter_mut() {
+            match problem.set_params(&individual.params) {
+                Ok(_) => {
+                    match problem.evaluate() {
+                        Ok(obj) => {
+                            individual.objective = obj;
+                            evals += 1;
+                        },
+                        Err(_) => {
+                            individual.objective = f64::INFINITY;
+                        }
+                    }
+                },
+                Err(_) => {
+                    individual.objective = f64::INFINITY;
+                }
+            }
+        }
+        evals
+    }
+
+    /// Evaluate a population of individuals in parallel using worker-based threading
+    ///
+    /// This uses the same worker pattern as complex evolution to minimize cloning.
+    fn evaluate_population_parallel(
+        &self,
+        individuals: &mut [Individual],
+        problem: &dyn Optimisable,
+        pool: &rayon::ThreadPool,
+    ) -> usize {
+        use rayon::prelude::*;
+        use std::sync::{Arc, Mutex};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // Create n_threads worker problems (NOT population_size!)
+        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
+            (0..self.config.n_threads)
+                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
+                .collect();
+
+        let eval_counter = AtomicUsize::new(0);
+
+        // Collect parameters to evaluate
+        let params: Vec<Vec<f64>> = individuals.iter().map(|ind| ind.params.clone()).collect();
+
+        // Evaluate in parallel with round-robin worker assignment
+        let objectives: Vec<f64> = pool.install(|| {
+            params.par_iter()
+                  .enumerate()
+                  .map(|(i, param_vec)| {
+                      // Round-robin assignment to workers
+                      let worker_idx = i % self.config.n_threads;
+                      let worker = &worker_problems[worker_idx];
+
+                      // Lock worker, evaluate, unlock
+                      let mut prob = worker.lock().unwrap();
+                      match prob.set_params(param_vec) {
+                          Ok(_) => match prob.evaluate() {
+                              Ok(obj) => {
+                                  eval_counter.fetch_add(1, Ordering::Relaxed);
+                                  obj
+                              },
+                              Err(_) => f64::INFINITY,
+                          },
+                          Err(_) => f64::INFINITY,
+                      }
+                  })
+                  .collect()
+        });
+
+        // Write objectives back to individuals
+        for (individual, objective) in individuals.iter_mut().zip(objectives.iter()) {
+            individual.objective = *objective;
+        }
+
+        eval_counter.load(Ordering::Relaxed)
     }
 }
 

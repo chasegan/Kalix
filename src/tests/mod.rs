@@ -63,3 +63,6 @@ mod test_model_constant_optimisation;
 
 #[cfg(test)]
 mod test_ini_document;
+
+#[cfg(test)]
+mod test_sce_ua;
