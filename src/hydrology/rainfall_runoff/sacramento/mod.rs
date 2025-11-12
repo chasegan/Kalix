@@ -170,9 +170,14 @@ impl Sacramento {
         // Set the kernel ordinates
         let low_ordinate_value = ceil(self.laguh) - self.laguh;
         let high_ordinate_value = 1f64 - low_ordinate_value;
-        self.unit_hydrograph.set_kernel(high_ordinate_position, high_ordinate_value);
-        if low_ordinate_value > 0f64 {
-            self.unit_hydrograph.set_kernel(high_ordinate_position - 1, low_ordinate_value);
+        for i in 0..kernel_len {
+            if i == high_ordinate_position {
+                self.unit_hydrograph.set_kernel(i, high_ordinate_value);
+            } else if i == (high_ordinate_position - 1) {
+                self.unit_hydrograph.set_kernel(i, low_ordinate_value);
+            } else {
+                self.unit_hydrograph.set_kernel(i, 0f64);
+            }
         }
         self
     }
