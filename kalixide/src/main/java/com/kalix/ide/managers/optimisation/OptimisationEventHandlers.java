@@ -33,6 +33,7 @@ public class OptimisationEventHandlers {
     private Consumer<String> treeNodeUpdater;
     private Consumer<String> detailsUpdater;
     private Consumer<String> convergencePlotUpdater;
+    private Consumer<String> modelDisplayUpdater;
 
     /**
      * Creates a new OptimisationEventHandlers instance.
@@ -69,6 +70,13 @@ public class OptimisationEventHandlers {
     }
 
     /**
+     * Sets the callback for updating model display (optimised model text editor).
+     */
+    public void setModelDisplayUpdater(Consumer<String> updater) {
+        this.modelDisplayUpdater = updater;
+    }
+
+    /**
      * Handles status update messages from the optimisation program.
      *
      * @param sessionKey The session key
@@ -87,6 +95,11 @@ public class OptimisationEventHandlers {
             // Update details panel if this optimisation is currently selected
             if (detailsUpdater != null) {
                 detailsUpdater.accept(sessionKey);
+            }
+
+            // Update model display (status changed, e.g., READY -> RUNNING)
+            if (modelDisplayUpdater != null) {
+                modelDisplayUpdater.accept(sessionKey);
             }
         });
     }
@@ -136,13 +149,8 @@ public class OptimisationEventHandlers {
                                                   objectiveValues.get(0),
                                                   objectiveValues);
 
-                        // Store total evaluations if not already set
-                        if (result.getEvaluations() == null && progressInfo.getPercentage() > 0) {
-                            // Calculate total from current count and percentage
-                            int totalEvals = (int)(progressInfo.getEvaluationCount() * 100.0 /
-                                                  progressInfo.getPercentage());
-                            result.setEvaluations(totalEvals);
-                        }
+                        // Store current evaluation count
+                        result.setEvaluations(progressInfo.getEvaluationCount());
 
                         // Update convergence plot if selected
                         if (convergencePlotUpdater != null) {
@@ -256,6 +264,11 @@ public class OptimisationEventHandlers {
 
                 if (convergencePlotUpdater != null) {
                     convergencePlotUpdater.accept(sessionKey);
+                }
+
+                // Update model display (status changed to DONE or ERROR)
+                if (modelDisplayUpdater != null) {
+                    modelDisplayUpdater.accept(sessionKey);
                 }
             }
         });

@@ -34,7 +34,7 @@ public class OptimisationResultsManager {
 
     // Default messages
     private static final String MSG_READY = "# Optimisation ready to start...";
-    private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say, and what you do are in harmony. - Mahatma Gandhi";
+    private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say,\n# and what you do are in harmony. - Mahatma Gandhi";
 
     private final KalixIniTextArea optimisedModelEditor;
     private final RTextScrollPane scrollPane;
@@ -72,96 +72,6 @@ public class OptimisationResultsManager {
      */
     public RTextScrollPane getScrollPane() {
         return scrollPane;
-    }
-
-    /**
-     * Displays results for an optimisation.
-     *
-     * @param info The optimisation info
-     */
-    public void displayResults(OptimisationInfo info) {
-        if (info == null) {
-            optimisedModelEditor.setText(MSG_READY);
-            return;
-        }
-
-        OptimisationStatus status = info.getStatus();
-        OptimisationResult result = info.getResult();
-
-        if (status == OptimisationStatus.DONE && result != null) {
-            // Show optimised model if available
-            if (result.getOptimisedModelIni() != null &&
-                !result.getOptimisedModelIni().isEmpty()) {
-                optimisedModelEditor.setText(result.getOptimisedModelIni());
-            } else {
-                // Show summary if no model available
-                optimisedModelEditor.setText(result.formatSummary());
-            }
-            optimisedModelEditor.setCaretPosition(0); // Scroll to top
-        } else if (status == OptimisationStatus.ERROR) {
-            displayError(info, result);
-        } else if (status == OptimisationStatus.STOPPED) {
-            optimisedModelEditor.setText(MSG_PLACEHOLDER);
-        } else if (status == OptimisationStatus.RUNNING ||
-                   status == OptimisationStatus.LOADING) {
-            displayRunningStatus(info);
-        } else {
-            optimisedModelEditor.setText(MSG_READY);
-        }
-    }
-
-    /**
-     * Displays error information.
-     */
-    private void displayError(OptimisationInfo info, OptimisationResult result) {
-        StringBuilder errorText = new StringBuilder();
-        errorText.append("# OPTIMISATION FAILED\n");
-        errorText.append("# ").append("=".repeat(60)).append("\n");
-        errorText.append("# Name: ").append(info.getName()).append("\n");
-        errorText.append("# Session: ").append(info.getSessionKey()).append("\n");
-
-        if (result != null) {
-            if (result.getMessage() != null) {
-                errorText.append("# Error: ").append(result.getMessage()).append("\n");
-            }
-            if (result.getStartTime() != null) {
-                errorText.append("# Started: ")
-                    .append(result.getStartTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                    .append("\n");
-            }
-        }
-
-        errorText.append("# ").append("=".repeat(60)).append("\n");
-        errorText.append("\n# Check the configuration and try again.\n");
-
-        optimisedModelEditor.setText(errorText.toString());
-    }
-
-    /**
-     * Displays running status.
-     */
-    private void displayRunningStatus(OptimisationInfo info) {
-        StringBuilder text = new StringBuilder();
-        text.append("# OPTIMISATION IN PROGRESS\n");
-        text.append("# ").append("=".repeat(60)).append("\n");
-        text.append("# Name: ").append(info.getName()).append("\n");
-
-        OptimisationResult result = info.getResult();
-        if (result != null) {
-            if (result.getCurrentProgress() != null) {
-                text.append("# Progress: ").append(result.getCurrentProgress()).append("%\n");
-            }
-            if (result.getBestObjective() != null) {
-                text.append("# Current Best: ").append(
-                    String.format("%.6f", result.getBestObjective())).append("\n");
-            }
-            if (result.getEvaluations() != null) {
-                text.append("# Evaluations: ").append(result.getEvaluations()).append("\n");
-            }
-        }
-
-        text.append("# ").append("=".repeat(60)).append("\n");
-        optimisedModelEditor.setText(text.toString());
     }
 
     /**
@@ -358,39 +268,6 @@ public class OptimisationResultsManager {
         return sb.toString();
     }
 
-    /**
-     * Exports results as CSV.
-     *
-     * @param info The optimisation info
-     * @param file The file to export to
-     * @throws IOException If export fails
-     */
-    public void exportResultsAsCsv(OptimisationInfo info, File file) throws IOException {
-        if (info == null || info.getResult() == null) {
-            throw new IllegalArgumentException("No results to export");
-        }
-
-        StringBuilder csv = new StringBuilder();
-        csv.append("Parameter,Value\n");
-
-        OptimisationResult result = info.getResult();
-
-        // Add basic info
-        csv.append("Name,").append(info.getName()).append("\n");
-        csv.append("Best Objective,").append(result.getBestObjective()).append("\n");
-        csv.append("Evaluations,").append(result.getEvaluations()).append("\n");
-        csv.append("Generations,").append(result.getGenerations()).append("\n");
-
-        // Add parameters
-        if (result.getParametersPhysical() != null) {
-            csv.append("\nOptimised Parameters:\n");
-            result.getParametersPhysical().forEach((param, value) ->
-                csv.append(param).append(",").append(value).append("\n"));
-        }
-
-        Files.writeString(file.toPath(), csv.toString());
-    }
-
     // Setters for dependencies
     public void setWorkingDirectorySupplier(Supplier<File> supplier) {
         this.workingDirectorySupplier = supplier;
@@ -411,7 +288,7 @@ public class OptimisationResultsManager {
      */
     public void updateOptimisedModelDisplay(OptimisationInfo optInfo) {
         if (optInfo == null) {
-            optimisedModelEditor.setText(MSG_READY);
+            optimisedModelEditor.setText("");
             return;
         }
 
@@ -427,9 +304,6 @@ public class OptimisationResultsManager {
                 // Fallback: show summary if no model available
                 optimisedModelEditor.setText(result.formatSummary());
             }
-        } else if (status == OptimisationStatus.RUNNING || status == OptimisationStatus.LOADING) {
-            // Show simple quote while optimization is running
-            optimisedModelEditor.setText(MSG_PLACEHOLDER);
         } else if (status == OptimisationStatus.ERROR) {
             // Show error
             StringBuilder errorText = new StringBuilder();
@@ -441,8 +315,8 @@ public class OptimisationResultsManager {
             }
             optimisedModelEditor.setText(errorText.toString());
         } else {
-            // Starting/Ready state
-            optimisedModelEditor.setText(MSG_READY);
+            // Everything else: show Gandhi quote from start until completion
+            optimisedModelEditor.setText(MSG_PLACEHOLDER);
         }
     }
 }

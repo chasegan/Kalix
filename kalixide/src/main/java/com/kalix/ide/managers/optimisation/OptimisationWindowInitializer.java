@@ -164,7 +164,8 @@ public class OptimisationWindowInitializer {
             Runnable saveCurrentConfig,
             Consumer<String> updateTreeNode,
             Consumer<String> updateDetailsIfSelected,
-            Consumer<String> updateConvergencePlot) {
+            Consumer<String> updateConvergencePlot,
+            Consumer<String> updateModelDisplay) {
 
         // Store stdioTaskManager for use in action callbacks
         this.stdioTaskManager = stdioTaskManager;
@@ -212,6 +213,7 @@ public class OptimisationWindowInitializer {
         eventHandlers.setTreeNodeUpdater(updateTreeNode);
         eventHandlers.setDetailsUpdater(updateDetailsIfSelected);
         eventHandlers.setConvergencePlotUpdater(updateConvergencePlot);
+        eventHandlers.setModelDisplayUpdater(updateModelDisplay);
 
         // Tree selection callbacks
         treeManager.setOnNoSelectionCallback(displayMessagePanel);

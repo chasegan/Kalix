@@ -176,13 +176,11 @@ public class OptimisationProgressManager {
 
         // Update evaluations
         if (result.getEvaluations() != null) {
-            String evalText = String.format("Evaluations: %d", result.getEvaluations());
-            if (result.getGenerations() != null) {
-                evalText += String.format(" (Gen %d)", result.getGenerations());
+            String evalText = String.format("Evaluations: %,d", result.getEvaluations());
+            if (result.getCurrentProgress() != null && result.getCurrentProgress() > 0) {
+                evalText += String.format(" (%.1f%%)", result.getCurrentProgress().doubleValue());
             }
             evaluationProgressLabel.setText(evalText);
-        } else if (result.getCurrentProgress() != null) {
-            evaluationProgressLabel.setText(String.format("Progress: %d%%", result.getCurrentProgress()));
         }
     }
 
@@ -408,14 +406,13 @@ public class OptimisationProgressManager {
         if (!result.getConvergenceEvaluations().isEmpty()) {
             int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
 
-            // Calculate percentage if we know the total evaluations
+            // Display count with percentage from backend if available
             String progressText;
-            Integer evaluations = result.getEvaluations();
-            if (evaluations != null && evaluations > 0) {
-                double percentComplete = (currentEval * 100.0) / evaluations;
-                progressText = String.format("Evaluations: %,d (%.1f%%)", currentEval, percentComplete);
+            Integer currentProgress = result.getCurrentProgress();
+            if (currentProgress != null && currentProgress > 0) {
+                progressText = String.format("Evaluations: %,d (%.1f%%)", currentEval, currentProgress.doubleValue());
             } else {
-                // No total available yet, just show count
+                // No percentage available yet, just show count
                 progressText = String.format("Evaluations: %,d", currentEval);
             }
 

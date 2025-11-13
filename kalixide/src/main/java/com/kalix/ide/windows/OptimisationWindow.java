@@ -213,7 +213,8 @@ public class OptimisationWindow extends JFrame {
             this::saveCurrentConfigToNode,
             updateCoordinator::updateTreeNodeForSession,
             updateCoordinator::updateDetailsIfSelected,
-            updateCoordinator::updateConvergencePlotIfSelected
+            updateCoordinator::updateConvergencePlotIfSelected,
+            updateCoordinator::updateModelDisplayIfSelected
         );
     }
 
@@ -251,7 +252,7 @@ public class OptimisationWindow extends JFrame {
             plotManager.updatePlot(optInfo.getResult());
         } else {
             // Clear results displays
-            optimisedModelEditor.setText("");
+            resultsManager.updateOptimisedModelDisplay(optInfo);  // Shows MSG_READY for READY status
             plotManager.clearPlot();
             if (bestObjectiveLabel != null) {
                 bestObjectiveLabel.setText("Best: —");

@@ -76,10 +76,10 @@ public class OptimisationUpdateCoordinator {
     public void updateDetailsIfSelected(String sessionKey) {
         OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
         if (selectedInfo != null && selectedInfo.hasStartedRunning()) {
-            // Update timing labels
+            // Update timing labels (changes every update)
             progressManager.updateTimingLabels(selectedInfo);
-            // Update results display
-            resultsManager.updateOptimisedModelDisplay(selectedInfo);
+            // Note: optimised model display is NOT updated here - it only changes on status changes
+            // (start, complete, error) which are handled separately
         }
     }
 
@@ -95,6 +95,19 @@ public class OptimisationUpdateCoordinator {
             plotManager.updatePlot(selectedInfo.getResult());
             // Also update labels in real-time
             progressManager.updateConvergenceLabels(selectedInfo.getResult());
+        }
+    }
+
+    /**
+     * Updates the model display if the given session is currently selected.
+     * Called when status changes (e.g., optimization completes or errors).
+     *
+     * @param sessionKey The session key
+     */
+    public void updateModelDisplayIfSelected(String sessionKey) {
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null) {
+            resultsManager.updateOptimisedModelDisplay(selectedInfo);
         }
     }
 }
