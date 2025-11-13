@@ -26,8 +26,7 @@ public class AlgorithmConfigPanel extends JPanel {
             "de_cr", "0.9"
         ),
         "SCE", Map.of(
-            "population_size", "50",
-            "sce_complexes", "5"
+            "complexes", "12"
         )
     );
 

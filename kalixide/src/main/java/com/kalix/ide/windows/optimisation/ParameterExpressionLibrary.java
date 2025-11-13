@@ -11,7 +11,7 @@ public class ParameterExpressionLibrary {
     // Map of parameter type to expression template (# is placeholder for counter)
     private static final Map<String, String> TYPE_EXPRESSIONS = Map.ofEntries(
         // GR4J parameters
-        Map.entry("constant", "lin_range(g(#),0,100)"),
+        Map.entry("constant", "lin_range(g(#),0,2)"),
         Map.entry("x1", "lin_range(g(#),1,1500)"),
         Map.entry("x2", "lin_range(g(#),-10,6)"),
         Map.entry("x3", "lin_range(g(#),1,500)"),

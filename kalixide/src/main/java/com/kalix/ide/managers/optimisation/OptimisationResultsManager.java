@@ -34,7 +34,7 @@ public class OptimisationResultsManager {
 
     // Default messages
     private static final String MSG_READY = "# Optimisation ready to start...";
-    private static final String MSG_KNUTH = "# If you optimize everything, you will always be unhappy. - Donald Knuth";
+    private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say, and what you do are in harmony. - Mahatma Gandhi";
 
     private final KalixIniTextArea optimisedModelEditor;
     private final RTextScrollPane scrollPane;
@@ -101,7 +101,7 @@ public class OptimisationResultsManager {
         } else if (status == OptimisationStatus.ERROR) {
             displayError(info, result);
         } else if (status == OptimisationStatus.STOPPED) {
-            optimisedModelEditor.setText(MSG_KNUTH);
+            optimisedModelEditor.setText(MSG_PLACEHOLDER);
         } else if (status == OptimisationStatus.RUNNING ||
                    status == OptimisationStatus.LOADING) {
             displayRunningStatus(info);
@@ -429,7 +429,7 @@ public class OptimisationResultsManager {
             }
         } else if (status == OptimisationStatus.RUNNING || status == OptimisationStatus.LOADING) {
             // Show simple quote while optimization is running
-            optimisedModelEditor.setText(MSG_KNUTH);
+            optimisedModelEditor.setText(MSG_PLACEHOLDER);
         } else if (status == OptimisationStatus.ERROR) {
             // Show error
             StringBuilder errorText = new StringBuilder();

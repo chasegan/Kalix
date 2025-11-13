@@ -94,7 +94,7 @@ public class ObjectiveConfigPanel extends JPanel {
         gbc.gridwidth = 4;
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        String[] objectiveFunctions = {"NSE", "RMSE", "MAE", "KGE", "R2"};
+        String[] objectiveFunctions = {"SDEB", "PEARS_R", "NSE", "LNSE", "RMSE", "MAE", "KGE", "PBIAS"};
         objectiveFunctionCombo = new JComboBox<>(objectiveFunctions);
         objectiveFunctionCombo.setEditable(true);
         objectiveFunctionCombo.setSelectedItem("NSE"); // Default to NSE
