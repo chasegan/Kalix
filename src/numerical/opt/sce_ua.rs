@@ -407,33 +407,33 @@ impl SceUa {
         let mut evaluations = 0;
 
         for _ in 0..breeding_iterations {
-            // Select p parents from complex using weighted probability
-            let parent_indices = self.select_parents_weighted(
+            // Select p members for the simplex from complex using weighted probability
+            let simplex_indices = self.create_simplex(
                 complex.members.len(),
                 p,
                 elitism,
                 rng,
             );
 
-            // Extract parent individuals WITH their complex indices
+            // Extract simplex members WITH their complex indices
             // Store as (Individual, complex_index) to track through sorting
-            let mut parents_with_indices: Vec<(Individual, usize)> = parent_indices
+            let mut simplex_with_indices: Vec<(Individual, usize)> = simplex_indices
                 .iter()
                 .map(|&idx| (complex.members[idx].clone(), idx))
                 .collect();
 
-            // Sort parents by objective (best first)
-            parents_with_indices.sort_by(|a, b| a.0.objective.partial_cmp(&b.0.objective).unwrap());
+            // Sort simplex by objective (best first)
+            simplex_with_indices.sort_by(|a, b| a.0.objective.partial_cmp(&b.0.objective).unwrap());
 
             // Extract just the individuals for algorithm logic
-            let parents: Vec<Individual> = parents_with_indices.iter().map(|(ind, _)| ind.clone()).collect();
+            let simplex: Vec<Individual> = simplex_with_indices.iter().map(|(ind, _)| ind.clone()).collect();
 
-            // Identify worst parent
-            let worst_idx_in_parents = parents.len() - 1;
-            let worst = &parents[worst_idx_in_parents];
+            // Identify worst member in simplex
+            let worst_idx_in_simplex = simplex.len() - 1;
+            let worst = &simplex[worst_idx_in_simplex];
 
-            // Compute centroid without worst parent
-            let centroid = Self::compute_centroid(&parents[..worst_idx_in_parents]);
+            // Compute centroid without worst member
+            let centroid = Self::compute_centroid(&simplex[..worst_idx_in_simplex]);
 
             // Try reflection: new = worst * (-1) + centroid * 2
             let mut proposal = self.reflect(&worst.params, &centroid.params, -1.0);
@@ -475,7 +475,7 @@ impl SceUa {
             }
 
             // Replace worst member in complex with proposal
-            let worst_idx_in_complex = parents_with_indices[worst_idx_in_parents].1;
+            let worst_idx_in_complex = simplex_with_indices[worst_idx_in_simplex].1;
             complex.members[worst_idx_in_complex] = proposal_individual;
 
             // Re-sort complex after replacement to maintain sorted order for next iteration
@@ -486,18 +486,18 @@ impl SceUa {
         evaluations
     }
 
-    /// Select parents using weighted probability (better individuals more likely)
+    /// Select simplex members
     ///
     /// Implements the trapezoidal weighting scheme from Duan et al. (1994)
     /// where probability weight[i] = i^elitism (with i from n down to 1)
-    fn select_parents_weighted(
+    fn create_simplex(
         &self,
         n_members: usize,
         n_parents: usize,
         elitism: f64,
         rng: &mut StdRng,
     ) -> Vec<usize> {
-        let mut parents = Vec::with_capacity(n_parents);
+        let mut simplex = Vec::with_capacity(n_parents);
         let mut available: Vec<usize> = (0..n_members).collect();
         let mut weights: Vec<f64> = (1..=n_members)
             .rev()
@@ -517,14 +517,14 @@ impl SceUa {
                 chosen_idx += 1;
             }
 
-            // Add selected parent
-            parents.push(available[chosen_idx]);
+            // Add selected member to simplex
+            simplex.push(available[chosen_idx]);
 
             // Remove from available pool
             available.remove(chosen_idx);
             weights.remove(chosen_idx);
         }
-        parents
+        simplex
     }
 
     /// Compute centroid of a set of individuals
