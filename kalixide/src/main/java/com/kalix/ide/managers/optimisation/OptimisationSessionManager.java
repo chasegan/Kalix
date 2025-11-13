@@ -462,11 +462,11 @@ public class OptimisationSessionManager {
      * @return The generated name
      */
     private String generateOptimisationName() {
-        String baseName = "Optimisation " + optCounter++;
+        String baseName = "Opt " + optCounter++;
 
         // Check for duplicates and adjust if needed
         while (sessionToOptName.containsValue(baseName)) {
-            baseName = "Optimisation " + optCounter++;
+            baseName = "Opt " + optCounter++;
         }
 
         return baseName;

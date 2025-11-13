@@ -33,12 +33,13 @@ public class OptimisationConfigManager {
 
     private final KalixIniTextArea configEditor;
     private final OptimisationGuiBuilder guiBuilder;
-    private final JLabel configStatusLabel;
     private final RTextScrollPane configScrollPane;
 
     private Supplier<File> workingDirectorySupplier;
     private Consumer<String> statusUpdater;
+    private Consumer<String> configStatusCallback;
     private boolean isUpdatingEditor = false;
+    private boolean isConfigModified = false;
     private String lastLoadedConfig = "";
 
     /**
@@ -66,9 +67,6 @@ public class OptimisationConfigManager {
 
         // Continue with initialization
         this.configEditor.setText("");
-
-        // Initialize status label
-        this.configStatusLabel = new JLabel(CONFIG_STATUS_ORIGINAL);
 
         // Create scroll pane
         this.configScrollPane = new RTextScrollPane(configEditor);
@@ -105,12 +103,12 @@ public class OptimisationConfigManager {
     }
 
     /**
-     * Gets the status label component.
+     * Sets the callback for config status changes.
      *
-     * @return The status label
+     * @param callback The callback to invoke when config status changes
      */
-    public JLabel getConfigStatusLabel() {
-        return configStatusLabel;
+    public void setConfigStatusCallback(Consumer<String> callback) {
+        this.configStatusCallback = callback;
     }
 
     /**
@@ -140,7 +138,10 @@ public class OptimisationConfigManager {
      */
     private void onConfigTextChanged() {
         if (!isUpdatingEditor) {
-            configStatusLabel.setText(CONFIG_STATUS_MODIFIED);
+            isConfigModified = true;
+            if (configStatusCallback != null) {
+                configStatusCallback.accept(CONFIG_STATUS_MODIFIED);
+            }
             logger.debug("Configuration marked as modified");
         }
     }
@@ -159,7 +160,10 @@ public class OptimisationConfigManager {
             configEditor.setText("");
             lastLoadedConfig = "";
         }
-        configStatusLabel.setText(CONFIG_STATUS_ORIGINAL);
+        isConfigModified = false;
+        if (configStatusCallback != null) {
+            configStatusCallback.accept(CONFIG_STATUS_ORIGINAL);
+        }
         isUpdatingEditor = false;
 
         // Update editability based on status
@@ -195,7 +199,10 @@ public class OptimisationConfigManager {
             try {
                 String content = Files.readString(selectedFile.toPath());
                 setConfiguration(content);
-                configStatusLabel.setText(CONFIG_STATUS_ORIGINAL);
+                isConfigModified = false;
+                if (configStatusCallback != null) {
+                    configStatusCallback.accept(CONFIG_STATUS_ORIGINAL);
+                }
 
                 if (statusUpdater != null) {
                     statusUpdater.accept("Configuration loaded from " + selectedFile.getName());
@@ -356,7 +363,7 @@ public class OptimisationConfigManager {
      * @return true if modified, false otherwise
      */
     public boolean isConfigModified() {
-        return CONFIG_STATUS_MODIFIED.equals(configStatusLabel.getText());
+        return isConfigModified;
     }
 
     /**

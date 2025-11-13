@@ -48,7 +48,7 @@ public class OptimisationTreeCellRenderer extends DefaultTreeCellRenderer {
 
             // Add objective value if available
             if (result.getBestObjective() != null) {
-                displayText = String.format("%s (obj: %.6f)", info.getName(), result.getBestObjective());
+                displayText = String.format("%s (%.6f)", info.getName(), result.getBestObjective());
             }
 
             // Or show progress if still running

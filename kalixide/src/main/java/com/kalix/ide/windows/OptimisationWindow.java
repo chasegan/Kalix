@@ -178,7 +178,7 @@ public class OptimisationWindow extends JFrame {
             modelTextSupplier,
             modelText -> {
                 if (parentIDE != null) {
-                    parentIDE.setModelText(modelText);
+                    parentIDE.setModelTextAndMarkDirty(modelText);
                 }
             }
         );
@@ -460,6 +460,7 @@ public class OptimisationWindow extends JFrame {
 
             // Update tree display
             treeModel.nodeChanged(currentlyDisplayedNode);
+            optTree.repaint();
         } else if (!configManager.validateConfiguration()) {
             JOptionPane.showMessageDialog(this,
                 "Invalid configuration. Please check the configuration.",

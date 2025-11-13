@@ -143,6 +143,7 @@ public class OptimisationTreeManager {
                 // Status is determined dynamically by OptimisationInfo.getStatus()
                 // Just trigger a repaint
                 treeModel.nodeChanged(node);
+                tree.repaint();
             }
         }
     }
@@ -160,6 +161,7 @@ public class OptimisationTreeManager {
             if (userObject instanceof OptimisationInfo info) {
                 info.setResult(result);
                 treeModel.nodeChanged(node);
+                tree.repaint();
             }
         }
     }
@@ -214,6 +216,7 @@ public class OptimisationTreeManager {
         DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
         if (node != null) {
             treeModel.nodeChanged(node);
+            tree.repaint();
         }
     }
 
@@ -403,6 +406,9 @@ public class OptimisationTreeManager {
         if (node != null && treeModel != null) {
             // Notify tree model of change (triggers renderer update)
             treeModel.nodeChanged(node);
+
+            // Force immediate repaint to ensure visual update
+            tree.repaint();
 
             // If this was a significant status change, expand the tree
             if (previousStatus != currentStatus &&

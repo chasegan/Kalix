@@ -12,7 +12,10 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
-import javax.swing.tree.*;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
+import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.util.function.Consumer;
@@ -110,6 +113,9 @@ public class OptimisationWindowInitializer {
             configScrollPane,
             createGenerateConfigAction()
         );
+
+        // Wire up config status callback now that the label exists
+        configManager.setConfigStatusCallback(status -> configStatusLabel.setText(status));
 
         // Tab 3: Results
         JPanel plotWithLabelsPanel = plotManager.createPlotPanelWithLabels();
@@ -251,6 +257,7 @@ public class OptimisationWindowInitializer {
                 if (renamed) {
                     optInfo.setName(newName.trim());
                     treeModel.nodeChanged(sessionManager.getTreeNode(optInfo.getSessionKey()));
+                    optTree.repaint();
                 }
             }
         });
