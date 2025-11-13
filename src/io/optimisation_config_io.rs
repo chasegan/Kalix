@@ -122,22 +122,20 @@ impl OptimisationConfigData {
 /// parsed from INI format.
 #[derive(Debug, Clone)]
 pub struct OptimisationConfig {
-    // [General] section
+    // [optimisation] section - Problem definition
     pub model_file: Option<String>,  // Optional: can be provided via inline model instead
     pub observed_data_series: String,  // Will be "file.csv.name" or "file.csv.N"
     pub simulated_series: String,
     pub objective_function: ObjectiveFunction,
     pub output_file: Option<String>,
 
-    // [Algorithm] section - Common parameters
+    // [optimisation] section - Algorithm configuration
     pub termination_evaluations: usize,  // Termination criterion: stop after approximately this many function evaluations
     pub random_seed: Option<u64>,
     pub n_threads: usize,
-
-    // [Algorithm] section - Algorithm-specific parameters
     pub algorithm: AlgorithmParams,
 
-    // [Parameters] section
+    // [parameters] section
     pub parameter_config: ParameterMappingConfig,
 }
 
@@ -158,71 +156,71 @@ impl OptimisationConfig {
 
     /// Build configuration from intermediate data (validation logic)
     fn from_data(data: OptimisationConfigData) -> Result<Self, String> {
-        // Parse [General] section
-        let model_file = data.get_property("general", "model_file").map(|s| s.to_string());
+        // Parse [optimisation] section
+        let model_file = data.get_property("optimisation", "model_file").map(|s| s.to_string());
 
         // Parse observed data series (by name or index)
-        let observed_data_series = if let Some(val) = data.get_property("general", "observed_data_by_name") {
+        let observed_data_series = if let Some(val) = data.get_property("optimisation", "observed_data_by_name") {
             val.to_string()
-        } else if let Some(val) = data.get_property("general", "observed_data_by_index") {
+        } else if let Some(val) = data.get_property("optimisation", "observed_data_by_index") {
             val.to_string()
         } else {
-            return Err("Must specify either 'observed_data_by_name' or 'observed_data_by_index' in [General] section".to_string());
+            return Err("Must specify either 'observed_data_by_name' or 'observed_data_by_index' in [optimisation] section".to_string());
         };
 
-        let simulated_series = data.require_property("general", "simulated_series")?.to_string();
+        let simulated_series = data.require_property("optimisation", "simulated_series")?.to_string();
 
-        let objective_str = data.require_property("general", "objective_function")?;
+        let objective_str = data.require_property("optimisation", "objective_function")?;
         let objective_function = Self::parse_objective_function(objective_str)?;
 
-        let output_file = data.get_property("general", "output_file")
+        let output_file = data.get_property("optimisation", "output_file")
             .map(|s| s.to_string());
 
-        // Parse [Algorithm] section - Common parameters
-        let termination_evaluations = data.require_property("algorithm", "termination_evaluations")?
+        // Algorithm configuration (same section)
+        let termination_evaluations = data.require_property("optimisation", "termination_evaluations")?
             .parse::<usize>()
             .map_err(|_| "Invalid 'termination_evaluations' value")?;
 
-        let random_seed = data.get_property("algorithm", "random_seed")
+        let random_seed = data.get_property("optimisation", "random_seed")
             .and_then(|p| p.parse::<u64>().ok());
 
-        let n_threads = data.get_property("algorithm", "n_threads")
+        let n_threads = data.get_property("optimisation", "n_threads")
             .and_then(|p| p.parse::<usize>().ok())
             .unwrap_or(1);  // Default to single-threaded
 
         // Parse algorithm-specific parameters
-        let algorithm_name = data.require_property("algorithm", "algorithm")?
+        let algorithm_name = data.require_property("optimisation", "algorithm")?
             .to_uppercase();
 
         let algorithm = match algorithm_name.as_str() {
             "DE" => {
-                let population_size = data.require_property("algorithm", "population_size")?
+                let population_size = data.require_property("optimisation", "population_size")?
                     .parse::<usize>()
                     .map_err(|_| "Invalid 'population_size' for DE")?;
 
-                let f = data.get_property("algorithm", "de_f")
+                let f = data.get_property("optimisation", "de_f")
                     .and_then(|p| p.parse::<f64>().ok())
                     .unwrap_or(0.8);
 
-                let cr = data.get_property("algorithm", "de_cr")
+                let cr = data.get_property("optimisation", "de_cr")
                     .and_then(|p| p.parse::<f64>().ok())
                     .unwrap_or(0.9);
 
                 AlgorithmParams::DE { population_size, f, cr }
             },
             "CMAES" => {
-                let population_size = data.require_property("algorithm", "population_size")?
+                let population_size = data.require_property("optimisation", "population_size")?
                     .parse::<usize>()
                     .map_err(|_| "Invalid 'population_size' for CMA-ES")?;
 
-                let sigma = data.require_property("algorithm", "sigma")?
+                let sigma = data.require_property("optimisation", "sigma")?
                     .parse::<f64>()
                     .map_err(|_| "Invalid 'sigma' for CMA-ES")?;
 
                 AlgorithmParams::CMAES { population_size, sigma }
             },
             "SCE" => {
-                let complexes = data.require_property("algorithm", "complexes")?
+                let complexes = data.require_property("optimisation", "complexes")?
                     .parse::<usize>()
                     .map_err(|_| "Invalid 'complexes' for SCE")?;
 
@@ -351,21 +349,19 @@ mod tests {
     #[test]
     fn test_parse_optimisation_config() {
         let ini_content = r#"
-[General]
+[optimisation]
 model_file = test.kai
 observed_data_by_name = obs.csv.flow
 simulated_series = node.gr4j.dsflow
 objective_function = NSE
 output_file = results.txt
-
-[Algorithm]
 algorithm = DE
 population_size = 30
 termination_evaluations = 50
 de_f = 0.8
 de_cr = 0.9
 
-[Parameters]
+[parameters]
 node.gr4j.x1 = log_range(g(1), 100, 1200)
 node.gr4j.x2 = lin_range(g(2), -5, 3)
 "#;
@@ -394,18 +390,16 @@ node.gr4j.x2 = lin_range(g(2), -5, 3)
     #[test]
     fn test_case_insensitive_parsing() {
         let ini_content = r#"
-[GENERAL]
+[OPTIMISATION]
 MODEL_FILE = Test.KAI
 observed_DATA_by_name = Obs.CSV.Flow
 Simulated_Series = node.GR4J.dsflow
 OBJECTIVE_FUNCTION = nse
-
-[algorithm]
 ALGORITHM = de
 POPULATION_SIZE = 20
 TERMINATION_EVALUATIONS = 10
 
-[parameters]
+[PARAMETERS]
 Node.GR4J.X1 = log_range(g(1), 100, 1200)
 "#;
 
