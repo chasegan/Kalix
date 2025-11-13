@@ -6,7 +6,7 @@
 use super::{
     OptimisationConfig, AlgorithmParams, Optimizer,
     DifferentialEvolution, de::DEConfig,
-    SceUa, sce_ua::SceUaConfig
+    Sce, sce::SceConfig
 };
 
 /// Error type for optimizer creation
@@ -77,14 +77,14 @@ pub fn create_optimizer_with_callback(
             Ok(Box::new(DifferentialEvolution::new(de_config)))
         }
         AlgorithmParams::SCEUA { complexes } => {
-            let sce_ua = create_sceua_optimizer_with_callback(
+            let sce = create_sce_optimizer_with_callback(
                 *complexes,
                 config.termination_evaluations,
                 config.random_seed,
                 config.n_threads,
                 progress_callback,
             );
-            Ok(Box::new(sce_ua))
+            Ok(Box::new(sce))
         }
         AlgorithmParams::CMAES { .. } => {
             Err(OptimizerFactoryError::NotImplemented("CMA-ES".to_string()))
@@ -169,9 +169,9 @@ pub fn create_de_optimizer_with_callback(
     DifferentialEvolution::new(de_config)
 }
 
-/// Create an SCE-UA optimizer
+/// Create an SCE optimizer
 ///
-/// This returns the concrete SCE-UA type.
+/// This returns the concrete SCE type.
 ///
 /// # Arguments
 /// * `complexes` - Number of complexes for parallel evolution
@@ -180,18 +180,18 @@ pub fn create_de_optimizer_with_callback(
 /// * `n_threads` - Number of threads for parallel complex evolution
 ///
 /// # Returns
-/// An SceUa optimizer (without progress callback)
+/// An Sce optimizer (without progress callback)
 ///
 /// # Note
 /// The returned optimizer has no progress callback. Use
-/// `create_sceua_optimizer_with_callback` if you need progress reporting.
-pub fn create_sceua_optimizer(
+/// `create_sce_optimizer_with_callback` if you need progress reporting.
+pub fn create_sce_optimizer(
     complexes: usize,
     termination_evaluations: usize,
     seed: Option<u64>,
     n_threads: usize,
-) -> SceUa {
-    create_sceua_optimizer_with_callback(
+) -> Sce {
+    create_sce_optimizer_with_callback(
         complexes,
         termination_evaluations,
         seed,
@@ -200,7 +200,7 @@ pub fn create_sceua_optimizer(
     )
 }
 
-/// Create an SCE-UA optimizer with a progress callback
+/// Create an SCE optimizer with a progress callback
 ///
 /// # Arguments
 /// * `complexes` - Number of complexes for parallel evolution
@@ -210,15 +210,15 @@ pub fn create_sceua_optimizer(
 /// * `progress_callback` - Optional progress callback receiving OptimizationProgress
 ///
 /// # Returns
-/// An SceUa optimizer with the callback configured
-pub fn create_sceua_optimizer_with_callback(
+/// An Sce optimizer with the callback configured
+pub fn create_sce_optimizer_with_callback(
     complexes: usize,
     termination_evaluations: usize,
     seed: Option<u64>,
     n_threads: usize,
     progress_callback: Option<Box<dyn Fn(&super::optimizer_trait::OptimizationProgress) + Send + Sync>>,
-) -> SceUa {
-    let config = SceUaConfig {
+) -> Sce {
+    let config = SceConfig {
         complexes,
         termination_evaluations,
         seed,
@@ -226,7 +226,7 @@ pub fn create_sceua_optimizer_with_callback(
         progress_callback,
     };
 
-    SceUa::new(config)
+    Sce::new(config)
 }
 
 /// Create an optimizer from configuration, matching on algorithm type
@@ -256,13 +256,13 @@ pub fn create_optimizer_instance(
             Ok(OptimizerInstance::DE(de))
         }
         AlgorithmParams::SCEUA { complexes } => {
-            let sce_ua = create_sceua_optimizer(
+            let sce = create_sce_optimizer(
                 *complexes,
                 config.termination_evaluations,
                 config.random_seed,
                 config.n_threads,
             );
-            Ok(OptimizerInstance::SCEUA(sce_ua))
+            Ok(OptimizerInstance::SCE(sce))
         }
         AlgorithmParams::CMAES { .. } => {
             Err(OptimizerFactoryError::NotImplemented("CMA-ES".to_string()))
@@ -277,7 +277,7 @@ pub fn create_optimizer_instance(
 /// algorithm-specific features (like DEProgress callbacks).
 pub enum OptimizerInstance {
     DE(DifferentialEvolution),
-    SCEUA(SceUa),
+    SCE(Sce),
     // Future: CMAES(CmaEs),
 }
 
@@ -286,7 +286,7 @@ impl OptimizerInstance {
     pub fn name(&self) -> &str {
         match self {
             OptimizerInstance::DE(_) => "DE",
-            OptimizerInstance::SCEUA(_) => "SCE-UA",
+            OptimizerInstance::SCE(_) => "SCE",
         }
     }
 }
@@ -313,8 +313,6 @@ mod tests {
                 cr: 0.9,
             },
             parameter_config: ParameterMappingConfig::new(),
-            report_frequency: 10,
-            verbose: false,
         }
     }
 

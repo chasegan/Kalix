@@ -26,7 +26,7 @@ use std::time::Instant;
 
 
 /// Configuration for SCE-UA algorithm
-pub struct SceUaConfig {
+pub struct SceConfig {
     /// Number of complexes
     pub complexes: usize,
 
@@ -81,18 +81,18 @@ impl Complex {
     }
 }
 
-/// SCE-UA optimizer
-pub struct SceUa {
-    config: SceUaConfig,
+/// SCE optimizer
+pub struct Sce {
+    config: SceConfig,
 }
 
-impl SceUa {
-    /// Create a new SCE-UA optimizer with the given configuration
-    pub fn new(config: SceUaConfig) -> Self {
+impl Sce {
+    /// Create a new SCE optimizer with the given configuration
+    pub fn new(config: SceConfig) -> Self {
         Self { config }
     }
 
-    /// Run the SCE-UA optimization algorithm
+    /// Run the SCE optimization algorithm
     pub fn optimize_detailed(
         &self,
         problem: &mut dyn Optimisable,
@@ -668,7 +668,7 @@ struct EvolutionResult {
     evaluations: usize,
 }
 
-impl Optimizer for SceUa {
+impl Optimizer for Sce {
     fn optimize(
         &self,
         problem: &mut dyn Optimisable,
@@ -679,6 +679,6 @@ impl Optimizer for SceUa {
     }
 
     fn name(&self) -> &str {
-        "SCE-UA"
+        "SCE"
     }
 }

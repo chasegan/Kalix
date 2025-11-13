@@ -1,7 +1,7 @@
 // Optimisation algorithms
 pub mod cmaes;
 pub mod de;
-pub mod sce_ua;
+pub mod sce;
 pub mod sp_uci;
 
 // Optimisation framework
@@ -21,7 +21,7 @@ pub use objectives::{ObjectiveFunction, SdebObjective};
 pub use optimisation::OptimisationProblem;
 pub use optimizer_trait::{Optimizer, OptimizationProgress, OptimizationResult};
 pub use de::{DifferentialEvolution, DEConfig, DEResult};
-pub use sce_ua::{SceUa, SceUaConfig};
+pub use sce::{Sce, SceConfig};
 pub use factory::{create_optimizer, create_optimizer_with_callback, create_de_optimizer, create_de_optimizer_with_callback, create_optimizer_instance, OptimizerInstance, OptimizerFactoryError};
 
 // Re-export IO types for convenience

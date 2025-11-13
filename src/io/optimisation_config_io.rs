@@ -33,7 +33,7 @@ pub enum AlgorithmParams {
         population_size: usize,
         sigma: f64,  // Initial step size
     },
-    /// SCE-UA algorithm
+    /// SCE algorithm
     SCEUA {
         complexes: usize,
         // Note: points_per_complex is calculated as 2*n_params + 1 (Duan et al. 1994)
@@ -46,13 +46,13 @@ impl AlgorithmParams {
         match self {
             AlgorithmParams::DE { .. } => "DE",
             AlgorithmParams::CMAES { .. } => "CMAES",
-            AlgorithmParams::SCEUA { .. } => "SCEUA",
+            AlgorithmParams::SCEUA { .. } => "SCE",
         }
     }
 
     /// Get population size (common across all algorithms)
     ///
-    /// For SCE-UA, returns number of complexes (actual population = complexes * (2*n_params + 1))
+    /// For SCE, returns number of complexes (actual population = complexes * (2*n_params + 1))
     pub fn population_size(&self) -> usize {
         match self {
             AlgorithmParams::DE { population_size, .. } => *population_size,
@@ -139,10 +139,6 @@ pub struct OptimisationConfig {
 
     // [Parameters] section
     pub parameter_config: ParameterMappingConfig,
-
-    // [Reporting] section
-    pub report_frequency: usize,
-    pub verbose: bool,
 }
 
 impl OptimisationConfig {
@@ -225,10 +221,10 @@ impl OptimisationConfig {
 
                 AlgorithmParams::CMAES { population_size, sigma }
             },
-            "SCEUA" | "SCE-UA" => {
+            "SCE" => {
                 let complexes = data.require_property("algorithm", "complexes")?
                     .parse::<usize>()
-                    .map_err(|_| "Invalid 'complexes' for SCE-UA")?;
+                    .map_err(|_| "Invalid 'complexes' for SCE")?;
 
                 // Note: points_per_complex is automatically calculated as 2*n_params + 1
                 // following Duan et al. (1994). If specified in config, it will be ignored.
@@ -236,7 +232,7 @@ impl OptimisationConfig {
                 AlgorithmParams::SCEUA { complexes }
             },
             _ => return Err(format!(
-                "Unknown algorithm: '{}'. Valid options: DE, CMAES, SCEUA",
+                "Unknown algorithm: '{}'. Valid options: DE, CMAES, SCE",
                 algorithm_name
             )),
         };
@@ -256,15 +252,6 @@ impl OptimisationConfig {
             param_strings.iter().map(|s| s.as_str()).collect()
         )?;
 
-        // Parse [Reporting] section (optional)
-        let report_frequency = data.get_property("reporting", "report_frequency")
-            .and_then(|p| p.parse::<usize>().ok())
-            .unwrap_or(10);
-
-        let verbose = data.get_property("reporting", "verbose")
-            .map(|p| p.to_lowercase() == "true")
-            .unwrap_or(false);
-
         Ok(Self {
             model_file,
             observed_data_series,
@@ -276,8 +263,6 @@ impl OptimisationConfig {
             n_threads,
             algorithm,
             parameter_config,
-            report_frequency,
-            verbose,
         })
     }
 
@@ -383,10 +368,6 @@ de_cr = 0.9
 [Parameters]
 node.gr4j.x1 = log_range(g(1), 100, 1200)
 node.gr4j.x2 = lin_range(g(2), -5, 3)
-
-[Reporting]
-report_frequency = 5
-verbose = true
 "#;
 
         let config = OptimisationConfig::from_ini(ini_content).unwrap();
@@ -399,8 +380,6 @@ verbose = true
         assert_eq!(config.algorithm.population_size(), 30);
         assert_eq!(config.termination_evaluations, 50);
         assert_eq!(config.parameter_config.n_genes(), 2);
-        assert_eq!(config.report_frequency, 5);
-        assert_eq!(config.verbose, true);
 
         // Verify algorithm-specific parameters
         match &config.algorithm {
@@ -428,9 +407,6 @@ TERMINATION_EVALUATIONS = 10
 
 [parameters]
 Node.GR4J.X1 = log_range(g(1), 100, 1200)
-
-[reporting]
-VERBOSE = TRUE
 "#;
 
         let config = OptimisationConfig::from_ini(ini_content).unwrap();
@@ -448,8 +424,6 @@ VERBOSE = TRUE
         // Algorithm is normalized to uppercase
         assert_eq!(config.algorithm.name(), "DE");
         assert_eq!(config.algorithm.population_size(), 20);
-
-        assert_eq!(config.verbose, true);
     }
 
     #[test]

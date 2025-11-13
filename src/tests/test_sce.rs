@@ -3,7 +3,7 @@
 /// This file tests individual functions of the SCE-UA implementation
 /// to verify correctness of the algorithm's building blocks.
 
-use crate::numerical::opt::sce_ua::{SceUa, Individual};
+use crate::numerical::opt::sce::{Sce, Individual};
 use crate::numerical::opt::{OptimisationProblem, ParameterMapping, ParameterMappingConfig, Transform};
 use crate::numerical::opt::objectives::{ObjectiveFunction, SdebObjective};
 use crate::numerical::opt::optimisable::Optimisable;
@@ -21,7 +21,7 @@ fn test_compute_centroid_two_individuals() {
     let ind2 = Individual::new(vec![2.0, 2.0, 2.0, 2.0]);
 
     let individuals = vec![ind1, ind2];
-    let centroid = SceUa::compute_centroid(&individuals);
+    let centroid = Sce::compute_centroid(&individuals);
 
     // Check each parameter value
     assert_eq!(centroid.params.len(), 4);
@@ -44,7 +44,7 @@ fn test_compute_centroid_three_individuals() {
     let ind3 = Individual::new(vec![0.0, 3.0]);
 
     let individuals = vec![ind1, ind2, ind3];
-    let centroid = SceUa::compute_centroid(&individuals);
+    let centroid = Sce::compute_centroid(&individuals);
 
     assert_eq!(centroid.params.len(), 2);
     assert!((centroid.params[0] - 1.0).abs() < 1e-10);
@@ -59,7 +59,7 @@ fn test_compute_centroid_single_dimension() {
     let ind3 = Individual::new(vec![3.0]);
 
     let individuals = vec![ind1, ind2, ind3];
-    let centroid = SceUa::compute_centroid(&individuals);
+    let centroid = Sce::compute_centroid(&individuals);
 
     assert_eq!(centroid.params.len(), 1);
     assert!((centroid.params[0] - 3.0).abs() < 1e-10);

@@ -57,6 +57,12 @@ enum Commands {
         /// Path to save the optimised model file (.ini)
         #[arg(short = 's', long = "save-model")]
         save_model: Option<String>,
+        /// Suppress terminal output and plotting
+        #[arg(short = 'q', long = "quiet")]
+        quiet: bool,
+        /// Report frequency (plot updates every N evaluations)
+        #[arg(short = 'r', long = "report-frequency", default_value = "20")]
+        report_frequency: usize,
     },
 }
 
@@ -179,7 +185,7 @@ fn main() {
 
             println!("Done!");
         }
-        Commands::Optimise { config_file, model_file, save_model } => {
+        Commands::Optimise { config_file, model_file, save_model, quiet, report_frequency } => {
             use kalix::numerical::opt::{
                 OptimisationConfig, OptimisationProblem,
                 create_optimizer_with_callback, OptimizationProgress, Optimisable
@@ -198,7 +204,7 @@ fn main() {
                 }
             };
 
-            if config.verbose {
+            if !quiet {
                 println!("Objective function: {:?}", config.objective_function);
                 println!("Algorithm: {}", config.algorithm.name());
                 println!("Population size: {}", config.algorithm.population_size());
@@ -237,7 +243,7 @@ fn main() {
                 }
             };
 
-            if config.verbose {
+            if !quiet {
                 println!("Observed data points: {}", observed_timeseries.timeseries.len());
             }
 
@@ -263,10 +269,10 @@ fn main() {
 
             // Create progress callback for terminal plot
             use std::sync::atomic::{AtomicUsize, Ordering};
-            let report_freq = config.report_frequency;
+            let report_freq = report_frequency;
             let plot_clone = Arc::clone(&opt_plot);
             let last_report_eval = Arc::new(AtomicUsize::new(0));
-            let progress_callback = if config.verbose {
+            let progress_callback = if !quiet {
                 Some(Box::new(move |progress: &OptimizationProgress| {
                     // Report every N evaluations (since OptimizationProgress doesn't have generation)
                     let last = last_report_eval.load(Ordering::Relaxed);
@@ -296,8 +302,8 @@ fn main() {
             let mut problem_mut = problem;  // Make mutable for optimisation
             let result = optimizer.optimize(&mut problem_mut, None);
 
-            // Render final plot if verbose mode is enabled
-            if config.verbose {
+            // Render final plot
+            if !quiet {
                 let mut plot = opt_plot.lock().unwrap();
                 plot.render_final(result.best_objective, result.n_evaluations, result.elapsed);
                 print!("{}", plot.render());
