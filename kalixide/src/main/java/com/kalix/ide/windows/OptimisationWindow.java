@@ -259,6 +259,12 @@ public class OptimisationWindow extends JFrame {
             if (evaluationProgressLabel != null) {
                 evaluationProgressLabel.setText("Evaluations: —");
             }
+            if (startTimeLabel != null) {
+                startTimeLabel.setText("Start: —");
+            }
+            if (elapsedTimeLabel != null) {
+                elapsedTimeLabel.setText("Elapsed: —");
+            }
         }
 
         // Update progress manager

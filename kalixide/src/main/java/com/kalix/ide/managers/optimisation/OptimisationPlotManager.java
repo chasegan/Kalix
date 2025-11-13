@@ -200,7 +200,7 @@ public class OptimisationPlotManager {
      */
     public void clearPlot() {
         convergenceDataSet.removeAllSeries();
-        convergencePlot.repaint();
+        convergencePlot.refreshData(true);
         logger.debug("Cleared convergence plot");
     }
 
