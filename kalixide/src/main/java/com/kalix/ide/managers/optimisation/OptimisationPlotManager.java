@@ -281,7 +281,7 @@ public class OptimisationPlotManager {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
 
         // Add title
-        JLabel titleLabel = new JLabel("Convergence History", JLabel.CENTER);
+        JLabel titleLabel = new JLabel("Objective function convergence", JLabel.CENTER);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
         panel.add(titleLabel, BorderLayout.NORTH);
 

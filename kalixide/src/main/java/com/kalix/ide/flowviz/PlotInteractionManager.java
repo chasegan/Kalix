@@ -50,6 +50,7 @@ public class PlotInteractionManager {
     private boolean autoYMode = false;
     private JPopupMenu contextMenu;
     private JCheckBoxMenuItem autoYMenuItem;
+    private JMenu yAxisScaleMenu;
 
     // Data access callbacks
     private Supplier<DataSet> dataSetSupplier;
@@ -551,11 +552,29 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
+        // Y-Axis Scale submenu
+        yAxisScaleMenu = new JMenu("Y-Axis Scale");
+        ButtonGroup yAxisScaleGroup = new ButtonGroup();
+
+        for (YAxisScale scale : YAxisScale.values()) {
+            JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
+            scaleItem.addActionListener(e -> {
+                if (parentComponent instanceof PlotPanel) {
+                    ((PlotPanel) parentComponent).setYAxisScale(scale);
+                }
+            });
+            yAxisScaleGroup.add(scaleItem);
+            yAxisScaleMenu.add(scaleItem);
+        }
+        contextMenu.add(yAxisScaleMenu);
+
+        contextMenu.addSeparator();
+
         JMenuItem saveDataItem = new JMenuItem("Save Data...");
         saveDataItem.addActionListener(e -> saveData());
         contextMenu.add(saveDataItem);
 
-        // Add popup menu listener to update checkbox state when menu is shown
+        // Add popup menu listener to update checkbox/radio button states when menu is shown
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
@@ -563,6 +582,15 @@ public class PlotInteractionManager {
                 if (parentComponent instanceof PlotPanel plotPanel) {
                     // Get the current auto-Y state from the PlotPanel
                     autoYMenuItem.setSelected(plotPanel.isAutoYMode());
+
+                    // Get the current Y-axis scale and select the corresponding radio button
+                    YAxisScale currentScale = plotPanel.getYAxisScale();
+                    for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
+                        JMenuItem item = yAxisScaleMenu.getItem(i);
+                        if (item instanceof JRadioButtonMenuItem radioItem) {
+                            radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
+                        }
+                    }
                 }
             }
 

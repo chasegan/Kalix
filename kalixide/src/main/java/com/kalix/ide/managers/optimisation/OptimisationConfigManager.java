@@ -337,13 +337,13 @@ public class OptimisationConfigManager {
             return false;
         }
 
-        // Check for required sections - these are the actual config sections
-        boolean hasGeneral = config.contains("[General]");
-        boolean hasAlgorithm = config.contains("[Algorithm]");
-        boolean hasParameters = config.contains("[Parameters]");
+        // Check for required sections - case-insensitive since backend accepts both
+        String configLower = config.toLowerCase();
+        boolean hasOptimisation = configLower.contains("[optimisation]");
+        boolean hasParameters = configLower.contains("[parameters]");
 
-        if (!hasGeneral || !hasAlgorithm || !hasParameters) {
-            logger.warn("Configuration missing required sections [General], [Algorithm], or [Parameters]");
+        if (!hasOptimisation || !hasParameters) {
+            logger.warn("Configuration missing required sections [optimisation] or [parameters]");
             return false;
         }
 

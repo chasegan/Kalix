@@ -206,6 +206,7 @@ public class OptimisationWindow extends JFrame {
     private void setupManagerCallbacks() {
         windowInitializer.setupManagerCallbacks(
             this,
+            stdioTaskManager,
             statusUpdater,
             () -> rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE),
             this::displayOptimisation,

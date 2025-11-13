@@ -97,7 +97,7 @@ public class ObjectiveConfigPanel extends JPanel {
         String[] objectiveFunctions = {"SDEB", "PEARS_R", "NSE", "LNSE", "RMSE", "MAE", "KGE", "PBIAS"};
         objectiveFunctionCombo = new JComboBox<>(objectiveFunctions);
         objectiveFunctionCombo.setEditable(true);
-        objectiveFunctionCombo.setSelectedItem("NSE"); // Default to NSE
+        objectiveFunctionCombo.setSelectedItem("SDEB"); // Default to SDEB
         formPanel.add(objectiveFunctionCombo, gbc);
 
         add(formPanel, BorderLayout.NORTH);

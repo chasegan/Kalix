@@ -7,6 +7,7 @@ import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import com.kalix.ide.windows.MinimalEditorWindow;
+import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
@@ -30,6 +31,8 @@ public class OptimisationWindowInitializer {
     private final OptimisationSessionManager sessionManager;
     private final OptimisationPanelBuilder panelBuilder;
     private final OptimisationEventHandlers eventHandlers;
+
+    private com.kalix.ide.managers.StdioTaskManager stdioTaskManager;
 
     // Component references that need to be accessed
     private JTree optTree;
@@ -148,6 +151,7 @@ public class OptimisationWindowInitializer {
      */
     public void setupManagerCallbacks(
             JFrame parentFrame,
+            com.kalix.ide.managers.StdioTaskManager stdioTaskManager,
             Consumer<String> statusUpdater,
             Runnable displayMessagePanel,
             Consumer<OptimisationInfo> displayOptimisation,
@@ -155,6 +159,9 @@ public class OptimisationWindowInitializer {
             Consumer<String> updateTreeNode,
             Consumer<String> updateDetailsIfSelected,
             Consumer<String> updateConvergencePlot) {
+
+        // Store stdioTaskManager for use in action callbacks
+        this.stdioTaskManager = stdioTaskManager;
 
         // Session manager callbacks
         sessionManager.setOnOptimisationCreated(optInfo -> {
@@ -271,6 +278,11 @@ public class OptimisationWindowInitializer {
         treeManager.setStopOptimisationAction(optInfo -> {
             sessionManager.stopOptimisation(optInfo.getSessionKey());
             statusUpdater.accept("Stopped: " + optInfo.getName());
+        });
+
+        treeManager.setViewInSessionManagerAction(optInfo -> {
+            String sessionKey = optInfo.getSession().getSessionKey();
+            SessionManagerWindow.showSessionManagerWindow(parentFrame, this.stdioTaskManager, statusUpdater, sessionKey);
         });
     }
 

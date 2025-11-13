@@ -57,6 +57,7 @@ public class AlgorithmConfigPanel extends JPanel {
         leftGbc.weightx = 1.0;
         leftGbc.fill = GridBagConstraints.HORIZONTAL;
         algorithmCombo = new JComboBox<>(new String[]{"DE", "SCE"});
+        algorithmCombo.setSelectedItem("SCE"); // Default to SCE
         algorithmCombo.addActionListener(e -> updateAlgorithmSpecificParams());
         leftPanel.add(algorithmCombo, leftGbc);
 
@@ -83,7 +84,7 @@ public class AlgorithmConfigPanel extends JPanel {
         leftGbc.gridx = 1;
         leftGbc.weightx = 1.0;
         leftGbc.fill = GridBagConstraints.HORIZONTAL;
-        threadsField = new JTextField("4");
+        threadsField = new JTextField("12");
         leftPanel.add(threadsField, leftGbc);
 
         // Random Seed

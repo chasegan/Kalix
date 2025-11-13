@@ -95,8 +95,8 @@ public class OptimisationGuiBuilder extends JPanel {
     public String generateConfigText() {
         StringBuilder sb = new StringBuilder();
 
-        // [General] section (kalixcli format)
-        sb.append("[General]\n");
+        // [optimisation] section (merged General + Algorithm sections)
+        sb.append("[optimisation]\n");
 
         // Determine observed_data_by_index vs observed_data_by_name
         String observedDataFile = objectivePanel.getObservedDataFile();
@@ -123,10 +123,8 @@ public class OptimisationGuiBuilder extends JPanel {
 
         sb.append("simulated_series = ").append(objectivePanel.getSimulatedSeries()).append("\n");
         sb.append("objective_function = ").append(objectivePanel.getObjectiveFunction()).append("\n");
-        sb.append("\n");
 
-        // [Algorithm] section
-        sb.append("[Algorithm]\n");
+        // Algorithm settings (now in same section)
         sb.append("algorithm = ").append(algorithmPanel.getAlgorithm()).append("\n");
 
         // Add algorithm-specific parameters first (like population_size)
@@ -147,7 +145,7 @@ public class OptimisationGuiBuilder extends JPanel {
 
         sb.append("\n");
 
-        // [Parameters] section - generate expressions for parameters
+        // [parameters] section - generate expressions for parameters
         Map<String, String> optimizationParams = parametersPanel.getOptimizationParameters();
 
         // If some parameters don't have expressions, try to auto-generate them
@@ -191,7 +189,7 @@ public class OptimisationGuiBuilder extends JPanel {
         }
 
         if (!finalParams.isEmpty()) {
-            sb.append("[Parameters]\n");
+            sb.append("[parameters]\n");
             for (Map.Entry<String, String> entry : finalParams.entrySet()) {
                 sb.append(entry.getKey()).append(" = ").append(entry.getValue()).append("\n");
             }

@@ -37,6 +37,7 @@ public class OptimisationTreeManager {
     private Consumer<OptimisationInfo> compareModelAction;
     private Consumer<OptimisationInfo> saveResultsAction;
     private Consumer<OptimisationInfo> stopOptimisationAction;
+    private Consumer<OptimisationInfo> viewInSessionManagerAction;
     private Consumer<OptimisationInfo> renameAction;
     private Consumer<OptimisationInfo> removeAction;
 
@@ -229,6 +230,28 @@ public class OptimisationTreeManager {
     public void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
+        // Rename
+        JMenuItem renameItem = new JMenuItem("Rename");
+        renameItem.addActionListener(e -> {
+            OptimisationInfo info = getSelectedOptimisation();
+            if (info != null && renameAction != null) {
+                renameAction.accept(info);
+            }
+        });
+        contextMenu.add(renameItem);
+
+        // Remove
+        JMenuItem removeItem = new JMenuItem("Remove");
+        removeItem.addActionListener(e -> {
+            OptimisationInfo info = getSelectedOptimisation();
+            if (info != null && removeAction != null) {
+                removeAction.accept(info);
+            }
+        });
+        contextMenu.add(removeItem);
+
+        contextMenu.addSeparator();
+
         // Show Model
         JMenuItem showModelItem = new JMenuItem("Show Model");
         showModelItem.addActionListener(e -> {
@@ -285,25 +308,15 @@ public class OptimisationTreeManager {
 
         contextMenu.addSeparator();
 
-        // Rename
-        JMenuItem renameItem = new JMenuItem("Rename");
-        renameItem.addActionListener(e -> {
+        // View in KalixCLI Session Manager
+        JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
+        sessionManagerItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
-            if (info != null && renameAction != null) {
-                renameAction.accept(info);
+            if (info != null && viewInSessionManagerAction != null) {
+                viewInSessionManagerAction.accept(info);
             }
         });
-        contextMenu.add(renameItem);
-
-        // Remove
-        JMenuItem removeItem = new JMenuItem("Remove");
-        removeItem.addActionListener(e -> {
-            OptimisationInfo info = getSelectedOptimisation();
-            if (info != null && removeAction != null) {
-                removeAction.accept(info);
-            }
-        });
-        contextMenu.add(removeItem);
+        contextMenu.add(sessionManagerItem);
 
         // Add mouse listener for right-click
         tree.addMouseListener(new MouseAdapter() {
@@ -362,6 +375,10 @@ public class OptimisationTreeManager {
 
     public void setStopOptimisationAction(Consumer<OptimisationInfo> action) {
         this.stopOptimisationAction = action;
+    }
+
+    public void setViewInSessionManagerAction(Consumer<OptimisationInfo> action) {
+        this.viewInSessionManagerAction = action;
     }
 
     public void setRenameAction(Consumer<OptimisationInfo> action) {
