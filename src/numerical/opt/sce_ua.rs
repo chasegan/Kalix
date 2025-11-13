@@ -22,31 +22,7 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::fmt::format;
-use std::io::stdout;
-use std::time::{Duration, Instant};
-
-use std::fs;
-use std::path::Path;
-use std::fs::File;
-use std::io::Write;
-
-fn count_files_matching_pattern(directory: &Path, pattern: &str) -> usize {
-    let mut count = 0;
-    if let Ok(entries) = fs::read_dir(directory) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let file_name = entry.file_name();
-                if let Some(name_str) = file_name.to_str() {
-                    if name_str.contains(pattern) {
-                        count += 1;
-                    }
-                }
-            }
-        }
-    }
-    count
-}
+use std::time::Instant;
 
 
 /// Configuration for SCE-UA algorithm
@@ -160,20 +136,6 @@ impl SceUa {
         // Sort population by objective (best first)
         population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
 
-        // DEBUG: Log initial population to file
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut file = File::create("debug_ipop.txt").expect("Failed to create debug file");
-            for individual in &population {
-                write!(file, "{}", individual.objective).expect("Failed to write objective");
-                for param in &individual.params {
-                    write!(file, ",{}", param).expect("Failed to write parameter");
-                }
-                writeln!(file).expect("Failed to write newline");
-            }
-        }
-
         // Track best solution
         let mut best_params = population[0].params.clone();
         let mut best_objective = population[0].objective;
@@ -227,20 +189,6 @@ impl SceUa {
             // Step 5: Combine and sort all individuals
             population = self.combine_complexes(&complexes);
             population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
-
-            // DEBUG: Log population to file
-            {
-                use std::fs::File;
-                use std::io::Write;
-                let mut file = File::create(format!("debug_pop_{}.txt", shuffle_count)).expect("Failed to create debug file");
-                for individual in &population {
-                    write!(file, "{}", individual.objective).expect("Failed to write objective");
-                    for param in &individual.params {
-                        write!(file, ",{}", param).expect("Failed to write parameter");
-                    }
-                    writeln!(file).expect("Failed to write newline");
-                }
-            }
 
             // Update best solution
             if population[0].objective < best_objective {
@@ -480,49 +428,19 @@ impl SceUa {
             // Extract just the individuals for algorithm logic
             let parents: Vec<Individual> = parents_with_indices.iter().map(|(ind, _)| ind.clone()).collect();
 
-            //DEBUG
-            fn individual_to_string(individual: &Individual) -> String {
-                let mut s = String::new();
-                s.push_str(format!("{}",individual.objective).as_str());
-                for param in &individual.params {
-                    s.push_str(format!(",{}",param).as_str());
-                }
-                s.push_str("\n");
-                return s;
-            }
-            let mut debug_message = String::new();
-            debug_message.push_str("Parents:\n");
-            for parent in &parents {
-                debug_message.push_str(individual_to_string(parent).as_str());
-            }
-
             // Identify worst parent
             let worst_idx_in_parents = parents.len() - 1;
             let worst = &parents[worst_idx_in_parents];
 
-            //DEBUG
-            debug_message.push_str(format!("Worst:\n{}", individual_to_string(worst)).as_str());
-
             // Compute centroid without worst parent
             let centroid = Self::compute_centroid(&parents[..worst_idx_in_parents]);
-
-            //DEBUG
-            debug_message.push_str(format!("Centroid:\n{}", individual_to_string(&centroid)).as_str());
 
             // Try reflection: new = worst * (-1) + centroid * 2
             let mut proposal = self.reflect(&worst.params, &centroid.params, -1.0);
 
-            //DEBUG
-            debug_message.push_str(format!("Reflection proposal:\n{}",
-                                           individual_to_string(&Individual::new(proposal.clone()))).as_str());
-
             // If reflection is out of bounds, generate random individual
             if !self.is_valid(&proposal) {
                 proposal = self.random_individual(n_params, rng);
-
-                //DEBUG
-                debug_message.push_str(format!("Reflection was out of bounds. Here is a random:\n{}",
-                                               individual_to_string(&Individual::new(proposal.clone()))).as_str());
             }
 
             // Evaluate proposal
@@ -530,10 +448,6 @@ impl SceUa {
             if let Ok(obj) = self.evaluate_individual(problem, &proposal) {
                 proposal_individual.objective = obj;
                 evaluations += 1;
-
-                //DEBUG
-                debug_message.push_str(format!("After evaluation:\n{}",
-                                               individual_to_string(&proposal_individual)).as_str());
             }
 
             // If proposal is worse than worst, try contraction
@@ -542,22 +456,10 @@ impl SceUa {
                 if let Ok(obj) = self.evaluate_individual(problem, &contracted) {
                     evaluations += 1;
 
-                    //DEBUG
-                    let mut contracted_individual = Individual::new(contracted.clone());
-                    contracted_individual.objective = obj;
-                    debug_message.push_str(format!("Proposal was worse than worst. Try contraction:\n{}",
-                                                   individual_to_string(&contracted_individual)).as_str());
-
                     // Use contraction if it's better
                     if obj < proposal_individual.objective {
                         proposal_individual = Individual::new(contracted);
                         proposal_individual.objective = obj;
-
-                        //DEBUG
-                        debug_message.push_str("Contraction better than proposal. Contraction accepted.\n");
-                    } else {
-                        //DEBUG
-                        debug_message.push_str("Contraction worse than proposal. Contraction rejected.\n");
                     }
                 }
 
@@ -572,28 +474,7 @@ impl SceUa {
                 }
             }
 
-            //DEBUG
-            debug_message.push_str(format!("Accepted:\n{}",
-                                           individual_to_string(&proposal_individual)).as_str());
-
-            // DEBUG: Log initial population to file
-            {
-                let dir = Path::new("."); // Current directory
-                let keyfile_pattern = "debug_pop_70.txt";
-                if count_files_matching_pattern(dir, keyfile_pattern) > 0 {
-                    let txt_pattern = "txt"; // Files containing "txt" in their name
-                    let num_txt_files = count_files_matching_pattern(dir, txt_pattern);
-                    if num_txt_files < 100 {
-                        let mut file = File::create(format!("debug_cce_{}.txt", num_txt_files)).expect("Failed to create debug file");
-                        write!(file, "{}", debug_message).expect("Failed to write objective");
-                    }
-                }
-            }
-
             // Replace worst member in complex with proposal
-            // Always replace - this is the SCE-UA algorithm design
-            // Even if proposal is worse, it maintains population diversity
-            // Use the tracked complex index from the sorted parents_with_indices
             let worst_idx_in_complex = parents_with_indices[worst_idx_in_parents].1;
             complex.members[worst_idx_in_complex] = proposal_individual;
 
@@ -643,7 +524,6 @@ impl SceUa {
             available.remove(chosen_idx);
             weights.remove(chosen_idx);
         }
-
         parents
     }
 
