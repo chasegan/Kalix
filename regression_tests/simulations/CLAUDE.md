@@ -13,4 +13,12 @@ You can also output a mass balance report like this:
 The mass balance report is great for verifying that the simulation hasn't changed (e.g. for new kalix software version or when the user makes a non-functional change in the model file). If a previous mass balance report is available as "previous_mbal.txt" then you can run the model and do the verification in one step like this:
 > kalixcli simulate my_model.ini -v my_previous_mbal.txt
 
-If I ask you to do things with the csv files, you may use the python instance which is available in this environment.
+If you need to know more about the Kalix CLI commands, you can use the help system (built using clap).
+> kalixcli --help
+
+About the CSV files:
+- If I ask you to do things with the csv files, you may use the python instance which is available in this environment. 
+- CSV files should generally have dates (in "yyyy-mm-dd" format) in the first column and then values in subsequent columns.
+- Entries should be sequential and at equally-spaced timestamps.
+- The top row should contain column headers.
+- Missing data is represented as empty values in the CSV files, and often represented by NAN once loaded into memory.
