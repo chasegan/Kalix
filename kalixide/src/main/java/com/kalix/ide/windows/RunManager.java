@@ -814,30 +814,6 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Restores timeseries tree selection by searching for matching series keys.
-     * Gracefully skips series that no longer exist in the rebuilt tree.
-     *
-     * @param selectedTimeseriesKeys Set of series keys to restore (format: "seriesName [RunName]")
-     * @return Number of series successfully restored
-     */
-    private int restoreTimeseriesTreeSelection(Set<String> selectedTimeseriesKeys) {
-        List<TreePath> pathsToSelect = new ArrayList<>();
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-
-        // Recursively search tree for matching series keys
-        searchAndCollectPaths(root, selectedTimeseriesKeys, pathsToSelect);
-
-        if (!pathsToSelect.isEmpty()) {
-            // Restore selection without triggering events
-            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
-            timeseriesTree.setSelectionPaths(pathsArray);
-            return pathsToSelect.size();
-        } else {
-            return 0;
-        }
-    }
-
-    /**
      * Recursively searches tree nodes for matching series keys and collects their paths.
      */
     private void searchAndCollectPaths(DefaultMutableTreeNode node, Set<String> targetKeys, List<TreePath> results) {
@@ -1108,11 +1084,14 @@ public class RunManager extends JFrame {
             return;
         }
 
-        TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-
         // Block timeseries tree selection events during rebuild and restoration
         isUpdatingSelection = true;
         updateOutputsTree();
+
+        // Restore visual selection to match what's currently plotted
+        Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+        reconcileSelectedSeriesWithTree(restoredSeries);
+
         isUpdatingSelection = false;
     }
 
@@ -1401,95 +1380,6 @@ public class RunManager extends JFrame {
      */
     private void collectLeafNodes(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
         outputsTreeBuilder.collectLeafNodes(node, leaves);
-    }
-
-    /**
-     * Get the full series name for a tree node by walking up the path
-     */
-    private String getFullSeriesName(DefaultMutableTreeNode node) {
-        if (node == null) return null;
-
-        List<String> pathParts = new ArrayList<>();
-        TreeNode currentNode = node;
-
-        while (currentNode != null && currentNode.getParent() != null) {
-            if (currentNode instanceof DefaultMutableTreeNode) {
-                String part = ((DefaultMutableTreeNode) currentNode).getUserObject().toString();
-                pathParts.add(0, part); // Add to beginning to build path from root to leaf
-            }
-            currentNode = currentNode.getParent();
-        }
-
-        return pathParts.isEmpty() ? null : String.join(".", pathParts);
-    }
-
-    /**
-     * Check if a node represents a special message (like "No outputs available")
-     * Delegates to OutputsTreeBuilder.
-     */
-    private boolean isSpecialMessageNode(DefaultMutableTreeNode node) {
-        return OutputsTreeBuilder.isSpecialMessageNode(node);
-    }
-
-    /**
-     * Get the currently selected run information
-     */
-    private RunInfoImpl getSelectedRunInfo() {
-        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
-        if (selectedPath == null) {
-            return null;
-        }
-
-        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        Object userObject = selectedNode.getUserObject();
-
-        if (userObject instanceof RunInfoImpl) {
-            return (RunInfoImpl) userObject;
-        }
-
-        return null;
-    }
-
-
-    /**
-     * Finds an equivalent path in the current tree based on node names.
-     */
-    private TreePath findEquivalentPath(TreePath oldPath) {
-        if (oldPath == null || oldPath.getPathCount() <= 1) {
-            return null;
-        }
-
-        // Build path of node names
-        String[] pathNames = new String[oldPath.getPathCount() - 1]; // Skip root
-        for (int i = 1; i < oldPath.getPathCount(); i++) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) oldPath.getPathComponent(i);
-            pathNames[i - 1] = node.getUserObject().toString();
-        }
-
-        // Try to find equivalent path in current tree
-        DefaultMutableTreeNode currentNode = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-        List<Object> newPathComponents = new ArrayList<>();
-        newPathComponents.add(currentNode);
-
-        for (String pathName : pathNames) {
-            DefaultMutableTreeNode foundChild = null;
-            for (int i = 0; i < currentNode.getChildCount(); i++) {
-                DefaultMutableTreeNode child = (DefaultMutableTreeNode) currentNode.getChildAt(i);
-                if (child.getUserObject().toString().equals(pathName)) {
-                    foundChild = child;
-                    break;
-                }
-            }
-
-            if (foundChild == null) {
-                return null; // Path doesn't exist in new tree
-            }
-
-            newPathComponents.add(foundChild);
-            currentNode = foundChild;
-        }
-
-        return new TreePath(newPathComponents.toArray());
     }
 
     /**
