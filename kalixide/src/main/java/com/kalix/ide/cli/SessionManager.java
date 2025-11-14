@@ -241,41 +241,6 @@ public class SessionManager {
         }, processExecutor.getExecutorService());
     }
     
-    
-    /**
-     * Requests results from a ready session.
-     * 
-     * @param sessionKey the session to request results from
-     * @param resultType the type of results to request
-     * @return CompletableFuture with the results
-     */
-    public CompletableFuture<String> requestResults(String sessionKey, String resultType) {
-        return CompletableFuture.supplyAsync(() -> {
-            KalixSession session = activeSessions.get(sessionKey);
-            if (session == null) {
-                throw new IllegalArgumentException("Session not found: " + sessionKey);
-            }
-            
-            if (!session.isReady()) {
-                throw new IllegalStateException("Session not ready for queries: " + sessionKey + " (state: " + session.getState() + ")");
-            }
-            
-            try {
-                String command = KalixStdioProtocol.formatResultRequest(resultType, null);
-                session.getProcess().sendCommand(command);
-                
-                // Wait for response (this is a simplified implementation)
-                // In practice, you might want more sophisticated result parsing
-                Optional<String> response = session.getProcess().readOutputLine();
-                return response.orElse("");
-                
-            } catch (IOException e) {
-                session.setState(SessionState.ERROR, "Failed to request results: " + e.getMessage());
-                throw new RuntimeException("Failed to request results from session " + sessionKey, e);
-            }
-        });
-    }
-    
     /**
      * Terminates a session gracefully.
      * 
@@ -421,8 +386,7 @@ public class SessionManager {
         // Check for JSON protocol messages
         if (JsonStdioProtocol.looksLikeCompactJson(line)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(line);
-            if (jsonMsg.isPresent())
-                handleJsonProtocolMessage(session, jsonMsg.get(), config);
+            jsonMsg.ifPresent(systemMessage -> handleJsonProtocolMessage(session, systemMessage, config));
         }
     }
     
@@ -447,9 +411,7 @@ public class SessionManager {
         // Check for JSON protocol messages on stderr (some CLIs send protocol info there)
         if (JsonStdioProtocol.looksLikeCompactJson(errorLine)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
-            if (jsonMsg.isPresent()) {
-                handleJsonProtocolMessage(session, jsonMsg.get(), config);
-            }
+            jsonMsg.ifPresent(systemMessage -> handleJsonProtocolMessage(session, systemMessage, config));
         }
     }
     

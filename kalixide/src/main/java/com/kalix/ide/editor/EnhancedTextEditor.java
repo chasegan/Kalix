@@ -17,6 +17,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
+import com.kalix.ide.linter.factories.LinterComponentFactory;
 import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -162,7 +163,7 @@ public class EnhancedTextEditor extends JPanel {
         if (linterManager != null) {
             linterManager.dispose();
         }
-        linterManager = new LinterManager(textArea, schemaManager);
+        linterManager = LinterComponentFactory.createLinterManager(textArea, schemaManager);
     }
     
     private void setupKeyBindings() {
@@ -326,7 +327,6 @@ public class EnhancedTextEditor extends JPanel {
             }
 
             // Now toggle comments on all lines
-            StringBuilder newText = new StringBuilder();
             int newSelectionStart = selectionStart;
             int newSelectionEnd = selectionEnd;
             int offsetDelta = 0;
@@ -414,10 +414,6 @@ public class EnhancedTextEditor extends JPanel {
             // Replace all \r\n with \n, then remove any remaining \r
             String normalizedText = currentText.replace("\r\n", "\n").replace("\r", "\n");
 
-            // Count changes for user feedback
-            int crlfCount = currentText.split("\r\n", -1).length - 1;
-            int crCount = currentText.replace("\r\n", "").split("\r", -1).length - 1;
-
             // Update text
             int caretPosition = textArea.getCaretPosition();
             programmaticUpdate = true;
@@ -464,11 +460,6 @@ public class EnhancedTextEditor extends JPanel {
         textArea.paste();
     }
     
-    public void selectAll() {
-        textArea.selectAll();
-    }
-    
-    
     // Dirty state management
     public boolean isDirty() {
         return isDirty;
@@ -509,13 +500,6 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     /**
-     * Remove an external document listener.
-     */
-    public void removeDocumentListener(DocumentListener listener) {
-        externalDocumentListeners.remove(listener);
-    }
-    
-    /**
      * Notify external document listeners of changes.
      */
     private void notifyExternalListeners(java.util.function.BiConsumer<DocumentListener, DocumentEvent> method, DocumentEvent e) {
@@ -528,16 +512,8 @@ public class EnhancedTextEditor extends JPanel {
         }
     }
     
-    public TextNavigationManager getNavigationManager() {
-        return navigationManager;
-    }
-    
     public TextSearchManager getSearchManager() {
         return searchManager;
-    }
-    
-    public FileDropManager getDropManager() {
-        return dropManager;
     }
     
     /**
@@ -619,42 +595,6 @@ public class EnhancedTextEditor extends JPanel {
     public void setLinterBaseDirectorySupplier(java.util.function.Supplier<java.io.File> baseDirectorySupplier) {
         if (linterManager != null) {
             linterManager.setBaseDirectorySupplier(baseDirectorySupplier);
-        }
-    }
-
-    /**
-     * Navigate to the next validation error.
-     */
-    public void goToNextError() {
-        if (linterManager != null) {
-            linterManager.goToNextError();
-        }
-    }
-
-    /**
-     * Navigate to the previous validation error.
-     */
-    public void goToPreviousError() {
-        if (linterManager != null) {
-            linterManager.goToPreviousError();
-        }
-    }
-
-    /**
-     * Manually trigger validation.
-     */
-    public void validateNow() {
-        if (linterManager != null) {
-            linterManager.validateNow();
-        }
-    }
-
-    /**
-     * Enable or disable linting for this editor.
-     */
-    public void setLintingEnabled(boolean enabled) {
-        if (linterManager != null) {
-            linterManager.setValidationEnabled(enabled);
         }
     }
 

@@ -314,31 +314,4 @@ public class FlowVizMenuManager {
         item.addActionListener(listener);
         return item;
     }
-
-    /**
-     * Gets the coordinate display toggle menu item for external state management.
-     *
-     * @return The coordinate toggle menu item
-     */
-    public JCheckBoxMenuItem getCoordinateToggle() {
-        return coordinateToggle;
-    }
-
-    /**
-     * Gets the data panel toggle menu item for external state management.
-     *
-     * @return The data toggle menu item
-     */
-    public JCheckBoxMenuItem getDataToggle() {
-        return dataToggle;
-    }
-
-    /**
-     * Gets the Auto-Y mode toggle menu item for external state management.
-     *
-     * @return The Auto-Y toggle menu item
-     */
-    public JCheckBoxMenuItem getAutoYToggle() {
-        return autoYToggle;
-    }
 }

@@ -355,43 +355,6 @@ public class MinimalEditorWindow extends JFrame {
     }
 
     /**
-     * Gets the text content from the editor.
-     *
-     * @return The current text content
-     */
-    public String getText() {
-        return textArea.getText();
-    }
-
-    /**
-     * Sets the text content in the editor.
-     *
-     * @param text The text to set
-     */
-    public void setText(String text) {
-        textArea.setText(text);
-        textArea.setCaretPosition(0); // Scroll to top
-    }
-
-    /**
-     * Gets the current file being edited.
-     *
-     * @return The current file, or null if no file is loaded
-     */
-    public File getCurrentFile() {
-        return currentFile;
-    }
-
-    /**
-     * Sets the syntax editing style for the text area.
-     *
-     * @param syntaxStyle The syntax style constant (e.g., SyntaxConstants.SYNTAX_STYLE_JSON)
-     */
-    public void setSyntaxEditingStyle(String syntaxStyle) {
-        textArea.setSyntaxEditingStyle(syntaxStyle);
-    }
-
-    /**
      * Updates the current line highlight color based on the current theme.
      * Called during initialization and when themes change.
      */

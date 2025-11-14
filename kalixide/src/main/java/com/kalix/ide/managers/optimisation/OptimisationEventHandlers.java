@@ -77,34 +77,6 @@ public class OptimisationEventHandlers {
     }
 
     /**
-     * Handles status update messages from the optimisation program.
-     *
-     * @param sessionKey The session key
-     * @param statusMessage The status message
-     */
-    public void handleStatusUpdate(String sessionKey, String statusMessage) {
-        SwingUtilities.invokeLater(() -> {
-            // Update status in the session manager - status message is not used directly
-            // Status is tracked via the OptimisationInfo object
-
-            // Update tree node to reflect status change
-            if (treeNodeUpdater != null) {
-                treeNodeUpdater.accept(sessionKey);
-            }
-
-            // Update details panel if this optimisation is currently selected
-            if (detailsUpdater != null) {
-                detailsUpdater.accept(sessionKey);
-            }
-
-            // Update model display (status changed, e.g., READY -> RUNNING)
-            if (modelDisplayUpdater != null) {
-                modelDisplayUpdater.accept(sessionKey);
-            }
-        });
-    }
-
-    /**
      * Handles the list of optimisable parameters from kalixcli.
      *
      * @param sessionKey The session key
@@ -271,21 +243,6 @@ public class OptimisationEventHandlers {
                     modelDisplayUpdater.accept(sessionKey);
                 }
             }
-        });
-    }
-
-    /**
-     * Handles error messages.
-     *
-     * @param errorMessage The error message to display
-     * @param parent The parent component for the dialog
-     */
-    public void handleError(String errorMessage, JComponent parent) {
-        SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(parent,
-                errorMessage,
-                "Optimisation Error",
-                JOptionPane.ERROR_MESSAGE);
         });
     }
 }

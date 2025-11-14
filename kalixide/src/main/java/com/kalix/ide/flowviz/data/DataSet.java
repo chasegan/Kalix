@@ -145,65 +145,6 @@ public class DataSet {
             .sum();
     }
     
-    public int getTotalMissingPointCount() {
-        return getTotalPointCount() - getTotalValidPointCount();
-    }
-    
-    // Performance optimization: check if any series has regular intervals
-    public boolean hasAnyRegularIntervalSeries() {
-        return series.stream().anyMatch(TimeSeriesData::hasRegularInterval);
-    }
-    
-    public boolean allSeriesHaveRegularIntervals() {
-        return !series.isEmpty() && series.stream().allMatch(TimeSeriesData::hasRegularInterval);
-    }
-    
-    // Data validation
-    public List<DataValidationIssue> validateData() {
-        List<DataValidationIssue> issues = new ArrayList<>();
-        
-        for (TimeSeriesData seriesData : series) {
-            // Check for duplicate series names
-            long nameCount = series.stream().filter(s -> s.getName().equals(seriesData.getName())).count();
-            if (nameCount > 1) {
-                issues.add(new DataValidationIssue(
-                    DataValidationIssue.Severity.WARNING,
-                    "Duplicate series name: " + seriesData.getName()
-                ));
-            }
-            
-            // Check for empty series
-            if (seriesData.getPointCount() == 0) {
-                issues.add(new DataValidationIssue(
-                    DataValidationIssue.Severity.WARNING,
-                    "Empty series: " + seriesData.getName()
-                ));
-            }
-            
-            // Check for all missing values
-            if (seriesData.getValidPointCount() != null && seriesData.getValidPointCount() == 0) {
-                issues.add(new DataValidationIssue(
-                    DataValidationIssue.Severity.ERROR,
-                    "Series has no valid data points: " + seriesData.getName()
-                ));
-            }
-            
-            // Check for high percentage of missing values
-            if (seriesData.getValidPointCount() != null && seriesData.getPointCount() > 0) {
-                double missingPercentage = (double) seriesData.getMissingPointCount() / seriesData.getPointCount();
-                if (missingPercentage > 0.5) {
-                    issues.add(new DataValidationIssue(
-                        DataValidationIssue.Severity.WARNING,
-                        String.format("Series has %.1f%% missing values: %s", 
-                            missingPercentage * 100, seriesData.getName())
-                    ));
-                }
-            }
-        }
-        
-        return issues;
-    }
-    
     // Event listeners for UI updates
     public interface DataSetListener {
         void onSeriesAdded(TimeSeriesData series);
@@ -246,26 +187,6 @@ public class DataSet {
             } catch (Exception e) {
                 System.err.println("Error in DataSet listener: " + e.getMessage());
             }
-        }
-    }
-    
-    public static class DataValidationIssue {
-        public enum Severity { WARNING, ERROR }
-        
-        private final Severity severity;
-        private final String message;
-        
-        public DataValidationIssue(Severity severity, String message) {
-            this.severity = severity;
-            this.message = message;
-        }
-        
-        public Severity getSeverity() { return severity; }
-        public String getMessage() { return message; }
-        
-        @Override
-        public String toString() {
-            return severity + ": " + message;
         }
     }
 }

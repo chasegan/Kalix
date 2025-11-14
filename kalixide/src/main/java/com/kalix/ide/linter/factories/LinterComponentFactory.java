@@ -1,6 +1,8 @@
 package com.kalix.ide.linter.factories;
 
-import com.kalix.ide.linter.*;
+import com.kalix.ide.linter.LinterHighlighter;
+import com.kalix.ide.linter.LinterManager;
+import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.events.ValidationEventManager;
 import com.kalix.ide.linter.managers.LinterOrchestrator;
 import com.kalix.ide.linter.model.ValidationIssue;
@@ -45,36 +47,5 @@ public class LinterComponentFactory {
         linterManager.setEventManager(eventManager);
 
         return linterManager;
-    }
-
-    /**
-     * Create a LinterOrchestrator with dependencies.
-     */
-    public static LinterOrchestrator createOrchestrator(SchemaManager schemaManager) {
-        return new LinterOrchestrator(schemaManager);
-    }
-
-
-    /**
-     * Create a LinterHighlighter for the given text area.
-     */
-    public static LinterHighlighter createHighlighter(RSyntaxTextArea textArea) {
-        return new LinterHighlighter(textArea);
-    }
-
-    /**
-     * Create tooltip manager with shared issue tracking.
-     */
-    public static LinterTooltipManager createTooltipManager(
-            RSyntaxTextArea textArea,
-            ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
-        return new LinterTooltipManager(textArea, issuesByLine);
-    }
-
-    /**
-     * Create error navigation manager.
-     */
-    public static ErrorNavigationManager createNavigationManager(RSyntaxTextArea textArea) {
-        return new ErrorNavigationManager(textArea);
     }
 }

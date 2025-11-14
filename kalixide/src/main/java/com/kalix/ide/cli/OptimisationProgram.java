@@ -27,7 +27,6 @@ public class OptimisationProgram extends AbstractSessionProgram {
     private final Consumer<String> resultCallback;
     private final Consumer<java.util.List<String>> parametersCallback;
     private ProgramState currentState = ProgramState.WAITING_FOR_INITIAL_READY;
-    private String configText;
     private String modelIni;
 
     /**
@@ -74,8 +73,6 @@ public class OptimisationProgram extends AbstractSessionProgram {
             statusUpdater.accept("Cannot start optimisation: program not ready (current state: " + currentState + ")");
             return;
         }
-
-        this.configText = configText;
 
         // Send run_optimisation command
         currentState = ProgramState.OPTIMISING;

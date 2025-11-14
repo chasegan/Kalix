@@ -22,11 +22,6 @@ public class DockingSplitPane extends JSplitPane implements ComponentListener {
         setupCleanupLogic();
     }
 
-    public DockingSplitPane(int orientation, Component leftComponent, Component rightComponent) {
-        super(orientation, leftComponent, rightComponent);
-        setupCleanupLogic();
-    }
-
     /**
      * Sets up the cleanup logic that monitors component changes.
      */
@@ -163,13 +158,6 @@ public class DockingSplitPane extends JSplitPane implements ComponentListener {
         } finally {
             isCleaningUp = false;
         }
-    }
-
-    /**
-     * Returns whether this split pane is currently performing cleanup.
-     */
-    public boolean isCleaningUp() {
-        return isCleaningUp;
     }
 
     // ComponentListener implementation (for future use if needed)

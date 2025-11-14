@@ -11,9 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -62,15 +59,6 @@ public class OptimisationPlotManager {
      */
     public PlotPanel getPlotPanel() {
         return convergencePlot;
-    }
-
-    /**
-     * Gets the convergence dataset.
-     *
-     * @return The dataset
-     */
-    public DataSet getDataSet() {
-        return convergenceDataSet;
     }
 
     /**
@@ -180,96 +168,12 @@ public class OptimisationPlotManager {
     }
 
     /**
-     * Adds a single convergence point to the plot.
-     * Used for real-time updates during optimisation.
-     *
-     * @param evaluation The evaluation count
-     * @param bestObjective The best objective value
-     * @param populationValues The population values at this evaluation
-     */
-    public void addConvergencePoint(int evaluation, double bestObjective, List<Double> populationValues) {
-        // This would require incremental updates to existing series
-        // For simplicity, we'll rebuild the entire plot
-        // In a production system, we'd maintain the data and update incrementally
-
-        logger.debug("Added convergence point at evaluation {}: best={}", evaluation, bestObjective);
-    }
-
-    /**
      * Clears the convergence plot.
      */
     public void clearPlot() {
         convergenceDataSet.removeAllSeries();
         convergencePlot.refreshData(true);
         logger.debug("Cleared convergence plot");
-    }
-
-    /**
-     * Exports the plot as an image.
-     *
-     * @param file The file to export to
-     * @param width The image width
-     * @param height The image height
-     * @throws IOException If export fails
-     */
-    public void exportPlotAsImage(File file, int width, int height) throws IOException {
-        // Create off-screen image
-        java.awt.image.BufferedImage image =
-            new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
-
-        Graphics2D g2 = image.createGraphics();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        // Set background
-        g2.setColor(Color.WHITE);
-        g2.fillRect(0, 0, width, height);
-
-        // Render plot
-        convergencePlot.setSize(width, height);
-        convergencePlot.paint(g2);
-
-        g2.dispose();
-
-        // Write to file
-        String format = file.getName().toLowerCase().endsWith(".png") ? "PNG" : "JPEG";
-        javax.imageio.ImageIO.write(image, format, file);
-
-        logger.info("Exported plot to {}", file.getAbsolutePath());
-    }
-
-    /**
-     * Exports convergence data as CSV.
-     *
-     * @param file The file to export to
-     * @param result The optimisation result
-     * @throws IOException If export fails
-     */
-    public void exportDataAsCsv(File file, OptimisationResult result) throws IOException {
-        if (result == null || result.getConvergenceHistory().isEmpty()) {
-            throw new IllegalArgumentException("No convergence data to export");
-        }
-
-        StringBuilder csv = new StringBuilder();
-        csv.append("Evaluation,Best Objective,Population Min,Population Mean,Population Max\n");
-
-        for (OptimisationResult.ConvergencePoint point : result.getConvergenceHistory()) {
-            csv.append(point.getEvaluation()).append(",");
-            csv.append(point.getBestObjective()).append(",");
-
-            List<Double> pop = point.getPopulationValues();
-            if (!pop.isEmpty()) {
-                double min = pop.stream().mapToDouble(Double::doubleValue).min().orElse(0);
-                double mean = pop.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                double max = pop.stream().mapToDouble(Double::doubleValue).max().orElse(0);
-                csv.append(min).append(",").append(mean).append(",").append(max);
-            } else {
-                csv.append(",,");
-            }
-            csv.append("\n");
-        }
-
-        Files.writeString(file.toPath(), csv.toString());
-        logger.info("Exported convergence data to {}", file.getAbsolutePath());
     }
 
     /**
@@ -310,23 +214,5 @@ public class OptimisationPlotManager {
         }
 
         return stats;
-    }
-
-    /**
-     * Refreshes the plot display without changing data.
-     */
-    public void refreshDisplay() {
-        convergencePlot.repaint();
-    }
-
-    /**
-     * Sets whether the plot should auto-zoom to fit data.
-     *
-     * @param autoZoom true to enable auto-zoom
-     */
-    public void setAutoZoom(boolean autoZoom) {
-        if (autoZoom) {
-            convergencePlot.refreshData(true);
-        }
     }
 }

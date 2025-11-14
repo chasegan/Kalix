@@ -303,10 +303,6 @@ public class DataPanel extends JPanel {
             updateAppearance();
         }
 
-        public boolean isSelected() {
-            return selected;
-        }
-
         private void updateAppearance() {
             float alpha = seriesVisible ? 1.0f : 0.5f;
 
@@ -364,18 +360,8 @@ public class DataPanel extends JPanel {
             return seriesName;
         }
 
-        public Color getSeriesColor() {
-            return seriesColor;
-        }
-
         public boolean isSeriesVisible() {
             return seriesVisible;
-        }
-
-        public void setSeriesVisible(boolean visible) {
-            seriesVisible = visible;
-            visibilityCheckbox.setSelected(visible);
-            updateAppearance();
         }
     }
 

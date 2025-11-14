@@ -168,7 +168,7 @@ public class OptimisationGuiBuilder extends JPanel {
                     if (type == null) {
                         type = "unknown";
                     }
-                    if (warnings.length() > 0) {
+                    if (!warnings.isEmpty()) {
                         warnings.append("\n");
                     }
                     warnings.append("  - ").append(paramName).append(" (type: ").append(type).append(")");
@@ -180,7 +180,7 @@ public class OptimisationGuiBuilder extends JPanel {
         }
 
         // Show warning dialog if any parameters couldn't be generated
-        if (warnings.length() > 0) {
+        if (!warnings.isEmpty()) {
             javax.swing.JOptionPane.showMessageDialog(this,
                 "Could not auto-generate expressions for unrecognized parameter types:\n\n" + warnings +
                 "\n\nThese parameters were omitted from the configuration.\nPlease add them manually in the Text Editor if needed.",
@@ -196,38 +196,6 @@ public class OptimisationGuiBuilder extends JPanel {
         }
 
         return sb.toString();
-    }
-
-    /**
-     * Loads default values for demonstration purposes.
-     */
-    public void loadDefaults() {
-        // Set objective defaults
-        objectivePanel.setObservedDataFile("../data.csv");
-        objectivePanel.setSeries("ObsFlow");
-        objectivePanel.setSimulatedSeries("node.mygr4jnode.ds_1");
-        objectivePanel.setObjectiveFunction("NSE");
-
-        // Set algorithm defaults
-        algorithmPanel.setAlgorithm("DE");
-        algorithmPanel.setTerminationEvaluations("5000");
-        algorithmPanel.setThreads("4");
-        algorithmPanel.setRandomSeed(""); // Blank = use random initial seed
-
-        // Set some parameter expressions as examples (using kalixcli format)
-        parametersPanel.setParameterExpression("node.mygr4jnode.x1", "lin_range(g(1), 10, 2000)");
-        parametersPanel.setParameterExpression("node.mygr4jnode.x2", "lin_range(g(2), -8, 6)");
-    }
-
-    /**
-     * Clears all inputs.
-     */
-    public void clearAll() {
-        objectivePanel.setObservedDataFile("");
-        objectivePanel.setSeries("");
-        objectivePanel.setSimulatedSeries("");
-        objectivePanel.setObjectiveFunction("");
-        parametersPanel.clearAllExpressions();
     }
 
     /**

@@ -11,8 +11,6 @@ public class ModelChangeEvent {
         NODE_MODIFIED,
         LINK_ADDED,
         LINK_REMOVED,
-        LINK_MODIFIED,
-        MODEL_CLEARED,
         MODEL_RELOADED,
         NODE_SELECTED,
         NODE_DESELECTED,
@@ -45,10 +43,6 @@ public class ModelChangeEvent {
     
     public String getEntityId() {
         return entityId;
-    }
-    
-    public long getTimestamp() {
-        return timestamp;
     }
     
     public int getAffectedNodeCount() {

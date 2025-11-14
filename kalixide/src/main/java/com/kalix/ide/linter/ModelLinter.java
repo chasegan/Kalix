@@ -38,13 +38,6 @@ public class ModelLinter {
     }
 
     /**
-     * Validate INI model content against the loaded schema.
-     */
-    public ValidationResult validate(String content) {
-        return validate(content, null);
-    }
-
-    /**
      * Validate INI model content against the loaded schema with a base directory for resolving relative paths.
      *
      * @param content The model content to validate

@@ -75,10 +75,6 @@ public class OptimisationResult {
         this.evaluations = evaluations;
     }
 
-    public Integer getGenerations() {
-        return generations;
-    }
-
     public void setGenerations(Integer generations) {
         this.generations = generations;
     }
@@ -99,20 +95,8 @@ public class OptimisationResult {
         this.success = success;
     }
 
-    public Map<String, Double> getParametersPhysical() {
-        return new HashMap<>(parametersPhysical);
-    }
-
     public void setParametersPhysical(Map<String, Double> parameters) {
         this.parametersPhysical = new HashMap<>(parameters);
-    }
-
-    public Map<String, Double> getParametersNormalized() {
-        return new HashMap<>(parametersNormalized);
-    }
-
-    public void setParametersNormalized(Map<String, Double> parameters) {
-        this.parametersNormalized = new HashMap<>(parameters);
     }
 
     public String getOptimisedModelIni() {
@@ -145,18 +129,6 @@ public class OptimisationResult {
 
     public void addConvergencePoint(int evaluation, double bestObjective, List<Double> populationValues) {
         convergenceHistory.add(new ConvergencePoint(evaluation, bestObjective, populationValues));
-    }
-
-    public void clearConvergenceHistory() {
-        convergenceHistory.clear();
-    }
-
-    public String getConfigurationUsed() {
-        return configurationUsed;
-    }
-
-    public void setConfigurationUsed(String configurationUsed) {
-        this.configurationUsed = configurationUsed;
     }
 
     public LocalDateTime getStartTime() {
@@ -213,20 +185,6 @@ public class OptimisationResult {
             objectives.add(point.getBestObjective());
         }
         return objectives;
-    }
-
-    /**
-     * Gets the list of population values from convergence history.
-     * This is a convenience method for backwards compatibility.
-     *
-     * @return List of lists of population values
-     */
-    public List<List<Double>> getConvergencePopulation() {
-        List<List<Double>> population = new ArrayList<>();
-        for (ConvergencePoint point : convergenceHistory) {
-            population.add(point.getPopulationValues());
-        }
-        return population;
     }
 
     /**

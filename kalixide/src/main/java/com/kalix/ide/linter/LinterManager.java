@@ -54,6 +54,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
     /**
      * Constructor with dependency injection.
+     * Use LinterComponentFactory.createLinterManager() to create instances.
      */
     public LinterManager(
             RSyntaxTextArea textArea,
@@ -71,25 +72,6 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         this.tooltipManager = tooltipManager;
         this.navigationManager = navigationManager;
         this.issuesByLine = issuesByLine;
-
-        initialize();
-    }
-
-    /**
-     * Legacy constructor for backward compatibility.
-     */
-    @Deprecated
-    public LinterManager(RSyntaxTextArea textArea, SchemaManager schemaManager) {
-        this.textArea = textArea;
-        this.schemaManager = schemaManager;
-
-        // Create dependencies using factory
-        this.issuesByLine = new ConcurrentHashMap<>();
-        this.orchestrator = new LinterOrchestrator(schemaManager);
-        this.eventManager = new ValidationEventManager(textArea, this);
-        this.tooltipManager = new LinterTooltipManager(textArea, issuesByLine);
-        this.navigationManager = new ErrorNavigationManager(textArea);
-        this.highlighter = new LinterHighlighter(textArea);
 
         initialize();
     }

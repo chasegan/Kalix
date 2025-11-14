@@ -560,7 +560,6 @@ public class DatasetLoaderManager {
 
         // Notify tree model to preserve selection
         int[] childIndices = new int[] { insertIndex };
-        Object[] children = new Object[] { datasetNode };
         treeModel.nodesWereInserted(loadedDatasetsNode, childIndices);
 
         logger.info("Added dataset to tree: " + file.getName());

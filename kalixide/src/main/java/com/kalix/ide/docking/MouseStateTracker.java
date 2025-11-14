@@ -18,7 +18,6 @@ public class MouseStateTracker {
     private volatile boolean mouseButtonPressed = false;
     private Timer mouseStateTimer;
     private Runnable buttonReleasedCallback;
-    private Point lastDragPosition;
 
     /**
      * Creates a new MouseStateTracker and sets up global mouse event listening.
@@ -48,11 +47,9 @@ public class MouseStateTracker {
     /**
      * Starts monitoring for mouse button release with the given callback.
      *
-     * @param dragPosition The current drag position to pass to callback
      * @param callback Runnable to execute when button release is detected
      */
-    public void startMonitoring(Point dragPosition, Runnable callback) {
-        this.lastDragPosition = new Point(dragPosition);
+    public void startMonitoring(Runnable callback) {
         this.buttonReleasedCallback = callback;
 
         // Stop existing timer if running
@@ -72,15 +69,6 @@ public class MouseStateTracker {
     }
 
     /**
-     * Updates the current drag position for the callback.
-     *
-     * @param dragPosition The new drag position
-     */
-    public void updateDragPosition(Point dragPosition) {
-        this.lastDragPosition = new Point(dragPosition);
-    }
-
-    /**
      * Stops monitoring mouse button state and cleans up resources.
      */
     public void stopMonitoring() {
@@ -89,24 +77,5 @@ public class MouseStateTracker {
             mouseStateTimer = null;
         }
         buttonReleasedCallback = null;
-        lastDragPosition = null;
-    }
-
-    /**
-     * Returns whether the left mouse button is currently pressed according to global state.
-     *
-     * @return true if mouse button is pressed, false otherwise
-     */
-    public boolean isMouseButtonPressed() {
-        return mouseButtonPressed;
-    }
-
-    /**
-     * Returns the last known drag position.
-     *
-     * @return Point representing last drag position, or null if not set
-     */
-    public Point getLastDragPosition() {
-        return lastDragPosition != null ? new Point(lastDragPosition) : null;
     }
 }

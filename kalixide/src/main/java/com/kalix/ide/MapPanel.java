@@ -38,8 +38,7 @@ public class MapPanel extends JPanel implements KeyListener {
     // Click tracking for node navigation
     private Point clickStartPoint = null;
     private String clickedNodeName = null;
-    private static final int CLICK_TOLERANCE = UIConstants.Map.CLICK_TOLERANCE;
-    
+
     // Rectangle selection state
     private boolean isRectangleSelecting = false;
     private Point rectangleStartPoint = null;
@@ -397,19 +396,6 @@ public class MapPanel extends JPanel implements KeyListener {
 
     public void resetZoom() {
         zoomLevel = 1.0;
-        repaint();
-    }
-    
-    public void resetPan() {
-        panX = 0.0;
-        panY = 0.0;
-        repaint();
-    }
-    
-    public void resetView() {
-        zoomLevel = 1.0;
-        panX = 0.0;
-        panY = 0.0;
         repaint();
     }
     

@@ -30,9 +30,7 @@ public class MapRenderer {
     private final NodeShapeRenderer shapeRenderer;
 
     // Rendering constants (centralized in UIConstants)
-    private static final int GRID_SIZE = UIConstants.Map.GRID_SIZE;
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
-    private static final int NODE_RADIUS = UIConstants.Map.NODE_RADIUS;
     private static final int TEXT_BACKGROUND_PADDING = UIConstants.Text.BACKGROUND_PADDING;
 
     // Selection rectangle styling (centralized in UIConstants)

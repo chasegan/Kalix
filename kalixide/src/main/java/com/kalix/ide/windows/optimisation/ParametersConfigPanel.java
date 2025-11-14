@@ -146,7 +146,7 @@ public class ParametersConfigPanel extends JPanel {
                     if (type == null) {
                         type = "unknown";
                     }
-                    if (unrecognizedParams.length() > 0) {
+                    if (!unrecognizedParams.isEmpty()) {
                         unrecognizedParams.append("\n");
                     }
                     unrecognizedParams.append("Parameter: ").append(paramName)
@@ -156,7 +156,7 @@ public class ParametersConfigPanel extends JPanel {
         }
 
         // Show dialog if any parameters were unrecognized
-        if (unrecognizedParams.length() > 0) {
+        if (!unrecognizedParams.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                 "Could not recognize parameter types:\n\n" + unrecognizedParams +
                 "\n\nPlease specify expressions manually for these parameters.",

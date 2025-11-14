@@ -265,71 +265,6 @@ public class OptimisationPanelBuilder {
         mainTabbedPane.addTab(OptimisationUIConstants.TAB_RESULTS, resultsPanel);
     }
 
-    /**
-     * Builds the control button panel.
-     *
-     * @param newAction Action for new optimisation button
-     * @param removeAction Action for remove button
-     * @param loadAction Action for load config button
-     * @param saveAction Action for save config button
-     * @param runAction Action for run button
-     * @param stopAction Action for stop button
-     * @return The control panel
-     */
-    public JPanel buildControlPanel(ActionListener newAction,
-                                    ActionListener removeAction,
-                                    ActionListener loadAction,
-                                    ActionListener saveAction,
-                                    ActionListener runAction,
-                                    ActionListener stopAction) {
-        JPanel controlPanel = new JPanel(new BorderLayout());
-        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        // Left panel for tree operations
-        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        JButton newButton = new JButton("New Optimisation");
-        newButton.addActionListener(newAction);
-        leftPanel.add(newButton);
-
-        JButton removeButton = new JButton("Remove");
-        removeButton.addActionListener(removeAction);
-        leftPanel.add(removeButton);
-
-        // Center panel for config operations
-        JPanel centerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        loadConfigButton = new JButton("Load Config");
-        loadConfigButton.addActionListener(loadAction);
-        centerPanel.add(loadConfigButton);
-
-        saveConfigButton = new JButton("Save Config");
-        saveConfigButton.addActionListener(saveAction);
-        centerPanel.add(saveConfigButton);
-
-        // Right panel for run operations
-        JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        runButton = new JButton("▶ Run");
-        runButton.addActionListener(runAction);
-        runButton.setForeground(new Color(0, 128, 0)); // Green
-        rightButtonPanel.add(runButton);
-
-        stopButton = new JButton("■ Stop");
-        stopButton.addActionListener(stopAction);
-        stopButton.setForeground(Color.RED);
-        stopButton.setEnabled(false);
-        rightButtonPanel.add(stopButton);
-
-        controlPanel.add(leftPanel, BorderLayout.WEST);
-        controlPanel.add(centerPanel, BorderLayout.CENTER);
-        controlPanel.add(rightButtonPanel, BorderLayout.EAST);
-
-        return controlPanel;
-    }
-
-    // Getters for components that need external access
-    public JPanel getRightPanel() {
-        return rightPanel;
-    }
-
     public CardLayout getRightPanelLayout() {
         return rightPanelLayout;
     }
@@ -352,20 +287,5 @@ public class OptimisationPanelBuilder {
 
     public JButton getSaveConfigButton() {
         return saveConfigButton;
-    }
-
-    public JLabel getConfigStatusLabel() {
-        return configStatusLabel;
-    }
-
-    /**
-     * Shows the specified card in the right panel.
-     *
-     * @param cardName The name of the card to show ("message" or "optimisation")
-     */
-    public void showCard(String cardName) {
-        if (rightPanelLayout != null && rightPanel != null) {
-            rightPanelLayout.show(rightPanel, cardName);
-        }
     }
 }

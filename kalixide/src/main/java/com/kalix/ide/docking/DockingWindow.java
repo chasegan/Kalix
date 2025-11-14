@@ -80,7 +80,7 @@ public class DockingWindow extends JFrame {
         setSize(Dimensions.DEFAULT_WINDOW_WIDTH, Dimensions.DEFAULT_WINDOW_HEIGHT);
 
         // Create main docking area
-        mainArea = new DockingArea(Layout.MAIN_AREA_NAME);
+        mainArea = new DockingArea();
         add(mainArea, BorderLayout.CENTER);
 
         // Handle window closing
@@ -123,23 +123,6 @@ public class DockingWindow extends JFrame {
             pack();
             setLocationRelativeTo(null);
         }
-    }
-
-    /**
-     * Removes a dockable panel from this window.
-     */
-    public void removeDockablePanel(DockablePanel panel) {
-        mainArea.removeDockablePanel(panel);
-        updateWindowTitle();
-
-        // Auto-close logic is now handled by DockingManager to prevent race conditions
-    }
-
-    /**
-     * Returns the main docking area of this window.
-     */
-    public DockingArea getMainArea() {
-        return mainArea;
     }
 
     /**
@@ -223,21 +206,5 @@ public class DockingWindow extends JFrame {
      */
     public boolean isAutoClose() {
         return autoClose;
-    }
-
-    /**
-     * Sets whether this window should auto-close when empty.
-     */
-    public void setAutoClose(boolean autoClose) {
-        this.autoClose = autoClose;
-    }
-
-    /**
-     * Factory method to create a new docking window at a specific location.
-     */
-    public static DockingWindow createAt(Point location) {
-        DockingWindow window = new DockingWindow();
-        window.setLocation(location);
-        return window;
     }
 }

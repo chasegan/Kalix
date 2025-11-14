@@ -89,31 +89,4 @@ public class AutoHidingProgressBar extends StatusProgressBar {
         cancelAutoHideTimer();
         super.hideProgress();
     }
-
-
-    /**
-     * Sets the auto-hide delay.
-     *
-     * @param delayMs delay in milliseconds before auto-hiding
-     */
-    public void setAutoHideDelay(int delayMs) {
-        if (autoHideTimer != null) {
-            autoHideTimer.stop();
-            autoHideTimer = new Timer(delayMs, e -> hideProgress());
-            autoHideTimer.setRepeats(false);
-        }
-    }
-
-    /**
-     * Enables or disables auto-hiding functionality.
-     *
-     * @param enabled true to enable auto-hiding, false to disable
-     */
-    public void setAutoHideEnabled(boolean enabled) {
-        if (!enabled) {
-            cancelAutoHideTimer();
-        } else if (isProgressVisible()) {
-            resetAutoHideTimer();
-        }
-    }
 }

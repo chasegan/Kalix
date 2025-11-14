@@ -25,9 +25,6 @@ public class HydrologicalModel {
     private final Set<String> removedNodes;
     private final Set<String> removedLinks;
     
-    // Version tracking for change detection
-    private volatile long version = 0;
-    
     // Previous parse result for incremental updates
     private ModelParser.ParseResult previousParseResult;
     
@@ -76,7 +73,6 @@ public class HydrologicalModel {
         modifiedNodes.add(node.getName());
         removedNodes.remove(node.getName());
         
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_ADDED, node.getName()));
     }
     
@@ -92,7 +88,6 @@ public class HydrologicalModel {
             modifiedNodes.remove(nodeName);
             removedNodes.add(nodeName);
             
-            incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_REMOVED, nodeName));
         }
     }
@@ -108,7 +103,6 @@ public class HydrologicalModel {
         modifiedLinks.add(linkId);
         removedLinks.remove(linkId);
         
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_ADDED, linkId));
     }
     
@@ -123,7 +117,6 @@ public class HydrologicalModel {
             modifiedLinks.remove(linkId);
             removedLinks.add(linkId);
             
-            incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_REMOVED, linkId));
         }
     }
@@ -169,7 +162,6 @@ public class HydrologicalModel {
         
         // Clear change tracking since this is a full update
         clearChangeTracking();
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_RELOADED, null));
     }
     
@@ -198,13 +190,6 @@ public class HydrologicalModel {
     }
     
     /**
-     * Get current version (increases with each change)
-     */
-    public long getVersion() {
-        return version;
-    }
-    
-    /**
      * Get model statistics for performance monitoring
      */
     public ModelStatistics getStatistics() {
@@ -212,8 +197,7 @@ public class HydrologicalModel {
             nodes.size(),
             links.size(),
             modifiedNodes.size(),
-            modifiedLinks.size(),
-            version
+            modifiedLinks.size()
         );
     }
     
@@ -305,9 +289,7 @@ public class HydrologicalModel {
             }
             affectedLinkCount = diff.getNewLinks().size();
         }
-        
-        incrementVersion();
-        
+
         // Send single consolidated event with total affected counts
         int totalAffectedNodes = diff.getAddedNodes().size() + diff.getRemovedNodes().size() + diff.getModifiedNodes().size();
         if (totalAffectedNodes > 0 || affectedLinkCount > 0) {
@@ -349,12 +331,6 @@ public class HydrologicalModel {
         changeListeners.remove(listener);
     }
     
-    // Internal helper methods
-    
-    private void incrementVersion() {
-        version++;
-    }
-    
     private void notifyListeners(ModelChangeEvent event) {
         for (ModelChangeListener listener : changeListeners) {
             try {
@@ -364,25 +340,6 @@ public class HydrologicalModel {
                 logger.warn("Error in model change listener: {}", e.getMessage());
             }
         }
-    }
-    
-    /**
-     * Clear all data (for new model)
-     */
-    public void clear() {
-        nodes.clear();
-        links.clear();
-        spatialIndex.clear();
-        
-        modifiedNodes.clear();
-        modifiedLinks.clear();
-        removedNodes.clear();
-        removedLinks.clear();
-        selectedNodes.clear();
-        selectedLinks.clear();
-
-        incrementVersion();
-        notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_CLEARED, null));
     }
     
     // Selection management
@@ -403,7 +360,6 @@ public class HydrologicalModel {
         }
         
         selectedNodes.add(nodeName);
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_SELECTED, nodeName));
     }
     
@@ -413,7 +369,6 @@ public class HydrologicalModel {
      */
     public void deselectNode(String nodeName) {
         if (selectedNodes.remove(nodeName)) {
-            incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_DESELECTED, nodeName));
         }
     }
@@ -426,7 +381,6 @@ public class HydrologicalModel {
         if (hadSelection) {
             selectedNodes.clear();
             selectedLinks.clear();
-            incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
         }
     }
@@ -484,7 +438,6 @@ public class HydrologicalModel {
 
         String linkId = getLinkId(link);
         selectedLinks.add(linkId);
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_SELECTED, linkId));
     }
 
@@ -499,7 +452,6 @@ public class HydrologicalModel {
 
         String linkId = getLinkId(link);
         if (selectedLinks.remove(linkId)) {
-            incrementVersion();
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_DESELECTED, linkId));
         }
     }
@@ -566,7 +518,6 @@ public class HydrologicalModel {
         modifiedNodes.add(nodeName);
         removedNodes.remove(nodeName);
         
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_MODIFIED, nodeName));
     }
     
@@ -604,7 +555,6 @@ public class HydrologicalModel {
         selectedNodes.clear();
         
         // Update version and notify of selection clear
-        incrementVersion();
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
         
         System.out.println("HydrologicalModel: Deleted " + nodesToDelete.size() + " selected nodes");

@@ -398,20 +398,8 @@ public class FlowVizWindow extends JFrame {
     public static void createNewWindow() {
         SwingUtilities.invokeLater(() -> new FlowVizWindow());
     }
-
-    /**
-     * Gets the current 64-bit precision preference setting.
-     * @return true if 64-bit precision is enabled, false for 32-bit
-     */
-    public boolean isPrecision64() {
-        return actionManager == null || actionManager.isPrecision64();
-    }
     
     public static List<FlowVizWindow> getOpenWindows() {
         return new ArrayList<>(openWindows);
-    }
-    
-    public static int getWindowCount() {
-        return openWindows.size();
     }
 }

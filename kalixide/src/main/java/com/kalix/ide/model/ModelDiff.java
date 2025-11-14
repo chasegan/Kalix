@@ -93,11 +93,6 @@ public class ModelDiff {
         return newLinks;
     }
     
-    public int getTotalChanges() {
-        return addedNodes.size() + removedNodes.size() + modifiedNodes.size() + 
-               (linksChanged ? 1 : 0);
-    }
-    
     @Override
     public String toString() {
         return String.format("ModelDiff{added=%d, removed=%d, modified=%d, linksChanged=%b}", 

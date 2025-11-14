@@ -16,7 +16,6 @@ import java.awt.event.ActionListener;
 public class MenuBarBuilder {
     
     private final MenuBarCallbacks callbacks;
-    private final EnhancedTextEditor textEditor;
     private final KeyboardShortcutManager shortcutManager;
     private JMenu recentFilesMenu;
     private JMenu fileMenu;
@@ -41,7 +40,6 @@ public class MenuBarBuilder {
         void zoomOut();
         void resetZoom();
         void zoomToFit();
-        String switchTheme(String theme);
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
@@ -51,8 +49,7 @@ public class MenuBarBuilder {
         void runModelFromMemory();
         void searchModel();
         void showFindReplaceDialog();
-        void getCliVersion();
-        
+
         // Run Manager window
         void showRunManager();
 
@@ -96,23 +93,20 @@ public class MenuBarBuilder {
      */
     public MenuBarBuilder(MenuBarCallbacks callbacks, EnhancedTextEditor textEditor) {
         this.callbacks = callbacks;
-        this.textEditor = textEditor;
         this.shortcutManager = KeyboardShortcutManager.getInstance();
     }
     
     /**
      * Builds and returns the complete menu bar.
-     * 
-     * @param currentTheme The current theme name for theme menu selection
-     * @param currentNodeTheme The current node theme for node theme menu selection
+     *
      * @return The configured JMenuBar
      */
-    public JMenuBar buildMenuBar(String currentTheme, NodeTheme.Theme currentNodeTheme) {
+    public JMenuBar buildMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
-        menuBar.add(createViewMenu(currentTheme, currentNodeTheme));
+        menuBar.add(createViewMenu());
         menuBar.add(createRunMenu());
         menuBar.add(createToolsMenu());
         menuBar.add(createAIMenu());
@@ -182,7 +176,7 @@ public class MenuBarBuilder {
     /**
      * Creates the View menu.
      */
-    private JMenu createViewMenu(String currentTheme, NodeTheme.Theme currentNodeTheme) {
+    private JMenu createViewMenu() {
         JMenu viewMenu = new JMenu("View");
 
         // Zoom to Fit at the top

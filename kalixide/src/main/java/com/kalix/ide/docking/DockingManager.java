@@ -22,7 +22,6 @@ public class DockingManager {
     // Current drag operation state
     private DockablePanel currentDragPanel;
     private DragPreview dragPreview;
-    private Point dragStartLocation;
     private boolean isDragging = false;
 
     // Mouse state tracking
@@ -85,7 +84,6 @@ public class DockingManager {
         }
 
         currentDragPanel = panel;
-        dragStartLocation = new Point(screenLocation);
         lastDragPosition = new Point(screenLocation);
         isDragging = true;
 
@@ -93,7 +91,7 @@ public class DockingManager {
         createDragPreview(panel, screenLocation);
 
         // Start monitoring for mouse button release
-        mouseTracker.startMonitoring(screenLocation, () -> endDragOperation(lastDragPosition));
+        mouseTracker.startMonitoring(() -> endDragOperation(lastDragPosition));
 
         // Don't remove panel from parent during drag - keep it in place
         // The drag preview will show what's being dragged
@@ -109,7 +107,6 @@ public class DockingManager {
 
         // Update last drag position
         lastDragPosition = new Point(screenLocation);
-        mouseTracker.updateDragPosition(screenLocation);
 
         // Update drag preview position
         dragPreview.updatePosition(screenLocation);
@@ -180,7 +177,6 @@ public class DockingManager {
 
             isDragging = false;
             currentDragPanel = null;
-            dragStartLocation = null;
             lastDragPosition = null;
         }
     }
@@ -204,20 +200,6 @@ public class DockingManager {
             }
         }
         return null;
-    }
-
-    /**
-     * Drops the panel into the specified docking area.
-     */
-    private void dropIntoArea(DockablePanel panel, DockingArea area) {
-        // Get the current parent before moving the panel
-        Container oldParent = panel.getParent();
-
-        // Add to new area (this will automatically remove from old parent)
-        area.addDockablePanel(panel);
-
-        // Check if old parent was a DockingWindow that should auto-close
-        checkForAutoClose(oldParent);
     }
 
     /**
@@ -464,12 +446,4 @@ public class DockingManager {
             }
         });
     }
-
-    /**
-     * Returns whether a drag operation is currently in progress.
-     */
-    public boolean isDragging() {
-        return isDragging;
-    }
-
 }

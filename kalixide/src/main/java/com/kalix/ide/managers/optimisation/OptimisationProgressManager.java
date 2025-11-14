@@ -23,7 +23,6 @@ public class OptimisationProgressManager {
     private static final Logger logger = LoggerFactory.getLogger(OptimisationProgressManager.class);
 
     // Time formatters
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final DateTimeFormatter TIME_WITH_MILLIS = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
     // UI Components
@@ -205,7 +204,6 @@ public class OptimisationProgressManager {
             // Update elapsed time one final time
             if (result.getEndTime() != null && result.getStartTime() != null) {
                 Duration duration = Duration.between(result.getStartTime(), result.getEndTime());
-                String elapsed = formatDuration(duration);
                 elapsedTimeLabel.setText(String.format("Elapsed: %s (%.3fs)",
                     result.getEndTime().format(TIME_WITH_MILLIS),
                     duration.toMillis() / 1000.0));
@@ -224,25 +222,6 @@ public class OptimisationProgressManager {
         }
 
         logger.info("Completed progress tracking for optimisation: {}", info.getName());
-    }
-
-    /**
-     * Stops progress tracking for an optimisation.
-     *
-     * @param sessionKey The session key
-     */
-    public void stopProgress(String sessionKey) {
-        sessionStartTimes.remove(sessionKey);
-
-        if (currentOptimisation != null &&
-            currentOptimisation.getSessionKey().equals(sessionKey)) {
-            elapsedTimer.stop();
-            currentOptimisation = null;
-
-            if (progressBar != null) {
-                progressBar.setVisible(false);
-            }
-        }
     }
 
     /**

@@ -394,33 +394,6 @@ public class NodeTheme {
     }
     
     /**
-     * Clears all node type color assignments without changing the theme.
-     * Useful for resetting colors while keeping the same theme.
-     */
-    public void resetColors() {
-        nodeTypeColors.clear();
-        nextColorIndex = 0;
-    }
-
-    
-    /**
-     * Gets the number of node types that have been assigned colors.
-     * @return The number of assigned node types
-     */
-    public int getAssignedTypeCount() {
-        return nodeTypeColors.size();
-    }
-    
-    /**
-     * Checks if a specific node type has been assigned a color.
-     * @param nodeType The node type to check
-     * @return true if the node type has an assigned color
-     */
-    public boolean hasColorForType(String nodeType) {
-        return nodeTypeColors.containsKey(nodeType);
-    }
-    
-    /**
      * Converts a theme name string to a Theme enum.
      * @param themeName The theme name string
      * @return The corresponding Theme enum, or LIGHT if not found

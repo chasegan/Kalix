@@ -329,15 +329,6 @@ public class FileOperationsManager {
     public File getCurrentFile() {
         return currentFile;
     }
-    
-    /**
-     * Checks if there is a current file loaded for saving.
-     *
-     * @return true if a file is currently loaded
-     */
-    public boolean hasCurrentFile() {
-        return currentFile != null;
-    }
 
     /**
      * Gets the directory of the current file as the working directory.

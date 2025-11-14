@@ -102,8 +102,8 @@ public class DockingDemo extends JFrame {
         setLayout(new BorderLayout());
 
         // Create left and right docking areas
-        DockingArea leftArea = new DockingArea("Left Panel");
-        DockingArea rightArea = new DockingArea("Right Panel");
+        DockingArea leftArea = new DockingArea();
+        DockingArea rightArea = new DockingArea();
 
         // Add the dockable panels to their respective areas
         leftArea.addDockablePanel(dockableMapPanel);

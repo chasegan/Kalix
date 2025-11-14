@@ -222,11 +222,4 @@ public class DockingGrip extends JComponent {
         SwingUtilities.convertPointToScreen(screenLocation, this);
         DockingManager.getInstance().endDragOperation(screenLocation);
     }
-
-    /**
-     * Returns whether this grip is currently being dragged.
-     */
-    public boolean isDragging() {
-        return isDragging;
-    }
 }

@@ -103,22 +103,4 @@ public class DragPreview {
             previewWindow = null;
         }
     }
-
-    /**
-     * Returns whether the preview window is currently visible.
-     *
-     * @return true if preview is showing, false otherwise
-     */
-    public boolean isVisible() {
-        return previewWindow != null && previewWindow.isVisible();
-    }
-
-    /**
-     * Returns the original panel that this preview represents.
-     *
-     * @return The DockablePanel being previewed
-     */
-    public DockablePanel getOriginalPanel() {
-        return originalPanel;
-    }
 }

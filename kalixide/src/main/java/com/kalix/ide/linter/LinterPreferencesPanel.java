@@ -42,14 +42,6 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
     private JTable rulesTable;
     private RulesTableModel rulesTableModel;
 
-    public LinterPreferencesPanel(SchemaManager schemaManager) {
-        super(new BorderLayout());
-        this.schemaManager = schemaManager;
-        this.linterManager = null;
-        setBorder(BorderFactory.createTitledBorder("Model Linting Settings"));
-        initializePanel();
-    }
-
     public LinterPreferencesPanel(SchemaManager schemaManager, LinterManager linterManager) {
         super(new BorderLayout());
         this.schemaManager = schemaManager;

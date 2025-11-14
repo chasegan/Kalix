@@ -382,7 +382,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         add(toolBar, BorderLayout.NORTH);
 
         // Create a single main docking area
-        mainDockingArea = new DockingArea("Main Workspace");
+        mainDockingArea = new DockingArea();
 
         // Initialize with both panels using a custom split layout
         SwingUtilities.invokeLater(() -> {
@@ -404,7 +404,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void setupMenuBar() {
         MenuBarBuilder menuBuilder = new MenuBarBuilder(this, textEditor);
-        JMenuBar menuBar = menuBuilder.buildMenuBar(themeManager.getCurrentTheme(), mapPanel.getCurrentNodeTheme());
+        JMenuBar menuBar = menuBuilder.buildMenuBar();
         setJMenuBar(menuBar);
 
         // Update recent files menu
@@ -1051,11 +1051,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
-    public String switchTheme(String theme) {
-        return themeManager.switchTheme(theme);
-    }
-    
-    @Override
     public void setNodeTheme(NodeTheme.Theme theme) {
         mapPanel.setNodeTheme(theme);
         // Save the preference
@@ -1124,55 +1119,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
     }
 
-    public void locatePreferenceFile() {
-        try {
-            String prefsPath = PreferenceManager.getPreferenceFilePath();
-            File prefsFile = new File(prefsPath);
-            File parentDir = prefsFile.getParentFile();
-
-            // Use the directory containing the preference file (or would contain it)
-            File targetDir = parentDir != null ? parentDir : new File(".");
-
-            if (Desktop.isDesktopSupported()) {
-                Desktop desktop = Desktop.getDesktop();
-                if (desktop.isSupported(Desktop.Action.OPEN)) {
-                    desktop.open(targetDir);
-                    updateStatus("Opened folder: " + targetDir.getAbsolutePath());
-                } else {
-                    showLocationFallback(targetDir);
-                }
-            } else {
-                showLocationFallback(targetDir);
-            }
-        } catch (Exception e) {
-            updateStatus("Error locating preference file: " + e.getMessage());
-            JOptionPane.showMessageDialog(
-                this,
-                "Could not open the folder containing the preference file.\n" +
-                "Preference file location: " + PreferenceManager.getPreferenceFilePath(),
-                "Cannot Open Folder",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-        }
-    }
-
-    /**
-     * Fallback method to show preference file location when desktop operations aren't supported.
-     */
-    private void showLocationFallback(File targetDir) {
-        JOptionPane.showMessageDialog(
-            this,
-            "Preference file is located in:\n" + targetDir.getAbsolutePath() + "\n\n" +
-            "File name: kalix_prefs.json\n\n" +
-            "Your system doesn't support automatically opening folders.\n" +
-            "Please navigate to this location manually.",
-            "Preference File Location",
-            JOptionPane.INFORMATION_MESSAGE
-        );
-        updateStatus("Preference file location: " + targetDir.getAbsolutePath());
-    }
-    
-    
     @Override
     public void searchModel() {
         textEditor.getSearchManager().showFindDialog();
@@ -1183,13 +1129,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         textEditor.getSearchManager().showFindReplaceDialog();
         updateStatus("Find and Replace dialog opened");
     }
-    
-    @Override
-    public void getCliVersion() {
-        versionChecker.checkVersionWithStatusUpdate();
-    }
-    
-    
+
     @Override
     public void showRunManager() {
         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
@@ -1416,8 +1356,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
             ProcessBuilder processBuilder = new ProcessBuilder(commandParts);
             processBuilder.directory(currentFile.getParentFile());
-
-            Process process = processBuilder.start();
 
             updateStatus("External editor launched: " + currentFile.getName());
 

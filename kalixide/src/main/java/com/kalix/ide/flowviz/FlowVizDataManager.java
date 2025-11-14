@@ -85,16 +85,6 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Sets the base directory supplier for file dialogs.
-     * This should provide the model's directory for opening data files.
-     *
-     * @param supplier Supplier that returns the base directory (null if no file is loaded)
-     */
-    public void setBaseDirectorySupplier(java.util.function.Supplier<File> supplier) {
-        this.baseDirectorySupplier = supplier;
-    }
-
-    /**
      * Opens a file chooser dialog and loads selected files with support for multiple selection.
      * Supports both CSV files and Kalix compressed timeseries files (.kai).
      *

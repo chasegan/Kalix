@@ -280,12 +280,4 @@ public class FlowVizActionManager {
     public boolean isPrecision64() {
         return precision64;
     }
-
-    /**
-     * Sets the data visibility state (used during initialization).
-     * @param dataVisible true to show data panel
-     */
-    public void setDataVisible(boolean dataVisible) {
-        this.dataVisible = dataVisible;
-    }
 }

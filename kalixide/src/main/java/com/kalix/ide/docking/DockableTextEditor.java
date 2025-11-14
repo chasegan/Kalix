@@ -1,8 +1,5 @@
 package com.kalix.ide.docking;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.kalix.ide.editor.EnhancedTextEditor;
 import java.awt.BorderLayout;
 
@@ -12,7 +9,6 @@ import java.awt.BorderLayout;
  * maintaining all the original text editor features.
  */
 public class DockableTextEditor extends DockablePanel {
-    private static final Logger logger = LoggerFactory.getLogger(DockableTextEditor.class);
 
     private EnhancedTextEditor textEditor;
 
@@ -123,58 +119,10 @@ public class DockableTextEditor extends DockablePanel {
         return textEditor;
     }
 
-    /**
-     * Delegates method calls to the wrapped EnhancedTextEditor for convenience.
-     */
-    public String getText() {
-        return textEditor != null ? textEditor.getText() : "";
-    }
 
     public void setText(String text) {
         if (textEditor != null) {
             textEditor.setText(text);
-        }
-    }
-
-    public boolean isDirty() {
-        return textEditor != null && textEditor.isDirty();
-    }
-
-    public void cut() {
-        if (textEditor != null) {
-            textEditor.cut();
-        }
-    }
-
-    public void copy() {
-        if (textEditor != null) {
-            textEditor.copy();
-        }
-    }
-
-    public void paste() {
-        if (textEditor != null) {
-            textEditor.paste();
-        }
-    }
-
-    public boolean canUndo() {
-        return textEditor != null && textEditor.canUndo();
-    }
-
-    public boolean canRedo() {
-        return textEditor != null && textEditor.canRedo();
-    }
-
-    public void undo() {
-        if (textEditor != null) {
-            textEditor.undo();
-        }
-    }
-
-    public void redo() {
-        if (textEditor != null) {
-            textEditor.redo();
         }
     }
 

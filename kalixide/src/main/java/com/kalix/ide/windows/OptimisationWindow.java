@@ -174,8 +174,6 @@ public class OptimisationWindow extends JFrame {
             statusUpdater
         );
         this.modelManager = new OptimisationModelManager(
-            workingDirectorySupplier,
-            modelTextSupplier,
             modelText -> {
                 if (parentIDE != null) {
                     parentIDE.setModelTextAndMarkDirty(modelText);

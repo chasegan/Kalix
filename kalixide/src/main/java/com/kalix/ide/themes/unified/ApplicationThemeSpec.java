@@ -11,14 +11,6 @@ import java.util.Map;
 public class ApplicationThemeSpec {
 
     /**
-     * Generate FlatLaf properties from a color palette.
-     * This replaces the need for separate .properties files.
-     */
-    public static Properties generateProperties(ColorPalette palette) {
-        return generateProperties(palette, null);
-    }
-
-    /**
      * Generate FlatLaf properties from a color palette with custom overrides.
      * Allows exact color mappings to be preserved for specific themes.
      */

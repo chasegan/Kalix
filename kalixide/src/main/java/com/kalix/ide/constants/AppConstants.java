@@ -51,7 +51,6 @@ public final class AppConstants {
     @Deprecated public static final String PREF_THEME = "theme";
     @Deprecated public static final String PREF_NODE_THEME = "node.theme";
     @Deprecated public static final String PREF_EDITOR_THEME = "editor.theme";
-    public static final String PREF_SPLIT_PANE_DIVIDER = "ui.splitpane.divider.location";
     @Deprecated public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
     @Deprecated public static final String PREF_FLOWVIZ_SHOW_COORDINATES = "flowviz.show.coordinates";
     
@@ -69,7 +68,6 @@ public final class AppConstants {
     public static final String STATUS_ZOOMED_IN = "Zoomed in";
     public static final String STATUS_ZOOMED_OUT = "Zoomed out";
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
-    public static final String STATUS_FLOWVIZ_OPENED = "FlowViz window opened";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
     public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini)";
     
@@ -81,12 +79,10 @@ public final class AppConstants {
     public static final String ERROR_FAILED_TO_OPEN = "Failed to open file: ";
     public static final String ERROR_FILE_NOT_EXISTS = "File no longer exists:\n";
     public static final String ERROR_FAILED_LOOK_AND_FEEL = "Failed to set look and feel: ";
-    public static final String ERROR_FAILED_FLATLAF_INIT = "Failed to initialize FlatLaf: ";
-    
+
     // Menu text
     public static final String MENU_NO_RECENT_FILES = "No recent files";
-    public static final String MENU_CLEAR_RECENT_FILES = "Clear Recent Files";
-    
+
     // Default text content
     public static final String DEFAULT_MODEL_TEXT = "# Welcome, friend ...\n";
 
@@ -97,7 +93,6 @@ public final class AppConstants {
     public static final String PROP_FLATLAF_MENU_EMBEDDED = "flatlaf.menuBarEmbedded";
     
     // Layout margins and spacing
-    public static final Insets DEFAULT_INSETS = new Insets(10, 10, 10, 10);
     public static final int STATUS_LABEL_BORDER_V = 5;
     public static final int STATUS_LABEL_BORDER_H = 10;
     
@@ -108,7 +103,6 @@ public final class AppConstants {
     public static String getToolbarSaveTooltip() { return "Save Model (" + KeyboardShortcutManager.getInstance().getShortcutString("S") + ")"; }
     public static String getToolbarSearchTooltip() { return "Search in Model (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Plotting Tool";
-    public static final String TOOLBAR_VERSION_TOOLTIP = "Check Kalix CLI Version";
     public static String getToolbarRunModelTooltip() { return "Run Model (" + KeyboardShortcutManager.getInstance().getShortcutString("R") + ")"; }
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Run Manager";
     public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
@@ -116,13 +110,5 @@ public final class AppConstants {
     // Branding
     public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";
     public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_banner_dark-124-24.png";
-    public static final String TOOLBAR_LOGO_TOOLTIP = "Visit Kalix Development Website";
     public static final int TOOLBAR_LOGO_HEIGHT = 24; // Scaled height for toolbar
-
-    // Status messages for new actions
-    public static final String STATUS_MODEL_RUNNING = "Running model...";
-    public static final String STATUS_MODEL_RUN_COMPLETE = "Model run completed";
-    public static final String STATUS_MODEL_RUN_ERROR = "Model run failed";
-    public static final String STATUS_SEARCH_OPENED = "Search dialog opened";
-    public static final String STATUS_SEARCH_NOT_IMPLEMENTED = "Search - Not yet implemented";
 }

@@ -39,6 +39,8 @@ public class OptimisationConfigManager {
     private Consumer<String> statusUpdater;
     private Consumer<String> configStatusCallback;
     private boolean isUpdatingEditor = false;
+
+    // Configuration state tracking
     private boolean isConfigModified = false;
     private String lastLoadedConfig = "";
 
@@ -320,18 +322,6 @@ public class OptimisationConfigManager {
     }
 
     /**
-     * Updates the GUI builder from the text configuration.
-     *
-     * @param modelText The model text for context
-     */
-    public void updateGuiFromText(String modelText) {
-        // Note: GUI builder currently doesn't support reverse parsing from text
-        // This would require implementing a config parser in OptimisationGuiBuilder
-        // For now, GUI must be manually configured
-        logger.debug("GUI update from text not yet implemented");
-    }
-
-    /**
      * Validates the current configuration.
      *
      * @return true if valid, false otherwise
@@ -358,39 +348,12 @@ public class OptimisationConfigManager {
     }
 
     /**
-     * Checks if the configuration has been modified.
-     *
-     * @return true if modified, false otherwise
-     */
-    public boolean isConfigModified() {
-        return isConfigModified;
-    }
-
-    /**
      * Sets the status updater callback.
      *
      * @param statusUpdater The status updater
      */
     public void setStatusUpdater(Consumer<String> statusUpdater) {
         this.statusUpdater = statusUpdater;
-    }
-
-    /**
-     * Sets the working directory supplier.
-     *
-     * @param supplier The directory supplier
-     */
-    public void setWorkingDirectorySupplier(Supplier<File> supplier) {
-        this.workingDirectorySupplier = supplier;
-    }
-
-    /**
-     * Gets whether the configuration editor is currently being updated programmatically.
-     *
-     * @return true if updating, false otherwise
-     */
-    public boolean isUpdatingEditor() {
-        return isUpdatingEditor;
     }
 
     /**

@@ -110,17 +110,6 @@ public class DockableMapPanel extends DockablePanel {
         }
     }
 
-    public void resetZoom() {
-        if (mapPanel != null) {
-            mapPanel.resetZoom();
-        }
-    }
-
-    public void zoomToFit() {
-        if (mapPanel != null) {
-            mapPanel.zoomToFit();
-        }
-    }
 
     @Override
     public void setBounds(int x, int y, int width, int height) {

@@ -47,14 +47,6 @@ public class LinterOrchestrator {
     }
 
     /**
-     * Perform validation on the given content.
-     * Always performs full validation for maximum accuracy and simplicity.
-     */
-    public void performValidation(String content) {
-        performValidation(content, null);
-    }
-
-    /**
      * Perform validation on the given content with a base directory for resolving relative paths.
      * Always performs full validation for maximum accuracy and simplicity.
      *
@@ -115,27 +107,6 @@ public class LinterOrchestrator {
         if (!enabled) {
             clearValidation();
         }
-    }
-
-    /**
-     * Check if validation is enabled.
-     */
-    public boolean isValidationEnabled() {
-        return validationEnabled;
-    }
-
-    /**
-     * Check if there are any validation results.
-     */
-    public boolean hasValidationResults() {
-        return currentValidationResult != null && !currentValidationResult.isEmpty();
-    }
-
-    /**
-     * Check if there are any validation errors.
-     */
-    public boolean hasValidationErrors() {
-        return currentValidationResult != null && currentValidationResult.hasErrors();
     }
 
     /**

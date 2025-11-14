@@ -19,14 +19,11 @@ import java.util.Set;
  * and synchronizing changes back to the text editor.
  */
 public class MapInteractionManager {
-    private static final Logger logger = LoggerFactory.getLogger(MapInteractionManager.class);
-    
     private final MapPanel mapPanel;
     private final HydrologicalModel model;
     
     // Drag state tracking
     private boolean isDragging = false;
-    private Point dragStartScreen;
     private Point2D dragStartWorld;
     private final Map<String, Point2D> originalNodePositions;
     
@@ -68,7 +65,6 @@ public class MapInteractionManager {
         }
         
         isDragging = true;
-        dragStartScreen = new Point(screenPoint);
         dragStartWorld = screenToWorld(screenPoint);
         
         // Store original positions of all selected nodes
@@ -135,28 +131,6 @@ public class MapInteractionManager {
         
         // Clear drag state
         originalNodePositions.clear();
-        dragStartScreen = null;
-        dragStartWorld = null;
-    }
-    
-    /**
-     * Cancel the current drag operation and restore original positions.
-     */
-    public void cancelDrag() {
-        if (!isDragging) {
-            return;
-        }
-        
-        // Restore original positions
-        for (Map.Entry<String, Point2D> entry : originalNodePositions.entrySet()) {
-            String nodeName = entry.getKey();
-            Point2D originalPos = entry.getValue();
-            model.updateNodePosition(nodeName, originalPos.getX(), originalPos.getY());
-        }
-        
-        isDragging = false;
-        originalNodePositions.clear();
-        dragStartScreen = null;
         dragStartWorld = null;
     }
     

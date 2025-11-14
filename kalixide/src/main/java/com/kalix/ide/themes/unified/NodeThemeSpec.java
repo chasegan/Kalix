@@ -11,23 +11,6 @@ import java.util.List;
 public class NodeThemeSpec {
 
     /**
-     * Generate a NodeTheme.Theme from a color palette.
-     * Uses intelligent color distribution from the palette.
-     */
-    public static NodeTheme.Theme generateNodeTheme(ColorPalette palette) {
-        // Convert palette colors to hex strings
-        String[] nodeColors = generateNodeColorArray(palette);
-
-        // Create text style from palette
-        NodeTheme.TextStyle textStyle = generateTextStyle(palette);
-
-        // Use reflection to create the theme since NodeTheme.Theme constructor is package-private
-        // For now, return one of the existing themes as a placeholder
-        // TODO: Need to refactor NodeTheme.Theme to support dynamic creation
-        return NodeTheme.Theme.LIGHT; // Placeholder - will be replaced with proper dynamic creation
-    }
-
-    /**
      * Generate an array of node colors from the palette.
      * Distributes palette colors intelligently across node types.
      */
@@ -104,7 +87,7 @@ public class NodeThemeSpec {
             palette.createVariant(palette.getOnSurface(), 1.2f))); // Muted color
 
         // Use accent colors for other node types
-        if (accents.size() > 0) {
+        if (!accents.isEmpty()) {
             colorMap.put("gr4j", colorToHex(accents.get(0)));
             colorMap.put("sacramento", colorToHex(accents.get(accents.size() > 1 ? 1 : 0)));
             colorMap.put("routing", colorToHex(accents.get(accents.size() > 2 ? 2 : 0)));

@@ -349,12 +349,6 @@ public class DiffWindow extends JFrame {
             for (int i = 0; i < rows.size(); i++) {
                 DiffRow row = rows.get(i);
                 DiffRow.Tag tag = row.getTag();
-                String oldLine = row.getOldLine();
-                String newLine = row.getNewLine();
-
-                // Check for padding lines (empty strings indicate added padding for alignment)
-                boolean leftIsPadding = (oldLine == null || oldLine.isEmpty());
-                boolean rightIsPadding = (newLine == null || newLine.isEmpty());
 
                 Color color = null;
                 switch (tag) {

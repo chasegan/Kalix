@@ -228,7 +228,7 @@ public class INIModelParser {
                 String continuationContent = removeComments(nextLine).trim();
                 if (!continuationContent.isEmpty()) {
                     // Add a space before appending to maintain separation
-                    if (combinedValue.length() > 0 && !combinedValue.toString().endsWith(" ")) {
+                    if (!combinedValue.isEmpty() && !combinedValue.toString().endsWith(" ")) {
                         combinedValue.append(" ");
                     }
                     combinedValue.append(continuationContent);

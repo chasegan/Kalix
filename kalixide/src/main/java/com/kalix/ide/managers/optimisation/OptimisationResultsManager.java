@@ -37,7 +37,6 @@ public class OptimisationResultsManager {
     private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say,\n# and what you do are in harmony. - Mahatma Gandhi";
 
     private final KalixIniTextArea optimisedModelEditor;
-    private final RTextScrollPane scrollPane;
 
     private Supplier<File> workingDirectorySupplier;
     private Supplier<String> originalModelSupplier;
@@ -51,9 +50,6 @@ public class OptimisationResultsManager {
         this.optimisedModelEditor = new KalixIniTextArea(TEXT_AREA_ROWS, TEXT_AREA_COLUMNS);
         this.optimisedModelEditor.setEditable(false);
         this.optimisedModelEditor.setText(MSG_READY);
-
-        // Create scroll pane
-        this.scrollPane = new RTextScrollPane(optimisedModelEditor);
     }
 
     /**
@@ -63,15 +59,6 @@ public class OptimisationResultsManager {
      */
     public KalixIniTextArea getOptimisedModelEditor() {
         return optimisedModelEditor;
-    }
-
-    /**
-     * Gets the scroll pane containing the editor.
-     *
-     * @return The scroll pane
-     */
-    public RTextScrollPane getScrollPane() {
-        return scrollPane;
     }
 
     /**

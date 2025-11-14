@@ -50,14 +50,6 @@ public class DockingContext {
     }
 
     /**
-     * Gets a service by its class type.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getService(Class<T> serviceClass) {
-        return (T) services.get(serviceClass);
-    }
-
-    /**
      * Gets a service by name.
      */
     @SuppressWarnings("unchecked")
@@ -73,13 +65,6 @@ public class DockingContext {
     }
 
     /**
-     * Gets an action by name.
-     */
-    public Action getAction(String actionName) {
-        return actions.get(actionName);
-    }
-
-    /**
      * Invokes an action by name.
      */
     public void invokeAction(String actionName) {
@@ -87,37 +72,6 @@ public class DockingContext {
         if (action != null) {
             action.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, actionName));
         }
-    }
-
-    /**
-     * Registers an event listener.
-     */
-    public void addEventListener(String eventType, Consumer<DockingEvent> listener) {
-        eventListeners.put(eventType, listener);
-    }
-
-    /**
-     * Removes an event listener.
-     */
-    public void removeEventListener(String eventType) {
-        eventListeners.remove(eventType);
-    }
-
-    /**
-     * Fires an event to all registered listeners.
-     */
-    public void fireEvent(DockingEvent event) {
-        Consumer<DockingEvent> listener = eventListeners.get(event.getType());
-        if (listener != null) {
-            SwingUtilities.invokeLater(() -> listener.accept(event));
-        }
-    }
-
-    /**
-     * Convenience method to fire a simple event.
-     */
-    public void fireEvent(String eventType, Object source, String data) {
-        fireEvent(new DockingEvent(eventType, source, data));
     }
 
     /**

@@ -127,22 +127,6 @@ public class OptimisationInfo {
         this.hasStartedRunning = hasStartedRunning;
     }
 
-    public boolean isConfigModified() {
-        return isConfigModified;
-    }
-
-    public void setConfigModified(boolean configModified) {
-        isConfigModified = configModified;
-    }
-
-    public LocalDateTime getCreatedTime() {
-        return createdTime;
-    }
-
-    public void setCreatedTime(LocalDateTime createdTime) {
-        this.createdTime = createdTime;
-    }
-
     /**
      * Checks if this optimisation is currently running.
      *
@@ -153,18 +137,6 @@ public class OptimisationInfo {
         return status == OptimisationStatus.RUNNING ||
                status == OptimisationStatus.LOADING ||
                status == OptimisationStatus.STARTING;
-    }
-
-    /**
-     * Checks if this optimisation has completed (successfully or with error).
-     *
-     * @return true if the optimisation is done or errored
-     */
-    public boolean isComplete() {
-        OptimisationStatus status = getStatus();
-        return status == OptimisationStatus.DONE ||
-               status == OptimisationStatus.ERROR ||
-               status == OptimisationStatus.STOPPED;
     }
 
     @Override

@@ -289,7 +289,6 @@ public class PreferenceManager {
      * Parses a simple JSON object into a Map.
      * Only supports flat key-value pairs with string, boolean, number, and string array values.
      */
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> parseSimpleJson(String json) {
         Map<String, Object> result = new HashMap<>();
 

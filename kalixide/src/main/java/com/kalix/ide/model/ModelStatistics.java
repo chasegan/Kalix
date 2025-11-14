@@ -8,15 +8,13 @@ public class ModelStatistics {
     private final int linkCount;
     private final int modifiedNodeCount;
     private final int modifiedLinkCount;
-    private final long version;
-    
+
     public ModelStatistics(int nodeCount, int linkCount, int modifiedNodeCount, 
-                          int modifiedLinkCount, long version) {
+                          int modifiedLinkCount) {
         this.nodeCount = nodeCount;
         this.linkCount = linkCount;
         this.modifiedNodeCount = modifiedNodeCount;
         this.modifiedLinkCount = modifiedLinkCount;
-        this.version = version;
     }
     
     public int getNodeCount() {
@@ -35,13 +33,9 @@ public class ModelStatistics {
         return modifiedLinkCount;
     }
     
-    public long getVersion() {
-        return version;
-    }
-    
     @Override
     public String toString() {
         return String.format("ModelStatistics{nodes=%d, links=%d, modifiedNodes=%d, modifiedLinks=%d, version=%d}",
-            nodeCount, linkCount, modifiedNodeCount, modifiedLinkCount, version);
+            nodeCount, linkCount, modifiedNodeCount, modifiedLinkCount);
     }
 }

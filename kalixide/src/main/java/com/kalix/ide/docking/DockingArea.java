@@ -53,27 +53,16 @@ public class DockingArea extends JPanel {
 
     private boolean isHighlighted = false;
     private boolean isValidDropTarget = true;
-    private String areaName;
     private PlaceholderComponent emptyLabel;
 
     // Hybrid docking zone support
     private DropZoneDetector.DropZone currentDropZone = DropZoneDetector.DropZone.NONE;
-    private Point lastCursorPosition;
 
-    /**
-     * Creates a new DockingArea with the default name "Docking Area".
-     */
-    public DockingArea() {
-        this("Docking Area");
-    }
 
     /**
      * Creates a new DockingArea with the specified name.
-     *
-     * @param name the display name for this docking area
      */
-    public DockingArea(String name) {
-        this.areaName = name;
+    public DockingArea() {
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(Layout.AREA_BORDER_SIZE, Layout.AREA_BORDER_SIZE,
                                                  Layout.AREA_BORDER_SIZE, Layout.AREA_BORDER_SIZE));
@@ -197,7 +186,6 @@ public class DockingArea extends JPanel {
 
                 if (newZone != currentDropZone) {
                     currentDropZone = newZone;
-                    lastCursorPosition = new Point(componentPoint);
                     repaint();
                 }
             }
@@ -211,20 +199,6 @@ public class DockingArea extends JPanel {
      */
     public DropZoneDetector.DropZone getCurrentDropZone() {
         return currentDropZone;
-    }
-
-    /**
-     * Returns whether this area is currently highlighted.
-     */
-    public boolean isHighlighted() {
-        return isHighlighted;
-    }
-
-    /**
-     * Sets whether this area can accept drop operations.
-     */
-    public void setValidDropTarget(boolean validDropTarget) {
-        this.isValidDropTarget = validDropTarget;
     }
 
     /**
@@ -265,20 +239,6 @@ public class DockingArea extends JPanel {
             // If coordinate conversion fails, return false to avoid hanging
             return false;
         }
-    }
-
-    /**
-     * Returns the name of this docking area.
-     */
-    public String getAreaName() {
-        return areaName;
-    }
-
-    /**
-     * Sets the name of this docking area.
-     */
-    public void setAreaName(String areaName) {
-        this.areaName = areaName;
     }
 
     @Override

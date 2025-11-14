@@ -55,7 +55,6 @@ import static com.kalix.ide.docking.DockingConstants.*;
  * @since 2025-09-27
  */
 public class DockablePanel extends JPanel {
-    private static final Logger logger = LoggerFactory.getLogger(DockablePanel.class);
 
     // State management
     private boolean isHighlighted = false;
@@ -243,13 +242,6 @@ public class DockablePanel extends JPanel {
     }
 
     /**
-     * Returns whether this panel is currently highlighted (F6 + hover).
-     */
-    public boolean isHighlighted() {
-        return isHighlighted;
-    }
-
-    /**
      * Forces the panel to request focus so it can receive key events.
      */
     public void requestDockingFocus() {
@@ -281,12 +273,5 @@ public class DockablePanel extends JPanel {
         if (dockingModeActive) {
             deactivateDockingMode();
         }
-    }
-
-    /**
-     * Returns whether docking mode is currently active.
-     */
-    public boolean isDockingModeActive() {
-        return dockingModeActive;
     }
 }

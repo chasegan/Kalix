@@ -50,36 +50,6 @@ public final class DockingConstants {
         }
 
         /**
-         * Updates theme colors from standard UIManager properties.
-         * Uses Panel.background for background color and Component.focusColor for accent.
-         * Falls back to reasonable defaults if properties are not set.
-         */
-        public static void updateFromUIManager() {
-            // Get background color from standard Panel.background
-            Color uiBackground = UIManager.getColor("Panel.background");
-            if (uiBackground == null) {
-                uiBackground = UIManager.getColor("control"); // Fallback
-            }
-            if (uiBackground == null) {
-                uiBackground = Color.LIGHT_GRAY; // Final fallback
-            }
-
-            // Get accent color from Component.focusColor or selection colors
-            Color uiAccent = UIManager.getColor("Component.focusColor");
-            if (uiAccent == null) {
-                uiAccent = UIManager.getColor("textHighlight"); // Fallback
-            }
-            if (uiAccent == null) {
-                uiAccent = UIManager.getColor("List.selectionBackground"); // Another fallback
-            }
-            if (uiAccent == null) {
-                uiAccent = new Color(0, 123, 255); // Final fallback to blue
-            }
-
-            setTheme(uiAccent, uiBackground);
-        }
-
-        /**
          * Updates all derived colors based on current accent and background colors.
          */
         private static void updateColors() {
@@ -137,18 +107,6 @@ public final class DockingConstants {
         private static Color withAlpha(Color color, int alpha) {
             return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
         }
-
-        // Public getters for the derived colors (these always return current theme colors)
-        public static Color getHighlight() { return highlight; }
-        public static Color getGrip() { return grip; }
-        public static Color getGripDots() { return gripDots; }
-        public static Color getDropZoneHighlight() { return dropZoneHighlight; }
-        public static Color getDropZoneBorder() { return dropZoneBorder; }
-        public static Color getDragPreview() { return dragPreview; }
-        public static Color getDragPreviewBorder() { return dragPreviewBorder; }
-        public static Color getDotShadow() { return dotShadow; }
-        public static Color getDotHighlight() { return dotHighlight; }
-        public static Color getPlaceholderFallback() { return placeholderFallback; }
 
         // Constants that always return current dynamic colors
         public static final Color HIGHLIGHT = new Color(0, 0, 0) {
@@ -289,9 +247,6 @@ public final class DockingConstants {
         /** Delay for mouse event settling in milliseconds */
         public static final int MOUSE_SETTLE_DELAY = 50;
 
-        /** Click detection tolerance in pixels */
-        public static final int CLICK_TOLERANCE = 5;
-
         /** Drag preview opacity (0.0 to 1.0) */
         public static final float DRAG_PREVIEW_OPACITY = 0.5f;
 
@@ -326,11 +281,6 @@ public final class DockingConstants {
      * Layout and positioning constants.
      */
     public static final class Layout {
-        /** Default docking area name */
-        public static final String DEFAULT_AREA_NAME = "Docking Area";
-
-        /** Main area identifier */
-        public static final String MAIN_AREA_NAME = "Main";
 
         /** Empty border size for docking areas */
         public static final int AREA_BORDER_SIZE = 5;

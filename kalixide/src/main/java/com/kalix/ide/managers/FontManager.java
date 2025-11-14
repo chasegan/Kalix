@@ -40,41 +40,6 @@ public class FontManager {
     }
 
     /**
-     * Gets the JetBrains Mono font at the specified size.
-     *
-     * @param size The font size in points
-     * @return A Font object, or null if the embedded font failed to load
-     */
-    public static Font getJetBrainsMono(int size) {
-        if (!initialized) {
-            initialize();
-        }
-
-        if (jetBrainsMonoFont != null) {
-            return jetBrainsMonoFont.deriveFont(Font.PLAIN, size);
-        }
-        return null;
-    }
-
-    /**
-     * Gets the JetBrains Mono font at the specified size and style.
-     *
-     * @param style The font style (Font.PLAIN, Font.BOLD, Font.ITALIC, etc.)
-     * @param size The font size in points
-     * @return A Font object, or null if the embedded font failed to load
-     */
-    public static Font getJetBrainsMono(int style, int size) {
-        if (!initialized) {
-            initialize();
-        }
-
-        if (jetBrainsMonoFont != null) {
-            return jetBrainsMonoFont.deriveFont(style, size);
-        }
-        return null;
-    }
-
-    /**
      * Gets the best available monospace font for text editing.
      * Tries JetBrains Mono first, then falls back to system monospace fonts.
      *

@@ -27,7 +27,6 @@ public class AxisRenderer {
     private static final int TIME_LABEL_OFFSET = 18;
     private static final int VALUE_LABEL_OFFSET = 8;
     private static final int TIME_TITLE_OFFSET = 40;
-    private static final int VALUE_TITLE_OFFSET = 55;
 
     private final TemporalAxisCalculator temporalCalculator;
 
