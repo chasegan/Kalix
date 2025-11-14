@@ -1,10 +1,17 @@
 package com.kalix.ide.flowviz.models;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
-import com.kalix.ide.flowviz.stats.*;
+import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.Statistic;
+import com.kalix.ide.flowviz.stats.StatisticsRegistry;
+import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.table.AbstractTableModel;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Table model for displaying statistics of multiple time series.

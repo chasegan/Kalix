@@ -5,7 +5,12 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Utilities for creating and applying masks to time series data.
