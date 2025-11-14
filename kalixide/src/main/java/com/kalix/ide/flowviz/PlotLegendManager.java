@@ -632,12 +632,6 @@ public class PlotLegendManager {
         this.onCollapsedChanged = callback;
     }
 
-    public void setPosition(int x, int y) {
-        this.x = x;
-        this.y = y;
-        savePreferences();
-    }
-
     /**
      * Loads legend preferences.
      */

@@ -38,8 +38,6 @@ public class PlotInteractionManager {
 
     // Zoom and pan constants
     private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
-    private static final double MIN_ZOOM = 0.001;
-    private static final double MAX_ZOOM = 1000.0;
 
     private final JComponent parentComponent;
     private final CoordinateDisplayManager coordinateDisplayManager;
@@ -720,57 +718,6 @@ public class PlotInteractionManager {
                 "Error saving data: " + e.getMessage(),
                 "Save Error",
                 JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    /**
-     * Legacy method - kept for backward compatibility if needed elsewhere.
-     */
-    private void saveDataCsv() {
-        DataSet dataSet = dataSetSupplier.get();
-        if (dataSet == null || dataSet.isEmpty()) {
-            JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
-        fileChooser.setSelectedFile(new File("timeseries_data.csv"));
-
-        // Set initial directory to model directory if available
-        if (baseDirectorySupplier != null) {
-            java.io.File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            }
-        }
-
-        int result = fileChooser.showSaveDialog(parentComponent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".csv")) {
-                file = new File(file.getAbsolutePath() + ".csv");
-            }
-
-            try {
-                com.kalix.ide.flowviz.transform.PlotType plotType =
-                    (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
-                TimeSeriesCsvExporter.export(dataSet, file, plotType);
-                JOptionPane.showMessageDialog(parentComponent,
-                    "Data saved successfully to " + file.getName(),
-                    "Save Data",
-                    JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(parentComponent,
-                    "Error saving data: " + e.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
-            } catch (IllegalArgumentException e) {
-                JOptionPane.showMessageDialog(parentComponent,
-                    "Invalid data: " + e.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
-            }
         }
     }
 }

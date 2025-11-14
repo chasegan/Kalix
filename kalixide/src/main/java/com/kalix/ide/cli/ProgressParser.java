@@ -20,7 +20,7 @@ public class ProgressParser {
         private final java.util.List<Double> objectiveValues;  // Array of objective values from population
 
         public enum ProgressType {
-            PERCENTAGE, FRACTION, STEP, ITERATION, TIME_STEP, PHASE, COMPLETION, UNKNOWN
+            PERCENTAGE, ITERATION, COMPLETION, UNKNOWN
         }
 
         public ProgressInfo(double percentage, String description, String rawLine, ProgressType type) {
@@ -72,16 +72,5 @@ public class ProgressParser {
         }
 
         return new ProgressInfo(percentComplete, description, command, ProgressInfo.ProgressType.PERCENTAGE);
-    }
-
-    /**
-     * Creates a ProgressInfo from JSON progress data (legacy method for backward compatibility).
-     *
-     * @param percentComplete the percentage complete (0.0-100.0)
-     * @param currentStep the current step description
-     * @return progress information
-     */
-    public static ProgressInfo createFromJson(double percentComplete, String currentStep) {
-        return createFromJson(percentComplete, currentStep, "unknown");
     }
 }

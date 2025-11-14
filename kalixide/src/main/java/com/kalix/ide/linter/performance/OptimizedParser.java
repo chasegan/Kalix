@@ -24,7 +24,6 @@ public class OptimizedParser {
 
     // Performance configuration
     private static final int LARGE_FILE_THRESHOLD_LINES = 1000;
-    private static final int INITIAL_CAPACITY = 256;
 
     /**
      * Parse content with automatic optimization based on size.
@@ -197,28 +196,5 @@ public class OptimizedParser {
             }
         }
         return count;
-    }
-
-    /**
-     * Estimate memory usage for content parsing.
-     */
-    public static long estimateMemoryUsage(String content) {
-        if (content == null || content.isEmpty()) {
-            return 0;
-        }
-
-        // Rough estimation based on content size and expected object overhead
-        long baseMemory = content.length() * 2L; // String overhead
-        int lineCount = countLines(content);
-        long objectOverhead = lineCount * 100L; // Estimated per-line object overhead
-
-        return baseMemory + objectOverhead;
-    }
-
-    /**
-     * Check if content should use optimized parsing.
-     */
-    public static boolean shouldUseOptimizedParsing(String content) {
-        return content != null && countLines(content) > LARGE_FILE_THRESHOLD_LINES;
     }
 }

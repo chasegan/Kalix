@@ -2,6 +2,7 @@ package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
+import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
@@ -24,12 +25,6 @@ import java.util.function.Supplier;
 public class OptimisationConfigManager {
 
     private static final Logger logger = LoggerFactory.getLogger(OptimisationConfigManager.class);
-
-    // Configuration constants
-    private static final int TEXT_AREA_ROWS = 20;
-    private static final int TEXT_AREA_COLUMNS = 80;
-    public static final String CONFIG_STATUS_ORIGINAL = "Original";
-    public static final String CONFIG_STATUS_MODIFIED = "Modified";
 
     private final KalixIniTextArea configEditor;
     private final OptimisationGuiBuilder guiBuilder;
@@ -55,7 +50,10 @@ public class OptimisationConfigManager {
         this.workingDirectorySupplier = workingDirectorySupplier;
 
         // Initialize text editor first
-        this.configEditor = new KalixIniTextArea(TEXT_AREA_ROWS, TEXT_AREA_COLUMNS);
+        this.configEditor = new KalixIniTextArea(
+            OptimisationUIConstants.CONFIG_TEXT_AREA_ROWS,
+            OptimisationUIConstants.CONFIG_TEXT_AREA_COLUMNS
+        );
 
         // Initialize GUI builder with config text consumer
         this.guiBuilder = new OptimisationGuiBuilder(
@@ -142,7 +140,7 @@ public class OptimisationConfigManager {
         if (!isUpdatingEditor) {
             isConfigModified = true;
             if (configStatusCallback != null) {
-                configStatusCallback.accept(CONFIG_STATUS_MODIFIED);
+                configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_MODIFIED);
             }
             logger.debug("Configuration marked as modified");
         }
@@ -164,7 +162,7 @@ public class OptimisationConfigManager {
         }
         isConfigModified = false;
         if (configStatusCallback != null) {
-            configStatusCallback.accept(CONFIG_STATUS_ORIGINAL);
+            configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
         }
         isUpdatingEditor = false;
 
@@ -203,7 +201,7 @@ public class OptimisationConfigManager {
                 setConfiguration(content);
                 isConfigModified = false;
                 if (configStatusCallback != null) {
-                    configStatusCallback.accept(CONFIG_STATUS_ORIGINAL);
+                    configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
                 }
 
                 if (statusUpdater != null) {

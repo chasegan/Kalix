@@ -69,19 +69,6 @@ public class PreferencesDialog extends JDialog {
     private static final String FONT_PANEL = "font";
 
     /**
-     * Creates a new professional preferences dialog.
-     */
-    public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor, SchemaManager schemaManager) {
-        super(parent, "Preferences", true);
-        this.parent = parent;
-        this.themeManager = themeManager;
-        this.textEditor = textEditor;
-        this.schemaManager = schemaManager;
-
-        initializeDialog();
-    }
-
-    /**
      * Creates a new professional preferences dialog with callback.
      */
     public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor,

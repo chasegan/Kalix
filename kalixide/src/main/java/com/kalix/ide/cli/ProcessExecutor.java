@@ -92,11 +92,6 @@ public class ProcessExecutor {
             return this;
         }
         
-        public ProcessConfig workingDirectory(String workingDirectory) {
-            this.workingDirectory = Paths.get(workingDirectory);
-            return this;
-        }
-        
         public ProcessConfig timeout(long seconds) {
             this.timeoutSeconds = seconds;
             return this;
@@ -461,14 +456,6 @@ public class ProcessExecutor {
     }
     
     /**
-     * Convenience method to execute a simple command.
-     */
-    public ProcessResult execute(String command, String... args) throws Exception {
-        List<String> argList = args != null ? List.of(args) : List.of();
-        return execute(command, argList, new ProcessConfig());
-    }
-    
-    /**
      * Starts an interactive process that allows bidirectional communication.
      * The process will not automatically terminate and streams will not be monitored
      * by StreamMonitor - use the RunningProcess methods for communication.
@@ -532,14 +519,6 @@ public class ProcessExecutor {
         }, executorService);
         
         return new RunningProcess(process, future, true); // true = interactive mode
-    }
-    
-    /**
-     * Convenience method to start an interactive process.
-     */
-    public RunningProcess startInteractive(String command, String... args) throws IOException {
-        List<String> argList = args != null ? List.of(args) : List.of();
-        return startInteractive(command, argList, new ProcessConfig());
     }
     
     /**

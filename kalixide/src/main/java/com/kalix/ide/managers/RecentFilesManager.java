@@ -134,19 +134,13 @@ public class RecentFilesManager {
                 item.setToolTipText(filePath);
 
                 // Create action listener for opening this file
-                item.addActionListener(e -> openRecentFile(filePath, recentFilesMenu));
+                item.addActionListener(e -> openRecentFile(filePath));
 
                 recentFilesMenu.add(item);
             }
 
             // Add separator and clear option
             recentFilesMenu.addSeparator();
-//            JMenuItem clearItem = new JMenuItem(AppConstants.MENU_CLEAR_RECENT_FILES);
-//            clearItem.addActionListener(e -> {
-//                clearRecentFiles();
-//                updateMenuContents();
-//            });
-//            recentFilesMenu.add(clearItem);
         }
     }
     
@@ -154,9 +148,8 @@ public class RecentFilesManager {
      * Attempts to open a recent file.
      *
      * @param filePath The path of the file to open
-     * @param recentFilesMenu The recent files menu (unused, kept for compatibility)
      */
-    private void openRecentFile(String filePath, JMenu recentFilesMenu) {
+    private void openRecentFile(String filePath) {
         File file = new File(filePath);
         if (file.exists()) {
             fileOpenCallback.accept(filePath);

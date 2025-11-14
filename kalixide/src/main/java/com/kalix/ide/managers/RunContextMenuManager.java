@@ -37,8 +37,6 @@ import java.util.function.Supplier;
  */
 public class RunContextMenuManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(RunContextMenuManager.class);
-
     // Dependencies
     private final JFrame parentFrame;
     private final JTree runTree;

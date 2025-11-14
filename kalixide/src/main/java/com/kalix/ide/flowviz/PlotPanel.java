@@ -35,11 +35,6 @@ public class PlotPanel extends JPanel {
     private static final int MARGIN_TOP = 20;
     private static final int MARGIN_BOTTOM = 60;
     
-    // Zoom and pan state
-    private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
-    private static final double MIN_ZOOM = 0.001;
-    private static final double MAX_ZOOM = 1000.0;
-    
     
     // Data and rendering
     private DataSet originalDataSet;  // Reference to shared dataset
@@ -535,15 +530,6 @@ public class PlotPanel extends JPanel {
      */
     public AggregationMethod getAggregationMethod() {
         return aggregationMethod;
-    }
-
-    /**
-     * Refreshes the display dataset from the original data.
-     * Call this when the original dataset has been modified externally
-     * (e.g., series added or removed).
-     */
-    public void refreshData() {
-        refreshData(true);
     }
 
     /**

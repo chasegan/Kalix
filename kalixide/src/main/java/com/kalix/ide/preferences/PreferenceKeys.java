@@ -43,12 +43,6 @@ public class PreferenceKeys {
     /** UI theme selection (string, default: "Light") */
     public static final String UI_THEME = "ui.theme";
 
-    /** Last directory used for file operations (string, default: "./") */
-    public static final String DATA_LAST_DIRECTORY = "data.lastDirectory";
-
-    /** List of recently opened files (string list, default: empty) */
-    public static final String DATA_RECENT_FILES = "data.recentFiles";
-
     /** Node theme selection (string, default: "LIGHT") */
     public static final String UI_NODE_THEME = "ui.nodeTheme";
 
@@ -88,34 +82,10 @@ public class PreferenceKeys {
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
     // These preferences are machine-specific and handle transient UI state
 
-    /** Main window width (int, default: 1000) */
-    public static final String WINDOW_WIDTH = "window.width";
-
-    /** Main window height (int, default: 700) */
-    public static final String WINDOW_HEIGHT = "window.height";
-
-    /** Main window X position (int, default: center screen) */
-    public static final String WINDOW_X = "window.x";
-
-    /** Main window Y position (int, default: center screen) */
-    public static final String WINDOW_Y = "window.y";
-
-    /** Main window maximized state (boolean, default: false) */
-    public static final String WINDOW_MAXIMIZED = "window.maximized";
-
-    /** FlowViz split pane divider position (int, default: 250) */
-    public static final String FLOWVIZ_SPLIT_PANE_POSITION = "flowviz.splitPanePosition";
-
     /** Last opened file path for session restoration (string, default: "") */
     public static final String LAST_OPENED_FILE = "lastOpenedFile";
 
     // ==== DEFAULT VALUES ====
-
-    /** Default recent files list */
-    public static final List<String> DEFAULT_RECENT_FILES = List.of();
-
-    /** Maximum number of recent files to track - unified with AppConstants.Files.MAX_RECENT_FILES */
-    public static final int MAX_RECENT_FILES = 10;
 
     /** Default Python terminal command for Windows */
     public static final String DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS = "%windir%\\System32\\cmd.exe \"/K\" %USERPROFILE%\\anaconda3\\Scripts\\activate.bat";

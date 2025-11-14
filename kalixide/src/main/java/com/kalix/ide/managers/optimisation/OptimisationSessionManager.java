@@ -251,29 +251,6 @@ public class OptimisationSessionManager {
     }
 
     /**
-     * Runs an optimisation with the stored configuration.
-     *
-     * @param optInfo The optimisation info
-     * @return true if started successfully, false otherwise
-     */
-    public boolean runOptimisation(OptimisationInfo optInfo) {
-        if (optInfo == null || optInfo.getSession() == null) {
-            handleError("No optimisation selected");
-            return false;
-        }
-
-        // Get config text from session
-        String sessionKey = optInfo.getSession().getSessionKey();
-        String configText = sessionToConfigText.get(sessionKey);
-        if (configText == null) {
-            handleError("Configuration text not found in session");
-            return false;
-        }
-
-        return runOptimisation(optInfo, configText, null);
-    }
-
-    /**
      * Stops an optimisation session.
      *
      * @param sessionKey The session key
@@ -487,28 +464,6 @@ public class OptimisationSessionManager {
         }
 
         logger.error("Optimisation error: {}", errorMessage);
-    }
-
-    /**
-     * Sets the counter for generated optimisation names.
-     *
-     * @param counter The counter value
-     */
-    public void setOptimisationCounter(int counter) {
-        this.optCounter = counter;
-    }
-
-    /**
-     * Clears all sessions and tracking data.
-     */
-    public void clearAll() {
-        sessionToOptName.clear();
-        sessionToTreeNode.clear();
-        lastKnownStatus.clear();
-        optimisationResults.clear();
-        sessionToModelText.clear();
-        sessionToConfigText.clear();
-        optCounter = 1;
     }
 
     // Setters for callbacks

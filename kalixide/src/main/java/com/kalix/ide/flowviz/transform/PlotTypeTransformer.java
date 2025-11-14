@@ -364,18 +364,4 @@ public class PlotTypeTransformer {
         }
         return dateTimes;
     }
-
-    /**
-     * Utility: Creates a deep copy of a DataSet with only selected series.
-     */
-    private static DataSet filterSelectedSeries(DataSet input, List<String> selectedSeriesKeys) {
-        DataSet filtered = new DataSet();
-        for (String key : selectedSeriesKeys) {
-            TimeSeriesData series = input.getSeries(key);
-            if (series != null) {
-                filtered.addSeries(series);
-            }
-        }
-        return filtered;
-    }
 }
