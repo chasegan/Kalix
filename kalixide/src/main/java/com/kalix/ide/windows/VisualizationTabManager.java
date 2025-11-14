@@ -307,6 +307,8 @@ public class VisualizationTabManager {
             .addSaveButton()
             .addSeparator()
             .addAggregationControls()
+            .addSeparator()
+            .addMaskControls()
             .build();
     }
 
@@ -556,6 +558,35 @@ public class VisualizationTabManager {
             return this;
         }
 
+        StatsToolbarBuilder addMaskControls() {
+            // Mask label
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+            toolbar.add(new JLabel("Mask:"));
+            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
+
+            // Mask mode dropdown
+            String[] maskOptions = {"All", "Each", "None"};
+            JComboBox<String> maskCombo = createDropdown(maskOptions,
+                UIConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
+
+            // Set initial selection from stats model
+            if (tabInfo.statsModel != null) {
+                maskCombo.setSelectedItem(tabInfo.statsModel.getMaskMode().getDisplayName());
+            }
+
+            maskCombo.addActionListener(e -> {
+                String selected = (String) maskCombo.getSelectedItem();
+                if (selected != null && tabInfo.statsModel != null) {
+                    com.kalix.ide.flowviz.stats.MaskMode mode =
+                        com.kalix.ide.flowviz.stats.MaskMode.fromDisplayName(selected);
+                    tabInfo.statsModel.setMaskMode(mode);
+                }
+            });
+            toolbar.add(maskCombo);
+
+            return this;
+        }
+
         /** Applies current aggregation settings to stats. */
         private void applyAggregation() {
             if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
@@ -616,8 +647,12 @@ public class VisualizationTabManager {
                 }
 
                 try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
-                    // Write header
-                    writer.write("Series,Min,Max,Mean,Points\n");
+                    // Write header (dynamic columns from table)
+                    for (int col = 0; col < statsTable.getColumnCount(); col++) {
+                        if (col > 0) writer.write(",");
+                        writer.write(statsTable.getColumnName(col));
+                    }
+                    writer.write("\n");
 
                     // Write data rows
                     for (int row = 0; row < statsTable.getRowCount(); row++) {
@@ -671,6 +706,56 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Applies a custom cell renderer to the stats table that colors statistic values.
+     * The Series column (column 0) remains default, while statistic columns use a theme color.
+     */
+    private void applyStatsTableRenderer(JTable table) {
+        table.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(
+                    JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+
+                java.awt.Component c = super.getTableCellRendererComponent(
+                    table, value, isSelected, hasFocus, row, column);
+
+                if (c instanceof JLabel) {
+                    JLabel label = (JLabel) c;
+
+                    if (!isSelected) {
+                        if (column == 0) {
+                            // Series name column - use default foreground color
+                            Color defaultColor = UIManager.getColor("Table.foreground");
+                            if (defaultColor != null) {
+                                label.setForeground(defaultColor);
+                            }
+                        } else {
+                            // Statistic columns - use muted theme color
+                            Color statsColor = UIManager.getColor("Label.disabledForeground");
+                            if (statsColor == null) {
+                                // Fallback to a semi-transparent default text color
+                                Color defaultColor = UIManager.getColor("Table.foreground");
+                                if (defaultColor != null) {
+                                    statsColor = new Color(
+                                        defaultColor.getRed(),
+                                        defaultColor.getGreen(),
+                                        defaultColor.getBlue(),
+                                        160  // ~63% opacity
+                                    );
+                                }
+                            }
+                            if (statsColor != null) {
+                                label.setForeground(statsColor);
+                            }
+                        }
+                    }
+                }
+
+                return c;
+            }
+        });
+    }
+
+    /**
      * Adds a new statistics tab.
      *
      * @return The created StatsTableModel
@@ -681,6 +766,14 @@ public class VisualizationTabManager {
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
+
+        // Apply custom renderer to color statistics columns
+        applyStatsTableRenderer(table);
+
+        // Make the Series column wider to accommodate longer series names
+        if (table.getColumnCount() > 0) {
+            table.getColumnModel().getColumn(0).setPreferredWidth(200);
+        }
 
         JScrollPane scrollPane = new JScrollPane(table);
 
@@ -715,6 +808,14 @@ public class VisualizationTabManager {
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
+
+        // Apply custom renderer to color statistics columns
+        applyStatsTableRenderer(table);
+
+        // Make the Series column wider to accommodate longer series names
+        if (table.getColumnCount() > 0) {
+            table.getColumnModel().getColumn(0).setPreferredWidth(200);
+        }
 
         JScrollPane scrollPane = new JScrollPane(table);
 
