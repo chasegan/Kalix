@@ -19,7 +19,8 @@ public class StatsTableModel extends AbstractTableModel {
     private String referenceSeries = null;  // Name of first series
 
     // Cache of original (unmasked) series data
-    private final Map<String, TimeSeriesData> originalSeriesCache = new HashMap<>();
+    // Using LinkedHashMap to preserve insertion order
+    private final Map<String, TimeSeriesData> originalSeriesCache = new LinkedHashMap<>();
 
     /**
      * Statistics for a single time series with all computed values.
