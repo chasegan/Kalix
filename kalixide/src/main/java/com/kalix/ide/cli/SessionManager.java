@@ -40,7 +40,6 @@ public class SessionManager {
         STARTING,       // Session process is starting up
         RUNNING,        // Session is actively executing (e.g., running simulation)
         READY,          // Session completed main task, ready for queries
-        COMPLETING,     // Session is finishing up and will terminate
         ERROR,          // Session encountered an error
         TERMINATED      // Session has ended
     }

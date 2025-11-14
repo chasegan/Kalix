@@ -115,13 +115,6 @@ public class SessionManagerWindow extends JFrame {
         }
     }
 
-    /**
-     * Gets the Session Manager instance if it exists and is open.
-     */
-    public static SessionManagerWindow getOpenInstance() {
-        return (instance != null && instance.isVisible()) ? instance : null;
-    }
-
     private void setupWindow(JFrame parentFrame) {
         setTitle("KalixCLI Session Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);

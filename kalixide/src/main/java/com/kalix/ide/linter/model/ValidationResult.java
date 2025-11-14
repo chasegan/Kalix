@@ -57,34 +57,6 @@ public class ValidationResult {
     }
 
     /**
-     * Check if validation has any warnings.
-     */
-    public boolean hasWarnings() {
-        return issues.stream().anyMatch(issue -> issue.getSeverity() == ValidationRule.Severity.WARNING);
-    }
-
-    /**
-     * Get total number of issues.
-     */
-    public int getIssueCount() {
-        return issues.size();
-    }
-
-    /**
-     * Clear all issues.
-     */
-    public void clear() {
-        issues.clear();
-    }
-
-    /**
-     * Check if the validation passed (no errors).
-     */
-    public boolean isValid() {
-        return !hasErrors();
-    }
-
-    /**
      * Check if the result is empty (no issues).
      */
     public boolean isEmpty() {

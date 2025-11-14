@@ -249,32 +249,4 @@ public class StreamMonitor {
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
     }
-    
-    /**
-     * Factory method to create a monitor for stdout with progress parsing.
-     */
-    public static StreamMonitor forStdout(InputStream stdout, Consumer<String> lineCallback, Consumer<String> progressCallback) {
-        return new StreamMonitor(stdout, lineCallback, progressCallback);
-    }
-    
-    /**
-     * Factory method to create a monitor for stderr (typically no progress parsing).
-     */
-    public static StreamMonitor forStderr(InputStream stderr, Consumer<String> lineCallback) {
-        return new StreamMonitor(stderr, lineCallback, null);
-    }
-    
-    /**
-     * Factory method to create a simple monitor with just line callbacks.
-     */
-    public static StreamMonitor withLineCallback(InputStream inputStream, Consumer<String> lineCallback) {
-        return new StreamMonitor(inputStream, lineCallback, null);
-    }
-    
-    /**
-     * Factory method to create a monitor that only collects output (no callbacks).
-     */
-    public static StreamMonitor collectOnly(InputStream inputStream) {
-        return new StreamMonitor(inputStream, null, null);
-    }
 }

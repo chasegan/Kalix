@@ -289,25 +289,4 @@ public class TimeSeriesCsvExporter {
         }
         return null; // Not found or invalid
     }
-
-    /**
-     * Configuration class for CSV export options.
-     *
-     * <p>This class can be extended in the future to provide customization
-     * options such as custom date formats, delimiter characters, or
-     * missing value representations.</p>
-     *
-     * @since 1.0
-     */
-    public static class ExportOptions {
-        // Future expansion for export customization
-        // e.g., custom date formats, delimiters, missing value representations
-
-        /**
-         * Creates default export options.
-         */
-        public ExportOptions() {
-            // Default configuration
-        }
-    }
 }

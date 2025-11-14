@@ -17,7 +17,6 @@ public class StatusProgressBar extends JComponent {
     private double progress = 0.0; // 0.0 to 1.0
     private String progressText = "";
     private boolean visible = false;
-    private boolean indeterminate = false;
 
     // Simple colors without command-specific logic
     private final Color backgroundColor = new Color(230, 230, 230);
@@ -130,19 +129,6 @@ public class StatusProgressBar extends JComponent {
     }
     
     /**
-     * Sets indeterminate mode (spinning animation).
-     * 
-     * @param indeterminate true for indeterminate mode
-     */
-    public void setIndeterminate(boolean indeterminate) {
-        this.indeterminate = indeterminate;
-        if (indeterminate) {
-            // Could add spinning animation here if needed
-        }
-        repaint();
-    }
-    
-    /**
      * Gets the current progress value.
      * 
      * @return progress value between 0.0 and 1.0
@@ -237,9 +223,7 @@ public class StatusProgressBar extends JComponent {
         this.progress = 0.0;
         this.targetProgress = 0.0;
         this.progressText = "";
-        this.indeterminate = false;
         animationTimer.stop();
         repaint();
     }
-    
 }

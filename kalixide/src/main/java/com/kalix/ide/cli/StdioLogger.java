@@ -87,27 +87,6 @@ public class StdioLogger {
     }
     
     /**
-     * Sets the output stream for normal log messages.
-     */
-    public void setOutputStream(PrintStream stream) {
-        this.outputStream = stream;
-    }
-    
-    /**
-     * Sets the error stream for error and warning messages.
-     */
-    public void setErrorStream(PrintStream stream) {
-        this.errorStream = stream;
-    }
-    
-    /**
-     * Sets a callback for IDE log display.
-     */
-    public void setIdeLogCallback(Consumer<String> callback) {
-        this.ideLogCallback = callback;
-    }
-    
-    /**
      * Logs a debug message.
      */
     public void debug(String message) {
@@ -212,43 +191,6 @@ public class StdioLogger {
         }
     }
     
-    /**
-     * Gets recent log entries for IDE display.
-     */
-    public LogEntry[] getRecentEntries() {
-        return recentEntries.toArray(new LogEntry[0]);
-    }
-    
-    /**
-     * Gets recent log entries of a specific level or higher.
-     */
-    public LogEntry[] getRecentEntries(LogLevel minLevel) {
-        return recentEntries.stream()
-                .filter(entry -> entry.getLevel().getLevel() >= minLevel.getLevel())
-                .toArray(LogEntry[]::new);
-    }
-    
-    /**
-     * Clears recent log entries.
-     */
-    public void clearRecentEntries() {
-        recentEntries.clear();
-    }
-    
-    /**
-     * Gets the current log level.
-     */
-    public LogLevel getLogLevel() {
-        return currentLevel;
-    }
-    
-    /**
-     * Checks if a log level is enabled.
-     */
-    public boolean isEnabled(LogLevel level) {
-        return level.getLevel() >= currentLevel.getLevel();
-    }
-    
     // Singleton instance for global use
     private static final StdioLogger INSTANCE = new StdioLogger();
     
@@ -257,40 +199,5 @@ public class StdioLogger {
      */
     public static StdioLogger getInstance() {
         return INSTANCE;
-    }
-    
-    /**
-     * Convenience methods for global logging.
-     */
-    public static void logDebug(String message) {
-        INSTANCE.debug(message);
-    }
-    
-    public static void logDebug(String message, Throwable exception) {
-        INSTANCE.debug(message, exception);
-    }
-    
-    public static void logInfo(String message) {
-        INSTANCE.info(message);
-    }
-    
-    public static void logInfo(String message, Throwable exception) {
-        INSTANCE.info(message, exception);
-    }
-    
-    public static void logWarn(String message) {
-        INSTANCE.warn(message);
-    }
-    
-    public static void logWarn(String message, Throwable exception) {
-        INSTANCE.warn(message, exception);
-    }
-    
-    public static void logError(String message) {
-        INSTANCE.error(message);
-    }
-    
-    public static void logError(String message, Throwable exception) {
-        INSTANCE.error(message, exception);
     }
 }

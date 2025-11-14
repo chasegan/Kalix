@@ -32,8 +32,7 @@ public class TextNavigationManager {
     public void showGoToLineDialog() {
         // Get total line count
         int totalLines = getLineCount();
-        int currentLine = getCurrentLineNumber();
-        
+
         String input = JOptionPane.showInputDialog(
             parentComponent,
             String.format("Go to line (1-%d):", totalLines),

@@ -95,14 +95,6 @@ public class TextCoordinateUpdater {
     }
     
     /**
-     * Check if currently updating from model (to prevent infinite loops).
-     * @return true if currently updating text from model changes
-     */
-    public boolean isUpdatingFromModel() {
-        return updatingFromModel;
-    }
-    
-    /**
      * Scrolls the text editor to the specified node definition.
      * Finds the node's section header and positions it in the visible area.
      * @param nodeName Name of the node to scroll to
@@ -180,9 +172,6 @@ public class TextCoordinateUpdater {
         
         try {
             Document doc = textEditor.getTextArea().getDocument();
-            
-            // Create a CompoundEdit for grouping multiple deletions into single undo operation
-            CompoundEdit compoundEdit = new CompoundEdit();
             
             // Process nodes in reverse order to maintain document positions
             // Sort by document position (descending) to delete from end to beginning

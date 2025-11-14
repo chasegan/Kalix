@@ -28,10 +28,6 @@ public class ValidationIssue {
         return severity;
     }
 
-    public String getRuleName() {
-        return ruleName;
-    }
-
     @Override
     public String toString() {
         return String.format("Line %d: %s [%s]", lineNumber, message, severity);

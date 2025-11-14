@@ -144,38 +144,12 @@ public class SessionCommunicationLog {
     }
     
     /**
-     * Gets all log entries for this session.
-     * 
-     * @return unmodifiable list of log entries
-     */
-    public List<LogEntry> getEntries() {
-        return Collections.unmodifiableList(new ArrayList<>(entries));
-    }
-    
-    /**
      * Gets the internal session key this log belongs to.
      *
      * @return the session key
      */
     public String getSessionKey() {
         return sessionKey;
-    }
-    
-    /**
-     * Gets the number of entries in the log.
-     * 
-     * @return the entry count
-     */
-    public int getEntryCount() {
-        return entries.size();
-    }
-    
-    /**
-     * Clears all entries from the log.
-     */
-    public void clear() {
-        entries.clear();
-        logSystemMessage("Log cleared for session: " + sessionKey);
     }
     
     /**
@@ -191,19 +165,4 @@ public class SessionCommunicationLog {
         }
         return sb.toString();
     }
-    
-    /**
-     * Gets the most recent log entries.
-     * 
-     * @param count maximum number of entries to return
-     * @return list of recent entries (most recent first)
-     */
-    public List<LogEntry> getRecentEntries(int count) {
-        List<LogEntry> allEntries = new ArrayList<>(entries);
-        if (allEntries.size() <= count) {
-            return allEntries;
-        }
-        return allEntries.subList(allEntries.size() - count, allEntries.size());
-    }
-    
 }

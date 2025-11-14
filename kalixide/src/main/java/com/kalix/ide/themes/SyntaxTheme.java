@@ -142,30 +142,9 @@ public class SyntaxTheme {
     private Theme currentTheme;
 
     /**
-     * Creates a new SyntaxTheme with the default theme.
-     */
-    public SyntaxTheme() {
-        this(Theme.LIGHT);
-    }
-
-    /**
      * Creates a new SyntaxTheme with the specified theme.
      */
     public SyntaxTheme(Theme theme) {
-        this.currentTheme = theme;
-    }
-
-    /**
-     * Gets the current theme.
-     */
-    public Theme getCurrentTheme() {
-        return currentTheme;
-    }
-
-    /**
-     * Sets the current theme.
-     */
-    public void setCurrentTheme(Theme theme) {
         this.currentTheme = theme;
     }
 
@@ -174,20 +153,6 @@ public class SyntaxTheme {
      */
     public static Theme[] getAllThemes() {
         return Theme.values();
-    }
-
-    /**
-     * Gets a theme by display name.
-     * @param displayName The display name of the theme
-     * @return The corresponding Theme enum, or LIGHT if not found
-     */
-    public static Theme getThemeByDisplayName(String displayName) {
-        for (Theme theme : Theme.values()) {
-            if (theme.getDisplayName().equals(displayName)) {
-                return theme;
-            }
-        }
-        return Theme.LIGHT; // Default fallback
     }
 
     /**
@@ -201,20 +166,5 @@ public class SyntaxTheme {
         } catch (IllegalArgumentException e) {
             return Theme.LIGHT; // Default fallback
         }
-    }
-
-    /**
-     * Gets a color map for all token types in the current theme.
-     * Keys match RSyntaxTextArea token type constants.
-     */
-    public Map<String, Color> getTokenColorMap() {
-        Map<String, Color> colorMap = new HashMap<>();
-        colorMap.put("Token.IDENTIFIER", currentTheme.getIdentifierColor());
-        colorMap.put("Token.OPERATOR", currentTheme.getOperatorColor());
-        colorMap.put("Token.LITERAL_STRING_DOUBLE_QUOTE", currentTheme.getStringColor());
-        colorMap.put("Token.RESERVED_WORD", currentTheme.getReservedWordColor());
-        colorMap.put("Token.COMMENT_EOL", currentTheme.getCommentColor());
-        colorMap.put("Token.WHITESPACE", currentTheme.getWhitespaceColor());
-        return colorMap;
     }
 }

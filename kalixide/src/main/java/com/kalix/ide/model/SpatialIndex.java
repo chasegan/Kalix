@@ -121,10 +121,6 @@ public class SpatialIndex {
             this.maxNodesPerCell = maxNodesPerCell;
         }
         
-        public int getTotalNodes() { return totalNodes; }
-        public int getGridCells() { return gridCells; }
-        public int getMaxNodesPerCell() { return maxNodesPerCell; }
-        
         @Override
         public String toString() {
             return String.format("IndexStats{nodes=%d, cells=%d, maxPerCell=%d}", 

@@ -129,28 +129,6 @@ public class SchemaManager {
 
     }
 
-    /**
-     * Enable or disable a specific validation rule.
-     */
-    public void setRuleEnabled(String ruleName, boolean enabled) {
-        if (enabled) {
-            disabledRules.remove(ruleName);
-        } else {
-            disabledRules.add(ruleName);
-        }
-
-        // Update schema
-        if (currentSchema != null) {
-            ValidationRule rule = currentSchema.getValidationRule(ruleName);
-            if (rule != null) {
-                rule.setEnabled(enabled);
-            }
-        }
-
-        // Save to preferences
-        PreferenceManager.setFileStringList(PreferenceKeys.LINTER_DISABLED_RULES, disabledRules.stream().toList());
-    }
-
     // Getters
     public LinterSchema getCurrentSchema() {
         return currentSchema;

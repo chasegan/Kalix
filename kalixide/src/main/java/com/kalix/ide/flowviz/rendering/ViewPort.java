@@ -17,20 +17,6 @@ public class ViewPort {
     // Axis transformations
     private final YAxisScale yAxisScale;
     private final XAxisType xAxisType;
-    
-    public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue) {
-        this(startTimeMs, endTimeMs, minValue, maxValue, 0, 0, 0, 0, YAxisScale.LINEAR, XAxisType.TIME);
-    }
-
-    public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
-                   int plotX, int plotY, int plotWidth, int plotHeight) {
-        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, YAxisScale.LINEAR, XAxisType.TIME);
-    }
-
-    public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
-                   int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale) {
-        this(startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight, yAxisScale, XAxisType.TIME);
-    }
 
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
                    int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale, XAxisType xAxisType) {
@@ -234,17 +220,6 @@ public class ViewPort {
     public ViewPort withXAxisType(XAxisType xAxisType) {
         return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
-    }
-    
-    // Calculate how many pixels per data point
-    public double getPixelsPerMillisecond() {
-        if (endTimeMs == startTimeMs) return 0;
-        return (double) plotWidth / (endTimeMs - startTimeMs);
-    }
-    
-    public double getPixelsPerValue() {
-        if (maxValue == minValue) return 0;
-        return plotHeight / (maxValue - minValue);
     }
     
     // Calculate visible point density for LOD decisions

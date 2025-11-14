@@ -592,48 +592,9 @@ public class TimeSeriesCsvImporter {
         /** Skip rows where all data values are missing */
         public boolean skipRowsWithAllMissingValues = true;
 
-        /** Use strict date parsing (reject ambiguous formats) */
-        public boolean strictDateParsing = false;
-
-        /** Maximum number of rows to process (for preview/testing) */
-        public int maxPreviewRows = 10000;
-
         /**
          * Creates default import options.
          */
         public CsvImportOptions() {}
-
-        /**
-         * Sets whether to skip rows with all missing values.
-         *
-         * @param skip true to skip rows with all missing data
-         * @return this options object for method chaining
-         */
-        public CsvImportOptions skipRowsWithAllMissingValues(boolean skip) {
-            this.skipRowsWithAllMissingValues = skip;
-            return this;
-        }
-
-        /**
-         * Sets strict date parsing mode.
-         *
-         * @param strict true for strict parsing (reject ambiguous dates)
-         * @return this options object for method chaining
-         */
-        public CsvImportOptions strictDateParsing(boolean strict) {
-            this.strictDateParsing = strict;
-            return this;
-        }
-
-        /**
-         * Sets the maximum number of rows to process.
-         *
-         * @param maxRows maximum rows to import (0 for unlimited)
-         * @return this options object for method chaining
-         */
-        public CsvImportOptions maxPreviewRows(int maxRows) {
-            this.maxPreviewRows = maxRows;
-            return this;
-        }
     }
 }

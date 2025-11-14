@@ -117,13 +117,4 @@ public class SeriesColorManager {
         return seriesColorMap;
     }
 
-    /**
-     * Sets the entire color map (for restoration).
-     *
-     * @param colorMap The color map to set
-     */
-    public void setColorMap(Map<String, Color> colorMap) {
-        seriesColorMap.clear();
-        seriesColorMap.putAll(colorMap);
-    }
 }

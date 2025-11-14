@@ -18,11 +18,6 @@ public class TabbedDockingContainer extends JPanel {
         initializeContainer();
     }
 
-    public TabbedDockingContainer(DockablePanel initialPanel) {
-        initializeContainer();
-        addDockablePanel(initialPanel);
-    }
-
     /**
      * Initializes the tabbed container.
      */
@@ -99,20 +94,6 @@ public class TabbedDockingContainer extends JPanel {
         panel.requestDockingFocus();
     }
 
-    /**
-     * Removes a dockable panel from the tabs.
-     */
-    public void removeDockablePanel(DockablePanel panel) {
-        int index = dockablePanels.indexOf(panel);
-        if (index >= 0) {
-            dockablePanels.remove(index);
-            tabbedPane.removeTabAt(index);
-
-            // Check if cleanup is needed after removal
-            scheduleCleanupCheck();
-        }
-    }
-
     @Override
     public void remove(Component comp) {
         // If it's a dockable panel being removed, sync our list
@@ -127,38 +108,6 @@ public class TabbedDockingContainer extends JPanel {
 
         // Check if cleanup is needed after removal
         scheduleCleanupCheck();
-    }
-
-    /**
-     * Returns the number of panels in this container.
-     */
-    public int getPanelCount() {
-        return dockablePanels.size();
-    }
-
-    /**
-     * Returns true if this container has no panels.
-     */
-    public boolean isEmpty() {
-        return dockablePanels.isEmpty();
-    }
-
-    /**
-     * Returns the currently selected panel, or null if none selected.
-     */
-    public DockablePanel getSelectedPanel() {
-        int selectedIndex = tabbedPane.getSelectedIndex();
-        if (selectedIndex >= 0 && selectedIndex < dockablePanels.size()) {
-            return dockablePanels.get(selectedIndex);
-        }
-        return null;
-    }
-
-    /**
-     * Returns all panels in this container.
-     */
-    public List<DockablePanel> getAllPanels() {
-        return new ArrayList<>(dockablePanels);
     }
 
     /**
@@ -189,16 +138,6 @@ public class TabbedDockingContainer extends JPanel {
         }
 
         return null;
-    }
-
-    /**
-     * Creates a tabbed container from an existing single panel.
-     * Useful when converting a regular docking area to tabbed.
-     */
-    public static TabbedDockingContainer convertFromSinglePanel(DockablePanel existingPanel) {
-        TabbedDockingContainer container = new TabbedDockingContainer();
-        container.addDockablePanel(existingPanel);
-        return container;
     }
 
     /**
@@ -292,12 +231,5 @@ public class TabbedDockingContainer extends JPanel {
         } finally {
             isCleaningUp = false;
         }
-    }
-
-    /**
-     * Returns whether this tabbed container is currently performing cleanup.
-     */
-    public boolean isCleaningUp() {
-        return isCleaningUp;
     }
 }
