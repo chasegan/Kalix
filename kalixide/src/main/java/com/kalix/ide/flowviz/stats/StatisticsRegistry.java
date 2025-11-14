@@ -20,7 +20,8 @@ public class StatisticsRegistry {
         new MaxStatistic(),
         new MeanStatistic(),
         new CountStatistic(),
-        new BiasStatistic()
+        new BiasStatistic(),
+        new SdebStatistic()
     );
 
     /**
