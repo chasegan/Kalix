@@ -1356,6 +1356,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
             ProcessBuilder processBuilder = new ProcessBuilder(commandParts);
             processBuilder.directory(currentFile.getParentFile());
+            processBuilder.start();
 
             updateStatus("External editor launched: " + currentFile.getName());
 

@@ -103,15 +103,16 @@ public class MenuBarBuilder {
      */
     public JMenuBar buildMenuBar() {
         JMenuBar menuBar = new JMenuBar();
-        
+
         menuBar.add(createFileMenu());
         menuBar.add(createEditMenu());
         menuBar.add(createViewMenu());
         menuBar.add(createRunMenu());
         menuBar.add(createToolsMenu());
         menuBar.add(createAIMenu());
+        menuBar.add(createSystemMenu());
         menuBar.add(createHelpMenu());
-        
+
         return menuBar;
     }
     
@@ -206,10 +207,10 @@ public class MenuBarBuilder {
     }
     
     /**
-     * Creates the Data Tools menu.
+     * Creates the Tools menu.
      */
     private JMenu createToolsMenu() {
-        JMenu toolsMenu = new JMenu("Data Tools");
+        JMenu toolsMenu = new JMenu("Tools");
         toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
         return toolsMenu;
     }
@@ -220,18 +221,25 @@ public class MenuBarBuilder {
     private JMenu createAIMenu() {
         JMenu aiMenu = new JMenu("AI");
 
-        // Launch terminal
-        aiMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
-        aiMenu.add(createMenuItem("External Editor", e -> callbacks.openExternalEditor()));
-        aiMenu.add(createMenuItem("File Manager", e -> callbacks.openFileManager()));
-        aiMenu.addSeparator();
         aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
         aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));
 
         return aiMenu;
     }
 
-    
+    /**
+     * Creates the System menu.
+     */
+    private JMenu createSystemMenu() {
+        JMenu systemMenu = new JMenu("System");
+
+        systemMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
+        systemMenu.add(createMenuItem("Visual Studio Code", e -> callbacks.openExternalEditor()));
+        systemMenu.add(createMenuItem("File Manager", e -> callbacks.openFileManager()));
+
+        return systemMenu;
+    }
+
     /**
      * Creates the Help menu.
      */
