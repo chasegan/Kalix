@@ -39,9 +39,9 @@ def verify_model(model_path, mbal_filename='mbal_for_verification.txt'):
         return False, f"Mass balance file not found: {mbal_path}"
 
     try:
-        # Run kalixcli with verification
+        # Run kalix with verification
         result = subprocess.run(
-            ['kalixcli', 'simulate', model_file, '-v', mbal_filename],
+            ['kalix', 'simulate', model_file, '-v', mbal_filename],
             cwd=model_dir,
             capture_output=True,
             text=True,
