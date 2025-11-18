@@ -5,7 +5,7 @@ use crate::io::ini_model_io::IniModelIO;
 #[test]
 fn test_line_continuation_integration() {
     let content = r#"
-[attributes]
+[kalix]
 ini_version = 0.0.1
 
 [inputs]
@@ -36,7 +36,7 @@ params = 0.01, 40.0, 23.0,
 #[test]
 fn test_to_string_preserves_unchanged() {
     let content = r#"# Top comment
-[attributes]
+[kalix]
 ini_version = 0.0.1
 
 [node.test]
@@ -83,7 +83,7 @@ params = 100.0, 2.0, 50.0, 0.5
 
 #[test]
 fn test_round_trip() {
-    let content = r#"[attributes]
+    let content = r#"[kalix]
 ini_version = 0.0.1
 
 [inputs]
@@ -109,8 +109,8 @@ node.node1.dsflow
 
     // Check values match
     assert_eq!(
-        doc1.get_property("attributes", "ini_version"),
-        doc2.get_property("attributes", "ini_version")
+        doc1.get_property("kalix", "ini_version"),
+        doc2.get_property("kalix", "ini_version")
     );
     assert_eq!(
         doc1.get_property("node.node1", "type"),
@@ -124,7 +124,7 @@ node.node1.dsflow
 
 #[test]
 fn test_modify_and_save() {
-    let content = r#"[attributes]
+    let content = r#"[kalix]
 ini_version = 0.0.1
 
 [node.gr4j_node]
@@ -179,7 +179,7 @@ fn test_full_model_round_trip() {
     // 3. Save to new INI file
     // 4. Reload and verify changes
 
-    let original_ini = r#"[attributes]
+    let original_ini = r#"[kalix]
 ini_version = 0.0.1
 
 [inputs]
@@ -251,7 +251,7 @@ node.gr4j_node.dsflow
 fn test_save_and_reload_from_file() {
     use std::path::Path;
 
-    let original_ini = r#"[attributes]
+    let original_ini = r#"[kalix]
 ini_version = 0.0.1
 
 [inputs]

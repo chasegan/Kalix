@@ -16,16 +16,16 @@ public class SectionValidator implements ValidationStrategy {
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         validateRequiredSections(model, result);
-        validateAttributesSection(model, result);
+        validateKalixSection(model, result);
     }
 
     @Override
     public String getDescription() {
-        return "Required sections and attributes validation";
+        return "Required sections and kalix section validation";
     }
 
     private void validateRequiredSections(INIModelParser.ParsedModel model, ValidationResult result) {
-        Set<String> requiredSections = Set.of("attributes", "inputs", "outputs");
+        Set<String> requiredSections = Set.of("kalix", "inputs", "outputs");
 
         for (String sectionName : requiredSections) {
             if (!model.getSections().containsKey(sectionName)) {
@@ -35,17 +35,17 @@ public class SectionValidator implements ValidationStrategy {
         }
     }
 
-    private void validateAttributesSection(INIModelParser.ParsedModel model, ValidationResult result) {
-        INIModelParser.Section attributesSection = model.getSections().get("attributes");
-        if (attributesSection != null) {
-            validateIniVersion(attributesSection, result);
+    private void validateKalixSection(INIModelParser.ParsedModel model, ValidationResult result) {
+        INIModelParser.Section kalixSection = model.getSections().get("kalix");
+        if (kalixSection != null) {
+            validateIniVersion(kalixSection, result);
         }
     }
 
-    private void validateIniVersion(INIModelParser.Section attributesSection, ValidationResult result) {
-        INIModelParser.Property versionProp = attributesSection.getProperties().get("ini_version");
+    private void validateIniVersion(INIModelParser.Section kalixSection, ValidationResult result) {
+        INIModelParser.Property versionProp = kalixSection.getProperties().get("ini_version");
         if (versionProp == null) {
-            result.addIssue(attributesSection.getStartLine() + 1,
+            result.addIssue(kalixSection.getStartLine() + 1,
                           "Missing required property: ini_version",
                           ValidationRule.Severity.ERROR, "missing_ini_version");
         } else {

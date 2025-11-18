@@ -42,11 +42,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // Iterate over the sections of the ini_doc and construct the model as we go
     for (section_name, ini_section) in ini_doc.sections {
 
-        if section_name == "attributes" {
+        if section_name == "kalix" {
             // -------------------------------------------------------------------------------------
-            // Parsing attributes
+            // Parsing kalix
             // -------------------------------------------------------------------------------------
-            // Nothing we need from attributes
+            // Nothing we need from kalix
         } else if section_name == "inputs" {
             // -------------------------------------------------------------------------------------
             // Parsing inputs
@@ -500,7 +500,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     ini_doc.invalidate_all();
 
     // Set the ini version
-    ini_doc.set_property("attributes", "ini_version", "0.0.1");
+    ini_doc.set_property("kalix", "ini_version", "0.0.1");
 
     // List all input files
     for file_path in &model.input_file_paths {

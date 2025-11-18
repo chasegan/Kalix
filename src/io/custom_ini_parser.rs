@@ -491,7 +491,7 @@ key2 = value2,  # First part
 
             // Verify compatibility with legacy format
             let legacy = doc.to_legacy_format();
-            assert!(legacy.contains_key("attributes"));
+            assert!(legacy.contains_key("kalix"));
             assert!(legacy.contains_key("inputs"));
             assert!(legacy.contains_key("outputs"));
 
