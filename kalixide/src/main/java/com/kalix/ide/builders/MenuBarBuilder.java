@@ -83,6 +83,10 @@ public class MenuBarBuilder {
 
         // File manager
         void openFileManager();
+
+        // AI menu
+        void initClaudeMd();
+        void initAgentsMd();
     }
     
     /**
@@ -221,8 +225,8 @@ public class MenuBarBuilder {
     private JMenu createAIMenu() {
         JMenu aiMenu = new JMenu("AI");
 
-        aiMenu.add(createMenuItem("Init CLAUDE.md", e -> {}));
-        aiMenu.add(createMenuItem("Init AGENTS.md", e -> {}));
+        aiMenu.add(createMenuItem("Init CLAUDE.md", e -> callbacks.initClaudeMd()));
+        aiMenu.add(createMenuItem("Init AGENTS.md", e -> callbacks.initAgentsMd()));
 
         return aiMenu;
     }

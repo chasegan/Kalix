@@ -1323,6 +1323,94 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void initClaudeMd() {
+        initMarkdownFile("CLAUDE.md");
+    }
+
+    @Override
+    public void initAgentsMd() {
+        initMarkdownFile("AGENTS.md");
+    }
+
+    /**
+     * Helper method to create a markdown file from the template in resources.
+     * Both CLAUDE.md and AGENTS.md use the same template content.
+     *
+     * @param fileName The name of the file to create (e.g., "CLAUDE.md" or "AGENTS.md")
+     */
+    private void initMarkdownFile(String fileName) {
+        File currentFile = fileOperations.getCurrentFile();
+
+        if (currentFile == null) {
+            updateStatus("No file currently open - please open a model file first");
+            JOptionPane.showMessageDialog(
+                this,
+                "Please open a model file first.\n\n" +
+                "The " + fileName + " file will be created in the same directory as your model.",
+                "No Model Open",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        File targetDirectory = currentFile.getParentFile();
+        File targetFile = new File(targetDirectory, fileName);
+
+        // Check if file already exists
+        if (targetFile.exists()) {
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                fileName + " already exists in this directory.\n\n" +
+                "Do you want to overwrite it?",
+                "File Exists",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            );
+
+            if (result != JOptionPane.YES_OPTION) {
+                updateStatus(fileName + " creation cancelled");
+                return;
+            }
+        }
+
+        try {
+            // Read template from resources
+            String templateContent;
+            try (java.io.InputStream is = getClass().getResourceAsStream("/CLAUDE.md")) {
+                if (is == null) {
+                    throw new RuntimeException("Template file not found in resources");
+                }
+                templateContent = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+
+            // Write to target file
+            java.nio.file.Files.writeString(targetFile.toPath(), templateContent, java.nio.charset.StandardCharsets.UTF_8);
+
+            updateStatus(fileName + " created in: " + targetDirectory.getAbsolutePath());
+
+            // Show success dialog
+            JOptionPane.showMessageDialog(
+                this,
+                "Created '" + targetFile.getAbsolutePath() + "'",
+                "Done",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (Exception e) {
+            String message = "Failed to create " + fileName + ": " + e.getMessage();
+            updateStatus(message);
+            logger.error("Error creating " + fileName, e);
+
+            JOptionPane.showMessageDialog(
+                this,
+                message,
+                "Error Creating File",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    @Override
     public void openExternalEditor() {
         File currentFile = fileOperations.getCurrentFile();
 
