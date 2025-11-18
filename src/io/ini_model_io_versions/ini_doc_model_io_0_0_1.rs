@@ -500,7 +500,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     ini_doc.invalidate_all();
 
     // Set the ini version
-    ini_doc.set_property("kalix", "ini_version", "0.0.1");
+    ini_doc.set_property("kalix", "version", "0.0.1");
 
     // List all input files
     for file_path in &model.input_file_paths {

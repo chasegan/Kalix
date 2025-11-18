@@ -129,7 +129,7 @@ impl IniModelIO {
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
     pub fn ini_doc_to_model_with_working_directory(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
-        let ini_format_version = ini_doc.get_property("kalix", "ini_version")
+        let ini_format_version = ini_doc.get_property("kalix", "version")
             .unwrap_or(&"input-did-not-specify-format-version".to_string())
             .to_string();
 

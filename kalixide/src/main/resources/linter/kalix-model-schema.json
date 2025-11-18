@@ -4,7 +4,7 @@
     "kalix": {
       "required": true,
       "properties": {
-        "ini_version": {
+        "version": {
           "required": true,
           "type": "version",
           "pattern": "^\\d+\\.\\d+\\.\\d+$"

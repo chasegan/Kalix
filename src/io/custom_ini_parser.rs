@@ -522,8 +522,8 @@ key2 = value2,  # First part
     #[test]
     fn test_legacy_format_conversion() {
         let content = r#"
-[attributes]
-ini_version = 0.0.1
+[kalix]
+version = 0.0.1
 
 [node.test]
 type = inflow
@@ -534,7 +534,7 @@ params = 1.0, 2.0, 3.0
         let legacy = doc.to_legacy_format();
 
         assert_eq!(legacy.len(), 2);
-        assert_eq!(legacy["attributes"]["ini_version"], Some("0.0.1".to_string()));
+        assert_eq!(legacy["kalix"]["version"], Some("0.0.1".to_string()));
         assert_eq!(legacy["node.test"]["type"], Some("inflow".to_string()));
         assert_eq!(legacy["node.test"]["params"], Some("1.0, 2.0, 3.0".to_string()));
     }

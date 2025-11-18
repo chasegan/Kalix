@@ -38,22 +38,22 @@ public class SectionValidator implements ValidationStrategy {
     private void validateKalixSection(INIModelParser.ParsedModel model, ValidationResult result) {
         INIModelParser.Section kalixSection = model.getSections().get("kalix");
         if (kalixSection != null) {
-            validateIniVersion(kalixSection, result);
+            validateVersion(kalixSection, result);
         }
     }
 
-    private void validateIniVersion(INIModelParser.Section kalixSection, ValidationResult result) {
-        INIModelParser.Property versionProp = kalixSection.getProperties().get("ini_version");
+    private void validateVersion(INIModelParser.Section kalixSection, ValidationResult result) {
+        INIModelParser.Property versionProp = kalixSection.getProperties().get("version");
         if (versionProp == null) {
             result.addIssue(kalixSection.getStartLine() + 1,
-                          "Missing required property: ini_version",
-                          ValidationRule.Severity.ERROR, "missing_ini_version");
+                          "Missing required property: version",
+                          ValidationRule.Severity.ERROR, "missing_version");
         } else {
             String version = versionProp.getValue();
             if (!ValidationUtils.isValidIniVersion(version)) {
                 result.addIssue(versionProp.getLineNumber(),
-                              "Invalid ini_version format. Expected: X.Y.Z",
-                              ValidationRule.Severity.ERROR, "invalid_ini_version");
+                              "Invalid version format. Expected: X.Y.Z",
+                              ValidationRule.Severity.ERROR, "invalid_version");
             }
         }
     }

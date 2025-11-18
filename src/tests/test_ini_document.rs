@@ -6,7 +6,7 @@ use crate::io::ini_model_io::IniModelIO;
 fn test_line_continuation_integration() {
     let content = r#"
 [kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [inputs]
 ./src/tests/example_models/1/flows.csv
@@ -37,7 +37,7 @@ params = 0.01, 40.0, 23.0,
 fn test_to_string_preserves_unchanged() {
     let content = r#"# Top comment
 [kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [node.test]
 type = gr4j
@@ -84,7 +84,7 @@ params = 100.0, 2.0, 50.0, 0.5
 #[test]
 fn test_round_trip() {
     let content = r#"[kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [inputs]
 ./data/input1.csv
@@ -109,8 +109,8 @@ node.node1.dsflow
 
     // Check values match
     assert_eq!(
-        doc1.get_property("kalix", "ini_version"),
-        doc2.get_property("kalix", "ini_version")
+        doc1.get_property("kalix", "version"),
+        doc2.get_property("kalix", "version")
     );
     assert_eq!(
         doc1.get_property("node.node1", "type"),
@@ -125,7 +125,7 @@ node.node1.dsflow
 #[test]
 fn test_modify_and_save() {
     let content = r#"[kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [node.gr4j_node]
 type = gr4j
@@ -180,7 +180,7 @@ fn test_full_model_round_trip() {
     // 4. Reload and verify changes
 
     let original_ini = r#"[kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [inputs]
 ./src/tests/example_models/1/rex_rain.csv
@@ -252,7 +252,7 @@ fn test_save_and_reload_from_file() {
     use std::path::Path;
 
     let original_ini = r#"[kalix]
-ini_version = 0.0.1
+version = 0.0.1
 
 [inputs]
 ./example_models/1/rex_rain.csv
