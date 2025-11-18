@@ -62,6 +62,11 @@ pub struct Sacramento {
     perc: f64,
     uzfwc: f64,
     uztwc: f64,
+
+    // Pre-calculated parameter-dependent constants (for performance)
+    pervious_area_fraction: f64,  // = 1.0 - pctim - adimp
+    side_factor: f64,              // = 1.0 / (1.0 + side)
+    reserved_lower_zone: f64,      // = rserv * (lzfpm + lzfsm)
 }
 
 impl Sacramento {
@@ -137,26 +142,25 @@ impl Sacramento {
 
     //
     pub fn get_params_as_vec(&self) -> Vec<f64> {
-        let mut answer = Vec::new();
-        //answer.push(self.rserv);
-        answer.push(self.adimp);
-        answer.push(self.lzfpm);
-        answer.push(self.lzfsm);
-        answer.push(self.lzpk);
-        answer.push(self.lzsk);
-        answer.push(self.lztwm);
-        answer.push(self.pctim);
-        answer.push(self.pfree);
-        answer.push(self.rexp);
-        answer.push(self.sarva);
-        answer.push(self.side);
-        answer.push(self.ssout);
-        answer.push(self.uzfwm);
-        answer.push(self.uzk);
-        answer.push(self.uztwm);
-        answer.push(self.zperc);
-        answer.push(self.laguh);
-        answer
+        vec![
+            self.adimp,
+            self.lzfpm,
+            self.lzfsm,
+            self.lzpk,
+            self.lzsk,
+            self.lztwm,
+            self.pctim,
+            self.pfree,
+            self.rexp,
+            self.sarva,
+            self.side,
+            self.ssout,
+            self.uzfwm,
+            self.uzk,
+            self.uztwm,
+            self.zperc,
+            self.laguh,
+        ]
     }
 
     pub fn set_uh_ordinates_using_laguh(&mut self) -> &mut Self {
@@ -231,6 +235,11 @@ impl Sacramento {
         self.pbase = self.alzfsm * self.lzsk + self.alzfpm * self.lzpk;
         self.adimc = self.uztwc + self.lztwc;
 
+        // Pre-calculate parameter-dependent constants for performance
+        self.pervious_area_fraction = 1.0 - self.pctim - self.adimp;
+        self.side_factor = 1.0 / (1.0 + self.side);
+        self.reserved_lower_zone = self.rserv * (self.lzfpm + self.lzfsm);
+
         // Return self
         self
     }
@@ -293,7 +302,7 @@ impl Sacramento {
 
         // Adjust impervious area store
         self.adimc -= e5;
-        self.evapuzfw = self.evapuzfw * (1f64 - self.adimp - self.pctim);
+        self.evapuzfw = self.evapuzfw * self.pervious_area_fraction;
 
         // Resupply lower zone tension with water from the lower zone free, if more water is available there.
         let mut ratiolztw = 1f64;
@@ -301,11 +310,10 @@ impl Sacramento {
             ratiolztw = self.lztwc / self.lztwm;
         }
 
-        let reserved_lower_zone = self.rserv * ( self.lzfpm + self.lzfsm );
         let mut ratiolzfw = 1f64;
-        if (self.alzfpm + self.alzfsm - reserved_lower_zone + self.lztwm) > 0f64 {
-            ratiolzfw = (self.alzfpc + self.alzfsc - reserved_lower_zone + self.lztwc) /
-                (self.alzfpm + self.alzfsm - reserved_lower_zone + self.lztwm);
+        if (self.alzfpm + self.alzfsm - self.reserved_lower_zone + self.lztwm) > 0f64 {
+            ratiolzfw = (self.alzfpc + self.alzfsc - self.reserved_lower_zone + self.lztwc) /
+                (self.alzfpm + self.alzfsm - self.reserved_lower_zone + self.lztwm);
         }
 
         if ratiolztw < ratiolzfw {
@@ -480,15 +488,13 @@ impl Sacramento {
         }
 
         // Compute the storage volumes, runoff components and evaporation
-        let temp = 1f64 - self.pctim - self.adimp;
-        self.flosf = self.flosf * temp;
-        self.floin = self.floin * temp;
-        self.flobf = self.flobf * temp;
+        self.flosf = self.flosf * self.pervious_area_fraction;
+        self.floin = self.floin * self.pervious_area_fraction;
+        self.flobf = self.flobf * self.pervious_area_fraction;
 
         // Take side out of the lower zone primary and supplemental stores
-        let temp = 1f64 / (1f64 + self.side);
-        self.lzfsc = self.alzfsc * temp;
-        self.lzfpc = self.alzfpc * temp;
+        self.lzfsc = self.alzfsc * self.side_factor;
+        self.lzfpc = self.alzfpc * self.side_factor;
 
         // Adjust flow for unit hydrograph
         self.flwsf = self.unit_hydrograph.run_step(self.floin + self.flosf + roimp);

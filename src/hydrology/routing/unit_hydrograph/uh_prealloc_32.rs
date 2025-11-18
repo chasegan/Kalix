@@ -7,10 +7,13 @@ pub struct UHPrealloc32 {
     of vecs. This one has a maximum capacity of 32 elements. You don't
     need to use all of them, and this will work normally for any UH with
     32 or fewer elements.
+
+    Uses a circular buffer to avoid shifting the entire array each timestep.
      */
     kernel: [f64; 32],
     storage: [f64; 32],
     len: usize,
+    head: usize,  // Circular buffer head pointer
 }
 
 impl UHPrealloc32 {
@@ -22,6 +25,7 @@ impl UHPrealloc32 {
             kernel: [0.0; 32],
             storage: [0.0; 32],
             len: length,
+            head: 0,
         };
         answer.kernel[0] = 1.0;
         answer
@@ -40,12 +44,13 @@ impl UHPrealloc32 {
         }
     }
 
-    /// Empties the storages
+    /// Empties the storages and resets the circular buffer head
     pub fn reset_state_to_empty(&mut self)
     {
         for i in 0..self.len {
             self.storage[i] = 0.0;
         }
+        self.head = 0;
     }
 
 
@@ -58,14 +63,21 @@ impl UHPrealloc32 {
     }
 
     pub fn run_step(&mut self, input_value: f64) -> f64 {
+        // Add input weighted by kernel at circular positions
         for i in 0..self.len {
-            self.storage[i] += input_value * self.kernel[i];
+            let pos = (self.head + i) % self.len;
+            self.storage[pos] += input_value * self.kernel[i];
         }
-        let answer = self.storage[0];
-        for i in 0..=self.len {
-            self.storage[i] = self.storage[i + 1];
-        }
-        self.storage[self.len - 1] = 0.0;
+
+        // Get output from current head position
+        let answer = self.storage[self.head];
+
+        // Zero out the position we just output from
+        self.storage[self.head] = 0.0;
+
+        // Advance the head pointer (circular)
+        self.head = (self.head + 1) % self.len;
+
         answer
     }
 }

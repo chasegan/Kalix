@@ -34,7 +34,7 @@ public class OptimisationResultsManager {
 
     // Default messages
     private static final String MSG_READY = "# Optimisation ready to start...";
-    private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say,\n# and what you do are in harmony. - Mahatma Gandhi";
+    private static final String MSG_PLACEHOLDER = "# Happiness is when what you think, what you say, and what you do\n# are in harmony. - Mahatma Gandhi";
 
     private final KalixIniTextArea optimisedModelEditor;
 
