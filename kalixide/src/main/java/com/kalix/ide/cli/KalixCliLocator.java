@@ -8,16 +8,16 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Cross-platform utility for locating the kalixcli executable.
+ * Cross-platform utility for locating the kalix executable.
  * Handles different installation patterns and path conventions across Windows, Mac, and Linux.
  */
 public class KalixCliLocator {
     
-    private static final String CLI_NAME_BASE = "kalixcli";
-    private static final String CLI_NAME_WINDOWS = "kalixcli.exe";
+    private static final String CLI_NAME_BASE = "kalix";
+    private static final String CLI_NAME_WINDOWS = "kalix.exe";
     
     /**
-     * Information about a located kalixcli installation.
+     * Information about a located kalix installation.
      */
     public static class CliLocation {
         private final Path path;
@@ -42,14 +42,14 @@ public class KalixCliLocator {
     }
     
     /**
-     * Attempts to locate kalixcli using a simplified strategy.
+     * Attempts to locate kalix using a simplified strategy.
      *
      * If userConfiguredPath is provided:
      *   - ONLY uses that path (no fallback)
      *   - Returns empty if the path is invalid
      *
      * If no userConfiguredPath:
-     *   - Uses unqualified "kalixcli" command (relies on system PATH)
+     *   - Uses unqualified "kalix" command (relies on system PATH)
      *
      * @param userConfiguredPath Optional user-configured path
      * @return Optional containing CliLocation if found, empty otherwise
@@ -66,14 +66,14 @@ public class KalixCliLocator {
             return Optional.empty();
         }
 
-        // No user path configured - use unqualified "kalixcli" from system PATH
+        // No user path configured - use unqualified "kalix" from system PATH
         return findInPath();
     }
     
     /**
-     * Finds kalixcli using application preferences.
+     * Finds kalix using application preferences.
      * This method checks user settings and falls back to auto-discovery.
-     * 
+     *
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCliWithPreferences() {
@@ -89,7 +89,7 @@ public class KalixCliLocator {
     }
     
     /**
-     * Checks if kalixcli is available in the system PATH.
+     * Checks if kalix is available in the system PATH.
      * Uses unqualified command name and relies on system PATH resolution.
      */
     private static Optional<CliLocation> findInPath() {
@@ -148,7 +148,7 @@ public class KalixCliLocator {
     }
     
     /**
-     * Gets the version of a kalixcli executable.
+     * Gets the version of a kalix executable.
      */
     private static String getVersion(Path cliPath) {
         try {
@@ -167,7 +167,7 @@ public class KalixCliLocator {
     }
     
     /**
-     * Validates that a given path points to a working kalixcli executable.
+     * Validates that a given path points to a working kalix executable.
      */
     public static boolean validateKalixCli(Path cliPath) {
         if (!Files.exists(cliPath) || !Files.isExecutable(cliPath)) {
@@ -200,7 +200,7 @@ public class KalixCliLocator {
     }
 
     /**
-     * Searches for all available kalixcli installations (for selection dialogs).
+     * Searches for all available kalix installations (for selection dialogs).
      * Now simplified to only check the system PATH.
      */
     public static List<CliLocation> findAllInstallations() {

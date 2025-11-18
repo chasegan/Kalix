@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_message_serialization() {
         let fields = serde_json::json!({"key": "value"});
-        let msg = Message::new("test", Some("kalixcli_123".to_string()), fields);
+        let msg = Message::new("test", Some("kalix_123".to_string()), fields);
 
         let json = serde_json::to_string(&msg).unwrap();
         let deserialized: Message = serde_json::from_str(&json).unwrap();

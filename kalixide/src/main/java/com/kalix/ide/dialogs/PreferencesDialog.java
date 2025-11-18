@@ -156,7 +156,7 @@ public class PreferencesDialog extends JDialog {
 
         // Simulation branch
         DefaultMutableTreeNode kalix = new DefaultMutableTreeNode("Simulation");
-        kalix.add(new DefaultMutableTreeNode("Kalixcli"));
+        kalix.add(new DefaultMutableTreeNode("Kalix"));
         root.add(kalix);
 
         // Integrations at the bottom
@@ -191,7 +191,7 @@ public class PreferencesDialog extends JDialog {
                 case "Integrations":
                     cardLayout.show(contentPanel, FILE_PANEL);
                     break;
-                case "Kalixcli":
+                case "Kalix":
                     cardLayout.show(contentPanel, KALIXCLI_PANEL);
                     break;
                 case "Data & Visualization":
@@ -573,7 +573,7 @@ public class PreferencesDialog extends JDialog {
         private JTextArea pathLabel;
 
         public KalixCliPreferencePanel() {
-            super("Kalixcli");
+            super("Kalix");
             initializePanel();
         }
 
@@ -589,7 +589,7 @@ public class PreferencesDialog extends JDialog {
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             binaryPathField = new JTextField(PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, ""));
-            binaryPathField.setToolTipText("Leave empty to use kalixcli from system PATH");
+            binaryPathField.setToolTipText("Leave empty to use kalix from system PATH");
             formPanel.add(binaryPathField, gbc);
 
             gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
@@ -629,8 +629,8 @@ public class PreferencesDialog extends JDialog {
             infoArea.setWrapStyleWord(true);
             infoArea.setLineWrap(true);
             infoArea.setFocusable(false);
-            infoArea.setText("Configure the path to the kalixcli binary. If left empty, the system will " +
-                "search for 'kalixcli' in the system PATH and common installation directories.");
+            infoArea.setText("Configure the path to the kalix binary. If left empty, the system will " +
+                "search for 'kalix' in the system PATH and common installation directories.");
             formPanel.add(infoArea, gbc);
 
             add(formPanel, BorderLayout.CENTER);
@@ -638,7 +638,7 @@ public class PreferencesDialog extends JDialog {
 
         private void browseBinary(ActionEvent e) {
             JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Select KalixCLI Binary");
+            fileChooser.setDialogTitle("Select Kalix Binary");
             fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
 
             String currentPath = binaryPathField.getText().trim();

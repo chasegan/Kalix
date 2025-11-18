@@ -10,7 +10,7 @@ use std::time::Duration;
 
 
 #[derive(Parser)]
-#[command(name = "kalixcli")]
+#[command(name = "kalix")]
 #[command(about = "A command line interface for the Kalix hydrological modeling system")]
 #[command(version = "0.1.0")]
 struct Cli {

@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 
 /**
  * Manager class for handling STDIO session execution with progress monitoring.
- * Manages persistent kalixcli sessions for model execution and result querying.
+ * Manages persistent kalix sessions for model execution and result querying.
  */
 public class StdioTaskManager {
 
@@ -59,10 +59,10 @@ public class StdioTaskManager {
      */
     private void handleCliNotFound() {
         SwingUtilities.invokeLater(() -> {
-            statusUpdater.accept("Error: kalixcli not found");
+            statusUpdater.accept("Error: kalix not found");
             JOptionPane.showMessageDialog(parentFrame,
-                "Kalixcli not found. Please fix this in File > Preferences > Kalixcli.",
-                "Kalixcli Not Found", JOptionPane.ERROR_MESSAGE);
+                "Kalix not found. Please fix this in File > Preferences > Kalix.",
+                "Kalix Not Found", JOptionPane.ERROR_MESSAGE);
         });
     }
     
@@ -77,11 +77,11 @@ public class StdioTaskManager {
         // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Locate kalixcli using preferences
+                // Locate kalix using preferences
                 Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences();
                 if (cliLocation.isEmpty()) {
                     handleCliNotFound();
-                    throw new RuntimeException("kalixcli not found");
+                    throw new RuntimeException("kalix not found");
                 }
 
                 // Configure session for model run (let SessionManager auto-generate unique ID)

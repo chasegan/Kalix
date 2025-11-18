@@ -68,12 +68,12 @@ public class VersionChecker {
     public CompletableFuture<VersionResult> getVersionAsync() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                statusUpdateCallback.accept("Checking kalixcli version...");
+                statusUpdateCallback.accept("Checking kalix version...");
                 
-                // Find kalixcli
+                // Find kalix
                 Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences();
                 if (cliLocation.isEmpty()) {
-                    return VersionResult.failure(new RuntimeException("kalixcli not found. Please check your settings."));
+                    return VersionResult.failure(new RuntimeException("kalix not found. Please check your settings."));
                 }
                 
                 KalixCliLocator.CliLocation cli = cliLocation.get();
@@ -100,8 +100,8 @@ public class VersionChecker {
     }
     
     /**
-     * Executes the kalixcli --version command.
-     * 
+     * Executes the kalix --version command.
+     *
      * @param cli The CLI location
      * @return The version result
      */
@@ -111,7 +111,7 @@ public class VersionChecker {
             ProcessExecutor.ProcessConfig config = new ProcessExecutor.ProcessConfig()
                 .timeout(10); // 10 seconds should be more than enough for version check
             
-            // Execute kalixcli --version
+            // Execute kalix --version
             ProcessExecutor.ProcessResult result = processExecutor.execute(
                 cli.getPath().toString(),
                 List.of("--version"),
@@ -147,7 +147,7 @@ public class VersionChecker {
         }
         
         if (result.isSuccess()) {
-            String statusMsg = "kalixcli version: " + result.getVersion();
+            String statusMsg = "kalix version: " + result.getVersion();
             statusUpdateCallback.accept(statusMsg);
         } else {
             String errorMsg = result.getException() != null ? 

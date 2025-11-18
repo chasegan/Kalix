@@ -84,12 +84,12 @@ public class OptimisationSessionManager {
             return;
         }
 
-        // Find kalixcli using the same method as simulations
+        // Find kalix using the same method as simulations
         Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
             com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences();
 
         if (!cliLocationOpt.isPresent()) {
-            handleError("kalixcli not found. Please configure the path in Preferences.");
+            handleError("kalix not found. Please configure the path in Preferences.");
             return;
         }
 

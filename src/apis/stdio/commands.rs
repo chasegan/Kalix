@@ -107,7 +107,7 @@ impl Command for GetVersionCommand {
     }
     
     fn description(&self) -> &str {
-        "Get kalixcli version information"
+        "Get kalix version information"
     }
     
     fn parameters(&self) -> Vec<ParameterSpec> {
@@ -140,7 +140,7 @@ impl Command for GetStateCommand {
     }
     
     fn description(&self) -> &str {
-        "Get current kalixcli state information"
+        "Get current kalix state information"
     }
     
     fn parameters(&self) -> Vec<ParameterSpec> {
