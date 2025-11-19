@@ -61,6 +61,7 @@ public class EnhancedTextEditor extends JPanel {
     private TextSearchManager searchManager;
     private FileDropManager dropManager;
     private LinterManager linterManager;
+    private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
     
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
@@ -164,6 +165,128 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
         }
         linterManager = LinterComponentFactory.createLinterManager(textArea, schemaManager);
+    }
+
+    /**
+     * Initialize the context command system.
+     * This enables context-aware commands like rename node.
+     *
+     * @param parentFrame   Parent frame for dialogs
+     * @param modelSupplier Supplier for the current parsed model
+     */
+    public void initializeContextCommands(JFrame parentFrame,
+                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+        contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
+            textArea, parentFrame, modelSupplier);
+        contextCommandManager.initialize();
+
+        // Setup custom popup menu with context commands
+        setupContextMenu();
+    }
+
+    /**
+     * Sets up the right-click context menu with context-aware commands.
+     */
+    private void setupContextMenu() {
+        textArea.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showContextMenu(e);
+                }
+            }
+
+            private void showContextMenu(MouseEvent e) {
+                // Build a fresh menu each time
+                JPopupMenu menu = createContextMenu();
+
+                // Show menu at click location
+                menu.show(e.getComponent(), e.getX(), e.getY());
+            }
+
+            /**
+             * Factory method that creates a fresh context menu with standard actions
+             * and context-aware commands.
+             */
+            private JPopupMenu createContextMenu() {
+                JPopupMenu menu = new JPopupMenu();
+
+                // Add standard editing actions
+                menu.add(createMenuItem("Undo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.UNDO_ACTION)));
+                menu.add(createMenuItem("Redo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.REDO_ACTION)));
+                menu.addSeparator();
+                menu.add(createMenuItem("Cut", textArea.getAction(org.fife.ui.rtextarea.RTextArea.CUT_ACTION)));
+                menu.add(createMenuItem("Copy", textArea.getAction(org.fife.ui.rtextarea.RTextArea.COPY_ACTION)));
+                menu.add(createMenuItem("Paste", textArea.getAction(org.fife.ui.rtextarea.RTextArea.PASTE_ACTION)));
+                menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION)));
+                menu.addSeparator();
+                menu.add(createMenuItem("Select All", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
+
+                // Add context-aware commands if available
+                if (contextCommandManager != null) {
+                    java.util.List<com.kalix.ide.editor.commands.EditorCommand> commands =
+                        contextCommandManager.getApplicableCommands();
+
+                    if (!commands.isEmpty()) {
+                        menu.addSeparator();
+
+                        // Group commands by category
+                        java.util.Map<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> commandsByCategory =
+                            new java.util.LinkedHashMap<>();
+
+                        for (com.kalix.ide.editor.commands.EditorCommand command : commands) {
+                            String category = command.getMetadata().getCategory();
+                            commandsByCategory.computeIfAbsent(category, k -> new java.util.ArrayList<>()).add(command);
+                        }
+
+                        // Add menu items grouped by category
+                        for (java.util.Map.Entry<String, java.util.List<com.kalix.ide.editor.commands.EditorCommand>> entry : commandsByCategory.entrySet()) {
+                            String category = entry.getKey();
+                            java.util.List<com.kalix.ide.editor.commands.EditorCommand> categoryCommands = entry.getValue();
+
+                            if (!category.isEmpty()) {
+                                // Commands with category - create submenu
+                                JMenu submenu = new JMenu(category);
+                                for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
+                                    JMenuItem item = new JMenuItem(command.getMetadata().getDisplayName());
+                                    item.addActionListener(ae -> contextCommandManager.executeCommand(command));
+                                    submenu.add(item);
+                                }
+                                menu.add(submenu);
+                            } else {
+                                // Commands with no category - add directly
+                                for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
+                                    JMenuItem item = new JMenuItem(command.getMetadata().getDisplayName());
+                                    item.addActionListener(ae -> contextCommandManager.executeCommand(command));
+                                    menu.add(item);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return menu;
+            }
+
+            /**
+             * Helper to create a menu item from an action.
+             */
+            private JMenuItem createMenuItem(String name, Action action) {
+                JMenuItem item = new JMenuItem(name);
+                if (action != null) {
+                    item.addActionListener(action);
+                    item.setEnabled(action.isEnabled());
+                }
+                return item;
+            }
+        });
     }
     
     private void setupKeyBindings() {

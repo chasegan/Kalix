@@ -247,6 +247,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Initialize linter for text editor
         textEditor.initializeLinter(schemaManager);
 
+        // Initialize context-aware command system
+        textEditor.initializeContextCommands(this, () -> {
+            // Parse the current text on-demand (lazy evaluation)
+            try {
+                return com.kalix.ide.linter.parsing.INIModelParser.parse(textEditor.getText());
+            } catch (Exception e) {
+                return null;
+            }
+        });
+
         // Set up linter base directory supplier to use current file's directory
         textEditor.setLinterBaseDirectorySupplier(() -> {
             if (fileOperations != null) {
