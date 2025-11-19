@@ -30,12 +30,11 @@ public class FlowVizActionManager {
     private final FlowVizDataManager dataManager;
 
     // State management
-    private boolean dataVisible = true;
+    private boolean dataVisible = false;  // Hidden by default
     private boolean autoYMode = true;
     private boolean precision64 = true;
 
     // Callbacks for parent communication
-    private final Consumer<String> statusUpdater;
     private final Runnable titleUpdater;
     private final Consumer<File> currentFileUpdater;
 
@@ -47,25 +46,28 @@ public class FlowVizActionManager {
      * @param splitPane The split pane for layout management
      * @param menuManager The menu manager for state synchronization
      * @param dataManager The data manager for file operations
-     * @param statusUpdater Callback to update status messages
      * @param titleUpdater Callback to update window title
      * @param currentFileUpdater Callback to update current file reference
      */
     public FlowVizActionManager(PlotPanel plotPanel, DataPanel dataPanel, JSplitPane splitPane,
                                FlowVizMenuManager menuManager, FlowVizDataManager dataManager,
-                               Consumer<String> statusUpdater, Runnable titleUpdater,
-                               Consumer<File> currentFileUpdater) {
+                               Runnable titleUpdater, Consumer<File> currentFileUpdater) {
         this.plotPanel = plotPanel;
         this.dataPanel = dataPanel;
         this.splitPane = splitPane;
         this.menuManager = menuManager;
         this.dataManager = dataManager;
-        this.statusUpdater = statusUpdater;
         this.titleUpdater = titleUpdater;
         this.currentFileUpdater = currentFileUpdater;
 
         // Load initial state from preferences
         loadPreferences();
+
+        // Set initial data panel visibility (hidden by default)
+        if (!dataVisible) {
+            splitPane.setLeftComponent(null);
+            splitPane.setDividerLocation(0);
+        }
     }
 
     /**
@@ -76,7 +78,6 @@ public class FlowVizActionManager {
         dataPanel.clearSeries();
         currentFileUpdater.accept(null);
         titleUpdater.run();
-        statusUpdater.accept("Started new session - all data cleared");
     }
 
     /**
@@ -90,7 +91,7 @@ public class FlowVizActionManager {
      * Exports the current plot (placeholder implementation).
      */
     public void exportPlot() {
-        statusUpdater.accept("Export plot - Not yet implemented");
+        // Export plot - Not yet implemented
     }
 
     /**
@@ -106,7 +107,6 @@ public class FlowVizActionManager {
             splitPane.setDividerLocation(0);
         }
         menuManager.updateMenuStates();
-        statusUpdater.accept("Data panel " + (dataVisible ? "shown" : "hidden"));
     }
 
     /**
@@ -114,7 +114,6 @@ public class FlowVizActionManager {
      */
     public void zoomIn() {
         plotPanel.zoomIn();
-        statusUpdater.accept("Zoomed in");
     }
 
     /**
@@ -122,7 +121,6 @@ public class FlowVizActionManager {
      */
     public void zoomOut() {
         plotPanel.zoomOut();
-        statusUpdater.accept("Zoomed out");
     }
 
     /**
@@ -130,7 +128,6 @@ public class FlowVizActionManager {
      */
     public void zoomToFit() {
         plotPanel.zoomToFit();
-        statusUpdater.accept("Zoomed to fit data");
     }
 
     /**
@@ -144,7 +141,6 @@ public class FlowVizActionManager {
         PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYMode);
 
         menuManager.updateMenuStates();
-        statusUpdater.accept(autoYMode ? "Auto-Y mode enabled" : "Auto-Y mode disabled");
     }
 
     /**
@@ -158,7 +154,6 @@ public class FlowVizActionManager {
         // Save preference
         PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, newState);
 
-        statusUpdater.accept("Coordinate display " + (newState ? "enabled" : "disabled"));
     }
 
     /**
@@ -171,7 +166,6 @@ public class FlowVizActionManager {
         PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64);
 
         menuManager.updateMenuStates();
-        statusUpdater.accept(precision64 ? "64-bit precision enabled" : "32-bit precision enabled");
     }
 
     /**
@@ -179,21 +173,20 @@ public class FlowVizActionManager {
      */
     public void resetView() {
         plotPanel.resetView();
-        statusUpdater.accept("View reset");
     }
 
     /**
      * Shows statistics panel (placeholder implementation).
      */
     public void showStatistics() {
-        statusUpdater.accept("Statistics panel - Not yet implemented");
+        // Statistics panel - Not yet implemented
     }
 
     /**
      * Shows data information dialog (placeholder implementation).
      */
     public void showDataInfo() {
-        statusUpdater.accept("Data information - Not yet implemented");
+        // Data information - Not yet implemented
     }
 
     /**

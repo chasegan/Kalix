@@ -21,7 +21,6 @@ public class FlowVizWindow extends JFrame {
     
     private PlotPanel plotPanel;
     private DataPanel dataPanel;
-    private JLabel statusLabel;
     private JSplitPane splitPane;
     private JToolBar toolBar;
     // State variables have been moved to FlowVizActionManager
@@ -39,7 +38,7 @@ public class FlowVizWindow extends JFrame {
         windowCounter++;
         setTitle("FlowViz - Untitled " + windowCounter);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(1000, 700);
+        setSize(600, 400);
         setLocationRelativeTo(null);
 
         // Initialize menu manager
@@ -67,6 +66,50 @@ public class FlowVizWindow extends JFrame {
 
         setVisible(true);
     }
+
+    /**
+     * Creates a new FlowViz window and pre-loads data from the specified file.
+     * Supports CSV and Kalix timeseries (.kai) files.
+     *
+     * @param dataFile The file to load (CSV or KAI format)
+     */
+    public FlowVizWindow(File dataFile) {
+        windowCounter++;
+        setTitle("FlowViz - Untitled " + windowCounter);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setSize(600, 400);
+        setLocationRelativeTo(null);
+
+        // Initialize menu manager
+        menuManager = new FlowVizMenuManager(this);
+
+        // Track this window
+        openWindows.add(this);
+
+        // Handle window closing
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                openWindows.remove(FlowVizWindow.this);
+            }
+        });
+
+        initializeComponents();
+        setupLayout();
+        setupDataModel();
+        setupDataManager();
+        setupActionManager();
+        setupMenuBar();
+        setupToolBar();
+        loadPreferences();
+
+        // Load the specified file after initialization
+        if (dataFile != null && dataFile.exists()) {
+            SwingUtilities.invokeLater(() -> dataManager.loadFile(dataFile));
+        }
+
+        setVisible(true);
+    }
     
     private void initializeComponents() {
         plotPanel = new PlotPanel();
@@ -75,9 +118,6 @@ public class FlowVizWindow extends JFrame {
         plotPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
-        
-        statusLabel = new JLabel("Ready - No data loaded");
-        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     }
     
     private void setupLayout() {
@@ -93,12 +133,6 @@ public class FlowVizWindow extends JFrame {
         splitPane.setResizeWeight(0.0); // Keep data panel fixed width
 
         add(splitPane, BorderLayout.CENTER);
-
-        // Status bar at bottom
-        JPanel statusPanel = new JPanel(new BorderLayout());
-        statusPanel.add(statusLabel, BorderLayout.WEST);
-        statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
-        add(statusPanel, BorderLayout.SOUTH);
 
         // Set up visibility change listener for data panel
         dataPanel.setVisibilityChangeListener(this::updatePlotVisibility);
@@ -235,8 +269,6 @@ public class FlowVizWindow extends JFrame {
                 plotPanel.addLegendSeries(series.getName(), seriesColor);
 
                 updateTitle();
-                updateStatus(String.format("Added series '%s' with %,d points",
-                    series.getName(), series.getPointCount()));
             }
 
             @Override
@@ -248,13 +280,11 @@ public class FlowVizWindow extends JFrame {
                 plotPanel.removeLegendSeries(seriesName);
 
                 updateTitle();
-                updateStatus("Removed series: " + seriesName);
             }
-            
+
             @Override
             public void onDataChanged() {
                 updatePlotPanel();
-                updateStatus("Data updated");
             }
         });
     }
@@ -279,18 +309,33 @@ public class FlowVizWindow extends JFrame {
     }
     
     private void updateTitle() {
-        String title = "FlowViz";
-        if (currentFile != null) {
-            title += " - " + currentFile.getName();
+        String title;
+
+        // Detect if we have data from a single file by checking series names
+        boolean isSingleFile = false;
+        if (currentFile != null && dataSet.getSeriesCount() > 0) {
+            // Check if all series are from the same file
+            java.util.Set<String> fileNames = new java.util.HashSet<>();
+            for (String seriesName : dataSet.getSeriesNames()) {
+                // Series names are formatted as "filename: SeriesName"
+                if (seriesName.contains(": ")) {
+                    String fileName = seriesName.substring(0, seriesName.indexOf(": "));
+                    fileNames.add(fileName);
+                }
+            }
+            isSingleFile = fileNames.size() == 1;
+        }
+
+        if (isSingleFile) {
+            title = currentFile.getName();
         } else {
-            title += " - Untitled " + windowCounter;
+            title = "Various timeseries";
         }
-        
+
         if (dataSet.getSeriesCount() > 0) {
-            title += String.format(" (%d series, %,d total points)", 
-                dataSet.getSeriesCount(), dataSet.getTotalPointCount());
+            title += String.format(" (%d series)", dataSet.getSeriesCount());
         }
-        
+
         setTitle(title);
     }
     
@@ -333,7 +378,6 @@ public class FlowVizWindow extends JFrame {
         dataManager = new FlowVizDataManager(this, dataSet);
 
         dataManager.setupCallbacks(
-            this::updateStatus,
             file -> currentFile = file,
             this::updateTitle,
             () -> actionManager.zoomToFit()
@@ -349,20 +393,9 @@ public class FlowVizWindow extends JFrame {
             splitPane,
             menuManager,
             dataManager,
-            this::updateStatus,
             this::updateTitle,
             file -> currentFile = file
         );
-    }
-
-    // Action methods have been moved to FlowVizActionManager
-    
-    
-
-    
-    
-    private void updateStatus(String message) {
-        statusLabel.setText(message);
     }
 
     /**
@@ -398,7 +431,16 @@ public class FlowVizWindow extends JFrame {
     public static void createNewWindow() {
         SwingUtilities.invokeLater(() -> new FlowVizWindow());
     }
-    
+
+    /**
+     * Creates a new FlowViz window pre-loaded with data from the specified file.
+     *
+     * @param dataFile The file to load (CSV or KAI format)
+     */
+    public static void createWindowWithFile(File dataFile) {
+        SwingUtilities.invokeLater(() -> new FlowVizWindow(dataFile));
+    }
+
     public static List<FlowVizWindow> getOpenWindows() {
         return new ArrayList<>(openWindows);
     }

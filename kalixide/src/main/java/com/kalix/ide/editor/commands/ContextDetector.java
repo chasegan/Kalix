@@ -107,6 +107,21 @@ public class ContextDetector {
                         .sectionName("constants");
                     return builder.build();
                 }
+
+                // Check if we're in inputs section on a file path line
+                if ("inputs".equals(currentSection)) {
+                    // Check if this line contains a file path (non-empty, non-comment line)
+                    if (!line.isEmpty() && !line.startsWith("#") && !line.startsWith(";")) {
+                        // Get the actual file path from parsed model by matching line number
+                        String filePath = findInputFileAtLine(parsedModel, currentLine + 1); // Convert 0-based to 1-based
+                        if (filePath != null) {
+                            builder.type(EditorContext.ContextType.INPUT_FILE)
+                                .sectionName("inputs")
+                                .inputFilePath(filePath);
+                            return builder.build();
+                        }
+                    }
+                }
             }
 
             // Default to unknown context
@@ -153,5 +168,18 @@ public class ContextDetector {
         }
 
         return currentSection;
+    }
+
+    /**
+     * Finds the input file path at the given line number (1-based).
+     * Returns null if no input file is found at that line.
+     */
+    private String findInputFileAtLine(INIModelParser.ParsedModel model, int lineNumber) {
+        for (java.util.Map.Entry<String, Integer> entry : model.getInputFileLineNumbers().entrySet()) {
+            if (entry.getValue() == lineNumber) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 }

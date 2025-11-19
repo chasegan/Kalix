@@ -255,7 +255,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             } catch (Exception e) {
                 return null;
             }
-        });
+        }, () -> fileOperations.getCurrentFile());
 
         // Set up linter base directory supplier to use current file's directory
         textEditor.setLinterBaseDirectorySupplier(() -> {

@@ -31,7 +31,7 @@ public class FileOperationsManager {
 
     // Current file tracking for save functionality
     private File currentFile;
-    
+
     /**
      * Creates a new FileOperationsManager instance.
      *

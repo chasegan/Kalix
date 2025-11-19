@@ -20,6 +20,7 @@ public class ContextCommandManager {
     private final RSyntaxTextArea editor;
     private final JFrame parentFrame;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private final Supplier<java.io.File> modelFileSupplier;
     private final java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier;
 
     private final CommandRegistry registry;
@@ -32,14 +33,17 @@ public class ContextCommandManager {
      * @param editor             The text editor
      * @param parentFrame        Parent frame for dialogs
      * @param modelSupplier      Supplier for the parsed model (may return null if parsing failed)
+     * @param modelFileSupplier  Supplier for the current model file (may return null if no file loaded)
      * @param replacementApplier Callback for applying atomic text replacements
      */
     public ContextCommandManager(RSyntaxTextArea editor, JFrame parentFrame,
                                   Supplier<INIModelParser.ParsedModel> modelSupplier,
+                                  Supplier<java.io.File> modelFileSupplier,
                                   java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;
+        this.modelFileSupplier = modelFileSupplier;
         this.replacementApplier = replacementApplier;
 
         this.registry = new CommandRegistry();
@@ -59,6 +63,9 @@ public class ContextCommandManager {
      * Registers all available commands.
      */
     private void registerCommands() {
+        // Register plot command (appears at root level, before refactoring commands)
+        registry.register(new PlotInputFileCommand(modelFileSupplier, parentFrame));
+
         // Register rename command - pass supplier, not the model itself
         registry.register(new RenameNodeCommand(modelSupplier, parentFrame));
 

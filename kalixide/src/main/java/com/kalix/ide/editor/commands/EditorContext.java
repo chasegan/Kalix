@@ -16,6 +16,7 @@ public class EditorContext {
         PROPERTY,          // On a property line (key = value)
         TABLE_VALUE,       // Inside a multi-line table
         OUTPUT_REFERENCE,  // In [outputs] section
+        INPUT_FILE,        // In [inputs] section on a file path line
         SECTION_HEADER,    // On a section header line
         CONSTANTS,         // In [constants] section
         UNKNOWN
@@ -63,6 +64,10 @@ public class EditorContext {
 
     public Optional<Integer> getLineNumber() {
         return Optional.ofNullable((Integer) metadata.get("lineNumber"));
+    }
+
+    public Optional<String> getInputFilePath() {
+        return Optional.ofNullable((String) metadata.get("inputFilePath"));
     }
 
     public Object getMetadata(String key) {
@@ -115,6 +120,11 @@ public class EditorContext {
 
         public Builder lineNumber(int lineNumber) {
             this.metadata.put("lineNumber", lineNumber);
+            return this;
+        }
+
+        public Builder inputFilePath(String filePath) {
+            this.metadata.put("inputFilePath", filePath);
             return this;
         }
 

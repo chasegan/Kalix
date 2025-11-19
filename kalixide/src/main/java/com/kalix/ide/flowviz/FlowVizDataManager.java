@@ -33,7 +33,6 @@ public class FlowVizDataManager {
     private final DataSet dataSet;
 
     // Callbacks for communication with parent window
-    private Consumer<String> statusUpdater;
     private Consumer<File> currentFileUpdater;
     private Runnable titleUpdater;
     private Runnable zoomToFitAction;
@@ -64,21 +63,17 @@ public class FlowVizDataManager {
      * Sets up the callback functions for communication with the parent window components.
      *
      * <p>This method establishes the communication bridge between the data manager and
-     * the parent FlowViz window by providing callback functions for status updates,
-     * file tracking, UI updates, and plot operations. This design allows the data manager
-     * to operate independently while still providing feedback and triggering necessary
-     * updates in the parent window.
+     * the parent FlowViz window by providing callback functions for file tracking,
+     * UI updates, and plot operations. This design allows the data manager to operate
+     * independently while still triggering necessary updates in the parent window.
      *
-     * @param statusUpdater Consumer function to update the status bar with progress messages
      * @param currentFileUpdater Consumer function to update the current file reference for title display
      * @param titleUpdater Runnable to refresh the window title after data changes
      * @param zoomToFitAction Runnable to trigger zoom-to-fit operation after data import
      */
-    public void setupCallbacks(Consumer<String> statusUpdater,
-                             Consumer<File> currentFileUpdater,
+    public void setupCallbacks(Consumer<File> currentFileUpdater,
                              Runnable titleUpdater,
                              Runnable zoomToFitAction) {
-        this.statusUpdater = statusUpdater;
         this.currentFileUpdater = currentFileUpdater;
         this.titleUpdater = titleUpdater;
         this.zoomToFitAction = zoomToFitAction;
@@ -157,8 +152,6 @@ public class FlowVizDataManager {
      * @param files Array of files to load (CSV or KAI)
      */
     public void loadMultipleFiles(File[] files) {
-        statusUpdater.accept("Loading " + files.length + " files...");
-
         // Create progress dialog for multiple files
         JProgressBar progressBar = new JProgressBar(0, files.length);
         progressBar.setStringPainted(true);
@@ -214,7 +207,6 @@ public class FlowVizDataManager {
             @Override
             protected void done() {
                 progressDialog.dispose();
-                statusUpdater.accept("Loaded " + files.length + " files");
             }
 
             public void cancel() {
@@ -226,7 +218,6 @@ public class FlowVizDataManager {
         cancelButton.addActionListener(e -> {
             multiLoadTask.cancel(true);
             progressDialog.dispose();
-            statusUpdater.accept("File loading cancelled");
         });
 
         multiLoadTask.execute();
@@ -239,8 +230,6 @@ public class FlowVizDataManager {
      * @param csvFile The CSV file to load
      */
     public void loadCsvFile(File csvFile) {
-        statusUpdater.accept("Loading CSV file...");
-
         // Create progress dialog
         JProgressBar progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
@@ -280,7 +269,6 @@ public class FlowVizDataManager {
                         "Error loading CSV file:\n" + e.getMessage(),
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
-                    statusUpdater.accept("Error loading CSV file");
                 }
             }
         };
@@ -288,7 +276,6 @@ public class FlowVizDataManager {
         cancelButton.addActionListener(e -> {
             importTask.cancel(true);
             progressDialog.dispose();
-            statusUpdater.accept("CSV import cancelled");
         });
 
         importTask.execute();
@@ -301,8 +288,6 @@ public class FlowVizDataManager {
      * @param ktmFile The KAI metadata file to load
      */
     public void loadKtmFile(File ktmFile) {
-        statusUpdater.accept("Loading Kalix timeseries file...");
-
         // Verify the corresponding .kaz file exists
         String basePath = ktmFile.getAbsolutePath().replaceAll("\\.kai$", "");
         File kazFile = new File(basePath + ".kaz");
@@ -312,7 +297,6 @@ public class FlowVizDataManager {
                 "Binary data file not found: " + kazFile.getName() + "\nBoth .kai and .kaz files are required.",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
-            statusUpdater.accept("Failed to load Kalix timeseries file");
             return;
         }
 
@@ -365,7 +349,6 @@ public class FlowVizDataManager {
                         "Error loading Kalix timeseries file:\n" + e.getMessage(),
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
-                    statusUpdater.accept("Error loading Kalix timeseries file");
                 }
             }
         };
@@ -373,7 +356,6 @@ public class FlowVizDataManager {
         cancelButton.addActionListener(e -> {
             loadTask.cancel(true);
             progressDialog.dispose();
-            statusUpdater.accept("Kalix timeseries import cancelled");
         });
 
         loadTask.execute();
@@ -392,7 +374,6 @@ public class FlowVizDataManager {
                 "No time series data found in file: " + ktmFile.getName(),
                 "Load Warning",
                 JOptionPane.WARNING_MESSAGE);
-            statusUpdater.accept("No data loaded");
             return;
         }
 
@@ -419,10 +400,6 @@ public class FlowVizDataManager {
         currentFileUpdater.accept(ktmFile);
         titleUpdater.run();
 
-        // Update status with statistics
-        statusUpdater.accept(String.format("Added %d series from Kalix timeseries file (%,d total series, %,d total points)",
-            addedCount, dataSet.getSeriesCount(), dataSet.getTotalPointCount()));
-
         // Zoom to fit all data (including existing + new)
         if (zoomToFitAction != null) {
             zoomToFitAction.run();
@@ -435,8 +412,6 @@ public class FlowVizDataManager {
      * @param csvFiles Array of CSV files to load
      */
     public void loadMultipleCsvFiles(File[] csvFiles) {
-        statusUpdater.accept("Loading " + csvFiles.length + " CSV files...");
-
         // Create progress dialog for multiple files
         JProgressBar progressBar = new JProgressBar(0, csvFiles.length);
         progressBar.setStringPainted(true);
@@ -510,7 +485,6 @@ public class FlowVizDataManager {
             @Override
             protected void done() {
                 progressDialog.dispose();
-                statusUpdater.accept("Loaded " + csvFiles.length + " CSV files");
             }
 
             public void cancel() {
@@ -522,7 +496,6 @@ public class FlowVizDataManager {
         cancelButton.addActionListener(e -> {
             multiLoadTask.cancel(true);
             progressDialog.dispose();
-            statusUpdater.accept("File loading cancelled");
         });
 
         multiLoadTask.execute();
@@ -544,7 +517,6 @@ public class FlowVizDataManager {
 
             JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
                 "CSV Load Error", JOptionPane.ERROR_MESSAGE);
-            statusUpdater.accept("Failed to load CSV file");
             return;
         }
 
@@ -579,12 +551,6 @@ public class FlowVizDataManager {
             JOptionPane.showMessageDialog(parentFrame, warningMessage.toString(),
                 "Load Warnings", JOptionPane.WARNING_MESSAGE);
         }
-
-        // Update status with statistics
-        TimeSeriesCsvImporter.ImportStatistics stats = importResult.getStatistics();
-        int newSeriesCount = importResult.getDataSet().getSeriesCount();
-        statusUpdater.accept(String.format("Added %d new series (%,d total series, %,d total points) in %d ms",
-            newSeriesCount, dataSet.getSeriesCount(), dataSet.getTotalPointCount(), stats.getParseTimeMs()));
 
         // Zoom to fit all data (including existing + new)
         if (zoomToFitAction != null) {
@@ -654,7 +620,6 @@ public class FlowVizDataManager {
             public void dragEnter(DropTargetDragEvent dtde) {
                 if (isDragAcceptable(dtde)) {
                     dtde.acceptDrag(DnDConstants.ACTION_COPY);
-                    statusUpdater.accept("Drop CSV or KAI files to load them...");
                 } else {
                     dtde.rejectDrag();
                 }
@@ -671,7 +636,7 @@ public class FlowVizDataManager {
 
             @Override
             public void dragExit(DropTargetEvent dte) {
-                statusUpdater.accept("Ready");
+                // Do nothing
             }
 
             @Override
@@ -702,7 +667,6 @@ public class FlowVizDataManager {
                             .toList();
 
                         if (supportedFiles.isEmpty()) {
-                            statusUpdater.accept("No supported files found in drop");
                             JOptionPane.showMessageDialog(parentFrame,
                                 "Please drop CSV or KAI files only.",
                                 "Invalid File Type",
@@ -718,7 +682,6 @@ public class FlowVizDataManager {
                         dtde.dropComplete(true);
                     } catch (Exception e) {
                         dtde.dropComplete(false);
-                        statusUpdater.accept("Failed to load dropped files");
                         JOptionPane.showMessageDialog(parentFrame,
                             "Failed to load dropped files: " + e.getMessage(),
                             "Drop Error",

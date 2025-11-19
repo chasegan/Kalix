@@ -164,15 +164,17 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Initialize the context command system.
-     * This enables context-aware commands like rename node.
+     * This enables context-aware commands like rename node and plot input files.
      *
-     * @param parentFrame   Parent frame for dialogs
-     * @param modelSupplier Supplier for the current parsed model
+     * @param parentFrame       Parent frame for dialogs
+     * @param modelSupplier     Supplier for the current parsed model
+     * @param modelFileSupplier Supplier for the current model file
      */
     public void initializeContextCommands(JFrame parentFrame,
-                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier,
+                                          java.util.function.Supplier<java.io.File> modelFileSupplier) {
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
-            textArea, parentFrame, modelSupplier, this::applyAtomicReplacements);
+            textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
         contextCommandManager.initialize();
 
         // Setup custom popup menu with context commands
