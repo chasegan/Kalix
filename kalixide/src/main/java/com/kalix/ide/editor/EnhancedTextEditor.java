@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.undo.UndoManager;
 import java.awt.*;
 import java.awt.event.*;
 
@@ -45,8 +44,7 @@ public class EnhancedTextEditor extends JPanel {
 
     private RSyntaxTextArea textArea;
     private RTextScrollPane scrollPane;
-    private UndoManager undoManager;
-    
+
     // State tracking
     private boolean isDirty = false;
     private DirtyStateListener dirtyStateListener;
@@ -77,8 +75,6 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     private void initializeComponents() {
-        undoManager = new UndoManager();
-
         textArea = new RSyntaxTextArea();
         textArea.setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI); // Test simplified custom TokenMaker
         textArea.setLineWrap(false); // Disable line wrapping
@@ -96,18 +92,17 @@ public class EnhancedTextEditor extends JPanel {
 
         // Apply saved syntax theme
         applySavedSyntaxTheme();
-        
+
         // Enable mark occurrences
         textArea.setMarkOccurrences(true);
         textArea.setMarkOccurrencesDelay(300); // 300ms delay before highlighting
-        
-        // Enable undo/redo tracking
-        textArea.getDocument().addUndoableEditListener(undoManager);
-        
+
+        // RSyntaxTextArea has built-in undo/redo support via RUndoManager - no need to add our own
+
         scrollPane = new RTextScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        
+
     }
     
     private void setupLayout() {
@@ -398,22 +393,22 @@ public class EnhancedTextEditor extends JPanel {
     // Core functionality methods
     
     public boolean canUndo() {
-        return undoManager.canUndo();
+        return textArea.canUndo();
     }
-    
+
     public boolean canRedo() {
-        return undoManager.canRedo();
+        return textArea.canRedo();
     }
     
     public void undo() {
-        if (undoManager.canUndo()) {
-            undoManager.undo();
+        if (textArea.canUndo()) {
+            textArea.undoLastAction();
         }
     }
-    
+
     public void redo() {
-        if (undoManager.canRedo()) {
-            undoManager.redo();
+        if (textArea.canRedo()) {
+            textArea.redoLastAction();
         }
     }
 
@@ -561,7 +556,7 @@ public class EnhancedTextEditor extends JPanel {
             textArea.setText(text);
             textArea.setCaretPosition(0);
             setDirty(false);
-            undoManager.discardAllEdits();
+            textArea.discardAllEdits();
         } finally {
             programmaticUpdate = false;
         }

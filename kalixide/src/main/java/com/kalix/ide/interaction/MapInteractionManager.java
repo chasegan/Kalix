@@ -121,11 +121,16 @@ public class MapInteractionManager {
         
         // Sync changes to text editor if updater is available
         if (textUpdater != null) {
+            // Batch update all moved nodes as a single atomic operation
+            java.util.Map<String, java.awt.geom.Point2D.Double> nodeUpdates = new java.util.HashMap<>();
             for (String nodeName : originalNodePositions.keySet()) {
                 ModelNode node = model.getNode(nodeName);
                 if (node != null) {
-                    textUpdater.updateNodeCoordinate(nodeName, node.getX(), node.getY());
+                    nodeUpdates.put(nodeName, new java.awt.geom.Point2D.Double(node.getX(), node.getY()));
                 }
+            }
+            if (!nodeUpdates.isEmpty()) {
+                textUpdater.updateNodeCoordinates(nodeUpdates);
             }
         }
         

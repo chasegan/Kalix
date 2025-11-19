@@ -31,28 +31,53 @@ public class TextCoordinateUpdater {
     }
     
     /**
-     * Update the coordinate of a node in the text editor using document operations.
-     * This preserves undo/redo functionality by making targeted document edits.
-     * @param nodeName Name of the node to update
-     * @param x New X coordinate
-     * @param y New Y coordinate
+     * Update coordinates for multiple nodes as a single atomic undo operation.
+     * @param nodeUpdates Map of node names to their new coordinates
      */
-    public void updateNodeCoordinate(String nodeName, double x, double y) {
+    public void updateNodeCoordinates(java.util.Map<String, java.awt.geom.Point2D.Double> nodeUpdates) {
+        if (textEditor == null || nodeUpdates == null || nodeUpdates.isEmpty()) {
+            return;
+        }
+
+        // Set flag to prevent infinite update loops
+        updatingFromModel = true;
+
+        try {
+            // Group all coordinate updates as single atomic undo operation
+            textEditor.getTextArea().beginAtomicEdit();
+            try {
+                for (java.util.Map.Entry<String, java.awt.geom.Point2D.Double> entry : nodeUpdates.entrySet()) {
+                    String nodeName = entry.getKey();
+                    java.awt.geom.Point2D.Double coords = entry.getValue();
+                    updateSingleNodeCoordinate(nodeName, coords.x, coords.y);
+                }
+            } finally {
+                textEditor.getTextArea().endAtomicEdit();
+            }
+
+        } finally {
+            // Clear the flag
+            updatingFromModel = false;
+        }
+    }
+
+    /**
+     * Internal helper to update a single node's coordinate.
+     * Document operations are performed without atomic edit wrapping (caller handles that).
+     */
+    private void updateSingleNodeCoordinate(String nodeName, double x, double y) {
         if (textEditor == null) {
             return;
         }
-        
-        // Set flag to prevent infinite update loops
-        updatingFromModel = true;
-        
+
         try {
             Document doc = textEditor.getTextArea().getDocument();
             String currentText = doc.getText(0, doc.getLength());
-            
+
             if (currentText == null || currentText.trim().isEmpty()) {
                 return;
             }
-            
+
             // Create regex pattern to match the coordinate values specifically
             // Pattern explanation:
             // (\[node\.nodeName\][^\[]*?loc\s*=\s*)([0-9.eE+-]+)(\s*,\s*)([0-9.eE+-]+)
@@ -63,34 +88,32 @@ public class TextCoordinateUpdater {
             String escapedNodeName = Pattern.quote(nodeName);
             String pattern = "(\\[node\\." + escapedNodeName + "[^\\[]*?loc\\s*=\\s*)([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)";
             Pattern nodePattern = Pattern.compile(pattern, Pattern.DOTALL | Pattern.MULTILINE);
-            
+
             Matcher matcher = nodePattern.matcher(currentText);
-            
+
             if (matcher.find()) {
                 // Format coordinates with reasonable precision (2 decimal places)
                 String formattedX = String.format("%.2f", x);
                 String formattedY = String.format("%.2f", y);
-                
+
                 // Calculate positions and replacement text
                 int coordStart = matcher.start(2);  // Start of X coordinate
                 int coordEnd = matcher.end(4);      // End of Y coordinate
                 String coordReplacement = formattedX + matcher.group(3) + formattedY;
-                
-                // Use document replace operation (preserves undo/redo)
+
+                // Perform document operations (atomic edit wrapping handled by caller)
                 doc.remove(coordStart, coordEnd - coordStart);
-                doc.insertString(coordStart, coordReplacement, null);            } else {
+                doc.insertString(coordStart, coordReplacement, null);
+            } else {
                 logger.warn("Could not find node section for: {}", nodeName);
             }
-            
+
         } catch (BadLocationException e) {
             logger.error("Bad location error updating coordinates for {}: {}", nodeName, e.getMessage());
             e.printStackTrace();
         } catch (Exception e) {
             logger.error("Error updating coordinates for {}: {}", nodeName, e.getMessage());
             e.printStackTrace();
-        } finally {
-            // Clear the flag
-            updatingFromModel = false;
         }
     }
     
@@ -166,17 +189,17 @@ public class TextCoordinateUpdater {
         if (textEditor == null || nodeNames == null || nodeNames.isEmpty()) {
             return;
         }
-        
+
         // Set flag to prevent infinite update loops
         updatingFromModel = true;
-        
+
         try {
             Document doc = textEditor.getTextArea().getDocument();
-            
+
             // Process nodes in reverse order to maintain document positions
             // Sort by document position (descending) to delete from end to beginning
             String currentText = doc.getText(0, doc.getLength());
-            
+
             // Find all node sections and their positions
             java.util.List<NodeSection> sectionsToDelete = new java.util.ArrayList<>();
             for (String nodeName : nodeNames) {
@@ -185,17 +208,23 @@ public class TextCoordinateUpdater {
                     sectionsToDelete.add(section);
                 }
             }
-            
+
             // Sort by start position (descending) to delete from end to beginning
             sectionsToDelete.sort((a, b) -> Integer.compare(b.start, a.start));
-            
-            // Delete each section using document operations
-            for (NodeSection section : sectionsToDelete) {
-                doc.remove(section.start, section.length);
+
+            // Group all deletions as single atomic undo operation
+            if (!sectionsToDelete.isEmpty()) {
+                textEditor.getTextArea().beginAtomicEdit();
+                try {
+                    // Delete each section using document operations
+                    for (NodeSection section : sectionsToDelete) {
+                        doc.remove(section.start, section.length);
+                    }
+                } finally {
+                    textEditor.getTextArea().endAtomicEdit();
+                }
             }
-            
-            if (!sectionsToDelete.isEmpty()) {            }
-            
+
         } catch (BadLocationException e) {
             logger.error("Bad location error deleting nodes from text: {}", e.getMessage());
             e.printStackTrace();
