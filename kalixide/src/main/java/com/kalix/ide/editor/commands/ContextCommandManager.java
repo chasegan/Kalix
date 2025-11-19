@@ -20,6 +20,7 @@ public class ContextCommandManager {
     private final RSyntaxTextArea editor;
     private final JFrame parentFrame;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private final java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier;
 
     private final CommandRegistry registry;
     private final ContextDetector detector;
@@ -28,19 +29,22 @@ public class ContextCommandManager {
     /**
      * Creates a new ContextCommandManager.
      *
-     * @param editor        The text editor
-     * @param parentFrame   Parent frame for dialogs
-     * @param modelSupplier Supplier for the parsed model (may return null if parsing failed)
+     * @param editor             The text editor
+     * @param parentFrame        Parent frame for dialogs
+     * @param modelSupplier      Supplier for the parsed model (may return null if parsing failed)
+     * @param replacementApplier Callback for applying atomic text replacements
      */
     public ContextCommandManager(RSyntaxTextArea editor, JFrame parentFrame,
-                                  Supplier<INIModelParser.ParsedModel> modelSupplier) {
+                                  Supplier<INIModelParser.ParsedModel> modelSupplier,
+                                  java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;
+        this.replacementApplier = replacementApplier;
 
         this.registry = new CommandRegistry();
         this.detector = new ContextDetector();
-        this.executor = new CommandExecutor(editor, parentFrame);
+        this.executor = new CommandExecutor(editor, parentFrame, replacementApplier);
     }
 
     /**

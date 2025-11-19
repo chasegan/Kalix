@@ -20,10 +20,13 @@ public class CommandExecutor {
 
     private final RSyntaxTextArea editor;
     private final JFrame parentFrame;
+    private final java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier;
 
-    public CommandExecutor(RSyntaxTextArea editor, JFrame parentFrame) {
+    public CommandExecutor(RSyntaxTextArea editor, JFrame parentFrame,
+                          java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
+        this.replacementApplier = replacementApplier;
     }
 
     /**
@@ -62,23 +65,18 @@ public class CommandExecutor {
                 return false;
             }
 
-            // Apply all replacements as a single operation (atomic undo)
-            String newText = applyReplacements(currentText, replacements);
+            // Convert TextReplacement to LineReplacement and apply atomically
+            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
+            for (TextReplacement replacement : replacements) {
+                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
+                    replacement.getLineNumber(),
+                    replacement.getOldText(),
+                    replacement.getNewText()
+                ));
+            }
 
-            logger.debug("Current text length: {}, New text length: {}", currentText.length(), newText.length());
-            logger.debug("Text changed: {}", !currentText.equals(newText));
-
-            // Set text (single undo operation)
-            editor.setText(newText);
-            logger.debug("Called editor.setText()");
-
-            // Verify the text was actually set
-            String verifyText = editor.getText();
-            logger.debug("Verification - text after setText length: {}", verifyText.length());
-            logger.debug("Verification - contains new name: {}", verifyText.contains(newName));
-            logger.debug("Verification - contains old name: {}", verifyText.contains(oldName));
-
-            editor.setCaretPosition(0); // Reset caret to top
+            // Apply all replacements as a single atomic undo operation
+            replacementApplier.accept(lineReplacements);
 
             logger.info("Renamed node '{}' to '{}' ({} references updated)", oldName, newName, replacements.size());
             return true;
@@ -151,31 +149,6 @@ public class CommandExecutor {
         return replacements;
     }
 
-    /**
-     * Applies a list of text replacements to the document.
-     *
-     * @param text         The original text
-     * @param replacements The replacements to apply
-     * @return The modified text
-     */
-    private String applyReplacements(String text, List<TextReplacement> replacements) {
-        String[] lines = text.split("\n", -1);
-
-        // Apply replacements
-        // NOTE: INIModelParser uses 1-based line numbers, but array indices are 0-based
-        for (TextReplacement replacement : replacements) {
-            int lineNum = replacement.getLineNumber();
-            int arrayIndex = lineNum - 1; // Convert 1-based to 0-based
-
-            if (arrayIndex >= 0 && arrayIndex < lines.length) {
-                lines[arrayIndex] = lines[arrayIndex].replace(replacement.getOldText(), replacement.getNewText());
-            } else {
-                logger.warn("Line number {} out of bounds for replacement", lineNum);
-            }
-        }
-
-        return String.join("\n", lines);
-    }
 
     /**
      * Shows an error dialog.

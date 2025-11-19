@@ -177,7 +177,7 @@ public class EnhancedTextEditor extends JPanel {
     public void initializeContextCommands(JFrame parentFrame,
                                           java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
-            textArea, parentFrame, modelSupplier);
+            textArea, parentFrame, modelSupplier, this::applyAtomicReplacements);
         contextCommandManager.initialize();
 
         // Setup custom popup menu with context commands
@@ -566,7 +566,80 @@ public class EnhancedTextEditor extends JPanel {
             programmaticUpdate = false;
         }
     }
-    
+
+    /**
+     * Applies multiple text replacements as a single atomic undo operation.
+     * Each replacement specifies a line number and the old/new text.
+     *
+     * @param replacements List of line-based text replacements
+     */
+    public void applyAtomicReplacements(java.util.List<LineReplacement> replacements) {
+        if (replacements.isEmpty()) {
+            return;
+        }
+
+        try {
+            javax.swing.text.Document doc = textArea.getDocument();
+            String[] lines = textArea.getText().split("\n", -1);
+
+            // Start compound edit for atomic undo
+            textArea.beginAtomicEdit();
+
+            try {
+                // Apply replacements in reverse order to maintain line positions
+                // Sort by line number descending
+                java.util.List<LineReplacement> sortedReplacements = new java.util.ArrayList<>(replacements);
+                sortedReplacements.sort((a, b) -> Integer.compare(b.lineNumber, a.lineNumber));
+
+                for (LineReplacement replacement : sortedReplacements) {
+                    int lineIndex = replacement.lineNumber - 1; // Convert 1-based to 0-based
+
+                    if (lineIndex >= 0 && lineIndex < lines.length) {
+                        // Find the start position of this line in the document
+                        int startPos = 0;
+                        for (int i = 0; i < lineIndex; i++) {
+                            startPos += lines[i].length() + 1; // +1 for newline
+                        }
+
+                        String originalLine = lines[lineIndex];
+                        String newLine = originalLine.replace(replacement.oldText, replacement.newText);
+
+                        // Replace the line content in the document
+                        doc.remove(startPos, originalLine.length());
+                        doc.insertString(startPos, newLine, null);
+
+                        // Update our lines array for subsequent replacements
+                        lines[lineIndex] = newLine;
+                    }
+                }
+
+                setDirty(true);
+
+            } finally {
+                // End compound edit
+                textArea.endAtomicEdit();
+            }
+
+        } catch (Exception e) {
+            logger.error("Error applying atomic replacements", e);
+        }
+    }
+
+    /**
+     * Represents a line-based text replacement.
+     */
+    public static class LineReplacement {
+        public final int lineNumber; // 1-based
+        public final String oldText;
+        public final String newText;
+
+        public LineReplacement(int lineNumber, String oldText, String newText) {
+            this.lineNumber = lineNumber;
+            this.oldText = oldText;
+            this.newText = newText;
+        }
+    }
+
     public String getText() {
         return textArea.getText();
     }
