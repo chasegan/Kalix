@@ -112,10 +112,23 @@ impl Model {
         //5) Allow the user to override the sim period
         // TODO: provide this functionality later
 
-        //6) Load input data into the data_cache
-        // TODO: Fix this. Currently it just jams data into the cache irrespective of the simulation period.
-        //self.data_cache.start_timestamp = self.configuration.sim_start_timestamp; //TODO: can I delete the property "data_cache.start_timestamp"?
+        //6) Load input data into the data_cache, properly aligned with simulation period
         for i in 0..self.inputs.len() {
+            let input_ts = &self.inputs[i].timeseries;
+
+            // Validate that input step size matches simulation step size
+            if input_ts.step_size != self.configuration.sim_stepsize {
+                return Err(format!(
+                    "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
+                    input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
+                ));
+            }
+
+            // Calculate how many timesteps we need for the simulation
+            let sim_steps = 1 + ((self.configuration.sim_end_timestamp
+                - self.configuration.sim_start_timestamp)
+                / self.configuration.sim_stepsize) as usize;
+
             //Fill any data that might be using the column name as a reference
             //Fill any data that might be using the column number as a reference
             for full_path in [
@@ -126,8 +139,27 @@ impl Model {
                     self.data_cache.series[idx].timestamps.clear();
                     self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
                     self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
-                    for j in 0..self.inputs[i].timeseries.len() {
-                        let value = self.inputs[i].timeseries.values[j];
+
+                    // For each simulation timestep, find corresponding input value
+                    for step in 0..sim_steps {
+                        let sim_timestamp = self.configuration.sim_start_timestamp
+                            + (step as u64 * self.configuration.sim_stepsize);
+
+                        // Find value at this timestamp in input data
+                        let value = if sim_timestamp >= input_ts.start_timestamp {
+                            let steps_from_input_start = (sim_timestamp - input_ts.start_timestamp)
+                                / input_ts.step_size;
+                            let input_idx = steps_from_input_start as usize;
+
+                            if input_idx < input_ts.values.len() {
+                                input_ts.values[input_idx]
+                            } else {
+                                f64::NAN  // Beyond input data range
+                            }
+                        } else {
+                            f64::NAN  // Before input data starts
+                        };
+
                         self.data_cache.series[idx].push_value(value);
                     }
                 }
