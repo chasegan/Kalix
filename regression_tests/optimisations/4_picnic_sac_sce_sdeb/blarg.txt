@@ -1,0 +1,80 @@
+# OPTIMISATION RESULTS
+# ======================================================================
+# Generated: 2025-11-14T00:44:52.372034
+# Name: Opt 2
+# Session: session-2
+# ======================================================================
+
+=== OPTIMISATION RESULT ===
+Status: SUCCESS
+Best Objective: 72418.46985415
+Evaluations: 10478
+Message: Optimization completed successfully
+Elapsed Time: 00:00:17
+
+Optimized Parameters:
+=========================
+
+
+# CONFIGURATION USED:
+# ----------------------------------------------------------------------
+[optimisation]
+observed_data_by_index = formatted_11000A.csv.1
+simulated_series = node.my_sac.ds_1
+objective_function = SDEB
+algorithm = SCE
+complexes = 12
+termination_evaluations = 10000
+n_threads = 12
+
+[parameters]
+c.rfsum = lin_range(g(1),0,2)
+node.my_sac.adimp = log_range(g(2),1E-05,0.15)
+node.my_sac.lzfpm = log_range(g(3),1,300)
+node.my_sac.lzfsm = log_range(g(4),1,350)
+node.my_sac.lzpk = log_range(g(5),0.001,0.6)
+node.my_sac.lzsk = log_range(g(6),0.001,0.9)
+node.my_sac.lztwm = log_range(g(7),10,600)
+node.my_sac.pctim = log_range(g(8),1E-05,0.11)
+node.my_sac.pfree = log_range(g(9),0.01,0.5)
+node.my_sac.rexp = log_range(g(10),1,6)
+node.my_sac.sarva = log_range(g(11),1E-05,0.11)
+node.my_sac.side = log_range(g(12),1E-05,0.1)
+node.my_sac.ssout = log_range(g(13),1E-05,0.1)
+node.my_sac.uzfwm = log_range(g(14),5,155)
+node.my_sac.uzk = log_range(g(15),0.1,1)
+node.my_sac.uztwm = log_range(g(16),12,180)
+node.my_sac.zperc = log_range(g(17),1,600)
+node.my_sac.laguh = lin_range(g(18),0,3)
+
+
+# OPTIMISED MODEL:
+# ----------------------------------------------------------------------
+
+[attributes]
+ini_version = 0.0.1
+
+[constants]
+c.rfsum = 1.0257577698005718
+
+[inputs]
+formatted_mpot.csv
+formatted_rain.csv
+#formatted_11000A.csv
+
+[node.my_sac]
+loc = 0,0
+type = sacramento
+area = 228
+evap = data.formatted_mpot_csv.by_index.1
+rain = c.rfsum * data.formatted_rain_csv.by_index.1
+params = 0.0007996789619949308, 223.37765753669382, 240.54866695788806, 0.004710616045546181,   #adimp, lzfpm, lzfsm, lzpk
+    0.019821823411697397, 36.84029513679785, 0.0017608941460532468, 0.1373435707926456,   #lzsk, lztwm, pctim, pfree
+    2.0377129307581403, 0.00036730549832793947, 0.002062272249489054, 0.001105647395016545,   #rexp, sarva, side, ssout
+    86.92588965767796, 0.16588756004706107, 38.970441121669936, 30.649110989164164,   #uzfwm, uzk, uztwm, zperc
+    1.627973640496101, 
+# laguh = 1.661658974562702
+
+[outputs]
+node.my_sac.ds_1
+
