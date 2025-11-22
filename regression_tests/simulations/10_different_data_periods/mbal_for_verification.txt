@@ -1,0 +1,19 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 3
+  Timesteps: 11
+  Stepsize (s): 86400
+  Period: 1889-01-05T00:00:00.000Z, 1889-01-15T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  node1_inflow, 100
+  node2_inflow, 60
+
+BLACKHOLE NODES
+  node3_blackhole, -160
+
+----------------------------------
+TOTAL = 0
+----------------------------------

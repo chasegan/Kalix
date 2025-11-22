@@ -8,25 +8,25 @@ MASS BALANCE REPORT
   Note: units are ML/timestep
 
 INFLOW NODES
-  node1_inflow, 85.11407289372443
+  node1_inflow, 135.0252132982843
 
 SACRAMENTO NODES
   Node2_sacramento, 287.45307448574795
 
 GR4J NODES
-  node6_gr4j, 164.62097526525642
+  node6_gr4j, 260.4394315142618
 
 USER NODES
-  node3_user, -19.65516463963266
+  node3_user, -20
 
 LOSS NODES
-  node11_loss, -23.413105657283516
+  node11_loss, -30.278425869204455
 
 STORAGE NODES
-  node4_storage, -0.027382256777266804
+  node4_storage, -0.027382257189702757
 
 ROUTING NODES
-  node5_routing, -0.26980400874673377
+  node5_routing, -0.343642927889325
 
 SPLITTER NODES
   node8_splitter, 0
@@ -38,9 +38,9 @@ GAUGE NODES
   node10_gauge, 0
 
 BLACKHOLE NODES
-  node12_blackhole, -210.71795091555165
-  node9_blackhole, -283.1047151667364
+  node12_blackhole, -272.5058328228393
+  node9_blackhole, -359.7624354211711
 
 ----------------------------------
-TOTAL = 0.0000000000005684341886080801
+TOTAL = 0.00000000000017053025658242404
 ----------------------------------
