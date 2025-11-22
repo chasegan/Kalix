@@ -17,5 +17,6 @@ pub mod sacramento_node;
 pub mod node_enum;
 pub mod node_trait;
 pub mod link;
+pub mod rainfall_weights;
 
 

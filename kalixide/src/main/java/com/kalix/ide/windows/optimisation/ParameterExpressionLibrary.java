@@ -10,12 +10,18 @@ public class ParameterExpressionLibrary {
 
     // Map of parameter type to expression template (# is placeholder for counter)
     private static final Map<String, String> TYPE_EXPRESSIONS = Map.ofEntries(
-        // GR4J parameters
+        // Constants (from [constants] section)
         Map.entry("constant", "lin_range(g(#),0,2)"),
+
+        // GR4J parameters
         Map.entry("x1", "lin_range(g(#),1,1500)"),
         Map.entry("x2", "lin_range(g(#),-10,6)"),
         Map.entry("x3", "lin_range(g(#),1,500)"),
         Map.entry("x4", "lin_range(g(#),0.5,4)"),
+
+        // Rainfall factor parameters (node-agnostic)
+        Map.entry("rf_bias", "lin_range(g(#),0.7,1.3)"),
+        Map.entry("rf_d", "lin_range(g(#),0.001,0.999)"),
 
         // Sacramento parameters
         Map.entry("adimp", "log_range(g(#),1E-05,0.15)"),
@@ -45,6 +51,7 @@ public class ParameterExpressionLibrary {
      *
      * Rules:
      * - If name starts with "c." → type is "constant"
+     * - If type matches "rf_d" followed by digits → normalize to "rf_d"
      * - Otherwise, type is the substring after the last "."
      *
      * @param paramName The full parameter name (e.g., "node.mygr4jnode.x1")
@@ -57,7 +64,18 @@ public class ParameterExpressionLibrary {
 
         int lastDot = paramName.lastIndexOf('.');
         if (lastDot >= 0 && lastDot < paramName.length() - 1) {
-            return paramName.substring(lastDot + 1);
+            String type = paramName.substring(lastDot + 1);
+
+            // Normalize rf_d0, rf_d1, rf_d2, ... to just "rf_d"
+            if (type.startsWith("rf_d") && type.length() > 4) {
+                // Check if everything after "rf_d" is digits
+                String suffix = type.substring(4);
+                if (suffix.matches("\\d+")) {
+                    return "rf_d";
+                }
+            }
+
+            return type;
         }
 
         return null; // Could not determine type

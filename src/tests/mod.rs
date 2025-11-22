@@ -66,3 +66,15 @@ mod test_ini_document;
 
 #[cfg(test)]
 mod test_sce;
+
+#[cfg(test)]
+mod test_linear_combination;
+
+#[cfg(test)]
+mod test_rainfall_weights;
+
+#[cfg(test)]
+mod test_linear_combination_save;
+
+#[cfg(test)]
+mod test_linear_combination_bug_fix;

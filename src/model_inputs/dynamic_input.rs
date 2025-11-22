@@ -27,6 +27,8 @@ use crate::data_management::data_cache::DataCache;
 use crate::functions::{parse_function, EvaluationConfig, VariableContext};
 use crate::functions::ast::{ExpressionNode, evaluate_binary_op, evaluate_unary_op};
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
+use crate::model_inputs::linear_combination::detect_linear_combination;
+use crate::misc::misc_functions::format_f64;
 
 /// Optimized AST that uses direct data cache indices instead of variable names
 #[derive(Debug, Clone)]
@@ -182,13 +184,15 @@ impl OptimizedExpressionNode {
     }
 }
 
+
 /// DynamicInput supports constants, data references, and function expressions
 ///
-/// This enum is optimised for performance with five variants:
+/// This enum is optimised for performance with six variants:
 /// - `None`: No input (returns 0.0)
 /// - `DirectReference`: Pure data reference (zero overhead)
 /// - `DirectConstantReference`: Pure constant reference (zero overhead)
 /// - `Constant`: Constant value (zero overhead)
+/// - `LinearCombination`: Linear combination of data references with optimizable weights
 /// - `Function`: Complex expression (minimal overhead)
 ///
 /// All variants store the original expression string for round-trip serialization
@@ -215,6 +219,26 @@ pub enum DynamicInput {
     Constant {
         value: f64,
         original: String
+    },
+
+    /// Linear combination of data references with optimizable weights
+    /// Form: a1 * data1 + a2 * data2 + ... where ai = bias * softmax(logit(ui))
+    /// Following the symmetric parameterization from the wiki
+    LinearCombination {
+        /// Indices into data cache for each data source
+        data_indices: Vec<usize>,
+        /// Variable names for each data source (preserved for serialization)
+        variable_names: Vec<String>,
+        /// Current weights (updated when optimization parameters change)
+        coefficients: Vec<f64>,
+        /// Normalized parameters u_i in [0,1] (optimizable)
+        /// u_i = 0.5 means equal weight to reference (first) station
+        /// Length is n-1 for n stations (first station is reference)
+        u_params: Vec<f64>,
+        /// Bias parameter - sum of all weights (optimizable)
+        bias: f64,
+        /// Original expression for serialization
+        original: String,
     },
 
     /// Function expression (optimised for performance)
@@ -258,6 +282,45 @@ impl DynamicInput {
         let parsed = parse_function(trimmed)
             .map_err(|e| format!("Failed to parse expression '{}': {}", trimmed, e))?;
 
+        // Check if it's a linear combination pattern first
+        let ast = parsed.get_ast();
+        if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
+            if let Some(linear_info) = detect_linear_combination(expr_node) {
+                // It's a linear combination! Create the LinearCombination variant
+                let mut data_indices = Vec::new();
+
+                // Resolve variable names to data cache indices
+                for var_name in &linear_info.variables {
+                    let lower_name = var_name.to_lowercase();
+                    let idx = data_cache.get_or_add_new_series(&lower_name, flag_as_critical);
+                    data_indices.push(idx);
+                }
+
+                // Initialize with default parameter values
+                let n = data_indices.len();
+                let u_params = if n > 1 {
+                    vec![0.5; n - 1]  // n-1 parameters for distribution
+                } else {
+                    vec![]
+                };
+                let bias = linear_info.coefficients.iter().sum::<f64>();
+
+                // Use parsed coefficients directly - don't recompute with defaults
+                // (they may already be optimized values from a saved model)
+                let coefficients = linear_info.coefficients.clone();
+
+                return Ok(DynamicInput::LinearCombination {
+                    data_indices,
+                    variable_names: linear_info.variables,
+                    coefficients,
+                    u_params,
+                    bias,
+                    original: trimmed.to_string(),
+                });
+            }
+        }
+
+        // Not a linear combination, proceed with existing logic
         // Get all variables referenced
         let variables = parsed.get_variables();
 
@@ -351,6 +414,13 @@ impl DynamicInput {
                 data_cache.constants.get_value(*idx)
             }
             DynamicInput::Constant { value, .. } => *value,
+            DynamicInput::LinearCombination { data_indices, coefficients, .. } => {
+                // High-performance dot product of weights and data values
+                data_indices.iter()
+                    .zip(coefficients.iter())
+                    .map(|(&idx, &weight)| data_cache.get_current_value(idx) * weight)
+                    .sum()
+            }
             DynamicInput::Function { expression, optimised_ast } => {
                 optimised_ast.evaluate(data_cache).unwrap_or_else(|e| {
                     eprintln!("ERROR: Critical evaluation failure in expression '{}': {}. Returning 0.0. This indicates a parser bug.", expression, e);
@@ -360,13 +430,46 @@ impl DynamicInput {
         }
     }
 
-    /// Get the original expression string for serialization
-    pub fn to_string(&self) -> &str {
+    /// Get the expression string for serialization
+    /// For LinearCombination, this returns the optimized expression with current weights
+    pub fn to_string(&self) -> String {
+        match self {
+            DynamicInput::None { original } => original.clone(),
+            DynamicInput::DirectReference { original, .. } => original.clone(),
+            DynamicInput::DirectConstantReference { original, .. } => original.clone(),
+            DynamicInput::Constant { original, .. } => original.clone(),
+            DynamicInput::LinearCombination { variable_names, coefficients, .. } => {
+                // Reconstruct the expression with current optimized weights
+                if variable_names.is_empty() {
+                    return "0.0".to_string();
+                }
+
+                let terms: Vec<String> = variable_names.iter()
+                    .zip(coefficients.iter())
+                    .map(|(var, weight)| {
+                        // Always include the coefficient to maintain LinearCombination on round-trip
+                        format!("{} * {}", format_f64(*weight), var)
+                    })
+                    .collect();
+
+                if terms.is_empty() {
+                    "0.0".to_string()
+                } else {
+                    terms.join(" + ")
+                }
+            }
+            DynamicInput::Function { expression, .. } => expression.clone(),
+        }
+    }
+
+    /// Get the original unmodified expression string
+    pub fn original_string(&self) -> &str {
         match self {
             DynamicInput::None { original } => original.as_str(),
             DynamicInput::DirectReference { original, .. } => original.as_str(),
             DynamicInput::DirectConstantReference { original, .. } => original.as_str(),
             DynamicInput::Constant { original, .. } => original.as_str(),
+            DynamicInput::LinearCombination { original, .. } => original.as_str(),
             DynamicInput::Function { expression, .. } => expression.as_str(),
         }
     }
@@ -393,3 +496,4 @@ fn evaluate_function(name: &str, args: &[f64]) -> Result<f64, String> {
     crate::functions::functions::evaluate_builtin_function(name, args)
         .map_err(|e| format!("Function error: {}", e))
 }
+

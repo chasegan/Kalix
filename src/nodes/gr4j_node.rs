@@ -1,4 +1,5 @@
 use super::Node;
+use super::rainfall_weights::RainfallWeightHandler;
 use crate::hydrology::rainfall_runoff::gr4j::Gr4j;
 use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
@@ -54,6 +55,7 @@ impl Gr4jNode {
             ..Default::default()
         }
     }
+
 }
 
 impl Node for Gr4jNode {
@@ -164,6 +166,13 @@ impl Node for Gr4jNode {
 
 impl OptimisableComponent for Gr4jNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        // Try to handle as rainfall weight parameter first
+        match RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
+            true => return Ok(()), // Parameter was handled
+            false => {} // Not a rainfall parameter, continue to standard parameters
+        }
+
+        // Standard GR4J parameters
         match name {
             "x1" => {
                 self.gr4j_model.x1 = value;
@@ -190,6 +199,12 @@ impl OptimisableComponent for Gr4jNode {
     }
 
     fn get_param(&self, name: &str) -> Result<f64, String> {
+        // Try to handle as rainfall weight parameter first
+        if let Some(value) = RainfallWeightHandler::try_get_param(&self.rain_mm_input, name, &self.name)? {
+            return Ok(value);
+        }
+
+        // Standard GR4J parameters
         match name {
             "x1" => Ok(self.gr4j_model.x1),
             "x2" => Ok(self.gr4j_model.x2),
@@ -200,9 +215,14 @@ impl OptimisableComponent for Gr4jNode {
     }
 
     fn list_params(&self) -> Vec<String> {
-        vec!["x1", "x2", "x3", "x4"]
+        let mut params = vec!["x1", "x2", "x3", "x4"]
             .iter()
             .map(|s| s.to_string())
-            .collect()
+            .collect::<Vec<_>>();
+
+        // Add rainfall parameters if using linear combination
+        params.extend(RainfallWeightHandler::list_params(&self.rain_mm_input));
+
+        params
     }
 }

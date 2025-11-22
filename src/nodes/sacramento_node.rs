@@ -1,4 +1,5 @@
 use super::Node;
+use super::rainfall_weights::RainfallWeightHandler;
 use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
@@ -56,6 +57,7 @@ impl SacramentoNode {
             ..Default::default()
         }
     }
+
 }
 
 impl Node for SacramentoNode {
@@ -178,6 +180,13 @@ impl Node for SacramentoNode {
 
 impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        // Try to handle as rainfall weight parameter first
+        match RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
+            true => return Ok(()), // Parameter was handled
+            false => {} // Not a rainfall parameter, continue to standard parameters
+        }
+
+        // Standard Sacramento parameters
         match name {
             "adimp" => {
                 self.sacramento_model.adimp = value;
@@ -252,6 +261,12 @@ impl OptimisableComponent for SacramentoNode {
     }
 
     fn get_param(&self, name: &str) -> Result<f64, String> {
+        // Try to handle as rainfall weight parameter first
+        if let Some(value) = RainfallWeightHandler::try_get_param(&self.rain_mm_input, name, &self.name)? {
+            return Ok(value);
+        }
+
+        // Standard Sacramento parameters
         match name {
             "adimp" => Ok(self.sacramento_model.adimp),
             "lzfpm" => Ok(self.sacramento_model.lzfpm),
@@ -275,13 +290,18 @@ impl OptimisableComponent for SacramentoNode {
     }
 
     fn list_params(&self) -> Vec<String> {
-        vec![
+        let mut params = vec![
             "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
             "pctim", "pfree", "rexp", "sarva", "side",
             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
         ]
         .iter()
         .map(|s| s.to_string())
-        .collect()
+        .collect::<Vec<_>>();
+
+        // Add rainfall parameters if using linear combination
+        params.extend(RainfallWeightHandler::list_params(&self.rain_mm_input));
+
+        params
     }
 }

@@ -1,4 +1,74 @@
 
+/// Format an f64 value intelligently based on its magnitude
+///
+/// This function provides a compact, human-readable string representation of any f64 value
+/// that is guaranteed to be parsable and non-empty.
+///
+/// # Formatting rules:
+/// - Very small values (< 1e-4) use scientific notation
+/// - Very large values (>= 1e6) use scientific notation
+/// - Values between 0.0001 and 999999 use normal notation
+/// - Trailing zeros after decimal point are removed
+/// - Maximum of 10 significant figures for precision
+///
+/// # Examples:
+/// - 0.5 → "0.5"
+/// - 0.3333333 → "0.3333333"
+/// - 0.00001 → "1e-5"
+/// - 1000000 → "1e+6"
+/// - 1.0 → "1"
+/// - 0.0 → "0"
+pub fn format_f64(value: f64) -> String {
+    let abs_value = value.abs();
+
+    // Choose format based on magnitude
+    let formatted = if abs_value == 0.0 {
+        "0".to_string()
+    } else if abs_value < 1e-4 || abs_value >= 1e6 {
+        // Use scientific notation
+        // For very large numbers, use more precision to avoid rounding
+        let precision = if abs_value >= 1e10 { 13 } else { 10 };
+        let s = format!("{:.prec$e}", value, prec = precision);
+        // Remove trailing zeros from the mantissa only (not the exponent)
+        if let Some(e_pos) = s.find('e') {
+            let (mantissa, exponent_part) = s.split_at(e_pos);
+            let cleaned_mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+
+            // Parse the exponent (skip the 'e')
+            let exp_str = &exponent_part[1..];
+            if let Ok(exp_num) = exp_str.parse::<i32>() {
+                // Format with explicit sign
+                if exp_num >= 0 {
+                    format!("{}e+{}", cleaned_mantissa, exp_num)
+                } else {
+                    format!("{}e{}", cleaned_mantissa, exp_num)
+                }
+            } else {
+                // Fallback - shouldn't happen with valid scientific notation
+                format!("{}{}", cleaned_mantissa, exponent_part)
+            }
+        } else {
+            s
+        }
+    } else if abs_value >= 1.0 {
+        // For values >= 1, use up to 10 significant figures
+        let s = format!("{:.10}", value);
+        // If it has a decimal point, remove trailing zeros
+        if s.contains('.') {
+            s.trim_end_matches('0').trim_end_matches('.').to_string()
+        } else {
+            s
+        }
+    } else {
+        // For values between 0.0001 and 1, show up to 10 decimal places
+        let s = format!("{:.10}", value);
+        // Remove trailing zeros
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    };
+
+    formatted
+}
+
 pub fn make_result_name(node_name: &str, parameter: &str) -> String {
     format!("node.{node_name}.{parameter}")
 }
@@ -151,3 +221,4 @@ pub fn format_vec_as_multiline_table(values: &[f64], n_cols: usize, n_spaces: us
 
     result
 }
+

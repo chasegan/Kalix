@@ -11,6 +11,7 @@
 
 pub mod input_data_definition;
 pub mod dynamic_input;
+pub mod linear_combination;
 
 pub use input_data_definition::InputDataDefinition;
 pub use dynamic_input::DynamicInput;
