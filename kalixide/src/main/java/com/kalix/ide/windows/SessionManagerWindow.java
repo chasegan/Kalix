@@ -26,6 +26,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -43,6 +44,8 @@ public class SessionManagerWindow extends JFrame {
     private JTree sessionTree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
+    private DefaultMutableTreeNode activeSessionsNode;
+    private DefaultMutableTreeNode foreignProcessesNode;
 
     // Details panel components
     private JLabel kalixcliUidLabel;
@@ -60,7 +63,9 @@ public class SessionManagerWindow extends JFrame {
 
     // Session tracking
     private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
+    private final Map<Long, DefaultMutableTreeNode> foreignPidToTreeNode = new HashMap<>();
     private String selectedSessionKey = null;
+    private Long selectedForeignPid = null;
 
     // Update timer
     private Timer updateTimer;
@@ -134,8 +139,13 @@ public class SessionManagerWindow extends JFrame {
     }
 
     private void initializeComponents() {
-        // Initialize session tree
+        // Initialize session tree with two sections
         rootNode = new DefaultMutableTreeNode("Sessions");
+        activeSessionsNode = new DefaultMutableTreeNode("Active Sessions");
+        foreignProcessesNode = new DefaultMutableTreeNode("Foreign Processes");
+        rootNode.add(activeSessionsNode);
+        rootNode.add(foreignProcessesNode);
+
         treeModel = new DefaultTreeModel(rootNode);
         sessionTree = new JTree(treeModel);
         sessionTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
@@ -348,6 +358,8 @@ public class SessionManagerWindow extends JFrame {
             Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
             boolean[] treeStructureChanged = {false};
 
+            // === Update Active Sessions ===
+
             // Add new sessions to tree
             for (SessionManager.KalixSession session : activeSessions.values()) {
                 String sessionKey = session.getSessionKey();
@@ -356,7 +368,7 @@ public class SessionManagerWindow extends JFrame {
                     // New session - add to tree
                     SessionInfo sessionInfo = new SessionInfo(session);
                     DefaultMutableTreeNode sessionNode = new DefaultMutableTreeNode(sessionInfo);
-                    rootNode.add(sessionNode);
+                    activeSessionsNode.add(sessionNode);
                     sessionToTreeNode.put(sessionKey, sessionNode);
                     treeStructureChanged[0] = true;
                 } else {
@@ -371,7 +383,7 @@ public class SessionManagerWindow extends JFrame {
                 String sessionKey = entry.getKey();
                 if (!activeSessions.containsKey(sessionKey)) {
                     DefaultMutableTreeNode nodeToRemove = entry.getValue();
-                    rootNode.remove(nodeToRemove);
+                    activeSessionsNode.remove(nodeToRemove);
                     treeStructureChanged[0] = true;
 
                     // Clear selection if this was the selected session
@@ -384,15 +396,69 @@ public class SessionManagerWindow extends JFrame {
                 return false;
             });
 
+            // === Update Foreign Processes ===
+
+            java.util.List<StdioTaskManager.ForeignProcess> foreignProcesses = stdioTaskManager.detectForeignKalixProcesses();
+
+            // Add new foreign processes to tree
+            for (StdioTaskManager.ForeignProcess foreign : foreignProcesses) {
+                long pid = foreign.getPid();
+
+                if (!foreignPidToTreeNode.containsKey(pid)) {
+                    // New foreign process - add to tree
+                    ForeignProcessInfo foreignInfo = new ForeignProcessInfo(foreign);
+                    DefaultMutableTreeNode foreignNode = new DefaultMutableTreeNode(foreignInfo);
+                    foreignProcessesNode.add(foreignNode);
+                    foreignPidToTreeNode.put(pid, foreignNode);
+                    treeStructureChanged[0] = true;
+                } else {
+                    // Existing foreign process - update node display
+                    DefaultMutableTreeNode existingNode = foreignPidToTreeNode.get(pid);
+                    treeModel.nodeChanged(existingNode);
+                }
+            }
+
+            // Remove dead foreign processes from tree
+            Set<Long> currentForeignPids = foreignProcesses.stream()
+                .map(StdioTaskManager.ForeignProcess::getPid)
+                .collect(java.util.stream.Collectors.toSet());
+
+            foreignPidToTreeNode.entrySet().removeIf(entry -> {
+                long pid = entry.getKey();
+                if (!currentForeignPids.contains(pid)) {
+                    DefaultMutableTreeNode nodeToRemove = entry.getValue();
+                    foreignProcessesNode.remove(nodeToRemove);
+                    treeStructureChanged[0] = true;
+
+                    // Clear selection if this was the selected foreign process
+                    if (pid == (selectedForeignPid != null ? selectedForeignPid : -1)) {
+                        clearDetailsPanel();
+                        selectedForeignPid = null;
+                    }
+                    return true;
+                }
+                return false;
+            });
+
             // Notify tree of changes
             if (treeStructureChanged[0]) {
                 treeModel.nodeStructureChanged(rootNode);
+                // Expand both sections by default
+                sessionTree.expandPath(new TreePath(activeSessionsNode.getPath()));
+                sessionTree.expandPath(new TreePath(foreignProcessesNode.getPath()));
             }
 
             // Update details and log for selected session
             if (selectedSessionKey != null && activeSessions.containsKey(selectedSessionKey)) {
                 updateDetailsPanel(activeSessions.get(selectedSessionKey));
                 updateLog(activeSessions.get(selectedSessionKey));
+            }
+
+            // Update details for selected foreign process
+            if (selectedForeignPid != null && foreignPidToTreeNode.containsKey(selectedForeignPid)) {
+                DefaultMutableTreeNode foreignNode = foreignPidToTreeNode.get(selectedForeignPid);
+                ForeignProcessInfo foreignInfo = (ForeignProcessInfo) foreignNode.getUserObject();
+                updateDetailsForForeign(foreignInfo.foreign);
             }
         });
     }
@@ -405,20 +471,34 @@ public class SessionManagerWindow extends JFrame {
         if (selectedPath == null) {
             clearDetailsPanel();
             selectedSessionKey = null;
+            selectedForeignPid = null;
             return;
         }
 
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof SessionInfo sessionInfo)) {
-            clearDetailsPanel();
-            selectedSessionKey = null;
+        Object userObject = selectedNode.getUserObject();
+
+        // Handle session selection
+        if (userObject instanceof SessionInfo sessionInfo) {
+            selectedSessionKey = sessionInfo.session.getSessionKey();
+            selectedForeignPid = null;
+            updateDetailsPanel(sessionInfo.session);
+            updateLog(sessionInfo.session);
             return;
         }
 
-        selectedSessionKey = sessionInfo.session.getSessionKey();
+        // Handle foreign process selection
+        if (userObject instanceof ForeignProcessInfo foreignInfo) {
+            selectedForeignPid = foreignInfo.foreign.getPid();
+            selectedSessionKey = null;
+            updateDetailsForForeign(foreignInfo.foreign);
+            return;
+        }
 
-        updateDetailsPanel(sessionInfo.session);
-        updateLog(sessionInfo.session);
+        // Section headers or unknown - clear selection
+        clearDetailsPanel();
+        selectedSessionKey = null;
+        selectedForeignPid = null;
     }
 
     /**
@@ -462,6 +542,41 @@ public class SessionManagerWindow extends JFrame {
         uptimeLabel.setText("-");
         logArea.setText("Select a session to view STDIO log...");
         lastLogContent = "";
+    }
+
+    /**
+     * Updates the details panel for a foreign process.
+     */
+    private void updateDetailsForForeign(StdioTaskManager.ForeignProcess foreign) {
+        kalixcliUidLabel.setText("N/A (foreign)");
+        sessionKeyLabel.setText("PID " + foreign.getPid());
+        sessionStateLabel.setText("Foreign");
+        programTypeLabel.setText("External Process");
+        programStateLabel.setText("Running");
+
+        String startTimeStr = foreign.getStartTime() != null
+            ? foreign.getStartTime().toString()
+            : "Unknown";
+        startTimeLabel.setText(startTimeStr);
+
+        uptimeLabel.setText(foreign.getUptimeString());
+
+        // Show process info in log area
+        StringBuilder info = new StringBuilder();
+        info.append("=== Foreign Kalix Process ===\n\n");
+        info.append("PID: ").append(foreign.getPid()).append("\n");
+        info.append("Command: ").append(foreign.getCommand()).append("\n");
+        info.append("User: ").append(foreign.getUser()).append("\n");
+        info.append("Start Time: ").append(startTimeStr).append("\n");
+        info.append("Uptime: ").append(foreign.getUptimeString()).append("\n");
+        info.append("\n");
+        info.append("This process is not managed by the current KalixIDE session.\n");
+        info.append("It may belong to another KalixIDE instance or a background process.\n");
+        info.append("\n");
+        info.append("You can terminate this process using the 'Terminate' button.");
+
+        logArea.setText(info.toString());
+        lastLogContent = info.toString();
     }
 
     /**
@@ -613,13 +728,50 @@ public class SessionManagerWindow extends JFrame {
     }
 
     /**
-     * Terminates the selected session.
+     * Terminates the selected session or foreign process.
      */
     private void terminateSession() {
+        // Handle foreign process termination
+        if (selectedForeignPid != null) {
+            int result = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to terminate this foreign process?\n\nPID: " + selectedForeignPid,
+                "Terminate Foreign Process",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+
+            if (result == JOptionPane.YES_OPTION) {
+                stdioTaskManager.killForeignProcess(selectedForeignPid)
+                    .thenAccept(success -> SwingUtilities.invokeLater(() -> {
+                        if (success) {
+                            statusUpdater.accept("Foreign process terminated");
+                        } else {
+                            statusUpdater.accept("Failed to terminate foreign process");
+                            JOptionPane.showMessageDialog(this,
+                                "Failed to terminate foreign process. It may have already exited or you may lack permissions.",
+                                "Termination Failed",
+                                JOptionPane.WARNING_MESSAGE);
+                        }
+                        refreshSessions();
+                    }))
+                    .exceptionally(throwable -> {
+                        SwingUtilities.invokeLater(() -> {
+                            statusUpdater.accept("Error terminating foreign process: " + throwable.getMessage());
+                            JOptionPane.showMessageDialog(this,
+                                "Error terminating foreign process: " + throwable.getMessage(),
+                                "Termination Error",
+                                JOptionPane.ERROR_MESSAGE);
+                        });
+                        return null;
+                    });
+            }
+            return;
+        }
+
+        // Handle managed session termination
         if (selectedSessionKey == null) {
             JOptionPane.showMessageDialog(this,
-                "Please select a session first.",
-                "No Session Selected",
+                "Please select a session or foreign process first.",
+                "Nothing Selected",
                 JOptionPane.INFORMATION_MESSAGE);
             return;
         }
@@ -722,6 +874,22 @@ public class SessionManagerWindow extends JFrame {
     }
 
     /**
+     * Data class for foreign process display information.
+     */
+    private static class ForeignProcessInfo {
+        final StdioTaskManager.ForeignProcess foreign;
+
+        ForeignProcessInfo(StdioTaskManager.ForeignProcess foreign) {
+            this.foreign = foreign;
+        }
+
+        @Override
+        public String toString() {
+            return foreign.getDisplayName();
+        }
+    }
+
+    /**
      * Custom tree cell renderer for session tree.
      */
     private static class SessionTreeCellRenderer extends DefaultTreeCellRenderer {
@@ -785,6 +953,17 @@ public class SessionManagerWindow extends JFrame {
                             setIcon(null);
                             break;
                     }
+                } else if (userObject instanceof ForeignProcessInfo foreignInfo) {
+                    // Display foreign process with gray color and warning icon
+                    setText(foreignInfo.toString());
+
+                    if (!sel) {
+                        setForeground(new Color(128, 128, 128)); // Gray
+                    }
+
+                    // Set warning icon for foreign process
+                    int iconSize = 12;
+                    setIcon(FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, iconSize, new Color(200, 150, 0)));
                 }
             }
 

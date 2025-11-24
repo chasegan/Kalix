@@ -91,16 +91,25 @@ public class KalixStdioSession {
     
     /**
      * Checks if the kalixcli process is still running.
-     * 
+     *
      * @return true if the process is alive
      */
     public boolean isRunning() {
         return runningProcess.isRunning();
     }
-    
+
+    /**
+     * Gets the process ID (PID) of the kalixcli process.
+     *
+     * @return the process ID
+     */
+    public long pid() {
+        return runningProcess.getProcess().pid();
+    }
+
     /**
      * Closes the process and cleans up resources.
-     * 
+     *
      * @param forceKill if true, forcibly kills the process
      */
     public void close(boolean forceKill) {

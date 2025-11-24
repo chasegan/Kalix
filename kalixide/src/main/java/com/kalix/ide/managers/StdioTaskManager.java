@@ -6,11 +6,16 @@ import com.kalix.ide.windows.RunManager;
 
 import javax.swing.*;
 import java.io.File;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Manager class for handling STDIO session execution with progress monitoring.
@@ -182,7 +187,150 @@ public class StdioTaskManager {
     public void sendCommand(String sessionKey, String command) {
         sessionManager.sendCommand(sessionKey, command);
     }
-    
+
+    /**
+     * Detects foreign kalix/kalixcli processes running on the system that are not managed
+     * by the current SessionManager. These may be managed by other KalixIDE instances.
+     *
+     * @return list of foreign ProcessHandle objects
+     */
+    public List<ForeignProcess> detectForeignKalixProcesses() {
+        // Get PIDs of all managed sessions
+        Set<Long> managedPids = sessionManager.getActiveSessions().values().stream()
+            .map(session -> session.getProcess().pid())
+            .collect(Collectors.toSet());
+
+        // Find all kalix processes on the system
+        return ProcessHandle.allProcesses()
+            .filter(ph -> ph.isAlive())
+            .filter(ph -> {
+                // Check if command contains "kalix"
+                Optional<String> cmdOpt = ph.info().command();
+                if (cmdOpt.isEmpty()) {
+                    return false;
+                }
+
+                String cmd = cmdOpt.get().toLowerCase();
+                // Match kalix, kalixcli, or paths ending with kalix/kalixcli
+                return cmd.contains("kalix") || cmd.endsWith("kalix") ||
+                       cmd.endsWith("kalix.exe") || cmd.endsWith("kalixcli") ||
+                       cmd.endsWith("kalixcli.exe");
+            })
+            .filter(ph -> !managedPids.contains(ph.pid()))
+            .map(ForeignProcess::new)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Kills a foreign process by PID.
+     *
+     * @param pid the process ID to kill
+     * @return CompletableFuture that completes when the process is killed
+     */
+    public CompletableFuture<Boolean> killForeignProcess(long pid) {
+        return CompletableFuture.supplyAsync(() -> {
+            Optional<ProcessHandle> processOpt = ProcessHandle.of(pid);
+            if (processOpt.isEmpty()) {
+                return false; // Process already dead
+            }
+
+            ProcessHandle process = processOpt.get();
+
+            // Try graceful termination first
+            boolean destroyed = process.destroy();
+            if (!destroyed) {
+                return false;
+            }
+
+            // Wait up to 5 seconds for graceful termination
+            try {
+                process.onExit().get(5, java.util.concurrent.TimeUnit.SECONDS);
+                return true;
+            } catch (Exception e) {
+                // Graceful termination failed, force kill
+                return process.destroyForcibly();
+            }
+        });
+    }
+
+    /**
+     * Represents a foreign kalix process detected on the system.
+     * These processes are not managed by the current SessionManager and may
+     * belong to other KalixIDE instances or background processes.
+     */
+    public static class ForeignProcess {
+        private final ProcessHandle handle;
+        private final long pid;
+        private final String command;
+        private final String user;
+        private final Instant startTime;
+        private final Duration cpuDuration;
+
+        public ForeignProcess(ProcessHandle handle) {
+            this.handle = handle;
+            this.pid = handle.pid();
+
+            ProcessHandle.Info info = handle.info();
+            this.command = info.command().orElse("unknown");
+            this.user = info.user().orElse("unknown");
+            this.startTime = info.startInstant().orElse(null);
+            this.cpuDuration = info.totalCpuDuration().orElse(null);
+        }
+
+        public long getPid() {
+            return pid;
+        }
+
+        public String getCommand() {
+            return command;
+        }
+
+        public String getUser() {
+            return user;
+        }
+
+        public Instant getStartTime() {
+            return startTime;
+        }
+
+        public Duration getCpuDuration() {
+            return cpuDuration;
+        }
+
+        public boolean isAlive() {
+            return handle.isAlive();
+        }
+
+        public String getDisplayName() {
+            // Extract just the executable name from full path
+            String execName = command;
+            int lastSlash = Math.max(execName.lastIndexOf('/'), execName.lastIndexOf('\\'));
+            if (lastSlash >= 0) {
+                execName = execName.substring(lastSlash + 1);
+            }
+            return String.format("%s (PID %d)", execName, pid);
+        }
+
+        public String getUptimeString() {
+            if (startTime == null) {
+                return "unknown";
+            }
+
+            Duration uptime = Duration.between(startTime, Instant.now());
+            long hours = uptime.toHours();
+            long minutes = uptime.toMinutesPart();
+            long seconds = uptime.toSecondsPart();
+
+            if (hours > 0) {
+                return String.format("%dh %dm", hours, minutes);
+            } else if (minutes > 0) {
+                return String.format("%dm %ds", minutes, seconds);
+            } else {
+                return String.format("%ds", seconds);
+            }
+        }
+    }
+
     /**
      * Handles session events for UI updates.
      */
