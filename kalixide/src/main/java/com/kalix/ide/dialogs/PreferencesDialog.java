@@ -289,12 +289,26 @@ public class PreferencesDialog extends JDialog {
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> dispose());
+        closeButton.addActionListener(e -> {
+            savePendingChanges();
+            dispose();
+        });
 
         buttonPanel.add(closeButton);
         getRootPane().setDefaultButton(closeButton);
 
         return buttonPanel;
+    }
+
+    /**
+     * Saves any pending changes from text fields that haven't been committed yet.
+     */
+    private void savePendingChanges() {
+        // Save Kalix CLI path if it has been edited
+        if (kalixCliPanel != null && kalixCliPanel.binaryPathField != null) {
+            String path = kalixCliPanel.binaryPathField.getText().trim();
+            PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, path);
+        }
     }
 
     /**
@@ -583,22 +597,36 @@ public class PreferencesDialog extends JDialog {
             gbc.insets = new Insets(5, 5, 5, 5);
             gbc.anchor = GridBagConstraints.WEST;
 
+            // Info area
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1.0; gbc.weighty = 0;
+            JTextArea infoArea = new JTextArea();
+            infoArea.setEditable(false);
+            infoArea.setOpaque(false);
+            infoArea.setWrapStyleWord(true);
+            infoArea.setLineWrap(true);
+            infoArea.setFocusable(false);
+            infoArea.setText("Specify directories to search for the Kalix CLI binary. Multiple directories can be " +
+                "specified using ';' as a delimiter (e.g., /usr/local/bin;/opt/kalix/bin). If left empty, the system will " +
+                "search for 'kalix' in the system PATH.");
+            formPanel.add(infoArea, gbc);
+
             // Binary path
-            gbc.gridx = 0; gbc.gridy = 0;
-            formPanel.add(new JLabel("Binary Path:"), gbc);
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            formPanel.add(new JLabel("Path:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             binaryPathField = new JTextField(PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, ""));
-            binaryPathField.setToolTipText("Leave empty to use kalix from system PATH");
+            binaryPathField.setToolTipText("Leave empty to use kalix from system PATH. Use ';' to separate multiple directories.");
             formPanel.add(binaryPathField, gbc);
 
             gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            browseButton = new JButton("Browse...");
+            browseButton = new JButton("Add...");
             browseButton.addActionListener(this::browseBinary);
             formPanel.add(browseButton, gbc);
 
             // Test and status
-            gbc.gridx = 0; gbc.gridy = 1;
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
             testButton = new JButton("Test");
             testButton.addActionListener(this::testConnection);
             formPanel.add(testButton, gbc);
@@ -609,7 +637,7 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(statusLabel, gbc);
 
             // Path label (shows actual binary path)
-            gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0; gbc.weighty = 1.0;
             pathLabel = new JTextArea("");
             pathLabel.setEditable(false);
             pathLabel.setOpaque(false);
@@ -620,34 +648,40 @@ public class PreferencesDialog extends JDialog {
             pathLabel.setFocusable(false);  // Prevent cursor from appearing
             formPanel.add(pathLabel, gbc);
 
-            // Info area
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.BOTH;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            JTextArea infoArea = new JTextArea();
-            infoArea.setEditable(false);
-            infoArea.setOpaque(false);
-            infoArea.setWrapStyleWord(true);
-            infoArea.setLineWrap(true);
-            infoArea.setFocusable(false);
-            infoArea.setText("Configure the path to the kalix binary. If left empty, the system will " +
-                "search for 'kalix' in the system PATH and common installation directories.");
-            formPanel.add(infoArea, gbc);
-
             add(formPanel, BorderLayout.CENTER);
         }
 
         private void browseBinary(ActionEvent e) {
             JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Select Kalix Binary");
-            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-
-            String currentPath = binaryPathField.getText().trim();
-            if (!currentPath.isEmpty()) {
-                fileChooser.setSelectedFile(new File(currentPath));
-            }
+            fileChooser.setDialogTitle("Add Directory to Search Path");
+            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 
             if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                String newPath = fileChooser.getSelectedFile().getAbsolutePath();
+                File selectedDir = fileChooser.getSelectedFile();
+
+                // Convert to relative path (relative to current working directory)
+                java.nio.file.Path currentDir = java.nio.file.Paths.get("").toAbsolutePath();
+                java.nio.file.Path selectedPath = selectedDir.toPath().toAbsolutePath();
+                java.nio.file.Path relativePath;
+
+                try {
+                    relativePath = currentDir.relativize(selectedPath);
+                } catch (IllegalArgumentException ex) {
+                    // Paths on different drives (Windows) - use absolute path
+                    relativePath = selectedPath;
+                }
+
+                String pathToAdd = relativePath.toString();
+
+                // Append to existing path with ';' delimiter
+                String currentPath = binaryPathField.getText().trim();
+                String newPath;
+                if (currentPath.isEmpty()) {
+                    newPath = pathToAdd;
+                } else {
+                    newPath = currentPath + ";" + pathToAdd;
+                }
+
                 binaryPathField.setText(newPath);
                 PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, newPath);
                 statusLabel.setText("Status: Path changed - click Test");
@@ -669,30 +703,22 @@ public class PreferencesDialog extends JDialog {
 
             SwingUtilities.invokeLater(() -> {
                 try {
-                    if (path.isEmpty()) {
-                        Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> location =
-                            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences();
+                    // Use findKalixCli which handles semicolon-delimited paths
+                    Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> location =
+                        com.kalix.ide.cli.KalixCliLocator.findKalixCli(path);
 
-                        if (location.isPresent()) {
-                            statusLabel.setText("Status: ✓ Found - " + location.get().getVersion());
-                            statusLabel.setForeground(new Color(0, 128, 0));
-                            pathLabel.setText("Path: " + location.get().getPath().toAbsolutePath());
-                        } else {
-                            statusLabel.setText("Status: ✗ Not found in system");
-                            statusLabel.setForeground(Color.RED);
-                            pathLabel.setText("");
-                        }
+                    if (location.isPresent()) {
+                        statusLabel.setText("Status: ✓ Found - " + location.get().getVersion());
+                        statusLabel.setForeground(new Color(0, 128, 0));
+                        pathLabel.setText("Path: " + location.get().getPath().toAbsolutePath());
                     } else {
-                        java.nio.file.Path binaryPath = java.nio.file.Paths.get(path);
-                        if (com.kalix.ide.cli.KalixCliLocator.validateKalixCli(binaryPath)) {
-                            statusLabel.setText("Status: ✓ Valid binary");
-                            statusLabel.setForeground(new Color(0, 128, 0));
-                            pathLabel.setText("Path: " + binaryPath.toAbsolutePath());
+                        if (path.isEmpty()) {
+                            statusLabel.setText("Status: ✗ Not found in system PATH");
                         } else {
-                            statusLabel.setText("Status: ✗ Invalid or inaccessible");
-                            statusLabel.setForeground(Color.RED);
-                            pathLabel.setText("");
+                            statusLabel.setText("Status: ✗ Not found in specified directories");
                         }
+                        statusLabel.setForeground(Color.RED);
+                        pathLabel.setText("");
                     }
                 } catch (Exception ex) {
                     statusLabel.setText("Status: ✗ Test failed");

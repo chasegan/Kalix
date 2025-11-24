@@ -45,29 +45,69 @@ public class KalixCliLocator {
      * Attempts to locate kalix using a simplified strategy.
      *
      * If userConfiguredPath is provided:
-     *   - ONLY uses that path (no fallback)
-     *   - Returns empty if the path is invalid
+     *   - Splits the path by ';' delimiter (supports multiple directories)
+     *   - Searches each directory sequentially for kalix executable
+     *   - Returns the first valid kalix found
+     *   - Returns empty if none found (no fallback to system PATH)
      *
      * If no userConfiguredPath:
      *   - Uses unqualified "kalix" command (relies on system PATH)
      *
-     * @param userConfiguredPath Optional user-configured path
+     * @param userConfiguredPath Optional user-configured path (supports ';' delimiter for multiple paths)
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCli(String userConfiguredPath) {
-        // If user specified a path, ONLY use that path (no fallback)
+        // If user specified a path, ONLY use those paths (no fallback)
         if (userConfiguredPath != null && !userConfiguredPath.trim().isEmpty()) {
-            Path configuredPath = Paths.get(userConfiguredPath.trim());
-            if (validateKalixCli(configuredPath)) {
-                String version = getVersion(configuredPath);
-                return Optional.of(new CliLocation(configuredPath, version, false));
+            // Split by ';' to support multiple paths
+            String[] pathSegments = userConfiguredPath.split(";");
+
+            for (String segment : pathSegments) {
+                String trimmedSegment = segment.trim();
+                if (trimmedSegment.isEmpty()) {
+                    continue;
+                }
+
+                // Try to find kalix in this directory
+                Optional<CliLocation> found = findKalixInDirectory(trimmedSegment);
+                if (found.isPresent()) {
+                    return found;
+                }
             }
-            // User-specified path is invalid - fail (don't fallback)
+
+            // No valid kalix found in any of the specified paths
             return Optional.empty();
         }
 
         // No user path configured - use unqualified "kalix" from system PATH
         return findInPath();
+    }
+
+    /**
+     * Searches for a kalix executable in the specified directory.
+     *
+     * @param directoryPath The directory path to search in
+     * @return Optional containing CliLocation if found and valid, empty otherwise
+     */
+    private static Optional<CliLocation> findKalixInDirectory(String directoryPath) {
+        Path dir = Paths.get(directoryPath);
+
+        // Check if directory exists
+        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+            return Optional.empty();
+        }
+
+        // Determine the executable name based on OS
+        String executableName = isWindows() ? CLI_NAME_WINDOWS : CLI_NAME_BASE;
+        Path kalixPath = dir.resolve(executableName);
+
+        // Validate the executable
+        if (validateKalixCli(kalixPath)) {
+            String version = getVersion(kalixPath);
+            return Optional.of(new CliLocation(kalixPath, version, false));
+        }
+
+        return Optional.empty();
     }
     
     /**
