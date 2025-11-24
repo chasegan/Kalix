@@ -26,7 +26,7 @@ public class RenameNodeCommand implements EditorCommand {
             .id("rename_node")
             .displayName("Rename")
             .description("Rename this node and all its references")
-            .category("Refactor")
+            .category("")
             .build();
     }
 

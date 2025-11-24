@@ -151,6 +151,22 @@ public class CommandExecutor {
 
 
     /**
+     * Inserts text at the current cursor position.
+     *
+     * @param text The text to insert
+     */
+    public void insertTextAtCursor(String text) {
+        try {
+            int caretPos = editor.getCaretPosition();
+            editor.insert(text, caretPos);
+            logger.debug("Inserted {} characters at position {}", text.length(), caretPos);
+        } catch (Exception e) {
+            logger.error("Error inserting text at cursor", e);
+            showError("Failed to insert text: " + e.getMessage());
+        }
+    }
+
+    /**
      * Shows an error dialog.
      */
     private void showError(String message) {

@@ -260,7 +260,18 @@ public class EnhancedTextEditor extends JPanel {
                             } else {
                                 // Commands with no category - add directly
                                 for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
-                                    JMenuItem item = new JMenuItem(command.getMetadata().getDisplayName());
+                                    // Customize display name for certain commands
+                                    String displayName = command.getMetadata().getDisplayName();
+
+                                    // For rename command, include the node name
+                                    if ("rename_node".equals(command.getMetadata().getId())) {
+                                        com.kalix.ide.editor.commands.EditorContext context = contextCommandManager.getCurrentContext();
+                                        if (context.getNodeName().isPresent()) {
+                                            displayName = "Rename " + context.getNodeName().get();
+                                        }
+                                    }
+
+                                    JMenuItem item = new JMenuItem(displayName);
                                     item.addActionListener(ae -> contextCommandManager.executeCommand(command));
                                     menu.add(item);
                                 }

@@ -66,13 +66,18 @@ public class ContextDetector {
                 return builder.build();
             }
 
-            // Check if we're inside a node section (use parsed model if available)
+            // Check if we're inside a section (use parsed model if available)
             if (parsedModel != null) {
                 String currentSection = findCurrentSection(parsedModel, currentLine);
+
+                // Always set section name if we found one
+                if (currentSection != null) {
+                    builder.sectionName(currentSection);
+                }
+
                 if (currentSection != null && currentSection.startsWith("node.")) {
                     String nodeName = currentSection.substring(5); // Remove "node." prefix
-                    builder.nodeName(nodeName)
-                        .sectionName(currentSection);
+                    builder.nodeName(nodeName);
 
                     INIModelParser.Section section = parsedModel.getSections().get(currentSection);
                     if (section != null) {
@@ -96,15 +101,13 @@ public class ContextDetector {
 
                 // Check if we're in outputs section
                 if ("outputs".equals(currentSection)) {
-                    builder.type(EditorContext.ContextType.OUTPUT_REFERENCE)
-                        .sectionName("outputs");
+                    builder.type(EditorContext.ContextType.OUTPUT_REFERENCE);
                     return builder.build();
                 }
 
                 // Check if we're in constants section
                 if ("constants".equals(currentSection)) {
-                    builder.type(EditorContext.ContextType.CONSTANTS)
-                        .sectionName("constants");
+                    builder.type(EditorContext.ContextType.CONSTANTS);
                     return builder.build();
                 }
 
@@ -116,7 +119,6 @@ public class ContextDetector {
                         String filePath = findInputFileAtLine(parsedModel, currentLine + 1); // Convert 0-based to 1-based
                         if (filePath != null) {
                             builder.type(EditorContext.ContextType.INPUT_FILE)
-                                .sectionName("inputs")
                                 .inputFilePath(filePath);
                             return builder.build();
                         }

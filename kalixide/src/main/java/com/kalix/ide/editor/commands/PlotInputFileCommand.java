@@ -28,7 +28,7 @@ public class PlotInputFileCommand implements EditorCommand {
     public CommandMetadata getMetadata() {
         return new CommandMetadata.Builder()
             .id("plot_input_file")
-            .displayName("Plot")
+            .displayName("Plot Selected Dataset")
             .description("Plot input file data in FlowViz")
             .category("") // Empty category = appears at root level, not in submenu
             .build();

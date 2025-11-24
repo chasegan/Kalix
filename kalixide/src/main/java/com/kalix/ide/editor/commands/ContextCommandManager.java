@@ -66,8 +66,14 @@ public class ContextCommandManager {
         // Register plot command (appears at root level, before refactoring commands)
         registry.register(new PlotInputFileCommand(modelFileSupplier, parentFrame));
 
+        // Register insert file path command
+        registry.register(new InsertFilePathCommand(modelFileSupplier, parentFrame));
+
         // Register rename command - pass supplier, not the model itself
         registry.register(new RenameNodeCommand(modelSupplier, parentFrame));
+
+        // Register LVAS generation command
+        registry.register(new GenerateSimpleLvasCommand(parentFrame));
 
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));
@@ -87,6 +93,16 @@ public class ContextCommandManager {
 
         // Find applicable commands
         return registry.getApplicableCommands(context);
+    }
+
+    /**
+     * Gets the current editor context.
+     * Useful for customizing menu item display names.
+     *
+     * @return The current EditorContext
+     */
+    public EditorContext getCurrentContext() {
+        return detectCurrentContext();
     }
 
     /**
