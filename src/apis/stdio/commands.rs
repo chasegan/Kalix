@@ -531,9 +531,9 @@ impl Command for RunSimulationCommand {
             .ok_or(CommandError::ModelNotLoaded)?;
 
         // Check if model has input data
-        if model.inputs.is_empty() {
-            return Err(CommandError::DataNotLoaded);
-        }
+        // if model.inputs.is_empty() {
+        //     return Err(CommandError::DataNotLoaded);
+        // }
 
         // Try to configure the model simulation period
         match model.configure() {

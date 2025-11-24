@@ -104,13 +104,11 @@ impl Model {
 
         //3) Read the input data from file
         // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
-        // TODO: E.g. if we were doing reload on run with a subset of the data, or
+        //       E.g. if we were doing reload on run with a subset of the data, or
 
-        //4) Automatically determining the maximum simulation period
-        self.configuration = self.auto_determine_simulation_period()?;
-
-        //5) Allow the user to override the sim period
-        // TODO: provide this functionality later
+        //4) Determine simulation period
+        //5) Supports sim period specified by user (done in the same step)
+        self.auto_determine_simulation_period()?;
 
         //6) Load input data into the data_cache, properly aligned with simulation period
         for i in 0..self.inputs.len() {
@@ -235,14 +233,41 @@ impl Model {
     }
 
     /// Determine the simulation period on the basis of the available input data
-    pub fn auto_determine_simulation_period(&self) -> Result<Configuration, String> {
+    pub fn auto_determine_simulation_period(&mut self) -> Result<(), String> {
 
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
 
         // If there is no critical input data, return a default configuration.
         if civ.len() == 0 {
-            return Ok(Configuration::new());
+            // Go with the specified sim period
+            match self.configuration.specified_sim_start_timestamp {
+                Some(timestamp) => {
+                    self.configuration.sim_start_timestamp = timestamp;
+                }
+                None => {
+                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                }
+            }
+            match self.configuration.specified_sim_end_timestamp {
+                Some(timestamp) => {
+                    self.configuration.sim_end_timestamp = timestamp;
+                }
+                None => {
+                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                }
+            }
+            if self.configuration.sim_start_timestamp > self.configuration.sim_end_timestamp {
+                return Err("Specified start date is before end date.".to_string());
+            }
+
+            // Default to daily step size and calculate n_steps //TODO: make this customisable
+            self.configuration.sim_stepsize = 86400;
+            self.configuration.sim_nsteps = (self.configuration.sim_end_timestamp -
+                self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+
+            // Return
+            return Ok(());
         }
 
         // Go through all the critical inputs and make sure they are all in the model.
@@ -308,20 +333,43 @@ impl Model {
             }
         }
 
-        // Return the configuration
-        //TODO: change sim_start to u64 and delete cast
-        // println!("Mask start_timestamp: {}", mask.start_timestamp);
-        // println!("Mask start_index: {}", start_index);
-        // println!("Mask end_index: {}", end_index);
+        // Update the configuration
         let n_steps = (end_index - start_index) as u64;
         let start_timestamp = mask.start_timestamp + (start_index as u64 * mask.step_size);
         let end_timestamp = mask.start_timestamp + ((end_index - 1) as u64 * mask.step_size);
-        Ok(Configuration {
-            sim_stepsize: mask.step_size,
-            sim_start_timestamp: start_timestamp,
-            sim_end_timestamp: end_timestamp,
-            sim_nsteps: n_steps,
-        })
+        self.configuration.sim_stepsize = mask.step_size;
+        self.configuration.sim_start_timestamp = start_timestamp;
+        self.configuration.sim_end_timestamp = end_timestamp;
+        self.configuration.sim_nsteps = n_steps;
+
+        // Override with dates specified in the model, if relevant
+        match self.configuration.specified_sim_start_timestamp {
+            Some(timestamp) => {
+                if (timestamp < self.configuration.sim_start_timestamp) ||
+                    (timestamp > self.configuration.sim_end_timestamp) {
+                    return Err("Specified start inconsistent with input data.".to_string());
+                }
+                self.configuration.sim_start_timestamp = timestamp;
+                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                    self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
+            }
+            None => {}
+        }
+        match self.configuration.specified_sim_end_timestamp {
+            Some(timestamp) => {
+                if (timestamp < self.configuration.sim_start_timestamp) ||
+                    (timestamp > self.configuration.sim_end_timestamp) {
+                    return Err("Specified end inconsistent with input data.".to_string());
+                }
+                self.configuration.sim_end_timestamp = timestamp;
+                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                    self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
+            }
+            None => {}
+        }
+
+        // Return ok
+        Ok(())
     }
 
 
