@@ -499,7 +499,7 @@ public class PlotInteractionManager {
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001);
+        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
         if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
             minValue = logScaleMin;
         }

@@ -142,32 +142,28 @@ public class PlotPanel extends JPanel {
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001);
+        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
         if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
             minValue = logScaleMin;
         }
 
         // Add 5% padding
         long timePadding = (long) ((endTime - startTime) * 0.05);
-        double valuePadding = (maxValue - minValue) * 0.05;
-        
+
         startTime -= timePadding;
         endTime += timePadding;
-        minValue -= valuePadding;
-        maxValue += valuePadding;
-        
-        // Ensure minimum range
+
+        // Ensure minimum time range
         if (endTime - startTime < 1000) { // Less than 1 second
             long center = (startTime + endTime) / 2;
             startTime = center - 500;
             endTime = center + 500;
         }
-        
-        if (maxValue - minValue < 0.001) { // Very small value range
-            double center = (minValue + maxValue) / 2;
-            minValue = center - 0.5;
-            maxValue = center + 0.5;
-        }
+
+        // Apply padding to Y values in appropriate space (linear or log)
+        double[] paddedYRange = applyYAxisPadding(minValue, maxValue, yAxisScale, 0.05);
+        minValue = paddedYRange[0];
+        maxValue = paddedYRange[1];
 
         Rectangle plotArea = getPlotArea();
         XAxisType xAxisType = determineXAxisType();
@@ -185,6 +181,43 @@ public class PlotPanel extends JPanel {
         XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+    }
+
+    /**
+     * Applies padding to Y-axis range in the appropriate transformed space.
+     * Works for all scale types (LINEAR, LOG, SQRT) by applying padding in transformed
+     * space and then inverse transforming back to data space. This ensures consistent
+     * visual spacing regardless of scale type.
+     *
+     * @param minValue The minimum Y value before padding
+     * @param maxValue The maximum Y value before padding
+     * @param yAxisScale The Y-axis scale type (LINEAR, LOG, or SQRT)
+     * @param paddingFraction The fraction of range to use as padding (e.g., 0.05 for 5%)
+     * @return Array of [paddedMin, paddedMax]
+     */
+    private static double[] applyYAxisPadding(double minValue, double maxValue, YAxisScale yAxisScale, double paddingFraction) {
+        double valueRange = maxValue - minValue;
+
+        // Handle very small value range
+        if (valueRange < 0.001) {
+            double center = (minValue + maxValue) / 2;
+            return new double[]{center - 0.5, center + 0.5};
+        }
+
+        // Apply padding in transformed space for correct visual spacing
+        double transformedMin = yAxisScale.transform(minValue);
+        double transformedMax = yAxisScale.transform(maxValue);
+        double transformedRange = transformedMax - transformedMin;
+
+        double padding = transformedRange * paddingFraction;
+        transformedMin -= padding;
+        transformedMax += padding;
+
+        // Inverse transform back to data space
+        double paddedMin = yAxisScale.inverseTransform(transformedMin);
+        double paddedMax = yAxisScale.inverseTransform(transformedMax);
+
+        return new double[]{paddedMin, paddedMax};
     }
 
     /**

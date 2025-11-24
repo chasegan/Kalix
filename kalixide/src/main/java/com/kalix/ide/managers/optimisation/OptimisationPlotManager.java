@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.models.optimisation.OptimisationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +48,7 @@ public class OptimisationPlotManager {
         this.convergencePlot = new PlotPanel();
         this.convergencePlot.setDataSet(convergenceDataSet);
         this.convergencePlot.setXAxisType(XAxisType.COUNT); // Use COUNT x-axis for evaluation numbers
+        this.convergencePlot.setYAxisScale(YAxisScale.LOG); // Use LOG scale for objective values
         this.convergencePlot.setPreferredSize(new Dimension(0, PLOT_HEIGHT));
 
         logger.debug("Created optimisation plot manager");
