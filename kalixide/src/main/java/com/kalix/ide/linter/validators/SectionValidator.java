@@ -25,7 +25,7 @@ public class SectionValidator implements ValidationStrategy {
     }
 
     private void validateRequiredSections(INIModelParser.ParsedModel model, ValidationResult result) {
-        Set<String> requiredSections = Set.of("kalix", "inputs", "outputs");
+        Set<String> requiredSections = Set.of("kalix", "outputs");
 
         for (String sectionName : requiredSections) {
             if (!model.getSections().containsKey(sectionName)) {
