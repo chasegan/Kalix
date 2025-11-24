@@ -17,8 +17,8 @@ public final class AppConstants {
     // Application metadata
     public static final String APP_NAME = "Kalix";
     public static final String APP_VERSION = "1.0";
-    public static final String APP_DESCRIPTION = "A Java Swing interface for Kalix hydrologic models.";
-    public static final String APP_WEBSITE_URL = "https://www.notion.so/chasegan/Kalix";
+    public static final String APP_DESCRIPTION = "A hydrologic and river-management modelling platform for the people.";
+    public static final String APP_WEBSITE_URL = "https://chasegan.notion.site/Kalix-User-Guide-762687200b564e8e8c82b4f98879974f";
     
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;

@@ -205,8 +205,6 @@ public class MenuBarBuilder {
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Optimiser", e -> callbacks.showOptimisation()));
         runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));
-        runMenu.addSeparator();
-        runMenu.add(createMenuItem("KalixCLI sessions (Advanced)", e -> callbacks.showSessionManager()));
         return runMenu;
     }
     
@@ -216,6 +214,8 @@ public class MenuBarBuilder {
     private JMenu createToolsMenu() {
         JMenu toolsMenu = new JMenu("Tools");
         toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
+        toolsMenu.addSeparator();
+        toolsMenu.add(createMenuItem("KalixCLI sessions", e -> callbacks.showSessionManager()));
         return toolsMenu;
     }
 

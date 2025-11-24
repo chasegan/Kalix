@@ -962,9 +962,33 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showAbout() {
-        DialogUtils.showInfo(this,
-            AppConstants.APP_NAME + "\nVersion " + AppConstants.APP_VERSION + "\n\n" + AppConstants.APP_DESCRIPTION,
-            "About Kalix IDE");
+        // Create a JEditorPane for proper hyperlink support
+        JEditorPane editorPane = new JEditorPane("text/html",
+            "<html>" +
+            "<body style='font-family: sans-serif;'>" +
+            "<b>" + AppConstants.APP_NAME + " " + AppConstants.APP_VERSION + "</b><br>" +
+            AppConstants.APP_DESCRIPTION + "<br>" +
+            "<a href='" + AppConstants.APP_WEBSITE_URL + "'>" + AppConstants.APP_WEBSITE_URL + "</a>" +
+            "</body></html>");
+
+        editorPane.setEditable(false);
+        editorPane.setOpaque(false);
+        editorPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+
+        // Add hyperlink click listener
+        editorPane.addHyperlinkListener(e -> {
+            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+                try {
+                    if (java.awt.Desktop.isDesktopSupported()) {
+                        java.awt.Desktop.getDesktop().browse(e.getURL().toURI());
+                    }
+                } catch (Exception ex) {
+                    updateStatus("Error opening website: " + ex.getMessage());
+                }
+            }
+        });
+
+        JOptionPane.showMessageDialog(this, editorPane, "About Kalix IDE", JOptionPane.INFORMATION_MESSAGE);
     }
     
     @Override
