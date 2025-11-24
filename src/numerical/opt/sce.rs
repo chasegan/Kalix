@@ -24,6 +24,9 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::time::Instant;
 
+/// Experimental flag: Use parameter recombination instead of random fallback
+/// when reflection and contraction both fail to improve
+const USE_EXPERIMENTAL_FALLBACK: bool = false;
 
 /// Configuration for SCE-UA algorithm
 pub struct SceConfig {
@@ -463,13 +466,25 @@ impl Sce {
                     }
                 }
 
-                // If still worse than worst, fallback to random
+                // If still worse than worst, apply fallback strategy
                 if proposal_individual.objective > worst.objective {
-                    let random_params = self.random_individual(n_params, rng);
-                    if let Ok(obj) = self.evaluate_individual(problem, &random_params) {
-                        proposal_individual = Individual::new(random_params);
-                        proposal_individual.objective = obj;
-                        evaluations += 1;
+                    if USE_EXPERIMENTAL_FALLBACK {
+                        // EXPERIMENTAL: Generate proposal by recombining parameters from complex members
+                        // This keeps the new point within the "successful" parameter space
+                        let recombined_params = self.recombine_from_complex(&complex.members, n_params, rng);
+                        if let Ok(obj) = self.evaluate_individual(problem, &recombined_params) {
+                            proposal_individual = Individual::new(recombined_params);
+                            proposal_individual.objective = obj;
+                            evaluations += 1;
+                        }
+                    } else {
+                        // ORIGINAL: Generate completely random point across entire [0,1] space
+                        let random_params = self.random_individual(n_params, rng);
+                        if let Ok(obj) = self.evaluate_individual(problem, &random_params) {
+                            proposal_individual = Individual::new(random_params);
+                            proposal_individual.objective = obj;
+                            evaluations += 1;
+                        }
                     }
                 }
             }
@@ -567,6 +582,22 @@ impl Sce {
     /// Generate a random individual within [0, 1] bounds
     fn random_individual(&self, n_params: usize, rng: &mut StdRng) -> Vec<f64> {
         (0..n_params).map(|_| rng.gen::<f64>()).collect()
+    }
+
+    /// Generate a new individual by recombining parameters from complex members
+    ///
+    /// For each parameter dimension, randomly select the value from one of the
+    /// complex members. This creates a new point that stays within the "successful"
+    /// parameter space defined by the complex, similar to crossover in genetic algorithms.
+    fn recombine_from_complex(&self, complex_members: &[Individual], n_params: usize, rng: &mut StdRng) -> Vec<f64> {
+        let n_members = complex_members.len();
+        (0..n_params)
+            .map(|param_idx| {
+                // Randomly select a member to donate this parameter
+                let donor_idx = rng.gen_range(0..n_members);
+                complex_members[donor_idx].params[param_idx]
+            })
+            .collect()
     }
 
     /// Evaluate an individual's objective function
