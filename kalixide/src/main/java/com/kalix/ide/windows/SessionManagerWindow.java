@@ -121,7 +121,7 @@ public class SessionManagerWindow extends JFrame {
     }
 
     private void setupWindow(JFrame parentFrame) {
-        setTitle("KalixCLI Session Manager");
+        setTitle("Kalix - CLI Session Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setSize(1000, 700);
 

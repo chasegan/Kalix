@@ -192,7 +192,7 @@ public class RunManager extends JFrame {
     }
 
     private void setupWindow(JFrame parentFrame) {
-        setTitle("Run Manager");
+        setTitle("Kalix - Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setSize(1100, 600);
 

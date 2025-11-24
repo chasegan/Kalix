@@ -75,7 +75,7 @@ public class DiffWindow extends JFrame {
      * @param referenceModel The original/reference model
      */
     public DiffWindow(String thisModel, String referenceModel) {
-        this(thisModel, referenceModel, "Model Comparison", "Reference Model", "This Model");
+        this(thisModel, referenceModel, "Kalix - Model Comparison", "Reference Model", "This Model");
     }
 
     /**

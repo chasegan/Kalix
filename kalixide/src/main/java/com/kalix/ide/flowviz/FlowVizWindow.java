@@ -36,7 +36,7 @@ public class FlowVizWindow extends JFrame {
     
     public FlowVizWindow() {
         windowCounter++;
-        setTitle("FlowViz - Untitled " + windowCounter);
+        setTitle("Kalix - Untitled " + windowCounter);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(600, 400);
         setLocationRelativeTo(null);
@@ -75,7 +75,7 @@ public class FlowVizWindow extends JFrame {
      */
     public FlowVizWindow(File dataFile) {
         windowCounter++;
-        setTitle("FlowViz - Untitled " + windowCounter);
+        setTitle("Kalix - Untitled " + windowCounter);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(600, 400);
         setLocationRelativeTo(null);
@@ -329,14 +329,14 @@ public class FlowVizWindow extends JFrame {
         if (isSingleFile) {
             title = currentFile.getName();
         } else {
-            title = "Various timeseries";
+            title = "Various Timeseries";
         }
 
         if (dataSet.getSeriesCount() > 0) {
             title += String.format(" (%d series)", dataSet.getSeriesCount());
         }
 
-        setTitle(title);
+        setTitle("Kalix - " + title);
     }
     
     private void updatePlotPanel() {

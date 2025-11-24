@@ -302,7 +302,7 @@ public class OptimisationWindow extends JFrame {
     }
 
     private void setupWindow(JFrame parentFrame) {
-        setTitle("Optimiser");
+        setTitle("Kalix - Optimiser");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setSize(OptimisationUIConstants.WINDOW_WIDTH, OptimisationUIConstants.WINDOW_HEIGHT);
 

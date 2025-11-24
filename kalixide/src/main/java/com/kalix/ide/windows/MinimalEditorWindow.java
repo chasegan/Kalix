@@ -121,7 +121,7 @@ public class MinimalEditorWindow extends JFrame {
     }
 
     private void setupWindow() {
-        setTitle("Text Editor");
+        setTitle("Kalix - Text Editor");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(800, 600);
         setLocationRelativeTo(null);
@@ -320,7 +320,7 @@ public class MinimalEditorWindow extends JFrame {
             textArea.setText(content);
             textArea.setCaretPosition(0); // Scroll to top
             currentFile = file;
-            setTitle("Text Editor - " + file.getName());
+            setTitle("Kalix - Text Editor - " + file.getName());
         } catch (IOException e) {
             JOptionPane.showMessageDialog(
                 this,
@@ -336,7 +336,7 @@ public class MinimalEditorWindow extends JFrame {
             String content = textArea.getText();
             Files.writeString(file.toPath(), content);
             currentFile = file;
-            setTitle("Text Editor - " + file.getName());
+            setTitle("Kalix - Text Editor - " + file.getName());
 
             JOptionPane.showMessageDialog(
                 this,
