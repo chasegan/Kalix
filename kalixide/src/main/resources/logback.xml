@@ -7,35 +7,15 @@
         </encoder>
     </appender>
 
-    <!-- File appender for persistent logs -->
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>kalix-ide.log</file>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <!-- Root logger configuration -->
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
     </root>
 
     <!-- Package-specific logging levels -->
-    <logger name="com.kalix.ide.interaction" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
-    </logger>
-
-    <logger name="com.kalix.ide.cli" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
-    </logger>
-
-    <logger name="com.kalix.ide.managers.FileWatcherManager" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
-    </logger>
+    <logger name="com.kalix.ide.interaction" level="DEBUG" />
+    <logger name="com.kalix.ide.cli" level="DEBUG" />
+    <logger name="com.kalix.ide.managers.FileWatcherManager" level="DEBUG" />
 
     <!-- Reduce noise from external libraries -->
     <logger name="com.formdev.flatlaf" level="WARN" />
