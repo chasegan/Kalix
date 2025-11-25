@@ -108,7 +108,21 @@ pub enum ExpressionNode {
         /// The name of the variable
         name: String,
     },
-    
+
+    /// A variable reference with a temporal offset and default value.
+    ///
+    /// Used for accessing previous timestep values with a fallback when
+    /// the offset would go before the start of the simulation.
+    /// Examples: `node.dam.ds_1[1, 0.0]` (yesterday, default 0.0)
+    VariableWithOffset {
+        /// The name of the variable
+        name: String,
+        /// The temporal offset (0 = current, 1 = previous timestep, etc.)
+        offset: usize,
+        /// Default value to use when current_step < offset
+        default_value: f64,
+    },
+
     /// A constant numerical value.
     ///
     /// Examples: `42`, `3.14159`, `-2.5`
@@ -122,9 +136,22 @@ impl ASTNode for ExpressionNode {
     fn evaluate(&self, context: &VariableContext) -> Result<f64, EvaluationError> {
         match self {
             ExpressionNode::Constant { value } => Ok(*value),
-            
+
             ExpressionNode::Variable { name } => {
                 context.get_variable(name)
+            }
+
+            ExpressionNode::VariableWithOffset { name, offset, .. } => {
+                // For now, offset evaluation through VariableContext is not supported
+                // This variant is mainly used for optimised evaluation via DataCache
+                // If offset is 0, treat as regular variable
+                if *offset == 0 {
+                    context.get_variable(name)
+                } else {
+                    Err(EvaluationError::InvalidOperation {
+                        message: format!("Offset access [{}] not supported in this evaluation context", offset),
+                    })
+                }
             }
             
             ExpressionNode::BinaryOp { left, op, right } => {
@@ -152,23 +179,29 @@ impl ASTNode for ExpressionNode {
     fn get_variables(&self) -> HashSet<String> {
         match self {
             ExpressionNode::Constant { .. } => HashSet::new(),
-            
+
             ExpressionNode::Variable { name } => {
                 let mut vars = HashSet::new();
                 vars.insert(name.clone());
                 vars
             }
-            
+
+            ExpressionNode::VariableWithOffset { name, .. } => {
+                let mut vars = HashSet::new();
+                vars.insert(name.clone());
+                vars
+            }
+
             ExpressionNode::BinaryOp { left, right, .. } => {
                 let mut vars = left.get_variables();
                 vars.extend(right.get_variables());
                 vars
             }
-            
+
             ExpressionNode::UnaryOp { operand, .. } => {
                 operand.get_variables()
             }
-            
+
             ExpressionNode::FunctionCall { args, .. } => {
                 let mut vars = HashSet::new();
                 for arg in args {

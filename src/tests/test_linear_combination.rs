@@ -53,28 +53,28 @@ mod tests {
 
     #[test]
     fn test_symmetric_weight_computation() {
-        // Test that when all u_params = 0.5, weights preserve original ratios
+        // Test that when all u_params = 0.5, weights are equal (softmax of zeros is uniform)
         // For 3 stations, we need 2 u_params
         let u_params = vec![0.5, 0.5];  // n-1 parameters for n stations
-        let coefficients = vec![0.2, 0.5, 0.3];
+        let coefficients = vec![0.2, 0.5, 0.3];  // Only used to determine n, not for weighting
         let bias = 2.0;
 
         let weights = compute_symmetric_weights(&u_params, &coefficients, bias);
 
         // When all u_params = 0.5 (logit(0.5) = 0), all w_i = 0
-        // So softmax gives equal distribution (1/3 each)
-        assert!((weights[0] - bias * (1.0/3.0) * 0.2).abs() < 1e-6);
-        assert!((weights[1] - bias * (1.0/3.0) * 0.5).abs() < 1e-6);
-        assert!((weights[2] - bias * (1.0/3.0) * 0.3).abs() < 1e-6);
+        // Softmax of all zeros gives equal distribution: each weight = bias / n
+        let expected_weight = bias / 3.0;  // 2.0 / 3 ≈ 0.6667
+        assert!((weights[0] - expected_weight).abs() < 1e-6);
+        assert!((weights[1] - expected_weight).abs() < 1e-6);
+        assert!((weights[2] - expected_weight).abs() < 1e-6);
 
-        // Weights should maintain original coefficient ratios
-        assert!((weights[0] / weights[1] - 0.2 / 0.5).abs() < 1e-6);
-        assert!((weights[1] / weights[2] - 0.5 / 0.3).abs() < 1e-6);
+        // All weights should be equal when u_params = 0.5
+        assert!((weights[0] - weights[1]).abs() < 1e-6);
+        assert!((weights[1] - weights[2]).abs() < 1e-6);
 
-        // Sum should equal bias * (1/n) * sum(coefficients) when all u_params = 0.5
+        // Sum should equal bias
         let weight_sum: f64 = weights.iter().sum();
-        let expected_sum = bias * (1.0/3.0) * coefficients.iter().sum::<f64>();
-        assert!((weight_sum - expected_sum).abs() < 1e-6);
+        assert!((weight_sum - bias).abs() < 1e-6);
     }
 
     #[test]
@@ -175,6 +175,8 @@ mod tests {
         data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
         // Create a linear combination
+        // Note: coefficients are preserved as-is from parsing. The update_weights()
+        // function must be called explicitly to recalculate from u_params and bias.
         let expr = "0.2 * data.rain1 + 0.8 * data.rain2";
         let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
 
@@ -187,13 +189,9 @@ mod tests {
         data_cache.add_value_at_index(idx2, 20.0);
         data_cache.set_current_step(0);
 
-        // Evaluate - should use default weights (u_params = [0.5] for 2 stations, bias = 1.0)
-        // With u_param = 0.5, both stations get equal softmax weight (0.5 each)
-        // So: weight_1 = bias * 0.5 * 0.2 = 1.0 * 0.5 * 0.2 = 0.1
-        //     weight_2 = bias * 0.5 * 0.8 = 1.0 * 0.5 * 0.8 = 0.4
-        // Total = 0.1 * 10.0 + 0.4 * 20.0 = 1.0 + 8.0 = 9.0
+        // Evaluate - uses original coefficients (0.2 and 0.8)
         let value = input.get_value(&data_cache);
-        let expected = 9.0;
+        let expected = 0.2 * 10.0 + 0.8 * 20.0;  // = 2 + 16 = 18
         assert!((value - expected).abs() < 1e-6, "Got {}, expected {}", value, expected);
     }
 

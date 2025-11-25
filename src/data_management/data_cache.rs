@@ -284,6 +284,57 @@ impl DataCache {
         self.series[series_idx].values[self.current_step]
     }
 
+    /// Get a value from a data series with a temporal offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `series_idx` - The index of the series (obtained from `get_or_add_new_series`)
+    /// * `offset` - Temporal offset: 0 = current timestep, 1 = previous timestep, etc.
+    ///
+    /// # Returns
+    ///
+    /// The value at (current_step - offset). Returns NaN if the offset would go before
+    /// the start of the simulation (i.e., current_step < offset).
+    ///
+    /// # Performance
+    ///
+    /// This method is optimised for the hot path with minimal overhead:
+    /// - Single bounds check
+    /// - Direct array access
+    /// Get a value from a data series with a temporal offset.
+    ///
+    /// Returns NaN if offset exceeds current_step. For user-specified defaults,
+    /// use `get_value_with_offset_or_default` instead.
+    pub fn get_value_with_offset(&self, series_idx: usize, offset: usize) -> f64 {
+        if self.current_step < offset {
+            f64::NAN
+        } else {
+            self.series[series_idx].values[self.current_step - offset]
+        }
+    }
+
+    /// Get a value from a data series with a temporal offset and user-specified default.
+    ///
+    /// # Arguments
+    ///
+    /// * `series_idx` - The index of the series
+    /// * `offset` - Temporal offset: 0 = current timestep, 1 = previous timestep, etc.
+    /// * `default_value` - Value to return when current_step < offset
+    ///
+    /// # Performance
+    ///
+    /// Optimised for the hot path with minimal overhead:
+    /// - Single comparison
+    /// - Direct array access
+    #[inline]
+    pub fn get_value_with_offset_or_default(&self, series_idx: usize, offset: usize, default_value: f64) -> f64 {
+        if self.current_step < offset {
+            default_value
+        } else {
+            self.series[series_idx].values[self.current_step - offset]
+        }
+    }
+
 
 
     /*

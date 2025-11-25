@@ -192,4 +192,59 @@ public class ValidationUtils {
     public static Pattern getIniVersionPattern() {
         return INI_VERSION_PATTERN;
     }
+
+    /**
+     * Validates a single node reference (e.g., "node.node13_inflow.ds_1").
+     * Returns error message if invalid, null if valid.
+     *
+     * @param nodeRef The node reference to validate
+     * @param model The parsed model
+     * @param schema The linter schema
+     * @return Error message if invalid, null if valid
+     */
+    public static String validateNodeReference(String nodeRef, INIModelParser.ParsedModel model, LinterSchema schema) {
+        // Basic pattern to extract node name and output property
+        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
+        java.util.regex.Matcher matcher = basicPattern.matcher(nodeRef);
+
+        if (!matcher.matches()) {
+            return "Invalid node reference format: " + nodeRef + " (should be node.nodename.property)";
+        }
+
+        String nodeName = matcher.group(1);
+        String outputProperty = matcher.group(2);
+
+        // Check if the node exists
+        if (!model.getNodes().containsKey(nodeName)) {
+            return "Node reference points to non-existent node: " + nodeName;
+        }
+
+        // Get the node's type
+        INIModelParser.NodeSection node = model.getNodes().get(nodeName);
+        String nodeType = null;
+        for (INIModelParser.Property prop : node.getProperties().values()) {
+            if ("type".equals(prop.getKey())) {
+                nodeType = prop.getValue();
+                break;
+            }
+        }
+
+        if (nodeType == null) {
+            return "Node " + nodeName + " has no type defined";
+        }
+
+        // Get the node type definition and check allowed outputs
+        com.kalix.ide.linter.schema.NodeTypeDefinition nodeTypeDef = schema.getNodeType(nodeType);
+        if (nodeTypeDef == null) {
+            return "Unknown node type: " + nodeType;
+        }
+
+        // Check if the output property is allowed for this node type
+        // If no allowed outputs are defined, allow everything
+        if (!nodeTypeDef.allowedOutputs.isEmpty() && !nodeTypeDef.allowedOutputs.contains(outputProperty)) {
+            return "Output property '" + outputProperty + "' is not allowed for node type '" + nodeType + "'. Allowed outputs: " + nodeTypeDef.allowedOutputs;
+        }
+
+        return null; // Valid
+    }
 }

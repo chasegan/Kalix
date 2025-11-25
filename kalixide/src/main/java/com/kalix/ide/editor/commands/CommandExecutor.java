@@ -32,6 +32,8 @@ public class CommandExecutor {
     /**
      * Renames a node throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
+     * This includes: node headers, downstream references, output references,
+     * and node references within function expressions.
      *
      * @param oldName       The current node name
      * @param newName       The new node name
@@ -139,6 +141,25 @@ public class CommandExecutor {
                 if (lineNumber != null) {
                     replacements.add(new TextReplacement(
                         lineNumber,
+                        "node." + oldName + ".",
+                        "node." + newName + "."
+                    ));
+                }
+            }
+        }
+
+        // 4. Find node references in function expressions: node.NodeName.property within property values
+        // These can appear in any property value, especially function_expression types
+        Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.");
+        for (INIModelParser.Section section : parsedModel.getSections().values()) {
+            if (!section.getName().startsWith("node.")) continue;
+
+            for (INIModelParser.Property prop : section.getProperties().values()) {
+                String value = prop.getValue();
+                // Check if this property value contains a reference to the old node name
+                if (nodeRefPattern.matcher(value).find()) {
+                    replacements.add(new TextReplacement(
+                        prop.getLineNumber(),
                         "node." + oldName + ".",
                         "node." + newName + "."
                     ));

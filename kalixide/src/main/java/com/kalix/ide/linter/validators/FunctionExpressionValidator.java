@@ -1,13 +1,18 @@
 package com.kalix.ide.linter.validators;
 
+import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.utils.ValidationUtils;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates function expressions used in model parameters.
- * Supports four types of inputs:
+ * Supports five types of inputs:
  * - Data references: "data.evap", "data.field.subfield"
  * - Constant references: "c.pi", "c.node_1_demand_levels.high"
+ * - Node output references: "node.node13_inflow.ds_1" (NEW)
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
  *
@@ -65,23 +70,37 @@ public class FunctionExpressionValidator {
     /**
      * Validate a function expression and return a list of error messages.
      * Returns empty list if expression is valid.
+     * Note: This method cannot validate node references without model context.
      */
     public List<String> validate(String expression) {
+        return validate(expression, null, null);
+    }
+
+    /**
+     * Validate a function expression with model context for node reference validation.
+     * Returns empty list if expression is valid.
+     *
+     * @param expression The expression to validate
+     * @param model The parsed model (optional, for node reference validation)
+     * @param schema The linter schema (optional, for node reference validation)
+     * @return List of error messages, empty if valid
+     */
+    public List<String> validate(String expression, INIModelParser.ParsedModel model, LinterSchema schema) {
         if (expression == null) {
             return List.of("Expression is null");
         }
 
         String trimmed = expression.trim();
 
-        // Check cache first
-        if (validationCache.containsKey(trimmed)) {
+        // Check cache first (only if no model/schema, since validation may differ)
+        if (model == null && schema == null && validationCache.containsKey(trimmed)) {
             return validationCache.get(trimmed);
         }
 
-        List<String> errors = performValidation(trimmed);
+        List<String> errors = performValidation(trimmed, model, schema);
 
-        // Cache result (with size limit)
-        if (validationCache.size() < MAX_CACHE_SIZE) {
+        // Cache result (with size limit, only if no model/schema)
+        if (model == null && schema == null && validationCache.size() < MAX_CACHE_SIZE) {
             validationCache.put(trimmed, errors);
         }
 
@@ -95,7 +114,7 @@ public class FunctionExpressionValidator {
         validationCache.clear();
     }
 
-    private List<String> performValidation(String expression) {
+    private List<String> performValidation(String expression, INIModelParser.ParsedModel model, LinterSchema schema) {
         List<String> errors = new ArrayList<>();
 
         // Fast path: empty expression
@@ -119,10 +138,24 @@ public class FunctionExpressionValidator {
             return errors; // Valid
         }
 
+        // Fast path: simple node reference
+        if (isSimpleNodeReference(expression)) {
+            // Validate node reference if model/schema available
+            if (model != null && schema != null) {
+                // Strip optional square brackets before validation
+                String refWithoutBrackets = expression.replaceFirst("\\[.*?\\]$", "");
+                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, model, schema);
+                if (error != null) {
+                    errors.add(error);
+                }
+            }
+            return errors; // Valid format-wise
+        }
+
         // Complex expression - tokenize and parse
         try {
             Tokenizer tokenizer = new Tokenizer(expression);
-            Parser parser = new Parser(tokenizer);
+            Parser parser = new Parser(tokenizer, model, schema);
             parser.parseExpression(errors);
 
             // Check for trailing tokens
@@ -146,7 +179,8 @@ public class FunctionExpressionValidator {
 
     private static boolean isSimpleDataReference(String s) {
         // Matches: data.xxx or data.xxx.yyy.zzz (dots and underscores allowed)
-        return s.matches("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
+        // Optional square brackets at the end: data.xxx[anything]
+        return s.matches("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*(\\[.*?\\])?$");
     }
 
     private static boolean isSimpleConstantReference(String s) {
@@ -154,10 +188,16 @@ public class FunctionExpressionValidator {
         return s.matches("^c\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
     }
 
+    private static boolean isSimpleNodeReference(String s) {
+        // Matches: node.xxx.yyy (node.nodename.property)
+        // Optional square brackets at the end: node.xxx.yyy[anything]
+        return s.matches("^node\\.[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
+    }
+
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, CONST_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
     }
 
     static class Token {
@@ -291,6 +331,11 @@ public class FunctionExpressionValidator {
                 return readDottedReference(start, firstSegment, TokenType.CONST_REF);
             }
 
+            // Check if this is a node reference (starts with "node.")
+            if (firstSegment.equals("node") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.NODE_REF);
+            }
+
             // Regular identifier (function name or variable)
             return new Token(TokenType.IDENT, firstSegment, start);
         }
@@ -313,6 +358,24 @@ public class FunctionExpressionValidator {
                     pos++;
                 }
                 sb.append(input, segStart, pos);
+            }
+
+            // Check for optional square brackets (only for data and node references)
+            if ((tokenType == TokenType.DATA_REF || tokenType == TokenType.NODE_REF) &&
+                pos < input.length() && input.charAt(pos) == '[') {
+                int bracketStart = pos;
+                pos++; // consume '['
+
+                // Find matching closing bracket
+                while (pos < input.length() && input.charAt(pos) != ']') {
+                    pos++;
+                }
+
+                if (pos < input.length() && input.charAt(pos) == ']') {
+                    pos++; // consume ']'
+                    sb.append(input, bracketStart, pos);
+                }
+                // If no closing bracket found, leave as-is (will be caught as error later)
             }
 
             return new Token(tokenType, sb.toString(), start);
@@ -350,10 +413,14 @@ public class FunctionExpressionValidator {
 
     static class Parser {
         private final Tokenizer tokenizer;
+        private final INIModelParser.ParsedModel model;
+        private final LinterSchema schema;
         Token current;
 
-        Parser(Tokenizer tokenizer) throws ParseException {
+        Parser(Tokenizer tokenizer, INIModelParser.ParsedModel model, LinterSchema schema) throws ParseException {
             this.tokenizer = tokenizer;
+            this.model = model;
+            this.schema = schema;
             this.current = tokenizer.nextToken();
         }
 
@@ -482,7 +549,7 @@ public class FunctionExpressionValidator {
             parsePrimaryExpression(errors);
         }
 
-        // PrimaryExpression := Number | DataRef | ConstRef | FunctionCall | '(' Expression ')'
+        // PrimaryExpression := Number | DataRef | ConstRef | NodeRef | FunctionCall | '(' Expression ')'
         private void parsePrimaryExpression(List<String> errors) throws ParseException {
             if (current.type == TokenType.NUMBER) {
                 advance();
@@ -492,6 +559,9 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.CONST_REF) {
                 validateConstantReference(current.value, errors);
                 advance();
+            } else if (current.type == TokenType.NODE_REF) {
+                validateNodeReference(current.value, errors);
+                advance();
             } else if (current.type == TokenType.IDENT) {
                 // Function call
                 parseFunctionCall(errors);
@@ -500,7 +570,7 @@ public class FunctionExpressionValidator {
                 parseExpression(errors);
                 expect(TokenType.RPAREN, errors);
             } else {
-                throw new ParseException("Expected number, data reference, constant reference, function, or '(' but got " + current.type);
+                throw new ParseException("Expected number, data reference, constant reference, node reference, function, or '(' but got " + current.type);
             }
         }
 
@@ -550,14 +620,17 @@ public class FunctionExpressionValidator {
         }
 
         private void validateDataReference(String dataRef, List<String> errors) {
+            // Strip optional square brackets for validation
+            String refWithoutBrackets = dataRef.replaceFirst("\\[.*?\\]$", "");
+
             // Check for malformed data references
-            if (dataRef.contains("..")) {
+            if (refWithoutBrackets.contains("..")) {
                 errors.add("Malformed data reference: '" + dataRef + "' (consecutive dots)");
             }
-            if (dataRef.endsWith(".")) {
+            if (refWithoutBrackets.endsWith(".")) {
                 errors.add("Malformed data reference: '" + dataRef + "' (trailing dot)");
             }
-            if (dataRef.equals("data") || dataRef.equals("data.")) {
+            if (refWithoutBrackets.equals("data") || refWithoutBrackets.equals("data.")) {
                 errors.add("Incomplete data reference: '" + dataRef + "'");
             }
         }
@@ -572,6 +645,33 @@ public class FunctionExpressionValidator {
             }
             if (constRef.equals("c") || constRef.equals("c.")) {
                 errors.add("Incomplete constant reference: '" + constRef + "'");
+            }
+        }
+
+        private void validateNodeReference(String nodeRef, List<String> errors) {
+            // Strip optional square brackets for validation
+            String refWithoutBrackets = nodeRef.replaceFirst("\\[.*?\\]$", "");
+
+            // Check for malformed node references
+            if (refWithoutBrackets.contains("..")) {
+                errors.add("Malformed node reference: '" + nodeRef + "' (consecutive dots)");
+                return;
+            }
+            if (refWithoutBrackets.endsWith(".")) {
+                errors.add("Malformed node reference: '" + nodeRef + "' (trailing dot)");
+                return;
+            }
+            if (refWithoutBrackets.equals("node") || refWithoutBrackets.equals("node.")) {
+                errors.add("Incomplete node reference: '" + nodeRef + "'");
+                return;
+            }
+
+            // Validate against model if available
+            if (model != null && schema != null) {
+                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, model, schema);
+                if (error != null) {
+                    errors.add(error);
+                }
             }
         }
 

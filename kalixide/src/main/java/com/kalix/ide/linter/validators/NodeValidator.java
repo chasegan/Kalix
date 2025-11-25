@@ -23,7 +23,7 @@ public class NodeValidator implements ValidationStrategy {
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         for (INIModelParser.NodeSection node : model.getNodes().values()) {
-            validateNode(node, schema, result);
+            validateNode(node, model, schema, result);
         }
     }
 
@@ -32,7 +32,7 @@ public class NodeValidator implements ValidationStrategy {
         return "Node type and parameter validation";
     }
 
-    private void validateNode(INIModelParser.NodeSection node, LinterSchema schema, ValidationResult result) {
+    private void validateNode(INIModelParser.NodeSection node, INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
         String nodeType = node.getNodeType();
         if (nodeType == null) {
             result.addIssue(node.getStartLine(),
@@ -62,13 +62,13 @@ public class NodeValidator implements ValidationStrategy {
 
         // Validate parameter types and formats
         for (INIModelParser.Property prop : node.getProperties().values()) {
-            validateNodeProperty(node, prop, typeDef, schema, result);
+            validateNodeProperty(node, prop, typeDef, model, schema, result);
         }
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,
-                                    NodeTypeDefinition typeDef, LinterSchema schema,
-                                    ValidationResult result) {
+                                    NodeTypeDefinition typeDef, INIModelParser.ParsedModel model,
+                                    LinterSchema schema, ValidationResult result) {
 
         String paramName = prop.getKey();
 
@@ -90,7 +90,7 @@ public class NodeValidator implements ValidationStrategy {
         // Validate based on parameter type from schema
         switch (paramDef.type) {
             case "function_expression":
-                validateFunctionExpression(prop, result);
+                validateFunctionExpression(prop, model, schema, result);
                 break;
             case "number":
                 validateNumber(prop, schema, result, paramDef.min, paramDef.max);
@@ -123,8 +123,10 @@ public class NodeValidator implements ValidationStrategy {
         }
     }
 
-    private void validateFunctionExpression(INIModelParser.Property prop, ValidationResult result) {
-        List<String> errors = functionValidator.validate(prop.getValue());
+    private void validateFunctionExpression(INIModelParser.Property prop, INIModelParser.ParsedModel model,
+                                          LinterSchema schema, ValidationResult result) {
+        // Validate with model and schema to enable node reference validation
+        List<String> errors = functionValidator.validate(prop.getValue(), model, schema);
 
         for (String error : errors) {
             // Determine severity - warnings for division by zero, errors for everything else

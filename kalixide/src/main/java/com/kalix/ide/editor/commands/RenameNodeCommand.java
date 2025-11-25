@@ -9,7 +9,8 @@ import java.util.function.Supplier;
 
 /**
  * Command to rename a node throughout the document.
- * Updates the node section header, all downstream references, and output references.
+ * Updates the node section header, all downstream references, output references,
+ * and node references within function expressions.
  */
 public class RenameNodeCommand implements EditorCommand {
 

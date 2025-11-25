@@ -30,6 +30,10 @@ enum Token {
     LeftParen,
     /// Right parenthesis )
     RightParen,
+    /// Left bracket [ (for offset syntax like node.x.ds_1[1])
+    LeftBracket,
+    /// Right bracket ]
+    RightBracket,
     /// Comma separator for function arguments
     Comma,
     /// End of input marker
@@ -197,7 +201,7 @@ impl Tokenizer {
     
     fn next_token(&mut self) -> Result<Token, ParseError> {
         self.skip_whitespace();
-        
+
         match self.current_char {
             None => Ok(Token::EOF),
             Some('(') => {
@@ -207,6 +211,14 @@ impl Tokenizer {
             Some(')') => {
                 self.advance();
                 Ok(Token::RightParen)
+            }
+            Some('[') => {
+                self.advance();
+                Ok(Token::LeftBracket)
+            }
+            Some(']') => {
+                self.advance();
+                Ok(Token::RightBracket)
             }
             Some(',') => {
                 self.advance();
@@ -341,9 +353,36 @@ impl ParsedFunction {
 
         // Downcast to ExpressionNode to inspect the AST structure
         if let Some(expr_node) = (self.ast.as_ref() as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-            // Check if the root node is a simple Variable node
-            if let ExpressionNode::Variable { name } = expr_node {
-                return Some(name.as_str());
+            // Check if the root node is a simple Variable node (with or without offset)
+            match expr_node {
+                ExpressionNode::Variable { name } => return Some(name.as_str()),
+                ExpressionNode::VariableWithOffset { name, .. } => return Some(name.as_str()),
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    /// Check if this function is a single variable with an offset.
+    ///
+    /// Returns `Some((variable_name, offset, default_value))` if the expression is a variable
+    /// with offset syntax like "node.x.ds_1[1, 0.0]", otherwise returns `None`.
+    ///
+    /// # Returns
+    ///
+    /// `Some((&str, usize, f64))` with the variable name, offset, and default value,
+    /// `None` if it's not a single variable with offset.
+    pub fn is_single_variable_with_offset(&self) -> Option<(&str, usize, f64)> {
+        // Check if we have exactly one variable
+        if self.variables.len() != 1 {
+            return None;
+        }
+
+        // Downcast to ExpressionNode to inspect the AST structure
+        if let Some(expr_node) = (self.ast.as_ref() as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
+            if let ExpressionNode::VariableWithOffset { name, offset, default_value } = expr_node {
+                return Some((name.as_str(), *offset, *default_value));
             }
         }
 
@@ -601,21 +640,21 @@ impl FunctionParser {
             Token::Identifier(name) => {
                 let name = name.clone();
                 self.consume_token()?;
-                
+
                 if self.current_token == Token::LeftParen {
                     // Function call
                     self.consume_token()?; // consume '('
                     let mut args = Vec::new();
-                    
+
                     if self.current_token != Token::RightParen {
                         args.push(self.parse_expression()?);
-                        
+
                         while self.current_token == Token::Comma {
                             self.consume_token()?; // consume ','
                             args.push(self.parse_expression()?);
                         }
                     }
-                    
+
                     if self.current_token != Token::RightParen {
                         return Err(ParseError::UnexpectedToken {
                             expected: ")".to_string(),
@@ -623,11 +662,85 @@ impl FunctionParser {
                             position: self.tokenizer.position,
                         });
                     }
-                    
+
                     self.consume_token()?; // consume ')'
                     Ok(Box::new(ExpressionNode::FunctionCall { name: name.to_lowercase(), args }))
+                } else if self.current_token == Token::LeftBracket {
+                    // Variable with offset: node.x.ds_1[offset, default]
+                    // Both offset and default are required
+                    self.consume_token()?; // consume '['
+
+                    // Expect a number (the offset)
+                    let offset = match &self.current_token {
+                        Token::Number(n) => {
+                            let offset_val = *n;
+                            if offset_val < 0.0 || offset_val.fract() != 0.0 {
+                                return Err(ParseError::SyntaxError {
+                                    position: self.tokenizer.position,
+                                    message: format!("Offset must be a non-negative integer, got {}", offset_val),
+                                });
+                            }
+                            offset_val as usize
+                        }
+                        _ => {
+                            return Err(ParseError::UnexpectedToken {
+                                expected: "non-negative integer".to_string(),
+                                found: format!("{:?}", self.current_token),
+                                position: self.tokenizer.position,
+                            });
+                        }
+                    };
+                    self.consume_token()?; // consume the offset number
+
+                    // Expect comma
+                    if self.current_token != Token::Comma {
+                        return Err(ParseError::SyntaxError {
+                            position: self.tokenizer.position,
+                            message: "Offset syntax requires default value: [offset, default]. Example: node.x.ds_1[1, 0.0]".to_string(),
+                        });
+                    }
+                    self.consume_token()?; // consume ','
+
+                    // Expect a number (the default value) - can be negative or nan
+                    let default_value = match &self.current_token {
+                        Token::Number(n) => *n,
+                        Token::Identifier(id) if id.to_lowercase() == "nan" => f64::NAN,
+                        Token::Operator(op) if op == "-" => {
+                            // Handle negative default: consume '-' then number
+                            self.consume_token()?;
+                            match &self.current_token {
+                                Token::Number(n) => -(*n),
+                                _ => {
+                                    return Err(ParseError::UnexpectedToken {
+                                        expected: "number after minus sign".to_string(),
+                                        found: format!("{:?}", self.current_token),
+                                        position: self.tokenizer.position,
+                                    });
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(ParseError::UnexpectedToken {
+                                expected: "default value (number or nan)".to_string(),
+                                found: format!("{:?}", self.current_token),
+                                position: self.tokenizer.position,
+                            });
+                        }
+                    };
+                    self.consume_token()?; // consume the default number/nan
+
+                    if self.current_token != Token::RightBracket {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: "]".to_string(),
+                            found: format!("{:?}", self.current_token),
+                            position: self.tokenizer.position,
+                        });
+                    }
+                    self.consume_token()?; // consume ']'
+
+                    Ok(Box::new(ExpressionNode::VariableWithOffset { name, offset, default_value }))
                 } else {
-                    // Variable
+                    // Variable (no offset)
                     Ok(Box::new(ExpressionNode::Variable { name }))
                 }
             }

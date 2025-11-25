@@ -38,9 +38,18 @@ pub enum OptimizedExpressionNode {
         value: f64
     },
 
-    /// Direct reference to a data cache series by index
+    /// Direct reference to a data cache series by index (current timestep)
     DataCacheReference {
         cache_index: usize
+    },
+
+    /// Direct reference to a data cache series with temporal offset
+    /// offset=0 means current, offset=1 means previous timestep, etc.
+    /// default_value is used when current_step < offset
+    DataCacheReferenceWithOffset {
+        cache_index: usize,
+        offset: usize,
+        default_value: f64
     },
 
     /// Direct reference to a constant cache value by index
@@ -79,6 +88,10 @@ impl OptimizedExpressionNode {
 
             OptimizedExpressionNode::DataCacheReference { cache_index } => {
                 Ok(data_cache.get_current_value(*cache_index))
+            }
+
+            OptimizedExpressionNode::DataCacheReferenceWithOffset { cache_index, offset, default_value } => {
+                Ok(data_cache.get_value_with_offset_or_default(*cache_index, *offset, *default_value))
             }
 
             OptimizedExpressionNode::ConstantReference { cache_index } => {
@@ -127,9 +140,33 @@ impl OptimizedExpressionNode {
                 if let Some(&idx) = constant_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
                 }
-                // Try data cache (data.* variables)
+                // Try data cache (data.* and node.* variables)
                 if let Some(&idx) = data_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
+                }
+                Err(format!("Variable '{}' not found in variable maps", name))
+            }
+            ExpressionNode::VariableWithOffset { name, offset, default_value } => {
+                // Convert to lowercase for case-insensitive lookup
+                let lower_name = name.to_lowercase();
+
+                // Constants don't support offset (they don't vary over time)
+                if lower_name.starts_with("c.") {
+                    return Err(format!("Offset syntax not supported for constants: {}", name));
+                }
+
+                // Data cache variables support offset
+                if let Some(&idx) = data_variable_map.get(&lower_name) {
+                    if *offset == 0 {
+                        // No offset - use the faster variant (default_value is never needed)
+                        return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
+                    } else {
+                        return Ok(OptimizedExpressionNode::DataCacheReferenceWithOffset {
+                            cache_index: idx,
+                            offset: *offset,
+                            default_value: *default_value
+                        });
+                    }
                 }
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
@@ -187,9 +224,10 @@ impl OptimizedExpressionNode {
 
 /// DynamicInput supports constants, data references, and function expressions
 ///
-/// This enum is optimised for performance with six variants:
+/// This enum is optimised for performance with seven variants:
 /// - `None`: No input (returns 0.0)
 /// - `DirectReference`: Pure data reference (zero overhead)
+/// - `DirectReferenceWithOffset`: Data reference with temporal offset (minimal overhead)
 /// - `DirectConstantReference`: Pure constant reference (zero overhead)
 /// - `Constant`: Constant value (zero overhead)
 /// - `LinearCombination`: Linear combination of data references with optimizable weights
@@ -203,9 +241,19 @@ pub enum DynamicInput {
         original: String
     },
 
-    /// Direct reference to a data cache series
+    /// Direct reference to a data cache series (current timestep)
     DirectReference {
         idx: usize,
+        original: String
+    },
+
+    /// Direct reference to a data cache series with temporal offset
+    /// offset=0 means current, offset=1 means previous timestep, etc.
+    /// default_value is used when current_step < offset
+    DirectReferenceWithOffset {
+        idx: usize,
+        offset: usize,
+        default_value: f64,
         original: String
     },
 
@@ -292,7 +340,9 @@ impl DynamicInput {
                 // Resolve variable names to data cache indices
                 for var_name in &linear_info.variables {
                     let lower_name = var_name.to_lowercase();
-                    let idx = data_cache.get_or_add_new_series(&lower_name, flag_as_critical);
+                    // node.* references are not critical inputs (they're outputs from other nodes)
+                    let is_critical = flag_as_critical && !lower_name.starts_with("node.");
+                    let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
                     data_indices.push(idx);
                 }
 
@@ -337,8 +387,12 @@ impl DynamicInput {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
+            } else if lower_name.starts_with("node.") {
+                // Resolve to data cache but NOT as critical input (node outputs don't determine simulation period)
+                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                data_variable_map.insert(lower_name.clone(), idx);
             } else {
-                // Resolve to data cache (existing logic)
+                // Resolve to data cache (data.* references - use flag_as_critical from caller)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
                 data_variable_map.insert(lower_name.clone(), idx);
             }
@@ -359,8 +413,35 @@ impl DynamicInput {
                 original: trimmed.to_string()
             })
 
+        } else if let Some((var_name, offset, default_value)) = parsed.is_single_variable_with_offset() {
+            // It's a direct reference to a single variable with offset syntax (e.g., node.x.ds_1[1, 0.0])
+            let lower_var = var_name.to_lowercase();
+
+            // Constants don't support offset
+            if lower_var.starts_with("c.") {
+                return Err(format!("Offset syntax not supported for constants: {}", var_name));
+            }
+
+            if let Some(&idx) = data_variable_map.get(&lower_var) {
+                if offset == 0 {
+                    // offset=0 means current value - use the faster DirectReference (default never needed)
+                    Ok(DynamicInput::DirectReference {
+                        idx,
+                        original: trimmed.to_string()
+                    })
+                } else {
+                    Ok(DynamicInput::DirectReferenceWithOffset {
+                        idx,
+                        offset,
+                        default_value,
+                        original: trimmed.to_string()
+                    })
+                }
+            } else {
+                Err(format!("Variable '{}' not found in variable maps", var_name))
+            }
         } else if let Some(var_name) = parsed.is_single_variable() {
-            // It's a direct reference to a single variable (no operations)
+            // It's a direct reference to a single variable (no operations, no offset)
             // Check if it's a constant or data reference
             let lower_var = var_name.to_lowercase();
             if let Some(&idx) = constant_variable_map.get(&lower_var) {
@@ -410,6 +491,9 @@ impl DynamicInput {
             DynamicInput::DirectReference { idx, .. } => {
                 data_cache.get_current_value(*idx)
             }
+            DynamicInput::DirectReferenceWithOffset { idx, offset, default_value, .. } => {
+                data_cache.get_value_with_offset_or_default(*idx, *offset, *default_value)
+            }
             DynamicInput::DirectConstantReference { idx, .. } => {
                 data_cache.constants.get_value(*idx)
             }
@@ -436,6 +520,7 @@ impl DynamicInput {
         match self {
             DynamicInput::None { original } => original.clone(),
             DynamicInput::DirectReference { original, .. } => original.clone(),
+            DynamicInput::DirectReferenceWithOffset { original, .. } => original.clone(),
             DynamicInput::DirectConstantReference { original, .. } => original.clone(),
             DynamicInput::Constant { original, .. } => original.clone(),
             DynamicInput::LinearCombination { variable_names, coefficients, .. } => {
@@ -467,6 +552,7 @@ impl DynamicInput {
         match self {
             DynamicInput::None { original } => original.as_str(),
             DynamicInput::DirectReference { original, .. } => original.as_str(),
+            DynamicInput::DirectReferenceWithOffset { original, .. } => original.as_str(),
             DynamicInput::DirectConstantReference { original, .. } => original.as_str(),
             DynamicInput::Constant { original, .. } => original.as_str(),
             DynamicInput::LinearCombination { original, .. } => original.as_str(),
