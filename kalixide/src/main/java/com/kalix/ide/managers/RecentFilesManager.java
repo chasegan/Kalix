@@ -1,10 +1,12 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.constants.AppConstants;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.prefs.Preferences;
 import java.util.function.Consumer;
@@ -14,16 +16,16 @@ import java.util.function.Consumer;
  * Maintains a list of recently opened files and provides menu management capabilities.
  */
 public class RecentFilesManager {
-    
+
     private final Preferences prefs;
     private final List<String> recentFiles;
     private final Consumer<String> fileOpenCallback;
     private final Runnable statusUpdateCallback;
-    private JMenu recentFilesMenu;
-    
+    private MenuBarBuilder menuBarBuilder;
+
     /**
      * Creates a new RecentFilesManager instance.
-     * 
+     *
      * @param prefs The preferences object for storing recent files
      * @param fileOpenCallback Callback function to open a file
      * @param statusUpdateCallback Callback to update status when files are cleared
@@ -84,7 +86,7 @@ public class RecentFilesManager {
         saveRecentFiles();
 
         // Update menu immediately
-        updateMenuContents();
+        rebuildMenu();
     }
     
     /**
@@ -93,55 +95,31 @@ public class RecentFilesManager {
     public void clearRecentFiles() {
         recentFiles.clear();
         saveRecentFiles();
-        updateMenuContents();
+        rebuildMenu();
         statusUpdateCallback.run();
     }
     
     /**
-     * Updates the given menu with current recent files.
+     * Sets the MenuBarBuilder reference for menu updates.
      *
-     * @param recentFilesMenu The menu to update
+     * @param menuBarBuilder The menu bar builder to use for updates
      */
-    public void updateRecentFilesMenu(JMenu recentFilesMenu) {
-        // Store reference to menu for future updates
-        this.recentFilesMenu = recentFilesMenu;
-        updateMenuContents();
+    public void setMenuBarBuilder(MenuBarBuilder menuBarBuilder) {
+        this.menuBarBuilder = menuBarBuilder;
+        rebuildMenu();
     }
 
     /**
-     * Updates the menu contents with current recent files.
-     * Uses the stored menu reference if available.
+     * Rebuilds the recent files section in the File menu.
      */
-    private void updateMenuContents() {
-        if (recentFilesMenu == null) {
+    private void rebuildMenu() {
+        if (menuBarBuilder == null) {
             return;
         }
-
-        recentFilesMenu.removeAll();
-
-        if (recentFiles.isEmpty()) {
-            JMenuItem emptyItem = new JMenuItem(AppConstants.MENU_NO_RECENT_FILES);
-            emptyItem.setEnabled(false);
-            recentFilesMenu.add(emptyItem);
-        } else {
-            // Add recent file menu items
-            for (int i = 0; i < recentFiles.size(); i++) {
-                String filePath = recentFiles.get(i);
-                String fileName = new File(filePath).getName();
-                String displayText = String.format("%d. %s", i + 1, fileName);
-
-                JMenuItem item = new JMenuItem(displayText);
-                item.setToolTipText(filePath);
-
-                // Create action listener for opening this file
-                item.addActionListener(e -> openRecentFile(filePath));
-
-                recentFilesMenu.add(item);
-            }
-
-            // Add separator and clear option
-            recentFilesMenu.addSeparator();
-        }
+        menuBarBuilder.rebuildRecentFilesSection(
+            Collections.unmodifiableList(recentFiles),
+            this::openRecentFile
+        );
     }
     
     /**
@@ -157,11 +135,11 @@ public class RecentFilesManager {
             // File no longer exists, remove from recent files
             recentFiles.remove(filePath);
             saveRecentFiles();
-            updateMenuContents();
+            rebuildMenu();
 
             // Show error dialog
             JOptionPane.showMessageDialog(
-                this.recentFilesMenu != null ? this.recentFilesMenu.getParent() : null,
+                null,
                 AppConstants.ERROR_FILE_NOT_EXISTS + filePath,
                 AppConstants.ERROR_FILE_NOT_FOUND_TITLE,
                 JOptionPane.WARNING_MESSAGE

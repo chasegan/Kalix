@@ -417,8 +417,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         JMenuBar menuBar = menuBuilder.buildMenuBar();
         setJMenuBar(menuBar);
 
-        // Update recent files menu
-        recentFilesManager.updateRecentFilesMenu(menuBuilder.getRecentFilesMenu());
+        // Connect recent files manager to menu builder
+        recentFilesManager.setMenuBarBuilder(menuBuilder);
     }
 
     /**

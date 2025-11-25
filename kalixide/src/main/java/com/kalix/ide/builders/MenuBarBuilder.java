@@ -8,6 +8,8 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.util.List;
 
 /**
  * Builder class for creating and configuring the application menu bar.
@@ -17,8 +19,8 @@ public class MenuBarBuilder {
     
     private final MenuBarCallbacks callbacks;
     private final KeyboardShortcutManager shortcutManager;
-    private JMenu recentFilesMenu;
     private JMenu fileMenu;
+    private int recentFilesSectionStart;  // Index where recent files section begins
     
     /**
      * Interface defining all callback methods needed for menu and toolbar actions.
@@ -121,12 +123,42 @@ public class MenuBarBuilder {
     }
     
     /**
-     * Gets the recent files menu for external updates.
-     * 
-     * @return The recent files menu
+     * Rebuilds the recent files section of the File menu.
+     * Clears existing recent files and Exit, then rebuilds cleanly.
+     *
+     * @param recentFiles List of recent file paths to display
+     * @param fileOpenCallback Callback when a recent file is clicked
      */
-    public JMenu getRecentFilesMenu() {
-        return recentFilesMenu;
+    public void rebuildRecentFilesSection(List<String> recentFiles, java.util.function.Consumer<String> fileOpenCallback) {
+        if (fileMenu == null) return;
+
+        // Remove everything from recentFilesSectionStart to end
+        while (fileMenu.getMenuComponentCount() > recentFilesSectionStart) {
+            fileMenu.remove(recentFilesSectionStart);
+        }
+
+        // Add separator before recent files
+        fileMenu.addSeparator();
+
+        // Add recent file items
+        for (int i = 0; i < recentFiles.size(); i++) {
+            String filePath = recentFiles.get(i);
+            String fileName = new File(filePath).getName();
+            String displayText = String.format("%d. %s", i + 1, fileName);
+
+            JMenuItem item = new JMenuItem(displayText);
+            item.setToolTipText(filePath);
+            item.addActionListener(e -> fileOpenCallback.accept(filePath));
+            fileMenu.add(item);
+        }
+
+        // Add separator before Exit (only if we have recent files)
+        if (!recentFiles.isEmpty()) {
+            fileMenu.addSeparator();
+        }
+
+        // Add Exit at the end
+        fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
     }
     
     /**
@@ -134,7 +166,7 @@ public class MenuBarBuilder {
      */
     private JMenu createFileMenu() {
         fileMenu = new JMenu("File");
-        
+
         fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
         fileMenu.addSeparator();
@@ -142,16 +174,14 @@ public class MenuBarBuilder {
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
-        
-        // Recent files will be added here by the proxy menu
-        // Exit will be added at the very end by the proxy menu
-        
-        // Create a proxy menu that delegates to adding items directly to the File menu
-        recentFilesMenu = new RecentFilesProxyMenu();
-        
-        // Initialize the menu with Exit at the bottom
-        ((RecentFilesProxyMenu) recentFilesMenu).initializeMenu();
-        
+
+        // Mark where the recent files section starts (after Preferences)
+        recentFilesSectionStart = fileMenu.getMenuComponentCount();
+
+        // Add initial separator and Exit - will be rebuilt when recent files are loaded
+        fileMenu.addSeparator();
+        fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
+
         return fileMenu;
     }
     
@@ -266,106 +296,4 @@ public class MenuBarBuilder {
         return item;
     }
     
-    /**
-     * A proxy menu that intercepts RecentFilesManager calls and adds items
-     * directly to the File menu instead of a submenu.
-     */
-    private class RecentFilesProxyMenu extends JMenu {
-        private final JMenuItem exitMenuItem;
-        private int recentFilesStartIndex = -1;
-        
-        public RecentFilesProxyMenu() {
-            super("Recent");
-            // Create the Exit menu item that will be managed by this proxy
-            exitMenuItem = createMenuItem("Exit", e -> callbacks.exitApplication());
-        }
-        
-        @Override
-        public void removeAll() {
-            // Remove recent file items and Exit, then re-add Exit at the end
-            if (fileMenu != null) {
-                // Remove Exit if it exists
-                removeExitFromMenu();
-                
-                // Remove recent files if they were added
-                if (recentFilesStartIndex != -1) {
-                    int itemCount = fileMenu.getMenuComponentCount();
-                    for (int i = itemCount - 1; i >= recentFilesStartIndex; i--) {
-                        fileMenu.remove(i);
-                    }
-                    recentFilesStartIndex = -1;
-                }
-                
-                // Always re-add Exit with separator after clearing
-                addExitWithSeparator();
-            }
-        }
-        
-        @Override
-        public JMenuItem add(JMenuItem item) {
-            // Add recent files items before Exit
-            if (fileMenu != null) {
-                // Remove Exit temporarily if it exists
-                removeExitFromMenu();
-                
-                // Mark the start of recent files section if this is the first item
-                if (recentFilesStartIndex == -1) {
-                    // Add separator before recent files
-                    fileMenu.addSeparator();
-                    recentFilesStartIndex = fileMenu.getMenuComponentCount();
-                }
-                
-                // Add the recent file item
-                JMenuItem addedItem = fileMenu.add(item);
-                
-                // Always add Exit at the end
-                addExitToMenu();
-                
-                return addedItem;
-            }
-            return item;
-        }
-        
-        @Override
-        public void addSeparator() {
-            // Add separator directly to the File menu as part of recent files section
-            // Remove Exit temporarily, add separator, then re-add Exit with separator
-            if (fileMenu != null) {
-                removeExitFromMenu();
-                fileMenu.addSeparator();
-                addExitWithSeparator();
-            }
-        }
-        
-        private void removeExitFromMenu() {
-            if (fileMenu == null) return;
-            
-            for (int i = fileMenu.getMenuComponentCount() - 1; i >= 0; i--) {
-                if (fileMenu.getMenuComponent(i) instanceof JMenuItem item) {
-                    if ("Exit".equals(item.getText())) {
-                        fileMenu.remove(i);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        private void addExitToMenu() {
-            if (fileMenu != null) {
-                fileMenu.add(exitMenuItem);
-            }
-        }
-        
-        private void addExitWithSeparator() {
-            if (fileMenu != null) {
-                fileMenu.addSeparator();
-                fileMenu.add(exitMenuItem);
-            }
-        }
-        
-        public void initializeMenu() {
-            // Add Exit to the menu initially with separator
-            addExitWithSeparator();
-        }
-    }
 }
