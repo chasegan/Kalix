@@ -2,6 +2,8 @@ package com.kalix.ide.managers;
 
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.utils.Platform;
+import com.kalix.ide.utils.PlatformUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +30,12 @@ public class FileWatcherManager {
     private Path currentWatchedDirectory;
     private boolean isWatching = false;
     private volatile boolean shouldStop = false;
+
+    // Windows generates multiple ENTRY_MODIFY events for a single write,
+    // so we use a time-based window. Other platforms use a single-event flag.
+    private static final boolean IS_WINDOWS = PlatformUtils.getCurrentPlatform() == Platform.WINDOWS;
+    private static final long WINDOWS_IGNORE_WINDOW_MS = 3000;
+    private volatile long ignoreChangesUntil = 0;
     private volatile boolean ignoreNextChange = false;
 
     /**
@@ -101,12 +109,17 @@ public class FileWatcherManager {
     }
 
     /**
-     * Tells the file watcher to ignore the next change event.
+     * Tells the file watcher to ignore the next change event(s).
      * Used when saving a file to prevent it from being immediately reloaded.
-     * The flag is automatically reset after the next change is ignored.
+     * On Windows, uses a time-based window since multiple ENTRY_MODIFY events
+     * are generated for a single write. Other platforms use a single-event flag.
      */
     public void ignoreNextChange() {
-        this.ignoreNextChange = true;
+        if (IS_WINDOWS) {
+            this.ignoreChangesUntil = System.currentTimeMillis() + WINDOWS_IGNORE_WINDOW_MS;
+        } else {
+            this.ignoreNextChange = true;
+        }
     }
 
     /**
@@ -162,9 +175,15 @@ public class FileWatcherManager {
                             modifiedFile.equals(currentWatchedFile.toPath())) {
 
                             // Skip reload if we should ignore this change (e.g., from our own save)
-                            if (ignoreNextChange) {
-                                ignoreNextChange = false;
-                                continue;
+                            if (IS_WINDOWS) {
+                                if (System.currentTimeMillis() < ignoreChangesUntil) {
+                                    continue;
+                                }
+                            } else {
+                                if (ignoreNextChange) {
+                                    ignoreNextChange = false;
+                                    continue;
+                                }
                             }
 
                             // Trigger reload on EDT

@@ -70,21 +70,28 @@ public class GenerateSimpleLvasCommand implements EditorCommand {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.anchor = GridBagConstraints.WEST;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
 
         // Full supply volume field
         gbc.gridx = 0; gbc.gridy = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JLabel("Full supply volume [ML]:"), gbc);
 
         gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         JTextField volumeField = new JTextField("10000", 15);
         panel.add(volumeField, gbc);
 
         // Full supply area field
         gbc.gridx = 0; gbc.gridy = 1;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JLabel("Full supply area [km2]:"), gbc);
 
         gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         JTextField areaField = new JTextField("3.0", 15);
         panel.add(areaField, gbc);
 

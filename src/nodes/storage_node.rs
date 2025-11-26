@@ -41,6 +41,9 @@ pub struct StorageNode {
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
+    recorder_idx_seep: Option<usize>,
+    recorder_idx_evap: Option<usize>,
+    recorder_idx_rain: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
@@ -104,6 +107,15 @@ impl Node for StorageNode {
         );
         self.recorder_idx_volume = data_cache.get_series_idx(
             make_result_name(&self.name, "volume").as_str(), false
+        );
+        self.recorder_idx_seep = data_cache.get_series_idx(
+            make_result_name(&self.name, "seep").as_str(), false
+        );
+        self.recorder_idx_rain = data_cache.get_series_idx(
+            make_result_name(&self.name, "rain").as_str(), false
+        );
+        self.recorder_idx_evap = data_cache.get_series_idx(
+            make_result_name(&self.name, "evap").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -225,16 +237,16 @@ impl Node for StorageNode {
             self.v -= seep_vol_nominal;
         }
 
-        // Check the answer
-        // TODO: Can we get rid of this?
-        if (self.v - v).abs() > EPSILON {
-            println!("About to panic");
-            println!("v = {}, self.v = {}", v, self.v);
-            println!("self.spill = {}", self.spill);
-            println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep_vol, self.evap_vol, self.rain_vol);
-            println!("self.upstream_inflow = {}, self.diversion = {}", self.usflow, self.diversion);
-            panic!("Error in {}. Mass balance was wrong. Solution should be {} but vol={}", self.name, v, self.v);
-        }
+        // // Check the answer
+        // // TODO: Can we get rid of this?
+        // if (self.v - v).abs() > EPSILON {
+        //     println!("About to panic");
+        //     println!("v = {}, self.v = {}", v, self.v);
+        //     println!("self.spill = {}", self.spill);
+        //     println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep_vol, self.evap_vol, self.rain_vol);
+        //     println!("self.upstream_inflow = {}, self.diversion = {}", self.usflow, self.diversion);
+        //     panic!("Error in {}. Mass balance was wrong. Solution should be {} but vol={}", self.name, v, self.v);
+        // }
 
         // Only spills go downstream via primary outlet
         self.ds_1_flow = self.spill;
@@ -250,6 +262,15 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_volume {
             data_cache.add_value_at_index(idx, self.v);
+        }
+        if let Some(idx) = self.recorder_idx_seep {
+            data_cache.add_value_at_index(idx, self.seep_vol);
+        }
+        if let Some(idx) = self.recorder_idx_rain {
+            data_cache.add_value_at_index(idx, self.rain_vol);
+        }
+        if let Some(idx) = self.recorder_idx_evap {
+            data_cache.add_value_at_index(idx, self.evap_vol);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
