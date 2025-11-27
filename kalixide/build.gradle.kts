@@ -1,6 +1,7 @@
 plugins {
     application
     java
+    id("org.beryx.runtime") version "1.13.1"
 }
 
 group = "com.kalix"
@@ -51,5 +52,36 @@ java {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+runtime {
+    options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))
+    modules.set(listOf(
+        "java.desktop",
+        "java.logging",
+        "java.xml",
+        "java.prefs",
+        "java.naming",
+        "jdk.unsupported"
+    ))
+
+    jpackage {
+        jpackageHome = System.getProperty("java.home")
+        imageName = "KalixIDE"
+
+        imageOptions = listOf(
+            "--app-version", "1.0.0",
+            "--vendor", "Kalix",
+            "--copyright", "Copyright 2024-2025 Kalix",
+            "--icon", file("src/main/resources/icons/kalix-256.png").absolutePath
+        )
+
+        installerOptions = listOf(
+            "--win-per-user-install",
+            "--win-dir-chooser",
+            "--win-menu",
+            "--win-shortcut"
+        )
+    }
 }
 
