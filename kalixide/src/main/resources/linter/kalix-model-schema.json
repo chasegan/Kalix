@@ -184,7 +184,7 @@
 
     "storage": {
       "description": "Storage node for water storage modeling",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "evap", "rain", "seep"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "evap", "rain", "seep", "level", "area"],
       "required_params": ["type", "loc"],
       "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand"],
       "dsnode_params": ["ds_1", "ds_2"],
