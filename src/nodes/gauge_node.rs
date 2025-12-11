@@ -9,13 +9,15 @@ pub struct GaugeNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub observed_flow_input: DynamicInput,
+    pub force_flow_input: DynamicInput,
+    pub reference_flow_input: DynamicInput,
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
 
     // Recorders
+    recorder_idx_delta: Option<usize>,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
@@ -50,6 +52,9 @@ impl Node for GaugeNode {
         //DynamicInput is already initialized during parsing
 
         // Initialize result recorders
+        self.recorder_idx_delta = data_cache.get_series_idx(
+            make_result_name(&self.name, "delta").as_str(), false
+        );
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
@@ -69,16 +74,33 @@ impl Node for GaugeNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-        // For gauge nodes, outflow equals upstream inflow (same as confluence)
-        self.dsflow_primary = self.usflow;
 
-        // // Get the observed flows (currently unused)
-        // let _observed_flow = self.observed_flow_def.get_value(data_cache);
-
-        // Update mass balance
-        // self.mbal = 0.0; // This is always zero for Gauge nodes (unless we allow flow override)
+        // Force flows if required, otherwise pass upstream value
+        match self.force_flow_input {
+            DynamicInput::None { .. } => {
+                self.dsflow_primary = self.usflow;
+            },
+            _ => {
+                let force_flow_value = self.force_flow_input.get_value(data_cache);
+                if force_flow_value.is_nan() {
+                    self.dsflow_primary = self.usflow;
+                } else {
+                    self.dsflow_primary = force_flow_value;
+                    self.mbal += (self.dsflow_primary - self.usflow);
+                }
+            }
+        }
 
         // Record results
+        if let Some(idx) = self.recorder_idx_delta {
+            let mut reference_flow_value = f64::NAN;
+            match self.reference_flow_input {
+                DynamicInput::None { .. } => {},
+                _ => { reference_flow_value = self.reference_flow_input.get_value(data_cache); }
+            }
+            let delta = self.usflow - reference_flow_value;
+            data_cache.add_value_at_index(idx, delta);
+        }
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }

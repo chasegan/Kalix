@@ -143,8 +143,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
-                        } else if name_lower == "observed" {
-                            n.observed_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                        } else if name_lower == "force_flow" {
+                            n.force_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "reference_flow" {
+                            n.reference_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -540,7 +543,8 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "gauge");
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "observed", &n.observed_flow_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "force_flow", &n.force_flow_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "reference_flow", &n.reference_flow_input.to_string());
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);

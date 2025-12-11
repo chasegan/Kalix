@@ -354,9 +354,9 @@
 
     "gauge": {
       "description": "Gauge node for monitoring and measuring flow",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "delta"],
       "required_params": ["type", "loc"],
-      "optional_params": ["observed"],
+      "optional_params": ["observed", "force_flow", "reference_flow"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -371,6 +371,14 @@
         "observed": {
           "type": "function_expression",
           "description": "Observed flow input (data reference, constant, or expression)"
+        },
+        "force_flow": {
+          "type": "function_expression",
+          "description": "Forced flow input (data reference, constant, or expression)"
+        },
+        "reference_flow": {
+          "type": "function_expression",
+          "description": "Reference flow input (data reference, constant, or expression)"
         }
       }
     }

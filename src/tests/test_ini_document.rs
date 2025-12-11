@@ -197,7 +197,6 @@ params = 100.0, 2.0, 50.0, 0.5
 [node.gauge_node]
 type = gauge
 loc = 100.5, 189
-observed = data.rex_rain_csv.by_name.value
 ds_1 = gr4j_node
 
 [outputs]
