@@ -1,4 +1,12 @@
 @echo off
+setlocal enabledelayedexpansion
+
+:: Read version from VERSION file
+set /p VERSION=<VERSION
+echo ========================================
+echo Building Kalix v%VERSION%
+echo ========================================
+
 echo Building Rust CLI...
 cargo build --release
 
@@ -11,18 +19,22 @@ cd ..
 echo Preparing distribution...
 if not exist dist mkdir dist
 
-echo Copying standalone KalixCLI...
-copy /Y target\release\kalixcli.exe dist\
-
 echo Preparing KalixIDE distribution...
-if exist dist\KalixIDE-Windows rmdir /s /q dist\KalixIDE-Windows
-mkdir dist\KalixIDE-Windows
-xcopy /E /I /Y kalixide\build\jpackage\KalixIDE dist\KalixIDE-Windows
+set DIST_FOLDER=dist\KalixIDE-Windows-%VERSION%
+set ZIP_NAME=KalixIDE-Windows-%VERSION%-Portable.zip
+if exist "%DIST_FOLDER%" rmdir /s /q "%DIST_FOLDER%"
+mkdir "%DIST_FOLDER%"
+xcopy /E /I /Y kalixide\build\jpackage\KalixIDE "%DIST_FOLDER%"
+
+echo Copying Kalix CLI into distribution...
+copy /Y target\release\kalix.exe "%DIST_FOLDER%\"
 
 echo Creating KalixIDE zip...
-powershell -Command "Compress-Archive -Path 'dist\KalixIDE-Windows' -DestinationPath 'dist\KalixIDE-Windows-Portable.zip' -Force"
+powershell -Command "Compress-Archive -Path '%DIST_FOLDER%' -DestinationPath 'dist\%ZIP_NAME%' -Force"
 
-echo Done!
-echo Standalone CLI: dist\kalixcli.exe
-echo IDE Portable: dist\KalixIDE-Windows-Portable.zip
-dir dist\kalixcli.exe dist\*.zip
+echo ========================================
+echo Build Complete - Kalix v%VERSION%
+echo ========================================
+echo Portable zip: dist\%ZIP_NAME%
+echo   Contains: KalixIDE + kalix.exe
+dir dist\%ZIP_NAME%
