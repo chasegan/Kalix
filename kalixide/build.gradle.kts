@@ -4,8 +4,11 @@ plugins {
     id("org.beryx.runtime") version "1.13.1"
 }
 
+// Read version from root VERSION file
+val kalixVersion = file("../VERSION").readText().trim()
+
 group = "com.kalix"
-version = "1.0-SNAPSHOT"
+version = kalixVersion
 
 repositories {
     mavenCentral()
@@ -54,6 +57,12 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.processResources {
+    from("../VERSION") {
+        rename { "version.txt" }
+    }
+}
+
 runtime {
     options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))
     modules.set(listOf(
@@ -70,7 +79,7 @@ runtime {
         imageName = "KalixIDE"
 
         imageOptions = listOf(
-            "--app-version", "1.0.0",
+            "--app-version", kalixVersion,
             "--vendor", "Kalix",
             "--copyright", "Copyright 2024-2025 Kalix",
             "--icon", file("src/main/resources/icons/kalix-256.png").absolutePath
