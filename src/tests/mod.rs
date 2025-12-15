@@ -78,3 +78,6 @@ mod test_linear_combination_save;
 
 #[cfg(test)]
 mod test_linear_combination_bug_fix;
+
+#[cfg(test)]
+mod test_input_validation;

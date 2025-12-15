@@ -169,6 +169,31 @@ impl Model {
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
 
+        //8) Validate that all data.* references correspond to actual input file columns.
+        //   This catches typos in non-critical data references that the existing
+        //   validation in auto_determine_simulation_period() doesn't check.
+        //   Note: We only check that the reference is valid (exists in an input file),
+        //   not that it has values - non-critical data is allowed to have missing values.
+        for idx in 0..self.data_cache.series.len() {
+            let name = &self.data_cache.series_name[idx];
+            if name.starts_with("data.") {
+                let name_lower = name.to_lowercase();
+                let mut found = false;
+                for ts in self.inputs.iter() {
+                    if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return Err(format!(
+                        "Data reference '{}' was not found in any input file. Check for typos in your model file.",
+                        name
+                    ));
+                }
+            }
+        }
+
         // Return
         Ok(())
     }
