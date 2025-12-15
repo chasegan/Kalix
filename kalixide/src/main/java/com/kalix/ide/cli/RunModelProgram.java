@@ -61,9 +61,6 @@ public class RunModelProgram extends AbstractSessionProgram {
 
         String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         sessionManager.sendCommand(sessionKey, loadCommand)
-            .thenRun(() -> {
-                statusUpdater.accept("Loading model in " + getDisplayName());
-            })
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
                 statusUpdater.accept("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
@@ -105,9 +102,6 @@ public class RunModelProgram extends AbstractSessionProgram {
 
                 String runCommand = JsonStdioProtocol.Commands.runSimulation();
                 sessionManager.sendCommand(sessionKey, runCommand)
-                    .thenRun(() -> {
-                        statusUpdater.accept("Model loaded, starting simulation in " + getDisplayName());
-                    })
                     .exceptionally(throwable -> {
                         currentState = ProgramState.FAILED;
                         statusUpdater.accept("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());
@@ -135,40 +129,29 @@ public class RunModelProgram extends AbstractSessionProgram {
                                                 JsonMessage.SystemMessage message) {
         switch (msgType) {
             case BUSY:
-                // Simulation started
-                statusUpdater.accept("Simulation running in " + getDisplayName());
+                // Simulation started - no status update needed
                 return true;
                 
             case PROGRESS:
-                // Progress update during simulation
+                // Progress update during simulation - update progress bar only, not status bar
                 try {
-                    // Compact protocol: progress data is directly in the message fields
                     Integer current = message.getCurrent();
                     Integer total = message.getTotal();
                     String command = message.getCommand();
 
-                    if (current != null && total != null && total > 0) {
+                    if (current != null && total != null && total > 0 && progressCallback != null) {
                         double percentComplete = (current.doubleValue() / total.doubleValue()) * 100.0;
-
-                        if (progressCallback != null) {
-                            ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
-                                    percentComplete,
-                                    "Processing", // Generic step description
-                                    command != null ? command : "simulation"
-                            );
-                            progressCallback.accept(progressInfo);
-                        }
-
-                        statusUpdater.accept(String.format("%s: %.1f%% - Processing",
-                                getDisplayName(), percentComplete));
-                    } else {
-                        statusUpdater.accept("Progress update received in " + getDisplayName());
+                        ProgressParser.ProgressInfo progressInfo = ProgressParser.createFromJson(
+                                percentComplete,
+                                "Processing",
+                                command != null ? command : "simulation"
+                        );
+                        progressCallback.accept(progressInfo);
                     }
-                    return true;
                 } catch (Exception e) {
-                    statusUpdater.accept("Error parsing progress from " + getDisplayName() + ": " + e.getMessage());
-                    return true;
+                    // Ignore progress parsing errors
                 }
+                return true;
                 
             case RESULT:
                 // Simulation completed successfully
@@ -207,8 +190,8 @@ public class RunModelProgram extends AbstractSessionProgram {
                         }
                     }
                 } catch (Exception e) {
-                    // If we can't parse the result data, just continue without outputs
-                    statusUpdater.accept("Warning: Could not parse outputs from result in " + getDisplayName() + ": " + e.getMessage());
+                    // If we can't parse the result data, notify user but continue
+                    statusUpdater.accept("Warning: Could not parse outputs from result: " + e.getMessage());
                 }
 
                 statusUpdater.accept("Model run completed successfully in " + getDisplayName());
@@ -247,27 +230,65 @@ public class RunModelProgram extends AbstractSessionProgram {
      */
     @Override
     protected String extractErrorMessage(JsonMessage.SystemMessage message) {
+        String errorMsg = null;
         try {
             // In compact protocol, error message is in the errorMessage field
-            String errorMsg = message.getErrorMessage();
-            if (errorMsg != null && !errorMsg.isEmpty()) {
-                return errorMsg;
-            }
-
-            // Fallback: check if error info is in the result field
-            if (message.getResult() != null && message.getResult().has("error")) {
-                var errorNode = message.getResult().get("error");
-                // Check if error is an object with a message property
-                if (errorNode.has("message")) {
-                    return errorNode.get("message").asText();
+            errorMsg = message.getErrorMessage();
+            if (errorMsg == null || errorMsg.isEmpty()) {
+                // Fallback: check if error info is in the result field
+                if (message.getResult() != null && message.getResult().has("error")) {
+                    var errorNode = message.getResult().get("error");
+                    // Check if error is an object with a message property
+                    if (errorNode.has("message")) {
+                        errorMsg = errorNode.get("message").asText();
+                    } else {
+                        // Fallback to treating error as a string
+                        errorMsg = errorNode.asText();
+                    }
                 }
-                // Fallback to treating error as a string
-                return errorNode.asText();
             }
         } catch (Exception e) {
             // If we can't parse error details, use the raw message
         }
-        return message.toString();
+
+        if (errorMsg == null || errorMsg.isEmpty()) {
+            errorMsg = message.toString();
+        }
+
+        return cleanupErrorMessage(errorMsg);
+    }
+
+    /**
+     * Cleans up error messages by removing redundant prefixes and normalizing format.
+     * The CLI backend often wraps errors with repetitive prefixes like "Command execution error:".
+     */
+    private String cleanupErrorMessage(String errorMsg) {
+        if (errorMsg == null) {
+            return "Unknown error";
+        }
+
+        // Prefixes to strip (in order of priority)
+        String[] redundantPrefixes = {
+            "Command execution error: ",
+            "Configuration failed: ",
+            "Simulation error: "
+        };
+
+        String cleaned = errorMsg;
+        boolean changed;
+
+        // Keep stripping prefixes until no more changes (handles "Prefix: Prefix: actual message")
+        do {
+            changed = false;
+            for (String prefix : redundantPrefixes) {
+                if (cleaned.startsWith(prefix)) {
+                    cleaned = cleaned.substring(prefix.length());
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        return cleaned.isEmpty() ? errorMsg : cleaned;
     }
     
     /**

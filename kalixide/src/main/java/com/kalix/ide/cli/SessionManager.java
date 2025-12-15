@@ -207,7 +207,6 @@ public class SessionManager {
 
                 // Notify session started
                 fireSessionEvent(sessionKey, null, SessionState.STARTING, "Session started");
-                updateStatus("Started session: " + sessionKey);
 
                 return sessionKey;
 
@@ -232,7 +231,6 @@ public class SessionManager {
                 session.getCommunicationLog().logIdeToCli(command);
                 session.getProcess().sendCommand(command);
                 session.setState(SessionState.RUNNING, "Executing command: " + command);
-                updateStatus("Sent command to session " + sessionKey + ": " + command);
             } catch (IOException e) {
                 handleSessionError(sessionKey, e, "Send command");
                 throw new RuntimeException("Failed to send command to session " + sessionKey, e);
@@ -315,7 +313,6 @@ public class SessionManager {
                 // Only allow removal of terminated or error sessions
                 if (session.getState() == SessionState.TERMINATED || session.getState() == SessionState.ERROR) {
                     activeSessions.remove(sessionKey);
-                    updateStatus("Removed session from list: " + sessionKey);
                 } else {
                     throw new IllegalStateException("Cannot remove active session: " + sessionKey + " (state: " + session.getState() + ")");
                 }
@@ -471,12 +468,12 @@ public class SessionManager {
 
         switch (msgType) {
             case LOG:
-                // Generic log message
+                // Generic log message - show to user
                 try {
                     String logMsg = message.getResult().asText();
-                    updateStatus("Session " + sessionKey + " log: " + logMsg);
+                    updateStatus(logMsg);
                 } catch (Exception e) {
-                    updateStatus("Session " + sessionKey + " log message received");
+                    // Ignore malformed log messages
                 }
                 break;
 
@@ -488,9 +485,24 @@ public class SessionManager {
                 // Don't show session ready message in status bar as it's not useful to users
                 break;
 
+            case BUSY:
+            case PROGRESS:
+            case RESULT:
+            case STOPPED:
+                // These are typically handled by active programs.
+                // If they reach here, the program didn't need them - silently ignore.
+                break;
+
+            case ERROR:
+                // Error not handled by a program - show a simplified message
+                String errorMsg = message.getErrorMessage();
+                if (errorMsg != null && !errorMsg.isEmpty()) {
+                    updateStatus("Error: " + errorMsg);
+                }
+                break;
+
             default:
-                // Other message types should be handled by programs
-                updateStatus("Unhandled JSON message type from session " + sessionKey + ": " + msgType);
+                // Valid message type we don't handle - silently ignore
                 break;
         }
     }
@@ -606,8 +618,6 @@ public class SessionManager {
      * Shuts down the session manager and terminates all active sessions.
      */
     public void shutdown() {
-        updateStatus("Shutting down session manager...");
-
         // Terminate all active sessions with brutal force for fast shutdown
         activeSessions.values().parallelStream().forEach(session -> {
             try {
@@ -618,6 +628,5 @@ public class SessionManager {
         });
 
         activeSessions.clear();
-        updateStatus("Session manager shutdown complete");
     }
 }
