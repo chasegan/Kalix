@@ -140,6 +140,15 @@ public class MinimalEditorWindow extends JFrame {
         });
     }
 
+    /**
+     * Re-applies font after component realization to fix Windows cursor alignment.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        configureMonospaceFont();
+    }
+
     private void initializeComponents() {
         // Initialize text area
         textArea = new RSyntaxTextArea();

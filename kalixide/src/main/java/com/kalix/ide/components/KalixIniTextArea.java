@@ -91,6 +91,15 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     }
 
     /**
+     * Re-applies font after component realization to fix Windows cursor alignment.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        configureMonospaceFont();
+    }
+
+    /**
      * Configures a monospace font for the text area.
      * Uses the embedded JetBrains Mono font with automatic fallback to system fonts.
      */

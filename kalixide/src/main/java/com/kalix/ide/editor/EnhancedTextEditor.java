@@ -111,6 +111,15 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Re-applies font after component realization to fix Windows cursor alignment.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        configureMonospaceFont();
+    }
+
+    /**
      * Configures a monospace font for the text area.
      * This is critical to prevent cursor position misalignment issues where the cursor
      * appears ahead of the actual typing position due to proportional font usage.

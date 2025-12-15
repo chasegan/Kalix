@@ -155,6 +155,20 @@ public class DiffWindow extends JFrame {
         });
     }
 
+    /**
+     * Re-applies font after component realization to fix Windows cursor alignment.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (leftTextArea != null) {
+            configureMonospaceFont(leftTextArea);
+        }
+        if (rightTextArea != null) {
+            configureMonospaceFont(rightTextArea);
+        }
+    }
+
     private void initializeComponents(String referenceModel, String thisModel) {
         // Create aligned text versions with padding for proper visual alignment
         AlignedTexts alignedTexts = createAlignedTexts();
