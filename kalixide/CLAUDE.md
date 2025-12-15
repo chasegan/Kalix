@@ -56,11 +56,41 @@ Comprehensive refactoring using manager pattern:
 - Performance optimizations (60 FPS throttling, O(log n) lookups)
 - Enhanced testability through separation of concerns
 
+### Text Editor Component Hierarchy
+All text editor components extend a base class hierarchy for consistent behavior:
+
+```
+RSyntaxTextArea (library)
+    └── KalixTextArea (abstract base)
+            ├── KalixIniTextArea (INI file editing)
+            └── KalixPlainTextArea (plain text/logs)
+```
+
+**KalixTextArea** (base class) provides:
+- Monospace font configuration via FontManager
+- Windows cursor alignment fix via `addNotify()` override
+- Common settings (anti-aliasing, tab handling)
+
+**KalixIniTextArea** adds:
+- Kalix INI syntax highlighting
+- Syntax theme support
+- Global preference update methods
+
+**KalixPlainTextArea** adds:
+- No syntax highlighting (SYNTAX_STYLE_NONE)
+- Suitable for logs and plain text display
+
+**Usage:**
+- For INI editing: Use `KalixIniTextArea` or `KalixIniTextArea.createReadOnly()`
+- For plain text: Use `KalixPlainTextArea` or `KalixPlainTextArea.createReadOnly()`
+- Never instantiate raw `RSyntaxTextArea` directly
+
+Key files: `KalixTextArea.java`, `KalixIniTextArea.java`, `KalixPlainTextArea.java`
+
 ### Text Editor with RSyntaxTextArea
 Enhanced text editor using manager pattern:
-- **RSyntaxTextArea integration**: INI syntax highlighting, find/replace, go-to-line
+- **Uses KalixIniTextArea**: Inherits font and cursor alignment fixes
 - **Manager classes**: `TextSearchManager`, `TextNavigationManager`, `FileDropManager`
-- **Code reduction**: EnhancedTextEditor reduced from 759 → 280 lines
 - **Features**: Mark occurrences, current line highlighting, Ctrl+F/Ctrl+H shortcuts
 
 ### Node Styling and Navigation

@@ -9,8 +9,7 @@ import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.utils.JsonUtils;
 
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import com.kalix.ide.components.KalixPlainTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -57,7 +56,7 @@ public class SessionManagerWindow extends JFrame {
     private JLabel uptimeLabel;
 
     // STDIO Log components
-    private RSyntaxTextArea logArea;
+    private KalixPlainTextArea logArea;
     private RTextScrollPane logScrollPane;
     private String lastLogContent = "";
 
@@ -170,12 +169,9 @@ public class SessionManagerWindow extends JFrame {
         uptimeLabel = new JLabel("-");
 
         // Initialize STDIO log area
-        logArea = new RSyntaxTextArea();
-        logArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE);
-        logArea.setEditable(false);
+        logArea = KalixPlainTextArea.createReadOnly(20, 60);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
         logArea.setBackground(Color.WHITE);
-        logArea.setCodeFoldingEnabled(false);
         logArea.setText("Select a session to view STDIO log...");
 
         logScrollPane = new RTextScrollPane(logArea);

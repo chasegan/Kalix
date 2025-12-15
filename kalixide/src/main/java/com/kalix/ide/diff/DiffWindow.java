@@ -1,13 +1,8 @@
 package com.kalix.ide.diff;
 
 import com.github.difflib.text.DiffRow;
-import com.kalix.ide.managers.FontManager;
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.themes.SyntaxTheme;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
-import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,20 +22,11 @@ import java.util.List;
 public class DiffWindow extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(DiffWindow.class);
 
-    // Custom syntax style for Kalix INI
-    private static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
-
-    // Track all open instances for preference updates (using WeakReference to avoid memory leaks)
     private static final List<WeakReference<DiffWindow>> openWindows = new ArrayList<>();
 
-    // Static block to register custom TokenMaker
-    static {
-        registerCustomTokenMaker();
-    }
-
     // UI Components
-    private RSyntaxTextArea leftTextArea;
-    private RSyntaxTextArea rightTextArea;
+    private KalixIniTextArea leftTextArea;
+    private KalixIniTextArea rightTextArea;
     private RTextScrollPane leftScrollPane;
     private RTextScrollPane rightScrollPane;
     private JSplitPane splitPane;
@@ -188,28 +174,11 @@ public class DiffWindow extends JFrame {
         navigationToolbar = createNavigationToolbar();
     }
 
-    private RSyntaxTextArea createTextArea() {
-        RSyntaxTextArea textArea = new RSyntaxTextArea();
+    private KalixIniTextArea createTextArea() {
+        KalixIniTextArea textArea = KalixIniTextArea.createReadOnly(20, 60);
 
-        // Set Kalix INI syntax
-        textArea.setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI);
-
-        // Read-only
-        textArea.setEditable(false);
-
-        // No line wrap
-        textArea.setLineWrap(false);
+        // Disable code folding for diff view
         textArea.setCodeFoldingEnabled(false);
-
-        // Highlighting features
-        textArea.setHighlightCurrentLine(true);
-        textArea.setCurrentLineHighlightColor(new Color(0, 0, 0, 20));
-
-        // Configure monospace font
-        configureMonospaceFont(textArea);
-
-        // Apply saved syntax theme
-        applySavedSyntaxTheme(textArea);
 
         return textArea;
     }
@@ -269,50 +238,14 @@ public class DiffWindow extends JFrame {
         add(splitPane, BorderLayout.CENTER);
     }
 
-    private void configureMonospaceFont(RSyntaxTextArea textArea) {
-        int fontSize = PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12);
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        textArea.setFont(monoFont);
-    }
-
     /**
      * Updates the font size of both text editors.
      *
-     * @param fontSize The new font size in points
+     * @param fontSize the new font size in points
      */
     public void updateFontSize(int fontSize) {
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        leftTextArea.setFont(monoFont);
-        rightTextArea.setFont(monoFont);
-    }
-
-    private void applySavedSyntaxTheme(RSyntaxTextArea textArea) {
-        try {
-            String savedThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
-            SyntaxTheme.Theme savedTheme = SyntaxTheme.getThemeByName(savedThemeName);
-            updateSyntaxTheme(textArea, savedTheme);
-        } catch (Exception e) {
-            updateSyntaxTheme(textArea, SyntaxTheme.Theme.LIGHT);
-        }
-    }
-
-    private void updateSyntaxTheme(RSyntaxTextArea textArea, SyntaxTheme.Theme syntaxTheme) {
-        if (textArea == null || syntaxTheme == null) {
-            return;
-        }
-
-        org.fife.ui.rsyntaxtextarea.SyntaxScheme syntaxScheme = textArea.getSyntaxScheme();
-
-        if (syntaxScheme != null) {
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.IDENTIFIER).foreground = syntaxTheme.getIdentifierColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.OPERATOR).foreground = syntaxTheme.getOperatorColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = syntaxTheme.getStringColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.RESERVED_WORD).foreground = syntaxTheme.getReservedWordColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.COMMENT_EOL).foreground = syntaxTheme.getCommentColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.WHITESPACE).foreground = syntaxTheme.getWhitespaceColor();
-
-            textArea.repaint();
-        }
+        leftTextArea.updateFontSize(fontSize);
+        rightTextArea.updateFontSize(fontSize);
     }
 
     private void initializeColors() {
@@ -610,22 +543,9 @@ public class DiffWindow extends JFrame {
     }
 
     /**
-     * Register the custom TokenMaker for Kalix INI format.
-     */
-    private static void registerCustomTokenMaker() {
-        try {
-            AbstractTokenMakerFactory factory = (AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance();
-            factory.putMapping(SYNTAX_STYLE_KALIX_INI, "com.kalix.ide.editor.KalixIniTokenMaker");
-        } catch (Exception e) {
-            logger.error("Failed to register custom Kalix INI TokenMaker", e);
-        }
-    }
-
-    /**
      * Updates the font size for all open DiffWindow instances.
-     * Called when font size preference changes.
      *
-     * @param fontSize The new font size in points
+     * @param fontSize the new font size in points
      */
     public static void updateAllFontSizes(int fontSize) {
         synchronized (openWindows) {
@@ -645,11 +565,10 @@ public class DiffWindow extends JFrame {
 
     /**
      * Updates the syntax theme for all open DiffWindow instances.
-     * Called when syntax theme preference changes.
      *
-     * @param syntaxTheme The new syntax theme to apply
+     * @param syntaxTheme the new syntax theme to apply
      */
-    public static void updateAllSyntaxThemes(com.kalix.ide.themes.SyntaxTheme.Theme syntaxTheme) {
+    public static void updateAllSyntaxThemes(SyntaxTheme.Theme syntaxTheme) {
         synchronized (openWindows) {
             Iterator<WeakReference<DiffWindow>> iterator = openWindows.iterator();
             while (iterator.hasNext()) {
@@ -659,9 +578,8 @@ public class DiffWindow extends JFrame {
                 if (window == null) {
                     iterator.remove();
                 } else {
-                    // Update syntax theme for both text areas
-                    window.updateSyntaxTheme(window.leftTextArea, syntaxTheme);
-                    window.updateSyntaxTheme(window.rightTextArea, syntaxTheme);
+                    window.leftTextArea.updateSyntaxTheme(syntaxTheme);
+                    window.rightTextArea.updateSyntaxTheme(syntaxTheme);
                 }
             }
         }
