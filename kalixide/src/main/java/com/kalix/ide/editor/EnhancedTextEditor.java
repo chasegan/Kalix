@@ -10,17 +10,13 @@ import java.awt.*;
 import java.awt.event.*;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
-import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
+import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.factories.LinterComponentFactory;
 import com.kalix.ide.themes.SyntaxTheme;
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.managers.FontManager;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -34,15 +30,7 @@ import com.kalix.ide.managers.FontManager;
 public class EnhancedTextEditor extends JPanel {
     private static final Logger logger = LoggerFactory.getLogger(EnhancedTextEditor.class);
 
-    // Custom syntax style for Kalix INI with line continuation
-    private static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
-
-    // Static block to register custom TokenMaker
-    static {
-        registerCustomTokenMaker();
-    }
-
-    private RSyntaxTextArea textArea;
+    private KalixIniTextArea textArea;
     private RTextScrollPane scrollPane;
 
     // State tracking
@@ -75,14 +63,8 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     private void initializeComponents() {
-        textArea = new RSyntaxTextArea();
-        textArea.setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI); // Test simplified custom TokenMaker
-        textArea.setLineWrap(false); // Disable line wrapping
-        textArea.setWrapStyleWord(false);
-
-        // CRITICAL: Set monospace font to prevent cursor position mismatch
-        // Without this, proportional fonts cause cursor to appear ahead of actual typing position
-        configureMonospaceFont();
+        // KalixIniTextArea handles font configuration, syntax highlighting, and Windows cursor fix
+        textArea = new KalixIniTextArea();
 
         // Enable bracket matching
         textArea.setBracketMatchingEnabled(true);
@@ -90,19 +72,9 @@ public class EnhancedTextEditor extends JPanel {
         // Apply theme-aware colors
         updateThemeColors();
 
-        // Apply saved syntax theme
-        applySavedSyntaxTheme();
-
-        // Enable mark occurrences
-        textArea.setMarkOccurrences(true);
-        textArea.setMarkOccurrencesDelay(300); // 300ms delay before highlighting
-
-        // RSyntaxTextArea has built-in undo/redo support via RUndoManager - no need to add our own
-
         scrollPane = new RTextScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-
     }
     
     private void setupLayout() {
@@ -111,40 +83,13 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Re-applies font after component realization to fix Windows cursor alignment.
-     */
-    @Override
-    public void addNotify() {
-        super.addNotify();
-        configureMonospaceFont();
-    }
-
-    /**
-     * Configures a monospace font for the text area.
-     * This is critical to prevent cursor position misalignment issues where the cursor
-     * appears ahead of the actual typing position due to proportional font usage.
-     *
-     * Uses the embedded JetBrains Mono font with automatic fallback to system fonts.
-     */
-    private void configureMonospaceFont() {
-        // Get the saved font size from preferences (default: 12pt)
-        int fontSize = PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12);
-
-        // Use FontManager to get the best available monospace font
-        // This will use embedded JetBrains Mono if available, otherwise fall back to system fonts
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        textArea.setFont(monoFont);
-    }
-
-    /**
      * Updates the font size of the text editor.
-     * This method can be called at runtime to change the font size dynamically.
+     * Delegates to the underlying KalixIniTextArea.
      *
      * @param fontSize The new font size in points
      */
     public void updateFontSize(int fontSize) {
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        textArea.setFont(monoFont);
+        textArea.updateFontSize(fontSize);
     }
 
     /**
@@ -737,57 +682,23 @@ public class EnhancedTextEditor extends JPanel {
         if (textArea == null) {
             return;
         }
-        
+
         // Apply background and foreground colors from current theme
         Color bgColor = UIManager.getColor("TextArea.background");
         Color fgColor = UIManager.getColor("TextArea.foreground");
-        Color selectionBgColor = UIManager.getColor("TextArea.selectionBackground");
-        
+
         if (bgColor != null) {
             textArea.setBackground(bgColor);
         }
-        
+
         if (fgColor != null) {
             textArea.setForeground(fgColor);
         }
-        
-        // Set current line highlight color based on theme
-        if (selectionBgColor != null) {
-            // Create a more subtle version of the selection color for line highlight
-            int alpha = 80; // More visible for better navigation feedback
-            Color lineHighlightColor = new Color(
-                selectionBgColor.getRed(),
-                selectionBgColor.getGreen(),
-                selectionBgColor.getBlue(),
-                alpha
-            );
-            textArea.setCurrentLineHighlightColor(lineHighlightColor);
-        } else {
-            // Fallback: determine if dark theme and set appropriate color
-            if (isDarkTheme()) {
-                textArea.setCurrentLineHighlightColor(new Color(255, 255, 255, 25)); // Light highlight for dark theme
-            } else {
-                textArea.setCurrentLineHighlightColor(new Color(0, 0, 0, 25)); // Dark highlight for light theme
-            }
-        }
-        
-        // Enable current line highlighting
-        textArea.setHighlightCurrentLine(true);
-        
+
+        // Delegate line highlight color to KalixIniTextArea
+        textArea.updateCurrentLineHighlight();
+
         textArea.repaint();
-    }
-    
-    /**
-     * Determines if the current theme is dark based on the background color.
-     * @return true if dark theme, false if light theme
-     */
-    private boolean isDarkTheme() {
-        Color bg = UIManager.getColor("Panel.background");
-        if (bg == null) {
-            return false;
-        }
-        // Consider theme dark if the sum of RGB values is less than 384 (128 * 3)
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) < 384;
     }
 
     // Linter integration methods
@@ -822,64 +733,14 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Register the custom TokenMaker for Kalix INI format with line continuation support.
-     * This method is called once when the class is loaded.
-     */
-    private static void registerCustomTokenMaker() {
-        try {
-            AbstractTokenMakerFactory factory = (AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance();
-            factory.putMapping(SYNTAX_STYLE_KALIX_INI, "com.kalix.ide.editor.KalixIniTokenMaker");
-        } catch (Exception e) {
-            logger.error("Failed to register custom Kalix INI TokenMaker", e);
-        }
-    }
-
-    /**
-     * Applies the saved syntax theme from preferences on startup.
-     * This ensures the syntax theme is loaded when the editor is first created.
-     */
-    private void applySavedSyntaxTheme() {
-        try {
-            // Get the saved syntax theme from preferences
-            String savedThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
-            SyntaxTheme.Theme savedTheme = SyntaxTheme.getThemeByName(savedThemeName);
-
-            // Apply the saved theme
-            updateSyntaxTheme(savedTheme);
-
-        } catch (Exception e) {
-            logger.warn("Failed to apply saved syntax theme, using default: {}", e.getMessage());
-            // Fallback to Light theme if anything goes wrong
-            updateSyntaxTheme(SyntaxTheme.Theme.LIGHT);
-        }
-    }
-
-    /**
      * Updates the syntax highlighting theme for the text editor.
-     * This method applies custom colors for different token types based on the selected theme.
+     * Delegates to the underlying KalixIniTextArea.
      *
      * @param syntaxTheme The syntax theme to apply
      */
     public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
-        if (textArea == null) {
-            return;
-        }
-
-        // For now, we'll apply syntax theme through RSyntaxTextArea's style mechanism
-        // RSyntaxTextArea uses SyntaxScheme to define token colors
-        org.fife.ui.rsyntaxtextarea.SyntaxScheme syntaxScheme = textArea.getSyntaxScheme();
-
-        if (syntaxScheme != null) {
-            // Apply colors from our SyntaxTheme to RSyntaxTextArea's token types
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.IDENTIFIER).foreground = syntaxTheme.getIdentifierColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.OPERATOR).foreground = syntaxTheme.getOperatorColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = syntaxTheme.getStringColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.RESERVED_WORD).foreground = syntaxTheme.getReservedWordColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.COMMENT_EOL).foreground = syntaxTheme.getCommentColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.WHITESPACE).foreground = syntaxTheme.getWhitespaceColor();
-
-            // Refresh the text area to apply the new colors
-            textArea.repaint();
+        if (textArea != null) {
+            textArea.updateSyntaxTheme(syntaxTheme);
         }
     }
 }

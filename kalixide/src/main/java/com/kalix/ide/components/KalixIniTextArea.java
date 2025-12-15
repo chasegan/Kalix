@@ -3,47 +3,47 @@ package com.kalix.ide.components;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
-import com.kalix.ide.managers.FontManager;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import java.awt.*;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 /**
- * Custom RSyntaxTextArea pre-configured for Kalix INI files.
+ * Text area pre-configured for Kalix INI file editing.
  *
- * Features:
- * - Custom Kalix INI syntax highlighting with line continuation support
- * - Monospace font (JetBrains Mono with fallback)
- * - Syntax theme from user preferences
- * - Theme-aware current line highlighting
- * - Code folding, anti-aliasing, and other defaults
- * - Automatic updates when preferences change
+ * Extends KalixTextArea to inherit monospace font configuration and
+ * Windows cursor alignment fix, then adds INI-specific features:
+ * <ul>
+ *   <li>Custom Kalix INI syntax highlighting with line continuation support</li>
+ *   <li>Syntax theme from user preferences</li>
+ *   <li>Theme-aware current line highlighting</li>
+ *   <li>Code folding, mark occurrences, and other editing features</li>
+ *   <li>Global preference update support via static methods</li>
+ * </ul>
+ *
+ * @see KalixTextArea for base configuration
+ * @see KalixPlainTextArea for plain text display
  */
-public class KalixIniTextArea extends RSyntaxTextArea {
+public class KalixIniTextArea extends KalixTextArea {
+
     private static final Logger logger = LoggerFactory.getLogger(KalixIniTextArea.class);
 
-    // Custom syntax style for Kalix INI with line continuation
-    private static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
+    /** Syntax style identifier for Kalix INI format. */
+    public static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
 
-    // Track all open instances for preference updates (using WeakReference to avoid memory leaks)
     private static final List<WeakReference<KalixIniTextArea>> instances = new ArrayList<>();
 
-    // Static block to register custom TokenMaker
     static {
         registerCustomTokenMaker();
     }
 
     /**
-     * Creates a KalixIniTextArea with default configuration.
+     * Creates a KalixIniTextArea with default dimensions.
      */
     public KalixIniTextArea() {
         this(20, 60);
@@ -52,65 +52,51 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     /**
      * Creates a KalixIniTextArea with specified dimensions.
      *
-     * @param rows Number of rows
-     * @param cols Number of columns
+     * @param rows number of visible rows
+     * @param cols number of visible columns
      */
     public KalixIniTextArea(int rows, int cols) {
         super(rows, cols);
-        initialize();
+        initializeIni();
         registerInstance();
     }
 
     /**
-     * Initializes the text area with Kalix INI defaults.
+     * Creates a KalixIniTextArea configured for read-only display.
+     * Useful for diff views and preview panels.
+     *
+     * @param rows number of visible rows
+     * @param cols number of visible columns
+     * @return a new read-only KalixIniTextArea instance
      */
-    private void initialize() {
+    public static KalixIniTextArea createReadOnly(int rows, int cols) {
+        KalixIniTextArea textArea = new KalixIniTextArea(rows, cols);
+        textArea.setEditable(false);
+        return textArea;
+    }
+
+    /**
+     * Initializes INI-specific settings.
+     */
+    private void initializeIni() {
         // Set Kalix INI syntax highlighting
         setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI);
 
-        // Enable INI mode features
+        // Enable editing features
         setMarkOccurrences(true);
-        setMarkOccurrencesDelay(300); // 300ms delay before highlighting
+        setMarkOccurrencesDelay(300);
         setHighlightCurrentLine(true);
-
-        // Code editing defaults
         setCodeFoldingEnabled(true);
-        setAntiAliasingEnabled(true);
-        setTabSize(4);
-        setTabsEmulated(true);
-        setLineWrap(false);
-
-        // Configure monospace font
-        configureMonospaceFont();
 
         // Apply saved syntax theme
         applySavedSyntaxTheme();
 
-        // Set current line highlight color based on theme
+        // Set theme-aware line highlight
         updateCurrentLineHighlight();
     }
 
     /**
-     * Re-applies font after component realization to fix Windows cursor alignment.
-     */
-    @Override
-    public void addNotify() {
-        super.addNotify();
-        configureMonospaceFont();
-    }
-
-    /**
-     * Configures a monospace font for the text area.
-     * Uses the embedded JetBrains Mono font with automatic fallback to system fonts.
-     */
-    private void configureMonospaceFont() {
-        int fontSize = PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12);
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        setFont(monoFont);
-    }
-
-    /**
-     * Applies the saved syntax theme from preferences.
+     * Applies the syntax theme from user preferences.
      */
     private void applySavedSyntaxTheme() {
         try {
@@ -118,15 +104,14 @@ public class KalixIniTextArea extends RSyntaxTextArea {
             SyntaxTheme.Theme savedTheme = SyntaxTheme.getThemeByName(savedThemeName);
             updateSyntaxTheme(savedTheme);
         } catch (Exception e) {
-            // Fallback to Light theme if anything goes wrong
             updateSyntaxTheme(SyntaxTheme.Theme.LIGHT);
         }
     }
 
     /**
-     * Updates the syntax highlighting theme for the text editor.
+     * Updates the syntax highlighting colors.
      *
-     * @param syntaxTheme The syntax theme to apply
+     * @param syntaxTheme the theme to apply
      */
     public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
         org.fife.ui.rsyntaxtextarea.SyntaxScheme syntaxScheme = getSyntaxScheme();
@@ -145,57 +130,7 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * Updates the current line highlight color based on the current theme.
-     */
-    private void updateCurrentLineHighlight() {
-        Color selectionBgColor = UIManager.getColor("TextArea.selectionBackground");
-
-        if (selectionBgColor != null) {
-            // Create a more subtle version of the selection color for line highlight
-            int alpha = 80; // More visible for better navigation feedback
-            Color lineHighlightColor = new Color(
-                selectionBgColor.getRed(),
-                selectionBgColor.getGreen(),
-                selectionBgColor.getBlue(),
-                alpha
-            );
-            setCurrentLineHighlightColor(lineHighlightColor);
-        } else {
-            // Fallback: determine if dark theme and set appropriate color
-            if (isDarkTheme()) {
-                setCurrentLineHighlightColor(new Color(255, 255, 255, 25)); // Light highlight for dark theme
-            } else {
-                setCurrentLineHighlightColor(new Color(0, 0, 0, 25)); // Dark highlight for light theme
-            }
-        }
-    }
-
-    /**
-     * Determines if the current theme is dark based on the background color.
-     *
-     * @return true if dark theme, false if light theme
-     */
-    private boolean isDarkTheme() {
-        Color bg = UIManager.getColor("Panel.background");
-        if (bg == null) {
-            return false;
-        }
-        // Consider theme dark if the sum of RGB values is less than 384 (128 * 3)
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) < 384;
-    }
-
-    /**
-     * Updates the font size of the text editor.
-     *
-     * @param fontSize The new font size in points
-     */
-    public void updateFontSize(int fontSize) {
-        Font monoFont = FontManager.getMonospaceFont(fontSize);
-        setFont(monoFont);
-    }
-
-    /**
-     * Registers the custom TokenMaker for Kalix INI format with line continuation support.
+     * Registers the custom TokenMaker for Kalix INI syntax.
      */
     private static void registerCustomTokenMaker() {
         try {
@@ -206,9 +141,6 @@ public class KalixIniTextArea extends RSyntaxTextArea {
         }
     }
 
-    /**
-     * Registers this instance for global preference updates.
-     */
     private void registerInstance() {
         synchronized (instances) {
             instances.add(new WeakReference<>(this));
@@ -216,10 +148,9 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * Updates the syntax theme for all open KalixIniTextArea instances.
-     * Called when syntax theme preference changes.
+     * Updates syntax theme for all KalixIniTextArea instances.
      *
-     * @param theme The new syntax theme to apply
+     * @param theme the theme to apply
      */
     public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
         synchronized (instances) {
@@ -229,10 +160,8 @@ public class KalixIniTextArea extends RSyntaxTextArea {
                 KalixIniTextArea textArea = ref.get();
 
                 if (textArea == null) {
-                    // Instance has been garbage collected, remove the reference
                     iterator.remove();
                 } else {
-                    // Update the syntax theme
                     textArea.updateSyntaxTheme(theme);
                 }
             }
@@ -240,10 +169,9 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * Updates the font size for all open KalixIniTextArea instances.
-     * Called when font size preference changes.
+     * Updates font size for all KalixIniTextArea instances.
      *
-     * @param fontSize The new font size in points
+     * @param fontSize the new font size in points
      */
     public static void updateAllFontSizes(int fontSize) {
         synchronized (instances) {
@@ -253,10 +181,8 @@ public class KalixIniTextArea extends RSyntaxTextArea {
                 KalixIniTextArea textArea = ref.get();
 
                 if (textArea == null) {
-                    // Instance has been garbage collected, remove the reference
                     iterator.remove();
                 } else {
-                    // Update the font size
                     textArea.updateFontSize(fontSize);
                 }
             }
@@ -264,8 +190,8 @@ public class KalixIniTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * Updates theme-dependent colors for all open KalixIniTextArea instances.
-     * Called when the application theme changes (e.g., light to dark).
+     * Updates theme-dependent colors for all KalixIniTextArea instances.
+     * Called when the application theme changes.
      */
     public static void updateAllForThemeChange() {
         synchronized (instances) {
@@ -275,10 +201,8 @@ public class KalixIniTextArea extends RSyntaxTextArea {
                 KalixIniTextArea textArea = ref.get();
 
                 if (textArea == null) {
-                    // Instance has been garbage collected, remove the reference
                     iterator.remove();
                 } else {
-                    // Update current line highlight color based on new theme
                     textArea.updateCurrentLineHighlight();
                 }
             }
