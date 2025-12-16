@@ -1,0 +1,50 @@
+
+///////////////////////////////////////
+// Input data definitions
+
+
+//(0.4 * 31002fil.ppt) + (0.6 * 002fact.ppt)
+[Input]
+Name = rain
+File = rain_infilled.csv
+
+//
+[Input]
+Name = evap
+File = mpot_rolled.csv
+
+
+///////////////////////////////////////
+// Node definitions
+
+[Sacramento]
+Name = SacNode
+Area = 228
+Model = Sac1
+
+
+
+///////////////////////////////////////
+// Sacramento models
+
+[Sacramento model]
+Name = Sac1
+Rainfall = rain
+Evaporation = evap
+Parameters = +
+	0,		45,		60,		0.01, +
+	0.01,	150,	0,		0.11, +
+	1.5,	0,		0.2,	0.01, +
+	25,		0.2,	47,		15
+LagUH = 0.1
+
+
+
+///////////////////////////////////////
+// Recorders
+
+[Recorder]
+Node = SacNode
+OutNo = 0
+Filename = modelled_flow.csv
+

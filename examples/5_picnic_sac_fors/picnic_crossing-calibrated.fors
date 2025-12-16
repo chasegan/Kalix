@@ -1,0 +1,67 @@
+// fors model saved at 11/12/2024 14:22:01.802
+
+///////////////////////////////////////
+// input data definitions
+
+[input]
+name = rain
+file = rain_infilled.csv
+
+[input]
+name = evap
+file = mpot_rolled.csv
+
+///////////////////////////////////////
+// node definitions
+
+[sacramento]
+name = sacnode
+area = 228
+model = sac1
+
+///////////////////////////////////////
+// sacramento models
+
+[sacramento model]
+name = sac1
+rainfall = 1*rain
+evaporation = evap
+parameters = +
+    0.00521788541173927, 26.8871407829569, 101.542373921545, 0.000604140051244201, + //adimp, lzfpm, lzfsm, lzpk
+    0.00997049452510603, 157.797735661589, 1.34950582907432E-05, 0.100635515106315, + //lzsk, lztwm, pctim, pfree
+    1.34367117322741, 1.0953514182367E-06, 0.000426270108248247, 0.0202765800340453, + //rexp, sarva, side, ssout
+    25.0338307632002, 0.198822144204879, 47.0419221240657, 20.1322954251098 //uzfwm, uzk, uztwm, zperc
+uh = 0.899747446553511, 0.100252553446489
+
+///////////////////////////////////////
+// recorders
+
+[recorder]
+node = sacnode
+outno = 0
+filename = modelled_flow.csv
+
+[recorder]
+node = sacnode
+outno = 8
+filename = modelled_flow_flosf.csv
+
+[recorder]
+node = sacnode
+outno = 9
+filename = modelled_flow_floin.csv
+
+[recorder]
+node = sacnode
+outno = 10
+filename = modelled_flow_flobf.csv
+
+[recorder]
+node = sacnode
+outno = 13
+filename = modelled_flow_roimp.csv
+
+
+
+
+
