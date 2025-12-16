@@ -41,6 +41,12 @@ pub struct Sacramento {
     pub uztwm: f64,
     pub zperc: f64,
 
+    // Flow components (public)
+    pub roimp: f64,
+    pub flobf: f64,
+    pub floin: f64,
+    pub flosf: f64,
+
     // TODO: which of these can be moved into the functions?
     // Other internal vars
     adimc: f64,
@@ -50,9 +56,6 @@ pub struct Sacramento {
     alzfsm: f64,
     channelflow: f64,
     evapuzfw: f64,
-    flobf: f64,
-    floin: f64,
-    flosf: f64,
     flwbf: f64,
     flwsf: f64,
     lzfpc: f64,
@@ -217,6 +220,7 @@ impl Sacramento {
         self.lzfpc = 0f64;
         self.lzfsc = 0f64;
         self.lztwc = 0f64;
+        self.roimp = 0f64;
         self.flobf = 0f64;
         self.flosf = 0f64;
         self.floin = 0f64;
@@ -327,7 +331,8 @@ impl Sacramento {
         }
 
         // Runoff from the impervious or water covered area
-        let mut roimp = pliq * self.pctim;
+        //let mut roimp = pliq * self.pctim;
+        self.roimp = pliq * self.pctim;
 
         // Reduce the rain by the amount of upper zone tension water deficiency
         let mut pav = pliq + self.uztwc - self.uztwm;
@@ -481,7 +486,8 @@ impl Sacramento {
                     }
                 }
                 self.adimc += pinc - addro;
-                roimp += addro * self.adimp;
+                //roimp += addro * self.adimp;
+                self.roimp += addro * self.adimp;
             }
             adj = 1f64 - adj;
             pav = 0f64;
@@ -497,7 +503,7 @@ impl Sacramento {
         self.lzfpc = self.alzfpc * self.side_factor;
 
         // Adjust flow for unit hydrograph
-        self.flwsf = self.unit_hydrograph.run_step(self.floin + self.flosf + roimp);
+        self.flwsf = self.unit_hydrograph.run_step(self.floin + self.flosf + self.roimp);
 
         // Baseflow loss
         self.flwbf = self.flobf / (1f64 + self.side);

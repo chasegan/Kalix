@@ -107,7 +107,7 @@
 
     "sacramento": {
       "description": "Sacramento rainfall-runoff model",
-      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "rain", "evap"],
+      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "rain", "evap", "roimp", "flosf", "flobf", "floin"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
       "optional_params": [],
       "dsnode_params": ["ds_1"],

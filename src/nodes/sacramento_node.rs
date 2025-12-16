@@ -27,9 +27,14 @@ pub struct SacramentoNode {
     runoff_volume_megs: f64,
 
     // Recorders
+    recording_obscure_things: bool,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_rain_mm: Option<usize>,
     recorder_idx_evap_mm: Option<usize>,
+    recorder_idx_roimp: Option<usize>,
+    recorder_idx_flosf: Option<usize>,
+    recorder_idx_flobf: Option<usize>,
+    recorder_idx_floin: Option<usize>,
     recorder_idx_runoff_volume_megs: Option<usize>,
     recorder_idx_runoff_depth_mm: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
@@ -93,6 +98,18 @@ impl Node for SacramentoNode {
         self.recorder_idx_evap_mm = data_cache.get_series_idx(
             make_result_name(&self.name, "evap").as_str(), false
         );
+        self.recorder_idx_roimp = data_cache.get_series_idx(
+            make_result_name(&self.name, "roimp").as_str(), false
+        );
+        self.recorder_idx_flosf = data_cache.get_series_idx(
+            make_result_name(&self.name, "flosf").as_str(), false
+        );
+        self.recorder_idx_flobf = data_cache.get_series_idx(
+            make_result_name(&self.name, "flobf").as_str(), false
+        );
+        self.recorder_idx_floin = data_cache.get_series_idx(
+            make_result_name(&self.name, "floin").as_str(), false
+        );
         self.recorder_idx_runoff_volume_megs = data_cache.get_series_idx(
             make_result_name(&self.name, "runoff_volume").as_str(), false
         );
@@ -105,6 +122,17 @@ impl Node for SacramentoNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+
+        // Just doing this so I can skip checking all these each timestep (unless they are needed)
+        // TODO: test whether this optimisation is measurable. I suspect I'm being totally crazy!
+        self.recording_obscure_things =
+            self.recorder_idx_roimp.is_some() ||
+            self.recorder_idx_flosf.is_some() ||
+            self.recorder_idx_flobf.is_some() ||
+            self.recorder_idx_floin.is_some() ||
+            self.recorder_idx_runoff_volume_megs.is_some() ||
+            self.recorder_idx_runoff_depth_mm.is_some() ||
+            self.recorder_idx_evap_mm.is_some();
 
         //Return
         Ok(())
@@ -134,14 +162,28 @@ impl Node for SacramentoNode {
         if let Some(idx) = self.recorder_idx_rain_mm {
             data_cache.add_value_at_index(idx, self.rain);
         }
-        if let Some(idx) = self.recorder_idx_evap_mm {
-            data_cache.add_value_at_index(idx, self.pet);
-        }
-        if let Some(idx) = self.recorder_idx_runoff_volume_megs {
-            data_cache.add_value_at_index(idx, self.runoff_volume_megs);
-        }
-        if let Some(idx) = self.recorder_idx_runoff_depth_mm {
-            data_cache.add_value_at_index(idx, self.runoff_depth_mm);
+        if self.recording_obscure_things {
+            if let Some(idx) = self.recorder_idx_evap_mm {
+                data_cache.add_value_at_index(idx, self.pet);
+            }
+            if let Some(idx) = self.recorder_idx_roimp {
+                data_cache.add_value_at_index(idx, self.sacramento_model.roimp * self.area_km2);
+            }
+            if let Some(idx) = self.recorder_idx_flosf {
+                data_cache.add_value_at_index(idx, self.sacramento_model.flosf * self.area_km2);
+            }
+            if let Some(idx) = self.recorder_idx_floin {
+                data_cache.add_value_at_index(idx, self.sacramento_model.floin * self.area_km2);
+            }
+            if let Some(idx) = self.recorder_idx_flobf {
+                data_cache.add_value_at_index(idx, self.sacramento_model.flobf * self.area_km2);
+            }
+            if let Some(idx) = self.recorder_idx_runoff_volume_megs {
+                data_cache.add_value_at_index(idx, self.runoff_volume_megs);
+            }
+            if let Some(idx) = self.recorder_idx_runoff_depth_mm {
+                data_cache.add_value_at_index(idx, self.runoff_depth_mm);
+            }
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
