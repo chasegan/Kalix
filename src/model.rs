@@ -37,8 +37,8 @@ pub struct Model {
     // (topologically sorted using Kahn's Algorithm)
     pub execution_order: Vec<usize>,
 
-    // Fast node name lookup
-    pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name] = node index
+    // Fast node name lookup (keys are lowercase for case-insensitive matching)
+    pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index
 
     // INI document for round-trip serialization
     pub ini_document: Option<IniDocument>,
@@ -65,7 +65,7 @@ impl Model {
         self.nodes.push(node);
         self.outgoing_links.push(Vec::new());
         self.incoming_links.push(Vec::new());
-        self.node_lookup.insert(name.clone(), idx);
+        self.node_lookup.insert(name.to_lowercase(), idx);
 
         idx
     }
@@ -82,9 +82,9 @@ impl Model {
         link_idx
     }
 
-    /// Gets a node index by name
+    /// Gets a node index by name (case-insensitive)
     pub fn get_node_idx(&self, name: &str) -> Option<usize> {
-        self.node_lookup.get(name).copied()
+        self.node_lookup.get(&name.to_lowercase()).copied()
     }
 
 

@@ -487,11 +487,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // Create all the links
     // -------------------------------------------------------------------------------------
     for link_helper in vec_link_defs {
-        let from_node_idx = model.node_lookup.get(&link_helper.from_node_name)
+        let from_node_idx = model.get_node_idx(&link_helper.from_node_name)
             .ok_or(format!("Node '{}' not found", link_helper.from_node_name))?;
-        let to_node_idx = model.node_lookup.get(&link_helper.to_node_name)
+        let to_node_idx = model.get_node_idx(&link_helper.to_node_name)
             .ok_or(format!("Node '{}' not found", link_helper.to_node_name))?;
-        model.add_link(*from_node_idx, *to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
+        model.add_link(from_node_idx, to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
     }
 
     // -------------------------------------------------------------------------------------
