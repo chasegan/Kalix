@@ -37,6 +37,7 @@ import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalLauncher;
+import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
@@ -1570,6 +1571,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @param args command line arguments (not used)
      */
     public static void main(String[] args) {
+        // Initialize Windows-specific integration (AppUserModelID for taskbar pinning)
+        // Must be called early, before any UI is created
+        WindowsIntegration.initialize();
+
         // Configure system properties for better macOS integration
         ThemeManager.configureSystemProperties();
 

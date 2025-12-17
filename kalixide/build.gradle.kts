@@ -39,6 +39,10 @@ dependencies {
     // Diff utilities for model comparison
     implementation("io.github.java-diff-utils:java-diff-utils:4.12")
 
+    // JNA for Windows native API calls (AppUserModelID for taskbar pinning)
+    implementation("net.java.dev.jna:jna:5.14.0")
+    implementation("net.java.dev.jna:jna-platform:5.14.0")
+
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
@@ -78,11 +82,18 @@ runtime {
         jpackageHome = System.getProperty("java.home")
         imageName = "KalixIDE"
 
+        // Use .ico on Windows, .png on other platforms
+        val iconFile = if (System.getProperty("os.name").lowercase().contains("win")) {
+            file("src/main/resources/icons/kalix.ico")
+        } else {
+            file("src/main/resources/icons/kalix-256.png")
+        }
+
         imageOptions = listOf(
             "--app-version", kalixVersion,
             "--vendor", "Kalix",
             "--copyright", "Copyright 2024-2025 Kalix",
-            "--icon", file("src/main/resources/icons/kalix-256.png").absolutePath
+            "--icon", iconFile.absolutePath
         )
 
         installerOptions = listOf(
