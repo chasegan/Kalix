@@ -166,6 +166,21 @@ impl DifferentialEvolution {
         let mut best_params = population[best_idx].clone();
         let mut objective_history = vec![best_objective];
 
+        // Check if all initial evaluations failed
+        if best_objective.is_infinite() {
+            return DEResult {
+                best_params,
+                best_objective,
+                generations: 0,
+                n_evaluations,
+                objective_history,
+                success: false,
+                message: "Optimization failed: all initial evaluations failed. \
+                         Check model configuration (node names, parameter targets, input data).".to_string(),
+                elapsed: start_time.elapsed(),
+            };
+        }
+
         // Main DE loop - terminate based on evaluations
         let mut generation = 0;
         while n_evaluations < self.config.termination_evaluations {

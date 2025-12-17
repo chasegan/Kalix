@@ -143,6 +143,20 @@ impl Sce {
         let mut best_params = population[0].params.clone();
         let mut best_objective = population[0].objective;
 
+        // Check if all initial evaluations failed
+        if best_objective.is_infinite() {
+            return OptimizationResult {
+                best_params,
+                best_objective,
+                n_evaluations,
+                success: false,
+                message: "Optimization failed: all initial evaluations failed. \
+                         Check model configuration (node names, parameter targets, input data).".to_string(),
+                elapsed: start_time.elapsed(),
+                algorithm_data: HashMap::new(),
+            };
+        }
+
         // Report initial population
         if let Some(ref callback) = self.config.progress_callback {
             let progress = OptimizationProgress {
