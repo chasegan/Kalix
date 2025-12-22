@@ -1,0 +1,24 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 6
+  Timesteps: 48824
+  Stepsize (s): 86400
+  Period: 1889-01-01T00:00:00.000Z, 2022-09-04T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  node1_inflow, 126.79567788251778
+  node2_inflow, 126.79567788251778
+
+STORAGE NODES
+  node4_storage, -47.496241292963184
+  node5_storage, -48.75478997257081
+
+BLACKHOLE NODES
+  node12_blackhole, -79.299436589554
+  node13_blackhole, -78.04088790994551
+
+----------------------------------
+TOTAL = 0.0000000000020605739337042905
+----------------------------------
