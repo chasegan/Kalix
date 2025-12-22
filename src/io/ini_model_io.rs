@@ -129,19 +129,30 @@ impl IniModelIO {
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
     pub fn ini_doc_to_model_with_working_directory(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
-        let ini_format_version = ini_doc.get_property("kalix", "version")
-            .unwrap_or(&"input-did-not-specify-format-version".to_string())
+
+        // Read kalix software version and model ini version
+        let software_version = env!("KALIX_VERSION");
+        let ini_version = ini_doc.get_property("kalix", "version")
+            .unwrap_or(&"no-version".to_string())
             .to_string();
 
         // Use appropriate interpreter for given ini format version
-        match ini_format_version.as_str() {
-            "0.0.1" => {
-                ini_doc_to_model_0_0_1(ini_doc, working_directory)
-            }
-            _ => {
-                Err(format!("Unsupported model version: {}", ini_format_version))
-            }
+        if (ini_version == software_version) ||
+            (ini_version == "no-version") {
+            // Use main reader function
+            ini_doc_to_model_0_0_1(ini_doc, working_directory)
+        } else {
+            // Abort with error message
+            Err(format!("Wrong version! Kalix version = {}, but model specifies version = {}.", software_version, ini_version))
         }
+
+        // match ini_format_version.as_str() {
+        //     "0.0.1" => {
+        //         ini_doc_to_model_0_0_1(ini_doc, working_directory)
+        //     }
+        //     _ => {
+        //     }
+        // }
     }
 
 

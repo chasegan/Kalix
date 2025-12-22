@@ -180,7 +180,6 @@ fn test_full_model_round_trip() {
     // 4. Reload and verify changes
 
     let original_ini = r#"[kalix]
-version = 0.0.1
 
 [inputs]
 ./src/tests/example_models/1/rex_rain.csv
@@ -251,7 +250,6 @@ fn test_save_and_reload_from_file() {
     use std::path::Path;
 
     let original_ini = r#"[kalix]
-version = 0.0.1
 
 [inputs]
 ./example_models/1/rex_rain.csv
