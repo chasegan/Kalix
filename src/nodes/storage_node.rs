@@ -40,6 +40,9 @@ pub struct StorageNode {
     pond_diversion: f64, //pond diversion
     spill: f64,
 
+    // Cached state for search optimization
+    previous_istop: usize,  // Remember previous solution row for warm start
+
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
@@ -95,6 +98,7 @@ impl Node for StorageNode {
         self.seep_vol = 0.0;
         self.pond_diversion = 0.0;
         self.spill = 0.0;
+        self.previous_istop = 0;  // Will be updated after first timestep
 
         //Initialize inflow series
         // All DynamicInput fields are already initialized during parsing
@@ -182,44 +186,88 @@ impl Node for StorageNode {
         // The solution is likely to be between the table rows. The strategy is
         // therefore to (1) find which rows bound the solution (2) interpolate
         // between those rows.
-        let mut error_prev = 0_f64;
-        let mut error_i = 0_f64;
-        let mut istop = 0;
-        for i in 0..self.d.nrows() {
-            istop = i; //why cant I just remember i?
+        //
+        // We use exponential expansion from the previous timestep's solution,
+        // followed by bisection. This gives O(log k) complexity where k is the
+        // number of rows moved since last timestep (typically 1-3).
 
-            //TODO: this is the stupid version that iterates through every i... change it to bisection.
-
-            // The predicted volume at any row 'i' in the table is given by:
-            // (remembering that self.v already accounts for inflows and diversions)
-            // 1mm * 1km2 = 1ML
+        // Helper to compute error at a given row
+        // Error = table_volume - predicted_volume
+        // Positive error means solution is at or below this row
+        // Negative error means solution is above this row
+        let compute_error = |i: usize| -> f64 {
             let predicted_volume = self.v +
                 net_rain_mm * self.d.get_value(i, AREA) - self.d.get_value(i, SPIL);
+            self.d.get_value(i, VOLU) - predicted_volume
+        };
 
-            // The row declares the final volume is = self.d.get_value(i, VOLU)
-            // therefore the error associated with that row is:
-            error_prev = error_i;
-            error_i = self.d.get_value(i, VOLU) - predicted_volume;
+        let nrows = self.d.nrows();
+        let mut lo: usize;
+        let mut hi: usize;
 
-            // A positive error means that the solution is somewhere before row i.
-            if error_i >= 0_f64 { break }
-        }
-        if error_i < 0_f64 {
-            // All error values are negative. This means that the volume went off the top of the table.
-            //TODO: add some functionality to extrapolate using the previous two rows
-            panic!("Error in storage node. Modelled volume exceeds the storage dimension table.")
-        }
-        if istop == 0 {
-            if error_i < -EPSILON {
-                panic!("Error in storage node. Negative error at row 0. How can this be?");
+        // Start from previous solution (clamped to valid range)
+        let start = self.previous_istop.min(nrows - 1);
+        let error_start = compute_error(start);
+
+        if error_start < 0.0 {
+            // Solution is ABOVE start - expand upward exponentially
+            lo = start;
+            let mut step = 1;
+            hi = (start + step).min(nrows - 1);
+
+            while compute_error(hi) < 0.0 && hi < nrows - 1 {
+                lo = hi;
+                step *= 2;
+                hi = (hi + step).min(nrows - 1);
             }
+        } else {
+            // Solution is AT or BELOW start - expand downward exponentially
+            hi = start;
+            let mut step = 1;
+            lo = start.saturating_sub(step);
 
-            // The solution is equal to row 0. I think we can just update the error
-            // values and i, and interpolate between row 0 and 1.
-            istop = 1;
-            error_prev = 0_f64;
-            error_i = 1_f64; //any positive value should work here
+            while compute_error(lo) >= 0.0 && lo > 0 {
+                hi = lo;
+                step *= 2;
+                lo = lo.saturating_sub(step);
+            }
         }
+
+        // Bisect between lo and hi to find exact bracket
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if compute_error(mid) < 0.0 {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+
+        // hi is now istop (first row where error >= 0)
+        // lo is istop - 1 (last row where error < 0), unless solution is at row 0
+        let istop = hi;
+        let error_i = compute_error(istop);
+        let error_prev = if istop > 0 { compute_error(istop - 1) } else { 0.0 };
+
+        // Remember for next timestep
+        self.previous_istop = istop;
+
+        // Check for off-the-table condition
+        if error_i < 0.0 {
+            // All error values are negative. Volume exceeds the table.
+            panic!("Error in storage node '{}'. Modelled volume exceeds the storage dimension table.", self.name);
+        }
+
+        // Handle solution at row 0
+        let (istop, error_prev, error_i) = if istop == 0 {
+            if error_i < -EPSILON {
+                panic!("Error in storage node '{}'. Negative error at row 0.", self.name);
+            }
+            // Solution is at or below row 0 - interpolate between row 0 and 1
+            (1, 0.0_f64, 1.0_f64)
+        } else {
+            (istop, error_prev, error_i)
+        };
         // Now interpolate between row i and i-1
 
         // Volume
