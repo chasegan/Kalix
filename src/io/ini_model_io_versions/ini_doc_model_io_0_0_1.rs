@@ -400,7 +400,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.seep_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "pond_demand" {
-                            n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.pond_demand_input = DynamicInput::from_string(v, &mut model.data_cache, true)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "dimensions" {
                             n.d = Table::from_csv_string(v, 4, false)
@@ -609,7 +609,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.demand_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());

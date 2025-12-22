@@ -396,7 +396,7 @@ fn test_create_and_run_model_with_storage_node() {
 
     st1.initialise(&mut data_cache).expect("Initialisation error");
     println!("Initial vol = {}", st1.v_initial);
-    println!("Area 0 = {}", st1.area0);
+    println!("Area 0 = {}", st1.area0_km2);
 
     let _spill = Timeseries::new_daily();
     let _volume = Timeseries::new_daily();

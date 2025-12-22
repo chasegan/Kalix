@@ -17,14 +17,14 @@ pub struct StorageNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub d: Table,       // Level m, Volume ML, Area ha, Spill ML
+    pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
     pub v: f64,
     pub v_initial: f64,
-    pub area0: f64,
+    pub area0_km2: f64, // Dead storage area interpolated from 'd' table during node initialisation
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub seep_mm_input: DynamicInput,
-    pub demand_input: DynamicInput,
+    pub pond_demand_input: DynamicInput,
 
     // Internal state only
     usflow: f64,
@@ -37,7 +37,7 @@ pub struct StorageNode {
     rain_vol: f64,
     evap_vol: f64,
     seep_vol: f64,
-    diversion: f64,
+    pond_diversion: f64, //pond diversion
     spill: f64,
 
     // Recorders
@@ -48,6 +48,7 @@ pub struct StorageNode {
     recorder_idx_seep: Option<usize>,
     recorder_idx_evap: Option<usize>,
     recorder_idx_rain: Option<usize>,
+    recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
@@ -62,7 +63,6 @@ impl StorageNode {
         Self {
             name: "".to_string(),
             d: Table::new(4),
-            area0: -1.0,
             ..Default::default()
         }
     }
@@ -72,7 +72,6 @@ impl StorageNode {
         Self {
             name: name.to_string(),
             d: Table::new(4),
-            area0: -1.0,
             ..Default::default()
         }
     }
@@ -94,7 +93,7 @@ impl Node for StorageNode {
         self.rain_vol = 0.0;
         self.evap_vol = 0.0;
         self.seep_vol = 0.0;
-        self.diversion = 0.0;
+        self.pond_diversion = 0.0;
         self.spill = 0.0;
 
         //Initialize inflow series
@@ -107,7 +106,7 @@ impl Node for StorageNode {
         }
 
         // Initial values and pre-calculations
-        self.area0 = self.d.interpolate(VOLU, AREA, 0_f64);
+        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0_f64); // Area at dead storage
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -130,6 +129,9 @@ impl Node for StorageNode {
         );
         self.recorder_idx_evap = data_cache.get_series_idx(
             make_result_name(&self.name, "evap").as_str(), false
+        );
+        self.recorder_idx_pond_diversion = data_cache.get_series_idx(
+            make_result_name(&self.name, "pond_diversion").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -158,7 +160,7 @@ impl Node for StorageNode {
         let rain_mm = self.rain_mm_input.get_value(data_cache);
         let evap_mm = self.evap_mm_input.get_value(data_cache);
         let seep_mm = self.seep_mm_input.get_value(data_cache);
-        let demand = self.demand_input.get_value(data_cache);
+        let pond_demand = self.pond_demand_input.get_value(data_cache);
 
         // TODO: Spill is zero when the volume is zero. MAKE THIS A REQUIREMENT of the storage
         //  table for consistency with the results. Also the table must start with volume = 0.
@@ -168,10 +170,10 @@ impl Node for StorageNode {
         // diversion could be.
         self.v += self.usflow;
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
-        let net_rain_at_dead_storage = 0.01 * self.area0 * net_rain_mm;
+        let net_rain_at_dead_storage = self.area0_km2 * net_rain_mm;
         let max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
-        self.diversion = demand.min(max_diversion);
-        self.v -= self.diversion;
+        self.pond_diversion = pond_demand.min(max_diversion);
+        self.v -= self.pond_diversion; //potentially negative here but must come good later //TODO: is there anything wrong with doing this here? I dont think I've checked
 
         // Now we just need to solve backward euler on the dimension table 'd'
         // to find the actual final solution (including net rainfall and spill
@@ -299,6 +301,9 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_evap {
             data_cache.add_value_at_index(idx, self.evap_vol);
+        }
+        if let Some(idx) = self.recorder_idx_pond_diversion {
+            data_cache.add_value_at_index(idx, self.pond_diversion);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
