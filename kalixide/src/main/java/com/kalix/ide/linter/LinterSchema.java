@@ -6,6 +6,7 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
+import com.kalix.ide.linter.schema.SectionDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +30,7 @@ public class LinterSchema {
     private final Map<String, ValidationRule> validationRules = new HashMap<>();
     private final Map<String, NodeTypeDefinition> nodeTypes = new HashMap<>();
     private final Map<String, DataType> dataTypes = new HashMap<>();
+    private final Map<String, SectionDefinition> sections = new HashMap<>();
     private String version;
 
     /**
@@ -76,6 +78,9 @@ public class LinterSchema {
         // Parse version
         version = schemaRoot.path("version").asText("unknown");
 
+        // Parse sections
+        parseSections();
+
         // Parse validation rules
         parseValidationRules();
 
@@ -83,7 +88,46 @@ public class LinterSchema {
         parseNodeTypes();
 
         // Parse data types
-        parseDataTypes();    }
+        parseDataTypes();
+    }
+
+    private void parseSections() {
+        JsonNode sectionsNode = schemaRoot.path("sections");
+        if (sectionsNode.isMissingNode()) return;
+
+        Iterator<Map.Entry<String, JsonNode>> fields = sectionsNode.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String sectionName = entry.getKey();
+            JsonNode sectionNode = entry.getValue();
+
+            SectionDefinition section = new SectionDefinition();
+            section.name = sectionName;
+            section.required = sectionNode.path("required").asBoolean(false);
+            section.validation = sectionNode.path("validation").asText(null);
+
+            // Parse properties
+            JsonNode propertiesNode = sectionNode.path("properties");
+            if (propertiesNode.isObject()) {
+                Iterator<Map.Entry<String, JsonNode>> propFields = propertiesNode.fields();
+                while (propFields.hasNext()) {
+                    Map.Entry<String, JsonNode> propEntry = propFields.next();
+                    String propName = propEntry.getKey();
+                    JsonNode propNode = propEntry.getValue();
+
+                    SectionDefinition.PropertyDefinition prop = new SectionDefinition.PropertyDefinition();
+                    prop.name = propName;
+                    prop.required = propNode.path("required").asBoolean(false);
+                    prop.type = propNode.path("type").asText(null);
+                    prop.pattern = propNode.path("pattern").asText(null);
+
+                    section.properties.put(propName, prop);
+                }
+            }
+
+            sections.put(sectionName, section);
+        }
+    }
 
     private void parseValidationRules() {
         JsonNode rulesNode = schemaRoot.path("validation_rules");
@@ -225,10 +269,12 @@ public class LinterSchema {
     public Map<String, ValidationRule> getValidationRules() { return new HashMap<>(validationRules); }
     public Map<String, NodeTypeDefinition> getNodeTypes() { return new HashMap<>(nodeTypes); }
     public Map<String, DataType> getDataTypes() { return new HashMap<>(dataTypes); }
+    public Map<String, SectionDefinition> getSections() { return new HashMap<>(sections); }
 
     public ValidationRule getValidationRule(String name) { return validationRules.get(name); }
     public NodeTypeDefinition getNodeType(String name) { return nodeTypes.get(name); }
     public DataType getDataType(String name) { return dataTypes.get(name); }
+    public SectionDefinition getSection(String name) { return sections.get(name); }
 
     /**
      * Get the default schema JSON content as a string.

@@ -4,56 +4,79 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.linter.schema.SectionDefinition;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
-import java.util.Set;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * Validates required sections and basic section structure.
+ * Validates required sections and section properties based on schema definitions.
  */
 public class SectionValidator implements ValidationStrategy {
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
-        validateRequiredSections(model, result);
-        validateKalixSection(model, result);
+        validateSections(model, schema, result);
     }
 
     @Override
     public String getDescription() {
-        return "Required sections and kalix section validation";
+        return "Section and property validation based on schema";
     }
 
-    private void validateRequiredSections(INIModelParser.ParsedModel model, ValidationResult result) {
-        Set<String> requiredSections = Set.of("kalix", "outputs");
+    private void validateSections(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+        Map<String, SectionDefinition> sectionDefs = schema.getSections();
 
-        for (String sectionName : requiredSections) {
-            if (!model.getSections().containsKey(sectionName)) {
-                result.addIssue(1, "Missing required section: [" + sectionName + "]",
+        for (SectionDefinition sectionDef : sectionDefs.values()) {
+            INIModelParser.Section modelSection = model.getSections().get(sectionDef.name);
+
+            // Check if required section is missing
+            if (sectionDef.required && modelSection == null) {
+                result.addIssue(1, "Missing required section: [" + sectionDef.name + "]",
                               ValidationRule.Severity.ERROR, "missing_section");
+                continue;
+            }
+
+            // If section exists, validate its properties
+            if (modelSection != null) {
+                validateSectionProperties(modelSection, sectionDef, result);
             }
         }
     }
 
-    private void validateKalixSection(INIModelParser.ParsedModel model, ValidationResult result) {
-        INIModelParser.Section kalixSection = model.getSections().get("kalix");
-        if (kalixSection != null) {
-            validateVersion(kalixSection, result);
-        }
-    }
+    private void validateSectionProperties(INIModelParser.Section modelSection,
+                                           SectionDefinition sectionDef,
+                                           ValidationResult result) {
+        for (SectionDefinition.PropertyDefinition propDef : sectionDef.properties.values()) {
+            INIModelParser.Property modelProp = modelSection.getProperties().get(propDef.name);
 
-    private void validateVersion(INIModelParser.Section kalixSection, ValidationResult result) {
-        INIModelParser.Property versionProp = kalixSection.getProperties().get("version");
-        if (versionProp == null) {
-            result.addIssue(kalixSection.getStartLine() + 1,
-                          "Missing required property: version",
-                          ValidationRule.Severity.ERROR, "missing_version");
-        } else {
-            String version = versionProp.getValue();
-            if (!ValidationUtils.isValidIniVersion(version)) {
-                result.addIssue(versionProp.getLineNumber(),
-                              "Invalid version format. Expected: X.Y.Z",
-                              ValidationRule.Severity.ERROR, "invalid_version");
+            // Check if required property is missing
+            if (propDef.required && modelProp == null) {
+                result.addIssue(modelSection.getStartLine() + 1,
+                              "Missing required property: " + propDef.name,
+                              ValidationRule.Severity.ERROR, "missing_property_" + propDef.name);
+                continue;
+            }
+
+            // If property exists, validate its format
+            if (modelProp != null && propDef.pattern != null) {
+                String value = modelProp.getValue();
+                if (!Pattern.matches(propDef.pattern, value)) {
+                    result.addIssue(modelProp.getLineNumber(),
+                                  "Invalid " + propDef.name + " format",
+                                  ValidationRule.Severity.ERROR, "invalid_" + propDef.name);
+                }
+            }
+
+            // Special validation for version type
+            if (modelProp != null && "version".equals(propDef.type)) {
+                String value = modelProp.getValue();
+                if (!ValidationUtils.isValidIniVersion(value)) {
+                    result.addIssue(modelProp.getLineNumber(),
+                                  "Invalid version format. Expected: X.Y.Z",
+                                  ValidationRule.Severity.ERROR, "invalid_version");
+                }
             }
         }
     }

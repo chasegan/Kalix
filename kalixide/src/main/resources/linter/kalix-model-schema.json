@@ -5,7 +5,7 @@
       "required": true,
       "properties": {
         "version": {
-          "required": true,
+          "required": false,
           "type": "version",
           "pattern": "^\\d+\\.\\d+\\.\\d+$"
         }
@@ -184,10 +184,10 @@
 
     "storage": {
       "description": "Storage node for water storage modeling",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "evap", "rain", "seep", "level", "area"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "evap", "rain", "seep", "level", "area", "pond_diversion"],
       "required_params": ["type", "loc"],
       "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand"],
-      "dsnode_params": ["ds_1", "ds_2"],
+      "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
       "parameters": {
         "type": {
           "type": "literal",
