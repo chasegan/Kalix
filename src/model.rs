@@ -6,6 +6,7 @@ use crate::data_management::data_cache::DataCache;
 use crate::io::csv_io::{write_ts};
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
+use crate::misc::execution_order_method::ExecutionOrderMethod;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
@@ -34,7 +35,7 @@ pub struct Model {
     pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
 
     // Pre-computed execution order
-    // (topologically sorted using Kahn's Algorithm)
+    pub execution_order_method : ExecutionOrderMethod,
     pub execution_order: Vec<usize>,
 
     // Fast node name lookup (keys are lowercase for case-insensitive matching)
@@ -52,6 +53,7 @@ impl Model {
             inputs: vec![],
             input_file_paths: vec![],
             outputs: vec![],
+            execution_order_method : ExecutionOrderMethod::default(),
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             ..Default::default()
         }
@@ -482,51 +484,88 @@ impl Model {
     }
 
 
-    /// Determine execution order using Kahn's algorithm (O(V+E) complexity)
+    /// Determine execution order
     fn determine_execution_order(&mut self) -> Result<(), String> {
-        let num_nodes = self.nodes.len();
-        let mut in_degree = vec![0; num_nodes];
 
-        // Calculate in-degrees for all nodes
-        for link in &self.links {
-            in_degree[link.to_node] += 1;
-        }
+        match self.execution_order_method {
+            ExecutionOrderMethod::Manual => {
+                //============================================================================
+                // Method 1 (DEFAULT): manual execution order based on node definition order
+                //============================================================================
 
-        // Initialize queue with nodes that have no incoming edges
-        let mut queue: VecDeque<usize> = in_degree
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, &degree)| if degree == 0 { Some(idx) } else { None })
-            .collect();
+                // Execution order according to node index
+                self.execution_order.clear();
+                for node_idx in 0..self.nodes.len() {
+                    self.execution_order.push(node_idx);
+                }
 
-        self.execution_order.clear();
+                // Check execution order is consistent with flow phase using link info:
+                // The node below each link must have a higher index than the node above the link
+                for link in &self.links {
+                    //println!("{} -> {}", link.from_node, link.to_node);
+                    if link.from_node >= link.to_node {
+                        let from_name = self.nodes[link.from_node].get_name();
+                        let to_name = self.nodes[link.to_node].get_name();
+                        return Err(format!(
+                            "Node '{}' must be defined before '{}'",
+                            from_name, to_name
+                        ));
+                    }
+                }
 
-        // Process nodes in topological order
-        while let Some(node_idx) = queue.pop_front() {
-            self.execution_order.push(node_idx);
+                // Done
+                Ok(())
+            }
+            ExecutionOrderMethod::Auto => {
+                //============================================================================
+                // Method 2: topologically sorted using Kahn's Algorithm
+                //============================================================================
 
-            // Reduce in-degree for all downstream nodes
-            for &link_idx in &self.outgoing_links[node_idx] {
-                let to_node = self.links[link_idx].to_node;
-                in_degree[to_node] -= 1;
+                let num_nodes = self.nodes.len();
+                let mut in_degree = vec![0; num_nodes];
 
-                if in_degree[to_node] == 0 {
-                    queue.push_back(to_node);
+                // Calculate in-degrees for all nodes
+                for link in &self.links {
+                    in_degree[link.to_node] += 1;
+                }
+
+                // Initialize queue with nodes that have no incoming edges
+                let mut queue: VecDeque<usize> = in_degree
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, &degree)| if degree == 0 { Some(idx) } else { None })
+                    .collect();
+
+                self.execution_order.clear();
+
+                // Process nodes in topological order
+                while let Some(node_idx) = queue.pop_front() {
+                    self.execution_order.push(node_idx);
+
+                    // Reduce in-degree for all downstream nodes
+                    for &link_idx in &self.outgoing_links[node_idx] {
+                        let to_node = self.links[link_idx].to_node;
+                        in_degree[to_node] -= 1;
+
+                        if in_degree[to_node] == 0 {
+                            queue.push_back(to_node);
+                        }
+                    }
+                }
+
+                // Check the results
+                if self.execution_order.len() != num_nodes {
+                    // This happens when the model is cyclic
+                    Err("Closed cycle detected in the model network!".to_string())
+                } else {
+                    Ok(())
                 }
             }
-        }
-
-        // Check the results
-        if self.execution_order.len() != num_nodes {
-            // This happens when the model is cyclic
-            Err("Closed cycle detected in the model network!".to_string())
-        } else {
-            Ok(())
         }
     }
 
     // Initialize all the nodes
-    // TODO: Keep in mind this is done in order of definition. Hopefully order will never matter.
+    // TODO: Keep in mind this is done in order of definition. Maybe I should change this to execution order
     fn initialize_nodes(&mut self) -> Result<(), String> {
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache)?
