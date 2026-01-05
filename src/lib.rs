@@ -15,3 +15,4 @@ pub mod timeseries;
 pub mod timeseries_input;
 pub mod data_management;
 pub mod terminal_plot;
+pub mod ordering;

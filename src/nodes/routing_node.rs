@@ -3,6 +3,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
+use crate::numerical::interpolation::lerp;
 
 #[derive(Default, Clone)]
 pub struct RoutingNode {
@@ -108,6 +109,16 @@ impl RoutingNode {
             self.pwl_qq[i] = index_flows[i];
             self.pwl_tt[i] = travel_times[i];
         }
+    }
+
+    /// Estimates the total lag at a given flow rate. This is the sum of the pure lag
+    /// and the storage routing lag.
+    pub fn estimate_total_lag(&self, flow_rate: f64) -> f64 {
+        let n = self.pwl_segs + 1;
+        let storage_lag = 0f64.max(lerp(&self.pwl_qq[..n],
+                                        &self.pwl_tt[..n], flow_rate));
+        let pure_lag = self.lag as f64;
+        storage_lag + pure_lag
     }
 
     /// Calculate the node storage by adding up all water volumes in the
