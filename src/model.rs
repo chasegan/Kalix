@@ -7,6 +7,7 @@ use crate::io::csv_io::{write_ts};
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
 use crate::misc::execution_order_method::ExecutionOrderMethod;
+use crate::ordering::simple_ordering::SimpleOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
@@ -37,6 +38,9 @@ pub struct Model {
     // Pre-computed execution order
     pub execution_order_method : ExecutionOrderMethod,
     pub execution_order: Vec<usize>,
+
+    // Ordering system
+    pub simple_ordering_system: SimpleOrderingSystem,
 
     // Fast node name lookup (keys are lowercase for case-insensitive matching)
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index
@@ -426,6 +430,13 @@ impl Model {
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
         self.determine_execution_order()?;
+        // TODO: why am I doing the execution order here in "initialize_network"? Cant we just do this once during configure?
+
+        // Initialise the ordering system
+        // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
+        self.simple_ordering_system.initialize(
+            &self.nodes, &self.links, &self.incoming_links
+        );
 
         // Return
         Ok(())

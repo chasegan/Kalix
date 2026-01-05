@@ -22,8 +22,10 @@
 // 4) T
 //
 
-use crate::nodes::{Link, NodeEnum};
+use std::fmt::format;
+use crate::nodes::{Link, Node, NodeEnum};
 
+#[derive(Clone, Default)]
 pub struct SimpleOrderingSystem {
     // "link_branch_info" contains, for each link, the regulated branch number (option), and
     // the lag from top of branch to current link. These are in the same order as "links".
@@ -37,21 +39,20 @@ impl SimpleOrderingSystem {
         }
     }
 
-    pub fn initialize(mut self,
+    pub fn initialize(&mut self,
                       nodes: &Vec<NodeEnum>,
                       links: &Vec<Link>,
-                      outgoing_links: &Vec<Vec<usize>>,
-                      incoming_links: &Vec<Vec<usize>>,
-                      execution_order: &Vec<usize>) {
+                      incoming_links: &Vec<Vec<usize>>) -> () {
 
         // Start clean
         self.link_branch_info.clear();
         let mut branch_counter = 0;
 
         // For each link, I want to know what regulated_branch it is in, and what the lag is to that point.
-        let mut link_idx = 0;
+        //let mut link_idx = 0;
         for link in links {
             let us_node_idx = link.from_node;
+            let ds_node_idx = link.to_node;
 
             let mut option_branch_idx = None;
             let mut lag = 0f64;
@@ -97,7 +98,14 @@ impl SimpleOrderingSystem {
 
             //Add the branch info for this link and move to the next link
             self.link_branch_info.push((option_branch_idx, lag));
-            link_idx += 1;
+
+            //  !!DEBUG CODE
+            // {
+            //     let us_node_name= nodes[us_node_idx].get_name();
+            //     let ds_node_name = nodes[ds_node_idx].get_name();
+            //     let link_idx = option_branch_idx.unwrap_or(9999);
+            //     println!("{}, {}, {}", us_node_name, ds_node_name, lag);
+            // }
         }
     }
 
