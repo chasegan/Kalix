@@ -23,12 +23,9 @@
 //
 
 use crate::nodes::{Link, NodeEnum};
-use crate::numerical::fifo_buffer::FifoBuffer;
 
 pub struct SimpleOrderingSystem {
-    // regulated_branches: Vec<RegulatedBranch>,
-
-    // "link_branch_info" contains, for each link, the regulated branch idx (option), and
+    // "link_branch_info" contains, for each link, the regulated branch number (option), and
     // the lag from top of branch to current link. These are in the same order as "links".
     link_branch_info: Vec<(Option<usize>, f64)>,
 }
@@ -36,7 +33,6 @@ pub struct SimpleOrderingSystem {
 impl SimpleOrderingSystem {
     pub fn new() -> SimpleOrderingSystem {
         SimpleOrderingSystem {
-            // regulated_branches: Vec::new(),
             link_branch_info: Vec::new(),
         }
     }
@@ -49,10 +45,7 @@ impl SimpleOrderingSystem {
                       execution_order: &Vec<usize>) {
 
         // Start clean
-        // self.regulated_branches.clear(); //TODO: I think we can actually do away with this. We dont actually use the properties.
         self.link_branch_info.clear();
-
-        // Branch counter
         let mut branch_counter = 0;
 
         // For each link, I want to know what regulated_branch it is in, and what the lag is to that point.
@@ -65,15 +58,8 @@ impl SimpleOrderingSystem {
             match &nodes[us_node_idx] {
                 NodeEnum::StorageNode(storage) => {
                     // This is a new branch
-                    // let new_branch = RegulatedBranch {
-                    //     first_link_idx: link_idx,
-                    //     last_link_idx: link_idx,
-                    //     max_lag: lag,
-                    // };
                     option_branch_idx = Some(branch_counter);
                     branch_counter += 1;
-                    // option_branch_idx = Some(self.regulated_branches.len());
-                    // self.regulated_branches.push(new_branch);
                 }
                 _ => {
                     // Branch info to be based on upstream link.
@@ -116,12 +102,4 @@ impl SimpleOrderingSystem {
     }
 
     //pub fn
-
 }
-//
-//
-// pub struct RegulatedBranch {
-//     first_link_idx: usize,
-//     last_link_idx: usize,
-//     max_lag: f64,
-// }
