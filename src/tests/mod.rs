@@ -81,3 +81,9 @@ mod test_linear_combination_bug_fix;
 
 #[cfg(test)]
 mod test_input_validation;
+
+#[cfg(test)]
+mod test_fifo_buffer;
+
+#[cfg(test)]
+mod test_interpolation;
