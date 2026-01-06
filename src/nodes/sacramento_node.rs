@@ -7,6 +7,9 @@ use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 use crate::numerical::opt::optimisable_component::OptimisableComponent;
 
+const MAX_DS_LINKS: usize = 5;
+const MAX_US_LINKS: usize = 5;
+
 #[derive(Default, Clone)]
 pub struct SacramentoNode {
     pub name: String,
@@ -25,6 +28,10 @@ pub struct SacramentoNode {
     pet: f64,
     runoff_depth_mm: f64,
     runoff_volume_megs: f64,
+
+    // Orders
+    pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recording_obscure_things: bool,
@@ -213,6 +220,14 @@ impl Node for SacramentoNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+
+    fn dsorders_mut(&mut self) -> &mut [f64] {
+        &mut self.dsorders
+    }
+
+    fn usorders_mut(&mut self) -> &mut [f64] {
+        &mut self.usorders
     }
 }
 

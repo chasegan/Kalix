@@ -4,17 +4,25 @@ use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 
+const MAX_DS_LINKS: usize = 5;
+const MAX_US_LINKS: usize = 5;
+
 #[derive(Default, Clone)]
 pub struct LossNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub loss_table: Table,  // By default, the columns mean Inflow Rate ML, Loss Rate ML
+    pub loss_table: Table,  // Columns: Inflow ML, Loss ML
+    pub flow_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
     loss: f64,
+
+    // Orders
+    pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -49,6 +57,16 @@ impl Node for LossNode {
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
+
+        // Build flow_table from loss_table (for reverse lookups during ordering)
+        self.flow_table = Table::new(2);
+        for row in 0..self.loss_table.nrows() {
+            let inflow = self.loss_table.get_value(row, 0);
+            let loss = self.loss_table.get_value(row, 1);
+            let outflow = inflow - loss;
+            self.flow_table.set_value(row, 0, inflow);
+            self.flow_table.set_value(row, 1, outflow);
+        }
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -122,5 +140,13 @@ impl Node for LossNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+
+    fn dsorders_mut(&mut self) -> &mut [f64] {
+        &mut self.dsorders
+    }
+
+    fn usorders_mut(&mut self) -> &mut [f64] {
+        &mut self.usorders
     }
 }

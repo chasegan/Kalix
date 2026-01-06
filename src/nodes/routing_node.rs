@@ -5,6 +5,9 @@ use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
 
+const MAX_DS_LINKS: usize = 5;
+const MAX_US_LINKS: usize = 5;
+
 #[derive(Default, Clone)]
 pub struct RoutingNode {
     pub name: String,
@@ -46,6 +49,10 @@ pub struct RoutingNode {
     seg_par_aa: [f64; 32],    //PWL segment parameters - aa coefficient
     seg_par_bb: [f64; 32],    //PWL segment parameters - bb coefficient
     seg_par_cc: [f64; 32],    //PWL segment parameters - cc coefficient
+
+    // Orders
+    pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: [f64; MAX_US_LINKS],
 
     //Recorders
     recorder_idx_usflow: Option<usize>,
@@ -303,5 +310,13 @@ impl Node for RoutingNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+
+    fn dsorders_mut(&mut self) -> &mut [f64] {
+        &mut self.dsorders
+    }
+
+    fn usorders_mut(&mut self) -> &mut [f64] {
+        &mut self.usorders
     }
 }

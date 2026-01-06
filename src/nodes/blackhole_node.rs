@@ -3,6 +3,9 @@ use crate::misc::misc_functions::make_result_name;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 
+const MAX_DS_LINKS: usize = 5;
+const MAX_US_LINKS: usize = 5;
+
 #[derive(Default, Clone)]
 pub struct BlackholeNode {
     pub name: String,
@@ -11,6 +14,10 @@ pub struct BlackholeNode {
 
     // Internal state only
     usflow: f64,
+
+    // Orders
+    pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -91,5 +98,13 @@ impl Node for BlackholeNode {
 
     fn get_mass_balance(&self) -> f64 {
         self.mbal
+    }
+
+    fn dsorders_mut(&mut self) -> &mut [f64] {
+        &mut self.dsorders
+    }
+
+    fn usorders_mut(&mut self) -> &mut [f64] {
+        &mut self.usorders
     }
 }
