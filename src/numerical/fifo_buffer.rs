@@ -1,5 +1,8 @@
 /// A fixed-size circular buffer that stores f64 values.
 /// Initialized with zeros. Supports inserting a new value and retrieving the oldest.
+/// The default value (from derive(Default)) will be a FifoBuffer with zero size. This would pass
+/// values straight through.
+#[derive(Clone, Default)]
 pub struct FifoBuffer {
     data: Vec<f64>,
     head: usize,
@@ -40,5 +43,26 @@ impl FifoBuffer {
     pub fn reset(&mut self) {
         self.data.fill(0.0);
         self.head = 0;
+    }
+
+    /// Returns the oldest value (next to be returned by push) without removing it.
+    /// Returns None if buffer has zero capacity.
+    pub fn front(&self) -> Option<f64> {
+        if self.data.is_empty() {
+            None
+        } else {
+            Some(self.data[self.head])
+        }
+    }
+
+    /// Returns the most recently inserted value without removing it.
+    /// Returns None if buffer has zero capacity.
+    pub fn back(&self) -> Option<f64> {
+        if self.data.is_empty() {
+            None
+        } else {
+            let back_idx = (self.head + self.data.len() - 1) % self.data.len();
+            Some(self.data[back_idx])
+        }
     }
 }
