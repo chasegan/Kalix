@@ -3,6 +3,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::numerical::fifo_buffer::FifoBuffer;
 
 const MAX_DS_LINKS: usize = 5;
 const MAX_US_LINKS: usize = 5;
@@ -20,7 +21,10 @@ pub struct InflowNode {
     dsflow_primary: f64,
     storage: f64,
 
-    // Orders
+    // Properties and internal state - regulated demands and ordering
+    pub is_regulated: bool,
+    pub order_phase_inflow_value: f64,
+    pub order_buffer: FifoBuffer,
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: [f64; MAX_US_LINKS],
 
@@ -84,8 +88,15 @@ impl Node for InflowNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-        // Get lateral inflow from input data
-        self.lateral_inflow = self.inflow_input.get_value(data_cache);
+
+        // Get lateral inflow
+        self.lateral_inflow = if self.is_regulated {
+            // Was evaluated in ordering phase
+            self.order_phase_inflow_value
+        } else {
+            // Evaluate now
+            self.inflow_input.get_value(data_cache)
+        };
 
         // Compute outflow based on inflow
         self.dsflow_primary = self.usflow + self.lateral_inflow;

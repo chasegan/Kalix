@@ -420,7 +420,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.d = Table::from_csv_file(v);
                                 // .map_err(|e| format!("Error on line {}: Could not load dimensions file for node '{}': {}",
                                 //                      ini_property.line_number, node_name, e))?;
-                        } else {
+                        } else if name_lower == "initial_volume" {
+                            n.v_initial = v.parse::<f64>()
+                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name))?;
+                        }
+                        else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name));
                         }
@@ -624,6 +629,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string());
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());

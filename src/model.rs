@@ -406,7 +406,10 @@ impl Model {
 
     pub fn run_timestep(&mut self, _t: u64) {
 
-        // Execute nodes in topological order with immediate flow propagation
+        // Execute order phase
+        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &self.data_cache);
+
+        // Execute nodes with flow phase
         for &node_idx in &self.execution_order {
 
             // Run the node's flow phase
@@ -435,7 +438,7 @@ impl Model {
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
         self.simple_ordering_system.initialize(
-            &self.nodes, &self.links, &self.incoming_links
+            &mut self.nodes, &self.links, &self.incoming_links
         );
 
         // Return

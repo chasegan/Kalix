@@ -3,7 +3,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-
+use crate::numerical::fifo_buffer::FifoBuffer;
 //------- IDEAS FOR ORDERING IN KALIX ----------//
 // A couple of thoughts are:
 //   - Having an ordering phase means you kinda have to know everything before
@@ -59,8 +59,13 @@ pub struct UserNode {
     pub mbal: f64,
     pub demand_input: DynamicInput,
 
-    // Properties - reg
+    // Properties and internal state - regulated demands and ordering
     pub is_regulated: bool,
+    pub order_travel_time: usize,
+    pub order_phase_demand_value: f64,
+    pub order_buffer: FifoBuffer,
+    pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: [f64; MAX_US_LINKS],
 
     // Properties - additional unreg
     pub pump_capacity: DynamicInput,
@@ -80,10 +85,6 @@ pub struct UserNode {
     pump_capacity_value: f64,
     flow_threshold_value: f64,
     demand_carryover_value: f64,
-
-    // Orders
-    pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -105,6 +106,7 @@ impl UserNode {
             name: "".to_string(),
             demand_input: DynamicInput::default(),
             is_regulated: false,
+            order_buffer: FifoBuffer::default(),
             pump_capacity: DynamicInput::default(),
             flow_threshold: DynamicInput::default(),
             annual_cap: None,
@@ -187,8 +189,13 @@ impl Node for UserNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
-        // Get demand from data_cache
-        let new_demand = self.demand_input.get_value(data_cache);
+        // Get demand value
+        let new_demand = if self.is_regulated {
+            let order_expected = self.order_buffer.push(self.order_phase_demand_value);
+            order_expected
+        } else {
+            self.demand_input.get_value(data_cache)
+        };
 
         // Work out availability considering flow threshold
         let mut available = match self.flow_threshold {

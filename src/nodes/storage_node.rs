@@ -181,9 +181,41 @@ impl Node for StorageNode {
         self.v += self.usflow;
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
         let net_rain_at_dead_storage = self.area0_km2 * net_rain_mm;
-        let max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
-        self.pond_diversion = pond_demand.min(max_diversion);
-        self.v -= self.pond_diversion; //potentially negative here but must come good later //TODO: is there anything wrong with doing this here? I dont think I've checked
+        let mut max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
+
+        // Pond demands
+        if pond_demand < max_diversion {
+            self.pond_diversion = pond_demand;
+            max_diversion -= self.pond_diversion;
+        } else {
+            self.pond_diversion = max_diversion;
+            max_diversion = 0f64;
+        }
+        self.v -= self.pond_diversion; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
+
+        // ds_1 ds_2 ds_3 ds_4 demands
+        // TODO: for ds_1, demands may be met by spills, but the current logic does not account for that
+        for i in 0..MAX_DS_LINKS {
+            let mut release = 0f64;
+            if self.dsorders[i] == 0f64 {
+                // nothing
+            } else if self.dsorders[i] < max_diversion {
+                release = self.dsorders[i];
+                max_diversion -= release;
+                self.v -= release; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
+            } else {
+                release = max_diversion;
+                max_diversion = 0f64;
+                self.v -= release; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
+            }
+            match i {
+                0 => { self.ds_1_flow = release; }
+                1 => { self.ds_2_flow = release; }
+                2 => { self.ds_3_flow = release; }
+                3 => { self.ds_4_flow = release; }
+                _ => { }
+            }
+        }
 
         // Now we just need to solve backward euler on the dimension table 'd'
         // to find the actual final solution (including net rainfall and spill
@@ -325,10 +357,11 @@ impl Node for StorageNode {
         // }
 
         // Only spills go downstream via primary outlet
-        self.ds_1_flow = self.spill;
-        self.ds_2_flow = 0.0;  // Not implemented yet
-        self.ds_3_flow = 0.0;  // Not implemented yet
-        self.ds_4_flow = 0.0;  // Not implemented yet
+        // self.ds_1_flow = self.spill;
+        self.ds_1_flow += self.spill;
+        // self.ds_2_flow = 0.0;  // Not implemented yet
+        // self.ds_3_flow = 0.0;  // Not implemented yet
+        // self.ds_4_flow = 0.0;  // Not implemented yet
         self.dsflow = self.ds_1_flow + (self.ds_2_flow + self.ds_3_flow + self.ds_4_flow);
 
         // Update mass balance
