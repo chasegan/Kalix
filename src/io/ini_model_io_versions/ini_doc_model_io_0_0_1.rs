@@ -461,7 +461,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "demand_carryover" {
                             (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u32(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                        } else {
+                        } else if name_lower == "regulated" {
+                            (n.is_regulated, _) = parse_csv_to_bool_option_u32(v)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        }
+                        else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name));
                         }

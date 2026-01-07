@@ -59,6 +59,9 @@ pub struct UserNode {
     pub mbal: f64,
     pub demand_input: DynamicInput,
 
+    // Properties - reg
+    pub is_regulated: bool,
+
     // Properties - additional unreg
     pub pump_capacity: DynamicInput,
     pub flow_threshold: DynamicInput,
@@ -101,6 +104,7 @@ impl UserNode {
         Self {
             name: "".to_string(),
             demand_input: DynamicInput::default(),
+            is_regulated: false,
             pump_capacity: DynamicInput::default(),
             flow_threshold: DynamicInput::default(),
             annual_cap: None,
