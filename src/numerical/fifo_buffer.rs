@@ -15,7 +15,11 @@ impl FifoBuffer {
     }
 
     /// Insert a new value and return the oldest value.
+    /// If buffer has zero capacity, returns the input value immediately (passthrough).
     pub fn push(&mut self, value: f64) -> f64 {
+        if self.data.is_empty() {
+            return value;
+        }
         let oldest = self.data[self.head];
         self.data[self.head] = value;
         self.head = (self.head + 1) % self.data.len();
