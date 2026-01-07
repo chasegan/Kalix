@@ -648,6 +648,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                     };
                     ini_doc.set_property(section_name.as_str(), "demand_carryover", value.as_str());
                 }
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "regulated", &n.is_regulated.to_string());
             }
         }
     }
