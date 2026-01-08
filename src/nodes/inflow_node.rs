@@ -24,7 +24,8 @@ pub struct InflowNode {
     // Properties and internal state - regulated demands and ordering
     pub is_regulated: bool,
     pub order_phase_inflow_value: f64,
-    pub order_buffer: FifoBuffer,
+    pub recession_factor: f64,
+    //pub order_buffer: FifoBuffer,
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: [f64; MAX_US_LINKS],
 
@@ -41,14 +42,7 @@ impl InflowNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            ..Default::default()
-        }
-    }
-
-    /// Base constructor with node name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
+            recession_factor: 0.0,
             ..Default::default()
         }
     }

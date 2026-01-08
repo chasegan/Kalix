@@ -52,17 +52,6 @@ impl Gr4jNode {
             ..Default::default()
         }
     }
-
-    /// Base constructor with name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            area_km2: 1.0,
-            gr4j_model: Gr4j::new(),
-            ..Default::default()
-        }
-    }
-
 }
 
 impl Node for Gr4jNode {

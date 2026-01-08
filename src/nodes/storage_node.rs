@@ -75,15 +75,6 @@ impl StorageNode {
             ..Default::default()
         }
     }
-
-    /// Base constructor with node name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            d: Table::new(4),
-            ..Default::default()
-        }
-    }
 }
 
 impl Node for StorageNode {

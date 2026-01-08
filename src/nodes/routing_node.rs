@@ -74,17 +74,6 @@ impl RoutingNode {
         }
     }
 
-    /// Base constructor with name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            pwl_divs: 1,
-            x: 0.0,
-            lag: 0,
-            ..Default::default()
-        }
-    }
-
     pub fn set_x(&mut self, value: f64) {
         self.x = value;
     }

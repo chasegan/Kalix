@@ -197,7 +197,8 @@ mod tests {
 
     #[test]
     fn test_gr4j_node_rainfall_parameters() {
-        let mut gr4j = Gr4jNode::new_named("test_gr4j");
+        let mut gr4j = Gr4jNode::new();
+        gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as linear combination
@@ -233,7 +234,8 @@ mod tests {
 
     #[test]
     fn test_gr4j_node_non_linear_combination() {
-        let mut gr4j = Gr4jNode::new_named("test_gr4j");
+        let mut gr4j = Gr4jNode::new();
+        gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as simple data reference (not linear combination)
@@ -254,7 +256,8 @@ mod tests {
 
     #[test]
     fn test_sacramento_node_rainfall_parameters() {
-        let mut sacramento = SacramentoNode::new_named("test_sacramento");
+        let mut sacramento = SacramentoNode::new();
+        sacramento.name = "test_sacramento".to_string();
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as linear combination
@@ -383,7 +386,8 @@ mod tests {
 
     #[test]
     fn test_sacramento_node_non_linear_combination() {
-        let mut sacramento = SacramentoNode::new_named("test_sacramento");
+        let mut sacramento = SacramentoNode::new();
+        sacramento.name = "test_sacramento".to_string();
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as simple data reference (not linear combination)

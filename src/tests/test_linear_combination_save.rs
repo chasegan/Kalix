@@ -8,7 +8,8 @@ mod tests {
 
     #[test]
     fn test_linear_combination_save_after_optimization() {
-        let mut gr4j = Gr4jNode::new_named("test_gr4j");
+        let mut gr4j = Gr4jNode::new();
+        gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as linear combination

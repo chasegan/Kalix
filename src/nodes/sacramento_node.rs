@@ -59,17 +59,6 @@ impl SacramentoNode {
             ..Default::default()
         }
     }
-
-    /// Base constructor with name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            area_km2: 1.0,
-            sacramento_model: Sacramento::new(),
-            ..Default::default()
-        }
-    }
-
 }
 
 impl Node for SacramentoNode {

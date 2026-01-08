@@ -39,14 +39,6 @@ impl SplitterNode {
             ..Default::default()
         }
     }
-
-    /// Base constructor with node name
-    pub fn new_named(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            ..Default::default()
-        }
-    }
 }
 
 impl Node for SplitterNode {
