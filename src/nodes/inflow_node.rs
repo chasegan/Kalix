@@ -23,6 +23,8 @@ pub struct InflowNode {
 
     // Properties and internal state - regulated demands and ordering
     pub is_regulated: bool,
+    pub order_travel_time: usize,
+    pub order_travel_time_gt_0: bool,
     pub order_phase_inflow_value: f64,
     pub recession_factor: f64,
     //pub order_buffer: FifoBuffer,

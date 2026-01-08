@@ -115,6 +115,8 @@ impl SimpleOrderingSystem {
                         // Inflow nodes on regulated branches must be evaluated in the ordering
                         // phase. Setting this flag lets them know how they are going to work.
                         inflow_node.is_regulated = true;
+                        inflow_node.order_travel_time = new_item.lag.round() as usize;
+                        inflow_node.order_travel_time_gt_0 = inflow_node.order_travel_time > 0;
                     },
                     _ => {}
                 }
@@ -143,7 +145,7 @@ impl SimpleOrderingSystem {
         }
 
         // Do we ever need to run the ordering phase?
-        self.model_has_ordering = (self.regulated_branch_counter > 0);
+        self.model_has_ordering = self.regulated_branch_counter > 0;
     }
 
     /// This function is to be run each day, before the flow phase, and it's job is to resolve
@@ -188,7 +190,9 @@ impl SimpleOrderingSystem {
                     // Orders are reduced based on known inflows
                     let inflow_value = inflow_node.inflow_input.get_value(data_cache);
                     inflow_node.order_phase_inflow_value = inflow_value;
-                    order = (inflow_node.dsorders[0] - inflow_value).max(0f64);
+                    let anticipated_inflow_on_delivery_timestep = inflow_value *
+                        if inflow_node.order_travel_time_gt_0 { inflow_node.recession_factor } else { 1.0 };
+                    order = (inflow_node.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
                 },
                 NodeEnum::ConfluenceNode(confluence_node) => {
                     // We must decide how to apportion the orders between upstream links (of which this
