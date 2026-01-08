@@ -1,9 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
-use crate::io::csv_io::{write_ts};
+use crate::io::csv_io::write_ts;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
 use crate::ordering::simple_ordering::SimpleOrderingSystem;
@@ -291,7 +291,7 @@ impl Model {
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable
             self.configuration.sim_stepsize = 86400;
-            self.configuration.sim_nsteps = (self.configuration.sim_end_timestamp -
+            self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
                 self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
 
             // Return
@@ -378,7 +378,7 @@ impl Model {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_start_timestamp = timestamp;
-                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
                     self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
@@ -390,7 +390,7 @@ impl Model {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_end_timestamp = timestamp;
-                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
                     self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
@@ -522,8 +522,7 @@ impl Model {
         Ok(())
     }
 
-    // Initialize all the nodes
-    // TODO: Keep in mind this is done in order of definition. Maybe I should change this to execution order
+    /// Initialize all the nodes
     fn initialize_nodes(&mut self) -> Result<(), String> {
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache)?
