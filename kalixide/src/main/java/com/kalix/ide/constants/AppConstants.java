@@ -17,6 +17,7 @@ public final class AppConstants {
     // Application metadata
     public static final String APP_NAME = "Kalix";
     public static final String APP_VERSION = loadVersion();
+    public static final String APP_TITLE = APP_NAME + " " + APP_VERSION;
     public static final String APP_DESCRIPTION = "A hydrologic and river-management modelling platform for the people.";
 
     private static String loadVersion() {

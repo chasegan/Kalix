@@ -33,7 +33,7 @@ public class TitleBarManager {
      * @param currentFile the currently loaded file, or null if none
      */
     public void updateTitle(boolean isDirty, File currentFile) {
-        String baseTitle = AppConstants.APP_NAME;
+        String baseTitle = AppConstants.APP_TITLE;
         String title = baseTitle;
 
         // Add file path if a file is loaded

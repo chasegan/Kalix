@@ -157,7 +157,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void setupWindow() {
         IconManager.SetIcon(this);
-        setTitle(AppConstants.APP_NAME);
+        setTitle(AppConstants.APP_TITLE);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(AppConstants.DEFAULT_WINDOW_WIDTH, AppConstants.DEFAULT_WINDOW_HEIGHT);
         setLocationRelativeTo(null);
