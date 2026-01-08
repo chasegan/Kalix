@@ -4,4 +4,3 @@ pub mod cli_helpers;
 pub mod componenet_identification;
 pub mod misc_functions;
 pub mod link_helper;
-pub mod execution_order_method;
