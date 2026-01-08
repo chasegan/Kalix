@@ -408,6 +408,11 @@
       "check": "node_exists"
     },
 
+    "node_ordering": {
+      "severity": "error",
+      "description": "Links must point to nodes defined below in the model file"
+    },
+
     "unique_node_names": {
       "severity": "error",
       "description": "Node names must be unique"

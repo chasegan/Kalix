@@ -28,6 +28,7 @@ public class ModelLinter {
             new SectionValidator(),
             new FileValidator(),
             new ReferenceValidator(),
+            new NodeOrderingValidator(),
             new NodeValidator(),
             new UniqueNameValidator()
         );
