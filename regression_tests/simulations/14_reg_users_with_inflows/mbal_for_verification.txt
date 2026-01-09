@@ -1,0 +1,42 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 20
+  Timesteps: 20
+  Stepsize (s): 86400
+  Period: 2022-01-01T00:00:00.000Z, 2022-01-20T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  inflow1, 4.5
+  inflow2, 4.5
+  inflow3, 4.5
+  inflow4, 4.5
+
+USER NODES
+  user1, -11.25
+  user2, -9.744134902954102
+  user3, -12
+  user4, -11.25
+
+STORAGE NODES
+  dam1, 9.75
+  dam2, 9.75
+  dam3, 12
+  dam4, 10.875
+
+ROUTING NODES
+  routing1, 0
+  routing2, -0.16373777389526367
+  routing3, 0
+  routing4, 0
+
+BLACKHOLE NODES
+  blackhole1, -3
+  blackhole2, -4.342127323150635
+  blackhole3, -4.5
+  blackhole4, -4.125
+
+----------------------------------
+TOTAL = 0
+----------------------------------

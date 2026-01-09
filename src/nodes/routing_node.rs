@@ -50,7 +50,8 @@ pub struct RoutingNode {
     seg_par_bb: [f64; 32],    //PWL segment parameters - bb coefficient
     seg_par_cc: [f64; 32],    //PWL segment parameters - cc coefficient
 
-    // Orders
+    // Properties and internal state - ordering
+    pub typical_regulated_flow: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: [f64; MAX_US_LINKS],
 
@@ -70,6 +71,7 @@ impl RoutingNode {
             pwl_divs: 1,
             x: 0.0,
             lag: 0,
+            typical_regulated_flow: 0.0,
             ..Default::default()
         }
     }

@@ -308,6 +308,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             } else {
                                 r_times = Some(index_times);
                             }
+                        } else if name_lower == "typical_regulated_flow" {
+                            n.typical_regulated_flow = v.parse::<f64>()
+                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name));
@@ -596,6 +600,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                     let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
                     ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
                 }
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string());
             }
             NodeEnum::SacramentoNode(n) => {
                 let section_name = format!("node.{}", n.name);
