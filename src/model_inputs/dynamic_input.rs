@@ -30,6 +30,36 @@ use crate::functions::operators::{BinaryOperator, UnaryOperator};
 use crate::model_inputs::linear_combination::detect_linear_combination;
 use crate::misc::misc_functions::format_f64;
 
+/// Simulation context field types for the `sim.*` namespace
+///
+/// These fields provide access to simulation date/time information within expressions.
+/// Example usage: `if(sim.month >= 6 && sim.month <= 8, summer_rate, winter_rate)`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimField {
+    /// Calendar year (e.g., 2020)
+    Year,
+    /// Month of year (1-12)
+    Month,
+    /// Day of month (1-31)
+    Day,
+    /// Day of year (1-366)
+    DayOfYear,
+    /// Current simulation step index (0-based)
+    Step,
+}
+
+/// Parse a `sim.*` variable name into a SimField
+fn parse_sim_field(name: &str) -> Option<SimField> {
+    match name {
+        "sim.year" => Some(SimField::Year),
+        "sim.month" => Some(SimField::Month),
+        "sim.day" => Some(SimField::Day),
+        "sim.day_of_year" => Some(SimField::DayOfYear),
+        "sim.step" => Some(SimField::Step),
+        _ => None,
+    }
+}
+
 /// Optimized AST that uses direct data cache indices instead of variable names
 #[derive(Debug, Clone)]
 pub enum OptimizedExpressionNode {
@@ -44,11 +74,11 @@ pub enum OptimizedExpressionNode {
     },
 
     /// Direct reference to a data cache series with temporal offset
-    /// offset=0 means current, offset=1 means previous timestep, etc.
-    /// default_value is used when current_step < offset
+    /// Offset convention: -ve = past, 0 = current, +ve = future
+    /// default_value is used when offset goes outside available data range
     DataCacheReferenceWithOffset {
         cache_index: usize,
-        offset: usize,
+        offset: isize,
         default_value: f64
     },
 
@@ -74,6 +104,12 @@ pub enum OptimizedExpressionNode {
     FunctionCall {
         name: String,
         args: Vec<Box<OptimizedExpressionNode>>,
+    },
+
+    /// Simulation context reference (sim.* namespace)
+    /// Provides access to date/time information during evaluation
+    SimContext {
+        field: SimField,
     },
 }
 
@@ -119,6 +155,16 @@ impl OptimizedExpressionNode {
                 let arg_values = arg_values?;
                 evaluate_function(name, &arg_values)
             }
+
+            OptimizedExpressionNode::SimContext { field } => {
+                Ok(match field {
+                    SimField::Year => data_cache.get_timestamp_year() as f64,
+                    SimField::Month => data_cache.get_timestamp_month() as f64,
+                    SimField::Day => data_cache.get_timestamp_day() as f64,
+                    SimField::DayOfYear => data_cache.get_day_of_year() as f64,
+                    SimField::Step => data_cache.current_step as f64,
+                })
+            }
         }
     }
 
@@ -136,7 +182,12 @@ impl OptimizedExpressionNode {
                 // Convert to lowercase for case-insensitive lookup (maps use lowercase keys)
                 let lower_name = name.to_lowercase();
 
-                // Try constant first (c.* variables)
+                // Check for sim.* namespace first (no map lookup needed)
+                if let Some(field) = parse_sim_field(&lower_name) {
+                    return Ok(OptimizedExpressionNode::SimContext { field });
+                }
+
+                // Try constant (c.* variables)
                 if let Some(&idx) = constant_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
                 }
@@ -153,6 +204,16 @@ impl OptimizedExpressionNode {
                 // Constants don't support offset (they don't vary over time)
                 if lower_name.starts_with("c.") {
                     return Err(format!("Offset syntax not supported for constants: {}", name));
+                }
+
+                // Simulation context variables don't support offset
+                if lower_name.starts_with("sim.") {
+                    return Err(format!("Offset syntax not supported for simulation context: {}", name));
+                }
+
+                // Node outputs cannot look forward - future values haven't been computed
+                if lower_name.starts_with("node.") && *offset > 0 {
+                    return Err(format!("Forward lookup not supported for node outputs: {}", name));
                 }
 
                 // Data cache variables support offset
@@ -248,11 +309,11 @@ pub enum DynamicInput {
     },
 
     /// Direct reference to a data cache series with temporal offset
-    /// offset=0 means current, offset=1 means previous timestep, etc.
-    /// default_value is used when current_step < offset
+    /// Offset convention: -ve = past, 0 = current, +ve = future
+    /// default_value is used when offset goes outside available data range
     DirectReferenceWithOffset {
         idx: usize,
-        offset: usize,
+        offset: isize,
         default_value: f64,
         original: String
     },
@@ -383,7 +444,11 @@ impl DynamicInput {
         for var_name in variables.iter() {
             let lower_name = var_name.to_lowercase();
 
-            if lower_name.starts_with("c.") {
+            if lower_name.starts_with("sim.") {
+                // Simulation context variables - no cache lookup needed
+                // They are resolved directly in from_expression_node via parse_sim_field
+                continue;
+            } else if lower_name.starts_with("c.") {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
@@ -422,6 +487,16 @@ impl DynamicInput {
                 return Err(format!("Offset syntax not supported for constants: {}", var_name));
             }
 
+            // Simulation context variables don't support offset
+            if lower_var.starts_with("sim.") {
+                return Err(format!("Offset syntax not supported for simulation context: {}", var_name));
+            }
+
+            // Node outputs cannot look forward
+            if lower_var.starts_with("node.") && offset > 0 {
+                return Err(format!("Forward lookup not supported for node outputs: {}", var_name));
+            }
+
             if let Some(&idx) = data_variable_map.get(&lower_var) {
                 if offset == 0 {
                     // offset=0 means current value - use the faster DirectReference (default never needed)
@@ -444,7 +519,15 @@ impl DynamicInput {
             // It's a direct reference to a single variable (no operations, no offset)
             // Check if it's a constant or data reference
             let lower_var = var_name.to_lowercase();
-            if let Some(&idx) = constant_variable_map.get(&lower_var) {
+
+            // sim.* variables need to go through the Function path
+            if lower_var.starts_with("sim.") {
+                let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map)?;
+                Ok(DynamicInput::Function {
+                    expression: trimmed.to_string(),
+                    optimised_ast
+                })
+            } else if let Some(&idx) = constant_variable_map.get(&lower_var) {
                 Ok(DynamicInput::DirectConstantReference {
                     idx,
                     original: trimmed.to_string()

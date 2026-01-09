@@ -171,6 +171,31 @@ impl DataCache {
     }
 
 
+    /// Gets the current day of year (1-366)
+    ///
+    /// Accounts for leap years when calculating the day of year.
+    pub fn get_day_of_year(&self) -> u32 {
+        // Cumulative days at the start of each month (0-indexed month)
+        // Index 0 = days before Jan, Index 1 = days before Feb, etc.
+        const DAYS_BEFORE_MONTH: [u32; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
+        let month_idx = (self.timestamp_month - 1) as usize;
+        let mut day_of_year = DAYS_BEFORE_MONTH[month_idx] + self.timestamp_day;
+
+        // Add 1 for leap year if we're past February
+        if self.timestamp_month > 2 && Self::is_leap_year(self.timestamp_year) {
+            day_of_year += 1;
+        }
+
+        day_of_year
+    }
+
+    /// Check if a year is a leap year
+    fn is_leap_year(year: i32) -> bool {
+        (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    }
+
+
     /*
     Increase the current step by +1.
     This also updates the data_cache timestamp values.
@@ -289,27 +314,22 @@ impl DataCache {
     /// # Arguments
     ///
     /// * `series_idx` - The index of the series (obtained from `get_or_add_new_series`)
-    /// * `offset` - Temporal offset: 0 = current timestep, 1 = previous timestep, etc.
+    /// * `offset` - Temporal offset: -ve = past, 0 = current, +ve = future
     ///
     /// # Returns
     ///
-    /// The value at (current_step - offset). Returns NaN if the offset would go before
-    /// the start of the simulation (i.e., current_step < offset).
+    /// The value at (current_step + offset). Returns NaN if the target step is
+    /// outside the available data range.
     ///
     /// # Performance
     ///
-    /// This method is optimised for the hot path with minimal overhead:
-    /// - Single bounds check
-    /// - Direct array access
-    /// Get a value from a data series with a temporal offset.
-    ///
-    /// Returns NaN if offset exceeds current_step. For user-specified defaults,
-    /// use `get_value_with_offset_or_default` instead.
-    pub fn get_value_with_offset(&self, series_idx: usize, offset: usize) -> f64 {
-        if self.current_step < offset {
+    /// Optimised for the hot path with minimal overhead.
+    pub fn get_value_with_offset(&self, series_idx: usize, offset: isize) -> f64 {
+        let target_step = self.current_step as isize + offset;
+        if target_step < 0 || target_step as usize >= self.series[series_idx].len() {
             f64::NAN
         } else {
-            self.series[series_idx].values[self.current_step - offset]
+            self.series[series_idx].values[target_step as usize]
         }
     }
 
@@ -318,8 +338,8 @@ impl DataCache {
     /// # Arguments
     ///
     /// * `series_idx` - The index of the series
-    /// * `offset` - Temporal offset: 0 = current timestep, 1 = previous timestep, etc.
-    /// * `default_value` - Value to return when current_step < offset
+    /// * `offset` - Temporal offset: -ve = past, 0 = current, +ve = future
+    /// * `default_value` - Value to return when target step is outside available data range
     ///
     /// # Performance
     ///
@@ -327,11 +347,12 @@ impl DataCache {
     /// - Single comparison
     /// - Direct array access
     #[inline]
-    pub fn get_value_with_offset_or_default(&self, series_idx: usize, offset: usize, default_value: f64) -> f64 {
-        if self.current_step < offset {
+    pub fn get_value_with_offset_or_default(&self, series_idx: usize, offset: isize, default_value: f64) -> f64 {
+        let target_step = self.current_step as isize + offset;
+        if target_step < 0 || target_step as usize >= self.series[series_idx].len() {
             default_value
         } else {
-            self.series[series_idx].values[self.current_step - offset]
+            self.series[series_idx].values[target_step as usize]
         }
     }
 

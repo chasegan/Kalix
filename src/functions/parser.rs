@@ -371,9 +371,10 @@ impl ParsedFunction {
     ///
     /// # Returns
     ///
-    /// `Some((&str, usize, f64))` with the variable name, offset, and default value,
+    /// `Some((&str, isize, f64))` with the variable name, offset, and default value,
     /// `None` if it's not a single variable with offset.
-    pub fn is_single_variable_with_offset(&self) -> Option<(&str, usize, f64)> {
+    /// Offset: -ve = past, 0 = current, +ve = future
+    pub fn is_single_variable_with_offset(&self) -> Option<(&str, isize, f64)> {
         // Check if we have exactly one variable
         if self.variables.len() != 1 {
             return None;
@@ -670,21 +671,44 @@ impl FunctionParser {
                     // Both offset and default are required
                     self.consume_token()?; // consume '['
 
-                    // Expect a number (the offset)
-                    let offset = match &self.current_token {
+                    // Expect a number (the offset) - can be negative (past) or positive (future)
+                    let offset: isize = match &self.current_token {
                         Token::Number(n) => {
                             let offset_val = *n;
-                            if offset_val < 0.0 || offset_val.fract() != 0.0 {
+                            if offset_val.fract() != 0.0 {
                                 return Err(ParseError::SyntaxError {
                                     position: self.tokenizer.position,
-                                    message: format!("Offset must be a non-negative integer, got {}", offset_val),
+                                    message: format!("Offset must be an integer, got {}", offset_val),
                                 });
                             }
-                            offset_val as usize
+                            offset_val as isize
+                        }
+                        Token::Operator(op) if op == "-" => {
+                            // Handle negative offset: consume '-' then number
+                            self.consume_token()?;
+                            match &self.current_token {
+                                Token::Number(n) => {
+                                    let offset_val = *n;
+                                    if offset_val.fract() != 0.0 {
+                                        return Err(ParseError::SyntaxError {
+                                            position: self.tokenizer.position,
+                                            message: format!("Offset must be an integer, got -{}", offset_val),
+                                        });
+                                    }
+                                    -(offset_val as isize)
+                                }
+                                _ => {
+                                    return Err(ParseError::UnexpectedToken {
+                                        expected: "integer after minus sign".to_string(),
+                                        found: format!("{:?}", self.current_token),
+                                        position: self.tokenizer.position,
+                                    });
+                                }
+                            }
                         }
                         _ => {
                             return Err(ParseError::UnexpectedToken {
-                                expected: "non-negative integer".to_string(),
+                                expected: "integer (negative for past, positive for future)".to_string(),
                                 found: format!("{:?}", self.current_token),
                                 position: self.tokenizer.position,
                             });
@@ -696,7 +720,7 @@ impl FunctionParser {
                     if self.current_token != Token::Comma {
                         return Err(ParseError::SyntaxError {
                             position: self.tokenizer.position,
-                            message: "Offset syntax requires default value: [offset, default]. Example: node.x.ds_1[1, 0.0]".to_string(),
+                            message: "Offset syntax requires default value: [offset, default]. Example: data.flow[-1, 0.0] for yesterday's value".to_string(),
                         });
                     }
                     self.consume_token()?; // consume ','

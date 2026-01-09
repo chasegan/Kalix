@@ -1,5 +1,5 @@
-Date,demand_pattern,inflow_1,zeros,order1_pattern,order2_pattern
-2022-01-01,0,0,0,0,10 
+Date,demand_pattern,Inflow_1,zeros,order1_pattern,order2_pattern,
+2022-01-01,0,0,0,0,10
 2022-01-02,0,10,0,10,10
 2022-01-03,10,10,0,10,10
 2022-01-04,10,10,0,10,10

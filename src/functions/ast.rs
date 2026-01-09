@@ -111,15 +111,21 @@ pub enum ExpressionNode {
 
     /// A variable reference with a temporal offset and default value.
     ///
-    /// Used for accessing previous timestep values with a fallback when
-    /// the offset would go before the start of the simulation.
-    /// Examples: `node.dam.ds_1[1, 0.0]` (yesterday, default 0.0)
+    /// Used for accessing past or future timestep values with a fallback when
+    /// the offset would go outside the available data range.
+    ///
+    /// Offset convention:
+    /// - Negative = past (e.g., -1 = yesterday)
+    /// - Zero = current timestep
+    /// - Positive = future (e.g., +1 = tomorrow) - only valid for data.* inputs
+    ///
+    /// Examples: `data.flow[-1, 0.0]` (yesterday, default 0.0)
     VariableWithOffset {
         /// The name of the variable
         name: String,
-        /// The temporal offset (0 = current, 1 = previous timestep, etc.)
-        offset: usize,
-        /// Default value to use when current_step < offset
+        /// The temporal offset (-ve = past, 0 = current, +ve = future)
+        offset: isize,
+        /// Default value to use when offset goes outside available data range
         default_value: f64,
     },
 

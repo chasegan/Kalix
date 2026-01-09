@@ -745,6 +745,7 @@ fn test_dynamic_input_node_creates_series_if_not_exists() {
 
 // ============================================================================
 // Tests for temporal offset syntax [offset, default]
+// Offset convention: -ve = past, 0 = current, +ve = future
 // ============================================================================
 
 #[test]
@@ -755,7 +756,7 @@ fn test_dynamic_input_offset_zero_same_as_direct() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Add test data
-    let idx = data_cache.get_or_add_new_series("node.upstream.ds_1", false);
+    let idx = data_cache.get_or_add_new_series("data.flow", true);
     let mut ts = Timeseries::new_daily();
     ts.start_timestamp = start_timestamp;
     ts.push_value(100.0);
@@ -764,7 +765,7 @@ fn test_dynamic_input_offset_zero_same_as_direct() {
     data_cache.series[idx] = ts;
 
     // Parse with offset [0, 0.0] - should optimize to DirectReference (same as no offset)
-    let input = DynamicInput::from_string("node.upstream.ds_1[0, 0.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.flow[0, 0.0]", &mut data_cache, true)
         .expect("Failed to parse offset reference");
 
     // Should be DirectReference (optimized away the [0, default])
@@ -786,8 +787,8 @@ fn test_dynamic_input_offset_previous_timestep() {
     data_cache.initialize(start_timestamp);
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
-    // Add test data - simulating node output over 5 days
-    let idx = data_cache.get_or_add_new_series("node.storage.volume", false);
+    // Add test data - simulating data over 5 days
+    let idx = data_cache.get_or_add_new_series("data.flow", true);
     let mut ts = Timeseries::new_daily();
     ts.start_timestamp = start_timestamp;
     ts.push_value(1000.0); // Day 0
@@ -797,17 +798,17 @@ fn test_dynamic_input_offset_previous_timestep() {
     ts.push_value(1400.0); // Day 4
     data_cache.series[idx] = ts;
 
-    // Parse with offset [1, 0.0] - yesterday's value, default 0.0
-    let input = DynamicInput::from_string("node.storage.volume[1, 0.0]", &mut data_cache, true)
+    // Parse with offset [-1, 0.0] - yesterday's value, default 0.0
+    let input = DynamicInput::from_string("data.flow[-1, 0.0]", &mut data_cache, true)
         .expect("Failed to parse offset reference");
 
     // Should be DirectReferenceWithOffset
     match &input {
         DynamicInput::DirectReferenceWithOffset { offset, default_value, .. } => {
-            assert_eq!(*offset, 1);
+            assert_eq!(*offset, -1);
             assert_eq!(*default_value, 0.0);
         }
-        _ => panic!("Expected DirectReferenceWithOffset for [1, 0.0] offset"),
+        _ => panic!("Expected DirectReferenceWithOffset for [-1, 0.0] offset"),
     }
 
     // Test at different timesteps
@@ -832,15 +833,15 @@ fn test_dynamic_input_offset_with_nonzero_default() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Add test data
-    let idx = data_cache.get_or_add_new_series("node.reservoir.volume", false);
+    let idx = data_cache.get_or_add_new_series("data.volume", true);
     let mut ts = Timeseries::new_daily();
     ts.start_timestamp = start_timestamp;
     ts.push_value(5000.0);
     ts.push_value(6000.0);
     data_cache.series[idx] = ts;
 
-    // Parse with offset [1, 5000.0] - default to initial volume
-    let input = DynamicInput::from_string("node.reservoir.volume[1, 5000.0]", &mut data_cache, true)
+    // Parse with offset [-1, 5000.0] - default to initial volume
+    let input = DynamicInput::from_string("data.volume[-1, 5000.0]", &mut data_cache, true)
         .expect("Failed to parse offset reference");
 
     // At step 0, no yesterday - should return default 5000.0
@@ -868,8 +869,8 @@ fn test_dynamic_input_offset_multiple_days() {
     }
     data_cache.series[idx] = ts;
 
-    // Parse with offset [3, -999.0] - value from 3 days ago, obvious default
-    let input = DynamicInput::from_string("data.rainfall[3, -999.0]", &mut data_cache, true)
+    // Parse with offset [-3, -999.0] - value from 3 days ago, obvious default
+    let input = DynamicInput::from_string("data.rainfall[-3, -999.0]", &mut data_cache, true)
         .expect("Failed to parse offset reference");
 
     data_cache.set_current_step(5);
@@ -891,7 +892,7 @@ fn test_dynamic_input_offset_in_expression() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Add test data for current flow
-    let idx1 = data_cache.get_or_add_new_series("node.dam.dsflow", false);
+    let idx1 = data_cache.get_or_add_new_series("data.dam.dsflow", false);
     let mut ts1 = Timeseries::new_daily();
     ts1.start_timestamp = start_timestamp;
     ts1.push_value(100.0);
@@ -902,7 +903,7 @@ fn test_dynamic_input_offset_in_expression() {
     // Expression: current flow minus yesterday's flow (change in flow)
     // Default to current flow so day 0 shows 0 change
     let input = DynamicInput::from_string(
-        "node.dam.dsflow - node.dam.dsflow[1, 100.0]",
+        "data.dam.dsflow - data.dam.dsflow[-1, 100.0]",
         &mut data_cache,
         true
     ).expect("Failed to parse expression with offset");
@@ -925,7 +926,7 @@ fn test_dynamic_input_offset_in_conditional() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Add storage volume data (increasing)
-    let idx = data_cache.get_or_add_new_series("node.reservoir.volume", false);
+    let idx = data_cache.get_or_add_new_series("data.reservoir.volume", false);
     let mut ts = Timeseries::new_daily();
     ts.start_timestamp = start_timestamp;
     ts.push_value(5000.0);
@@ -937,7 +938,7 @@ fn test_dynamic_input_offset_in_conditional() {
     // Expression: if volume increased compared to yesterday, return 1, else 0
     // Default yesterday to 0 so first day always shows "increased"
     let input = DynamicInput::from_string(
-        "if(node.reservoir.volume > node.reservoir.volume[1, 0.0], 1, 0)",
+        "if(data.reservoir.volume > data.reservoir.volume[-1, 0.0], 1, 0)",
         &mut data_cache,
         true
     ).expect("Failed to parse conditional with offset");
@@ -963,7 +964,7 @@ fn test_dynamic_input_offset_constant_not_supported() {
     data_cache.constants.set_value("c.threshold", 100.0);
 
     // Offset on constants should fail
-    let result = DynamicInput::from_string("c.threshold[1, 0.0]", &mut data_cache, true);
+    let result = DynamicInput::from_string("c.threshold[-1, 0.0]", &mut data_cache, true);
     assert!(result.is_err(), "Offset syntax should not be supported for constants");
     assert!(result.unwrap_err().contains("not supported for constants"));
 }
@@ -974,7 +975,7 @@ fn test_dynamic_input_offset_requires_default() {
     data_cache.get_or_add_new_series("data.test", true);
 
     // Missing default should fail at parse time
-    let result = DynamicInput::from_string("data.test[1]", &mut data_cache, true);
+    let result = DynamicInput::from_string("data.test[-1]", &mut data_cache, true);
     assert!(result.is_err(), "Offset syntax should require default value");
     assert!(result.unwrap_err().contains("requires default value"));
 }
@@ -993,7 +994,7 @@ fn test_dynamic_input_offset_negative_default() {
     data_cache.series[idx] = ts;
 
     // Negative default value should work (e.g., for temperatures)
-    let input = DynamicInput::from_string("data.temp[1, -10.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.temp[-1, -10.0]", &mut data_cache, true)
         .expect("Failed to parse offset with negative default");
 
     data_cache.set_current_step(0);
@@ -1015,7 +1016,7 @@ fn test_dynamic_input_offset_nan_default() {
     data_cache.series[idx] = ts;
 
     // NaN default - makes missing data explicit in output
-    let input = DynamicInput::from_string("data.flow[1, nan]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.flow[-1, nan]", &mut data_cache, true)
         .expect("Failed to parse offset with nan default");
 
     data_cache.set_current_step(0);
@@ -1025,13 +1026,277 @@ fn test_dynamic_input_offset_nan_default() {
     assert_eq!(input.get_value(&data_cache), 100.0); // Normal lookback works
 
     // Also test case-insensitive: NaN, NAN
-    let input2 = DynamicInput::from_string("data.flow[1, NaN]", &mut data_cache, true)
+    let input2 = DynamicInput::from_string("data.flow[-1, NaN]", &mut data_cache, true)
         .expect("Failed to parse offset with NaN default");
     data_cache.set_current_step(0);
     assert!(input2.get_value(&data_cache).is_nan());
 
-    let input3 = DynamicInput::from_string("data.flow[1, NAN]", &mut data_cache, true)
+    let input3 = DynamicInput::from_string("data.flow[-1, NAN]", &mut data_cache, true)
         .expect("Failed to parse offset with NAN default");
     data_cache.set_current_step(0);
     assert!(input3.get_value(&data_cache).is_nan());
+}
+
+// ============================================================================
+// Tests for forward lookups (positive offsets)
+// ============================================================================
+
+#[test]
+fn test_dynamic_input_forward_lookup() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Pre-populate data for entire simulation period
+    let idx = data_cache.get_or_add_new_series("data.forecast", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(100.0); // day 0
+    ts.push_value(150.0); // day 1
+    ts.push_value(200.0); // day 2
+    ts.push_value(250.0); // day 3
+    data_cache.series[idx] = ts;
+
+    // Forward lookup: tomorrow's value
+    let input = DynamicInput::from_string("data.forecast[1, -999.0]", &mut data_cache, true)
+        .expect("Failed to parse forward lookup");
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&data_cache), 150.0); // Tomorrow (day 1)
+
+    data_cache.set_current_step(1);
+    assert_eq!(input.get_value(&data_cache), 200.0); // Tomorrow (day 2)
+
+    data_cache.set_current_step(2);
+    assert_eq!(input.get_value(&data_cache), 250.0); // Tomorrow (day 3)
+
+    // Edge case: at end of data, forward lookup returns default
+    data_cache.set_current_step(3);
+    assert_eq!(input.get_value(&data_cache), -999.0); // No day 4, returns default
+}
+
+#[test]
+fn test_dynamic_input_forward_lookup_rejected_for_node() {
+    let mut data_cache = DataCache::new();
+    data_cache.get_or_add_new_series("node.dam.storage", false);
+
+    // Forward lookup on node.* should fail - future values haven't been computed
+    let result = DynamicInput::from_string("node.dam.storage[1, 0.0]", &mut data_cache, true);
+    assert!(result.is_err(), "Forward lookup should be rejected for node.*");
+    assert!(result.unwrap_err().contains("Forward lookup not supported"));
+}
+
+// ============================================================================
+// Tests for sim.* namespace (simulation context variables)
+// ============================================================================
+
+#[test]
+fn test_sim_year() {
+    let mut data_cache = DataCache::new();
+    // 2020-06-15 12:00:00 UTC
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.year", &mut data_cache, true)
+        .expect("Failed to parse sim.year");
+
+    assert_eq!(input.get_value(&data_cache), 2020.0);
+}
+
+#[test]
+fn test_sim_month() {
+    let mut data_cache = DataCache::new();
+    // 2020-06-15 12:00:00 UTC
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.month", &mut data_cache, true)
+        .expect("Failed to parse sim.month");
+
+    assert_eq!(input.get_value(&data_cache), 6.0);
+}
+
+#[test]
+fn test_sim_day() {
+    let mut data_cache = DataCache::new();
+    // 2020-06-15 12:00:00 UTC
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.day", &mut data_cache, true)
+        .expect("Failed to parse sim.day");
+
+    assert_eq!(input.get_value(&data_cache), 15.0);
+}
+
+#[test]
+fn test_sim_day_of_year() {
+    let mut data_cache = DataCache::new();
+    // 2020-06-15 12:00:00 UTC - day 167 of a leap year
+    // Jan=31, Feb=29, Mar=31, Apr=30, May=31, Jun 1-15 = 31+29+31+30+31+15 = 167
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+        .expect("Failed to parse sim.day_of_year");
+
+    assert_eq!(input.get_value(&data_cache), 167.0);
+}
+
+#[test]
+fn test_sim_day_of_year_non_leap() {
+    let mut data_cache = DataCache::new();
+    // 2019-03-01 12:00:00 UTC - day 60 of a non-leap year
+    // Jan=31, Feb=28, Mar 1 = 31+28+1 = 60
+    let start_timestamp: u64 = wrap_to_u64(1551441600);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+        .expect("Failed to parse sim.day_of_year");
+
+    assert_eq!(input.get_value(&data_cache), 60.0);
+}
+
+#[test]
+fn test_sim_day_of_year_leap_year() {
+    let mut data_cache = DataCache::new();
+    // 2020-03-01 12:00:00 UTC - day 61 of a leap year
+    // Jan=31, Feb=29, Mar 1 = 31+29+1 = 61
+    let start_timestamp: u64 = wrap_to_u64(1583064000);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+        .expect("Failed to parse sim.day_of_year");
+
+    assert_eq!(input.get_value(&data_cache), 61.0);
+}
+
+#[test]
+fn test_sim_step() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    let input = DynamicInput::from_string("sim.step", &mut data_cache, true)
+        .expect("Failed to parse sim.step");
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&data_cache), 0.0);
+
+    data_cache.set_current_step(10);
+    assert_eq!(input.get_value(&data_cache), 10.0);
+
+    data_cache.set_current_step(365);
+    assert_eq!(input.get_value(&data_cache), 365.0);
+}
+
+#[test]
+fn test_sim_in_expression() {
+    let mut data_cache = DataCache::new();
+    // 2020-07-15 - summer month
+    let start_timestamp: u64 = wrap_to_u64(1594814400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    // Test conditional based on month (summer = June-August)
+    let input = DynamicInput::from_string(
+        "if(sim.month >= 6 && sim.month <= 8, 1.5, 1.0)",
+        &mut data_cache,
+        true
+    ).expect("Failed to parse conditional with sim.month");
+
+    // July is summer, should return 1.5
+    assert_eq!(input.get_value(&data_cache), 1.5);
+}
+
+#[test]
+fn test_sim_in_arithmetic() {
+    let mut data_cache = DataCache::new();
+    // 2020-06-15
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    // Test arithmetic with sim values
+    let input = DynamicInput::from_string("sim.year + sim.month", &mut data_cache, true)
+        .expect("Failed to parse sim arithmetic");
+
+    assert_eq!(input.get_value(&data_cache), 2026.0); // 2020 + 6
+}
+
+#[test]
+fn test_sim_case_insensitive() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    data_cache.set_current_step(0);
+
+    // Test various case combinations
+    let input1 = DynamicInput::from_string("SIM.YEAR", &mut data_cache, true)
+        .expect("Failed to parse SIM.YEAR");
+    let input2 = DynamicInput::from_string("Sim.Month", &mut data_cache, true)
+        .expect("Failed to parse Sim.Month");
+    let input3 = DynamicInput::from_string("SIM.day_of_year", &mut data_cache, true)
+        .expect("Failed to parse SIM.day_of_year");
+
+    assert_eq!(input1.get_value(&data_cache), 2020.0);
+    assert_eq!(input2.get_value(&data_cache), 6.0);
+    assert_eq!(input3.get_value(&data_cache), 167.0);
+}
+
+#[test]
+fn test_sim_offset_not_supported() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Offset syntax should not be supported for sim.* variables
+    let result = DynamicInput::from_string("sim.year[1, 0]", &mut data_cache, true);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Offset syntax not supported"));
+}
+
+#[test]
+fn test_sim_with_data_reference() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1592222400);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Add some data
+    let idx = data_cache.get_or_add_new_series("data.base_value", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(100.0);
+    data_cache.series[idx] = ts;
+
+    data_cache.set_current_step(0);
+
+    // Mix sim.* with data.* reference
+    let input = DynamicInput::from_string(
+        "data.base_value * (1 + (sim.month - 6) * 0.1)",
+        &mut data_cache,
+        true
+    ).expect("Failed to parse mixed expression");
+
+    // month=6, so (6-6)*0.1 = 0, result = 100 * 1 = 100
+    assert_eq!(input.get_value(&data_cache), 100.0);
 }
