@@ -1,12 +1,11 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
-use crate::io::csv_io::{write_ts};
+use crate::io::csv_io::write_ts;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
-use crate::misc::execution_order_method::ExecutionOrderMethod;
 use crate::ordering::simple_ordering::SimpleOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
@@ -36,7 +35,6 @@ pub struct Model {
     pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
 
     // Pre-computed execution order
-    pub execution_order_method : ExecutionOrderMethod,
     pub execution_order: Vec<usize>,
 
     // Ordering system
@@ -57,7 +55,6 @@ impl Model {
             inputs: vec![],
             input_file_paths: vec![],
             outputs: vec![],
-            execution_order_method : ExecutionOrderMethod::default(),
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             ..Default::default()
         }
@@ -294,7 +291,7 @@ impl Model {
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable
             self.configuration.sim_stepsize = 86400;
-            self.configuration.sim_nsteps = (self.configuration.sim_end_timestamp -
+            self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
                 self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
 
             // Return
@@ -381,7 +378,7 @@ impl Model {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_start_timestamp = timestamp;
-                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
                     self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
@@ -393,7 +390,7 @@ impl Model {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_end_timestamp = timestamp;
-                self.configuration.sim_nsteps = (self.configuration.sim_start_timestamp -
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
                     self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
@@ -432,7 +429,7 @@ impl Model {
 
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
-        self.determine_execution_order()?;
+        self.check_execution_order()?;
         // TODO: why am I doing the execution order here in "initialize_network"? Cant we just do this once during configure?
 
         // Initialise the ordering system
@@ -498,88 +495,34 @@ impl Model {
     }
 
 
-    /// Determine execution order
-    fn determine_execution_order(&mut self) -> Result<(), String> {
+    /// Check execution order
+    fn check_execution_order(&mut self) -> Result<(), String> {
 
-        match self.execution_order_method {
-            ExecutionOrderMethod::Manual => {
-                //============================================================================
-                // Method 1 (DEFAULT): manual execution order based on node definition order
-                //============================================================================
+        // Execution order according to node index
+        self.execution_order.clear();
+        for node_idx in 0..self.nodes.len() {
+            self.execution_order.push(node_idx);
+        }
 
-                // Execution order according to node index
-                self.execution_order.clear();
-                for node_idx in 0..self.nodes.len() {
-                    self.execution_order.push(node_idx);
-                }
-
-                // Check execution order is consistent with flow phase using link info:
-                // The node below each link must have a higher index than the node above the link
-                for link in &self.links {
-                    //println!("{} -> {}", link.from_node, link.to_node);
-                    if link.from_node >= link.to_node {
-                        let from_name = self.nodes[link.from_node].get_name();
-                        let to_name = self.nodes[link.to_node].get_name();
-                        return Err(format!(
-                            "Node '{}' must be defined before '{}'",
-                            from_name, to_name
-                        ));
-                    }
-                }
-
-                // Done
-                Ok(())
-            }
-            ExecutionOrderMethod::Auto => {
-                //============================================================================
-                // Method 2: topologically sorted using Kahn's Algorithm
-                //============================================================================
-
-                let num_nodes = self.nodes.len();
-                let mut in_degree = vec![0; num_nodes];
-
-                // Calculate in-degrees for all nodes
-                for link in &self.links {
-                    in_degree[link.to_node] += 1;
-                }
-
-                // Initialize queue with nodes that have no incoming edges
-                let mut queue: VecDeque<usize> = in_degree
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, &degree)| if degree == 0 { Some(idx) } else { None })
-                    .collect();
-
-                self.execution_order.clear();
-
-                // Process nodes in topological order
-                while let Some(node_idx) = queue.pop_front() {
-                    self.execution_order.push(node_idx);
-
-                    // Reduce in-degree for all downstream nodes
-                    for &link_idx in &self.outgoing_links[node_idx] {
-                        let to_node = self.links[link_idx].to_node;
-                        in_degree[to_node] -= 1;
-
-                        if in_degree[to_node] == 0 {
-                            queue.push_back(to_node);
-                        }
-                    }
-                }
-
-                // Check the results
-                if self.execution_order.len() != num_nodes {
-                    // This happens when the model is cyclic
-                    Err("Closed cycle detected in the model network!".to_string())
-                } else {
-                    Ok(())
-                }
+        // Check execution order is consistent with flow phase using link info:
+        // The node below each link must have a higher index than the node above the link
+        for link in &self.links {
+            //println!("{} -> {}", link.from_node, link.to_node);
+            if link.from_node >= link.to_node {
+                let from_name = self.nodes[link.from_node].get_name();
+                let to_name = self.nodes[link.to_node].get_name();
+                return Err(format!(
+                    "Node '{}' must be defined before '{}'",
+                    from_name, to_name
+                ));
             }
         }
+
+        // Done
+        Ok(())
     }
 
-    // Initialize all the nodes
-    // TODO: Keep in mind this is done in order of definition. Maybe I should change this to execution order
+    /// Initialize all the nodes
     fn initialize_nodes(&mut self) -> Result<(), String> {
         for i in 0..self.nodes.len() {
             self.nodes[i].initialise(&mut self.data_cache)?

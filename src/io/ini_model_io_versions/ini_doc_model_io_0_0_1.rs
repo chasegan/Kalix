@@ -1,6 +1,5 @@
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::io::custom_ini_parser::IniDocument;
-use crate::misc::execution_order_method::ExecutionOrderMethod;
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
@@ -57,15 +56,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 } else if name_lower == "end" {
                     let timestamp = date_string_to_u64_flexible(ini_property.value.as_str())?.0;
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
-                } else if name_lower == "execution_order" {
-                    if ini_property.value.to_lowercase().starts_with("auto") {
-                        model.execution_order_method = ExecutionOrderMethod::Auto;
-                    } else if ini_property.value.to_lowercase().starts_with("manual") {
-                        model.execution_order_method = ExecutionOrderMethod::Manual; //This is also the default
-                    } else {
-                        return Err(format!("Error on line {}: Unexpected execution_order value '{}'",
-                                           ini_property.line_number, ini_property.value));
-                    }
                 }
             }
         } else if section_name == "inputs" {
