@@ -1,4 +1,5 @@
 use crate::io::csv_io::{read_ts, write_ts};
+use std::io::Write;
 
 
 #[test]
@@ -93,4 +94,73 @@ fn test_csv_writer() {
         },
         Err(e) => panic!("Something went wrong: {:?}", e)
     }
+}
+
+
+#[test]
+fn test_csv_reader_trailing_comma_in_header() {
+    // Create a temp file with trailing comma in header
+    let temp_path = "./src/tests/example_data/temp_trailing_comma.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        // Header has trailing comma, data rows don't
+        writeln!(file, "Date,col1,col2,col3,").unwrap();
+        writeln!(file, "2020-01-01,1.0,2.0,3.0").unwrap();
+        writeln!(file, "2020-01-02,4.0,5.0,6.0").unwrap();
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok(); // Clean up
+
+    let timeseries = result.expect("Should handle trailing comma in header");
+    assert_eq!(timeseries.len(), 3, "Should have 3 data columns");
+    assert_eq!(timeseries[0].name, "col1");
+    assert_eq!(timeseries[1].name, "col2");
+    assert_eq!(timeseries[2].name, "col3");
+    assert_eq!(timeseries[0].len(), 2);
+    assert_eq!(timeseries[0].values[0], 1.0);
+    assert_eq!(timeseries[2].values[1], 6.0);
+}
+
+
+#[test]
+fn test_csv_reader_trailing_comma_in_header_and_data() {
+    // Create a temp file with trailing commas in both header and data
+    let temp_path = "./src/tests/example_data/temp_trailing_comma2.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        writeln!(file, "Date,col1,col2,").unwrap();
+        writeln!(file, "2020-01-01,10.0,20.0,").unwrap();
+        writeln!(file, "2020-01-02,30.0,40.0,").unwrap();
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok(); // Clean up
+
+    let timeseries = result.expect("Should handle trailing commas");
+    assert_eq!(timeseries.len(), 2, "Should have 2 data columns");
+    assert_eq!(timeseries[0].values[0], 10.0);
+    assert_eq!(timeseries[1].values[1], 40.0);
+}
+
+
+#[test]
+fn test_csv_reader_whitespace_in_column_names() {
+    // Create a temp file with whitespace around column names
+    let temp_path = "./src/tests/example_data/temp_whitespace_cols.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        // Header has whitespace around column names
+        writeln!(file, "Date, col1 , col2,  col3  ").unwrap();
+        writeln!(file, "2020-01-01,1.0,2.0,3.0").unwrap();
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok(); // Clean up
+
+    let timeseries = result.expect("Should handle whitespace in column names");
+    assert_eq!(timeseries.len(), 3);
+    assert_eq!(timeseries[0].name, "col1", "Should trim leading/trailing whitespace");
+    assert_eq!(timeseries[1].name, "col2", "Should trim leading/trailing whitespace");
+    assert_eq!(timeseries[2].name, "col3", "Should trim leading/trailing whitespace");
 }

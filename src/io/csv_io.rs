@@ -26,8 +26,11 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     // Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
 
-    // Create a new csv reader
-    let mut reader = csv::Reader::from_path(filename)
+    // Create a new csv reader with flexible record lengths
+    // This allows rows with trailing commas (extra empty fields) without error
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_path(filename)
         .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
 
     // Get the first row (what csv crate thinks are headers)
@@ -43,15 +46,19 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
         None => return Err(format!("Empty file '{}'", filename))
     };
 
-    let headers_len = first_row.len();
+    // Calculate effective header length, ignoring trailing empty columns (from trailing commas)
+    let mut headers_len = first_row.len();
+    while headers_len > 1 && first_row.get(headers_len - 1).map(|s| s.trim().is_empty()).unwrap_or(false) {
+        headers_len -= 1;
+    }
     let n_data_cols = headers_len.saturating_sub(1); // exclude the index column
 
     // Initialize timeseries with column names
     if has_header {
-        // Use actual column names from the header row
+        // Use actual column names from the header row (trimmed of whitespace)
         for i in 1..headers_len {
             let mut ts = Timeseries::new_daily();
-            ts.name = first_row.get(i).unwrap_or("").to_string();
+            ts.name = first_row.get(i).unwrap_or("").trim().to_string();
             answer.push(ts);
         }
     } else {
