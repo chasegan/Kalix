@@ -261,7 +261,7 @@
       "description": "Routing node with advanced flow distribution capabilities",
       "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1"],
       "required_params": ["type", "loc"],
-      "optional_params": ["lag", "pwl", "n_divs", "x", "ds_1"],
+      "optional_params": ["lag", "pwl", "n_divs", "x", "ds_1", "typical_regulated_flow"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -296,6 +296,10 @@
         "ds_1": {
           "type": "downstream_reference",
           "description": "Downstream link to another node"
+        },
+        "typical_regulated_flow": {
+          "type": "number",
+          "description": "Typical regulated flow"
         }
       }
     },
