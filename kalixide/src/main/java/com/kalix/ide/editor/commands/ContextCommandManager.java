@@ -1,12 +1,16 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import java.io.File;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -20,8 +24,8 @@ public class ContextCommandManager {
     private final RSyntaxTextArea editor;
     private final JFrame parentFrame;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
-    private final Supplier<java.io.File> modelFileSupplier;
-    private final java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier;
+    private final Supplier<File> modelFileSupplier;
+    private final Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier;
 
     private final CommandRegistry registry;
     private final ContextDetector detector;
@@ -38,8 +42,8 @@ public class ContextCommandManager {
      */
     public ContextCommandManager(RSyntaxTextArea editor, JFrame parentFrame,
                                   Supplier<INIModelParser.ParsedModel> modelSupplier,
-                                  Supplier<java.io.File> modelFileSupplier,
-                                  java.util.function.Consumer<java.util.List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement>> replacementApplier) {
+                                  Supplier<File> modelFileSupplier,
+                                  Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;

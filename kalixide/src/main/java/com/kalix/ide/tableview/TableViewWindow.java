@@ -1,6 +1,7 @@
 package com.kalix.ide.tableview;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.constants.UIConstants;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -19,7 +20,6 @@ import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
-import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -32,8 +32,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Dialog window for editing table-based property values.
@@ -98,17 +96,17 @@ public class TableViewWindow extends JDialog {
     }
 
     private void configureTable() {
-        table.setRowHeight(24);
+        table.setRowHeight(UIConstants.TableView.ROW_HEIGHT);
         table.getTableHeader().setReorderingAllowed(false);
 
         // For VERTICAL orientation, set column widths
         if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-            table.getColumnModel().getColumn(0).setPreferredWidth(120);
-            table.getColumnModel().getColumn(1).setPreferredWidth(150);
+            table.getColumnModel().getColumn(0).setPreferredWidth(UIConstants.TableView.PARAM_NAME_COLUMN_WIDTH);
+            table.getColumnModel().getColumn(1).setPreferredWidth(UIConstants.TableView.VALUE_COLUMN_WIDTH);
         } else {
             // HORIZONTAL - all columns same width
             for (int i = 0; i < table.getColumnCount(); i++) {
-                table.getColumnModel().getColumn(i).setPreferredWidth(100);
+                table.getColumnModel().getColumn(i).setPreferredWidth(UIConstants.TableView.DATA_COLUMN_WIDTH);
             }
         }
 
@@ -120,8 +118,7 @@ public class TableViewWindow extends JDialog {
         table.setShowGrid(true);
         Color gridColor = UIManager.getColor("Table.gridColor");
         if (gridColor == null) {
-            // Fallback: create a faint gray color
-            gridColor = new Color(220, 220, 220);
+            gridColor = UIConstants.TableView.FALLBACK_GRID_COLOR;
         }
         table.setGridColor(gridColor);
 
@@ -174,6 +171,10 @@ public class TableViewWindow extends JDialog {
         JMenuItem copyItem = new JMenuItem("Copy");
         copyItem.addActionListener(e -> copySelectedCells());
         popupMenu.add(copyItem);
+
+        JMenuItem copyAllItem = new JMenuItem("Copy Entire Table");
+        copyAllItem.addActionListener(e -> copyEntireTable());
+        popupMenu.add(copyAllItem);
 
         JMenuItem pasteItem = new JMenuItem("Paste");
         pasteItem.addActionListener(e -> pasteFromClipboard());
@@ -327,6 +328,40 @@ public class TableViewWindow extends JDialog {
     }
 
     /**
+     * Copies the entire table including headers to clipboard in tab-separated format.
+     */
+    private void copyEntireTable() {
+        StringBuilder sb = new StringBuilder();
+
+        // Add column headers
+        for (int col = 0; col < table.getColumnCount(); col++) {
+            sb.append(table.getColumnName(col));
+            if (col < table.getColumnCount() - 1) {
+                sb.append("\t");
+            }
+        }
+        sb.append("\n");
+
+        // Add all data rows
+        for (int row = 0; row < table.getRowCount(); row++) {
+            for (int col = 0; col < table.getColumnCount(); col++) {
+                Object value = table.getValueAt(row, col);
+                sb.append(value != null ? value.toString() : "");
+                if (col < table.getColumnCount() - 1) {
+                    sb.append("\t");
+                }
+            }
+            if (row < table.getRowCount() - 1) {
+                sb.append("\n");
+            }
+        }
+
+        StringSelection selection = new StringSelection(sb.toString());
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(selection, selection);
+    }
+
+    /**
      * Pastes values from clipboard into table starting at selected cell.
      * Supports both tab-separated (Excel) and comma-separated (CSV) formats.
      */
@@ -389,14 +424,15 @@ public class TableViewWindow extends JDialog {
         int height;
 
         if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-            width = 300;
-            height = Math.min(500, 50 + tableModel.getRowCount() * 24);
+            width = UIConstants.TableView.VERTICAL_TABLE_WIDTH;
+            height = Math.min(UIConstants.TableView.MAX_TABLE_HEIGHT,
+                50 + tableModel.getRowCount() * UIConstants.TableView.ROW_HEIGHT);
         } else {
-            width = 450;
-            height = Math.min(400, 50 + tableModel.getRowCount() * 24);
+            width = UIConstants.TableView.HORIZONTAL_TABLE_WIDTH;
+            height = Math.min(400, 50 + tableModel.getRowCount() * UIConstants.TableView.ROW_HEIGHT);
         }
 
-        return new Dimension(width, Math.max(200, height));
+        return new Dimension(width, Math.max(UIConstants.TableView.MIN_TABLE_HEIGHT, height));
     }
 
     private JPanel createButtonPanel() {
@@ -536,7 +572,7 @@ public class TableViewWindow extends JDialog {
             double fsArea = Double.parseDouble(areaField.getText().trim());
 
             // Generate the pyramidal dimensions
-            double[][] rows = generatePyramidRows(fsVolume, fsArea);
+            double[][] rows = PyramidalDimensionsCalculator.generateRows(fsVolume, fsArea);
 
             // Clear existing rows and populate with new data
             while (tableModel.getRowCount() > 0) {
@@ -558,44 +594,6 @@ public class TableViewWindow extends JDialog {
                 "Error",
                 JOptionPane.ERROR_MESSAGE);
         }
-    }
-
-    /**
-     * Generates pyramidal storage dimension rows.
-     * @param fsVolume Full supply volume [ML]
-     * @param fsArea Full supply area [km²]
-     * @return Array of rows, each containing [level, volume, area, spill]
-     */
-    private double[][] generatePyramidRows(double fsVolume, double fsArea) {
-        final double BIG_VOL = 1e9;
-        final double BIG_SPILL = 1e9;
-
-        // Define rows: (volume, spill)
-        double[][] volumeSpill = {
-            {0, 0},
-            {fsVolume, 0},
-            {fsVolume + 1, BIG_SPILL},
-            {BIG_VOL, BIG_SPILL}
-        };
-
-        double[][] result = new double[volumeSpill.length][4];
-
-        for (int i = 0; i < volumeSpill.length; i++) {
-            double volume = volumeSpill[i][0];
-            double spill = volumeSpill[i][1];
-
-            // Calculate pyramid dimensions
-            double fsLevel = 3.0 * (fsVolume / 1000.0) / fsArea;
-            double level = Math.sqrt(3.0 * (volume / 1000.0) * (fsLevel / fsArea));
-            double area = (volume > 0) ? (3.0 * (volume / 1000.0) / level) : 0;
-
-            result[i][0] = level;
-            result[i][1] = volume;
-            result[i][2] = area;
-            result[i][3] = spill;
-        }
-
-        return result;
     }
 
     /**
@@ -757,150 +755,6 @@ public class TableViewWindow extends JDialog {
     public String showAndGetResult() {
         setVisible(true);
         return accepted ? result : null;
-    }
-
-    /**
-     * Table model that handles both VERTICAL and HORIZONTAL orientations.
-     */
-    private static class TableDataModel extends AbstractTableModel {
-
-        private final TablePropertyDefinition definition;
-        private final List<String[]> data;
-        private final String[] columnNames;
-
-        public TableDataModel(TablePropertyDefinition definition, String[][] initialValues) {
-            this.definition = definition;
-            this.columnNames = definition.getColumnNames();
-
-            // Convert initial values to mutable list
-            this.data = new ArrayList<>();
-            for (String[] row : initialValues) {
-                data.add(row.clone());
-            }
-        }
-
-        @Override
-        public int getRowCount() {
-            return data.size();
-        }
-
-        @Override
-        public int getColumnCount() {
-            if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-                return 2; // Parameter name + value
-            } else {
-                return columnNames.length;
-            }
-        }
-
-        @Override
-        public String getColumnName(int column) {
-            return columnNames[column];
-        }
-
-        @Override
-        public Object getValueAt(int rowIndex, int columnIndex) {
-            if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-                if (columnIndex == 0) {
-                    // Parameter name
-                    String[] rowNames = definition.getRowNames();
-                    return rowIndex < rowNames.length ? rowNames[rowIndex] : "";
-                } else {
-                    // Value
-                    return data.get(rowIndex)[0];
-                }
-            } else {
-                return data.get(rowIndex)[columnIndex];
-            }
-        }
-
-        @Override
-        public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-            if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-                if (columnIndex == 1) {
-                    data.get(rowIndex)[0] = (String) aValue;
-                    fireTableCellUpdated(rowIndex, columnIndex);
-                }
-            } else {
-                data.get(rowIndex)[columnIndex] = (String) aValue;
-                fireTableCellUpdated(rowIndex, columnIndex);
-            }
-        }
-
-        @Override
-        public boolean isCellEditable(int rowIndex, int columnIndex) {
-            if (definition.getOrientation() == DisplayOrientation.VERTICAL) {
-                return columnIndex == 1; // Only value column is editable
-            }
-            return true; // All cells editable in HORIZONTAL mode
-        }
-
-        public void addRow() {
-            int numCols = definition.getOrientation() == DisplayOrientation.VERTICAL
-                ? 1
-                : definition.getColumnNames().length;
-            String[] newRow = new String[numCols];
-            for (int i = 0; i < numCols; i++) {
-                newRow[i] = "";
-            }
-            data.add(newRow);
-            fireTableRowsInserted(data.size() - 1, data.size() - 1);
-        }
-
-        public void insertRow(int rowIndex) {
-            int numCols = definition.getOrientation() == DisplayOrientation.VERTICAL
-                ? 1
-                : definition.getColumnNames().length;
-            String[] newRow = new String[numCols];
-            for (int i = 0; i < numCols; i++) {
-                newRow[i] = "";
-            }
-            if (rowIndex < 0) {
-                rowIndex = 0;
-            } else if (rowIndex > data.size()) {
-                rowIndex = data.size();
-            }
-            data.add(rowIndex, newRow);
-            fireTableRowsInserted(rowIndex, rowIndex);
-        }
-
-        public void removeRow(int rowIndex) {
-            if (rowIndex >= 0 && rowIndex < data.size()) {
-                data.remove(rowIndex);
-                fireTableRowsDeleted(rowIndex, rowIndex);
-            }
-        }
-
-        /**
-         * Gets the data values in the format expected by the definition's formatValues method.
-         */
-        public String[][] getDataValues() {
-            String[][] result = new String[data.size()][];
-            for (int i = 0; i < data.size(); i++) {
-                result[i] = data.get(i).clone();
-            }
-            return result;
-        }
-
-        /**
-         * Gets non-empty data values, filtering out rows where all cells are empty or whitespace.
-         */
-        public String[][] getNonEmptyDataValues() {
-            List<String[]> nonEmptyRows = new ArrayList<>();
-            for (String[] row : data) {
-                boolean hasValue = false;
-                for (String cell : row) {
-                    if (cell != null && !cell.trim().isEmpty()) {
-                        hasValue = true;
-                        break;
-                    }
-                }
-                if (hasValue) {
-                    nonEmptyRows.add(row.clone());
-                }
-            }
-            return nonEmptyRows.toArray(new String[0][]);
-        }
     }
 
 }

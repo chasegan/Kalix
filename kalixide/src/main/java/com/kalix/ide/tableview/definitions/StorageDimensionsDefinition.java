@@ -14,10 +14,10 @@ import java.util.regex.Pattern;
 public class StorageDimensionsDefinition implements TablePropertyDefinition {
 
     private static final String[] COLUMN_NAMES = {
-        "Level",
-        "Volume",
-        "Area",
-        "Spill"
+        "Level [m]",
+        "Volume [ML]",
+        "Area [km2]",
+        "Spill [ML]"
     };
 
     private static final int NUM_COLUMNS = COLUMN_NAMES.length;

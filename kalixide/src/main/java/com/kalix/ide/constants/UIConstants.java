@@ -146,4 +146,39 @@ public final class UIConstants {
 
         private StdioLog() { throw new UnsupportedOperationException("Constants class"); }
     }
+
+    /**
+     * TableView window constants for table-based property editing
+     */
+    public static final class TableView {
+
+        /** Row height in pixels for table cells */
+        public static final int ROW_HEIGHT = 24;
+
+        /** Fallback grid color when theme color is unavailable */
+        public static final Color FALLBACK_GRID_COLOR = new Color(220, 220, 220);
+
+        /** Preferred width for VERTICAL orientation tables (parameter lists) */
+        public static final int VERTICAL_TABLE_WIDTH = 300;
+
+        /** Preferred width for HORIZONTAL orientation tables (data tables) */
+        public static final int HORIZONTAL_TABLE_WIDTH = 450;
+
+        /** Maximum table height */
+        public static final int MAX_TABLE_HEIGHT = 500;
+
+        /** Minimum table height */
+        public static final int MIN_TABLE_HEIGHT = 200;
+
+        /** Column width for parameter name column */
+        public static final int PARAM_NAME_COLUMN_WIDTH = 120;
+
+        /** Column width for value column */
+        public static final int VALUE_COLUMN_WIDTH = 150;
+
+        /** Column width for data columns in horizontal tables */
+        public static final int DATA_COLUMN_WIDTH = 100;
+
+        private TableView() { throw new UnsupportedOperationException("Constants class"); }
+    }
 }
