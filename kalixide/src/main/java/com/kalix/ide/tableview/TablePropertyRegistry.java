@@ -1,7 +1,10 @@
 package com.kalix.ide.tableview;
 
 import com.kalix.ide.tableview.definitions.Gr4jParamsDefinition;
+import com.kalix.ide.tableview.definitions.LossTableDefinition;
+import com.kalix.ide.tableview.definitions.RoutingPwlDefinition;
 import com.kalix.ide.tableview.definitions.SacramentoParamsDefinition;
+import com.kalix.ide.tableview.definitions.SplitterTableDefinition;
 import com.kalix.ide.tableview.definitions.StorageDimensionsDefinition;
 
 import java.util.HashMap;
@@ -32,6 +35,9 @@ public class TablePropertyRegistry {
         register(new SacramentoParamsDefinition());
         register(new Gr4jParamsDefinition());
         register(new StorageDimensionsDefinition());
+        register(new RoutingPwlDefinition());
+        register(new SplitterTableDefinition());
+        register(new LossTableDefinition());
     }
 
     /**
