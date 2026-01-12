@@ -1,5 +1,9 @@
 package com.kalix.ide.tableview;
 
+import com.kalix.ide.constants.AppConstants;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
+
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -11,6 +15,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
@@ -81,19 +86,11 @@ public class TableViewWindow extends JDialog {
         // Button panel
         JPanel buttonPanel = createButtonPanel();
 
-        // Add row buttons for dynamic tables
-        JPanel topPanel = null;
-        if (!definition.isFixedRowCount()) {
-            topPanel = createRowManagementPanel();
-        }
-
         // Layout
         JPanel contentPanel = new JPanel(new BorderLayout(5, 5));
         contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        if (topPanel != null) {
-            contentPanel.add(topPanel, BorderLayout.NORTH);
-        }
+        contentPanel.add(createToolBar(), BorderLayout.NORTH);
         contentPanel.add(scrollPane, BorderLayout.CENTER);
         contentPanel.add(buttonPanel, BorderLayout.SOUTH);
 
@@ -441,37 +438,245 @@ public class TableViewWindow extends JDialog {
         return panel;
     }
 
-    private JPanel createRowManagementPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private JToolBar createToolBar() {
+        JToolBar toolBar = new JToolBar();
+        toolBar.setFloatable(false);
+        toolBar.setRollover(true);
 
-        JButton addRowButton = new JButton("Add Row");
-        addRowButton.addActionListener(e -> {
-            tableModel.addRow();
-            table.scrollRectToVisible(table.getCellRect(tableModel.getRowCount() - 1, 0, true));
-        });
+        // Row management buttons (only for dynamic tables)
+        if (!definition.isFixedRowCount()) {
+            JButton addRowButton = createToolBarButton(
+                "Add Row",
+                FontAwesomeSolid.PLUS_SQUARE,
+                e -> {
+                    tableModel.addRow();
+                    table.scrollRectToVisible(table.getCellRect(tableModel.getRowCount() - 1, 0, true));
+                }
+            );
+            toolBar.add(addRowButton);
 
-        JButton removeRowButton = new JButton("Remove Row");
-        removeRowButton.addActionListener(e -> {
-            int selectedRow = table.getSelectedRow();
-            if (selectedRow >= 0 && tableModel.getRowCount() > 1) {
-                tableModel.removeRow(selectedRow);
-            } else if (selectedRow < 0) {
-                JOptionPane.showMessageDialog(this,
-                    "Please select a row to remove",
-                    "No Selection",
-                    JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                JOptionPane.showMessageDialog(this,
-                    "Cannot remove the last row",
-                    "Cannot Remove",
-                    JOptionPane.WARNING_MESSAGE);
+            JButton removeRowButton = createToolBarButton(
+                "Remove Row",
+                FontAwesomeSolid.MINUS_SQUARE,
+                e -> {
+                    int selectedRow = table.getSelectedRow();
+                    if (selectedRow >= 0 && tableModel.getRowCount() > 1) {
+                        tableModel.removeRow(selectedRow);
+                    } else if (selectedRow < 0) {
+                        JOptionPane.showMessageDialog(this,
+                            "Please select a row to remove",
+                            "No Selection",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(this,
+                            "Cannot remove the last row",
+                            "Cannot Remove",
+                            JOptionPane.WARNING_MESSAGE);
+                    }
+                }
+            );
+            toolBar.add(removeRowButton);
+
+            toolBar.addSeparator();
+        }
+
+        // Generate pyramidal dimensions button (only for storage dimensions)
+        if ("storage".equals(definition.getNodeType()) && "dimensions".equals(definition.getPropertyName())) {
+            JButton generateButton = createToolBarButton(
+                "Generate Pyramidal Dimensions",
+                FontAwesomeSolid.MAGIC,
+                e -> generatePyramidalDimensions()
+            );
+            toolBar.add(generateButton);
+            toolBar.addSeparator();
+        }
+
+        // Format values button (trim to significant figures)
+        JButton formatButton = createToolBarButton(
+            "Format pretty",
+            FontAwesomeSolid.HAND_SPARKLES,
+            e -> formatAllValues()
+        );
+        toolBar.add(formatButton);
+
+        return toolBar;
+    }
+
+    /**
+     * Prompts for parameters and generates pyramidal storage dimensions.
+     */
+    private void generatePyramidalDimensions() {
+        // Create panel with both input fields
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+
+        JPanel labelsPanel = new JPanel(new java.awt.GridLayout(2, 1, 5, 5));
+        labelsPanel.add(new javax.swing.JLabel("Full supply volume [ML]:"));
+        labelsPanel.add(new javax.swing.JLabel("Full supply area [km²]:"));
+
+        JPanel fieldsPanel = new JPanel(new java.awt.GridLayout(2, 1, 5, 5));
+        javax.swing.JTextField volumeField = new javax.swing.JTextField("10000", 15);
+        javax.swing.JTextField areaField = new javax.swing.JTextField("3.0", 15);
+        fieldsPanel.add(volumeField);
+        fieldsPanel.add(areaField);
+
+        panel.add(labelsPanel, BorderLayout.WEST);
+        panel.add(fieldsPanel, BorderLayout.CENTER);
+
+        int result = JOptionPane.showConfirmDialog(this, panel,
+            "Generate Pyramidal Dimensions",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+
+        if (result != JOptionPane.OK_OPTION) {
+            return; // Cancelled
+        }
+
+        try {
+            double fsVolume = Double.parseDouble(volumeField.getText().trim());
+            double fsArea = Double.parseDouble(areaField.getText().trim());
+
+            // Generate the pyramidal dimensions
+            double[][] rows = generatePyramidRows(fsVolume, fsArea);
+
+            // Clear existing rows and populate with new data
+            while (tableModel.getRowCount() > 0) {
+                tableModel.removeRow(0);
             }
-        });
 
-        panel.add(addRowButton);
-        panel.add(removeRowButton);
+            for (double[] row : rows) {
+                tableModel.addRow();
+                int rowIndex = tableModel.getRowCount() - 1;
+                tableModel.setValueAt(Double.toString(row[0]), rowIndex, 0); // Level
+                tableModel.setValueAt(Double.toString(row[1]), rowIndex, 1); // Volume
+                tableModel.setValueAt(Double.toString(row[2]), rowIndex, 2); // Area
+                tableModel.setValueAt(Double.toString(row[3]), rowIndex, 3); // Spill
+            }
 
-        return panel;
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this,
+                "Invalid numeric values entered",
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Generates pyramidal storage dimension rows.
+     * @param fsVolume Full supply volume [ML]
+     * @param fsArea Full supply area [km²]
+     * @return Array of rows, each containing [level, volume, area, spill]
+     */
+    private double[][] generatePyramidRows(double fsVolume, double fsArea) {
+        final double BIG_VOL = 1e9;
+        final double BIG_SPILL = 1e9;
+
+        // Define rows: (volume, spill)
+        double[][] volumeSpill = {
+            {0, 0},
+            {fsVolume, 0},
+            {fsVolume + 1, BIG_SPILL},
+            {BIG_VOL, BIG_SPILL}
+        };
+
+        double[][] result = new double[volumeSpill.length][4];
+
+        for (int i = 0; i < volumeSpill.length; i++) {
+            double volume = volumeSpill[i][0];
+            double spill = volumeSpill[i][1];
+
+            // Calculate pyramid dimensions
+            double fsLevel = 3.0 * (fsVolume / 1000.0) / fsArea;
+            double level = Math.sqrt(3.0 * (volume / 1000.0) * (fsLevel / fsArea));
+            double area = (volume > 0) ? (3.0 * (volume / 1000.0) / level) : 0;
+
+            result[i][0] = level;
+            result[i][1] = volume;
+            result[i][2] = area;
+            result[i][3] = spill;
+        }
+
+        return result;
+    }
+
+    /**
+     * Formats all numeric values to 3 significant figures with at least 3 decimal places.
+     * Formula: N decimal places where N = 2 + max(1, ceil(-log10(value)))
+     */
+    private void formatAllValues() {
+        // Stop any active editing
+        if (table.isEditing()) {
+            table.getCellEditor().stopCellEditing();
+        }
+
+        int valueColStart = definition.getOrientation() == DisplayOrientation.VERTICAL ? 1 : 0;
+
+        for (int row = 0; row < tableModel.getRowCount(); row++) {
+            for (int col = valueColStart; col < tableModel.getColumnCount(); col++) {
+                String value = (String) tableModel.getValueAt(row, col);
+                if (value != null && !value.trim().isEmpty()) {
+                    String formatted = formatToSignificantFigures(value.trim());
+                    if (formatted != null) {
+                        tableModel.setValueAt(formatted, row, col);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Formats a numeric string to 3 significant figures.
+     * - Scientific notation inputs stay in scientific notation with 3 sig figs
+     * - Decimal inputs get at least 3 decimal places using formula: N = 2 + max(1, ceil(-log10(|value|)))
+     * @param value The numeric string to format
+     * @return The formatted string, or null if not a valid number
+     */
+    private String formatToSignificantFigures(String value) {
+        try {
+            double num = Double.parseDouble(value);
+            if (num == 0) {
+                return "0.000";
+            }
+
+            // Check if original value is in scientific notation
+            boolean isScientific = value.contains("e") || value.contains("E");
+
+            if (isScientific) {
+                // Format to 3 significant figures in scientific notation (1 + 2 decimal places)
+                return String.format("%.2e", num);
+            } else {
+                // N = 2 + max(1, ceil(-log10(|value|)))
+                int n = 2 + Math.max(1, (int) Math.ceil(-Math.log10(Math.abs(num))));
+
+                // Format with n decimal places
+                return String.format("%." + n + "f", num);
+            }
+        } catch (NumberFormatException e) {
+            return null; // Not a valid number, leave unchanged
+        }
+    }
+
+    private JButton createToolBarButton(String tooltip, FontAwesomeSolid iconType,
+                                         java.awt.event.ActionListener listener) {
+        FontIcon icon = FontIcon.of(iconType, AppConstants.TOOLBAR_ICON_SIZE);
+        icon.setIconColor(getThemeAwareIconColor());
+
+        JButton button = new JButton(icon);
+        button.setToolTipText(tooltip);
+        button.setFocusPainted(false);
+        button.addActionListener(listener);
+        button.getAccessibleContext().setAccessibleName(tooltip);
+
+        return button;
+    }
+
+    private Color getThemeAwareIconColor() {
+        Color toolbarBackground = UIManager.getColor("ToolBar.background");
+        if (toolbarBackground != null) {
+            int sum = toolbarBackground.getRed() + toolbarBackground.getGreen() + toolbarBackground.getBlue();
+            boolean isDarkTheme = sum < 384;
+            return isDarkTheme ? Color.LIGHT_GRAY : Color.DARK_GRAY;
+        }
+        return Color.DARK_GRAY;
     }
 
     private boolean validateAllCells() {

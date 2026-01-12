@@ -27,7 +27,7 @@ public class OpenTableViewCommand implements EditorCommand {
         this.modelSupplier = modelSupplier;
         this.metadata = new CommandMetadata.Builder()
             .id("open_table_view")
-            .displayName("Open Table View")
+            .displayName("Table View")
             .description("Edit this property in a table view")
             .category("")
             .build();

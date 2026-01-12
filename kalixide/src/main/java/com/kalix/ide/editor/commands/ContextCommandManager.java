@@ -72,9 +72,6 @@ public class ContextCommandManager {
         // Register rename command - pass supplier, not the model itself
         registry.register(new RenameNodeCommand(modelSupplier, parentFrame));
 
-        // Register LVAS generation command
-        registry.register(new GenerateSimpleLvasCommand(parentFrame));
-
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
 
