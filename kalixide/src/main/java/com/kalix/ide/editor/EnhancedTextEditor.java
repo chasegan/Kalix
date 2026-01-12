@@ -155,6 +155,19 @@ public class EnhancedTextEditor extends JPanel {
             }
 
             private void showContextMenu(MouseEvent e) {
+                // Move caret to click position if not clicking within a selection
+                int clickOffset = textArea.viewToModel2D(e.getPoint());
+                int selStart = textArea.getSelectionStart();
+                int selEnd = textArea.getSelectionEnd();
+
+                boolean hasSelection = selStart != selEnd;
+                boolean clickInSelection = hasSelection && clickOffset >= selStart && clickOffset <= selEnd;
+
+                if (!clickInSelection) {
+                    // Move caret to click position
+                    textArea.setCaretPosition(clickOffset);
+                }
+
                 // Build a fresh menu each time
                 JPopupMenu menu = createContextMenu();
 
