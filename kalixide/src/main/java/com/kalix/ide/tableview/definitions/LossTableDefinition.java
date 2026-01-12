@@ -1,11 +1,8 @@
 package com.kalix.ide.tableview.definitions;
 
 import com.kalix.ide.tableview.DisplayOrientation;
+import com.kalix.ide.tableview.TableParsingUtils;
 import com.kalix.ide.tableview.TablePropertyDefinition;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * Table property definition for Loss node table parameter.
@@ -19,11 +16,6 @@ public class LossTableDefinition implements TablePropertyDefinition {
     };
 
     private static final int NUM_COLUMNS = COLUMN_NAMES.length;
-
-    // Pattern for valid numbers including scientific notation (e.g., 1e8, -3.14, .5)
-    private static final Pattern NUMBER_PATTERN = Pattern.compile(
-        "-?\\d*\\.?\\d+([eE][+-]?\\d+)?"
-    );
 
     @Override
     public String getNodeType() {
@@ -63,7 +55,7 @@ public class LossTableDefinition implements TablePropertyDefinition {
         }
 
         // Parse all numeric values
-        String[] allValues = parseNumericValues(iniValue);
+        String[] allValues = TableParsingUtils.parseNumericValues(iniValue);
 
         // Group into rows of 2 columns
         int numRows = (allValues.length + NUM_COLUMNS - 1) / NUM_COLUMNS;
@@ -98,7 +90,7 @@ public class LossTableDefinition implements TablePropertyDefinition {
         if (value == null || value.trim().isEmpty()) {
             return "Value cannot be empty";
         }
-        if (!isValidNumber(value.trim())) {
+        if (!TableParsingUtils.isValidNumber(value.trim())) {
             return "Value must be a number";
         }
         return null;
@@ -107,50 +99,5 @@ public class LossTableDefinition implements TablePropertyDefinition {
     @Override
     public String getWindowTitle() {
         return "Loss Table";
-    }
-
-    private String[] parseNumericValues(String iniValue) {
-        if (iniValue == null || iniValue.trim().isEmpty()) {
-            return new String[0];
-        }
-
-        // Split by commas, handling potential header line
-        String[] lines = iniValue.split("\n");
-        List<String> values = new ArrayList<>();
-
-        for (String line : lines) {
-            String trimmedLine = line.trim();
-            if (trimmedLine.isEmpty()) {
-                continue;
-            }
-
-            // Parse values from this line, skipping if any value is not a valid number
-            String[] parts = trimmedLine.split(",");
-            List<String> lineValues = new ArrayList<>();
-            boolean isDataLine = true;
-
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (!trimmed.isEmpty()) {
-                    if (isValidNumber(trimmed)) {
-                        lineValues.add(trimmed);
-                    } else {
-                        // Not a number - this is a header line
-                        isDataLine = false;
-                        break;
-                    }
-                }
-            }
-
-            if (isDataLine) {
-                values.addAll(lineValues);
-            }
-        }
-
-        return values.toArray(new String[0]);
-    }
-
-    private boolean isValidNumber(String value) {
-        return NUMBER_PATTERN.matcher(value).matches();
     }
 }

@@ -542,18 +542,22 @@ public class TableViewWindow extends JDialog {
      * Prompts for parameters and generates pyramidal storage dimensions.
      */
     private void generatePyramidalDimensions() {
-        // Create panel with both input fields
+        // Create panel with input fields
         JPanel panel = new JPanel(new BorderLayout(5, 5));
 
-        JPanel labelsPanel = new JPanel(new java.awt.GridLayout(2, 1, 5, 5));
+        JPanel labelsPanel = new JPanel(new java.awt.GridLayout(3, 1, 5, 5));
         labelsPanel.add(new javax.swing.JLabel("Full supply volume [ML]:"));
         labelsPanel.add(new javax.swing.JLabel("Full supply area [km²]:"));
+        labelsPanel.add(new javax.swing.JLabel("Number of rows:"));
 
-        JPanel fieldsPanel = new JPanel(new java.awt.GridLayout(2, 1, 5, 5));
+        JPanel fieldsPanel = new JPanel(new java.awt.GridLayout(3, 1, 5, 5));
         javax.swing.JTextField volumeField = new javax.swing.JTextField("10000", 15);
         javax.swing.JTextField areaField = new javax.swing.JTextField("3.0", 15);
+        javax.swing.JTextField rowsField = new javax.swing.JTextField(
+            String.valueOf(PyramidalDimensionsCalculator.DEFAULT_NUM_ROWS), 15);
         fieldsPanel.add(volumeField);
         fieldsPanel.add(areaField);
+        fieldsPanel.add(rowsField);
 
         panel.add(labelsPanel, BorderLayout.WEST);
         panel.add(fieldsPanel, BorderLayout.CENTER);
@@ -570,9 +574,10 @@ public class TableViewWindow extends JDialog {
         try {
             double fsVolume = Double.parseDouble(volumeField.getText().trim());
             double fsArea = Double.parseDouble(areaField.getText().trim());
+            int nRows = Integer.parseInt(rowsField.getText().trim());
 
             // Generate the pyramidal dimensions
-            double[][] rows = PyramidalDimensionsCalculator.generateRows(fsVolume, fsArea);
+            double[][] rows = PyramidalDimensionsCalculator.generateRows(fsVolume, fsArea, nRows);
 
             // Clear existing rows and populate with new data
             while (tableModel.getRowCount() > 0) {
