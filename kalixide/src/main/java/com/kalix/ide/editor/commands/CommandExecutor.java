@@ -188,6 +188,77 @@ public class CommandExecutor {
     }
 
     /**
+     * Replaces a property value in the document, handling multi-line values.
+     * The property format is: key = value (possibly with continuation lines)
+     *
+     * @param propertyKey The property key (e.g., "params", "dimensions")
+     * @param oldValue The current property value (as returned by parser, continuation lines joined)
+     * @param newValue The new property value to set
+     * @param propertyLineNumber The 1-based line number where the property starts
+     * @return true if replacement was successful
+     */
+    public boolean replacePropertyValue(String propertyKey, String oldValue, String newValue, int propertyLineNumber) {
+        try {
+            String text = editor.getText();
+            String[] lines = text.split("\n", -1);
+            int lineIndex = propertyLineNumber - 1; // Convert to 0-based
+
+            if (lineIndex < 0 || lineIndex >= lines.length) {
+                logger.warn("Invalid property line number: {}", propertyLineNumber);
+                return false;
+            }
+
+            // Find the start position of the property line
+            int startPos = 0;
+            for (int i = 0; i < lineIndex; i++) {
+                startPos += lines[i].length() + 1; // +1 for newline
+            }
+
+            // Find the end of the property value (including continuation lines)
+            int endLineIndex = lineIndex;
+            for (int i = lineIndex + 1; i < lines.length; i++) {
+                String nextLine = lines[i];
+                // Continuation line: non-empty and starts with whitespace
+                if (!nextLine.isEmpty() && Character.isWhitespace(nextLine.charAt(0))) {
+                    endLineIndex = i;
+                } else {
+                    break;
+                }
+            }
+
+            // Calculate end position (end of the last continuation line)
+            int endPos = startPos;
+            for (int i = lineIndex; i <= endLineIndex; i++) {
+                endPos += lines[i].length();
+                if (i < endLineIndex) {
+                    endPos += 1; // newline between lines
+                }
+            }
+
+            // Build the new property text
+            String newPropertyText = propertyKey + " = " + newValue;
+
+            // Perform the replacement as an atomic edit
+            editor.beginAtomicEdit();
+            try {
+                javax.swing.text.Document doc = editor.getDocument();
+                doc.remove(startPos, endPos - startPos);
+                doc.insertString(startPos, newPropertyText, null);
+            } finally {
+                editor.endAtomicEdit();
+            }
+
+            logger.debug("Replaced property {} value (lines {}-{})", propertyKey, propertyLineNumber, endLineIndex + 1);
+            return true;
+
+        } catch (Exception e) {
+            logger.error("Error replacing property value", e);
+            showError("Failed to update property: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Shows an error dialog.
      */
     private void showError(String message) {

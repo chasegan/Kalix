@@ -75,6 +75,9 @@ public class ContextCommandManager {
         // Register LVAS generation command
         registry.register(new GenerateSimpleLvasCommand(parentFrame));
 
+        // Register table view command for editing params/dimensions
+        registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
+
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));
         // registry.register(new DuplicateNodeCommand(...));
