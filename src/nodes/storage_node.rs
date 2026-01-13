@@ -10,7 +10,7 @@ const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
 const EPSILON: f64 = 1e-3;
-const MAX_DS_LINKS: usize = 5;
+const MAX_DS_LINKS: usize = 4;
 
 #[derive(Default, Clone)]
 pub struct StorageNode {
@@ -57,9 +57,13 @@ pub struct StorageNode {
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
+    recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
+    recorder_idx_ds_2_order: Option<usize>,
     recorder_idx_ds_3: Option<usize>,
+    recorder_idx_ds_3_order: Option<usize>,
     recorder_idx_ds_4: Option<usize>,
+    recorder_idx_ds_4_order: Option<usize>,
 }
 
 impl StorageNode {
@@ -145,6 +149,18 @@ impl Node for StorageNode {
         );
         self.recorder_idx_ds_4 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4").as_str(), false
+        );
+        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
+        self.recorder_idx_ds_2_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_order").as_str(), false
+        );
+        self.recorder_idx_ds_3_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_order").as_str(), false
+        );
+        self.recorder_idx_ds_4_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_order").as_str(), false
         );
 
         Ok(())
@@ -394,6 +410,18 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_ds_4 {
             data_cache.add_value_at_index(idx, self.ds_4_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1_order {
+            data_cache.add_value_at_index(idx, self.dsorders[0]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_order {
+            data_cache.add_value_at_index(idx, self.dsorders[1]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_3_order {
+            data_cache.add_value_at_index(idx, self.dsorders[2]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_order {
+            data_cache.add_value_at_index(idx, self.dsorders[3]);
         }
 
         // Reset upstream inflow for next timestep

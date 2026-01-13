@@ -24,7 +24,7 @@
   "node_types": {
     "inflow": {
       "description": "Inflow node with external data source",
-      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1"],
+      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
       "optional_params": ["inflow", "recession_factor"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -51,7 +51,7 @@
 
     "gr4j": {
       "description": "GR4J rainfall-runoff model",
-      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1"],
+      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
       "optional_params": [],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -87,7 +87,7 @@
 
     "routing_node": {
       "description": "Routing node with optional lag parameter for flow delay",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
       "optional_params": ["lag"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
@@ -111,7 +111,7 @@
 
     "sacramento": {
       "description": "Sacramento rainfall-runoff model",
-      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "rain", "evap", "roimp", "flosf", "flobf", "floin"],
+      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "roimp", "flosf", "flobf", "floin"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
       "optional_params": [],
       "dsnode_params": ["ds_1"],
@@ -147,7 +147,7 @@
 
     "user": {
       "description": "User node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
       "required_params": ["type", "loc"],
       "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover", "regulated"],
       "dsnode_params": ["ds_1"],
@@ -192,7 +192,7 @@
 
     "storage": {
       "description": "Storage node for water storage modeling",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "evap", "rain", "seep", "level", "area", "pond_diversion"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "evap", "rain", "seep", "level", "area", "pond_diversion"],
       "required_params": ["type", "loc"],
       "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand", "initial_volume"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
@@ -240,7 +240,7 @@
 
     "blackhole": {
       "description": "Blackhole node that consumes flow without further routing",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
       "optional_params": [],
       "dsnode_params": ["ds_1"],
@@ -259,7 +259,7 @@
 
     "routing": {
       "description": "Routing node with advanced flow distribution capabilities",
-      "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1"],
+      "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
       "optional_params": ["lag", "pwl", "n_divs", "x", "ds_1", "typical_regulated_flow"],
       "dsnode_params": ["ds_1"],
@@ -306,7 +306,7 @@
 
     "confluence": {
       "description": "Confluence node that merges multiple flow streams",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
       "optional_params": [],
       "dsnode_params": ["ds_1"],
@@ -325,7 +325,7 @@
 
     "loss": {
       "description": "Loss node for flow reduction modeling",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "loss"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "loss"],
       "required_params": ["type", "loc"],
       "optional_params": ["table"],
       "dsnode_params": ["ds_1"],
@@ -348,7 +348,7 @@
 
     "splitter": {
       "description": "Splitter node for dividing flow between two downstream paths",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_2"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_2", "ds_1_order", "ds_2_order"],
       "required_params": ["type", "loc", "table"],
       "optional_params": [],
       "dsnode_params": ["ds_1", "ds_2"],
@@ -371,7 +371,7 @@
 
     "gauge": {
       "description": "Gauge node for monitoring and measuring flow",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "delta"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "delta"],
       "required_params": ["type", "loc"],
       "optional_params": ["force_flow", "reference_flow"],
       "dsnode_params": ["ds_1"],

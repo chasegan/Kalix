@@ -58,6 +58,7 @@ pub struct RoutingNode {
     recorder_idx_volume: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
+    recorder_idx_ds_1_order: Option<usize>,
 }
 
 impl RoutingNode {
@@ -193,6 +194,9 @@ impl Node for RoutingNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
 
         //Return
         Ok(())
@@ -276,6 +280,9 @@ impl Node for RoutingNode {
         }
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1_order {
+            data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
 
         // Reset upstream inflow for next timestep

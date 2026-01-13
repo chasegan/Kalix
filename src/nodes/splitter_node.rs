@@ -25,7 +25,9 @@ pub struct SplitterNode {
     recorder_idx_usflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
+    recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
+    recorder_idx_ds_2_order: Option<usize>,
 }
 
 impl SplitterNode {
@@ -57,8 +59,14 @@ impl Node for SplitterNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
         self.recorder_idx_ds_2 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_2").as_str(), false
+        );
+        self.recorder_idx_ds_2_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_order").as_str(), false
         );
 
         // Return
@@ -91,8 +99,14 @@ impl Node for SplitterNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.ds_1_flow);
         }
+        if let Some(idx) = self.recorder_idx_ds_1_order {
+            data_cache.add_value_at_index(idx, self.dsorders[0]);
+        }
         if let Some(idx) = self.recorder_idx_ds_2 {
             data_cache.add_value_at_index(idx, self.ds_2_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_order {
+            data_cache.add_value_at_index(idx, self.dsorders[1]);
         }
 
         // Reset upstream inflow for next timestep
