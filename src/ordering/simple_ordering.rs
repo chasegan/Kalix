@@ -212,8 +212,7 @@ impl SimpleOrderingSystem {
                 },
             }
 
-            // Propagate the order to the downstream node inlet, and upstream node outlet
-            nodes[li.to_node].usorders_mut()[li.to_inlet as usize] = order; //TODO: I dont know if I need this. Maybe if I want to record it at confluences?
+            // Propagate the order to the upstream node outlet
             nodes[li.from_node].dsorders_mut()[li.from_outlet as usize] = order;
         }
     }

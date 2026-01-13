@@ -47,8 +47,7 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 //
 //----------------------------------------------//
 
-const MAX_DS_LINKS: usize = 5;
-const MAX_US_LINKS: usize = 5;
+const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
 pub struct UserNode {
@@ -65,7 +64,6 @@ pub struct UserNode {
     pub order_phase_demand_value: f64,
     pub order_buffer: FifoBuffer,
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     // Properties - additional unreg
     pub pump_capacity: DynamicInput,
@@ -315,9 +313,5 @@ impl Node for UserNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
-    }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        &mut self.usorders
     }
 }

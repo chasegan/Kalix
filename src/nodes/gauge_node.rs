@@ -4,8 +4,7 @@ use crate::data_management::data_cache::DataCache;
 use crate::model_inputs::DynamicInput;
 use crate::misc::location::Location;
 
-const MAX_DS_LINKS: usize = 5;
-const MAX_US_LINKS: usize = 5;
+const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
 pub struct GaugeNode {
@@ -21,7 +20,6 @@ pub struct GaugeNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_delta: Option<usize>,
@@ -135,9 +133,5 @@ impl Node for GaugeNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
-    }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        &mut self.usorders
     }
 }

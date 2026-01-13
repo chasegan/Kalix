@@ -11,7 +11,6 @@ pub trait Node: DynClone + Sync + Send {
 
     // Order accessors for the ordering system
     fn dsorders_mut(&mut self) -> &mut [f64];
-    fn usorders_mut(&mut self) -> &mut [f64];
 }
 
 clone_trait_object!(Node);

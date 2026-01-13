@@ -5,8 +5,7 @@ use crate::misc::location::Location;
 use super::super::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
 
-const MAX_DS_LINKS: usize = 5;
-const MAX_US_LINKS: usize = 5;
+const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
 pub struct RoutingNode {
@@ -53,7 +52,6 @@ pub struct RoutingNode {
     // Properties and internal state - ordering
     pub typical_regulated_flow: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     //Recorders
     recorder_idx_usflow: Option<usize>,
@@ -305,9 +303,5 @@ impl Node for RoutingNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
-    }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        &mut self.usorders
     }
 }

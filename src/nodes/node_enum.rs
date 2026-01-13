@@ -146,21 +146,5 @@ impl Node for NodeEnum {
             NodeEnum::StorageNode(node) => node.dsorders_mut(),
         }
     }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.usorders_mut(),
-            NodeEnum::ConfluenceNode(node) => node.usorders_mut(),
-            NodeEnum::GaugeNode(node) => node.usorders_mut(),
-            NodeEnum::LossNode(node) => node.usorders_mut(),
-            NodeEnum::SplitterNode(node) => node.usorders_mut(),
-            NodeEnum::UserNode(node) => node.usorders_mut(),
-            NodeEnum::Gr4jNode(node) => node.usorders_mut(),
-            NodeEnum::InflowNode(node) => node.usorders_mut(),
-            NodeEnum::RoutingNode(node) => node.usorders_mut(),
-            NodeEnum::SacramentoNode(node) => node.usorders_mut(),
-            NodeEnum::StorageNode(node) => node.usorders_mut(),
-        }
-    }
 }
 

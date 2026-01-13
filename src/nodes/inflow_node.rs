@@ -3,10 +3,8 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-use crate::numerical::fifo_buffer::FifoBuffer;
 
-const MAX_DS_LINKS: usize = 5;
-const MAX_US_LINKS: usize = 5;
+const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
 pub struct InflowNode {
@@ -27,9 +25,7 @@ pub struct InflowNode {
     pub order_travel_time_gt_0: bool,
     pub order_phase_inflow_value: f64,
     pub recession_factor: f64,
-    //pub order_buffer: FifoBuffer,
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -139,9 +135,5 @@ impl Node for InflowNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
-    }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        &mut self.usorders
     }
 }

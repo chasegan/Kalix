@@ -11,8 +11,6 @@ const AREA: usize = 2;
 const SPIL: usize = 3;
 const EPSILON: f64 = 1e-3;
 const MAX_DS_LINKS: usize = 5;
-const MAX_US_LINKS: usize = 5;
-
 
 #[derive(Default, Clone)]
 pub struct StorageNode {
@@ -47,7 +45,6 @@ pub struct StorageNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: [f64; MAX_US_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -445,9 +442,5 @@ impl Node for StorageNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
-    }
-
-    fn usorders_mut(&mut self) -> &mut [f64] {
-        &mut self.usorders
     }
 }
