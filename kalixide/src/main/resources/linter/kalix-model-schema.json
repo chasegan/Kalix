@@ -145,16 +145,16 @@
       }
     },
 
-    "user": {
-      "description": "User node representing water demand",
+    "unregulated_user": {
+      "description": "Unregulated user node representing water demand",
       "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
       "required_params": ["type", "loc"],
-      "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover", "regulated"],
+      "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
           "type": "literal",
-          "value": "user"
+          "value": "unregulated_user"
         },
         "loc": {
           "type": "coordinates",
@@ -182,10 +182,33 @@
           "type": "string",
           "pattern": "^(?i)(true|false)(\\s*,\\s*([1-9]|1[0-2]))?$",
           "description": "Demand carryover: 'true'/'false', or 'true/false, N' where N is month 1-12 (case-insensitive)"
+        }
+      }
+    },
+
+    "regulated_user": {
+      "description": "Regulated user node representing water demand",
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "diversion", "pump_capacity"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["order", "pump"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "regulated_user"
         },
-        "regulated": {
-          "type": "boolean",
-          "description": "Whether the user is regulated (true/false)"
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "order": {
+          "type": "function_expression",
+          "description": "Water order input (data reference, constant, or expression)"
+        },
+        "pump": {
+          "type": "function_expression",
+          "description": "Pump capacity (data reference, constant, or expression)"
         }
       }
     },

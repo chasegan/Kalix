@@ -205,7 +205,8 @@ public class NodeTheme {
                 case BOTANICAL:
                     // Current assignments for Botanical theme
                     map.put("storage", "4682B4");        // Steel Blue (index 5)
-                    map.put("user", "A0522D");           // Sienna (index 9)
+                    map.put("regulated_user", "A0522D"); // Sienna (index 9) - was "user"
+                    map.put("unregulated_user", "B8860B"); // Dark Goldenrod (index 1)
                     map.put("sacramento", "32CD32");     // Lime Green (index 10)
                     map.put("gr4j", "32CD32");           // Lime Green (index 10)
                     map.put("blackhole", "2F4F4F");      // Dark Slate Gray (index 2)
@@ -216,18 +217,18 @@ public class NodeTheme {
                     map.put("confluence", "8B4513");     // Saddle Brown - same as splitter
                     map.put("gauge", "228B22");          // Forest Green (index 0)
                     // Unused colors from botanical palette
-                    map.put("unused_1", "B8860B");       // Dark Goldenrod (index 1)
-                    map.put("unused_2", "556B2F");       // Dark Olive Green (index 4)
-                    map.put("unused_3", "CCCC00");       // Yellow-lime (index 7)
-                    map.put("unused_4", "1E90FF");       // Dodger Blue (index 8)
-                    map.put("unused_5", "CD853F");       // Peru (index 11)
-                    map.put("unused_6", "6495ED");       // Cornflower Blue (index 12)
-                    map.put("unused_7", "D2691E");       // Chocolate (index 13)
+                    map.put("unused_1", "556B2F");       // Dark Olive Green (index 4)
+                    map.put("unused_2", "CCCC00");       // Yellow-lime (index 7)
+                    map.put("unused_3", "1E90FF");       // Dodger Blue (index 8)
+                    map.put("unused_4", "CD853F");       // Peru (index 11)
+                    map.put("unused_5", "6495ED");       // Cornflower Blue (index 12)
+                    map.put("unused_6", "D2691E");       // Chocolate (index 13)
                     break;
                 case NEMO: // Nemo
                     // Map to similar concept colors in Nemo palette
                     map.put("storage", "48D1CC");        // Medium Turquoise (index 5) - water storage
-                    map.put("user", "5F9EA0");           // Cadet Blue (index 8) - user interaction
+                    map.put("regulated_user", "5F9EA0"); // Cadet Blue (index 8) - was "user"
+                    map.put("unregulated_user", "008B8B"); // Dark Cyan (index 7)
                     map.put("sacramento", "20B2AA");     // Light Sea Green (index 6) - river/flow
                     map.put("gr4j", "20B2AA");           // Light Sea Green (index 6) - river/flow
                     map.put("blackhole", "191970");      // Midnight Blue (index 0) - void/dark
@@ -238,13 +239,13 @@ public class NodeTheme {
                     map.put("confluence", "00CED1");     // Dark Turquoise - same as splitter
                     map.put("gauge", "87CEEB");          // Sky Blue (index 3)
                     // Unused colors from Nemo palette
-                    map.put("unused_1", "008B8B");       // Dark Cyan (index 7)
-                    map.put("unused_2", "4682B4");       // Steel Blue (index 9)
+                    map.put("unused_1", "4682B4");       // Steel Blue (index 9)
                     break;
                 case SUNSET_WARMTH:
                     // Sunset warmth color mappings with requested swaps
                     map.put("storage", "DAA520");        // Goldenrod (swapped from user)
-                    map.put("user", "4682B4");           // Steel Blue (swapped from storage)
+                    map.put("regulated_user", "4682B4"); // Steel Blue - was "user"
+                    map.put("unregulated_user", "4ECDC4"); // Teal (from palette index 4)
                     map.put("sacramento", "228B22");     // Forest Green
                     map.put("gr4j", "556B2F");           // Dark Olive Green
                     map.put("blackhole", "FF8C00");      // Dark Orange (swapped from routing)
@@ -258,7 +259,8 @@ public class NodeTheme {
                 case LIGHT:
                     // Light theme color mappings using the Light palette
                     map.put("storage", "277DA1");        // Dark Blue (index 9) - water storage
-                    map.put("user", "F3722C");           // Orange-red (index 1) - user interaction
+                    map.put("regulated_user", "F3722C"); // Orange-red (index 1) - was "user"
+                    map.put("unregulated_user", "F9844A"); // Light orange (index 3)
                     map.put("sacramento", "90BE6D");     // Green (index 5) - river/flow
                     map.put("gr4j", "90BE6D");           // Green (index 5) - river/flow
                     map.put("blackhole", "577590");      // Blue-gray (index 8) - blackhole
@@ -268,9 +270,8 @@ public class NodeTheme {
                     map.put("splitter", "F8961E");       // Orange (index 2)
                     map.put("confluence", "F8961E");     // Orange - same as splitter
                     map.put("gauge", "F94144");          // Red (index 0)
-                    // Additional mappings using unused colors
-                    map.put("outflow", "F9844A");        // Light orange (index 3)
-                    map.put("reservoir", "43AA8B");      // Teal (index 6)
+                    // Unused colors from Light palette
+                    map.put("unused_1", "43AA8B");       // Teal (index 6)
                     break;
                 default:
                     // For other themes, use cycling assignment
@@ -302,7 +303,8 @@ public class NodeTheme {
         Map.entry("gr4j", new ShapeTextMapping(NodeShape.WATER_DROP, "G4")),
         Map.entry("routing", new ShapeTextMapping(NodeShape.DIAMOND, "Rt")),
         Map.entry("sacramento", new ShapeTextMapping(NodeShape.WATER_DROP, "Sc")),
-        Map.entry("user", new ShapeTextMapping(NodeShape.PODIUM, "Us")),
+        Map.entry("unregulated_user", new ShapeTextMapping(NodeShape.PODIUM, "UU")),
+        Map.entry("regulated_user", new ShapeTextMapping(NodeShape.PODIUM, "RU")),
         Map.entry("storage", new ShapeTextMapping(NodeShape.TRIANGLE_UP, "St")),
         Map.entry("blackhole", new ShapeTextMapping(NodeShape.CIRCLE, "Bh")),
         Map.entry("confluence", new ShapeTextMapping(NodeShape.CIRCLE, "Co")),
