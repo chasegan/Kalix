@@ -7,6 +7,7 @@
 // The ordering system thus runs before the flow-phase
 
 use crate::data_management::data_cache::DataCache;
+use crate::model_inputs::DynamicInput;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -180,6 +181,25 @@ impl SimpleOrderingSystem {
                     // is just one).
                     // TODO: Do ordering through confluences. For now I'm sending all orders all ways!
                     order = confluence_node.dsorders[0];
+                },
+                NodeEnum::OrderConstraintNode(n) => {
+                    order = n.order_buffer.push(n.dsorders[0]);
+                    if n.set_order_defined {
+                        // Set order
+                        n.set_order_value = n.set_order_input.get_value(data_cache);
+                        order = n.set_order_value;
+                    } else {
+                        if n.min_order_defined {
+                            // Min order
+                            n.min_order_value = n.min_order_input.get_value(data_cache);
+                            order = order.max(n.min_order_value);
+                        }
+                        if n.max_order_defined {
+                            // Max order
+                            n.max_order_value = n.max_order_input.get_value(data_cache);
+                            order = order.min(n.max_order_value);
+                        }
+                    }
                 },
                 NodeEnum::SplitterNode(splitter_node) => {
                     // Splitter may have multiple downstream links. All orders propagate here.

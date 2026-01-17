@@ -7,7 +7,7 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u32, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
@@ -155,6 +155,39 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         }
                     }
                     NodeEnum::GaugeNode(n)
+                }
+                "order_constraint" => {
+                    let mut n = OrderConstraintNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "type" {
+                            // Skipping this
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "order_lag" {
+                            n.order_lag = (v.parse::<usize>().map_err(|_|
+                                format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                        ini_property.line_number, name, node_name))?);
+                        } else if name_lower == "min_order" {
+                            n.min_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "max_order" {
+                            n.max_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "set_order" {
+                            n.set_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else {
+                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                               ini_property.line_number, name, node_name));
+                        }
+                    }
+                    NodeEnum::OrderConstraintNode(n)
                 }
                 "gr4j" => {
                     let mut n = Gr4jNode::new();
@@ -584,6 +617,15 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "gauge");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "force_flow", &n.force_flow_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "reference_flow", &n.reference_flow_input.to_string());
+            }
+            NodeEnum::OrderConstraintNode(n) => {
+                let section_name = format!("node.{}", n.name);
+                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "type", "gauge");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "min_order", &n.min_order_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "max_order", &n.max_order_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "set_order", &n.set_order_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order_lag", &n.order_lag.to_string());
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);
