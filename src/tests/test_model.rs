@@ -17,7 +17,7 @@ use crate::data_management::data_cache::DataCache;
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::blackhole_node::BlackholeNode;
-use crate::nodes::user_node::UserNode;
+use crate::nodes::unregulated_user_node::UnregulatedUserNode;
 
 #[test]
 fn test_model_with_all_node_types() {
@@ -94,11 +94,11 @@ fn test_model_with_all_node_types() {
     //Add node3_user
     let node3_idx: usize;
     {
-        let mut n = UserNode::new();
+        let mut n = UnregulatedUserNode::new();
         n.name = "node3_user".to_string();
         n.demand_input = DynamicInput::from_string("data.constants_csv.by_name.const_20", &mut model.data_cache, true)
             .expect("Failed to parse demand expression");
-        node3_idx = model.add_node(NodeEnum::UserNode(n));
+        node3_idx = model.add_node(NodeEnum::UnregulatedUserNode(n));
 
         //Node results
         let result_name = "node.node3_user.usflow".to_string();

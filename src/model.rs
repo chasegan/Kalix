@@ -595,7 +595,7 @@ impl Model {
         for type_name in [
             "inflow",
             "sacramento", "gr4j",
-            "user", "loss",
+            "regulated_user", "unregulated_user", "loss",
             "storage", "routing",
             "splitter", "confluence", "gauge",
             "blackhole"] {
@@ -606,6 +606,7 @@ impl Model {
                 }
                 None => {}
             }
+            //TODO: I did this list so that I could control the order, but what if the type_name is not in this list (e.g. due to someone adding a node type).
         }
 
         // Write the total line

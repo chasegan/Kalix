@@ -7,7 +7,7 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u32, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, user_node::UserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, Node};
 
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
@@ -430,8 +430,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     }
                     NodeEnum::StorageNode(n)
                 }
-                "user" => {
-                    let mut n = UserNode::new();
+                "unregulated_user" => {
+                    let mut n = UnregulatedUserNode::new();
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
@@ -464,16 +464,38 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "demand_carryover" {
                             (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u32(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                        } else if name_lower == "regulated" {
-                            (n.is_regulated, _) = parse_csv_to_bool_option_u32(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                        }
-                        else {
+                        } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name));
                         }
                     }
-                    NodeEnum::UserNode(n)
+                    NodeEnum::UnregulatedUserNode(n)
+                }
+                "regulated_user" => {
+                    let mut n = RegulatedUserNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "type" {
+                            // Skipping this
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "order" {
+                            n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "pump" {
+                            n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else {
+                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                               ini_property.line_number, name, node_name));
+                        }
+                    }
+                    NodeEnum::RegulatedUserNode(n)
                 }
                 _ => {
                     let line_number = match ini_section.properties.get("type") {
@@ -634,10 +656,10 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
             }
-            NodeEnum::UserNode(n) => {
+            NodeEnum::UnregulatedUserNode(n) => {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
-                ini_doc.set_property(section_name.as_str(), "type", "user");
+                ini_doc.set_property(section_name.as_str(), "type", "unregulated_user");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "demand", &n.demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "flow_threshold", &n.flow_threshold.to_string());
@@ -654,7 +676,13 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                     };
                     ini_doc.set_property(section_name.as_str(), "demand_carryover", value.as_str());
                 }
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "regulated", &n.is_regulated.to_string());
+            }
+            NodeEnum::RegulatedUserNode(n) => {
+                let section_name = format!("node.{}", n.name);
+                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "type", "regulated_user");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
             }
         }
     }

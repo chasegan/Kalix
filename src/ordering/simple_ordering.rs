@@ -100,16 +100,14 @@ impl SimpleOrderingSystem {
             // is a storage with travel time zero, so I don't think there's anything to init).
             if new_link_item.zone_idx.is_some() {
                 match &mut nodes[new_link_item.to_node] {
-                    NodeEnum::UserNode(user_node) => {
-                        if user_node.is_regulated {
-                            let int_lag = new_link_item.lag.round() as usize;
-                            if int_lag > user_node.order_travel_time {
-                                // Increase the size of the order buffer. This will mean that in the
-                                // unusual case of a user having >1 regulated inlets, the user node
-                                // travel time will be based on the longest lag.
-                                user_node.order_travel_time = int_lag;
-                                user_node.order_buffer = FifoBuffer::new(int_lag);
-                            }
+                    NodeEnum::RegulatedUserNode(user_node) => {
+                        let int_lag = new_link_item.lag.round() as usize;
+                        if int_lag > user_node.order_travel_time {
+                            // Increase the size of the order buffer. This will mean that in the
+                            // unusual case of a user having >1 regulated inlets, the user node
+                            // travel time will be based on the longest lag.
+                            user_node.order_travel_time = int_lag;
+                            user_node.order_buffer = FifoBuffer::new(int_lag);
                         }
                     },
                     NodeEnum::InflowNode(inflow_node) => {
@@ -187,14 +185,9 @@ impl SimpleOrderingSystem {
                     // Splitter may have multiple downstream links. All orders propagate here.
                     order = splitter_node.dsorders.iter().sum();
                 },
-                NodeEnum::UserNode(user_node) => {
-                    if user_node.is_regulated {
-                        user_node.order_phase_demand_value = user_node.demand_input.get_value(data_cache);
-                        order = user_node.dsorders[0] + user_node.order_phase_demand_value;
-                    } else {
-                        // Pass order straight through - same as most benign node types
-                        order = user_node.dsorders[0];
-                    }
+                NodeEnum::RegulatedUserNode(n) => {
+                    n.order_value = n.order_input.get_value(data_cache);
+                    order = n.dsorders[0] + n.order_value;
                 },
                 other => {
                     // For all other nodes, we follow a greedy philosophy, propagating all orders
@@ -208,6 +201,7 @@ impl SimpleOrderingSystem {
                     // NodeEnum::Gr4jNode(_) => {}
                     // NodeEnum::RoutingNode(_) => {}
                     // NodeEnum::SacramentoNode(_) => {}
+                    // NodeEnum::UnregulatedUserNode(_) => {}
                     order = other.dsorders_mut()[0];
                 },
             }

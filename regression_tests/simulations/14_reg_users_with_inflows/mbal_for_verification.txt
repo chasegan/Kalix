@@ -13,7 +13,7 @@ INFLOW NODES
   inflow3, 4.5
   inflow4, 4.5
 
-USER NODES
+REGULATED_USER NODES
   user1, -11.25
   user2, -9.744134902954102
   user3, -12

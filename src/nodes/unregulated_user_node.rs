@@ -3,54 +3,11 @@ use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-use crate::numerical::fifo_buffer::FifoBuffer;
-//------- IDEAS FOR ORDERING IN KALIX ----------//
-// A couple of thoughts are:
-//   - Having an ordering phase means you kinda have to know everything before
-//     any flows occur, and it really limits parallelization.
-//   - Ordering up the network means when you place your order, you dont know
-//     when it will arrive. Additionally, Source mixes up the concepts of "order"
-//     and "demand". This leads to all the muddiness:
-//        - For a timeseries I'll order in advance, and take my water on the date.
-//        - For a function I'll order on the date, and take my water in arrears.
-//        - At each point there is an array of orders. This is what I want today,
-//          this is what I want tomorrow, but if you ask tomorrow I might change
-//          my mind.
-//        - Computational overhead is insane.
-//   - It is nice having the operations kinda happen automatically in Source
-//     as long as your storage has an outlet. Having some robust default behaviour
-//     is a must.
-//----------------------------------------------//
-// So in light of all that I wonder if there's a pragmatic operational view
-// that's just a lot simpler. Something like...
-//   - All nodes know which storage outlet they're being delivered by. And at
-//     start of the run they report themselves to the outlet.
-//   - There is no ordering phase.
-//   - When a storage runs (flow phase), it asks all its outlets how much water
-//     they want. Each outlet turns to it's registered users and asks something
-//     like.
-//        "Hey user A, if I release today, I can get you 1000ML in 1 day. How much do you want?"
-//        "Hey user B, if I release today, I can get you 1000ML in 3 days. How much do you want?"
-//        "Hey user C, if I release today, I can get you 1000ML in 3 days. How much do you want?"
-//     These numbers then have to go into a table, with the inflows (recession
-//     factors?), and the losses etc.
-//   - The water user is therefore only ever saying how much they will want in
-//     3 days time (in this example). They're not saying "well if I can get it today
-//     I'll take blah". This sounds like a limitation, but I think it's exactly
-//     limitation that's been
-//   - Distinguish between "order" and "demand":
-//        - The order is what I'm going to ask the storage to release today.
-//        - The demand is what I'm going to try to extract today.
-//   - The basic version of the above is for the demand to lag behind the order
-//     by x days. But maybe the demand is zero (for a non-consumptive user) or
-//     maybe the order was zero (for an unregulated user).
-//
-//----------------------------------------------//
 
 const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
-pub struct UserNode {
+pub struct UnregulatedUserNode {
 
     // Properties - basic
     pub name: String,
@@ -58,24 +15,16 @@ pub struct UserNode {
     pub mbal: f64,
     pub demand_input: DynamicInput,
 
-    // Properties and internal state - regulated demands and ordering
-    pub is_regulated: bool,
-    pub order_travel_time: usize,
-    pub order_phase_demand_value: f64,
-    pub order_buffer: FifoBuffer,
-    pub dsorders: [f64; MAX_DS_LINKS],
-
-    // Properties - additional unreg
+    // Properties - unreg user stuff
     pub pump_capacity: DynamicInput,
     pub flow_threshold: DynamicInput,
     pub annual_cap: Option<f64>,
     pub annual_cap_reset_month: u32,
-
-    // Properties - additional carryover
     pub demand_carryover_allowed: bool,
     pub demand_carryover_reset_month: Option<u32>,
 
     // Internal state only
+    pub dsorders: [f64; MAX_DS_LINKS],
     usflow: f64,
     dsflow_primary: f64,
     diversion: f64,
@@ -88,24 +37,22 @@ pub struct UserNode {
     recorder_idx_usflow: Option<usize>,
     recorder_idx_demand: Option<usize>,
     recorder_idx_diversion: Option<usize>,
-    recorder_idx_pump_capacity: Option<usize>, //New
-    recorder_idx_flow_threshold: Option<usize>, //New
-    recorder_idx_demand_carryover: Option<usize>, //New
+    recorder_idx_pump_capacity: Option<usize>,
+    recorder_idx_flow_threshold: Option<usize>,
+    recorder_idx_demand_carryover: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_ids_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
 }
 
 
-impl UserNode {
+impl UnregulatedUserNode {
 
     /// Base constructor
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
             demand_input: DynamicInput::default(),
-            is_regulated: false,
-            order_buffer: FifoBuffer::default(),
             pump_capacity: DynamicInput::default(),
             flow_threshold: DynamicInput::default(),
             annual_cap: None,
@@ -117,7 +64,7 @@ impl UserNode {
     }
 }
 
-impl Node for UserNode {
+impl Node for UnregulatedUserNode {
     fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
@@ -184,12 +131,7 @@ impl Node for UserNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Get demand value
-        let new_demand = if self.is_regulated {
-            let order_expected = self.order_buffer.push(self.order_phase_demand_value);
-            order_expected
-        } else {
-            self.demand_input.get_value(data_cache)
-        };
+        let new_demand = self.demand_input.get_value(data_cache);
 
         // Work out availability considering flow threshold
         let mut available = match self.flow_threshold {

@@ -21,7 +21,7 @@ INFLOW NODES
   silver_pipeline_in_07, 0.4829020749136645
   tannalo_pipeline_inf_05b, 0.9158074147103563
 
-USER NODES
+UNREGULATED_USER NODES
   abovemarian_supp_div_07, -0.13230897570391428
   cattle_supp_06, -0.024996574210062822
   cc_ds_tan_supp_div_05b, -0.09655771893751887
