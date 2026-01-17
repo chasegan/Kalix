@@ -147,7 +147,7 @@
 
     "unregulated_user": {
       "description": "Unregulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
       "required_params": ["type", "loc"],
       "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover"],
       "dsnode_params": ["ds_1"],
@@ -188,7 +188,7 @@
 
     "regulated_user": {
       "description": "Regulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "diversion", "pump_capacity"],
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "pump_capacity"],
       "required_params": ["type", "loc"],
       "optional_params": ["order", "pump"],
       "dsnode_params": ["ds_1"],

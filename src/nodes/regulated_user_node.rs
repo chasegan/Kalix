@@ -31,9 +31,11 @@ pub struct RegulatedUserNode {
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
+    recorder_idx_pump_capacity: Option<usize>,
+    recorder_idx_order: Option<usize>,
+    recorder_idx_order_due: Option<usize>,
     recorder_idx_demand: Option<usize>,
     recorder_idx_diversion: Option<usize>,
-    recorder_idx_pump_capacity: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_ids_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
@@ -72,14 +74,20 @@ impl Node for RegulatedUserNode {
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
         );
+        self.recorder_idx_pump_capacity = data_cache.get_series_idx(
+            make_result_name(&self.name, "pump_capacity").as_str(), false
+        );
+        self.recorder_idx_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "order").as_str(), false
+        );
+        self.recorder_idx_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "order_due").as_str(), false
+        );
         self.recorder_idx_demand = data_cache.get_series_idx(
             make_result_name(&self.name, "demand").as_str(), false
         );
         self.recorder_idx_diversion = data_cache.get_series_idx(
             make_result_name(&self.name, "diversion").as_str(), false
-        );
-        self.recorder_idx_pump_capacity = data_cache.get_series_idx(
-            make_result_name(&self.name, "pump_capacity").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -125,6 +133,12 @@ impl Node for RegulatedUserNode {
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
+        }
+        if let Some(idx) = self.recorder_idx_order {
+            data_cache.add_value_at_index(idx, self.order_value);
+        }
+        if let Some(idx) = self.recorder_idx_order_due {
+            data_cache.add_value_at_index(idx, order_due);
         }
         if let Some(idx) = self.recorder_idx_demand {
             data_cache.add_value_at_index(idx, new_demand);
