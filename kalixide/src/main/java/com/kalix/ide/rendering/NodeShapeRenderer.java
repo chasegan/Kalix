@@ -205,6 +205,10 @@ public class NodeShapeRenderer {
         9     // back to bottom left (closes shape)
     };
 
+    // Hexagon - wide orientation (flat sides on left and right)
+    private static final int[] HEXAGON_X = {-13, -4, 4, 13, 4, -4};
+    private static final int[] HEXAGON_Y = {0, -9, -9, 0, 9, 9};
+
     // Arrow Down - fat arrow pointing down with snub arrowhead (squarish proportions)
     // Shaft: 14px wide, runs from top to middle
     // Arrowhead: 24px wide, snub (10px tall)
@@ -279,6 +283,9 @@ public class NodeShapeRenderer {
                 break;
             case WATER_DROP:
                 renderPolygon(g2d, centerX, centerY, WATER_DROP_X, WATER_DROP_Y, fill);
+                break;
+            case HEXAGON:
+                renderPolygon(g2d, centerX, centerY, HEXAGON_X, HEXAGON_Y, fill);
                 break;
             case PODIUM:
                 renderPodiumInternal(g2d, centerX, centerY, fill);

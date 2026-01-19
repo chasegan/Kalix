@@ -22,6 +22,7 @@ public class NodeTheme {
         CIRCLE,           // ● Circle (existing)
         SQUARE,           // ■ Square
         DIAMOND,          // ◆ Diamond (rotated square)
+        HEXAGON,          // ⬡ Hexagon (wide orientation)
         WATER_DROP,       // 💧 Symmetric water drop shape
         PODIUM,           // 🏆 Three-step podium shape
         ARROW_DOWN        // ⬇ Fat arrow pointing down with snub arrowhead
@@ -216,9 +217,9 @@ public class NodeTheme {
                     map.put("splitter", "8B4513");       // Saddle Brown (index 6)
                     map.put("confluence", "8B4513");     // Saddle Brown - same as splitter
                     map.put("gauge", "228B22");          // Forest Green (index 0)
+                    map.put("order_constraint", "CCCC00"); // Yellow-lime (index 7)
                     // Unused colors from botanical palette
                     map.put("unused_1", "556B2F");       // Dark Olive Green (index 4)
-                    map.put("unused_2", "CCCC00");       // Yellow-lime (index 7)
                     map.put("unused_3", "1E90FF");       // Dodger Blue (index 8)
                     map.put("unused_4", "CD853F");       // Peru (index 11)
                     map.put("unused_5", "6495ED");       // Cornflower Blue (index 12)
@@ -238,8 +239,7 @@ public class NodeTheme {
                     map.put("splitter", "00CED1");       // Dark Turquoise (index 4)
                     map.put("confluence", "00CED1");     // Dark Turquoise - same as splitter
                     map.put("gauge", "87CEEB");          // Sky Blue (index 3)
-                    // Unused colors from Nemo palette
-                    map.put("unused_1", "4682B4");       // Steel Blue (index 9)
+                    map.put("order_constraint", "4682B4"); // Steel Blue (index 9)
                     break;
                 case SUNSET_WARMTH:
                     // Sunset warmth color mappings with requested swaps
@@ -255,6 +255,7 @@ public class NodeTheme {
                     map.put("splitter", "FF6B35");       // Orange-Red (from palette index 0)
                     map.put("confluence", "FF6B35");     // Orange-Red - same as splitter
                     map.put("gauge", "F7931E");          // Orange (from palette index 1)
+                    map.put("order_constraint", "FFD23F"); // Yellow (from palette index 2)
                     break;
                 case LIGHT:
                     // Light theme color mappings using the Light palette
@@ -270,8 +271,7 @@ public class NodeTheme {
                     map.put("splitter", "F8961E");       // Orange (index 2)
                     map.put("confluence", "F8961E");     // Orange - same as splitter
                     map.put("gauge", "F94144");          // Red (index 0)
-                    // Unused colors from Light palette
-                    map.put("unused_1", "43AA8B");       // Teal (index 6)
+                    map.put("order_constraint", "43AA8B"); // Teal (index 6)
                     break;
                 default:
                     // For other themes, use cycling assignment
@@ -310,7 +310,8 @@ public class NodeTheme {
         Map.entry("confluence", new ShapeTextMapping(NodeShape.CIRCLE, "Co")),
         Map.entry("loss", new ShapeTextMapping(NodeShape.SQUARE, "Lo")),
         Map.entry("gauge", new ShapeTextMapping(NodeShape.CIRCLE, "Ga")),
-        Map.entry("splitter", new ShapeTextMapping(NodeShape.CIRCLE, "Sp"))
+        Map.entry("splitter", new ShapeTextMapping(NodeShape.CIRCLE, "Sp")),
+        Map.entry("order_constraint", new ShapeTextMapping(NodeShape.HEXAGON, "OC"))
     );
 
     // Default shape text styling
