@@ -417,6 +417,42 @@
           "description": "Reference flow input (data reference, constant, or expression)"
         }
       }
+    },
+
+    "order_constraint": {
+      "description": "Order constraint node for limiting or setting orders",
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "min_order", "max_order", "set_order", "order", "order_due"],
+      "required_params": ["type", "loc"],
+      "optional_params": ["min_order", "max_order", "set_order", "delay_order_steps"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "order_constraint"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "min_order": {
+          "type": "function_expression",
+          "description": "Minimum order constraint (data reference, constant, or expression)"
+        },
+        "max_order": {
+          "type": "function_expression",
+          "description": "Maximum order constraint (data reference, constant, or expression)"
+        },
+        "set_order": {
+          "type": "function_expression",
+          "description": "Fixed order value (data reference, constant, or expression)"
+        },
+        "delay_order_steps": {
+          "type": "integer",
+          "min": 0,
+          "description": "Number of time steps to delay orders (integer >= 0)"
+        }
+      }
     }
   },
 
