@@ -29,7 +29,8 @@ pub struct OrderConstraintNode {
     pub min_order_value: f64,
     pub max_order_value: f64,
     pub set_order_value: f64,
-    pub us_order_value: f64,
+    pub sent_order_value: f64,
+    pub sent_order_buffer: FifoBuffer,
     usflow: f64,
     dsflow_primary: f64,
 
@@ -72,6 +73,7 @@ impl Node for OrderConstraintNode {
         self.set_order_value = 0.0;
         self.min_order_value = 0.0;
         self.max_order_value = f64::INFINITY;
+        //self.orders_sent = FifoBuffer::new(0); //Will be initialized in ordering system init.
 
         //DynamicInput is already initialized during parsing
 
@@ -114,6 +116,10 @@ impl Node for OrderConstraintNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Recall the order that is due today (and push the current order into the buffer)
+        // TODO: can I just move this into the recorder if block? Is it okay to only do this if we are recording?
+        let order_due = self.sent_order_buffer.push(self.sent_order_value);
+
         // Force flows if required, otherwise pass upstream value
         self.dsflow_primary = self.usflow;
 
@@ -139,9 +145,12 @@ impl Node for OrderConstraintNode {
         if let Some(idx) = self.recorder_idx_set_order {
             data_cache.add_value_at_index(idx, self.set_order_value);
         }
-        // if let Some(idx) = self.recorder_idx_order {
-        //     dacache.add_value_at_index(idx, self.us_order_value);
-        // }
+        if let Some(idx) = self.recorder_idx_order {
+            data_cache.add_value_at_index(idx, self.sent_order_value);
+        }
+        if let Some(idx) = self.recorder_idx_order_due {
+            data_cache.add_value_at_index(idx, order_due);
+        }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;

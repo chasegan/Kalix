@@ -93,6 +93,8 @@ impl SimpleOrderingSystem {
                 }
             }
 
+            // Initialize node ordering aspects
+            // --------------------------------
             // If we are on a regulated reach, some nodes will need to be informed of their
             // travel time. (Opportunity to do initialisation of nodes as needed now that we know
             // their travel time). I think it is okay to do this within the current loop by visiting
@@ -118,6 +120,12 @@ impl SimpleOrderingSystem {
                         inflow_node.order_travel_time = new_link_item.lag.round() as usize;
                         inflow_node.order_travel_time_gt_0 = inflow_node.order_travel_time > 0;
                     },
+                    NodeEnum::OrderConstraintNode(n) => {
+                        // Order constraint node uses a buffer to remember recent orders so it can
+                        // tell the modeller what is expected today
+                        let int_lag = new_link_item.lag.round() as usize;
+                        n.sent_order_buffer = FifoBuffer::new(int_lag);
+                    }
                     _ => {}
                 }
             }
@@ -200,6 +208,7 @@ impl SimpleOrderingSystem {
                             order = order.min(n.max_order_value);
                         }
                     }
+                    n.sent_order_value = order;
                 },
                 NodeEnum::SplitterNode(splitter_node) => {
                     // Splitter may have multiple downstream links. All orders propagate here.
