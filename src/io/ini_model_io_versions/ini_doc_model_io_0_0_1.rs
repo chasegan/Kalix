@@ -169,8 +169,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
-                        } else if name_lower == "order_lag" {
-                            n.order_lag = (v.parse::<usize>().map_err(|_|
+                        } else if name_lower == "delay_order_steps" {
+                            n.delay_order_steps = (v.parse::<usize>().map_err(|_|
                                 format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
                                         ini_property.line_number, name, node_name))?);
                         } else if name_lower == "min_order" {
@@ -625,7 +625,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "min_order", &n.min_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "max_order", &n.max_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "set_order", &n.set_order_input.to_string());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order_lag", &n.order_lag.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "delay_order_steps", &n.delay_order_steps.to_string());
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);

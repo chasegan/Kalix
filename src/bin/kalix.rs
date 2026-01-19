@@ -35,6 +35,7 @@ enum Commands {
     /// Return API spec as JSON on STDOUT
     GetAPI,
     /// Run a simulation
+    #[command(visible_alias = "sim")]
     Simulate {
         /// Path to the model file
         model_file: String,
@@ -49,6 +50,7 @@ enum Commands {
         verify_mass_balance: Option<String>,
     },
     /// Run parameter optimisation
+    #[command(visible_alias = "opt", alias = "optimize")]
     Optimise {
         /// Path to the optimisation configuration file (.ini)
         config_file: String,

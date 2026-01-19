@@ -183,7 +183,7 @@ impl SimpleOrderingSystem {
                     order = confluence_node.dsorders[0];
                 },
                 NodeEnum::OrderConstraintNode(n) => {
-                    order = n.order_buffer.push(n.dsorders[0]);
+                    order = n.delay_order_buffer.push(n.dsorders[0]);
                     if n.set_order_defined {
                         // Set order
                         n.set_order_value = n.set_order_input.get_value(data_cache);

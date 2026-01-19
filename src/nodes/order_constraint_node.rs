@@ -17,7 +17,10 @@ pub struct OrderConstraintNode {
     pub min_order_input: DynamicInput,
     pub max_order_input: DynamicInput,
     pub set_order_input: DynamicInput,
-    pub order_lag: usize,
+
+    // Properties and state for delaying downstream orders
+    pub delay_order_steps: usize,
+    pub delay_order_buffer: FifoBuffer,
 
     // Internal state only
     pub min_order_defined: bool,
@@ -26,7 +29,7 @@ pub struct OrderConstraintNode {
     pub min_order_value: f64,
     pub max_order_value: f64,
     pub set_order_value: f64,
-    pub order_buffer: FifoBuffer,
+    pub us_order_value: f64,
     usflow: f64,
     dsflow_primary: f64,
 
@@ -38,6 +41,11 @@ pub struct OrderConstraintNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_min_order: Option<usize>,
+    recorder_idx_max_order: Option<usize>,
+    recorder_idx_set_order: Option<usize>,
+    recorder_idx_order: Option<usize>,
+    recorder_idx_order_due: Option<usize>,
 }
 
 impl OrderConstraintNode {
@@ -57,7 +65,7 @@ impl Node for OrderConstraintNode {
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
-        self.order_buffer = FifoBuffer::new(self.order_lag);
+        self.delay_order_buffer = FifoBuffer::new(self.delay_order_steps);
         self.min_order_defined = !matches!(self.min_order_input, DynamicInput::None { .. });
         self.max_order_defined = !matches!(self.max_order_input, DynamicInput::None { .. });
         self.set_order_defined = !matches!(self.set_order_input, DynamicInput::None { .. });
@@ -79,6 +87,21 @@ impl Node for OrderConstraintNode {
         );
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
+        self.recorder_idx_min_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "min_order").as_str(), false
+        );
+        self.recorder_idx_max_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "max_order").as_str(), false
+        );
+        self.recorder_idx_set_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "set_order").as_str(), false
+        );
+        self.recorder_idx_order = data_cache.get_series_idx(
+            make_result_name(&self.name, "order").as_str(), false
+        );
+        self.recorder_idx_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "order_due").as_str(), false
         );
 
         // Return
@@ -107,6 +130,18 @@ impl Node for OrderConstraintNode {
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
+        if let Some(idx) = self.recorder_idx_min_order {
+            data_cache.add_value_at_index(idx, self.min_order_value);
+        }
+        if let Some(idx) = self.recorder_idx_max_order {
+            data_cache.add_value_at_index(idx, self.max_order_value);
+        }
+        if let Some(idx) = self.recorder_idx_set_order {
+            data_cache.add_value_at_index(idx, self.set_order_value);
+        }
+        // if let Some(idx) = self.recorder_idx_order {
+        //     dacache.add_value_at_index(idx, self.us_order_value);
+        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
