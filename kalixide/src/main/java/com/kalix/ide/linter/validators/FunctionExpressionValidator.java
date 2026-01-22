@@ -9,10 +9,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates function expressions used in model parameters.
- * Supports five types of inputs:
+ * Supports six types of inputs:
  * - Data references: "data.evap", "data.field.subfield"
  * - Constant references: "c.pi", "c.node_1_demand_levels.high"
- * - Node output references: "node.node13_inflow.ds_1" (NEW)
+ * - Node output references: "node.node13_inflow.ds_1"
+ * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
  *
@@ -27,6 +28,11 @@ public class FunctionExpressionValidator {
 
     // Known functions with their argument counts (-1 = variable args, must be >= 2)
     private static final Map<String, Integer> KNOWN_FUNCTIONS = createFunctionMap();
+
+    // Known simulation variables
+    private static final Set<String> KNOWN_SIM_VARIABLES = Set.of(
+        "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
+    );
 
     private static Map<String, Integer> createFunctionMap() {
         Map<String, Integer> map = new HashMap<>();
@@ -152,6 +158,11 @@ public class FunctionExpressionValidator {
             return errors; // Valid format-wise
         }
 
+        // Fast path: simple sim reference
+        if (isSimpleSimReference(expression)) {
+            return errors; // Valid
+        }
+
         // Complex expression - tokenize and parse
         try {
             Tokenizer tokenizer = new Tokenizer(expression);
@@ -194,10 +205,14 @@ public class FunctionExpressionValidator {
         return s.matches("^node\\.[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
     }
 
+    private static boolean isSimpleSimReference(String s) {
+        return KNOWN_SIM_VARIABLES.contains(s);
+    }
+
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, SIM_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
     }
 
     static class Token {
@@ -336,6 +351,11 @@ public class FunctionExpressionValidator {
                 return readDottedReference(start, firstSegment, TokenType.NODE_REF);
             }
 
+            // Check if this is a sim reference (starts with "sim.")
+            if (firstSegment.equals("sim") && pos < input.length() && input.charAt(pos) == '.') {
+                return readSimReference(start);
+            }
+
             // Regular identifier (function name or variable)
             return new Token(TokenType.IDENT, firstSegment, start);
         }
@@ -379,6 +399,23 @@ public class FunctionExpressionValidator {
             }
 
             return new Token(tokenType, sb.toString(), start);
+        }
+
+        // Read a sim reference (sim.year, sim.month, etc.)
+        private Token readSimReference(int start) {
+            StringBuilder sb = new StringBuilder("sim");
+
+            // Consume the dot
+            sb.append('.');
+            pos++;
+
+            // Read the variable name
+            while (pos < input.length() && (Character.isLetterOrDigit(input.charAt(pos)) || input.charAt(pos) == '_')) {
+                sb.append(input.charAt(pos));
+                pos++;
+            }
+
+            return new Token(TokenType.SIM_REF, sb.toString(), start);
         }
 
         private boolean isOperatorChar(char ch) {
@@ -562,6 +599,9 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.NODE_REF) {
                 validateNodeReference(current.value, errors);
                 advance();
+            } else if (current.type == TokenType.SIM_REF) {
+                validateSimReference(current.value, errors);
+                advance();
             } else if (current.type == TokenType.IDENT) {
                 // Function call
                 parseFunctionCall(errors);
@@ -570,7 +610,7 @@ public class FunctionExpressionValidator {
                 parseExpression(errors);
                 expect(TokenType.RPAREN, errors);
             } else {
-                throw new ParseException("Expected number, data reference, constant reference, node reference, function, or '(' but got " + current.type);
+                throw new ParseException("Expected number, data reference, constant reference, node reference, sim reference, function, or '(' but got " + current.type);
             }
         }
 
@@ -672,6 +712,13 @@ public class FunctionExpressionValidator {
                 if (error != null) {
                     errors.add(error);
                 }
+            }
+        }
+
+        private void validateSimReference(String simRef, List<String> errors) {
+            // Check if the sim reference is one of the known variables
+            if (!KNOWN_SIM_VARIABLES.contains(simRef)) {
+                errors.add("Unknown sim variable: '" + simRef + "'. Valid options are: sim.year, sim.month, sim.day, sim.day_of_year, sim.step");
             }
         }
 
