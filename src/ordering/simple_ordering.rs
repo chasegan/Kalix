@@ -7,7 +7,6 @@
 // The ordering system thus runs before the flow-phase
 
 use crate::data_management::data_cache::DataCache;
-use crate::model_inputs::DynamicInput;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -125,7 +124,30 @@ impl SimpleOrderingSystem {
                         // tell the modeller what is expected today
                         let int_lag = new_link_item.lag.round() as usize;
                         n.sent_order_buffer = FifoBuffer::new(int_lag);
-                    }
+                    },
+                    NodeEnum::ConfluenceNode(n) => {
+                        // Confluence nodes have buffers to delay orders intended for the short
+                        // upstream link.
+                        let int_lag = new_link_item.lag.round() as usize;
+                        if n.us_1_link_idx.is_none() {
+                            // We are defining link 1.
+                            n.us_1_lag = int_lag;
+                            n.us_1_link_idx = Some(new_link_item.link_idx);
+                        } else {
+                            // Assume we are now defining link 2.
+                            // TODO: guarantee no more than 2 upstream links
+                            n.us_2_lag = int_lag;
+                            if n.us_1_lag < n.us_2_lag {
+                                let lag_differential = n.us_2_lag - n.us_1_lag;
+                                n.us_1_order_buffer = FifoBuffer::new(lag_differential); //short path
+                                n.us_2_order_buffer = FifoBuffer::new(0); //long path
+                            } else {
+                                let lag_differential = n.us_1_lag - n.us_2_lag;
+                                n.us_2_order_buffer = FifoBuffer::new(lag_differential); //short path
+                                n.us_1_order_buffer = FifoBuffer::new(0); //long path (or equal)
+                            }
+                        }
+                    },
                     _ => {}
                 }
             }
@@ -172,24 +194,65 @@ impl SimpleOrderingSystem {
                     //   (1) to propagate orders through the storage if they opt out of delivering orders
                     //   (2) to meet target operating levels
                 },
-                NodeEnum::LossNode(loss_node) => {
+                NodeEnum::LossNode(node_below_link) => {
                     // Assume all orders on outlet 0 are propagated here.
-                    order = loss_node.flow_table.interpolate(0, 1, loss_node.dsorders[0]);
-                },
-                NodeEnum::InflowNode(inflow_node) => {
+                    order = node_below_link.flow_table.interpolate(0, 1, node_below_link.dsorders[0]);
+                }
+                NodeEnum::InflowNode(node_below_link) => {
                     // Orders are reduced based on known inflows
-                    let inflow_value = inflow_node.inflow_input.get_value(data_cache);
-                    inflow_node.order_phase_inflow_value = inflow_value;
+                    let inflow_value = node_below_link.inflow_input.get_value(data_cache);
+                    node_below_link.order_phase_inflow_value = inflow_value;
                     let anticipated_inflow_on_delivery_timestep = inflow_value *
-                        if inflow_node.order_travel_time_gt_0 { inflow_node.recession_factor } else { 1.0 };
-                    order = (inflow_node.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
-                },
-                NodeEnum::ConfluenceNode(confluence_node) => {
-                    // We must decide how to apportion the orders between upstream links (of which this
-                    // is just one).
-                    // TODO: Do ordering through confluences. For now I'm sending all orders all ways!
-                    order = confluence_node.dsorders[0];
-                },
+                        if node_below_link.order_travel_time_gt_0 { node_below_link.recession_factor } else { 1.0 };
+                    order = (node_below_link.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
+                }
+                NodeEnum::ConfluenceNode(node_below_link) => {
+                    // We must decide how to apportion the orders between upstream links (of which
+                    // this is just one).
+                    if node_below_link.us_1_link_idx.is_some() &&
+                        (node_below_link.us_1_link_idx.unwrap() == li.link_idx) {
+                        // We are on link 1
+                        if let Some(value) = node_below_link.order_prepared_for_us_1_buffer {
+                            // We already have a value available
+                            order = node_below_link.us_1_order_buffer.push(value);
+                            node_below_link.order_prepared_for_us_1_buffer = None;
+                        } else {
+                            // Evaluate the harmony function
+                            let link_1_harmony = node_below_link.harmony_fraction.get_value(data_cache)
+                                .max(0.0).min(1.0);
+                            node_below_link.harmony_fraction_value = link_1_harmony;
+                            // Calculate orders for buffers
+                            let link_1_order = link_1_harmony * node_below_link.dsorders[0];
+                            let link_2_order = (1.0 - link_1_harmony) * node_below_link.dsorders[0];
+                            // Now use the link 1 value and save the link 2 value for later
+                            order = node_below_link.us_1_order_buffer.push(link_1_order);
+                            node_below_link.order_prepared_for_us_1_buffer = None;
+                            node_below_link.order_prepared_for_us_2_buffer = Some(link_2_order);
+                        }
+                    } else {
+                        // Assume we are on link 2
+                        // But this assumes that we have already visited link1 this timestep and that's the problem.
+                        // order = node_below_link.us_2_order_buffer.push(node_below_link.remaining_order);
+                        // println!("Visiting link2 dsorder={}, sent={}, remaining={}", node_below_link.dsorders[0], order, node_below_link.remaining_order);
+                        if let Some(value) = node_below_link.order_prepared_for_us_2_buffer {
+                            // We already have a value available
+                            order = node_below_link.us_2_order_buffer.push(value);
+                            node_below_link.order_prepared_for_us_2_buffer = None;
+                        } else {
+                            // Evaluate the harmony function
+                            let link_1_harmony = node_below_link.harmony_fraction.get_value(data_cache)
+                                .max(0.0).min(1.0);
+                            node_below_link.harmony_fraction_value = link_1_harmony;
+                            // Calculate orders for buffers
+                            let link_1_order = link_1_harmony * node_below_link.dsorders[0];
+                            let link_2_order = (1.0 - link_1_harmony) * node_below_link.dsorders[0];
+                            // Now use the link 2 value and save the link 1 value for later
+                            order = node_below_link.us_2_order_buffer.push(link_2_order);
+                            node_below_link.order_prepared_for_us_2_buffer = None;
+                            node_below_link.order_prepared_for_us_1_buffer = Some(link_1_order);
+                        }
+                    }
+                }
                 NodeEnum::OrderConstraintNode(n) => {
                     order = n.delay_order_buffer.push(n.dsorders[0]);
                     if n.set_order_defined {
@@ -220,8 +283,7 @@ impl SimpleOrderingSystem {
                 },
                 other => {
                     // For all other nodes, we follow a greedy philosophy, propagating all orders
-                    // up all pathways. This may allow interesting flow-phase solutions whereby
-                    // we can make late decisions about which branch delivers the orders.
+                    // up all pathways.
                     //
                     // Assume these node types only have 1 downstream link at most.
                     //

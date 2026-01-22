@@ -124,6 +124,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "harmony_fraction" {
+                            n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name));
                         }
@@ -610,6 +613,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "confluence");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "harmony_fraction", &n.harmony_fraction.to_string());
             }
             NodeEnum::GaugeNode(n) => {
                 let section_name = format!("node.{}", n.name);

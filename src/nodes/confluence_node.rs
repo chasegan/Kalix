@@ -2,7 +2,10 @@ use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::model_inputs::DynamicInput;
+use crate::numerical::fifo_buffer::FifoBuffer;
 
+const MAX_US_LINKS: usize = 2; //TODO: not sure how to police this
 const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
@@ -10,6 +13,20 @@ pub struct ConfluenceNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
+
+    // Harmony fraction
+    pub harmony_fraction: DynamicInput,
+    pub harmony_fraction_value: f64,
+    pub remaining_order: f64,
+
+    // Internal state for order delays
+    pub us_1_link_idx: Option<usize>,
+    pub us_1_lag: usize,
+    pub us_2_lag: usize,
+    pub us_1_order_buffer: FifoBuffer, //The order buffers are used to lag orders directed up the short
+    pub us_2_order_buffer: FifoBuffer, //pathway. At least one of these buffers will have zero length.
+    pub order_prepared_for_us_1_buffer: Option<f64>,
+    pub order_prepared_for_us_2_buffer: Option<f64>,
 
     // Internal state only
     usflow: f64,
@@ -42,6 +59,17 @@ impl Node for ConfluenceNode {
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
+
+        // Harmony
+        self.harmony_fraction_value = 1.0; //100% for link 1. This will be overwritten anyway.
+        self.remaining_order = 0.0;
+
+        // State
+        self.us_1_link_idx = None;
+        self.us_1_lag = 0;
+        self.us_2_lag = 0;
+        self.us_1_order_buffer = FifoBuffer::default();
+        self.us_2_order_buffer = FifoBuffer::default();
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
