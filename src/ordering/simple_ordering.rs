@@ -53,7 +53,7 @@ impl SimpleOrderingSystem {
 
             // Determine if this is a new zone, or continuation of upstream zone
             match &nodes[new_link_item.from_node] {
-                NodeEnum::StorageNode(storage) => {
+                NodeEnum::StorageNode(_) => {
                     // This is a new zone.
                     new_link_item.zone_idx = Some(self.regulated_zone_counter);
                     self.regulated_zone_counter += 1;
@@ -209,8 +209,7 @@ impl SimpleOrderingSystem {
                 NodeEnum::ConfluenceNode(node_below_link) => {
                     // We must decide how to apportion the orders between upstream links (of which
                     // this is just one).
-                    if node_below_link.us_1_link_idx.is_some() &&
-                        (node_below_link.us_1_link_idx.unwrap() == li.link_idx) {
+                    if node_below_link.us_1_link_idx == Some(li.link_idx) {
                         // We are on link 1
                         if let Some(value) = node_below_link.order_prepared_for_us_1_buffer {
                             // We already have a value available
@@ -219,7 +218,7 @@ impl SimpleOrderingSystem {
                         } else {
                             // Evaluate the harmony function
                             let link_1_harmony = node_below_link.harmony_fraction.get_value(data_cache)
-                                .max(0.0).min(1.0);
+                                .clamp(0.0, 1.0);
                             node_below_link.harmony_fraction_value = link_1_harmony;
                             // Calculate orders for buffers
                             let link_1_order = link_1_harmony * node_below_link.dsorders[0];
@@ -241,7 +240,7 @@ impl SimpleOrderingSystem {
                         } else {
                             // Evaluate the harmony function
                             let link_1_harmony = node_below_link.harmony_fraction.get_value(data_cache)
-                                .max(0.0).min(1.0);
+                                .clamp(0.0, 1.0);
                             node_below_link.harmony_fraction_value = link_1_harmony;
                             // Calculate orders for buffers
                             let link_1_order = link_1_harmony * node_below_link.dsorders[0];
