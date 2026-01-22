@@ -331,7 +331,7 @@
       "description": "Confluence node that merges multiple flow streams",
       "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
-      "optional_params": [],
+      "optional_params": ["harmony_fraction"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -342,6 +342,10 @@
           "type": "coordinates",
           "format": "float,float",
           "description": "X,Y coordinates"
+        },
+        "harmony_fraction": {
+          "type": "function_expression",
+          "description": "Harmony fraction (data reference, constant, or expression)"
         }
       }
     },
