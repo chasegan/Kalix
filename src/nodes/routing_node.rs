@@ -19,7 +19,7 @@ pub struct RoutingNode {
     storage_volume: f64,
 
     //Parameters
-    lag: i32,           //number of days lag
+    lag: usize,         //number of days lag
     x: f64,             //inflow bias x
     pwl_divs: usize,    //number of divisions in the pwl routing
     pwl_segs: usize,    //number of segments defined in the seg_par_xx arrays
@@ -85,10 +85,10 @@ impl RoutingNode {
     }
     pub fn get_divs(&self) -> usize { self.pwl_divs }
 
-    pub  fn set_lag(&mut self, value: i32) {
+    pub fn set_lag(&mut self, value: usize) {
         self.lag = value;
     }
-    pub fn get_lag(&self) -> i32 { self.lag }
+    pub fn get_lag(&self) -> usize { self.lag }
 
     pub fn get_routing_table_as_vec(&self) -> Vec<f64> {
         let mut answer = vec![];
@@ -146,7 +146,7 @@ impl Node for RoutingNode {
         for i in 0..self.lag_sto_array.len(){
             self.lag_sto_array[i] = 0_f64;
         }
-        self.lag_sto_used = (self.lag + 1) as usize;
+        self.lag_sto_used = self.lag + 1;
         self.lag_iter_index = 0;
 
         // Here I can pre-compute all the PWL segment parameters

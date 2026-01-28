@@ -19,9 +19,9 @@ pub struct UnregulatedUserNode {
     pub pump_capacity: DynamicInput,
     pub flow_threshold: DynamicInput,
     pub annual_cap: Option<f64>,
-    pub annual_cap_reset_month: u32,
+    pub annual_cap_reset_month: u8,
     pub demand_carryover_allowed: bool,
-    pub demand_carryover_reset_month: Option<u32>,
+    pub demand_carryover_reset_month: Option<u8>,
 
     // Internal state only
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -165,10 +165,9 @@ impl Node for UnregulatedUserNode {
             Some(annual_cap) => {
                 let d = data_cache.get_timestamp_day();
                 if d == 1 {
-                    let m_reset = self.annual_cap_reset_month;
-                    let m = data_cache.get_timestamp_month();
+                    let m = data_cache.get_timestamp_month() as u8;
                     let s = data_cache.get_timestamp_seconds();
-                    if (m == m_reset) && (s == 0) {
+                    if (m == self.annual_cap_reset_month) && (s == 0) {
                         self.annual_diversion = 0.0;
                     }
                 }
@@ -180,18 +179,15 @@ impl Node for UnregulatedUserNode {
         if self.demand_carryover_allowed {
             // Allowing demand carryover
             // Check if we need to reset the demand carryover today
-            match self.demand_carryover_reset_month {
-                Some(m_reset) => {
-                    let d = data_cache.get_timestamp_day();
-                    if d == 1 {
-                        let m = data_cache.get_timestamp_month();
-                        let s = data_cache.get_timestamp_seconds();
-                        if (m == m_reset) && (s == 0) {
-                            self.demand_carryover_value = 0.0;
-                        }
+            if let Some(m_reset) = self.demand_carryover_reset_month {
+                let d = data_cache.get_timestamp_day();
+                if d == 1 {
+                    let m = data_cache.get_timestamp_month() as u8;
+                    let s = data_cache.get_timestamp_seconds();
+                    if (m == m_reset) && (s == 0) {
+                        self.demand_carryover_value = 0.0;
                     }
                 }
-                None => {}
             }
             // Now calculate the diversion
             self.demand_carryover_value += new_demand;

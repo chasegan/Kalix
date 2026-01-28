@@ -6,7 +6,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible};
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u32, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 
 const INLET: u8 = 0; //always inlet 0
@@ -300,8 +300,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "lag" {
-                            n.set_lag(v.parse::<i32>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': required integer",
+                            n.set_lag(v.parse::<usize>()
+                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
                                                      ini_property.line_number, name, node_name))?);
                         } else if name_lower == "n_divs" {
                             n.set_divs(v.parse::<usize>()
@@ -490,7 +490,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                    ini_property.line_number, params.len()));
                             }
                             n.annual_cap = Some(params[0]);
-                            n.annual_cap_reset_month = params[1] as u32;
+                            n.annual_cap_reset_month = params[1] as u8;
                         } else if name_lower == "pump" {
                             n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -498,7 +498,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.flow_threshold = DynamicInput::from_string(v, &mut model.data_cache, true)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "demand_carryover" {
-                            (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u32(v)
+                            (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u8(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
