@@ -30,7 +30,7 @@ UNREGULATED_USER NODES
   cc_unsupp_div_ustan_05b, -0.0019537157483949506
   cc_us_gar_supp_div_05b, -0.04755004499958056
   fh_unsupp_div_05a, -0.01568681549242574
-  marian_mill_supp_hp_div_07, -0.28702515630901526
+  marian_mill_supp_hp_div_07, -0.28702515630901504
   marian_supp_div_07, 0
   mcgregor_supp_div_07, -0.0399250155259956
   owens_unsupp_div_05b, -0.008527233435441204
@@ -43,20 +43,20 @@ UNREGULATED_USER NODES
   tannalo_supp_div_05b, -0.4570388989131807
 
 LOSS NODES
-  reach03_loss, -8.292011591386785
-  reach06_loss, -9.99196568152451
-  reach07_loss, -9.61295750338741
-  reach2_loss, -16.144673372274642
+  reach03_loss, -8.292011179927355
+  reach06_loss, -9.99196569046928
+  reach07_loss, -9.612957494089954
+  reach2_loss, -16.14466974102917
 
 STORAGE NODES
-  marianweir, -1.1598655129011382
-  mirani, -3.6290507013256437
-  teemburra, 0.515248191498116
-  waterhole, -6.466113010463176
+  marianweir, -1.1598655133892037
+  mirani, -3.6290507040405533
+  teemburra, 0.5152481916225299
+  waterhole, -6.466130393257787
 
 ROUTING NODES
   bigmodrouting, -0.08427380938987845
-  pwlr2, -0.000000000028608236147272255
+  pwlr2, -0.000000000028608040978582632
 
 CONFLUENCE NODES
   fhccconfluence, 0
@@ -83,8 +83,8 @@ GAUGE NODES
   teemburratw, 0
 
 BLACKHOLE NODES
-  eos, -2485.302867267741
+  eos, -2485.302853924939
 
 ----------------------------------
-TOTAL = 0.000000000027485569376040075
+TOTAL = 0.000000000013325340830760979
 ----------------------------------
