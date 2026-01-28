@@ -229,13 +229,13 @@ impl StorageNode {
     }
 
     /// Computes total outflow at a given volume, including:
-    /// - ds_1: max(order, spill) to give spill credit
+    /// - ds_1: max(order, spill) if above threshold, else just spill
     /// - ds_2, ds_3, ds_4: order if volume > threshold, else 0
     fn total_outflow_at_volume(&self, volume: f64) -> f64 {
         let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
 
-        // ds_1: spill counts toward order (take the larger of spill or order)
-        let ds_1_outflow = if self.dsorders[0] > 0.0 {
+        // ds_1: spill always flows, but order only if above threshold
+        let ds_1_outflow = if self.dsorders[0] > 0.0 && volume >= self.min_operating_volume[0] {
             spill.max(self.dsorders[0])
         } else {
             spill
@@ -244,11 +244,8 @@ impl StorageNode {
         // ds_2, ds_3, ds_4: release if above threshold
         let mut other_outflow = 0.0;
         for i in 1..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 {
-                let threshold = self.min_operating_volume[i];
-                if volume > threshold {
-                    other_outflow += self.dsorders[i];
-                }
+            if self.dsorders[i] > 0.0 && volume >= self.min_operating_volume[i] {
+                other_outflow += self.dsorders[i];
             }
         }
 
@@ -259,12 +256,16 @@ impl StorageNode {
     /// This is the sum of effective orders for all active outlets.
     /// Used to determine the "natural" release budget (no constraint).
     fn release_capacity_at_volume(&self, volume: f64, spill: f64) -> f64 {
-        // ds_1: effective order is (order - spill), since spill satisfies part of order
-        let mut capacity = (self.dsorders[0] - spill).max(0.0);
+        // ds_1: effective order is (order - spill), only if above threshold
+        let mut capacity = if volume >= self.min_operating_volume[0] {
+            (self.dsorders[0] - spill).max(0.0)
+        } else {
+            0.0
+        };
 
         // ds_2, ds_3, ds_4: full order if above threshold
         for i in 1..MAX_DS_LINKS {
-            if volume > self.min_operating_volume[i] {
+            if volume >= self.min_operating_volume[i] {
                 capacity += self.dsorders[i];
             }
         }
@@ -285,13 +286,13 @@ impl StorageNode {
         let mut remaining = release_budget;
 
         // Compute effective order for each outlet
-        // ds_1: spill credit (order minus what spill already provides)
-        // ds_2, ds_3, ds_4: full order if above threshold, else 0
+        // All outlets: full order if above threshold, else 0
+        // ds_1: also gets spill credit (order minus what spill already provides)
         let effective_orders: [f64; MAX_DS_LINKS] = [
-            (self.dsorders[0] - spill).max(0.0),
-            if volume > self.min_operating_volume[1] { self.dsorders[1] } else { 0.0 },
-            if volume > self.min_operating_volume[2] { self.dsorders[2] } else { 0.0 },
-            if volume > self.min_operating_volume[3] { self.dsorders[3] } else { 0.0 },
+            if volume >= self.min_operating_volume[0] { (self.dsorders[0] - spill).max(0.0) } else { 0.0 },
+            if volume >= self.min_operating_volume[1] { self.dsorders[1] } else { 0.0 },
+            if volume >= self.min_operating_volume[2] { self.dsorders[2] } else { 0.0 },
+            if volume >= self.min_operating_volume[3] { self.dsorders[3] } else { 0.0 },
         ];
 
         // Sort outlets by priority (lower value = higher priority)
@@ -319,13 +320,15 @@ impl StorageNode {
     /// Finds breakpoints (discontinuities) within a volume range.
     /// Only includes breakpoints for outlets with non-zero orders.
     fn find_breakpoints_in_range(&self, v_lo: f64, v_hi: f64) -> Vec<Breakpoint> {
-        let mut breaks = Vec::with_capacity(4);
+        let mut breaks = Vec::with_capacity(5);
 
-        // Check release thresholds for ds_2, ds_3, ds_4
-        for i in 1..MAX_DS_LINKS {
+        // Check release thresholds for all outlets (ds_1, ds_2, ds_3, ds_4)
+        // Include breakpoints strictly inside, or at the upper boundary (for boundary handling)
+        for i in 0..MAX_DS_LINKS {
             if self.dsorders[i] > 0.0 {
                 if let Some(ref info) = self.threshold_info[i] {
-                    if info.volume > v_lo && info.volume < v_hi {
+                    // Include if strictly inside OR at upper boundary (but not at lower)
+                    if info.volume > v_lo && info.volume <= v_hi {
                         breaks.push(Breakpoint::ReleaseThreshold { outlet: i });
                     }
                 }
@@ -416,20 +419,34 @@ impl StorageNode {
         // Determine outflow regime at segment midpoint
         let v_mid = (v_lo + v_hi) / 2.0;
         let spill_mid = self.d.interpolate(VOLU, SPIL, v_mid).max(0.0);
+        let ds_1_above_threshold = v_mid >= self.min_operating_volume[0];
         let ds_1_is_spill_limited = spill_mid >= self.dsorders[0];
 
         // Constant releases from ds_2, ds_3, ds_4 (if above their thresholds)
         let mut const_releases = 0.0;
         for i in 1..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 && v_mid > self.min_operating_volume[i] {
+            if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
                 const_releases += self.dsorders[i];
             }
         }
 
         // Solve the backward Euler equation:
         //   v = v_working + net_rain*(a0 + a1*v) - outflow(v)
-        let volume = if ds_1_is_spill_limited {
-            // ds_1 outflow = spill(v), which is linear: s0 + s1*v
+        //
+        // We track the ds_1 release assumed by the solver to ensure consistency
+        // between the equilibrium volume and the recorded flows.
+        let (volume, ds_1_release_assumed) = if !ds_1_above_threshold {
+            // ds_1 below threshold: only spill, no order release
+            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
+            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
+            let s1 = (spill_hi - spill_lo) / dv;
+            let s0 = spill_lo - s1 * v_lo;
+
+            let coeff = 1.0 - net_rain_mm * a1 + s1;
+            let rhs = v_working + net_rain_mm * a0 - s0 - const_releases;
+            (rhs / coeff, 0.0)  // No ds_1 release
+        } else if ds_1_is_spill_limited {
+            // ds_1 above threshold but spill-limited: outflow = spill(v)
             let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
             let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
             let s1 = (spill_hi - spill_lo) / dv;
@@ -438,18 +455,45 @@ impl StorageNode {
             // v*(1 - net_rain*a1 + s1) = v_working + net_rain*a0 - s0 - const_releases
             let coeff = 1.0 - net_rain_mm * a1 + s1;
             let rhs = v_working + net_rain_mm * a0 - s0 - const_releases;
-            rhs / coeff
+            let vol = rhs / coeff;
+            // ds_1 release = spill - spill_credit (but spill >= order, so release = 0)
+            (vol, 0.0)
         } else {
-            // ds_1 outflow = ds_1_order (constant)
+            // ds_1 above threshold and order-limited: outflow = order (constant)
             // v*(1 - net_rain*a1) = v_working + net_rain*a0 - ds_1_order - const_releases
             let coeff = 1.0 - net_rain_mm * a1;
             let rhs = v_working + net_rain_mm * a0 - self.dsorders[0] - const_releases;
-            rhs / coeff
+            (rhs / coeff, self.dsorders[0])  // Full ds_1 order
         };
 
-        // Clamp to segment bounds (numerical safety)
-        let volume = volume.clamp(v_lo, v_hi);
-        self.build_result_at_volume(volume)
+        // Check if solution is within segment bounds
+        let clamped_volume = volume.clamp(v_lo, v_hi);
+        let was_clamped = (volume - clamped_volume).abs() > EPSILON;
+
+        let level = self.d.interpolate(VOLU, LEVL, clamped_volume);
+        let area = self.d.interpolate(VOLU, AREA, clamped_volume);
+        let spill = self.d.interpolate(VOLU, SPIL, clamped_volume).max(0.0);
+
+        if was_clamped {
+            // Solution was outside segment and got clamped to boundary.
+            // Compute actual release from mass balance rather than using assumed value.
+            let outflow_needed = v_working + net_rain_mm * area - clamped_volume;
+            let release_budget = (outflow_needed - spill).max(0.0);
+            let ds_flows = self.allocate_releases(clamped_volume, spill, release_budget);
+            SolveResult { volume: clamped_volume, level, area, spill, ds_flows }
+        } else {
+            // Solution is within segment - use flows consistent with solver assumptions
+            let mut ds_flows = [0.0; MAX_DS_LINKS];
+            // ds_1: spill + release (where release was determined by solver regime)
+            ds_flows[0] = spill + (ds_1_release_assumed - spill).max(0.0);
+            // ds_2, ds_3, ds_4: based on v_mid threshold check (const_releases)
+            for i in 1..MAX_DS_LINKS {
+                if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
+                    ds_flows[i] = self.dsorders[i];
+                }
+            }
+            SolveResult { volume: clamped_volume, level, area, spill, ds_flows }
+        }
     }
 
     /// Solves when there are breakpoints within the table row interval.
@@ -467,9 +511,20 @@ impl StorageNode {
         let mut bounds = Vec::with_capacity(breakpoints.len() + 2);
         bounds.push(v_table_lo);
         for bp in breakpoints {
-            bounds.push(self.breakpoint_volume(bp));
+            let bp_vol = self.breakpoint_volume(bp);
+            // Only add if not duplicate of previous bound (avoids zero-length segments)
+            if let Some(&last) = bounds.last() {
+                if (bp_vol - last).abs() > EPSILON {
+                    bounds.push(bp_vol);
+                }
+            }
         }
-        bounds.push(v_table_hi);
+        // Only add v_table_hi if not duplicate
+        if let Some(&last) = bounds.last() {
+            if (v_table_hi - last).abs() > EPSILON {
+                bounds.push(v_table_hi);
+            }
+        }
 
         // Try each segment from low to high
         for i in 0..bounds.len() - 1 {
