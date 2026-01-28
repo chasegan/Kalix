@@ -6,8 +6,10 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible};
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
+use crate::nodes::storage_node::OutletDefinition;
+use crate::nodes::storage_node::OutletDefinition::{OutletWithAndMOLAndCapacity, OutletWithMOL};
 
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
@@ -434,6 +436,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "ds_2" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET))
+                        } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
+                            .and_then(|s| s.strip_suffix("_outlet"))
+                            .and_then(|s| s.parse::<i32>().ok()) {
+                            let params = csv_string_to_f64_vec(v)?;
+                            let i_outlet = (ds_num - 1) as usize;
+                            match params.len() {
+                                0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
+                                1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
+                                2 => n.outlet_definition[i_outlet] = OutletWithAndMOLAndCapacity(params[0], params[1]),
+                                _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number)),
+                            }
                         } else if name_lower == "evap" {
                             n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -452,8 +465,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                      ini_property.line_number, node_name, e))?;
                         } else if name_lower == "dimensions_file" {
                             n.d = Table::from_csv_file(v);
-                                // .map_err(|e| format!("Error on line {}: Could not load dimensions file for node '{}': {}",
-                                //                      ini_property.line_number, node_name, e))?;
                         } else if name_lower == "initial_volume" {
                             n.v_initial = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
@@ -701,6 +712,15 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
+                for (i, outlet_def) in n.outlet_definition.iter().enumerate() {
+                    let property_name = format!("ds_{}_outlet", i + 1);
+                    let value = match outlet_def {
+                        OutletDefinition::None => String::new(),
+                        OutletWithMOL(mol) => format_f64(*mol),
+                        OutletWithAndMOLAndCapacity(mol, cap) => format!("{}, {}", format_f64(*mol), format_f64(*cap)),
+                    };
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &property_name, &value);
+                }
             }
             NodeEnum::UnregulatedUserNode(n) => {
                 let section_name = format!("node.{}", n.name);

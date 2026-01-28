@@ -5,28 +5,88 @@ use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 
+// Table column indices
 const LEVL: usize = 0;
 const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
-const EPSILON: f64 = 1e-3;
+
+// Other constants
+const EPSILON: f64 = 1e-6;
 const MAX_DS_LINKS: usize = 4;
+
+// -----------------------------------------------------------------------------
+// Threshold and solver support structures
+// -----------------------------------------------------------------------------
+
+/// Precomputed information about a release threshold (minimum volume for release).
+/// Computed once during initialization to avoid repeated table lookups.
+#[derive(Default, Clone)]
+struct ThresholdInfo {
+    volume: f64,
+    #[allow(dead_code)]  // Reserved for potential optimization
+    table_row: usize,
+}
+
+/// A breakpoint where the outflow function changes character.
+/// Used during the backward Euler solve to handle piecewise-linear outflow.
+#[derive(Clone)]
+enum Breakpoint {
+    /// Volume where spill equals ds_1 order (transitions from order-limited to spill-limited)
+    SpillCrossover { volume: f64 },
+    /// Volume threshold below which an outlet cannot release
+    ReleaseThreshold { outlet: usize },
+}
+
+/// Result of the backward Euler solve, containing final state and outlet flows.
+struct SolveResult {
+    volume: f64,
+    level: f64,
+    area: f64,
+    spill: f64,
+    ds_flows: [f64; MAX_DS_LINKS],
+}
+
+/// Configure the node with these. The node will be initialized accordingly.
+#[derive(Default, Clone)]
+pub enum OutletDefinition {
+    #[default]
+    None,
+    OutletWithMOL(f64), //MOL [m]
+    OutletWithAndMOLAndCapacity(f64, f64), //MOL [m], Capacity [ML/step]
+    //OutletWithRatingCurve(table) //TODO: implement this
+}
+
+
+// -----------------------------------------------------------------------------
+// StorageNode
+// -----------------------------------------------------------------------------
 
 #[derive(Default, Clone)]
 pub struct StorageNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
-    pub v: f64,
+    pub d: Table,       // Dimension table: Level(m), Volume(ML), Area(km²), Spill(ML/d)
+    pub v: f64,         // Current volume
     pub v_initial: f64,
-    pub area0_km2: f64, // Dead storage area interpolated from 'd' table during node initialisation
+    pub area0_km2: f64, // Area at minimum storage (interpolated during init)
+
+    // Outlets
+    pub min_operating_volume: [f64; MAX_DS_LINKS], // Minimum operating volume for each outlet.
+    pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
+    pub outlet_priority: [u8; MAX_DS_LINKS], // Release priorities. Default: [0, 1, 2, 3]. lower value = higher priority.
+
+    // Climate inputs
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
 
-    // Internal state only
+    // Precomputed threshold info (populated during initialization)
+    threshold_info: [Option<ThresholdInfo>; MAX_DS_LINKS],
+
+    // Internal state
     usflow: f64,
     dsflow: f64,
     ds_1_flow: f64,
@@ -37,13 +97,13 @@ pub struct StorageNode {
     rain_vol: f64,
     evap_vol: f64,
     seep_vol: f64,
-    pond_diversion: f64, //pond diversion
+    pond_diversion: f64,
     spill: f64,
 
-    // Cached state for search optimization
-    previous_istop: usize,  // Remember previous solution row for warm start
+    // Warm-start hint for table row search
+    previous_row: usize,
 
-    // Orders
+    // Orders (set by ordering system before run_flow_phase)
     pub dsorders: [f64; MAX_DS_LINKS],
 
     // Recorders
@@ -67,21 +127,444 @@ pub struct StorageNode {
 }
 
 impl StorageNode {
-
-    /// Base constructor
     pub fn new() -> Self {
         Self {
-            name: "".to_string(),
+            name: String::new(),
             d: Table::new(4),
+            threshold_info: Default::default(), //[None, None, None, None],
+            outlet_priority: std::array::from_fn(|i| i as u8), //[0, 1, 2, 3],
             ..Default::default()
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Backward Euler solver
+    // -------------------------------------------------------------------------
+
+    /// Main solver entry point. Finds final volume accounting for:
+    /// - Net rainfall (rain - evap - seep) scaled by area
+    /// - Spill from the dimension table
+    /// - Ordered releases with threshold constraints
+    /// - ds_1 spill credit (spill contributes to satisfying ds_1 order)
+    fn solve_backward_euler(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+    ) -> SolveResult {
+        let nrows = self.d.nrows();
+
+        // Find the table row interval containing the solution
+        let (row_lo, row_hi) = self.find_row_interval(v_working, net_rain_mm, nrows);
+
+        // Check for breakpoints (discontinuities) within this interval
+        let v_lo = self.d.get_value(row_lo, VOLU);
+        let v_hi = self.d.get_value(row_hi, VOLU);
+        let breakpoints = self.find_breakpoints_in_range(v_lo, v_hi);
+
+        if breakpoints.is_empty() {
+            // Fast path: no discontinuities, solve directly in this interval
+            self.solve_in_interval(row_lo, v_working, net_rain_mm)
+        } else {
+            // Slow path: handle piecewise segments
+            self.solve_with_breakpoints(row_lo, v_working, net_rain_mm, &breakpoints)
+        }
+    }
+
+    /// Finds the table row interval [lo, hi] that brackets the solution.
+    /// Uses exponential expansion from the previous solution, then bisection.
+    fn find_row_interval(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        nrows: usize,
+    ) -> (usize, usize) {
+        // Error function: positive means solution is at or below this row
+        let error_at_row = |row: usize| -> f64 {
+            let area = self.d.get_value(row, AREA);
+            let table_vol = self.d.get_value(row, VOLU);
+            let outflow = self.total_outflow_at_volume(table_vol);
+            let predicted = v_working + net_rain_mm * area - outflow;
+            table_vol - predicted
+        };
+
+        // Start from previous solution (warm start)
+        let start = self.previous_row.min(nrows - 1);
+        let error_start = error_at_row(start);
+
+        let (mut lo, mut hi) = if error_start < 0.0 {
+            // Solution is above start row - expand upward
+            let mut lo = start;
+            let mut step = 1;
+            let mut hi = (start + step).min(nrows - 1);
+            while error_at_row(hi) < 0.0 && hi < nrows - 1 {
+                lo = hi;
+                step *= 2;
+                hi = (hi + step).min(nrows - 1);
+            }
+            (lo, hi)
+        } else {
+            // Solution is at or below start row - expand downward
+            let mut hi = start;
+            let mut step = 1;
+            let mut lo = start.saturating_sub(step);
+            while error_at_row(lo) >= 0.0 && lo > 0 {
+                hi = lo;
+                step *= 2;
+                lo = lo.saturating_sub(step);
+            }
+            (lo, hi)
+        };
+
+        // Bisect to find exact bracket
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if error_at_row(mid) < 0.0 {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+
+        (lo, hi)
+    }
+
+    /// Computes total outflow at a given volume, including:
+    /// - ds_1: max(order, spill) to give spill credit
+    /// - ds_2, ds_3, ds_4: order if volume > threshold, else 0
+    fn total_outflow_at_volume(&self, volume: f64) -> f64 {
+        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
+
+        // ds_1: spill counts toward order (take the larger of spill or order)
+        let ds_1_outflow = if self.dsorders[0] > 0.0 {
+            spill.max(self.dsorders[0])
+        } else {
+            spill
+        };
+
+        // ds_2, ds_3, ds_4: release if above threshold
+        let mut other_outflow = 0.0;
+        for i in 1..MAX_DS_LINKS {
+            if self.dsorders[i] > 0.0 {
+                let threshold = self.min_operating_volume[i];
+                if volume > threshold {
+                    other_outflow += self.dsorders[i];
+                }
+            }
+        }
+
+        ds_1_outflow + other_outflow
+    }
+
+    /// Computes the total release capacity at a given volume.
+    /// This is the sum of effective orders for all active outlets.
+    /// Used to determine the "natural" release budget (no constraint).
+    fn release_capacity_at_volume(&self, volume: f64, spill: f64) -> f64 {
+        // ds_1: effective order is (order - spill), since spill satisfies part of order
+        let mut capacity = (self.dsorders[0] - spill).max(0.0);
+
+        // ds_2, ds_3, ds_4: full order if above threshold
+        for i in 1..MAX_DS_LINKS {
+            if volume > self.min_operating_volume[i] {
+                capacity += self.dsorders[i];
+            }
+        }
+
+        capacity
+    }
+
+    /// Allocates a release budget among outlets based on priority.
+    /// Higher priority outlets (lower priority value) are satisfied first.
+    /// ds_1 always receives spill in addition to any allocated release.
+    fn allocate_releases(
+        &self,
+        volume: f64,
+        spill: f64,
+        release_budget: f64,
+    ) -> [f64; MAX_DS_LINKS] {
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        let mut remaining = release_budget;
+
+        // Compute effective order for each outlet
+        // ds_1: spill credit (order minus what spill already provides)
+        // ds_2, ds_3, ds_4: full order if above threshold, else 0
+        let effective_orders: [f64; MAX_DS_LINKS] = [
+            (self.dsorders[0] - spill).max(0.0),
+            if volume > self.min_operating_volume[1] { self.dsorders[1] } else { 0.0 },
+            if volume > self.min_operating_volume[2] { self.dsorders[2] } else { 0.0 },
+            if volume > self.min_operating_volume[3] { self.dsorders[3] } else { 0.0 },
+        ];
+
+        // Sort outlets by priority (lower value = higher priority)
+        let mut outlets: [(usize, u8); MAX_DS_LINKS] = [
+            (0, self.outlet_priority[0]),
+            (1, self.outlet_priority[1]),
+            (2, self.outlet_priority[2]),
+            (3, self.outlet_priority[3]),
+        ];
+        outlets.sort_by_key(|&(_, p)| p);
+
+        // Allocate budget by priority
+        for (outlet, _) in outlets {
+            let release = effective_orders[outlet].min(remaining);
+            ds_flows[outlet] = release;
+            remaining -= release;
+        }
+
+        // ds_1 always receives spill (physical outflow, not from budget)
+        ds_flows[0] += spill;
+
+        ds_flows
+    }
+
+    /// Finds breakpoints (discontinuities) within a volume range.
+    /// Only includes breakpoints for outlets with non-zero orders.
+    fn find_breakpoints_in_range(&self, v_lo: f64, v_hi: f64) -> Vec<Breakpoint> {
+        let mut breaks = Vec::with_capacity(4);
+
+        // Check release thresholds for ds_2, ds_3, ds_4
+        for i in 1..MAX_DS_LINKS {
+            if self.dsorders[i] > 0.0 {
+                if let Some(ref info) = self.threshold_info[i] {
+                    if info.volume > v_lo && info.volume < v_hi {
+                        breaks.push(Breakpoint::ReleaseThreshold { outlet: i });
+                    }
+                }
+            }
+        }
+
+        // Check for spill crossover (where spill = ds_1_order)
+        if self.dsorders[0] > 0.0 {
+            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
+            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
+
+            if spill_lo < self.dsorders[0] && self.dsorders[0] < spill_hi {
+                // Crossover is within this interval
+                if let Some(vol) = self.find_spill_crossover_in_range(v_lo, v_hi) {
+                    breaks.push(Breakpoint::SpillCrossover { volume: vol });
+                }
+            }
+        }
+
+        // Sort by volume for proper segment handling
+        breaks.sort_by(|a, b| {
+            let va = self.breakpoint_volume(a);
+            let vb = self.breakpoint_volume(b);
+            va.partial_cmp(&vb).unwrap()
+        });
+
+        breaks
+    }
+
+    /// Returns the volume at which a breakpoint occurs.
+    fn breakpoint_volume(&self, bp: &Breakpoint) -> f64 {
+        match bp {
+            Breakpoint::SpillCrossover { volume } => *volume,
+            Breakpoint::ReleaseThreshold { outlet } => {
+                self.threshold_info[*outlet].as_ref().unwrap().volume
+            }
+        }
+    }
+
+    /// Finds the volume where spill equals ds_1_order within a range.
+    fn find_spill_crossover_in_range(&self, v_lo: f64, v_hi: f64) -> Option<f64> {
+        let order = self.dsorders[0];
+        let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
+        let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
+
+        if spill_lo >= order || spill_hi <= order {
+            return None;
+        }
+
+        // Linear interpolation to find crossover volume
+        let t = (order - spill_lo) / (spill_hi - spill_lo);
+        Some(v_lo + t * (v_hi - v_lo))
+    }
+
+    /// Solves directly within a table row interval (no breakpoints).
+    fn solve_in_interval(
+        &self,
+        row_lo: usize,
+        v_working: f64,
+        net_rain_mm: f64,
+    ) -> SolveResult {
+        let v_lo = self.d.get_value(row_lo, VOLU);
+        let v_hi = self.d.get_value(row_lo + 1, VOLU);
+
+        self.solve_in_segment(v_lo, v_hi, v_working, net_rain_mm)
+    }
+
+    /// Solves within a segment where all functions are linear.
+    /// Uses direct algebraic solution of the backward Euler equation.
+    fn solve_in_segment(
+        &self,
+        v_lo: f64,
+        v_hi: f64,
+        v_working: f64,
+        net_rain_mm: f64,
+    ) -> SolveResult {
+        let dv = v_hi - v_lo;
+        if dv.abs() < EPSILON {
+            return self.build_result_at_volume(v_lo);
+        }
+
+        // Linear coefficients for area: area(v) = a0 + a1*v
+        let area_lo = self.d.interpolate(VOLU, AREA, v_lo);
+        let area_hi = self.d.interpolate(VOLU, AREA, v_hi);
+        let a1 = (area_hi - area_lo) / dv;
+        let a0 = area_lo - a1 * v_lo;
+
+        // Determine outflow regime at segment midpoint
+        let v_mid = (v_lo + v_hi) / 2.0;
+        let spill_mid = self.d.interpolate(VOLU, SPIL, v_mid).max(0.0);
+        let ds_1_is_spill_limited = spill_mid >= self.dsorders[0];
+
+        // Constant releases from ds_2, ds_3, ds_4 (if above their thresholds)
+        let mut const_releases = 0.0;
+        for i in 1..MAX_DS_LINKS {
+            if self.dsorders[i] > 0.0 && v_mid > self.min_operating_volume[i] {
+                const_releases += self.dsorders[i];
+            }
+        }
+
+        // Solve the backward Euler equation:
+        //   v = v_working + net_rain*(a0 + a1*v) - outflow(v)
+        let volume = if ds_1_is_spill_limited {
+            // ds_1 outflow = spill(v), which is linear: s0 + s1*v
+            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
+            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
+            let s1 = (spill_hi - spill_lo) / dv;
+            let s0 = spill_lo - s1 * v_lo;
+
+            // v*(1 - net_rain*a1 + s1) = v_working + net_rain*a0 - s0 - const_releases
+            let coeff = 1.0 - net_rain_mm * a1 + s1;
+            let rhs = v_working + net_rain_mm * a0 - s0 - const_releases;
+            rhs / coeff
+        } else {
+            // ds_1 outflow = ds_1_order (constant)
+            // v*(1 - net_rain*a1) = v_working + net_rain*a0 - ds_1_order - const_releases
+            let coeff = 1.0 - net_rain_mm * a1;
+            let rhs = v_working + net_rain_mm * a0 - self.dsorders[0] - const_releases;
+            rhs / coeff
+        };
+
+        // Clamp to segment bounds (numerical safety)
+        let volume = volume.clamp(v_lo, v_hi);
+        self.build_result_at_volume(volume)
+    }
+
+    /// Solves when there are breakpoints within the table row interval.
+    fn solve_with_breakpoints(
+        &self,
+        row_lo: usize,
+        v_working: f64,
+        net_rain_mm: f64,
+        breakpoints: &[Breakpoint],
+    ) -> SolveResult {
+        // Build segment boundaries: [table_lo, bp1, bp2, ..., table_hi]
+        let v_table_lo = self.d.get_value(row_lo, VOLU);
+        let v_table_hi = self.d.get_value(row_lo + 1, VOLU);
+
+        let mut bounds = Vec::with_capacity(breakpoints.len() + 2);
+        bounds.push(v_table_lo);
+        for bp in breakpoints {
+            bounds.push(self.breakpoint_volume(bp));
+        }
+        bounds.push(v_table_hi);
+
+        // Try each segment from low to high
+        for i in 0..bounds.len() - 1 {
+            let seg_lo = bounds[i];
+            let seg_hi = bounds[i + 1];
+
+            let result = self.solve_in_segment(seg_lo, seg_hi, v_working, net_rain_mm);
+
+            // Check if solution is within this segment
+            if result.volume >= seg_lo - EPSILON && result.volume <= seg_hi + EPSILON {
+                return result;
+            }
+
+            // Check for threshold discontinuity at segment boundary
+            if result.volume > seg_hi && i < bounds.len() - 2 {
+                if let Some(threshold_result) = self.check_threshold_at_boundary(
+                    seg_hi, v_working, net_rain_mm, breakpoints
+                ) {
+                    return threshold_result;
+                }
+            }
+        }
+
+        // Fallback: solution at table boundary (shouldn't normally reach here)
+        self.build_result_at_volume(v_table_hi)
+    }
+
+    /// Checks if the solution lies exactly at a threshold boundary.
+    /// At boundaries, the release budget is constrained by mass balance,
+    /// and allocation among outlets follows the priority ordering.
+    fn check_threshold_at_boundary(
+        &self,
+        boundary_volume: f64,
+        v_working: f64,
+        net_rain_mm: f64,
+        breakpoints: &[Breakpoint],
+    ) -> Option<SolveResult> {
+        // Find which breakpoint matches this boundary
+        for bp in breakpoints {
+            if let Breakpoint::ReleaseThreshold { outlet: _ } = bp {
+                let bp_vol = self.breakpoint_volume(bp);
+                if (bp_vol - boundary_volume).abs() < EPSILON {
+                    // Solution is at this threshold boundary
+                    let area = self.d.interpolate(VOLU, AREA, boundary_volume);
+                    let spill = self.d.interpolate(VOLU, SPIL, boundary_volume).max(0.0);
+
+                    // Compute release budget from mass balance constraint
+                    let outflow_needed = v_working + net_rain_mm * area - boundary_volume;
+                    let release_budget = (outflow_needed - spill).max(0.0);
+
+                    // Allocate constrained budget by priority
+                    return Some(self.build_result_at_boundary(boundary_volume, release_budget));
+                }
+            }
+        }
+        None
+    }
+
+    /// Builds a SolveResult for a given final volume (unconstrained case).
+    /// All active outlets receive their full orders.
+    fn build_result_at_volume(&self, volume: f64) -> SolveResult {
+        let level = self.d.interpolate(VOLU, LEVL, volume);
+        let area = self.d.interpolate(VOLU, AREA, volume);
+        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
+
+        // In the unconstrained case, budget equals full capacity
+        let release_budget = self.release_capacity_at_volume(volume, spill);
+        let ds_flows = self.allocate_releases(volume, spill, release_budget);
+
+        SolveResult { volume, level, area, spill, ds_flows }
+    }
+
+    /// Builds a SolveResult for a threshold boundary (constrained case).
+    /// Release budget is determined by mass balance; allocation follows priority.
+    fn build_result_at_boundary(
+        &self,
+        volume: f64,
+        release_budget: f64,
+    ) -> SolveResult {
+        let level = self.d.interpolate(VOLU, LEVL, volume);
+        let area = self.d.interpolate(VOLU, AREA, volume);
+        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
+        let ds_flows = self.allocate_releases(volume, spill, release_budget);
+
+        SolveResult { volume, level, area, spill, ds_flows }
+    }
 }
 
-impl Node for StorageNode {
+// -----------------------------------------------------------------------------
+// Node trait implementation
+// -----------------------------------------------------------------------------
 
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
-        // Initialize only internal state
+impl Node for StorageNode {
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
+        // Reset internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
@@ -96,280 +579,133 @@ impl Node for StorageNode {
         self.seep_vol = 0.0;
         self.pond_diversion = 0.0;
         self.spill = 0.0;
-        self.previous_istop = 0;  // Will be updated after first timestep
+        self.previous_row = 0;
 
-        //Initialize inflow series
-        // All DynamicInput fields are already initialized during parsing
-
-        // Checks
+        // Validate dimension table
         if self.d.nrows() < 2 {
-            let message = format!("Error in node '{}'. Storage dimension table must have at least 2 rows.", self.name);
-            return Err(message);
+            return Err(format!(
+                "Storage node '{}': dimension table must have at least 2 rows",
+                self.name
+            ));
         }
 
-        // Initial values and pre-calculations
-        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0_f64); // Area at dead storage
+        // Precompute area at minimum storage
+        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0.0);
 
-        // Initialize result recorders
+        // Precompute the minimum operating volume
+        for i in 0..MAX_DS_LINKS {
+            self.min_operating_volume[i] = match self.outlet_definition[i] {
+                OutletDefinition::None => 0.0,
+                OutletDefinition::OutletWithMOL(mol) | OutletDefinition::OutletWithAndMOLAndCapacity(mol, _) =>
+                    self.d.interpolate(LEVL, VOLU, mol),
+            };
+            println!("MOV {} set to {}", i, self.min_operating_volume[i]);
+        }
+
+        // Precompute threshold info for each outlet
+        let v_min = self.d.get_value(0, VOLU);
+        let v_max = self.d.get_value(self.d.nrows() - 1, VOLU);
+        for i in 0..MAX_DS_LINKS {
+            let threshold = self.min_operating_volume[i];
+            if threshold > 0.0 && threshold >= v_min && threshold <= v_max {
+                if let Some(row) = self.d.find_row(VOLU, threshold) {
+                    self.threshold_info[i] = Some(ThresholdInfo {
+                        volume: threshold,
+                        table_row: row,
+                    });
+                }
+            } else {
+                self.threshold_info[i] = None;
+            }
+        }
+
+        // Initialize recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
+            &make_result_name(&self.name, "usflow"), false);
         self.recorder_idx_volume = data_cache.get_series_idx(
-            make_result_name(&self.name, "volume").as_str(), false
-        );
+            &make_result_name(&self.name, "volume"), false);
         self.recorder_idx_level = data_cache.get_series_idx(
-            make_result_name(&self.name, "level").as_str(), false
-        );
+            &make_result_name(&self.name, "level"), false);
         self.recorder_idx_area = data_cache.get_series_idx(
-            make_result_name(&self.name, "area").as_str(), false
-        );
+            &make_result_name(&self.name, "area"), false);
         self.recorder_idx_seep = data_cache.get_series_idx(
-            make_result_name(&self.name, "seep").as_str(), false
-        );
+            &make_result_name(&self.name, "seep"), false);
         self.recorder_idx_rain = data_cache.get_series_idx(
-            make_result_name(&self.name, "rain").as_str(), false
-        );
+            &make_result_name(&self.name, "rain"), false);
         self.recorder_idx_evap = data_cache.get_series_idx(
-            make_result_name(&self.name, "evap").as_str(), false
-        );
+            &make_result_name(&self.name, "evap"), false);
         self.recorder_idx_pond_diversion = data_cache.get_series_idx(
-            make_result_name(&self.name, "pond_diversion").as_str(), false
-        );
+            &make_result_name(&self.name, "pond_diversion"), false);
         self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
+            &make_result_name(&self.name, "dsflow"), false);
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_1"), false);
         self.recorder_idx_ds_2 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_2"), false);
         self.recorder_idx_ds_3 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_3"), false);
         self.recorder_idx_ds_4 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_4"), false);
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_1_order"), false);
         self.recorder_idx_ds_2_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_order").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_2_order"), false);
         self.recorder_idx_ds_3_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_order").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_3_order"), false);
         self.recorder_idx_ds_4_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_order").as_str(), false
-        );
+            &make_result_name(&self.name, "ds_4_order"), false);
 
         Ok(())
     }
 
-    fn get_name(&self) -> &str { &self.name }
+    fn get_name(&self) -> &str {
+        &self.name
+    }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-
-        // Get the driving data
+        // Get climate inputs
         let rain_mm = self.rain_mm_input.get_value(data_cache);
         let evap_mm = self.evap_mm_input.get_value(data_cache);
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
-
-        // TODO: Spill is zero when the volume is zero. MAKE THIS A REQUIREMENT of the storage
-        //  table for consistency with the results. Also the table must start with volume = 0.
-
-        // We already know what the upstream flows are, and by looking at the
-        // net rainfall at dead storage, we can already know what the maximum
-        // diversion could be.
-        self.v += self.usflow;
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
-        let net_rain_at_dead_storage = self.area0_km2 * net_rain_mm;
-        let mut max_diversion = self.v + net_rain_at_dead_storage.max(0_f64);
 
-        // Pond demands
-        if pond_demand < max_diversion {
-            self.pond_diversion = pond_demand;
-            max_diversion -= self.pond_diversion;
-        } else {
-            self.pond_diversion = max_diversion;
-            max_diversion = 0f64;
-        }
-        self.v -= self.pond_diversion; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
+        // Add upstream inflow to storage
+        self.v += self.usflow;
 
-        // ds_1 ds_2 ds_3 ds_4 demands
-        // TODO: for ds_1, demands may be met by spills, but the current logic does not account for that
-        for i in 0..MAX_DS_LINKS {
-            let mut release = 0f64;
-            if self.dsorders[i] == 0f64 {
-                // nothing
-            } else if self.dsorders[i] < max_diversion {
-                release = self.dsorders[i];
-                max_diversion -= release;
-                self.v -= release; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
-            } else {
-                release = max_diversion;
-                max_diversion = 0f64;
-                self.v -= release; //TODO: potentially negative here, but I guess comes good later. Is there anything wrong this?
-            }
-            match i {
-                0 => { self.ds_1_flow = release; }
-                1 => { self.ds_2_flow = release; }
-                2 => { self.ds_3_flow = release; }
-                3 => { self.ds_4_flow = release; }
-                _ => { }
-            }
-        }
+        // Handle pond diversion (takes priority over all other releases)
+        let max_pond = self.v + (net_rain_mm * self.area0_km2).max(0.0);
+        self.pond_diversion = pond_demand.min(max_pond).max(0.0);
+        self.v -= self.pond_diversion;
 
-        // Now we just need to solve backward euler on the dimension table 'd'
-        // to find the actual final solution (including net rainfall and spill
-        // commensurate with the final storage level).
-        //
-        // The solution is likely to be between the table rows. The strategy is
-        // therefore to (1) find which rows bound the solution (2) interpolate
-        // between those rows.
-        //
-        // We use exponential expansion from the previous timestep's solution,
-        // followed by bisection. This gives O(log k) complexity where k is the
-        // number of rows moved since last timestep (typically 1-3).
+        // Working volume for backward Euler (after pond diversion)
+        let v_working = self.v;
 
-        // Helper to compute error at a given row
-        // Error = table_volume - predicted_volume
-        // Positive error means solution is at or below this row
-        // Negative error means solution is above this row
-        let compute_error = |i: usize| -> f64 {
-            let predicted_volume = self.v +
-                net_rain_mm * self.d.get_value(i, AREA) - self.d.get_value(i, SPIL);
-            self.d.get_value(i, VOLU) - predicted_volume
-        };
+        // Solve for final volume and outlet flows
+        let result = self.solve_backward_euler(v_working, net_rain_mm);
 
-        let nrows = self.d.nrows();
-        let mut lo: usize;
-        let mut hi: usize;
+        // Update state from solution
+        self.v = result.volume;
+        self.level = result.level;
+        self.spill = result.spill;
+        self.ds_1_flow = result.ds_flows[0];
+        self.ds_2_flow = result.ds_flows[1];
+        self.ds_3_flow = result.ds_flows[2];
+        self.ds_4_flow = result.ds_flows[3];
+        self.dsflow = self.ds_1_flow + self.ds_2_flow + self.ds_3_flow + self.ds_4_flow;
 
-        // Start from previous solution (clamped to valid range)
-        let start = self.previous_istop.min(nrows - 1);
-        let error_start = compute_error(start);
+        // Compute climate volumes using solved area
+        self.rain_vol = rain_mm * result.area;
+        self.evap_vol = evap_mm * result.area;
+        self.seep_vol = seep_mm * result.area;
 
-        if error_start < 0.0 {
-            // Solution is ABOVE start - expand upward exponentially
-            lo = start;
-            let mut step = 1;
-            hi = (start + step).min(nrows - 1);
-
-            while compute_error(hi) < 0.0 && hi < nrows - 1 {
-                lo = hi;
-                step *= 2;
-                hi = (hi + step).min(nrows - 1);
-            }
-        } else {
-            // Solution is AT or BELOW start - expand downward exponentially
-            hi = start;
-            let mut step = 1;
-            lo = start.saturating_sub(step);
-
-            while compute_error(lo) >= 0.0 && lo > 0 {
-                hi = lo;
-                step *= 2;
-                lo = lo.saturating_sub(step);
-            }
-        }
-
-        // Bisect between lo and hi to find exact bracket
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            if compute_error(mid) < 0.0 {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-
-        // hi is now istop (first row where error >= 0)
-        // lo is istop - 1 (last row where error < 0), unless solution is at row 0
-        let istop = hi;
-        let error_i = compute_error(istop);
-        let error_prev = if istop > 0 { compute_error(istop - 1) } else { 0.0 };
-
-        // Remember for next timestep
-        self.previous_istop = istop;
-
-        // Check for off-the-table condition
-        if error_i < 0.0 {
-            // All error values are negative. Volume exceeds the table.
-            panic!("Error in storage node '{}'. Modelled volume exceeds the storage dimension table.", self.name);
-        }
-
-        // Handle solution at row 0
-        let (istop, error_prev, error_i) = if istop == 0 {
-            if error_i < -EPSILON {
-                panic!("Error in storage node '{}'. Negative error at row 0.", self.name);
-            }
-            // Solution is at or below row 0 - interpolate between row 0 and 1
-            (1, 0.0_f64, 1.0_f64)
-        } else {
-            (istop, error_prev, error_i)
-        };
-        // Now interpolate between row i and i-1
-
-        // Volume
-        let x = error_prev / (error_prev - error_i);
-        let v_lo = self.d.get_value(istop - 1, VOLU);
-        let v_hi = self.d.get_value(istop, VOLU);
-        let dv = v_hi - v_lo;
-        let v = v_lo + dv * x;
-
-        // Spill
-        let spill = self.d.interpolate_row(istop -1, VOLU, SPIL, v);
-        self.spill = spill;
-        self.v -= spill;
-
-        // Level and Area
-        self.level = self.d.interpolate_row(istop -1, VOLU, LEVL, v);
-        let area_km2 = self.d.interpolate_row(istop -1, VOLU, AREA, v);
-
-        // Rainfall
-        let rain_vol = rain_mm * area_km2;
-        self.rain_vol = rain_vol;
-        self.v += rain_vol;
-
-        // Seep and Evap
-        let seep_vol_nominal = seep_mm * area_km2;
-        let evap_vol_nominal = evap_mm * area_km2;
-        let seep_evap_vol_nominal = seep_vol_nominal + evap_vol_nominal;
-        if seep_evap_vol_nominal > 0_f64 {
-            // Seepage+evap may need to be scaled down if self.v does not cover nominal seep+evap value
-            let seep_evap_factor = seep_evap_vol_nominal.min(self.v) / seep_evap_vol_nominal;
-            self.seep_vol = seep_vol_nominal * seep_evap_factor;
-            self.evap_vol = evap_vol_nominal * seep_evap_factor;
-            self.v -= seep_evap_vol_nominal * seep_evap_factor;
-        } else {
-            self.seep_vol = seep_vol_nominal;
-            self.evap_vol = evap_vol_nominal;
-            self.v -= seep_vol_nominal;
-        }
-
-        // // Check the answer
-        // // TODO: Can we get rid of this?
-        // if (self.v - v).abs() > EPSILON {
-        //     println!("About to panic");
-        //     println!("v = {}, self.v = {}", v, self.v);
-        //     println!("self.spill = {}", self.spill);
-        //     println!("self.seep = {}, self.evap = {}, self.rain = {}", self.seep_vol, self.evap_vol, self.rain_vol);
-        //     println!("self.upstream_inflow = {}, self.diversion = {}", self.usflow, self.diversion);
-        //     panic!("Error in {}. Mass balance was wrong. Solution should be {} but vol={}", self.name, v, self.v);
-        // }
-
-        // Only spills go downstream via primary outlet
-        // self.ds_1_flow = self.spill;
-        self.ds_1_flow += self.spill;
-        // self.ds_2_flow = 0.0;  // Not implemented yet
-        // self.ds_3_flow = 0.0;  // Not implemented yet
-        // self.ds_4_flow = 0.0;  // Not implemented yet
-        self.dsflow = self.ds_1_flow + (self.ds_2_flow + self.ds_3_flow + self.ds_4_flow);
-
-        // Update mass balance
+        // Update mass balance (downstream outflows - upstream inflows)
         self.mbal += self.dsflow - self.usflow;
+
+        // Update warm-start hint for next timestep
+        if let Some(row) = self.d.find_row(VOLU, result.volume) {
+            self.previous_row = row;
+        }
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -382,7 +718,7 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.level);
         }
         if let Some(idx) = self.recorder_idx_area {
-            data_cache.add_value_at_index(idx, area_km2);
+            data_cache.add_value_at_index(idx, result.area);
         }
         if let Some(idx) = self.recorder_idx_seep {
             data_cache.add_value_at_index(idx, self.seep_vol);
@@ -432,33 +768,27 @@ impl Node for StorageNode {
         self.usflow += flow;
     }
 
-    /// Storage node processing follows BackwardEuler with a variation that
-    /// diversion takes precedence over other fluxes. This means we can rely on:
-    ///      * being able to extract the full start-of-day storage volume (at least)
-    ///      * plus inflow if we know it
-    ///      * plus rainfall in excess of seep and evap
-    ///      * that a large demand will leave volume = 0 at the end of the day
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match outlet {
             0 => {
-                let outflow = self.ds_1_flow;
+                let flow = self.ds_1_flow;
                 self.ds_1_flow = 0.0;
-                outflow
+                flow
             }
             1 => {
-                let outflow = self.ds_2_flow;
+                let flow = self.ds_2_flow;
                 self.ds_2_flow = 0.0;
-                outflow
+                flow
             }
             2 => {
-                let outflow = self.ds_3_flow;
+                let flow = self.ds_3_flow;
                 self.ds_3_flow = 0.0;
-                outflow
+                flow
             }
             3 => {
-                let outflow = self.ds_4_flow;
+                let flow = self.ds_4_flow;
                 self.ds_4_flow = 0.0;
-                outflow
+                flow
             }
             _ => 0.0,
         }
