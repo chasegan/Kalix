@@ -217,7 +217,7 @@
       "description": "Storage node for water storage modeling",
       "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "evap", "rain", "seep", "level", "area", "pond_diversion"],
       "required_params": ["type", "loc"],
-      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand", "initial_volume"],
+      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand", "initial_volume", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
       "parameters": {
         "type": {
@@ -257,6 +257,22 @@
           "type": "number",
           "min": 0,
           "description": "Initial storage volume (non-negative number)"
+        },
+        "ds_1_outlet": {
+          "type": "number_sequence",
+          "description": "Outlet specification for ds_1 (1 or 2 comma-separated numbers)"
+        },
+        "ds_2_outlet": {
+          "type": "number_sequence",
+          "description": "Outlet specification for ds_2 (1 or 2 comma-separated numbers)"
+        },
+        "ds_3_outlet": {
+          "type": "number_sequence",
+          "description": "Outlet specification for ds_3 (1 or 2 comma-separated numbers)"
+        },
+        "ds_4_outlet": {
+          "type": "number_sequence",
+          "description": "Outlet specification for ds_4 (1 or 2 comma-separated numbers)"
         }
       }
     },
@@ -284,7 +300,7 @@
       "description": "Routing node with advanced flow distribution capabilities",
       "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
-      "optional_params": ["lag", "pwl", "n_divs", "x", "ds_1", "typical_regulated_flow"],
+      "optional_params": ["lag", "pwl", "n_divs", "x", "typical_regulated_flow"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -315,10 +331,6 @@
           "min": 0,
           "max": 1,
           "description": "Fraction parameter (real number from 0 to 1 inclusive)"
-        },
-        "ds_1": {
-          "type": "downstream_reference",
-          "description": "Downstream link to another node"
         },
         "typical_regulated_flow": {
           "type": "number",

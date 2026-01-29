@@ -127,7 +127,7 @@ impl StorageNode {
     /// ds_1 is special: spill counts toward its order.
     /// Returns (ds_1_outflow, effective_release_from_budget)
     /// where effective_release_from_budget is what ds_1 draws beyond spill.
-    fn ds_1_outflow(&self, volume: f64, spill: f64, ds_1_active: bool) -> (f64, f64) {
+    fn ds_1_outflow(&self, spill: f64, ds_1_active: bool) -> (f64, f64) {
         if !ds_1_active {
             // Below MOL: only spill flows, no order release
             (spill, 0.0)
@@ -188,7 +188,7 @@ impl StorageNode {
             if new_active == active {
                 // Converged - compute final flows
                 let spill = self.d.interpolate(VOLU, SPIL, v_candidate).max(0.0);
-                let ds_flows = self.compute_flows(v_candidate, spill, active);
+                let ds_flows = self.compute_flows(spill, active);
                 return (v_candidate, ds_flows, spill);
             }
 
@@ -199,7 +199,7 @@ impl StorageNode {
             {
                 // Check if equilibrium could be exactly at this threshold
                 if let Some(result) = self.try_equilibrium_at_threshold(
-                    v_working, net_rain_mm, threshold_vol, throttled_outlet, new_active, nrows
+                    v_working, net_rain_mm, threshold_vol, throttled_outlet
                 ) {
                     return result;
                 }
@@ -211,7 +211,7 @@ impl StorageNode {
 
         // Fallback - shouldn't normally reach here
         let spill = self.d.interpolate(VOLU, SPIL, v_working).max(0.0);
-        let ds_flows = self.compute_flows(v_working, spill, active);
+        let ds_flows = self.compute_flows(spill, active);
         (v_working, ds_flows, spill)
     }
 
@@ -342,8 +342,6 @@ impl StorageNode {
         net_rain_mm: f64,
         threshold_vol: f64,
         throttled_outlet: usize,
-        new_active: u8,
-        _nrows: usize,
     ) -> Option<(f64, [f64; MAX_DS_LINKS], f64)> {
         let area = self.d.interpolate(VOLU, AREA, threshold_vol);
         let spill = self.d.interpolate(VOLU, SPIL, threshold_vol).max(0.0);
@@ -425,14 +423,14 @@ impl StorageNode {
     }
 
     /// Computes individual outlet flows at final volume with given active set.
-    fn compute_flows(&self, volume: f64, spill: f64, active: u8) -> [f64; MAX_DS_LINKS] {
+    fn compute_flows(&self, spill: f64, active: u8) -> [f64; MAX_DS_LINKS] {
         let mut ds_flows = [0.0; MAX_DS_LINKS];
 
         for i in 0..MAX_DS_LINKS {
             if i == 0 {
                 // ds_1 always gets spill
                 let ds_1_active = (active & 1) != 0;
-                let (outflow, _) = self.ds_1_outflow(volume, spill, ds_1_active);
+                let (outflow, _) = self.ds_1_outflow(spill, ds_1_active);
                 ds_flows[0] = outflow;
             } else if active & (1 << i) != 0 {
                 ds_flows[i] = self.dsorders[i];

@@ -7,12 +7,16 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Validates output references and downstream node references.
  */
 public class ReferenceValidator implements ValidationStrategy {
+
+    // Pattern to match downstream node parameters: ds_1, ds_2, ds_3, etc. (but NOT ds_1_outlet, ds_2_order, etc.)
+    private static final Pattern DSNODE_PARAM_PATTERN = Pattern.compile("^ds_\\d+$");
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
@@ -59,7 +63,8 @@ public class ReferenceValidator implements ValidationStrategy {
 
         for (INIModelParser.NodeSection node : model.getNodes().values()) {
             for (INIModelParser.Property prop : node.getProperties().values()) {
-                if (prop.getKey().startsWith("ds_")) {
+                // Only match ds_1, ds_2, etc. - not ds_1_outlet, ds_1_order, etc.
+                if (DSNODE_PARAM_PATTERN.matcher(prop.getKey()).matches()) {
                     String referencedNode = prop.getValue();
                     if (!nodeNames.contains(referencedNode)) {
                         result.addIssue(prop.getLineNumber(),
