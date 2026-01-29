@@ -144,11 +144,11 @@ fn test_model_with_all_node_types() {
 
         let result_name = "node.node4_storage.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 371.1827572720972, 1376.5004320544042));
+        regression_results.insert(result_name, (48824, 371.182757274167, 1376.500432060663));
 
         let result_name = "node.node4_storage.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 371.1827572720972, 1376.5004320544042));
+        regression_results.insert(result_name, (48824, 371.182757274167, 1376.500432060663));
     }
     model.add_link(node3_idx, node4_idx, 0, 0);
 
@@ -169,19 +169,19 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node5_routing.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 371.1827572720972, 1376.5004320544042));
+        regression_results.insert(result_name, (48824, 371.182757274167, 1376.500432060663));
 
         let result_name = "node.node5_routing.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 371.1720340782409, 1372.6828578702764));
+        regression_results.insert(result_name, (48824, 371.17203408032026, 1372.6828578761033));
 
         let result_name = "node.node5_routing.volume".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 1002.7048781997056, 2545.6242472584195));
+        regression_results.insert(result_name, (48824, 1002.7048782079872, 2545.6242472660656));
 
         let result_name = "node.node5_routing.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 371.1720340782409, 1372.6828578702764));
+        regression_results.insert(result_name, (48824, 371.17203408032026, 1372.6828578761033));
     }
     model.add_link(node4_idx, node5_idx, 0, 0);
 
@@ -230,15 +230,15 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node7_confluence.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9284871036259, 2111.075532092634));
+        regression_results.insert(result_name, (48824, 622.9284871057101, 2111.0755320985454));
 
         let result_name = "node.node7_confluence.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9284871036259, 2111.075532092634));
+        regression_results.insert(result_name, (48824, 622.9284871057101, 2111.0755320985454));
 
         let result_name = "node.node7_confluence.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9284871036259, 2111.075532092634));
+        regression_results.insert(result_name, (48824, 622.9284871057101, 2111.0755320985454));
     }
     model.add_link(node5_idx, node7_idx, 0, 0);
     model.add_link(node6_idx, node7_idx, 0, 0);
@@ -256,19 +256,19 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node8_splitter.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9284871036259, 2111.075532092634));
+        regression_results.insert(result_name, (48824, 622.9284871057101, 2111.0755320985454));
 
         let result_name = "node.node8_splitter.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 622.9284871036259, 2111.075532092634));
+        regression_results.insert(result_name, (48824, 622.9284871057101, 2111.0755320985454));
 
         let result_name = "node.node8_splitter.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 338.1118483764767, 1049.9076304970338));
+        regression_results.insert(result_name, (48824, 338.1118483783044, 1049.9076304998403));
 
         let result_name = "node.node8_splitter.ds_2".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 284.81663872715836, 1061.390866083662));
+        regression_results.insert(result_name, (48824, 284.8166387274083, 1061.3908660867755));
     }
     model.add_link(node7_idx, node8_idx, 0, 0);
 
@@ -282,7 +282,7 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node9_blackhole.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 338.1118483764767, 1049.9076304970338));
+        regression_results.insert(result_name, (48824, 338.1118483783044, 1049.9076304998403));
 
         let result_name = "node.node9_blackhole.dsflow".to_string();
         model.outputs.push(result_name.clone());
@@ -304,15 +304,15 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node10_gauge.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 284.81663872715836, 1061.390866083662));
+        regression_results.insert(result_name, (48824, 284.8166387274083, 1061.3908660867755));
 
         let result_name = "node.node10_gauge.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 284.81663872715836, 1061.390866083662));
+        regression_results.insert(result_name, (48824, 284.8166387274083, 1061.3908660867755));
 
         let result_name = "node.node10_gauge.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 284.81663872715836, 1061.390866083662));
+        regression_results.insert(result_name, (48824, 284.8166387274083, 1061.3908660867755));
     }
     model.add_link(node8_idx, node10_idx, 1, 0);
 
@@ -329,19 +329,19 @@ fn test_model_with_all_node_types() {
         //Node results
         let result_name = "node.node11_loss.usflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 284.81663872715836, 1061.390866083662));
+        regression_results.insert(result_name, (48824, 284.8166387274083, 1061.3908660867755));
 
         let result_name = "node.node11_loss.dsflow".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 256.3349748544418, 955.2517794754871));
+        regression_results.insert(result_name, (48824, 256.33497485466745, 955.2517794782898));
 
         let result_name = "node.node11_loss.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 256.3349748544418, 955.2517794754871));
+        regression_results.insert(result_name, (48824, 256.33497485466745, 955.2517794782898));
 
         let result_name = "node.node11_loss.loss".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 28.48166387271569, 106.1390866083702));
+        regression_results.insert(result_name, (48824, 28.481663872740555, 106.13908660868192));
     }
     model.add_link(node10_idx, node11_idx, 0, 0);
 
