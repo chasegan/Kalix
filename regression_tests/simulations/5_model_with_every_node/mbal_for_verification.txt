@@ -20,13 +20,13 @@ UNREGULATED_USER NODES
   node3_user, -20
 
 LOSS NODES
-  node11_loss, -30.278425869586787
+  node11_loss, -30.27842586909957
 
 STORAGE NODES
-  node4_storage, -0.02738224823982164
+  node4_storage, -0.027382256411452227
 
 ROUTING NODES
-  node5_routing, -0.3436429282784483
+  node5_routing, -0.3436429282784468
 
 SPLITTER NODES
   node8_splitter, 0
@@ -38,9 +38,9 @@ GAUGE NODES
   node10_gauge, 0
 
 BLACKHOLE NODES
-  node12_blackhole, -272.5058328262808
-  node9_blackhole, -359.7624354259082
+  node12_blackhole, -272.5058328218958
+  node9_blackhole, -359.76243542260937
 
 ----------------------------------
-TOTAL = -0.00000000000005684341886080802
+TOTAL = -0.0000000000006252776074688882
 ----------------------------------

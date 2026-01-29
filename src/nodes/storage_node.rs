@@ -5,88 +5,38 @@ use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
 
-// Table column indices
 const LEVL: usize = 0;
 const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
-
-// Other constants
-const EPSILON: f64 = 1e-6;
+const EPSILON: f64 = 1e-3;
 const MAX_DS_LINKS: usize = 4;
 
-// -----------------------------------------------------------------------------
-// Threshold and solver support structures
-// -----------------------------------------------------------------------------
-
-/// Precomputed information about a release threshold (minimum volume for release).
-/// Computed once during initialization to avoid repeated table lookups.
-#[derive(Default, Clone)]
-struct ThresholdInfo {
-    volume: f64,
-    #[allow(dead_code)]  // Reserved for potential optimization
-    table_row: usize,
-}
-
-/// A breakpoint where the outflow function changes character.
-/// Used during the backward Euler solve to handle piecewise-linear outflow.
-#[derive(Clone)]
-enum Breakpoint {
-    /// Volume where spill equals ds_1 order (transitions from order-limited to spill-limited)
-    SpillCrossover { volume: f64 },
-    /// Volume threshold below which an outlet cannot release
-    ReleaseThreshold { outlet: usize },
-}
-
-/// Result of the backward Euler solve, containing final state and outlet flows.
-struct SolveResult {
-    volume: f64,
-    level: f64,
-    area: f64,
-    spill: f64,
-    ds_flows: [f64; MAX_DS_LINKS],
-}
-
-/// Configure the node with these. The node will be initialized accordingly.
-#[derive(Default, Clone)]
+/// Defines outlet configuration including minimum operating level (MOL) and capacity.
+/// MOL is specified as a level (m) and converted to volume internally.
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub enum OutletDefinition {
     #[default]
     None,
-    OutletWithMOL(f64), //MOL [m]
-    OutletWithAndMOLAndCapacity(f64, f64), //MOL [m], Capacity [ML/step]
-    //OutletWithRatingCurve(table) //TODO: implement this
+    OutletWithMOL(f64),                    // MOL level in metres
+    OutletWithAndMOLAndCapacity(f64, f64), // MOL level, capacity
 }
-
-
-// -----------------------------------------------------------------------------
-// StorageNode
-// -----------------------------------------------------------------------------
 
 #[derive(Default, Clone)]
 pub struct StorageNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub d: Table,       // Dimension table: Level(m), Volume(ML), Area(km²), Spill(ML/d)
-    pub v: f64,         // Current volume
+    pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
+    pub v: f64,
     pub v_initial: f64,
-    pub area0_km2: f64, // Area at minimum storage (interpolated during init)
-
-    // Outlets
-    pub min_operating_volume: [f64; MAX_DS_LINKS], // Minimum operating volume for each outlet.
-    pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
-    pub outlet_priority: [u8; MAX_DS_LINKS], // Release priorities. Default: [0, 1, 2, 3]. lower value = higher priority.
-
-    // Climate inputs
+    pub area0_km2: f64, // Dead storage area interpolated from 'd' table during node initialisation
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
 
-    // Precomputed threshold info (populated during initialization)
-    threshold_info: [Option<ThresholdInfo>; MAX_DS_LINKS],
-
-    // Internal state
+    // Internal state only
     usflow: f64,
     dsflow: f64,
     ds_1_flow: f64,
@@ -97,14 +47,21 @@ pub struct StorageNode {
     rain_vol: f64,
     evap_vol: f64,
     seep_vol: f64,
-    pond_diversion: f64,
+    pond_diversion: f64, //pond diversion
     spill: f64,
 
-    // Warm-start hint for table row search
-    previous_row: usize,
+    // Cached state for search optimization
+    previous_istop: usize,  // Remember previous solution row for warm start
 
-    // Orders (set by ordering system before run_flow_phase)
+    // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
+
+    // Outlet definitions (MOL, capacity) - parsed from INI
+    pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
+
+    // Minimum operating volume for each outlet (converted from MOL level during init)
+    // 0.0 means no MOL constraint (outlet always active)
+    min_operating_volume: [f64; MAX_DS_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -127,76 +84,177 @@ pub struct StorageNode {
 }
 
 impl StorageNode {
+
+    /// Base constructor
     pub fn new() -> Self {
         Self {
-            name: String::new(),
+            name: "".to_string(),
             d: Table::new(4),
-            threshold_info: Default::default(), //[None, None, None, None],
-            outlet_priority: std::array::from_fn(|i| i as u8), //[0, 1, 2, 3],
             ..Default::default()
         }
     }
 
     // -------------------------------------------------------------------------
-    // Backward Euler solver
+    // Backward Euler Solver with MOL Support
     // -------------------------------------------------------------------------
 
-    /// Main solver entry point. Finds final volume accounting for:
-    /// - Net rainfall (rain - evap - seep) scaled by area
-    /// - Spill from the dimension table
-    /// - Ordered releases with threshold constraints
-    /// - ds_1 spill credit (spill contributes to satisfying ds_1 order)
+    /// Determines which outlets are active (able to release) at a given volume.
+    /// An outlet is active if volume >= its minimum operating volume.
+    /// Returns a bitmask: bit i is set if outlet i is active.
+    fn active_outlets_at_volume(&self, volume: f64) -> u8 {
+        let mut active = 0u8;
+        for i in 0..MAX_DS_LINKS {
+            if self.dsorders[i] > 0.0 && volume >= self.min_operating_volume[i] {
+                active |= 1 << i;
+            }
+        }
+        active
+    }
+
+    /// Computes total controlled release for a set of active outlets.
+    /// Does NOT include spill - that's handled separately.
+    fn total_release_for_active(&self, active: u8) -> f64 {
+        let mut total = 0.0;
+        for i in 0..MAX_DS_LINKS {
+            if active & (1 << i) != 0 {
+                total += self.dsorders[i];
+            }
+        }
+        total
+    }
+
+    /// Computes the ds_1 outflow component for given volume and active set.
+    /// ds_1 is special: spill counts toward its order.
+    /// Returns (ds_1_outflow, effective_release_from_budget)
+    /// where effective_release_from_budget is what ds_1 draws beyond spill.
+    fn ds_1_outflow(&self, volume: f64, spill: f64, ds_1_active: bool) -> (f64, f64) {
+        if !ds_1_active {
+            // Below MOL: only spill flows, no order release
+            (spill, 0.0)
+        } else {
+            // Above MOL: outflow is max(order, spill)
+            // Effective release from budget is (order - spill), clamped to >= 0
+            let order = self.dsorders[0];
+            let effective_release = (order - spill).max(0.0);
+            (spill + effective_release, effective_release)
+        }
+    }
+
+    /// Solves the backward Euler equation for equilibrium volume.
+    ///
+    /// The equation is:
+    ///   v = v_working + net_rain * area(v) - spill(v) - releases(v)
+    ///
+    /// where releases(v) depends on which outlets are active at v.
+    ///
+    /// Uses iterative refinement: assume an active set, solve, check if
+    /// the solution is consistent with that active set. If not, adjust
+    /// and re-solve. Converges in 1-2 iterations typically.
+    ///
+    /// Returns (final_volume, ds_flows[4], spill)
     fn solve_backward_euler(
         &self,
         v_working: f64,
         net_rain_mm: f64,
-    ) -> SolveResult {
+    ) -> (f64, [f64; MAX_DS_LINKS], f64) {
         let nrows = self.d.nrows();
 
-        // Find the table row interval containing the solution
-        let (row_lo, row_hi) = self.find_row_interval(v_working, net_rain_mm, nrows);
+        // Start with outlets active based on current volume
+        let mut active = self.active_outlets_at_volume(v_working);
 
-        // Check for breakpoints (discontinuities) within this interval
-        let v_lo = self.d.get_value(row_lo, VOLU);
-        let v_hi = self.d.get_value(row_hi, VOLU);
-        let breakpoints = self.find_breakpoints_in_range(v_lo, v_hi);
+        const MAX_ITERATIONS: usize = 8; // Bounded by number of thresholds
 
-        if breakpoints.is_empty() {
-            // Fast path: no discontinuities, solve directly in this interval
-            self.solve_in_interval(row_lo, v_working, net_rain_mm)
-        } else {
-            // Slow path: handle piecewise segments
-            self.solve_with_breakpoints(row_lo, v_working, net_rain_mm, &breakpoints)
+        for _iter in 0..MAX_ITERATIONS {
+            // Compute total release assuming current active set
+            // For ds_1: if active and order > spill, we release (order - spill) from budget
+            // But spill depends on volume, so we need to solve iteratively or algebraically
+
+            // For simplicity, we solve assuming:
+            // - ds_2, ds_3, ds_4: release full order if active
+            // - ds_1: we handle via two cases (order-limited vs spill-limited)
+
+            let other_releases = self.total_release_for_active(active & 0b1110); // ds_2,3,4 only
+            let ds_1_active = (active & 1) != 0;
+            let ds_1_order = if ds_1_active { self.dsorders[0] } else { 0.0 };
+
+            // Find equilibrium volume by searching table rows
+            let v_candidate = self.find_equilibrium_volume(
+                v_working, net_rain_mm, ds_1_active, ds_1_order, other_releases, nrows
+            );
+
+            // Check which outlets should be active at the candidate volume
+            let new_active = self.active_outlets_at_volume(v_candidate);
+
+            if new_active == active {
+                // Converged - compute final flows
+                let spill = self.d.interpolate(VOLU, SPIL, v_candidate).max(0.0);
+                let ds_flows = self.compute_flows(v_candidate, spill, active);
+                return (v_candidate, ds_flows, spill);
+            }
+
+            // Active set changed - check if equilibrium is at a threshold
+            // Find the threshold that was crossed
+            if let Some((threshold_vol, throttled_outlet)) =
+                self.find_crossed_threshold(v_candidate, active, new_active)
+            {
+                // Check if equilibrium could be exactly at this threshold
+                if let Some(result) = self.try_equilibrium_at_threshold(
+                    v_working, net_rain_mm, threshold_vol, throttled_outlet, new_active, nrows
+                ) {
+                    return result;
+                }
+            }
+
+            // Update active set and continue iteration
+            active = new_active;
         }
+
+        // Fallback - shouldn't normally reach here
+        let spill = self.d.interpolate(VOLU, SPIL, v_working).max(0.0);
+        let ds_flows = self.compute_flows(v_working, spill, active);
+        (v_working, ds_flows, spill)
     }
 
-    /// Finds the table row interval [lo, hi] that brackets the solution.
-    /// Uses exponential expansion from the previous solution, then bisection.
-    fn find_row_interval(
+    /// Finds equilibrium volume given fixed release assumptions.
+    /// Uses exponential expansion + bisection to find the table row,
+    /// then linear interpolation within the row.
+    fn find_equilibrium_volume(
         &self,
         v_working: f64,
         net_rain_mm: f64,
+        ds_1_active: bool,
+        ds_1_order: f64,
+        other_releases: f64,
         nrows: usize,
-    ) -> (usize, usize) {
+    ) -> f64 {
         // Error function: positive means solution is at or below this row
-        let error_at_row = |row: usize| -> f64 {
-            let area = self.d.get_value(row, AREA);
+        // For ds_1: outflow = max(spill, order) if active, else just spill
+        let compute_error = |row: usize| -> f64 {
             let table_vol = self.d.get_value(row, VOLU);
-            let outflow = self.total_outflow_at_volume(table_vol);
-            let predicted = v_working + net_rain_mm * area - outflow;
+            let area = self.d.get_value(row, AREA);
+            let spill = self.d.get_value(row, SPIL).max(0.0);
+
+            let ds_1_outflow = if ds_1_active {
+                spill.max(ds_1_order)
+            } else {
+                spill
+            };
+
+            let total_outflow = ds_1_outflow + other_releases;
+            let predicted = v_working + net_rain_mm * area - total_outflow;
             table_vol - predicted
         };
 
-        // Start from previous solution (warm start)
-        let start = self.previous_row.min(nrows - 1);
-        let error_start = error_at_row(start);
+        // Exponential expansion from previous solution
+        let start = self.previous_istop.min(nrows - 1);
+        let error_start = compute_error(start);
 
         let (mut lo, mut hi) = if error_start < 0.0 {
             // Solution is above start row - expand upward
             let mut lo = start;
             let mut step = 1;
             let mut hi = (start + step).min(nrows - 1);
-            while error_at_row(hi) < 0.0 && hi < nrows - 1 {
+            while compute_error(hi) < 0.0 && hi < nrows - 1 {
                 lo = hi;
                 step *= 2;
                 hi = (hi + step).min(nrows - 1);
@@ -207,7 +265,7 @@ impl StorageNode {
             let mut hi = start;
             let mut step = 1;
             let mut lo = start.saturating_sub(step);
-            while error_at_row(lo) >= 0.0 && lo > 0 {
+            while compute_error(lo) >= 0.0 && lo > 0 {
                 hi = lo;
                 step *= 2;
                 lo = lo.saturating_sub(step);
@@ -218,404 +276,177 @@ impl StorageNode {
         // Bisect to find exact bracket
         while hi - lo > 1 {
             let mid = lo + (hi - lo) / 2;
-            if error_at_row(mid) < 0.0 {
+            if compute_error(mid) < 0.0 {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
 
-        (lo, hi)
-    }
+        let istop = hi;
+        let error_i = compute_error(istop);
 
-    /// Computes total outflow at a given volume, including:
-    /// - ds_1: max(order, spill) if above threshold, else just spill
-    /// - ds_2, ds_3, ds_4: order if volume > threshold, else 0
-    fn total_outflow_at_volume(&self, volume: f64) -> f64 {
-        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
-
-        // ds_1: spill always flows, but order only if above threshold
-        let ds_1_outflow = if self.dsorders[0] > 0.0 && volume >= self.min_operating_volume[0] {
-            spill.max(self.dsorders[0])
-        } else {
-            spill
-        };
-
-        // ds_2, ds_3, ds_4: release if above threshold
-        let mut other_outflow = 0.0;
-        for i in 1..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 && volume >= self.min_operating_volume[i] {
-                other_outflow += self.dsorders[i];
-            }
+        // Handle edge cases
+        if istop == 0 {
+            // Solution at or below row 0
+            return self.d.get_value(0, VOLU);
+        }
+        if error_i < 0.0 {
+            // Volume exceeds table - return max
+            return self.d.get_value(nrows - 1, VOLU);
         }
 
-        ds_1_outflow + other_outflow
+        // Interpolate between rows
+        let error_prev = compute_error(istop - 1);
+        let x = error_prev / (error_prev - error_i);
+        let v_lo = self.d.get_value(istop - 1, VOLU);
+        let v_hi = self.d.get_value(istop, VOLU);
+
+        v_lo + (v_hi - v_lo) * x
     }
 
-    /// Computes the total release capacity at a given volume.
-    /// This is the sum of effective orders for all active outlets.
-    /// Used to determine the "natural" release budget (no constraint).
-    fn release_capacity_at_volume(&self, volume: f64, spill: f64) -> f64 {
-        // ds_1: effective order is (order - spill), only if above threshold
-        let mut capacity = if volume >= self.min_operating_volume[0] {
-            (self.dsorders[0] - spill).max(0.0)
-        } else {
-            0.0
-        };
-
-        // ds_2, ds_3, ds_4: full order if above threshold
-        for i in 1..MAX_DS_LINKS {
-            if volume >= self.min_operating_volume[i] {
-                capacity += self.dsorders[i];
-            }
-        }
-
-        capacity
-    }
-
-    /// Allocates a release budget among outlets based on priority.
-    /// Higher priority outlets (lower priority value) are satisfied first.
-    /// ds_1 always receives spill in addition to any allocated release.
-    fn allocate_releases(
+    /// Finds which MOL threshold was crossed between old and new active sets.
+    /// Returns (threshold_volume, outlet_index) for the crossed threshold.
+    fn find_crossed_threshold(
         &self,
-        volume: f64,
-        spill: f64,
-        release_budget: f64,
-    ) -> [f64; MAX_DS_LINKS] {
-        let mut ds_flows = [0.0; MAX_DS_LINKS];
-        let mut remaining = release_budget;
+        v_candidate: f64,
+        old_active: u8,
+        new_active: u8,
+    ) -> Option<(f64, usize)> {
+        let changed = old_active ^ new_active;
 
-        // Compute effective order for each outlet
-        // All outlets: full order if above threshold, else 0
-        // ds_1: also gets spill credit (order minus what spill already provides)
-        let effective_orders: [f64; MAX_DS_LINKS] = [
-            if volume >= self.min_operating_volume[0] { (self.dsorders[0] - spill).max(0.0) } else { 0.0 },
-            if volume >= self.min_operating_volume[1] { self.dsorders[1] } else { 0.0 },
-            if volume >= self.min_operating_volume[2] { self.dsorders[2] } else { 0.0 },
-            if volume >= self.min_operating_volume[3] { self.dsorders[3] } else { 0.0 },
-        ];
+        // Find the threshold closest to the candidate volume
+        let mut best: Option<(f64, usize)> = None;
+        let mut best_dist = f64::MAX;
 
-        // Sort outlets by priority (lower value = higher priority)
-        let mut outlets: [(usize, u8); MAX_DS_LINKS] = [
-            (0, self.outlet_priority[0]),
-            (1, self.outlet_priority[1]),
-            (2, self.outlet_priority[2]),
-            (3, self.outlet_priority[3]),
-        ];
-        outlets.sort_by_key(|&(_, p)| p);
-
-        // Allocate budget by priority
-        for (outlet, _) in outlets {
-            let release = effective_orders[outlet].min(remaining);
-            ds_flows[outlet] = release;
-            remaining -= release;
-        }
-
-        // ds_1 always receives spill (physical outflow, not from budget)
-        ds_flows[0] += spill;
-
-        ds_flows
-    }
-
-    /// Finds breakpoints (discontinuities) within a volume range.
-    /// Only includes breakpoints for outlets with non-zero orders.
-    fn find_breakpoints_in_range(&self, v_lo: f64, v_hi: f64) -> Vec<Breakpoint> {
-        let mut breaks = Vec::with_capacity(5);
-
-        // Check release thresholds for all outlets (ds_1, ds_2, ds_3, ds_4)
-        // Include breakpoints strictly inside, or at the upper boundary (for boundary handling)
         for i in 0..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 {
-                if let Some(ref info) = self.threshold_info[i] {
-                    // Include if strictly inside OR at upper boundary (but not at lower)
-                    if info.volume > v_lo && info.volume <= v_hi {
-                        breaks.push(Breakpoint::ReleaseThreshold { outlet: i });
-                    }
+            if changed & (1 << i) != 0 {
+                let threshold = self.min_operating_volume[i];
+                let dist = (threshold - v_candidate).abs();
+                if dist < best_dist {
+                    best_dist = dist;
+                    best = Some((threshold, i));
                 }
             }
         }
 
-        // Check for spill crossover (where spill = ds_1_order)
-        if self.dsorders[0] > 0.0 {
-            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
-            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
-
-            if spill_lo < self.dsorders[0] && self.dsorders[0] < spill_hi {
-                // Crossover is within this interval
-                if let Some(vol) = self.find_spill_crossover_in_range(v_lo, v_hi) {
-                    breaks.push(Breakpoint::SpillCrossover { volume: vol });
-                }
-            }
-        }
-
-        // Sort by volume for proper segment handling
-        breaks.sort_by(|a, b| {
-            let va = self.breakpoint_volume(a);
-            let vb = self.breakpoint_volume(b);
-            va.partial_cmp(&vb).unwrap()
-        });
-
-        breaks
+        best
     }
 
-    /// Returns the volume at which a breakpoint occurs.
-    fn breakpoint_volume(&self, bp: &Breakpoint) -> f64 {
-        match bp {
-            Breakpoint::SpillCrossover { volume } => *volume,
-            Breakpoint::ReleaseThreshold { outlet } => {
-                self.threshold_info[*outlet].as_ref().unwrap().volume
-            }
-        }
-    }
+    /// Tries to find equilibrium exactly at a threshold boundary.
+    /// At a threshold, one outlet may be "throttled" (partial release)
+    /// to maintain the volume exactly at the threshold.
+    fn try_equilibrium_at_threshold(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        threshold_vol: f64,
+        throttled_outlet: usize,
+        new_active: u8,
+        _nrows: usize,
+    ) -> Option<(f64, [f64; MAX_DS_LINKS], f64)> {
+        let area = self.d.interpolate(VOLU, AREA, threshold_vol);
+        let spill = self.d.interpolate(VOLU, SPIL, threshold_vol).max(0.0);
 
-    /// Finds the volume where spill equals ds_1_order within a range.
-    fn find_spill_crossover_in_range(&self, v_lo: f64, v_hi: f64) -> Option<f64> {
-        let order = self.dsorders[0];
-        let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
-        let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
+        // Compute how much outflow is needed to stay at the threshold
+        let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
 
-        if spill_lo >= order || spill_hi <= order {
+        if outflow_needed < 0.0 {
+            // Net inflow exceeds what's needed - can't stay at this threshold
             return None;
         }
 
-        // Linear interpolation to find crossover volume
-        let t = (order - spill_lo) / (spill_hi - spill_lo);
-        Some(v_lo + t * (v_hi - v_lo))
-    }
-
-    /// Solves directly within a table row interval (no breakpoints).
-    fn solve_in_interval(
-        &self,
-        row_lo: usize,
-        v_working: f64,
-        net_rain_mm: f64,
-    ) -> SolveResult {
-        let v_lo = self.d.get_value(row_lo, VOLU);
-        let v_hi = self.d.get_value(row_lo + 1, VOLU);
-
-        self.solve_in_segment(v_lo, v_hi, v_working, net_rain_mm)
-    }
-
-    /// Solves within a segment where all functions are linear.
-    /// Uses direct algebraic solution of the backward Euler equation.
-    fn solve_in_segment(
-        &self,
-        v_lo: f64,
-        v_hi: f64,
-        v_working: f64,
-        net_rain_mm: f64,
-    ) -> SolveResult {
-        let dv = v_hi - v_lo;
-        if dv.abs() < EPSILON {
-            return self.build_result_at_volume(v_lo);
-        }
-
-        // Linear coefficients for area: area(v) = a0 + a1*v
-        let area_lo = self.d.interpolate(VOLU, AREA, v_lo);
-        let area_hi = self.d.interpolate(VOLU, AREA, v_hi);
-        let a1 = (area_hi - area_lo) / dv;
-        let a0 = area_lo - a1 * v_lo;
-
-        // Determine outflow regime at segment midpoint
-        let v_mid = (v_lo + v_hi) / 2.0;
-        let spill_mid = self.d.interpolate(VOLU, SPIL, v_mid).max(0.0);
-        let ds_1_above_threshold = v_mid >= self.min_operating_volume[0];
-        let ds_1_is_spill_limited = spill_mid >= self.dsorders[0];
-
-        // Constant releases from ds_2, ds_3, ds_4 (if above their thresholds)
-        let mut const_releases = 0.0;
-        for i in 1..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
-                const_releases += self.dsorders[i];
+        // Compute full release from outlets BELOW the threshold (always active)
+        // The throttled outlet is exactly AT the threshold
+        let mut fixed_release = 0.0;
+        for i in 0..MAX_DS_LINKS {
+            if i == throttled_outlet {
+                continue; // This one will be throttled
+            }
+            // Outlet i is active if its MOL <= threshold_vol
+            if self.dsorders[i] > 0.0 && self.min_operating_volume[i] <= threshold_vol {
+                if i == 0 {
+                    // ds_1: contributes max(order, spill) - but spill is separate
+                    // Actually ds_1 contributes (order - spill).max(0) from release budget
+                    fixed_release += (self.dsorders[0] - spill).max(0.0);
+                } else {
+                    fixed_release += self.dsorders[i];
+                }
             }
         }
 
-        // Solve the backward Euler equation:
-        //   v = v_working + net_rain*(a0 + a1*v) - outflow(v)
-        //
-        // We track the ds_1 release assumed by the solver to ensure consistency
-        // between the equilibrium volume and the recorded flows.
-        let (volume, ds_1_release_assumed) = if !ds_1_above_threshold {
-            // ds_1 below threshold: only spill, no order release
-            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
-            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
-            let s1 = (spill_hi - spill_lo) / dv;
-            let s0 = spill_lo - s1 * v_lo;
+        // How much can the throttled outlet take?
+        let available_for_throttled = outflow_needed - spill - fixed_release;
 
-            let coeff = 1.0 - net_rain_mm * a1 + s1;
-            let rhs = v_working + net_rain_mm * a0 - s0 - const_releases;
-            (rhs / coeff, 0.0)  // No ds_1 release
-        } else if ds_1_is_spill_limited {
-            // ds_1 above threshold but spill-limited: outflow = spill(v)
-            let spill_lo = self.d.interpolate(VOLU, SPIL, v_lo).max(0.0);
-            let spill_hi = self.d.interpolate(VOLU, SPIL, v_hi).max(0.0);
-            let s1 = (spill_hi - spill_lo) / dv;
-            let s0 = spill_lo - s1 * v_lo;
+        if available_for_throttled < 0.0 {
+            // Even with throttled outlet at zero, too much outflow
+            return None;
+        }
 
-            // v*(1 - net_rain*a1 + s1) = v_working + net_rain*a0 - s0 - const_releases
-            let coeff = 1.0 - net_rain_mm * a1 + s1;
-            let rhs = v_working + net_rain_mm * a0 - s0 - const_releases;
-            let vol = rhs / coeff;
-            // ds_1 release = spill - spill_credit (but spill >= order, so release = 0)
-            (vol, 0.0)
+        // The throttled outlet releases whatever is needed (capped by its order)
+        let throttled_max = if throttled_outlet == 0 {
+            (self.dsorders[0] - spill).max(0.0)
         } else {
-            // ds_1 above threshold and order-limited: outflow = order (constant)
-            // v*(1 - net_rain*a1) = v_working + net_rain*a0 - ds_1_order - const_releases
-            let coeff = 1.0 - net_rain_mm * a1;
-            let rhs = v_working + net_rain_mm * a0 - self.dsorders[0] - const_releases;
-            (rhs / coeff, self.dsorders[0])  // Full ds_1 order
+            self.dsorders[throttled_outlet]
         };
 
-        // Return unclamped volume so caller can decide if solution is in segment.
-        // Only compute flows at actual equilibrium volume (which may be out of segment).
-        let level = self.d.interpolate(VOLU, LEVL, volume);
-        let area = self.d.interpolate(VOLU, AREA, volume);
-        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
+        let throttled_release = available_for_throttled.min(throttled_max);
 
-        // Build flows consistent with solver assumptions
+        // Check if this is a valid equilibrium
+        // The throttled outlet must be able to release at least what's needed
+        // (or we need exactly zero from it if it's just turning off)
+        if available_for_throttled > throttled_max + EPSILON {
+            // Can't release enough even at full capacity
+            return None;
+        }
+
+        // Build the result
         let mut ds_flows = [0.0; MAX_DS_LINKS];
-        // ds_1: spill + release (where release was determined by solver regime)
-        ds_flows[0] = spill + (ds_1_release_assumed - spill).max(0.0);
-        // ds_2, ds_3, ds_4: based on v_mid threshold check (const_releases)
-        for i in 1..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
+        for i in 0..MAX_DS_LINKS {
+            if i == throttled_outlet {
+                if i == 0 {
+                    ds_flows[0] = spill + throttled_release;
+                } else {
+                    ds_flows[i] = throttled_release;
+                }
+            } else if self.dsorders[i] > 0.0 && self.min_operating_volume[i] <= threshold_vol {
+                if i == 0 {
+                    ds_flows[0] = spill + (self.dsorders[0] - spill).max(0.0);
+                } else {
+                    ds_flows[i] = self.dsorders[i];
+                }
+            } else if i == 0 {
+                // ds_1 below MOL still gets spill
+                ds_flows[0] = spill;
+            }
+        }
+
+        Some((threshold_vol, ds_flows, spill))
+    }
+
+    /// Computes individual outlet flows at final volume with given active set.
+    fn compute_flows(&self, volume: f64, spill: f64, active: u8) -> [f64; MAX_DS_LINKS] {
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+
+        for i in 0..MAX_DS_LINKS {
+            if i == 0 {
+                // ds_1 always gets spill
+                let ds_1_active = (active & 1) != 0;
+                let (outflow, _) = self.ds_1_outflow(volume, spill, ds_1_active);
+                ds_flows[0] = outflow;
+            } else if active & (1 << i) != 0 {
                 ds_flows[i] = self.dsorders[i];
             }
         }
-        SolveResult { volume, level, area, spill, ds_flows }
-    }
 
-    /// Solves when there are breakpoints within the table row interval.
-    fn solve_with_breakpoints(
-        &self,
-        row_lo: usize,
-        v_working: f64,
-        net_rain_mm: f64,
-        breakpoints: &[Breakpoint],
-    ) -> SolveResult {
-        // Build segment boundaries: [table_lo, bp1, bp2, ..., table_hi]
-        let v_table_lo = self.d.get_value(row_lo, VOLU);
-        let v_table_hi = self.d.get_value(row_lo + 1, VOLU);
-
-        let mut bounds = Vec::with_capacity(breakpoints.len() + 2);
-        bounds.push(v_table_lo);
-        for bp in breakpoints {
-            bounds.push(self.breakpoint_volume(bp));
-        }
-        bounds.push(v_table_hi);
-
-        // Sort and deduplicate
-        bounds.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        bounds.dedup_by(|a, b| (*a - *b).abs() < EPSILON);
-
-        // Try each segment from low to high
-        for i in 0..bounds.len() - 1 {
-            let seg_lo = bounds[i];
-            let seg_hi = bounds[i + 1];
-
-            let result = self.solve_in_segment(seg_lo, seg_hi, v_working, net_rain_mm);
-
-            // Check if solution is within this segment
-            if result.volume >= seg_lo - EPSILON && result.volume <= seg_hi + EPSILON {
-                return result;
-            }
-
-            // Check for threshold discontinuity at segment boundary
-            // (check_threshold_at_boundary returns None if boundary isn't a threshold)
-            if result.volume > seg_hi {
-                if let Some(threshold_result) = self.check_threshold_at_boundary(
-                    seg_hi, v_working, net_rain_mm, breakpoints
-                ) {
-                    return threshold_result;
-                }
-            }
-        }
-
-        // Fallback: solution at table boundary
-        // This handles the case where the solution lies exactly at the upper table boundary
-        self.build_result_at_volume(v_table_hi)
-    }
-
-    /// Checks if the solution lies exactly at a threshold boundary.
-    /// At boundaries, the release budget is constrained by mass balance,
-    /// and allocation among outlets follows the priority ordering.
-    /// Returns None if the boundary cannot support the required outflow.
-    fn check_threshold_at_boundary(
-        &self,
-        boundary_volume: f64,
-        v_working: f64,
-        net_rain_mm: f64,
-        breakpoints: &[Breakpoint],
-    ) -> Option<SolveResult> {
-        // Find which breakpoint matches this boundary
-        for bp in breakpoints {
-            if let Breakpoint::ReleaseThreshold { outlet: _ } = bp {
-                let bp_vol = self.breakpoint_volume(bp);
-                if (bp_vol - boundary_volume).abs() < EPSILON {
-                    // Potential solution at this threshold boundary
-                    let area = self.d.interpolate(VOLU, AREA, boundary_volume);
-                    let spill = self.d.interpolate(VOLU, SPIL, boundary_volume).max(0.0);
-
-                    // Compute outflow needed to stay at this boundary
-                    let outflow_needed = v_working + net_rain_mm * area - boundary_volume;
-                    if outflow_needed < -EPSILON {
-                        // Inflow exceeds what's needed - volume would rise above boundary
-                        continue;
-                    }
-
-                    // Check if release capacity at this boundary can meet the requirement
-                    let release_capacity = self.release_capacity_at_volume(boundary_volume, spill);
-                    let total_capacity = spill + release_capacity;
-
-                    if total_capacity >= outflow_needed - EPSILON {
-                        // Equilibrium is achievable at this boundary
-                        let release_budget = (outflow_needed - spill).max(0.0);
-                        return Some(self.build_result_at_boundary(boundary_volume, release_budget));
-                    }
-                    // Capacity insufficient - can't equilibrate here, continue to next segment
-                }
-            }
-        }
-        None
-    }
-
-    /// Builds a SolveResult for a given final volume (unconstrained case).
-    /// All active outlets receive their full orders.
-    fn build_result_at_volume(&self, volume: f64) -> SolveResult {
-        let level = self.d.interpolate(VOLU, LEVL, volume);
-        let area = self.d.interpolate(VOLU, AREA, volume);
-        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
-
-        // In the unconstrained case, budget equals full capacity
-        let release_budget = self.release_capacity_at_volume(volume, spill);
-        let ds_flows = self.allocate_releases(volume, spill, release_budget);
-
-        SolveResult { volume, level, area, spill, ds_flows }
-    }
-
-    /// Builds a SolveResult for a threshold boundary (constrained case).
-    /// Release budget is determined by mass balance; allocation follows priority.
-    fn build_result_at_boundary(
-        &self,
-        volume: f64,
-        release_budget: f64,
-    ) -> SolveResult {
-        let level = self.d.interpolate(VOLU, LEVL, volume);
-        let area = self.d.interpolate(VOLU, AREA, volume);
-        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
-        let ds_flows = self.allocate_releases(volume, spill, release_budget);
-
-        SolveResult { volume, level, area, spill, ds_flows }
+        ds_flows
     }
 }
 
-// -----------------------------------------------------------------------------
-// Node trait implementation
-// -----------------------------------------------------------------------------
-
 impl Node for StorageNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
-        // Reset internal state
+
+    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
+        // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
@@ -630,133 +461,135 @@ impl Node for StorageNode {
         self.seep_vol = 0.0;
         self.pond_diversion = 0.0;
         self.spill = 0.0;
-        self.previous_row = 0;
+        self.previous_istop = 0;  // Will be updated after first timestep
 
-        // Validate dimension table
+        //Initialize inflow series
+        // All DynamicInput fields are already initialized during parsing
+
+        // Checks
         if self.d.nrows() < 2 {
-            return Err(format!(
-                "Storage node '{}': dimension table must have at least 2 rows",
-                self.name
-            ));
+            let message = format!("Error in node '{}'. Storage dimension table must have at least 2 rows.", self.name);
+            return Err(message);
         }
 
-        // Precompute area at minimum storage
-        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0.0);
+        // Initial values and pre-calculations
+        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0_f64); // Area at dead storage
 
-        // Precompute the minimum operating volume
+        // Convert outlet definitions (MOL levels) to volumes
         for i in 0..MAX_DS_LINKS {
             self.min_operating_volume[i] = match self.outlet_definition[i] {
                 OutletDefinition::None => 0.0,
-                OutletDefinition::OutletWithMOL(mol) | OutletDefinition::OutletWithAndMOLAndCapacity(mol, _) =>
-                    self.d.interpolate(LEVL, VOLU, mol),
-            };
-            println!("MOV {} set to {}", i, self.min_operating_volume[i]);
-        }
-
-        // Precompute threshold info for each outlet
-        let v_min = self.d.get_value(0, VOLU);
-        let v_max = self.d.get_value(self.d.nrows() - 1, VOLU);
-        for i in 0..MAX_DS_LINKS {
-            let threshold = self.min_operating_volume[i];
-            if threshold > 0.0 && threshold >= v_min && threshold <= v_max {
-                if let Some(row) = self.d.find_row(VOLU, threshold) {
-                    self.threshold_info[i] = Some(ThresholdInfo {
-                        volume: threshold,
-                        table_row: row,
-                    });
+                OutletDefinition::OutletWithMOL(level) => {
+                    self.d.interpolate(LEVL, VOLU, level)
                 }
-            } else {
-                self.threshold_info[i] = None;
-            }
+                OutletDefinition::OutletWithAndMOLAndCapacity(level, _capacity) => {
+                    self.d.interpolate(LEVL, VOLU, level)
+                }
+            };
         }
 
-        // Initialize recorders
+        // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
-            &make_result_name(&self.name, "usflow"), false);
+            make_result_name(&self.name, "usflow").as_str(), false
+        );
         self.recorder_idx_volume = data_cache.get_series_idx(
-            &make_result_name(&self.name, "volume"), false);
+            make_result_name(&self.name, "volume").as_str(), false
+        );
         self.recorder_idx_level = data_cache.get_series_idx(
-            &make_result_name(&self.name, "level"), false);
+            make_result_name(&self.name, "level").as_str(), false
+        );
         self.recorder_idx_area = data_cache.get_series_idx(
-            &make_result_name(&self.name, "area"), false);
+            make_result_name(&self.name, "area").as_str(), false
+        );
         self.recorder_idx_seep = data_cache.get_series_idx(
-            &make_result_name(&self.name, "seep"), false);
+            make_result_name(&self.name, "seep").as_str(), false
+        );
         self.recorder_idx_rain = data_cache.get_series_idx(
-            &make_result_name(&self.name, "rain"), false);
+            make_result_name(&self.name, "rain").as_str(), false
+        );
         self.recorder_idx_evap = data_cache.get_series_idx(
-            &make_result_name(&self.name, "evap"), false);
+            make_result_name(&self.name, "evap").as_str(), false
+        );
         self.recorder_idx_pond_diversion = data_cache.get_series_idx(
-            &make_result_name(&self.name, "pond_diversion"), false);
+            make_result_name(&self.name, "pond_diversion").as_str(), false
+        );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
-            &make_result_name(&self.name, "dsflow"), false);
+            make_result_name(&self.name, "dsflow").as_str(), false
+        );
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_1"), false);
+            make_result_name(&self.name, "ds_1").as_str(), false
+        );
         self.recorder_idx_ds_2 = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_2"), false);
+            make_result_name(&self.name, "ds_2").as_str(), false
+        );
         self.recorder_idx_ds_3 = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_3"), false);
+            make_result_name(&self.name, "ds_3").as_str(), false
+        );
         self.recorder_idx_ds_4 = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_4"), false);
+            make_result_name(&self.name, "ds_4").as_str(), false
+        );
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_1_order"), false);
+            make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
         self.recorder_idx_ds_2_order = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_2_order"), false);
+            make_result_name(&self.name, "ds_2_order").as_str(), false
+        );
         self.recorder_idx_ds_3_order = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_3_order"), false);
+            make_result_name(&self.name, "ds_3_order").as_str(), false
+        );
         self.recorder_idx_ds_4_order = data_cache.get_series_idx(
-            &make_result_name(&self.name, "ds_4_order"), false);
+            make_result_name(&self.name, "ds_4_order").as_str(), false
+        );
 
         Ok(())
     }
 
-    fn get_name(&self) -> &str {
-        &self.name
-    }
+    fn get_name(&self) -> &str { &self.name }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
-        // Get climate inputs
+
+        // Get the driving data
         let rain_mm = self.rain_mm_input.get_value(data_cache);
         let evap_mm = self.evap_mm_input.get_value(data_cache);
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
-        let net_rain_mm = rain_mm - evap_mm - seep_mm;
 
-        // Add upstream inflow to storage
+        // Add upstream inflows
         self.v += self.usflow;
 
-        // Handle pond diversion (takes priority over all other releases)
-        let max_pond = self.v + (net_rain_mm * self.area0_km2).max(0.0);
-        self.pond_diversion = pond_demand.min(max_pond).max(0.0);
+        // Net rainfall rate (will be applied to area in solver)
+        let net_rain_mm = rain_mm - evap_mm - seep_mm;
+
+        // Handle pond diversion first (highest priority)
+        let net_rain_at_dead_storage = self.area0_km2 * net_rain_mm;
+        let max_diversion = self.v + net_rain_at_dead_storage.max(0.0);
+        self.pond_diversion = pond_demand.min(max_diversion);
         self.v -= self.pond_diversion;
 
         // Working volume for backward Euler (after pond diversion)
         let v_working = self.v;
 
-        // Solve for final volume and outlet flows
-        let result = self.solve_backward_euler(v_working, net_rain_mm);
+        // Solve backward Euler with MOL-aware releases
+        let (v_final, ds_flows, spill) = self.solve_backward_euler(v_working, net_rain_mm);
 
         // Update state from solution
-        self.v = result.volume;
-        self.level = result.level;
-        self.spill = result.spill;
-        self.ds_1_flow = result.ds_flows[0];
-        self.ds_2_flow = result.ds_flows[1];
-        self.ds_3_flow = result.ds_flows[2];
-        self.ds_4_flow = result.ds_flows[3];
+        self.v = v_final;
+        self.level = self.d.interpolate(VOLU, LEVL, v_final);
+        let area_km2 = self.d.interpolate(VOLU, AREA, v_final);
+        self.spill = spill;
+        self.ds_1_flow = ds_flows[0];
+        self.ds_2_flow = ds_flows[1];
+        self.ds_3_flow = ds_flows[2];
+        self.ds_4_flow = ds_flows[3];
         self.dsflow = self.ds_1_flow + self.ds_2_flow + self.ds_3_flow + self.ds_4_flow;
 
         // Compute climate volumes using solved area
-        self.rain_vol = rain_mm * result.area;
-        self.evap_vol = evap_mm * result.area;
-        self.seep_vol = seep_mm * result.area;
+        self.rain_vol = rain_mm * area_km2;
+        self.evap_vol = evap_mm * area_km2;
+        self.seep_vol = seep_mm * area_km2;
 
-        // Update mass balance (downstream outflows - upstream inflows)
+        // Update mass balance
         self.mbal += self.dsflow - self.usflow;
-
-        // Update warm-start hint for next timestep
-        if let Some(row) = self.d.find_row(VOLU, result.volume) {
-            self.previous_row = row;
-        }
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -769,7 +602,7 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.level);
         }
         if let Some(idx) = self.recorder_idx_area {
-            data_cache.add_value_at_index(idx, result.area);
+            data_cache.add_value_at_index(idx, area_km2);
         }
         if let Some(idx) = self.recorder_idx_seep {
             data_cache.add_value_at_index(idx, self.seep_vol);
@@ -819,27 +652,33 @@ impl Node for StorageNode {
         self.usflow += flow;
     }
 
+    /// Storage node processing follows BackwardEuler with a variation that
+    /// diversion takes precedence over other fluxes. This means we can rely on:
+    ///      * being able to extract the full start-of-day storage volume (at least)
+    ///      * plus inflow if we know it
+    ///      * plus rainfall in excess of seep and evap
+    ///      * that a large demand will leave volume = 0 at the end of the day
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match outlet {
             0 => {
-                let flow = self.ds_1_flow;
+                let outflow = self.ds_1_flow;
                 self.ds_1_flow = 0.0;
-                flow
+                outflow
             }
             1 => {
-                let flow = self.ds_2_flow;
+                let outflow = self.ds_2_flow;
                 self.ds_2_flow = 0.0;
-                flow
+                outflow
             }
             2 => {
-                let flow = self.ds_3_flow;
+                let outflow = self.ds_3_flow;
                 self.ds_3_flow = 0.0;
-                flow
+                outflow
             }
             3 => {
-                let flow = self.ds_4_flow;
+                let outflow = self.ds_4_flow;
                 self.ds_4_flow = 0.0;
-                flow
+                outflow
             }
             _ => 0.0,
         }
