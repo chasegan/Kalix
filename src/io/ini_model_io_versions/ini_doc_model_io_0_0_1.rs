@@ -5,7 +5,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::tid::utils::{date_string_to_u64_flexible};
+use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 use crate::nodes::storage_node::OutletDefinition;
@@ -599,8 +599,17 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     // Invalidate the ini_doc
     ini_doc.invalidate_all();
 
-    // Set the ini version
-    ini_doc.set_property("kalix", "version", "0.0.1");
+    // Validate the kalix section and version property if present (preserves original formatting)
+    ini_doc.validate_section("kalix");
+    ini_doc.validate_property("kalix", "version");
+
+    // Set start and end dates if specified
+    if let Some(start_timestamp) = model.configuration.specified_sim_start_timestamp {
+        ini_doc.set_property("kalix", "start", &u64_to_date_string(start_timestamp));
+    }
+    if let Some(end_timestamp) = model.configuration.specified_sim_end_timestamp {
+        ini_doc.set_property("kalix", "end", &u64_to_date_string(end_timestamp));
+    }
 
     // List all input files
     for file_path in &model.input_file_paths {

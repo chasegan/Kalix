@@ -288,6 +288,29 @@ impl IniDocument {
         }
     }
 
+    /// Mark an existing property (and its section) as valid without changing the value.
+    /// Returns true if the property exists and was validated, false otherwise.
+    pub fn validate_property(&mut self, section_name: &str, key: &str) -> bool {
+        if let Some(section) = self.sections.get_mut(section_name) {
+            if let Some(property) = section.properties.get_mut(key) {
+                section.valid = true;
+                property.valid = true;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Mark an existing section as valid without changing any properties.
+    /// Returns true if the section exists and was validated, false otherwise.
+    pub fn validate_section(&mut self, section_name: &str) -> bool {
+        if let Some(section) = self.sections.get_mut(section_name) {
+            section.valid = true;
+            return true;
+        }
+        false
+    }
+
     /// Remove all sections and properties marked as invalid
     /// Used after invalidate_all() and selective updates via set_property()
     pub fn remove_invalid_sections_and_properties(&mut self) {
@@ -296,8 +319,8 @@ impl IniDocument {
             section.properties.retain(|_, property| property.valid);
         }
 
-        // Remove invalid sections (or sections that are now empty)
-        self.sections.retain(|_, section| section.valid && !section.properties.is_empty());
+        // Remove invalid sections
+        self.sections.retain(|_, section| section.valid);
     }
 
     /// Convert the IniDocument back to an INI string
