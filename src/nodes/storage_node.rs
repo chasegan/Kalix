@@ -466,34 +466,23 @@ impl StorageNode {
             (rhs / coeff, self.dsorders[0])  // Full ds_1 order
         };
 
-        // Check if solution is within segment bounds
-        let clamped_volume = volume.clamp(v_lo, v_hi);
-        let was_clamped = (volume - clamped_volume).abs() > EPSILON;
+        // Return unclamped volume so caller can decide if solution is in segment.
+        // Only compute flows at actual equilibrium volume (which may be out of segment).
+        let level = self.d.interpolate(VOLU, LEVL, volume);
+        let area = self.d.interpolate(VOLU, AREA, volume);
+        let spill = self.d.interpolate(VOLU, SPIL, volume).max(0.0);
 
-        let level = self.d.interpolate(VOLU, LEVL, clamped_volume);
-        let area = self.d.interpolate(VOLU, AREA, clamped_volume);
-        let spill = self.d.interpolate(VOLU, SPIL, clamped_volume).max(0.0);
-
-        if was_clamped {
-            // Solution was outside segment and got clamped to boundary.
-            // Compute actual release from mass balance rather than using assumed value.
-            let outflow_needed = v_working + net_rain_mm * area - clamped_volume;
-            let release_budget = (outflow_needed - spill).max(0.0);
-            let ds_flows = self.allocate_releases(clamped_volume, spill, release_budget);
-            SolveResult { volume: clamped_volume, level, area, spill, ds_flows }
-        } else {
-            // Solution is within segment - use flows consistent with solver assumptions
-            let mut ds_flows = [0.0; MAX_DS_LINKS];
-            // ds_1: spill + release (where release was determined by solver regime)
-            ds_flows[0] = spill + (ds_1_release_assumed - spill).max(0.0);
-            // ds_2, ds_3, ds_4: based on v_mid threshold check (const_releases)
-            for i in 1..MAX_DS_LINKS {
-                if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
-                    ds_flows[i] = self.dsorders[i];
-                }
+        // Build flows consistent with solver assumptions
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        // ds_1: spill + release (where release was determined by solver regime)
+        ds_flows[0] = spill + (ds_1_release_assumed - spill).max(0.0);
+        // ds_2, ds_3, ds_4: based on v_mid threshold check (const_releases)
+        for i in 1..MAX_DS_LINKS {
+            if self.dsorders[i] > 0.0 && v_mid >= self.min_operating_volume[i] {
+                ds_flows[i] = self.dsorders[i];
             }
-            SolveResult { volume: clamped_volume, level, area, spill, ds_flows }
         }
+        SolveResult { volume, level, area, spill, ds_flows }
     }
 
     /// Solves when there are breakpoints within the table row interval.
@@ -511,20 +500,13 @@ impl StorageNode {
         let mut bounds = Vec::with_capacity(breakpoints.len() + 2);
         bounds.push(v_table_lo);
         for bp in breakpoints {
-            let bp_vol = self.breakpoint_volume(bp);
-            // Only add if not duplicate of previous bound (avoids zero-length segments)
-            if let Some(&last) = bounds.last() {
-                if (bp_vol - last).abs() > EPSILON {
-                    bounds.push(bp_vol);
-                }
-            }
+            bounds.push(self.breakpoint_volume(bp));
         }
-        // Only add v_table_hi if not duplicate
-        if let Some(&last) = bounds.last() {
-            if (v_table_hi - last).abs() > EPSILON {
-                bounds.push(v_table_hi);
-            }
-        }
+        bounds.push(v_table_hi);
+
+        // Sort and deduplicate
+        bounds.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        bounds.dedup_by(|a, b| (*a - *b).abs() < EPSILON);
 
         // Try each segment from low to high
         for i in 0..bounds.len() - 1 {
@@ -539,7 +521,8 @@ impl StorageNode {
             }
 
             // Check for threshold discontinuity at segment boundary
-            if result.volume > seg_hi && i < bounds.len() - 2 {
+            // (check_threshold_at_boundary returns None if boundary isn't a threshold)
+            if result.volume > seg_hi {
                 if let Some(threshold_result) = self.check_threshold_at_boundary(
                     seg_hi, v_working, net_rain_mm, breakpoints
                 ) {
@@ -548,13 +531,15 @@ impl StorageNode {
             }
         }
 
-        // Fallback: solution at table boundary (shouldn't normally reach here)
+        // Fallback: solution at table boundary
+        // This handles the case where the solution lies exactly at the upper table boundary
         self.build_result_at_volume(v_table_hi)
     }
 
     /// Checks if the solution lies exactly at a threshold boundary.
     /// At boundaries, the release budget is constrained by mass balance,
     /// and allocation among outlets follows the priority ordering.
+    /// Returns None if the boundary cannot support the required outflow.
     fn check_threshold_at_boundary(
         &self,
         boundary_volume: f64,
@@ -567,16 +552,27 @@ impl StorageNode {
             if let Breakpoint::ReleaseThreshold { outlet: _ } = bp {
                 let bp_vol = self.breakpoint_volume(bp);
                 if (bp_vol - boundary_volume).abs() < EPSILON {
-                    // Solution is at this threshold boundary
+                    // Potential solution at this threshold boundary
                     let area = self.d.interpolate(VOLU, AREA, boundary_volume);
                     let spill = self.d.interpolate(VOLU, SPIL, boundary_volume).max(0.0);
 
-                    // Compute release budget from mass balance constraint
+                    // Compute outflow needed to stay at this boundary
                     let outflow_needed = v_working + net_rain_mm * area - boundary_volume;
-                    let release_budget = (outflow_needed - spill).max(0.0);
+                    if outflow_needed < -EPSILON {
+                        // Inflow exceeds what's needed - volume would rise above boundary
+                        continue;
+                    }
 
-                    // Allocate constrained budget by priority
-                    return Some(self.build_result_at_boundary(boundary_volume, release_budget));
+                    // Check if release capacity at this boundary can meet the requirement
+                    let release_capacity = self.release_capacity_at_volume(boundary_volume, spill);
+                    let total_capacity = spill + release_capacity;
+
+                    if total_capacity >= outflow_needed - EPSILON {
+                        // Equilibrium is achievable at this boundary
+                        let release_budget = (outflow_needed - spill).max(0.0);
+                        return Some(self.build_result_at_boundary(boundary_volume, release_budget));
+                    }
+                    // Capacity insufficient - can't equilibrate here, continue to next segment
                 }
             }
         }
