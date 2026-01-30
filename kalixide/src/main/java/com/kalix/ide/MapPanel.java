@@ -17,6 +17,7 @@ import java.awt.event.KeyListener;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
@@ -54,6 +55,7 @@ public class MapPanel extends JPanel implements KeyListener {
 
     // Interaction management
     private MapInteractionManager interactionManager;
+    private MapContextMenuManager contextMenuManager;
     private EnhancedTextEditor textEditor;
 
     // Rendering
@@ -96,6 +98,15 @@ public class MapPanel extends JPanel implements KeyListener {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Right-click: show context menu
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    requestFocusInWindow();
+                    if (contextMenuManager != null) {
+                        contextMenuManager.showContextMenu(e.getPoint(), e);
+                    }
+                    return;
+                }
+
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     // Request focus for keyboard events (delete key)
                     requestFocusInWindow();
@@ -370,10 +381,11 @@ public class MapPanel extends JPanel implements KeyListener {
         
         this.model = model;
 
-        // Initialize interaction manager
+        // Initialize interaction manager and context menu manager
         if (this.model != null) {
             this.model.addChangeListener(event -> repaint());
             this.interactionManager = new MapInteractionManager(this, this.model);
+            this.contextMenuManager = new MapContextMenuManager(this, this.interactionManager, this.model);
 
             // Auto-fit the model content to the current component size
             if (getWidth() > 0 && getHeight() > 0) {
@@ -381,6 +393,7 @@ public class MapPanel extends JPanel implements KeyListener {
             }
         } else {
             this.interactionManager = null;
+            this.contextMenuManager = null;
         }
         
         repaint();
