@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,6 +64,9 @@ public class MapClipboardManager {
         ClipboardEntry.NodeSectionData anchor = sections.get(0);
         clipboard = new ClipboardEntry(sections, true, anchor.x(), anchor.y());
 
+        // Also copy to system clipboard for external paste
+        copyToSystemClipboard(sections);
+
         // Delete the original nodes
         textUpdater.deleteSelectedElements(selectedNodes, Collections.emptySet());
         model.deleteSelectedNodes();
@@ -88,6 +93,9 @@ public class MapClipboardManager {
         // Store in clipboard with anchor coordinates
         ClipboardEntry.NodeSectionData anchor = sections.get(0);
         clipboard = new ClipboardEntry(sections, false, anchor.x(), anchor.y());
+
+        // Also copy to system clipboard for external paste
+        copyToSystemClipboard(sections);
 
         logger.info("Copied {} nodes to clipboard", sections.size());
     }
@@ -427,6 +435,35 @@ public class MapClipboardManager {
             }
         } catch (BadLocationException e) {
             logger.error("Error inserting text: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Copy node section text to the OS system clipboard.
+     * This allows pasting the INI text into external programs.
+     * Works cross-platform (Windows, macOS, Linux) using java.awt.Toolkit.
+     */
+    private void copyToSystemClipboard(List<ClipboardEntry.NodeSectionData> sections) {
+        if (sections == null || sections.isEmpty()) {
+            return;
+        }
+
+        // Build combined text from all sections
+        StringBuilder sb = new StringBuilder();
+        for (ClipboardEntry.NodeSectionData section : sections) {
+            if (!sb.isEmpty()) {
+                sb.append("\n");
+            }
+            sb.append(section.sectionText());
+        }
+
+        // Copy to system clipboard
+        try {
+            StringSelection selection = new StringSelection(sb.toString());
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
+        } catch (Exception e) {
+            // Clipboard access can fail in headless environments or with security restrictions
+            logger.warn("Could not copy to system clipboard: {}", e.getMessage());
         }
     }
 }
