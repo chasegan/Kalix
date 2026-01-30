@@ -77,25 +77,8 @@ public class MapPanel extends JPanel implements KeyListener {
         addKeyListener(this);
 
         setupMouseListeners();
-        setupResizeListener();
     }
 
-
-    /**
-     * Sets up a component listener to auto-fit content when the component is resized.
-     */
-    private void setupResizeListener() {
-        addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentResized(java.awt.event.ComponentEvent e) {
-                // Auto-fit content when component size changes and we have a model
-                if (model != null && getWidth() > 0 && getHeight() > 0) {
-                    zoomToFit();
-                }
-            }
-        });
-    }
-    
     private void setupMouseListeners() {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
