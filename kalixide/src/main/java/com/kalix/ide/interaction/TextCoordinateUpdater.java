@@ -6,6 +6,11 @@ import org.slf4j.LoggerFactory;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.Set;
@@ -160,8 +165,8 @@ public class TextCoordinateUpdater {
                     textEditor.getTextArea().getCaret().setSelectionVisible(true);
                 }
 
-                // Request focus to ensure the text editor is active
-                textEditor.getTextArea().requestFocusInWindow();
+                // Note: We intentionally do NOT request focus here.
+                // The map should retain focus so Delete key works on selected nodes.
 
                 // Successfully scrolled to node
                 return true;
@@ -244,14 +249,140 @@ public class TextCoordinateUpdater {
         final String nodeName;
         final int start;
         final int length;
-        
+
         NodeSection(String nodeName, int start, int length) {
             this.nodeName = nodeName;
             this.start = start;
             this.length = length;
         }
     }
-    
+
+    /**
+     * Helper class to represent a text region to be deleted.
+     */
+    private static class TextDeletion {
+        final int start;
+        final int length;
+
+        TextDeletion(int start, int length) {
+            this.start = start;
+            this.length = length;
+        }
+    }
+
+    /**
+     * Delete selected nodes and links from the text editor as a single atomic operation.
+     * This handles:
+     * - Removal of entire node sections for selected nodes
+     * - Removal of ds_X = target property lines for selected links
+     *
+     * @param nodeNames Set of node names to delete (may be null or empty)
+     * @param linkIds Set of link IDs to delete in "source->target" format (may be null or empty)
+     */
+    public void deleteSelectedElements(Set<String> nodeNames, Set<String> linkIds) {
+        if ((nodeNames == null || nodeNames.isEmpty()) &&
+            (linkIds == null || linkIds.isEmpty())) {
+            return;
+        }
+
+        updatingFromModel = true;
+        try {
+            textEditor.getTextArea().beginAtomicEdit();
+            try {
+                Document doc = textEditor.getTextArea().getDocument();
+                String text = doc.getText(0, doc.getLength());
+
+                // Collect ALL deletions first
+                List<TextDeletion> deletions = new ArrayList<>();
+
+                // 1. Node sections to delete
+                if (nodeNames != null && !nodeNames.isEmpty()) {
+                    collectNodeSectionDeletions(text, nodeNames, deletions);
+                }
+
+                // 2. Link properties to delete (ds_X = target lines)
+                if (linkIds != null && !linkIds.isEmpty()) {
+                    collectLinkPropertyDeletions(text, linkIds, nodeNames, deletions);
+                }
+
+                // Sort by position DESCENDING and apply
+                deletions.sort((a, b) -> Integer.compare(b.start, a.start));
+                for (TextDeletion deletion : deletions) {
+                    doc.remove(deletion.start, deletion.length);
+                }
+            } finally {
+                textEditor.getTextArea().endAtomicEdit();
+            }
+        } catch (BadLocationException e) {
+            logger.error("Error deleting elements: {}", e.getMessage());
+        } finally {
+            updatingFromModel = false;
+        }
+    }
+
+    /**
+     * Collect node section deletions for the given node names.
+     */
+    private void collectNodeSectionDeletions(String text, Set<String> nodeNames,
+                                              List<TextDeletion> deletions) {
+        for (String nodeName : nodeNames) {
+            NodeSection section = findNodeSection(text, nodeName);
+            if (section != null) {
+                deletions.add(new TextDeletion(section.start, section.length));
+            }
+        }
+    }
+
+    /**
+     * Collect link property deletions (ds_X = target lines) for the given link IDs.
+     * Skips links where the source node is being deleted (section removal handles those).
+     */
+    private void collectLinkPropertyDeletions(String text, Set<String> linkIds,
+                                              Set<String> deletedNodes,
+                                              List<TextDeletion> deletions) {
+        // Group by source node
+        Map<String, Set<String>> sourceToTargets = new HashMap<>();
+        for (String linkId : linkIds) {
+            String[] parts = linkId.split("->");
+            if (parts.length == 2) {
+                String source = parts[0];
+                // Skip if source node is being deleted (section removal handles it)
+                if (deletedNodes == null || !deletedNodes.contains(source)) {
+                    sourceToTargets.computeIfAbsent(source, k -> new HashSet<>()).add(parts[1]);
+                }
+            }
+        }
+
+        // Find and collect ds_X lines within each source node's section
+        for (Map.Entry<String, Set<String>> entry : sourceToTargets.entrySet()) {
+            String sourceNode = entry.getKey();
+            Set<String> targets = entry.getValue();
+
+            NodeSection section = findNodeSection(text, sourceNode);
+            if (section == null) continue;
+
+            String sectionText = text.substring(section.start, section.start + section.length);
+            // Note: Don't include \s* before $ as it would match the newline
+            Pattern dsPattern = Pattern.compile("^ds_\\d+\\s*=\\s*(.+?)$", Pattern.MULTILINE);
+            Matcher matcher = dsPattern.matcher(sectionText);
+
+            while (matcher.find()) {
+                String targetNode = matcher.group(1).trim();
+                if (targets.contains(targetNode)) {
+                    int lineStart = section.start + matcher.start();
+                    int lineEnd = section.start + matcher.end();
+
+                    // Include trailing newline if present
+                    if (lineEnd < text.length() && text.charAt(lineEnd) == '\n') {
+                        lineEnd++;
+                    }
+
+                    deletions.add(new TextDeletion(lineStart, lineEnd - lineStart));
+                }
+            }
+        }
+    }
+
     /**
      * Find a node section in the text and return its position information.
      * @param text Current text content

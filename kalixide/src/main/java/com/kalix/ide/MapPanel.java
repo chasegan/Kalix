@@ -11,6 +11,7 @@ import java.awt.Point;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
@@ -53,6 +54,7 @@ public class MapPanel extends JPanel implements KeyListener {
 
     // Interaction management
     private MapInteractionManager interactionManager;
+    private EnhancedTextEditor textEditor;
 
     // Rendering
     private final MapRenderer mapRenderer = new MapRenderer();
@@ -630,6 +632,7 @@ public class MapPanel extends JPanel implements KeyListener {
      * @param textEditor The text editor to synchronize with
      */
     public void setupTextSynchronization(EnhancedTextEditor textEditor) {
+        this.textEditor = textEditor;
         if (interactionManager != null && textEditor != null) {
             TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
             interactionManager.setTextUpdater(textUpdater);
@@ -640,9 +643,31 @@ public class MapPanel extends JPanel implements KeyListener {
     
     @Override
     public void keyPressed(KeyEvent e) {
+        // Check for modifier key (Ctrl on Windows/Linux, Cmd on macOS)
+        boolean isModifierDown = (e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0 ||
+                                 (e.getModifiersEx() & InputEvent.META_DOWN_MASK) != 0;
+
+        // Undo: Ctrl+Z / Cmd+Z
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Z) {
+            if (textEditor != null && textEditor.canUndo()) {
+                textEditor.undo();
+            }
+            return;
+        }
+
+        // Redo: Ctrl+Y / Cmd+Y
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Y) {
+            if (textEditor != null && textEditor.canRedo()) {
+                textEditor.redo();
+            }
+            return;
+        }
+
+        // Delete: Delete or Backspace key
         if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
-            if (interactionManager != null && model != null && model.getSelectedNodeCount() > 0) {
-                interactionManager.deleteSelectedNodes();
+            if (interactionManager != null && model != null &&
+                (model.getSelectedNodeCount() > 0 || model.getSelectedLinkCount() > 0)) {
+                interactionManager.deleteSelectedElements();
                 repaint();
             }
         }

@@ -177,21 +177,29 @@ public class MapInteractionManager {
     }
     
     /**
-     * Delete all currently selected nodes from both the model and text.
+     * Delete all currently selected nodes and links from both the model and text.
      * This orchestrates deletion across the data model and text editor.
+     * All deletions are performed as a single atomic operation for undo support.
      */
-    public void deleteSelectedNodes() {
+    public void deleteSelectedElements() {
         Set<String> nodesToDelete = model.getSelectedNodes();
-        
-        if (nodesToDelete.isEmpty()) {
+        Set<String> linksToDelete = model.getSelectedLinks();
+
+        if (nodesToDelete.isEmpty() && linksToDelete.isEmpty()) {
             return; // Nothing to delete
-        }        // Delete from the data model first
-        model.deleteSelectedNodes();
-        
-        // Delete corresponding sections from text if updater is available
-        if (textUpdater != null) {
-            textUpdater.deleteNodesFromText(nodesToDelete);
         }
-        
+
+        // Delete from text first (single atomic operation handles all)
+        if (textUpdater != null) {
+            textUpdater.deleteSelectedElements(nodesToDelete, linksToDelete);
+        }
+
+        // Delete from the data model
+        if (!nodesToDelete.isEmpty()) {
+            model.deleteSelectedNodes();
+        }
+        if (!linksToDelete.isEmpty()) {
+            model.deleteLinks(linksToDelete);
+        }
     }
 }

@@ -559,4 +559,33 @@ public class HydrologicalModel {
         
         System.out.println("HydrologicalModel: Deleted " + nodesToDelete.size() + " selected nodes");
     }
+
+    /**
+     * Delete links from the model by their link IDs.
+     * @param linkIds Set of link IDs to delete in "source->target" format
+     */
+    public void deleteLinks(Set<String> linkIds) {
+        if (linkIds == null || linkIds.isEmpty()) {
+            return;
+        }
+
+        // Find links matching the IDs
+        List<ModelLink> toRemove = new ArrayList<>();
+        for (ModelLink link : links) {
+            String linkId = getLinkId(link);
+            if (linkIds.contains(linkId)) {
+                toRemove.add(link);
+            }
+        }
+
+        // Remove the found links
+        for (ModelLink link : toRemove) {
+            removeLink(link);
+        }
+
+        // Clear link selection for deleted links
+        selectedLinks.removeAll(linkIds);
+
+        System.out.println("HydrologicalModel: Deleted " + toRemove.size() + " links");
+    }
 }
