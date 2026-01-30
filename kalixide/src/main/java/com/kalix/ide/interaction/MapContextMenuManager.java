@@ -8,7 +8,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import java.awt.Point;
-import java.awt.event.ActionEvent;
+import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 
@@ -22,6 +22,9 @@ public class MapContextMenuManager {
     private final MapInteractionManager interactionManager;
     private final HydrologicalModel model;
 
+    // Clipboard manager for cut/copy/paste operations
+    private MapClipboardManager clipboardManager;
+
     // Track where the context menu was invoked for potential future use (e.g., paste location)
     private Point lastContextMenuLocation;
 
@@ -30,6 +33,14 @@ public class MapContextMenuManager {
         this.mapPanel = mapPanel;
         this.interactionManager = interactionManager;
         this.model = model;
+    }
+
+    /**
+     * Set the clipboard manager for cut/copy/paste operations.
+     * @param clipboardManager The clipboard manager
+     */
+    public void setClipboardManager(MapClipboardManager clipboardManager) {
+        this.clipboardManager = clipboardManager;
     }
 
     /**
@@ -65,7 +76,50 @@ public class MapContextMenuManager {
      * Add selection-related actions to the menu.
      */
     private void addSelectionActions(JPopupMenu menu, String nodeAtPoint, ModelLink linkAtPoint) {
-        boolean hasSelection = model.getSelectedNodeCount() > 0 || model.getSelectedLinkCount() > 0;
+        boolean hasNodeSelection = model.getSelectedNodeCount() > 0;
+        boolean hasSelection = hasNodeSelection || model.getSelectedLinkCount() > 0;
+        boolean hasClipboard = clipboardManager != null && clipboardManager.hasClipboardContent();
+        int shortcutMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+
+        // Cut
+        JMenuItem cutItem = new JMenuItem("Cut");
+        cutItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, shortcutMask));
+        cutItem.setEnabled(hasNodeSelection && clipboardManager != null);
+        cutItem.addActionListener(e -> {
+            if (clipboardManager != null) {
+                clipboardManager.cut();
+                mapPanel.repaint();
+            }
+        });
+        menu.add(cutItem);
+
+        // Copy
+        JMenuItem copyItem = new JMenuItem("Copy");
+        copyItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutMask));
+        copyItem.setEnabled(hasNodeSelection && clipboardManager != null);
+        copyItem.addActionListener(e -> {
+            if (clipboardManager != null) {
+                clipboardManager.copy();
+            }
+        });
+        menu.add(copyItem);
+
+        // Paste
+        JMenuItem pasteItem = new JMenuItem("Paste");
+        pasteItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMask));
+        pasteItem.setEnabled(hasClipboard);
+        pasteItem.addActionListener(e -> {
+            if (clipboardManager != null && lastContextMenuLocation != null) {
+                // Convert screen location to world coordinates
+                double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
+                double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                clipboardManager.pasteAtMapLocation(worldX, worldY);
+                mapPanel.repaint();
+            }
+        });
+        menu.add(pasteItem);
+
+        menu.addSeparator();
 
         // Delete Selection
         JMenuItem deleteItem = new JMenuItem("Delete Selection");

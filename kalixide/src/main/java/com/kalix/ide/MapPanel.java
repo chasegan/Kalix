@@ -17,6 +17,7 @@ import java.awt.event.KeyListener;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.interaction.MapClipboardManager;
 import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
@@ -56,6 +57,7 @@ public class MapPanel extends JPanel implements KeyListener {
     // Interaction management
     private MapInteractionManager interactionManager;
     private MapContextMenuManager contextMenuManager;
+    private MapClipboardManager clipboardManager;
     private EnhancedTextEditor textEditor;
 
     // Rendering
@@ -649,6 +651,14 @@ public class MapPanel extends JPanel implements KeyListener {
         if (interactionManager != null && textEditor != null) {
             TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
             interactionManager.setTextUpdater(textUpdater);
+
+            // Create clipboard manager (needs model, textEditor, and textUpdater)
+            if (model != null) {
+                clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
+                if (contextMenuManager != null) {
+                    contextMenuManager.setClipboardManager(clipboardManager);
+                }
+            }
         }
     }
     
@@ -672,6 +682,35 @@ public class MapPanel extends JPanel implements KeyListener {
         if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Y) {
             if (textEditor != null && textEditor.canRedo()) {
                 textEditor.redo();
+            }
+            return;
+        }
+
+        // Cut: Ctrl+X / Cmd+X
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_X) {
+            if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
+                clipboardManager.cut();
+                repaint();
+            }
+            return;
+        }
+
+        // Copy: Ctrl+C / Cmd+C
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_C) {
+            if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
+                clipboardManager.copy();
+            }
+            return;
+        }
+
+        // Paste: Ctrl+V / Cmd+V (paste at center of viewport)
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_V) {
+            if (clipboardManager != null && clipboardManager.hasClipboardContent()) {
+                // Calculate center of viewport in world coordinates
+                double centerX = (getWidth() / 2.0 - panX) / zoomLevel;
+                double centerY = (getHeight() / 2.0 - panY) / zoomLevel;
+                clipboardManager.pasteAtMapLocation(centerX, centerY);
+                repaint();
             }
             return;
         }
