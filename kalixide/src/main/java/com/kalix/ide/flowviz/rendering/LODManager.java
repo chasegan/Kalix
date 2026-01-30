@@ -4,12 +4,39 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
+/**
+ * Level-of-Detail manager for efficient rendering of large time series.
+ *
+ * <h2>Purpose</h2>
+ * When a time series has many more data points than pixels (e.g., 100k points in 1000px),
+ * rendering every point is wasteful and can cause visual artifacts. LOD rendering computes
+ * min/max bands per pixel column, allowing accurate representation with fewer draw calls.
+ *
+ * <h2>Caching</h2>
+ * LOD data is cached with key: {@code "seriesName_startTime_endTime_width_height"}.
+ * <p>
+ * <b>IMPORTANT:</b> The cache key does NOT include the actual data values! If the underlying
+ * data changes but the series name and viewport remain the same, the cache returns stale data.
+ * <p>
+ * When data changes, callers MUST call {@link #clearCache()} to invalidate. This is done by
+ * {@link com.kalix.ide.flowviz.PlotPanel#refreshData} via {@link TimeSeriesRenderer#clearCache()}.
+ *
+ * <h2>Why Pan/Zoom "Fixes" Stale Data</h2>
+ * Panning or zooming changes the viewport, which changes the cache key, causing a cache miss
+ * and fresh LOD computation. This is why stale data may appear correct after pan/zoom even
+ * without explicit cache invalidation - but relying on this is incorrect!
+ *
+ * @see TimeSeriesRenderer
+ * @see com.kalix.ide.flowviz.PlotPanel#refreshData
+ */
 public class LODManager {
-    
+
     // LOD threshold - switch to statistical bands when more than this many points per pixel
     private static final double POINTS_PER_PIXEL_THRESHOLD = 5.0;
-    
+
     // Cache for pre-computed LOD data
+    // Key: "seriesName_startTime_endTime_width_height" - NOTE: does NOT include data values!
+    // Must call clearCache() when underlying data changes
     private final Map<String, LODData> lodCache = new ConcurrentHashMap<>();
     
     public static class LODData {

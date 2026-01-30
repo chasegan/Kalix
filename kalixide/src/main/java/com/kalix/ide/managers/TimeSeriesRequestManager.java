@@ -16,17 +16,34 @@ import java.util.concurrent.*;
 /**
  * Manages asynchronous fetching and caching of timeseries data from kalixcli sessions.
  *
- * Key features:
- * - Sequential request processing (required by STDIO protocol)
- * - Intelligent caching to avoid redundant requests
- * - Automatic parsing of JSON responses with comma-separated timeseries data
- * - Progress callbacks for UI updates
+ * <h2>Caching Strategy</h2>
+ * Cache keys use format: {@code kalixcliUid:seriesName}
+ * <ul>
+ *   <li>{@code kalixcliUid} - Unique ID of the Kalix CLI process (persists across runs on same session)</li>
+ *   <li>{@code seriesName} - Full series name (e.g., "node.mygr4j.ds_1")</li>
+ * </ul>
  *
- * Usage:
- * 1. Create manager with session reference
- * 2. Call requestTimeSeries() for leaf node selections
- * 3. Receive callbacks when data is available
- * 4. Access cached data via getTimeSeriesFromCache()
+ * <h2>IMPORTANT: Cache Invalidation</h2>
+ * Because {@code kalixcliUid} persists when a session runs multiple simulations, cached data
+ * becomes stale when a new run completes. Callers MUST call {@link #clearCacheForSession}
+ * when a run completes to invalidate stale data. This is done by
+ * {@link com.kalix.ide.windows.RunManager#refreshLastSeries}.
+ *
+ * <h2>Two-Level Cache</h2>
+ * <ul>
+ *   <li>{@code cache} - In-progress requests (CompletableFuture)</li>
+ *   <li>{@code completedCache} - Completed data (TimeSeriesData)</li>
+ * </ul>
+ *
+ * <h2>Usage</h2>
+ * <ol>
+ *   <li>Call {@link #requestTimeSeries} - returns CompletableFuture</li>
+ *   <li>On completion, callback receives TimeSeriesData</li>
+ *   <li>Data is automatically cached for future requests</li>
+ *   <li>Call {@link #clearCacheForSession} when run completes to invalidate</li>
+ * </ol>
+ *
+ * @see com.kalix.ide.windows.RunManager#refreshLastSeries
  */
 public class TimeSeriesRequestManager {
     private static final Logger logger = LoggerFactory.getLogger(TimeSeriesRequestManager.class);
@@ -35,13 +52,15 @@ public class TimeSeriesRequestManager {
     private final SessionManager sessionManager;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Request queue (sequential processing)
+    // Request queue - sequential processing required by STDIO protocol
     private final ExecutorService requestExecutor;
     private final BlockingQueue<TimeSeriesRequest> requestQueue;
 
-    // Caching system
-    private final Map<String, CompletableFuture<TimeSeriesData>> cache;
-    private final Map<String, TimeSeriesData> completedCache;
+    // === TWO-LEVEL CACHE ===
+    // Keys are "kalixcliUid:seriesName" - NOTE: kalixcliUid persists across runs!
+    // Must call clearCacheForSession() when a run completes to invalidate stale data
+    private final Map<String, CompletableFuture<TimeSeriesData>> cache;         // In-progress requests
+    private final Map<String, TimeSeriesData> completedCache;                    // Completed data
 
     /**
      * Represents a timeseries fetch request
@@ -147,6 +166,32 @@ public class TimeSeriesRequestManager {
         String cacheKey = kalixcliUid + ":" + seriesName;
         CompletableFuture<TimeSeriesData> future = cache.get(cacheKey);
         return future != null && !future.isDone();
+    }
+
+    /**
+     * Clear all cached timeseries data for a session.
+     * Call this when a new run completes on the session to invalidate stale data.
+     * @param sessionKey The session key (IDE identifier)
+     */
+    public void clearCacheForSession(String sessionKey) {
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) return;
+
+        String prefix = kalixcliUid + ":";
+
+        // Remove from completed cache
+        completedCache.keySet().removeIf(key -> key.startsWith(prefix));
+
+        // Remove from in-progress cache (cancel pending futures)
+        cache.entrySet().removeIf(entry -> {
+            if (entry.getKey().startsWith(prefix)) {
+                entry.getValue().cancel(false);
+                return true;
+            }
+            return false;
+        });
+
+        logger.debug("Cleared cache for session {} (kalixcliUid: {})", sessionKey, kalixcliUid);
     }
 
     /**

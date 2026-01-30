@@ -30,8 +30,53 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * User-friendly Run Manager window for managing model runs.
- * Replaces the debugging-focused CLI Sessions window with a more intuitive interface.
+ * Run Manager window for managing simulation runs, exploring outputs, and plotting results.
+ *
+ * <h2>Architecture Overview</h2>
+ * The window has three main components:
+ * <ul>
+ *   <li><b>Left-top: Data Source Tree</b> ({@code timeseriesSourceTree}) - Shows runs and datasets</li>
+ *   <li><b>Left-bottom: Timeseries Tree</b> ({@code timeseriesTree}) - Shows available output series</li>
+ *   <li><b>Right: Visualization Tabs</b> ({@link VisualizationTabManager}) - Plots and statistics</li>
+ * </ul>
+ *
+ * <h2>Data Source Tree Structure</h2>
+ * <pre>
+ * Root (hidden)
+ * ├── Last run          → Most recently completed run (updates automatically)
+ * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
+ * ├── Run library       → Saved runs (future feature)
+ * └── Loaded datasets   → Imported CSV/KAI files
+ * </pre>
+ *
+ * <h2>Data Flow</h2>
+ * <ol>
+ *   <li>User selects source(s) in data source tree → {@link #onRunTreeSelectionChanged}</li>
+ *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
+ *   <li>User selects series in timeseries tree → {@link #onOutputsTreeSelectionChanged}</li>
+ *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
+ *   <li>Data is added to shared {@link DataSet} → {@link #addSeriesToPlot}</li>
+ *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
+ * </ol>
+ *
+ * <h2>Selection Tracking</h2>
+ * <ul>
+ *   <li>{@code selectedSeries} - Set of series keys currently plotted (e.g., "node.x.ds_1 [Last]")</li>
+ *   <li>{@code isUpdatingSelection} - Flag to prevent listener feedback loops during programmatic updates</li>
+ *   <li>Tree selection is restored after rebuilds via {@link #restoreTreeSelectionFromSelectedSeries}</li>
+ * </ul>
+ *
+ * <h2>"Last" Run Handling</h2>
+ * When a run completes ({@link #updateLastRun}):
+ * <ol>
+ *   <li>Cache is cleared for the session ({@link TimeSeriesRequestManager#clearCacheForSession})</li>
+ *   <li>If "Last" was selected, timeseries tree is rebuilt to show new outputs</li>
+ *   <li>Plotted "[Last]" series are refreshed with new data ({@link #refreshLastSeries})</li>
+ * </ol>
+ *
+ * @see OutputsTreeBuilder
+ * @see TimeSeriesRequestManager
+ * @see VisualizationTabManager
  */
 public class RunManager extends JFrame {
 
@@ -44,7 +89,9 @@ public class RunManager extends JFrame {
     private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
     private static java.util.function.Supplier<String> editorTextSupplier;
 
-    // Tree components
+    // === DATA SOURCE TREE (left-top) ===
+    // Shows: Last run, Current runs, Run library, Loaded datasets
+    // Selection triggers rebuild of timeseries tree
     private JTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
@@ -53,12 +100,16 @@ public class RunManager extends JFrame {
     private DefaultMutableTreeNode libraryNode;
     private DefaultMutableTreeNode loadedDatasetsNode;
 
-    // Timeseries tree components
+    // === TIMESERIES TREE (left-bottom) ===
+    // Shows hierarchical output series from selected sources
+    // Selection triggers data fetching and plotting
     private JTree timeseriesTree;
     private DefaultTreeModel timeseriesTreeModel;
     private JScrollPane timeseriesScrollPane;
 
-    // Visualization tab manager
+    // === VISUALIZATION (right side) ===
+    // Shared DataSet is the single source of truth for plotted data
+    // All plot tabs read from this shared dataset
     private VisualizationTabManager tabManager;
     private DataSet plotDataSet;
 
@@ -74,22 +125,28 @@ public class RunManager extends JFrame {
     private RunContextMenuManager runContextMenuManager;
     private SeriesColorManager seriesColorManager;
 
-    // Series selection tracking
+    // === SELECTION STATE ===
+    // selectedSeries tracks what's plotted, independent of tree selection
+    // Keys are "seriesName [SourceName]" e.g., "node.mygr4j.ds_1 [Last]"
+    // This allows restoring selection after tree rebuilds
     private Set<String> selectedSeries = new HashSet<>();
 
-    // Run tracking
+    // === RUN TRACKING ===
     private final Map<String, String> sessionToRunName = new HashMap<>();
     private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
     private final Map<String, RunInfoImpl.DetailedRunStatus> lastKnownStatus = new HashMap<>();
     private int runCounter = 1;
 
-    // Last run tracking
+    // === LAST RUN TRACKING ===
+    // lastRunInfo points to the most recently completed run
+    // Used to resolve "[Last]" series to actual session data
     private RunInfoImpl lastRunInfo = null;
     private DefaultMutableTreeNode lastRunChildNode = null;
     private final Map<String, Long> completionTimestamps = new HashMap<>();
     private long lastRunCompletionTime = 0L;
 
-    // Flag to prevent selection listener from firing during programmatic updates
+    // Flag to prevent selection listener feedback loops during programmatic tree updates
+    // Set to true before modifying tree selection, false after
     private boolean isUpdatingSelection = false;
 
     /**
@@ -575,6 +632,19 @@ public class RunManager extends JFrame {
         timeseriesTree.collapsePath(path);
     }
 
+    /**
+     * Refreshes the data source tree with current session states.
+     *
+     * Called by session event listener when sessions change state. This method:
+     * <ol>
+     *   <li>Discovers new sessions and adds them to "Current runs"</li>
+     *   <li>Detects status changes (RUNNING→DONE) for existing sessions</li>
+     *   <li>Updates "Last run" when a run completes (calls {@link #updateLastRun})</li>
+     *   <li>Triggers timeseries tree rebuild if the selected run's status changed</li>
+     * </ol>
+     *
+     * Only shows RunModelProgram sessions - other types (OptimisationProgram) are filtered out.
+     */
     public void refreshRuns() {
         if (stdioTaskManager == null) return;
 
@@ -731,7 +801,23 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Updates the Last run node to point to the most recently completed run.
+     * Updates the "Last run" node to point to the most recently completed run.
+     *
+     * This is a critical method for the "[Last]" feature. When a run completes:
+     * <ol>
+     *   <li>Updates {@code lastRunInfo} to point to the new run</li>
+     *   <li>Replaces the tree node under "Last run" with a new RunInfoImpl("Last", session)</li>
+     *   <li>If "Last" was selected in the data source tree:
+     *     <ul>
+     *       <li>Rebuilds timeseries tree to show outputs from new run (may have new/removed outputs)</li>
+     *       <li>Restores selection for series that still exist</li>
+     *       <li>Removes stale series from plot via {@link #reconcileSelectedSeriesWithTree}</li>
+     *     </ul>
+     *   </li>
+     *   <li>Calls {@link #refreshLastSeries} to update plotted "[Last]" data with new values</li>
+     * </ol>
+     *
+     * The RunInfoImpl for "Last" uses name="Last" so series display as "ds_1 [Last]" not "ds_1 [Run_3]".
      */
     private void updateLastRun(RunInfoImpl newLastRun, long completionTime) {
         lastRunInfo = newLastRun;
@@ -784,24 +870,24 @@ public class RunManager extends JFrame {
             treeModel.nodesWereInserted(lastRunNode, new int[]{0});
         }
 
-        // If Last was previously selected, restore everything
+        // If Last was previously selected, rebuild the timeseries tree to show new outputs
         if (wasLastSelected) {
             TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
 
-            // Restore dataset tree selection
+            // Restore run tree selection to the new Last node
             timeseriesSourceTree.addSelectionPath(newLastPath);
 
-            // Update RunInfo references in the existing tree without rebuilding
-            // This preserves the tree structure and selection
-            // IMPORTANT: Create a RunInfo with name "Last" (not the actual run name)
-            // so timeseries display as "ds_1 [Last]" not "ds_1 [Run_3]"
-            RunInfoImpl lastRunInfoWrapper = new RunInfoImpl("Last", newLastRun.getSession());
-            updateRunInfoInTimeseriesTree(lastRunInfoWrapper);
+            // Rebuild the timeseries tree to include any new outputs from the new run
+            // This is necessary because the new run may have different outputs than the old one
+            updateOutputsTree();
+
+            // Restore selection for series that still exist in the new tree
+            Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+
+            // Remove from plot any series that no longer exist (e.g., outputs that were removed)
+            reconcileSelectedSeriesWithTree(restoredSeries);
 
             isUpdatingSelection = false;
-
-            // Selection is automatically preserved since we updated in-place without reload()
-            // No need to manually restore or trigger events
         }
 
         TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
@@ -923,63 +1009,6 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Updates RunInfo references in the timeseries tree without rebuilding.
-     * Used when "Last" updates to point to a new run - the tree structure stays
-     * the same, but the RunInfo objects need to be updated.
-     *
-     * @param newRunInfo The new RunInfo to replace old "Last" references
-     */
-    private void updateRunInfoInTimeseriesTree(RunInfoImpl newRunInfo) {
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-        updateRunInfoInNode(root, newRunInfo);
-    }
-
-    /**
-     * Recursively updates RunInfo references in a tree node and its children.
-     */
-    private void updateRunInfoInNode(DefaultMutableTreeNode node, RunInfoImpl newRunInfo) {
-        Object userObject = node.getUserObject();
-
-        // Update SeriesLeafNode if it references "Last"
-        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-            if (leaf.source instanceof RunInfoImpl && "Last".equals(((RunInfoImpl) leaf.source).getRunName())) {
-                // Replace with new RunInfo
-                OutputsTreeBuilder.SeriesLeafNode newLeaf = new OutputsTreeBuilder.SeriesLeafNode(leaf.seriesName, newRunInfo, leaf.showSeriesName);
-                node.setUserObject(newLeaf);
-                timeseriesTreeModel.nodeChanged(node);
-            }
-        }
-        // Update SeriesParentNode if it contains "Last"
-        else if (userObject instanceof OutputsTreeBuilder.SeriesParentNode parent) {
-            // Check if this parent contains "Last" run
-            boolean containsLast = parent.sourcesWithSeries.stream()
-                .filter(s -> s instanceof RunInfoImpl)
-                .anyMatch(s -> "Last".equals(((RunInfoImpl) s).getRunName()));
-
-            if (containsLast) {
-                // Create new list with updated sources
-                List<Object> newSources = new ArrayList<>();
-                for (Object source : parent.sourcesWithSeries) {
-                    if (source instanceof RunInfoImpl && "Last".equals(((RunInfoImpl) source).getRunName())) {
-                        newSources.add(newRunInfo);
-                    } else {
-                        newSources.add(source);
-                    }
-                }
-                OutputsTreeBuilder.SeriesParentNode newParent = new OutputsTreeBuilder.SeriesParentNode(parent.seriesName, newSources);
-                node.setUserObject(newParent);
-                timeseriesTreeModel.nodeChanged(node);
-            }
-        }
-
-        // Recurse into children
-        for (int i = 0; i < node.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
-            updateRunInfoInNode(child, newRunInfo);
-        }
-    }
-
-    /**
      * Resolves a RunInfo to its actual session.
      * If the run is "Last", returns the session of the actual last completed run.
      */
@@ -1003,13 +1032,35 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Refreshes all series that reference "[Last]" to use the new Last run's data.
-     * Called when the Last run changes to a new completed run.
+     * Refreshes all plotted "[Last]" series to use data from the new Last run.
+     *
+     * Called by {@link #updateLastRun} when a run completes. This method:
+     * <ol>
+     *   <li>Clears the {@link TimeSeriesRequestManager} cache for this session -
+     *       CRITICAL because cache is keyed by kalixcliUid which persists across runs</li>
+     *   <li>For each series ending with " [Last]" in {@code selectedSeries}:
+     *     <ul>
+     *       <li>Removes old data from plot</li>
+     *       <li>Requests fresh data from the new run (async)</li>
+     *       <li>Callback adds new data and triggers plot refresh</li>
+     *     </ul>
+     *   </li>
+     * </ol>
+     *
+     * The cache clear happens unconditionally (even if no "[Last]" series are selected)
+     * so that future selections will fetch fresh data.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {
             return;
         }
+
+        String newSessionKey = lastRunInfo.getSession().getSessionKey();
+
+        // Clear stale cached data from the previous run on this session
+        // This MUST happen unconditionally so that future requests for [Last] data
+        // will fetch fresh data, even if no [Last] series are currently selected
+        timeSeriesRequestManager.clearCacheForSession(newSessionKey);
 
         // Find all series keys that end with " [Last]"
         List<String> lastSeriesKeys = selectedSeries.stream()
@@ -1019,8 +1070,6 @@ public class RunManager extends JFrame {
         if (lastSeriesKeys.isEmpty()) {
             return;
         }
-
-        String newSessionKey = lastRunInfo.getSession().getSessionKey();
 
         // Refresh each "[Last]" series
         for (String seriesKey : lastSeriesKeys) {

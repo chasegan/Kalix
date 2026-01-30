@@ -12,19 +12,40 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * Manages the construction and updating of the outputs/timeseries tree in RunManager.
+ * Builds and updates the timeseries tree (left-bottom panel) in RunManager.
  *
- * Responsibilities:
- * - Building hierarchical tree structures from dot-delimited series names
- * - Managing single vs multi-source tree strategies
- * - Preserving tree expansion state across rebuilds
- * - Natural sorting of series names
- * - Creating SeriesLeafNode and SeriesParentNode structures
+ * <h2>Tree Structure</h2>
+ * Series names are dot-delimited (e.g., "node.mygr4j.ds_1") and displayed hierarchically:
+ * <pre>
+ * node
+ * └── mygr4j
+ *     ├── ds_1 [Last]           → SeriesLeafNode (single source)
+ *     └── ds_2 [Last, Run_1]    → SeriesParentNode (multiple sources)
+ *         ├── Last              → SeriesLeafNode (child)
+ *         └── Run_1             → SeriesLeafNode (child)
+ * </pre>
  *
- * Usage:
- * 1. Create builder with tree model and dependencies
- * 2. Call updateTree() methods based on selection
- * 3. Tree expansion and structure are managed automatically
+ * <h2>Node Types</h2>
+ * <ul>
+ *   <li>{@link SeriesLeafNode} - Plottable leaf with seriesName and source reference</li>
+ *   <li>{@link SeriesParentNode} - Parent when same series exists in multiple selected sources</li>
+ *   <li>String nodes - Intermediate hierarchy levels (e.g., "node", "mygr4j")</li>
+ * </ul>
+ *
+ * <h2>Rebuild Behavior</h2>
+ * {@link #updateTree} does a full rebuild via {@code timeseriesTreeModel.reload()}.
+ * Expansion state is preserved by recording expanded paths before rebuild and restoring after.
+ * Tree selection is handled separately by RunManager via {@code restoreTreeSelectionFromSelectedSeries()}.
+ *
+ * <h2>Data Source</h2>
+ * Series names come from {@code getSeriesNamesCallback} which calls:
+ * <ul>
+ *   <li>For runs: {@link com.kalix.ide.cli.RunModelProgram#getOutputsGenerated()}</li>
+ *   <li>For datasets: The loaded CSV/KAI column names</li>
+ * </ul>
+ *
+ * @see com.kalix.ide.windows.RunManager#onRunTreeSelectionChanged
+ * @see com.kalix.ide.windows.RunManager#restoreTreeSelectionFromSelectedSeries
  */
 public class OutputsTreeBuilder {
 

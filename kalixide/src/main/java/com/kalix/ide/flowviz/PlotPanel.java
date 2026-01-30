@@ -25,6 +25,39 @@ import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Panel for rendering time series plots with support for aggregation, transforms, and LOD rendering.
+ *
+ * <h2>Data Flow and Caching</h2>
+ * There are TWO caching layers that must be invalidated when data changes:
+ * <ol>
+ *   <li><b>Transform cache</b> ({@code displayDataSet}, keyed by {@code lastTransformKey}):
+ *       Caches aggregated/transformed data. Invalidated by setting {@code lastTransformKey = null}.</li>
+ *   <li><b>LOD rendering cache</b> (in {@link TimeSeriesRenderer} → {@link com.kalix.ide.flowviz.rendering.LODManager}):
+ *       Caches pixel-level min/max bands for efficient rendering. Invalidated by {@code renderer.clearCache()}.</li>
+ * </ol>
+ *
+ * <h2>IMPORTANT: Refreshing Data</h2>
+ * When underlying data changes, call {@link #refreshData(boolean)} which:
+ * <ul>
+ *   <li>Invalidates both caches</li>
+ *   <li>Rebuilds {@code displayDataSet} from {@code originalDataSet}</li>
+ *   <li>Triggers repaint</li>
+ * </ul>
+ * Simply calling {@code repaint()} is NOT sufficient - it will render stale cached data!
+ *
+ * <h2>Rendering Pipeline</h2>
+ * <pre>
+ * originalDataSet (shared)
+ *   → TimeSeriesAggregator.aggregate()   [aggregation: daily, monthly, etc.]
+ *   → PlotTypeTransformer.transform()    [plot type: values, cumulative, difference]
+ *   → displayDataSet (cached per-panel)
+ *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
+ * </pre>
+ *
+ * @see com.kalix.ide.windows.VisualizationTabManager#updateAllTabs
+ * @see com.kalix.ide.flowviz.rendering.LODManager
+ */
 public class PlotPanel extends JPanel {
 
     private static final Logger logger = LoggerFactory.getLogger(PlotPanel.class);
@@ -34,18 +67,21 @@ public class PlotPanel extends JPanel {
     private static final int MARGIN_RIGHT = 20;
     private static final int MARGIN_TOP = 20;
     private static final int MARGIN_BOTTOM = 60;
-    
-    
-    // Data and rendering
-    private DataSet originalDataSet;  // Reference to shared dataset
-    private DataSet displayDataSet;   // Transformed for display (cached)
-    private final TimeSeriesRenderer renderer;
+
+
+    // === DATA FLOW ===
+    // originalDataSet → [transforms] → displayDataSet → [LOD] → screen
+    // Both displayDataSet and LOD have caches that must be invalidated via refreshData()
+
+    private DataSet originalDataSet;  // Reference to shared dataset (same for all plot tabs)
+    private DataSet displayDataSet;   // Transformed data for display (CACHED - see lastTransformKey)
+    private final TimeSeriesRenderer renderer;  // Contains LOD cache - clear via renderer.clearCache()
     private ViewPort currentViewport;
     private final Map<String, Color> seriesColors;
     private final List<String> visibleSeries;
     private boolean autoYMode = false;
 
-    // Transform settings (per-tab)
+    // Transform settings (per-tab) - changes trigger displayDataSet rebuild
     private AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
     private AggregationMethod aggregationMethod = AggregationMethod.SUM;
     private PlotType plotType = PlotType.VALUES;
@@ -55,7 +91,10 @@ public class PlotPanel extends JPanel {
     // Reference series tracking for DIFFERENCE plot types
     private String lastReferenceSeries = null;
 
-    // Cache management
+    // === TRANSFORM CACHE ===
+    // displayDataSet is cached and only rebuilt when transform settings change.
+    // Key format: "aggregationPeriod_aggregationMethod_plotType_referenceSeries"
+    // Set to null to force rebuild (done by refreshData())
     private String lastTransformKey = null;
 
     // Managers
@@ -571,8 +610,9 @@ public class PlotPanel extends JPanel {
      * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
     public void refreshData(boolean resetZoom) {
-        // Invalidate cache to force rebuild with new data
+        // Invalidate caches to force rebuild with new data
         lastTransformKey = null;
+        renderer.clearCache();  // Clear LOD rendering cache
 
         rebuildDisplayDataSet();
 

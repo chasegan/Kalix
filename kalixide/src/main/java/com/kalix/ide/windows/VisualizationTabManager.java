@@ -24,15 +24,41 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Manages visualization tabs in the RunManager.
- * Handles creation, deletion, and coordination of plot and statistics tabs.
- * All tabs share the same underlying dataset and color mappings.
+ * Manages visualization tabs (right side of RunManager) - plots and statistics.
+ *
+ * <h2>Shared Data Model</h2>
+ * All tabs share the same {@link DataSet} ({@code sharedDataSet}) and color map.
+ * When data changes in the DataSet, all tabs see it immediately. However, each
+ * {@link PlotPanel} has its own display cache that must be invalidated via
+ * {@link #updateAllTabs} → {@link PlotPanel#refreshData}.
+ *
+ * <h2>Tab Types</h2>
+ * <ul>
+ *   <li><b>PLOT</b> - Time series chart with aggregation, transforms, and LOD rendering</li>
+ *   <li><b>STATS</b> - Statistics table showing min/max/mean/etc. for each series</li>
+ * </ul>
+ *
+ * <h2>Update Flow</h2>
+ * When data is added/removed from the shared DataSet:
+ * <ol>
+ *   <li>RunManager calls {@link #updateAllTabs(boolean)}</li>
+ *   <li>For each PLOT tab: calls {@link PlotPanel#refreshData} (invalidates caches, rebuilds)</li>
+ *   <li>For STATS tabs: they update automatically via DataSet listeners</li>
+ * </ol>
+ *
+ * <h2>New Tab Behavior</h2>
+ * When adding a new tab ({@link #addPlotTab}), it's connected to {@code sharedDataSet}
+ * and immediately sees all current data. The new tab's display cache is built fresh,
+ * which is why new tabs show correct data even if existing tabs have stale caches.
+ *
+ * @see PlotPanel
+ * @see com.kalix.ide.windows.RunManager#addSeriesToPlot
  */
 public class VisualizationTabManager {
 
     private final JTabbedPane tabbedPane;
-    private final DataSet sharedDataSet;
-    private final Map<String, Color> sharedColorMap;
+    private final DataSet sharedDataSet;           // Single source of truth for all tabs
+    private final Map<String, Color> sharedColorMap;  // Consistent colors across all tabs
     private final List<TabInfo> tabs;
 
     // Drag and drop state
