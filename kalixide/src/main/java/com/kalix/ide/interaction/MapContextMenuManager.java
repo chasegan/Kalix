@@ -132,6 +132,13 @@ public class MapContextMenuManager {
             }
         });
         menu.add(deleteItem);
+
+        menu.addSeparator();
+
+        // Zoom to Fit
+        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
+        zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
+        menu.add(zoomToFitItem);
     }
 
     /**
