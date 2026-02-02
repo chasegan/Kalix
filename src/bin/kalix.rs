@@ -6,7 +6,7 @@ use kalix::apis::stdio::handlers::run_stdio_session;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 
 #[derive(Parser)]
@@ -48,6 +48,9 @@ enum Commands {
         /// Verify mass balance
         #[arg(short, long)]
         verify_mass_balance: Option<String>,
+        /// Report execution time profile
+        #[arg(short = 'p', long)]
+        profile: bool,
     },
     /// Run parameter optimisation
     #[command(visible_alias = "opt", alias = "optimize")]
@@ -117,9 +120,12 @@ fn main() {
             }
         }
         Commands::Simulate { model_file, output_file,
-            mass_balance, verify_mass_balance} => {
+            mass_balance, verify_mass_balance, profile } => {
+
+            let total_start = Instant::now();
 
             // Load model from file
+            let load_start = Instant::now();
             println!("Loading model file: {}", model_file);
             let mut m = match IniModelIO::new().read_model_file(model_file.as_str()) {
                 Ok(model) => model,
@@ -132,11 +138,16 @@ fn main() {
             if let Err(e) =  m.configure() {
                 panic!("Error: {}", e); // TODO: handle error properly
             }
+            let load_time = load_start.elapsed();
+
+            let sim_start = Instant::now();
             if let Err(e) = m.run() {
                 panic!("Error: {}", e); // TODO: handle error properly
             }
+            let sim_time = sim_start.elapsed();
 
             // Output file
+            let output_start = Instant::now();
             match output_file {
                 Some(f) => {
                     match m.write_outputs(f.as_str()) {
@@ -184,8 +195,22 @@ fn main() {
                 }
                 None => {}
             }
+            let output_time = output_start.elapsed();
+
+            let total_time = total_start.elapsed();
 
             println!("Done!");
+
+            if profile {
+                let misc_time = total_time.saturating_sub(load_time + sim_time + output_time);
+                println!("\n=== Execution Profile ===");
+                println!("  Loading time:    {:>10.3} ms", load_time.as_secs_f64() * 1000.0);
+                println!("  Simulation time: {:>10.3} ms", sim_time.as_secs_f64() * 1000.0);
+                println!("  Output time:     {:>10.3} ms", output_time.as_secs_f64() * 1000.0);
+                println!("  Misc:            {:>10.3} ms", misc_time.as_secs_f64() * 1000.0);
+                println!("  ─────────────────────────────");
+                println!("  Total time:      {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
+            }
         }
         Commands::Optimise { config_file, model_file, save_model, quiet, report_frequency } => {
             use kalix::numerical::opt::{
