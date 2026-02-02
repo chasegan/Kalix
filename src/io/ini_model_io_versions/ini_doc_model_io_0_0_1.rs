@@ -9,7 +9,7 @@ use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 use crate::nodes::storage_node::OutletDefinition;
-use crate::nodes::storage_node::OutletDefinition::{OutletWithAndMOLAndCapacity, OutletWithMOL};
+use crate::nodes::storage_node::OutletDefinition::{OutletWithMOLAndCapacity, OutletWithMOL};
 
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
@@ -444,7 +444,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             match params.len() {
                                 0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
                                 1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
-                                2 => n.outlet_definition[i_outlet] = OutletWithAndMOLAndCapacity(params[0], params[1]),
+                                2 => n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]),
                                 _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number)),
                             }
                         } else if name_lower == "evap" {
@@ -726,7 +726,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                     let value = match outlet_def {
                         OutletDefinition::None => String::new(),
                         OutletWithMOL(mol) => format_f64(*mol),
-                        OutletWithAndMOLAndCapacity(mol, cap) => format!("{}, {}", format_f64(*mol), format_f64(*cap)),
+                        OutletWithMOLAndCapacity(mol, cap) => format!("{}, {}", format_f64(*mol), format_f64(*cap)),
                     };
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &property_name, &value);
                 }

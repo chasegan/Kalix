@@ -18,8 +18,8 @@ const MAX_DS_LINKS: usize = 4;
 pub enum OutletDefinition {
     #[default]
     None,
-    OutletWithMOL(f64),                    // MOL level in metres
-    OutletWithAndMOLAndCapacity(f64, f64), // MOL level, capacity
+    OutletWithMOL(f64),                   // MOL level in metres
+    OutletWithMOLAndCapacity(f64, f64),   // MOL level, capacity
 }
 
 #[derive(Default, Clone)]
@@ -171,8 +171,8 @@ impl StorageNode {
 
         let mut ds_flows = [0.0; MAX_DS_LINKS];
         if ds_1_active {
-            // ds_1 releases its order plus any spill
-            ds_flows[0] = spill2 + ds_1_order;
+            // ds_1 meets its order (spill contributes, outlet makes up the difference)
+            ds_flows[0] = ds_1_order.max(spill2);
         } else {
             // ds_1 below MOL - only spill flows
             ds_flows[0] = spill2;
@@ -398,10 +398,7 @@ impl Node for StorageNode {
         self.seep_vol = 0.0;
         self.pond_diversion = 0.0;
         self.spill = 0.0;
-        self.previous_istop = 0;  // Will be updated after first timestep
-
-        //Initialize inflow series
-        // All DynamicInput fields are already initialized during parsing
+        self.previous_istop = 0;
 
         // Checks
         if self.d.nrows() < 2 {
@@ -419,7 +416,7 @@ impl Node for StorageNode {
                 OutletDefinition::OutletWithMOL(level) => {
                     self.d.interpolate(LEVL, VOLU, level)
                 }
-                OutletDefinition::OutletWithAndMOLAndCapacity(level, _capacity) => {
+                OutletDefinition::OutletWithMOLAndCapacity(level, _capacity) => {
                     self.d.interpolate(LEVL, VOLU, level)
                 }
             };
@@ -508,6 +505,11 @@ impl Node for StorageNode {
 
         // Solve backward Euler with MOL-aware releases
         let (v_final, ds_flows, spill) = self.solve_backward_euler(v_working, net_rain_mm);
+
+        // Update warm-start cache for next timestep
+        if let Some(row) = self.d.find_row(VOLU, v_final) {
+            self.previous_istop = row;
+        }
 
         // Update state from solution
         self.v = v_final;
