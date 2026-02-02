@@ -64,6 +64,10 @@ public class EnhancedTextEditor extends JPanel {
     private FileDropManager dropManager;
     private LinterManager linterManager;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
+
+    // Context command dependencies (stored for programmatic rename access)
+    private JFrame commandParentFrame;
+    private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> commandModelSupplier;
     
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
@@ -143,6 +147,10 @@ public class EnhancedTextEditor extends JPanel {
     public void initializeContextCommands(JFrame parentFrame,
                                           java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier,
                                           java.util.function.Supplier<java.io.File> modelFileSupplier) {
+        // Store for programmatic access (e.g., rename from map context menu)
+        this.commandParentFrame = parentFrame;
+        this.commandModelSupplier = modelSupplier;
+
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
             textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
         contextCommandManager.initialize();
@@ -279,11 +287,79 @@ public class EnhancedTextEditor extends JPanel {
             }
         });
     }
-    
+
+    /**
+     * Rename a node programmatically (e.g., from the map context menu).
+     * Prompts the user for a new name and updates all references.
+     *
+     * @param nodeName The current node name to rename
+     * @return true if rename was successful, false if cancelled or failed
+     */
+    public boolean renameNode(String nodeName) {
+        if (commandParentFrame == null || commandModelSupplier == null) {
+            logger.warn("Context commands not initialized - cannot rename node");
+            return false;
+        }
+
+        if (nodeName == null || nodeName.trim().isEmpty()) {
+            return false;
+        }
+
+        // Prompt user for new name
+        String newName = (String) javax.swing.JOptionPane.showInputDialog(
+            commandParentFrame,
+            "Enter new name for node '" + nodeName + "':",
+            "Rename Node",
+            javax.swing.JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            nodeName
+        );
+
+        if (newName == null || newName.trim().isEmpty() || newName.equals(nodeName)) {
+            // User cancelled or entered same name
+            return false;
+        }
+
+        final String trimmedNewName = newName.trim();
+
+        // Get fresh parsed model
+        com.kalix.ide.linter.parsing.INIModelParser.ParsedModel parsedModel = commandModelSupplier.get();
+        if (parsedModel == null) {
+            logger.error("Failed to parse model for rename");
+            javax.swing.JOptionPane.showMessageDialog(
+                commandParentFrame,
+                "Failed to parse model",
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+
+        // Create executor and perform rename
+        com.kalix.ide.editor.commands.CommandExecutor executor =
+            new com.kalix.ide.editor.commands.CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+
+        boolean success = executor.renameNode(nodeName, trimmedNewName, parsedModel);
+
+        if (success) {
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                javax.swing.JOptionPane.showMessageDialog(
+                    commandParentFrame,
+                    "Renamed '" + nodeName + "' to '" + trimmedNewName + "'",
+                    "Done",
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE
+                );
+            });
+        }
+
+        return success;
+    }
+
     private void setupKeyBindings() {
         InputMap inputMap = textArea.getInputMap();
         ActionMap actionMap = textArea.getActionMap();
-        
+
         // Undo/Redo
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.META_DOWN_MASK), "undo");
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undo");

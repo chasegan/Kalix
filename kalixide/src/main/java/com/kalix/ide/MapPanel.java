@@ -640,6 +640,7 @@ public class MapPanel extends JPanel implements KeyListener {
                 clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
                 if (contextMenuManager != null) {
                     contextMenuManager.setClipboardManager(clipboardManager);
+                    contextMenuManager.setTextEditor(textEditor);
                 }
             }
         }

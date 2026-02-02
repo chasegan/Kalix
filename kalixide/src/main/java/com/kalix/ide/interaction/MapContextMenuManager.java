@@ -3,6 +3,7 @@ package com.kalix.ide.interaction;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.MapPanel;
+import com.kalix.ide.editor.EnhancedTextEditor;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -25,6 +26,9 @@ public class MapContextMenuManager {
     // Clipboard manager for cut/copy/paste operations
     private MapClipboardManager clipboardManager;
 
+    // Text editor for rename operations
+    private EnhancedTextEditor textEditor;
+
     // Track where the context menu was invoked for potential future use (e.g., paste location)
     private Point lastContextMenuLocation;
 
@@ -41,6 +45,14 @@ public class MapContextMenuManager {
      */
     public void setClipboardManager(MapClipboardManager clipboardManager) {
         this.clipboardManager = clipboardManager;
+    }
+
+    /**
+     * Set the text editor for rename operations.
+     * @param textEditor The text editor
+     */
+    public void setTextEditor(EnhancedTextEditor textEditor) {
+        this.textEditor = textEditor;
     }
 
     /**
@@ -132,6 +144,22 @@ public class MapContextMenuManager {
             }
         });
         menu.add(deleteItem);
+
+        // Rename - only enabled when exactly one node is selected
+        boolean singleNodeSelected = model.getSelectedNodeCount() == 1;
+        String selectedNodeName = singleNodeSelected ?
+            model.getSelectedNodes().iterator().next() : null;
+
+        JMenuItem renameItem = new JMenuItem(singleNodeSelected ?
+            "Rename " + selectedNodeName : "Rename");
+        renameItem.setEnabled(singleNodeSelected && textEditor != null);
+        renameItem.addActionListener(e -> {
+            if (textEditor != null && selectedNodeName != null) {
+                textEditor.renameNode(selectedNodeName);
+                mapPanel.repaint();
+            }
+        });
+        menu.add(renameItem);
 
         menu.addSeparator();
 
