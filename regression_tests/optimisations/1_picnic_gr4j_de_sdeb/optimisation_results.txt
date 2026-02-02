@@ -1,0 +1,17 @@
+=== Kalix Optimisation Results ===
+Configuration file: optimisation.ini
+Model file: kalix.ini
+Observed data: data.csv.ObsFlow
+Simulated series: node.mygr4jnode.ds_1
+
+Algorithm: DE
+Objective function: SDEB
+Population size: 50
+Best objective value: 97501.924421
+Function evaluations: 5000
+
+Optimized Parameters:
+  node.mygr4jnode.x2 = 3.013503
+  node.mygr4jnode.x3 = 53.109456
+  node.mygr4jnode.x1 = 849.662054
+  node.mygr4jnode.x4 = 3.000256

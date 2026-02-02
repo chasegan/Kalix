@@ -68,6 +68,9 @@ enum Commands {
         /// Report frequency (plot updates every N evaluations)
         #[arg(short = 'r', long = "report-frequency", default_value = "20")]
         report_frequency: usize,
+        /// Report execution time profile
+        #[arg(short = 'p', long)]
+        profile: bool,
     },
 }
 
@@ -212,7 +215,7 @@ fn main() {
                 println!("  Total time:      {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
             }
         }
-        Commands::Optimise { config_file, model_file, save_model, quiet, report_frequency } => {
+        Commands::Optimise { config_file, model_file, save_model, quiet, report_frequency, profile } => {
             use kalix::numerical::opt::{
                 OptimisationConfig, OptimisationProblem,
                 create_optimizer_with_callback, OptimizationProgress, Optimisable
@@ -220,6 +223,9 @@ fn main() {
             use kalix::io::optimisation_config_io::load_observed_timeseries;
             use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
             use std::sync::{Arc, Mutex};
+
+            let total_start = Instant::now();
+            let setup_start = Instant::now();
 
             // Load optimisation configuration
             println!("Loading optimisation configuration: {}", config_file);
@@ -324,10 +330,12 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            let setup_time = setup_start.elapsed();
 
             // Run optimization (callback already configured in optimizer)
             let mut problem_mut = problem;  // Make mutable for optimisation
             let result = optimizer.optimize(&mut problem_mut, None);
+            let opt_time = result.elapsed;
 
             // Render final plot
             if !quiet {
@@ -361,6 +369,7 @@ fn main() {
             }
 
             // Save optimised model to file if specified
+            let output_start = Instant::now();
             if let Some(model_path) = save_model {
                 let ini_io = IniModelIO::new();
                 let model_string = ini_io.model_to_string(&problem_mut.model);
@@ -394,8 +403,22 @@ fn main() {
                     Err(e) => eprintln!("Error writing results: {}", e),
                 }
             }
+            let output_time = output_start.elapsed();
+
+            let total_time = total_start.elapsed();
 
             println!("\nDone!");
+
+            if profile {
+                let misc_time = total_time.saturating_sub(setup_time + opt_time + output_time);
+                println!("\n=== Execution Profile ===");
+                println!("  Setup time:        {:>10.3} ms", setup_time.as_secs_f64() * 1000.0);
+                println!("  Optimisation time: {:>10.3} ms", opt_time.as_secs_f64() * 1000.0);
+                println!("  Output time:       {:>10.3} ms", output_time.as_secs_f64() * 1000.0);
+                println!("  Misc:              {:>10.3} ms", misc_time.as_secs_f64() * 1000.0);
+                println!("  ─────────────────────────────────");
+                println!("  Total time:        {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
+            }
         }
         Commands::GetAPI => {
             let command = Cli::command();
