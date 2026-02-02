@@ -97,6 +97,14 @@ impl StorageNode {
     // -------------------------------------------------------------------------
     // Backward Euler Solver with MOL Support
     // -------------------------------------------------------------------------
+    //
+    // Terminology for ds_1 flows:
+    // - "ds_1_spill": uncontrolled overflow via the spillway, counts towards ds_1 orders
+    // - "ds_1_outlet": controlled outlet flow, supplements spill to meet ds_1 orders
+    // - "ds_1" (total): ds_1_spill + ds_1_outlet
+    //
+    // For ds_2, ds_3, ds_4: flow = outlet flow only (no spill component)
+    //
 
     /// Determines which outlets are active (able to release) at a given volume.
     /// An outlet is active if volume >= its minimum operating volume.
@@ -111,45 +119,24 @@ impl StorageNode {
         active
     }
 
-    /// Computes total controlled release for a set of active outlets.
-    /// Does NOT include spill - that's handled separately.
-    fn total_release_for_active(&self, active: u8) -> f64 {
+    /// Sums the orders for outlets specified by the mask.
+    /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
+    fn sum_orders(&self, outlet_mask: u8) -> f64 {
         let mut total = 0.0;
         for i in 0..MAX_DS_LINKS {
-            if active & (1 << i) != 0 {
+            if outlet_mask & (1 << i) != 0 {
                 total += self.dsorders[i];
             }
         }
         total
     }
 
-    /// Computes the ds_1 outflow component for given volume and active set.
-    /// ds_1 is special: spill counts toward its order.
-    /// Returns (ds_1_outflow, effective_release_from_budget)
-    /// where effective_release_from_budget is what ds_1 draws beyond spill.
-    fn ds_1_outflow(&self, spill: f64, ds_1_active: bool) -> (f64, f64) {
-        if !ds_1_active {
-            // Below MOL: only spill flows, no order release
-            (spill, 0.0)
-        } else {
-            // Above MOL: outflow is max(order, spill)
-            // Effective release from budget is (order - spill), clamped to >= 0
-            let order = self.dsorders[0];
-            let effective_release = (order - spill).max(0.0);
-            (spill + effective_release, effective_release)
-        }
-    }
-
     /// Solves the backward Euler equation for equilibrium volume.
     ///
-    /// The equation is:
-    ///   v = v_working + net_rain * area(v) - spill(v) - releases(v)
-    ///
-    /// where releases(v) depends on which outlets are active at v.
-    ///
-    /// Uses iterative refinement: assume an active set, solve, check if
-    /// the solution is consistent with that active set. If not, adjust
-    /// and re-solve. Converges in 1-2 iterations typically.
+    /// Uses a two-pass approach for ds_1:
+    /// - Pass 1: Solve spill-limited case (ds_1_outlet = 0, spill alone may meet order)
+    /// - If spill >= ds_1_order: done, ds_1 flow = spill
+    /// - Pass 2: Solve order-limited case (ds_1_outlet = order, subject to MOL)
     ///
     /// Returns (final_volume, ds_flows[4], spill)
     fn solve_backward_euler(
@@ -158,89 +145,148 @@ impl StorageNode {
         net_rain_mm: f64,
     ) -> (f64, [f64; MAX_DS_LINKS], f64) {
         let nrows = self.d.nrows();
+        let ds_1_order = self.dsorders[0];
 
+        // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
+        let (v_spill_only, spill) = self.solve_spill_limited_case(v_working, net_rain_mm, nrows);
+
+        if spill >= ds_1_order {
+            // Spill satisfies ds_1 order - no controlled release needed
+            let active = self.active_outlets_at_volume(v_spill_only);
+            let mut ds_flows = [0.0; MAX_DS_LINKS];
+            ds_flows[0] = spill;  // ds_1 gets the full spill
+            for i in 1..MAX_DS_LINKS {
+                if active & (1 << i) != 0 {
+                    ds_flows[i] = self.dsorders[i];
+                }
+            }
+            return (v_spill_only, ds_flows, spill);
+        }
+
+        // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
+        let (v_with_release, spill2) = self.solve_order_limited_case(v_working, net_rain_mm, ds_1_order, nrows);
+
+        let active = self.active_outlets_at_volume(v_with_release);
+        let ds_1_active = (active & 1) != 0;
+
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        if ds_1_active {
+            // ds_1 releases its order plus any spill
+            ds_flows[0] = spill2 + ds_1_order;
+        } else {
+            // ds_1 below MOL - only spill flows
+            ds_flows[0] = spill2;
+        }
+        for i in 1..MAX_DS_LINKS {
+            if active & (1 << i) != 0 {
+                ds_flows[i] = self.dsorders[i];
+            }
+        }
+
+        (v_with_release, ds_flows, spill2)
+    }
+
+    /// Solves the spill-limited case: no required ds_1 flow, spill alone determines ds_1.
+    /// Returns (equilibrium_volume, spill_at_equilibrium)
+    fn solve_spill_limited_case(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        nrows: usize,
+    ) -> (f64, f64) {
+        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows)
+    }
+
+    /// Solves the order-limited case: ds_1 must flow at least the order amount.
+    /// Returns (equilibrium_volume, spill_at_equilibrium)
+    fn solve_order_limited_case(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        ds_1_order: f64,
+        nrows: usize,
+    ) -> (f64, f64) {
+        self.solve_with_outflows(v_working, net_rain_mm, ds_1_order, nrows)
+    }
+
+    /// Solves for equilibrium volume with a required minimum ds_1 flow.
+    /// The actual ds_1 contribution to mass balance is max(spill, ds1_required_flow).
+    /// Handles MOL thresholds for ds_2, ds_3, ds_4 via iteration.
+    /// Returns (equilibrium_volume, spill_at_equilibrium)
+    fn solve_with_outflows(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        ds1_required_flow: f64,
+        nrows: usize,
+    ) -> (f64, f64) {
         // Start with outlets active based on current volume
         let mut active = self.active_outlets_at_volume(v_working);
 
-        const MAX_ITERATIONS: usize = 8; // Bounded by number of thresholds
+        const MAX_ITERATIONS: usize = 8;
 
         for _iter in 0..MAX_ITERATIONS {
-            // Compute total release assuming current active set
-            // For ds_1: if active and order > spill, we release (order - spill) from budget
-            // But spill depends on volume, so we need to solve iteratively or algebraically
+            // Sum orders for ds_2, ds_3, ds_4 based on active set
+            let ds234_orders = self.sum_orders(active & 0b1110);
 
-            // For simplicity, we solve assuming:
-            // - ds_2, ds_3, ds_4: release full order if active
-            // - ds_1: we handle via two cases (order-limited vs spill-limited)
-
-            let other_releases = self.total_release_for_active(active & 0b1110); // ds_2,3,4 only
-            let ds_1_active = (active & 1) != 0;
-            let ds_1_order = if ds_1_active { self.dsorders[0] } else { 0.0 };
-
-            // Find equilibrium volume by searching table rows
+            // Find equilibrium volume
             let v_candidate = self.find_equilibrium_volume(
-                v_working, net_rain_mm, ds_1_active, ds_1_order, other_releases, nrows
+                v_working, net_rain_mm, ds1_required_flow, ds234_orders, nrows
             );
 
             // Check which outlets should be active at the candidate volume
             let new_active = self.active_outlets_at_volume(v_candidate);
 
             if new_active == active {
-                // Converged - compute final flows
+                // Converged
                 let spill = self.d.interpolate(VOLU, SPIL, v_candidate).max(0.0);
-                let ds_flows = self.compute_flows(spill, active);
-                return (v_candidate, ds_flows, spill);
+                return (v_candidate, spill);
             }
 
             // Active set changed - check if equilibrium is at a threshold
-            // Find the threshold that was crossed
-            if let Some((threshold_vol, throttled_outlet)) =
+            if let Some((threshold_vol, _throttled_outlet)) =
                 self.find_crossed_threshold(v_candidate, active, new_active)
             {
-                // Check if equilibrium could be exactly at this threshold
-                if let Some(result) = self.try_equilibrium_at_threshold(
-                    v_working, net_rain_mm, threshold_vol, throttled_outlet
-                ) {
-                    return result;
+                // Try equilibrium at threshold
+                let area = self.d.interpolate(VOLU, AREA, threshold_vol);
+                let spill = self.d.interpolate(VOLU, SPIL, threshold_vol).max(0.0);
+                let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
+                let ds1_flow = spill.max(ds1_required_flow);
+                let total_outflow = ds1_flow + ds234_orders;
+
+                if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
+                    return (threshold_vol, spill);
                 }
             }
 
-            // Update active set and continue iteration
             active = new_active;
         }
 
-        // Fallback - shouldn't normally reach here
+        // Fallback
         let spill = self.d.interpolate(VOLU, SPIL, v_working).max(0.0);
-        let ds_flows = self.compute_flows(spill, active);
-        (v_working, ds_flows, spill)
+        (v_working, spill)
     }
 
-    /// Finds equilibrium volume given fixed release assumptions.
+    /// Finds equilibrium volume given required ds_1 flow and ds_2/3/4 orders.
+    /// Mass balance: v = v_working + net_rain*area(v) - max(spill(v), ds1_required_flow) - ds234_orders
     /// Uses exponential expansion + bisection to find the table row,
     /// then linear interpolation within the row.
     fn find_equilibrium_volume(
         &self,
         v_working: f64,
         net_rain_mm: f64,
-        ds_1_active: bool,
-        ds_1_order: f64,
-        other_releases: f64,
+        ds1_required_flow: f64,
+        ds234_orders: f64,
         nrows: usize,
     ) -> f64 {
         // Error function: positive means solution is at or below this row
-        // For ds_1: outflow = max(spill, order) if active, else just spill
         let compute_error = |row: usize| -> f64 {
             let table_vol = self.d.get_value(row, VOLU);
             let area = self.d.get_value(row, AREA);
             let spill = self.d.get_value(row, SPIL).max(0.0);
 
-            let ds_1_outflow = if ds_1_active {
-                spill.max(ds_1_order)
-            } else {
-                spill
-            };
-
-            let total_outflow = ds_1_outflow + other_releases;
+            let ds1_flow = spill.max(ds1_required_flow);
+            let total_outflow = ds1_flow + ds234_orders;
             let predicted = v_working + net_rain_mm * area - total_outflow;
             table_vol - predicted
         };
@@ -331,113 +377,6 @@ impl StorageNode {
         }
 
         best
-    }
-
-    /// Tries to find equilibrium exactly at a threshold boundary.
-    /// At a threshold, one outlet may be "throttled" (partial release)
-    /// to maintain the volume exactly at the threshold.
-    fn try_equilibrium_at_threshold(
-        &self,
-        v_working: f64,
-        net_rain_mm: f64,
-        threshold_vol: f64,
-        throttled_outlet: usize,
-    ) -> Option<(f64, [f64; MAX_DS_LINKS], f64)> {
-        let area = self.d.interpolate(VOLU, AREA, threshold_vol);
-        let spill = self.d.interpolate(VOLU, SPIL, threshold_vol).max(0.0);
-
-        // Compute how much outflow is needed to stay at the threshold
-        let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
-
-        if outflow_needed < 0.0 {
-            // Net inflow exceeds what's needed - can't stay at this threshold
-            return None;
-        }
-
-        // Compute full release from outlets BELOW the threshold (always active)
-        // The throttled outlet is exactly AT the threshold
-        let mut fixed_release = 0.0;
-        for i in 0..MAX_DS_LINKS {
-            if i == throttled_outlet {
-                continue; // This one will be throttled
-            }
-            // Outlet i is active if its MOL <= threshold_vol
-            if self.dsorders[i] > 0.0 && self.min_operating_volume[i] <= threshold_vol {
-                if i == 0 {
-                    // ds_1: contributes max(order, spill) - but spill is separate
-                    // Actually ds_1 contributes (order - spill).max(0) from release budget
-                    fixed_release += (self.dsorders[0] - spill).max(0.0);
-                } else {
-                    fixed_release += self.dsorders[i];
-                }
-            }
-        }
-
-        // How much can the throttled outlet take?
-        let available_for_throttled = outflow_needed - spill - fixed_release;
-
-        if available_for_throttled < 0.0 {
-            // Even with throttled outlet at zero, too much outflow
-            return None;
-        }
-
-        // The throttled outlet releases whatever is needed (capped by its order)
-        let throttled_max = if throttled_outlet == 0 {
-            (self.dsorders[0] - spill).max(0.0)
-        } else {
-            self.dsorders[throttled_outlet]
-        };
-
-        let throttled_release = available_for_throttled.min(throttled_max);
-
-        // Check if this is a valid equilibrium
-        // The throttled outlet must be able to release at least what's needed
-        // (or we need exactly zero from it if it's just turning off)
-        if available_for_throttled > throttled_max + EPSILON {
-            // Can't release enough even at full capacity
-            return None;
-        }
-
-        // Build the result
-        let mut ds_flows = [0.0; MAX_DS_LINKS];
-        for i in 0..MAX_DS_LINKS {
-            if i == throttled_outlet {
-                if i == 0 {
-                    ds_flows[0] = spill + throttled_release;
-                } else {
-                    ds_flows[i] = throttled_release;
-                }
-            } else if self.dsorders[i] > 0.0 && self.min_operating_volume[i] <= threshold_vol {
-                if i == 0 {
-                    ds_flows[0] = spill + (self.dsorders[0] - spill).max(0.0);
-                } else {
-                    ds_flows[i] = self.dsorders[i];
-                }
-            } else if i == 0 {
-                // ds_1 below MOL still gets spill
-                ds_flows[0] = spill;
-            }
-        }
-
-        Some((threshold_vol, ds_flows, spill))
-    }
-
-    /// Computes individual outlet flows at final volume with given active set.
-    fn compute_flows(&self, spill: f64, active: u8) -> [f64; MAX_DS_LINKS] {
-        let mut ds_flows = [0.0; MAX_DS_LINKS];
-
-        for i in 0..MAX_DS_LINKS {
-            if i == 0 {
-                // ds_1 always gets spill
-                let ds_1_active = (active & 1) != 0;
-                let (outflow, _) = self.ds_1_outflow(spill, ds_1_active);
-                ds_flows[0] = outflow;
-            } else if active & (1 << i) != 0 {
-                ds_flows[i] = self.dsorders[i];
-            }
-        }
-
-        ds_flows
     }
 }
 
