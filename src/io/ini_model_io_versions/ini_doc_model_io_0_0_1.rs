@@ -14,6 +14,8 @@ use crate::nodes::storage_node::OutletDefinition::{OutletWithMOLAndCapacity, Out
 const INLET: u8 = 0; //always inlet 0
 const DS_1_OUTLET: u8 = 0; //ds_1 is outlet 0
 const DS_2_OUTLET: u8 = 1; //ds_2 is outlet 1
+const DS_3_OUTLET: u8 = 2; //ds_3 is outlet 2
+const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 
 
 
@@ -436,6 +438,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "ds_2" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET))
+                        } else if name_lower == "ds_3" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_3_OUTLET, INLET))
+                        } else if name_lower == "ds_4" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_4_OUTLET, INLET))
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_outlet"))
                             .and_then(|s| s.parse::<i32>().ok()) {
