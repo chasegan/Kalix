@@ -12,13 +12,13 @@ INFLOW NODES
   node2_inflow, 126.79567788251778
 
 STORAGE NODES
-  node4_storage, -47.49624129389464
-  node5_storage, -48.75478994183474
+  node4_storage, -47.496242210131484
+  node5_storage, -48.754790949111396
 
 BLACKHOLE NODES
-  node12_blackhole, -79.29943658862273
-  node13_blackhole, -78.040887940682
+  node12_blackhole, -79.29943567238533
+  node13_blackhole, -78.04088693340529
 
 ----------------------------------
-TOTAL = 0.0000000000014566126083082054
+TOTAL = 0.0000000000020605739337042905
 ----------------------------------
