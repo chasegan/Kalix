@@ -138,22 +138,22 @@ impl StorageNode {
     /// - If spill >= ds_1_order: done, ds_1 flow = spill
     /// - Pass 2: Solve order-limited case (ds_1_outlet = order, subject to MOL)
     ///
-    /// Returns (final_volume, ds_flows[4], spill)
+    /// Returns (final_volume, ds_flows[4], spill, table_row)
     fn solve_backward_euler(
         &self,
         v_working: f64,
         net_rain_mm: f64,
-    ) -> (f64, [f64; MAX_DS_LINKS], f64) {
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, usize) {
         let nrows = self.d.nrows();
         let ds_1_order = self.dsorders[0];
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
-        let (v_spill_only, spill, active_pass1) = self.solve_spill_limited_case(v_working, net_rain_mm, nrows);
+        let (v_spill_only, spill, active_pass1, row_pass1) = self.solve_spill_limited_case(v_working, net_rain_mm, nrows);
 
         // Select which pass result to use
-        let (v_final, final_spill, active) = if spill >= ds_1_order {
+        let (v_final, final_spill, active, row) = if spill >= ds_1_order {
             // Spill satisfies ds_1 order - no controlled release needed
-            (v_spill_only, spill, active_pass1)
+            (v_spill_only, spill, active_pass1, row_pass1)
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
             self.solve_order_limited_case(v_working, net_rain_mm, ds_1_order, nrows)
@@ -162,7 +162,7 @@ impl StorageNode {
         // Compute available outflow from mass balance.
         // When the solver converges naturally, this equals the sum of orders.
         // When volume is constrained (floor or threshold clamp), this may be less.
-        let area = self.d.interpolate(VOLU, AREA, v_final);
+        let area = self.d.interpolate_row(row, VOLU, AREA, v_final);
         let available = (v_working + net_rain_mm * area - v_final).max(0.0);
 
         // Allocate outflows within the mass balance budget.
@@ -189,43 +189,43 @@ impl StorageNode {
             }
         }
 
-        (v_final, ds_flows, final_spill)
+        (v_final, ds_flows, final_spill, row)
     }
 
     /// Solves the spill-limited case: no required ds_1 flow, spill alone determines ds_1.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask)
+    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row)
     fn solve_spill_limited_case(
         &self,
         v_working: f64,
         net_rain_mm: f64,
         nrows: usize,
-    ) -> (f64, f64, u8) {
+    ) -> (f64, f64, u8, usize) {
         self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows)
     }
 
     /// Solves the order-limited case: ds_1 must flow at least the order amount.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask)
+    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row)
     fn solve_order_limited_case(
         &self,
         v_working: f64,
         net_rain_mm: f64,
         ds_1_order: f64,
         nrows: usize,
-    ) -> (f64, f64, u8) {
+    ) -> (f64, f64, u8, usize) {
         self.solve_with_outflows(v_working, net_rain_mm, ds_1_order, nrows)
     }
 
     /// Solves for equilibrium volume with a required minimum ds_1 flow.
     /// The actual ds_1 contribution to mass balance is max(spill, ds1_required_flow).
     /// Handles MOL thresholds for ds_2, ds_3, ds_4 via iteration.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_outlet_mask)
+    /// Returns (equilibrium_volume, spill_at_equilibrium, active_outlet_mask, table_row)
     fn solve_with_outflows(
         &self,
         v_working: f64,
         net_rain_mm: f64,
         ds1_required_flow: f64,
         nrows: usize,
-    ) -> (f64, f64, u8) {
+    ) -> (f64, f64, u8, usize) {
         // Start with outlets active based on current volume
         let mut active = self.active_outlets_at_volume(v_working);
 
@@ -239,7 +239,7 @@ impl StorageNode {
             let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
 
             // Find equilibrium volume
-            let v_candidate = self.find_equilibrium_volume(
+            let (v_candidate, row) = self.find_equilibrium_volume(
                 v_working, net_rain_mm, effective_ds1, ds234_orders, nrows
             );
 
@@ -247,9 +247,9 @@ impl StorageNode {
             let new_active = self.active_outlets_at_volume(v_candidate);
 
             if new_active == active {
-                // Converged
-                let spill = self.d.interpolate(VOLU, SPIL, v_candidate).max(0.0);
-                return (v_candidate, spill, active);
+                // Converged - use row from bisection for spill lookup
+                let spill = self.d.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
+                return (v_candidate, spill, active, row);
             }
 
             // Only check threshold clamping on reactivation (oscillation).
@@ -259,19 +259,21 @@ impl StorageNode {
                 if let Some((threshold_vol, _throttled_outlet)) =
                     self.find_crossed_threshold(v_candidate, active, new_active)
                 {
-                    let area = self.d.interpolate(VOLU, AREA, threshold_vol);
-                    let spill = self.d.interpolate(VOLU, SPIL, threshold_vol).max(0.0);
-                    let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
-                    let ds1_flow = spill.max(effective_ds1);
-                    let total_outflow = ds1_flow + ds234_orders;
+                    if let Some(thr_row) = self.d.find_row(VOLU, threshold_vol) {
+                        let area = self.d.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
+                        let spill = self.d.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
+                        let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
+                        let ds1_flow = spill.max(effective_ds1);
+                        let total_outflow = ds1_flow + ds234_orders;
 
-                    if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
-                        // Smaller active set can sustain the threshold volume
-                        return (threshold_vol, spill, active);
-                    } else if outflow_needed >= 0.0 {
-                        // Smaller set can't sustain threshold - clamp anyway with
-                        // larger set. Mass balance allocation will cap actual flows.
-                        return (threshold_vol, spill, new_active);
+                        if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
+                            // Smaller active set can sustain the threshold volume
+                            return (threshold_vol, spill, active, thr_row);
+                        } else if outflow_needed >= 0.0 {
+                            // Smaller set can't sustain threshold - clamp anyway with
+                            // larger set. Mass balance allocation will cap actual flows.
+                            return (threshold_vol, spill, new_active, thr_row);
+                        }
                     }
                 }
             }
@@ -279,9 +281,13 @@ impl StorageNode {
             active = new_active;
         }
 
-        // Fallback
-        let spill = self.d.interpolate(VOLU, SPIL, v_working).max(0.0);
-        (v_working, spill, active)
+        // Fallback (rare path) - do one find_row for v_working
+        if let Some(fb_row) = self.d.find_row(VOLU, v_working) {
+            let spill = self.d.interpolate_row(fb_row, VOLU, SPIL, v_working).max(0.0);
+            (v_working, spill, active, fb_row)
+        } else {
+            (v_working, 0.0, active, 0)
+        }
     }
 
     /// Finds equilibrium volume given required ds_1 flow and ds_2/3/4 orders.
@@ -295,7 +301,7 @@ impl StorageNode {
         ds1_required_flow: f64,
         ds234_orders: f64,
         nrows: usize,
-    ) -> f64 {
+    ) -> (f64, usize) {
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
             let table_vol = self.d.get_value(row, VOLU);
@@ -352,20 +358,21 @@ impl StorageNode {
         // Handle edge cases
         if istop == 0 {
             // Solution at or below row 0
-            return self.d.get_value(0, VOLU);
+            return (self.d.get_value(0, VOLU), 0);
         }
         if error_i < 0.0 {
             // Volume exceeds table - return max
-            return self.d.get_value(nrows - 1, VOLU);
+            return (self.d.get_value(nrows - 1, VOLU), nrows - 2);
         }
 
         // Interpolate between rows
-        let error_prev = compute_error(istop - 1);
+        let row = istop - 1;
+        let error_prev = compute_error(row);
         let x = error_prev / (error_prev - error_i);
-        let v_lo = self.d.get_value(istop - 1, VOLU);
+        let v_lo = self.d.get_value(row, VOLU);
         let v_hi = self.d.get_value(istop, VOLU);
 
-        v_lo + (v_hi - v_lo) * x
+        (v_lo + (v_hi - v_lo) * x, row)
     }
 
     /// Finds which MOL threshold was crossed between old and new active sets.
@@ -521,17 +528,15 @@ impl Node for StorageNode {
         let v_working = self.v;
 
         // Solve backward Euler with MOL-aware releases
-        let (v_final, ds_flows, spill) = self.solve_backward_euler(v_working, net_rain_mm);
+        let (v_final, ds_flows, spill, row) = self.solve_backward_euler(v_working, net_rain_mm);
 
-        // Update warm-start cache for next timestep
-        if let Some(row) = self.d.find_row(VOLU, v_final) {
-            self.previous_istop = row;
-        }
+        // Update warm-start cache for next timestep (expects upper bracket)
+        self.previous_istop = row + 1;
 
-        // Update state from solution
+        // Update state from solution using row from solver (no extra binary searches)
         self.v = v_final;
-        self.level = self.d.interpolate(VOLU, LEVL, v_final);
-        let area_km2 = self.d.interpolate(VOLU, AREA, v_final);
+        self.level = self.d.interpolate_row(row, VOLU, LEVL, v_final);
+        let area_km2 = self.d.interpolate_row(row, VOLU, AREA, v_final);
         self.spill = spill;
         self.ds_1_flow = ds_flows[0];
         self.ds_2_flow = ds_flows[1];
