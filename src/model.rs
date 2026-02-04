@@ -99,7 +99,13 @@ impl Model {
         //TASKS
         //1) Define output series
         for series_name in self.outputs.iter() {
-            self.data_cache.get_or_add_new_series(series_name, false);
+            let idx = self.data_cache.get_or_add_new_series(series_name, false);
+
+            //If the series was already registered in the data_cache by another part of the model, its
+            //name may have different casing (upper/lower/mixed). Here we update the name to ensure
+            //that when it is written to the output file, its appears with the same casing as the
+            //user specified in the outputs section.
+            self.data_cache.update_series_name(idx, series_name);
         }
 
         //2) Nodes ask data_cache for idx of relevant data series for input

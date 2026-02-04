@@ -214,7 +214,7 @@ impl DataCache {
             return None;
         }
         for i in 0..self.series_name.len() {
-            if self.series_name[i] == name {
+            if self.series_name[i].eq_ignore_ascii_case(name) {
                 if flag_as_critical { self.is_critical[i] = true; }
                 return Some(i);
             }
@@ -232,7 +232,7 @@ impl DataCache {
             return None;
         }
         for i in 0..self.series_name.len() {
-            if self.series_name[i] == name {
+            if self.series_name[i].eq_ignore_ascii_case(name) {
                 return Some(i);
             }
         }
@@ -259,6 +259,14 @@ impl DataCache {
             self.is_critical.push(flag_as_critical);
             idx
         }
+    }
+
+
+    /// Update the display name of an existing series (e.g. to match the casing
+    /// specified by the modeller in the [outputs] section).
+    pub fn update_series_name(&mut self, idx: usize, name: &str) {
+        self.series_name[idx] = name.to_string();
+        self.series[idx].name = name.to_string();
     }
 
 
