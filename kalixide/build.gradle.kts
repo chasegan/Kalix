@@ -35,6 +35,7 @@ dependencies {
     
     // RSyntaxTextArea for enhanced text components
     implementation("com.fifesoft:rsyntaxtextarea:3.3.4")
+    implementation("com.fifesoft:autocomplete:3.3.2")
 
     // Diff utilities for model comparison
     implementation("io.github.java-diff-utils:java-diff-utils:4.12")

@@ -63,6 +63,7 @@ public class EnhancedTextEditor extends JPanel {
     private TextSearchManager searchManager;
     private FileDropManager dropManager;
     private LinterManager linterManager;
+    private AutoCompleteManager autoCompleteManager;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
 
     // Context command dependencies (stored for programmatic rename access)
@@ -134,6 +135,22 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
         }
         linterManager = LinterComponentFactory.createLinterManager(textArea, schemaManager);
+    }
+
+    /**
+     * Initialize the auto-complete system.
+     * This should be called after the EnhancedTextEditor is created.
+     *
+     * @param schemaManager  Schema manager for node types and parameters
+     * @param modelSupplier  Supplier for the current parsed model
+     */
+    public void initializeAutoComplete(SchemaManager schemaManager,
+                                       java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+        if (autoCompleteManager != null) {
+            autoCompleteManager.dispose();
+        }
+        autoCompleteManager = new AutoCompleteManager(textArea, schemaManager, modelSupplier);
+        autoCompleteManager.install();
     }
 
     /**
@@ -831,6 +848,10 @@ public class EnhancedTextEditor extends JPanel {
      * Dispose of resources when the editor is no longer needed.
      */
     public void dispose() {
+        if (autoCompleteManager != null) {
+            autoCompleteManager.dispose();
+            autoCompleteManager = null;
+        }
         if (linterManager != null) {
             linterManager.dispose();
             linterManager = null;
