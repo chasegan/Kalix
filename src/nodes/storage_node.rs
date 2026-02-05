@@ -74,12 +74,20 @@ pub struct StorageNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_ds_1_outlet: Option<usize>,
+    recorder_idx_ds_1_spill: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
     recorder_idx_ds_2_order: Option<usize>,
+    recorder_idx_ds_2_outlet: Option<usize>,
+    recorder_idx_ds_2_spill: Option<usize>,
     recorder_idx_ds_3: Option<usize>,
     recorder_idx_ds_3_order: Option<usize>,
+    recorder_idx_ds_3_outlet: Option<usize>,
+    recorder_idx_ds_3_spill: Option<usize>,
     recorder_idx_ds_4: Option<usize>,
     recorder_idx_ds_4_order: Option<usize>,
+    recorder_idx_ds_4_outlet: Option<usize>,
+    recorder_idx_ds_4_spill: Option<usize>,
 }
 
 impl StorageNode {
@@ -94,7 +102,7 @@ impl StorageNode {
     }
 
     // -------------------------------------------------------------------------
-    // Backward Euler Solver with MOL Support
+    // Backward Euler Solver
     // -------------------------------------------------------------------------
     //
     // Terminology for ds_1 flows:
@@ -478,14 +486,38 @@ impl Node for StorageNode {
         self.recorder_idx_ds_1 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1").as_str(), false
         );
+        self.recorder_idx_ds_1_outlet = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_outlet").as_str(), false
+        );
+        self.recorder_idx_ds_1_spill = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_spill").as_str(), false
+        );
         self.recorder_idx_ds_2 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_2").as_str(), false
+        );
+        self.recorder_idx_ds_2_outlet = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_outlet").as_str(), false
+        );
+        self.recorder_idx_ds_2_spill = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_spill").as_str(), false
         );
         self.recorder_idx_ds_3 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_3").as_str(), false
         );
+        self.recorder_idx_ds_3_spill = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_spill").as_str(), false
+        );
+        self.recorder_idx_ds_3_outlet = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_outlet").as_str(), false
+        );
         self.recorder_idx_ds_4 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4").as_str(), false
+        );
+        self.recorder_idx_ds_4_outlet = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_outlet").as_str(), false
+        );
+        self.recorder_idx_ds_4_spill = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_spill").as_str(), false
         );
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
@@ -583,14 +615,39 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.ds_1_flow);
         }
+        if let Some(idx) = self.recorder_idx_ds_1_outlet {
+            let ds_1_outlet_flow = (self.ds_1_flow - self.spill).max(0.0);
+            data_cache.add_value_at_index(idx, ds_1_outlet_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1_spill {
+            data_cache.add_value_at_index(idx, self.spill);
+        }
         if let Some(idx) = self.recorder_idx_ds_2 {
             data_cache.add_value_at_index(idx, self.ds_2_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_outlet {
+            data_cache.add_value_at_index(idx, self.ds_2_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_spill {
+            data_cache.add_value_at_index(idx, 0.0);
         }
         if let Some(idx) = self.recorder_idx_ds_3 {
             data_cache.add_value_at_index(idx, self.ds_3_flow);
         }
+        if let Some(idx) = self.recorder_idx_ds_3_outlet {
+            data_cache.add_value_at_index(idx, self.ds_3_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_3_spill {
+            data_cache.add_value_at_index(idx, 0.0);
+        }
         if let Some(idx) = self.recorder_idx_ds_4 {
             data_cache.add_value_at_index(idx, self.ds_4_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_outlet {
+            data_cache.add_value_at_index(idx, self.ds_4_flow);
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_spill {
+            data_cache.add_value_at_index(idx, 0.0);
         }
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
