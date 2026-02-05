@@ -1,0 +1,67 @@
+Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
+================================================================================
+Found 18 model file(s)
+
+Verifying: 10_different_data_periods/model_with_different_data_periods.ini
+  ✓ VERIFIED!
+
+Verifying: 11_force_flow/model_with_forced_flow.ini
+  ✓ VERIFIED!
+
+Verifying: 12_storage_variations/storage_variations.ini
+  ✓ VERIFIED!
+
+Verifying: 13_reg_user_with_routing/model_with_ordering.ini
+  ✓ VERIFIED!
+
+Verifying: 14_reg_users_with_inflows/ordering_with_inflows.ini
+  ✓ VERIFIED!
+
+Verifying: 15_order_constraints/model.ini
+  ✓ VERIFIED!
+
+Verifying: 16_alternating_water_source/model.ini
+  ✓ VERIFIED!
+
+Verifying: 17_storage_outlets/model.ini
+  ✓ VERIFIED!
+
+Verifying: 18_filling_emptying_storage/model.ini
+  ✓ VERIFIED!
+
+Verifying: 1_picnic_gr4j/kalix.ini
+  ✓ VERIFIED!
+
+Verifying: 2_pioneer_val/PioneerVal_to_125001b_withLocations.ini
+  ✓ VERIFIED!
+
+Verifying: 3_calibrate_constants/model.ini
+  ✓ VERIFIED!
+
+Verifying: 4_user_variations/user.ini
+  ✓ VERIFIED!
+
+Verifying: 5_model_with_every_node/model_with_every_node_type.ini
+  ✓ VERIFIED!
+
+Verifying: 6_picnic_sacr/picnic_sacr.ini
+  ✓ VERIFIED!
+
+Verifying: 7_picnic_sacr_dmy/picnic_sacr.ini
+  ✓ VERIFIED!
+
+Verifying: 8_picnic_sacr_no_headder/picnic_sacr.ini
+  ✓ VERIFIED!
+
+Verifying: 9_hundred_sacr/kalix.ini
+  ✓ VERIFIED!
+
+================================================================================
+SUMMARY
+================================================================================
+Timestamp: 2026-02-05T16:11:22.621253
+Total: 18
+Passed: 18
+Failed: 0
+
+✓ All models verified successfully!

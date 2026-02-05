@@ -6,6 +6,7 @@ Automatically finds and verifies all Kalix model INI files against their mass ba
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -66,6 +67,19 @@ def verify_model(model_path, mbal_filename='mbal_for_verification.txt'):
 def main():
     # Get the script's directory as the root search directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    log_file = os.path.join(script_dir, 'verify_all_models_log.txt')
+
+    # Delete log file if it exists - a failed run should leave no file
+    if os.path.exists(log_file):
+        os.remove(log_file)
+
+    # Collect output lines to write to log file at the end
+    output_lines = []
+
+    def log(message=''):
+        """Print to screen and collect for log file."""
+        print(message)
+        output_lines.append(message)
 
     # Allow optional command line argument for different root directory
     if len(sys.argv) > 1:
@@ -73,55 +87,60 @@ def main():
     else:
         root_dir = script_dir
 
-    print(f"Searching for model files in: {root_dir}")
-    print("=" * 80)
+    log(f"Searching for model files in: {root_dir}")
+    log("=" * 80)
 
     # Find all model files
     model_files = find_model_files(root_dir)
 
     if not model_files:
-        print("No .ini files found!")
+        log("No .ini files found!")
         sys.exit(1)
 
-    print(f"Found {len(model_files)} model file(s)\n")
+    log(f"Found {len(model_files)} model file(s)\n")
 
     # Verify each model
     results = []
     for model_path in model_files:
         rel_path = os.path.relpath(model_path, root_dir)
-        print(f"Verifying: {rel_path}")
+        log(f"Verifying: {rel_path}")
 
         success, message = verify_model(model_path)
         results.append((rel_path, success, message))
 
         if success:
-            print(f"  ✓ {message}")
+            log(f"  ✓ {message}")
         else:
-            print(f"  ✗ {message}")
-        print()
+            log(f"  ✗ {message}")
+        log()
 
     # Summary
-    print("=" * 80)
-    print("SUMMARY")
-    print("=" * 80)
+    log("=" * 80)
+    log("SUMMARY")
+    log("=" * 80)
+    log(f"Timestamp: {datetime.now().isoformat()}")
 
     passed = sum(1 for _, success, _ in results if success)
     failed = len(results) - passed
 
-    print(f"Total: {len(results)}")
-    print(f"Passed: {passed}")
-    print(f"Failed: {failed}")
+    log(f"Total: {len(results)}")
+    log(f"Passed: {passed}")
+    log(f"Failed: {failed}")
 
     if failed > 0:
-        print("\nFailed models:")
+        log("\nFailed models:")
         for rel_path, success, message in results:
             if not success:
-                print(f"  - {rel_path}")
-                print(f"    {message}")
-        sys.exit(1)
+                log(f"  - {rel_path}")
+                log(f"    {message}")
     else:
-        print("\n✓ All models verified successfully!")
-        sys.exit(0)
+        log("\n✓ All models verified successfully!")
+
+    # Write log file at the end (only if we got this far)
+    with open(log_file, 'w') as f:
+        f.write('\n'.join(output_lines) + '\n')
+
+    sys.exit(1 if failed > 0 else 0)
 
 
 if __name__ == '__main__':
