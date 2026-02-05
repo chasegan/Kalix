@@ -19,6 +19,11 @@ use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::blackhole_node::BlackholeNode;
 use crate::nodes::unregulated_user_node::UnregulatedUserNode;
 
+const LEVL: usize = 0;
+const VOLU: usize = 1;
+const AREA: usize = 2;
+const SPIL: usize = 3;
+
 #[test]
 fn test_model_with_all_node_types() {
 
@@ -396,7 +401,7 @@ fn test_create_and_run_model_with_storage_node() {
 
     st1.initialise(&mut data_cache).expect("Initialisation error");
     println!("Initial vol = {}", st1.v_initial);
-    println!("Area 0 = {}", st1.area0_km2);
+    println!("Area 0 = {}", st1.d.get_value(0, VOLU));
 
     let _spill = Timeseries::new_daily();
     let _volume = Timeseries::new_daily();

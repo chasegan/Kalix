@@ -30,7 +30,6 @@ pub struct StorageNode {
     pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
     pub v: f64,
     pub v_initial: f64,
-    pub area0_km2: f64, // Dead storage area interpolated from 'd' table during node initialisation
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub seep_mm_input: DynamicInput,
@@ -426,9 +425,14 @@ impl Node for StorageNode {
             let message = format!("Error in node '{}'. Storage dimension table must have at least 2 rows.", self.name);
             return Err(message);
         }
-
-        // Initial values and pre-calculations
-        self.area0_km2 = self.d.interpolate(VOLU, AREA, 0_f64); // Area at dead storage
+        if self.d.get_value(0, VOLU) != 0_f64 {
+            let message = format!("Error in node '{}'. Storage dimension table must begin with volume=0.", self.name);
+            return Err(message);
+        }
+        if self.d.get_value(0, AREA) != 0_f64 {
+            let message = format!("Error in node '{}'. Storage dimension table must begin with area=0.", self.name);
+            return Err(message);
+        }
 
         // Convert outlet definitions (MOL levels) to volumes
         for i in 0..MAX_DS_LINKS {
@@ -516,9 +520,8 @@ impl Node for StorageNode {
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
 
         // Handle pond diversion first (highest priority)
-        let net_rain_at_dead_storage = self.area0_km2 * net_rain_mm;
-        let max_diversion = self.v + net_rain_at_dead_storage.max(0.0);
-        self.pond_diversion = pond_demand.min(max_diversion);
+        // There is no rainfall accessible since AREA=0 if we empty the storage.
+        self.pond_diversion = pond_demand.min(self.v);
         self.v -= self.pond_diversion;
 
         // Working volume for backward Euler (after pond diversion)
