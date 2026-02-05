@@ -355,15 +355,12 @@ impl StorageNode {
         let istop = hi;
         let error_i = compute_error(istop);
 
-        // Handle edge cases
+        // Handle floor case (solution at or below row 0)
         if istop == 0 {
-            // Solution at or below row 0
             return (self.d.get_value(0, VOLU), 0);
         }
-        if error_i < 0.0 {
-            // Volume exceeds table - return max
-            return (self.d.get_value(nrows - 1, VOLU), nrows - 2);
-        }
+        // Ceiling case (error_i < 0): allow extrapolation beyond table max
+        // by falling through to normal interpolation - x > 1.0 extrapolates
 
         // Interpolate between rows
         let row = istop - 1;
