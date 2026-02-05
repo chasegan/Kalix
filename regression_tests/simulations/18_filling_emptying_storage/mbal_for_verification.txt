@@ -1,7 +1,7 @@
 ==================================
 MASS BALANCE REPORT
 ==================================
-  Node count: 6
+  Node count: 8
   Timesteps: 10
   Stepsize (s): 86400
   Period: 2024-01-01T00:00:00.000Z, 2024-01-10T00:00:00.000Z
@@ -9,15 +9,17 @@ MASS BALANCE REPORT
 
 INFLOW NODES
   inflow1, 70
+  inflow1_level, 2.1
+  inflow2_level, 2.5
 
 STORAGE NODES
   emptying_storage, 50
   filling_storage, -70
 
-GAUGE NODES
-  eos1, 0
-  eos2, 0
+BLACKHOLE NODES
+  bh1, 0
+  bh2, -50
 
 ----------------------------------
-TOTAL = 50
+TOTAL = 4.6
 ----------------------------------
