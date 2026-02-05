@@ -20,7 +20,7 @@ def find_model_files(root_dir):
     return sorted(ini_files)
 
 
-def verify_model(model_path, mbal_filename='mbal_for_verification.txt'):
+def verify_model(model_path, mbal_filename='mbal.txt'):
     """
     Verify a model against its mass balance report.
 
