@@ -384,8 +384,8 @@ impl Model {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_start_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
-                    self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
+                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
         }
@@ -396,8 +396,8 @@ impl Model {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_end_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_start_timestamp -
-                    self.configuration.sim_end_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
+                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
             }
             None => {}
         }
