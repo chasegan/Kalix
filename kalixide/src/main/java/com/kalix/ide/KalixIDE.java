@@ -1179,6 +1179,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void findNodeOnMap() {
+        mapPanel.showFindNodeDialog();
+    }
+
+    @Override
     public void showRunManager() {
         RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
     }

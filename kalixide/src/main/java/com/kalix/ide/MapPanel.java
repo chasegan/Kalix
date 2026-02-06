@@ -745,7 +745,16 @@ public class MapPanel extends JPanel implements KeyListener {
     public double getPanY() {
         return panY;
     }
-    
+
+    /**
+     * Shows the Find Node dialog for searching nodes on the map.
+     */
+    public void showFindNodeDialog() {
+        if (mapSearchManager != null) {
+            mapSearchManager.showFindDialog();
+        }
+    }
+
     /**
      * Set up text synchronization with the text editor.
      * This enables bidirectional sync between map dragging and text coordinate updates.

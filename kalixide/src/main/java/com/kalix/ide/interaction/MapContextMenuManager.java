@@ -174,13 +174,8 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Zoom to Fit
-        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
-        zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
-        menu.add(zoomToFitItem);
-
         // Find Node
-        JMenuItem findNodeItem = new JMenuItem("Find Node...");
+        JMenuItem findNodeItem = new JMenuItem("Find on Map...");
         findNodeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, shortcutMask));
         findNodeItem.setEnabled(mapSearchManager != null);
         findNodeItem.addActionListener(e -> {
@@ -189,6 +184,11 @@ public class MapContextMenuManager {
             }
         });
         menu.add(findNodeItem);
+
+        // Zoom to Fit
+        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
+        zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
+        menu.add(zoomToFitItem);
     }
 
     /**
