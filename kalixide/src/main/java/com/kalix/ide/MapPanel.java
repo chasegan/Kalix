@@ -3,17 +3,22 @@ package com.kalix.ide;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.RenderingHints;
+import java.awt.Toolkit;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.geom.Arc2D;
+import java.awt.image.BufferedImage;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
@@ -29,6 +34,8 @@ import com.kalix.ide.rendering.MapRenderer;
 import com.kalix.ide.constants.UIConstants;
 
 public class MapPanel extends JPanel implements KeyListener {
+    private static final Cursor ROTATE_CURSOR = createRotateCursor();
+
     private double zoomLevel = 1.0;
     // Use centralized UI constants
     private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
@@ -86,6 +93,50 @@ public class MapPanel extends JPanel implements KeyListener {
         setupMouseListeners();
     }
 
+    /**
+     * Creates a custom rotation cursor: a circular arc with an arrowhead.
+     */
+    private static Cursor createRotateCursor() {
+        int size = 32;
+        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+        int cx = size / 2;
+        int cy = size / 2;
+        int radius = 8;
+
+        Arc2D arc = new Arc2D.Double(
+            cx - radius, cy - radius, radius * 2, radius * 2,
+            -20, 300, Arc2D.OPEN
+        );
+
+        // Inward tick endpoints at the end of the arc (at -20 degrees)
+        double endAngle = Math.toRadians(-20);
+        int outerX = (int) Math.round(cx + radius * Math.cos(endAngle));
+        int outerY = (int) Math.round(cy - radius * Math.sin(endAngle));
+        int innerX = (int) Math.round(cx + radius * 0.3 * Math.cos(endAngle));
+        int innerY = (int) Math.round(cy - radius * 0.3 * Math.sin(endAngle));
+
+        // First pass: white outline (thicker)
+        g.setColor(Color.WHITE);
+        g.setStroke(new BasicStroke(4.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(arc);
+        g.drawLine(outerX, outerY, innerX, innerY);
+
+        // Second pass: black foreground (thinner)
+        g.setColor(Color.BLACK);
+        g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(arc);
+        g.drawLine(outerX, outerY, innerX, innerY);
+
+        g.dispose();
+
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        return toolkit.createCustomCursor(img, new Point(cx, cy), "rotate");
+    }
+
     private void setupMouseListeners() {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
@@ -115,7 +166,7 @@ public class MapPanel extends JPanel implements KeyListener {
                     if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
                         // Ctrl held with multiple nodes selected — start rotation
                         interactionManager.startDrag(e.getPoint(), true);
-                        setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+                        setCursor(ROTATE_CURSOR);
                     } else if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
@@ -203,7 +254,7 @@ public class MapPanel extends JPanel implements KeyListener {
                 // Show rotation cursor when Ctrl is held and multiple nodes are selected
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
                 if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+                    setCursor(ROTATE_CURSOR);
                 } else {
                     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
                 }
@@ -729,7 +780,7 @@ public class MapPanel extends JPanel implements KeyListener {
         if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
                 && interactionManager != null && interactionManager.canStartRotation()
                 && !interactionManager.isDragging()) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+            setCursor(ROTATE_CURSOR);
         }
 
         // Find Node: Ctrl+F / Cmd+F
