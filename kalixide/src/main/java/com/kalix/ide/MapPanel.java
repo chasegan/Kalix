@@ -46,6 +46,11 @@ public class MapPanel extends JPanel implements KeyListener {
     private boolean isRectangleSelecting = false;
     private Point rectangleStartPoint = null;
     private Point rectangleCurrentPoint = null;
+
+    // Mouse hover tracking for coordinate display
+    private double mouseWorldX = 0;
+    private double mouseWorldY = 0;
+    private boolean mouseInPanel = false;
     
     // Node rendering constants (centralized in UIConstants)
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
@@ -176,7 +181,26 @@ public class MapPanel extends JPanel implements KeyListener {
             }
             
             @Override
+            public void mouseExited(MouseEvent e) {
+                mouseInPanel = false;
+                repaint();
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                mouseWorldX = (e.getX() - panX) / zoomLevel;
+                mouseWorldY = (e.getY() - panY) / zoomLevel;
+                mouseInPanel = true;
+                repaint();
+            }
+
+            @Override
             public void mouseDragged(MouseEvent e) {
+                // Update hover coordinates during drag too
+                mouseWorldX = (e.getX() - panX) / zoomLevel;
+                mouseWorldY = (e.getY() - panY) / zoomLevel;
+                mouseInPanel = true;
+
                 // Check if we should start node dragging
                 if (interactionManager != null && !interactionManager.isDragging() && 
                     clickedNodeName != null && interactionManager.canStartDrag(clickStartPoint)) {
@@ -249,7 +273,8 @@ public class MapPanel extends JPanel implements KeyListener {
         Point selectionCurrent = isRectangleSelecting ? rectangleCurrentPoint : null;
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
-                             showGridlines, model, nodeTheme, selectionStart, selectionCurrent);
+                             showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
+                             mouseWorldX, mouseWorldY, mouseInPanel);
 
         g2d.dispose();
     }

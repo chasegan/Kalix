@@ -75,11 +75,15 @@ public class MapRenderer {
      * @param nodeTheme Theme for node visualization
      * @param selectionStart Selection rectangle start point (null if no selection)
      * @param selectionCurrent Selection rectangle current point (null if no selection)
+     * @param mouseWorldX Mouse X in world coordinates
+     * @param mouseWorldY Mouse Y in world coordinates
+     * @param mouseInPanel Whether the mouse is currently over the panel
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
                          boolean showGridlines, HydrologicalModel model,
-                         NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent) {
+                         NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
+                         double mouseWorldX, double mouseWorldY, boolean mouseInPanel) {
 
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -110,7 +114,7 @@ public class MapRenderer {
             renderSelectionRectangle(g2d, selectionStart, selectionCurrent);
         }
 
-        renderDebugInfo(g2d, width, height, zoomLevel, panX, panY);
+        renderDebugInfo(g2d, width, height, zoomLevel, mouseWorldX, mouseWorldY, mouseInPanel);
     }
 
     /**
@@ -482,23 +486,30 @@ public class MapRenderer {
     }
 
     /**
-     * Renders debug information overlay showing zoom and pan values.
+     * Renders debug information overlay showing zoom level and mouse hover coordinates.
      *
      * @param g2d Graphics context
      * @param width Panel width
      * @param height Panel height
      * @param zoomLevel Current zoom level
-     * @param panX Horizontal pan offset
-     * @param panY Vertical pan offset
+     * @param mouseWorldX Mouse X in world coordinates
+     * @param mouseWorldY Mouse Y in world coordinates
+     * @param mouseInPanel Whether the mouse is currently over the panel
      */
     private void renderDebugInfo(Graphics2D g2d, int width, int height,
-                                double zoomLevel, double panX, double panY) {
+                                double zoomLevel, double mouseWorldX, double mouseWorldY,
+                                boolean mouseInPanel) {
 
         g2d.setColor(DEBUG_TEXT_COLOR);
         g2d.drawString(String.format("Zoom: %.1f%%", zoomLevel * 100),
                       DEBUG_TEXT_MARGIN, height - 25);
-        g2d.drawString(String.format("Pan: (%.0f, %.0f)", panX, panY),
-                      DEBUG_TEXT_MARGIN, height - DEBUG_TEXT_MARGIN);
+        if (mouseInPanel) {
+            g2d.drawString(String.format("Loc: (%.0f, %.0f)", mouseWorldX, mouseWorldY),
+                          DEBUG_TEXT_MARGIN, height - DEBUG_TEXT_MARGIN);
+        } else {
+            g2d.drawString("Loc: \u00af\\_(\u30c4)_/\u00af",
+                          DEBUG_TEXT_MARGIN, height - DEBUG_TEXT_MARGIN);
+        }
     }
 
     /**
