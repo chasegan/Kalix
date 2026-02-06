@@ -26,6 +26,11 @@ public class MapInteractionManager {
     private boolean isDragging = false;
     private Point2D dragStartWorld;
     private final Map<String, Point2D> originalNodePositions;
+
+    // Rotation state tracking
+    private boolean isRotating = false;
+    private Point2D rotationCenter;
+    private double rotationStartAngle;
     
     // Reference to text coordinate updater (will be added later)
     private TextCoordinateUpdater textUpdater;
@@ -54,19 +59,43 @@ public class MapInteractionManager {
         String nodeAtPoint = mapPanel.getNodeAtPoint(screenPoint);
         return nodeAtPoint != null && model.isNodeSelected(nodeAtPoint);
     }
-    
+
     /**
-     * Start a drag operation.
+     * Check if a rotation operation can start.
+     * Rotation requires at least 2 selected nodes.
+     * @return true if rotation can start
+     */
+    public boolean canStartRotation() {
+        return model.getSelectedNodeCount() >= 2;
+    }
+
+    /**
+     * Start a drag operation (translation).
      * @param screenPoint Starting mouse position
      */
     public void startDrag(Point screenPoint) {
-        if (!canStartDrag(screenPoint)) {
-            return;
+        startDrag(screenPoint, false);
+    }
+
+    /**
+     * Start a drag or rotation operation.
+     * @param screenPoint Starting mouse position
+     * @param rotate If true, start a rotation instead of translation
+     */
+    public void startDrag(Point screenPoint, boolean rotate) {
+        if (rotate) {
+            if (!canStartRotation()) {
+                return;
+            }
+        } else {
+            if (!canStartDrag(screenPoint)) {
+                return;
+            }
         }
-        
+
         isDragging = true;
         dragStartWorld = screenToWorld(screenPoint);
-        
+
         // Store original positions of all selected nodes
         originalNodePositions.clear();
         Set<String> selectedNodes = model.getSelectedNodes();
@@ -76,32 +105,72 @@ public class MapInteractionManager {
                 originalNodePositions.put(nodeName, new Point2D.Double(node.getX(), node.getY()));
             }
         }
+
+        if (rotate) {
+            isRotating = true;
+            // Compute centroid of selected nodes
+            double sumX = 0;
+            double sumY = 0;
+            for (Point2D pos : originalNodePositions.values()) {
+                sumX += pos.getX();
+                sumY += pos.getY();
+            }
+            int count = originalNodePositions.size();
+            rotationCenter = new Point2D.Double(sumX / count, sumY / count);
+            rotationStartAngle = Math.atan2(
+                dragStartWorld.getY() - rotationCenter.getY(),
+                dragStartWorld.getX() - rotationCenter.getX()
+            );
+        }
     }
     
     /**
      * Update drag positions during mouse drag.
+     * Applies translation or rotation depending on the current mode.
      * @param currentScreenPoint Current mouse position
      */
     public void updateDrag(Point currentScreenPoint) {
         if (!isDragging) {
             return;
         }
-        
-        // Calculate world-space movement delta
+
         Point2D currentWorld = screenToWorld(currentScreenPoint);
-        double deltaX = currentWorld.getX() - dragStartWorld.getX();
-        double deltaY = currentWorld.getY() - dragStartWorld.getY();
-        
-        // Update positions of all selected nodes
-        for (Map.Entry<String, Point2D> entry : originalNodePositions.entrySet()) {
-            String nodeName = entry.getKey();
-            Point2D originalPos = entry.getValue();
-            
-            double newX = originalPos.getX() + deltaX;
-            double newY = originalPos.getY() + deltaY;
-            
-            // Update node position in model
-            model.updateNodePosition(nodeName, newX, newY);
+
+        if (isRotating) {
+            // Rotation mode: apply 2D rotation matrix around centroid
+            double currentAngle = Math.atan2(
+                currentWorld.getY() - rotationCenter.getY(),
+                currentWorld.getX() - rotationCenter.getX()
+            );
+            double deltaAngle = currentAngle - rotationStartAngle;
+            double cos = Math.cos(deltaAngle);
+            double sin = Math.sin(deltaAngle);
+
+            for (Map.Entry<String, Point2D> entry : originalNodePositions.entrySet()) {
+                String nodeName = entry.getKey();
+                Point2D originalPos = entry.getValue();
+
+                double dx = originalPos.getX() - rotationCenter.getX();
+                double dy = originalPos.getY() - rotationCenter.getY();
+                double newX = rotationCenter.getX() + dx * cos - dy * sin;
+                double newY = rotationCenter.getY() + dx * sin + dy * cos;
+
+                model.updateNodePosition(nodeName, newX, newY);
+            }
+        } else {
+            // Translation mode: apply delta offset
+            double deltaX = currentWorld.getX() - dragStartWorld.getX();
+            double deltaY = currentWorld.getY() - dragStartWorld.getY();
+
+            for (Map.Entry<String, Point2D> entry : originalNodePositions.entrySet()) {
+                String nodeName = entry.getKey();
+                Point2D originalPos = entry.getValue();
+
+                double newX = originalPos.getX() + deltaX;
+                double newY = originalPos.getY() + deltaY;
+
+                model.updateNodePosition(nodeName, newX, newY);
+            }
         }
     }
     
@@ -137,14 +206,24 @@ public class MapInteractionManager {
         // Clear drag state
         originalNodePositions.clear();
         dragStartWorld = null;
+        isRotating = false;
+        rotationCenter = null;
     }
-    
+
     /**
-     * Check if currently dragging.
+     * Check if currently dragging (translation or rotation).
      * @return true if drag operation is active
      */
     public boolean isDragging() {
         return isDragging;
+    }
+
+    /**
+     * Check if currently rotating.
+     * @return true if rotation operation is active
+     */
+    public boolean isRotating() {
+        return isRotating;
     }
     
     /**

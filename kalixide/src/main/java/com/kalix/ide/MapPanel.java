@@ -110,7 +110,13 @@ public class MapPanel extends JPanel implements KeyListener {
                     clickStartPoint = new Point(e.getPoint());
                     clickedNodeName = nodeAtPoint;
                     
-                    if (nodeAtPoint != null) {
+                    // Check for Ctrl+click rotation start (anywhere on the map)
+                    boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
+                    if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
+                        // Ctrl held with multiple nodes selected — start rotation
+                        interactionManager.startDrag(e.getPoint(), true);
+                        setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+                    } else if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
 
@@ -193,6 +199,15 @@ public class MapPanel extends JPanel implements KeyListener {
                 mouseWorldX = (e.getX() - panX) / zoomLevel;
                 mouseWorldY = (e.getY() - panY) / zoomLevel;
                 mouseInPanel = true;
+
+                // Show rotation cursor when Ctrl is held and multiple nodes are selected
+                boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
+                if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
+                    setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+                } else {
+                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                }
+
                 repaint();
             }
 
@@ -710,6 +725,13 @@ public class MapPanel extends JPanel implements KeyListener {
         boolean isModifierDown = (e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0 ||
                                  (e.getModifiersEx() & InputEvent.META_DOWN_MASK) != 0;
 
+        // Update cursor for rotation preview when Ctrl is pressed
+        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
+                && interactionManager != null && interactionManager.canStartRotation()
+                && !interactionManager.isDragging()) {
+            setCursor(Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR));
+        }
+
         // Find Node: Ctrl+F / Cmd+F
         if (isModifierDown && e.getKeyCode() == KeyEvent.VK_F) {
             if (mapSearchManager != null) {
@@ -775,7 +797,11 @@ public class MapPanel extends JPanel implements KeyListener {
     
     @Override
     public void keyReleased(KeyEvent e) {
-        // Not used but required by KeyListener interface
+        // Reset cursor when Ctrl is released (rotation preview ends)
+        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
+                && interactionManager != null && !interactionManager.isDragging()) {
+            setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+        }
     }
     
     @Override
