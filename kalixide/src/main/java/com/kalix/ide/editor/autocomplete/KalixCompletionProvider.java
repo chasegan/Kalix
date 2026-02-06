@@ -35,6 +35,11 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
     private CompletionContext currentContext;
 
+    // Anchor offset for value contexts: locked when the popup opens so that
+    // typing non-word chars (spaces, operators) extends the filter text rather
+    // than resetting it. -1 means not set.
+    private int valueAnchorOffset = -1;
+
     enum ContextType {
         LINE_START,
         OUTPUT_RECORDERS,
@@ -62,6 +67,19 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
         currentContext = detectContext(tc);
 
+        // Manage the value anchor for value contexts
+        boolean isValueContext = currentContext.type == ContextType.DOWNSTREAM_REFERENCE
+                || currentContext.type == ContextType.GENERAL_VALUE;
+        if (isValueContext) {
+            int caretPos = tc.getCaretPosition();
+            // Lock the anchor on first invocation; reset if caret moved before it
+            if (valueAnchorOffset < 0 || caretPos < valueAnchorOffset) {
+                valueAnchorOffset = computeWordStartOffset(tc, caretPos);
+            }
+        } else {
+            valueAnchorOffset = -1;
+        }
+
         switch (currentContext.type) {
             case LINE_START:
                 addSectionHeaderCompletions();
@@ -86,15 +104,29 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                 break;
         }
 
-        List<Completion> results = super.getCompletions(tc);
+        // Use substring matching instead of the library's prefix-only binary search.
+        // This allows typing "Hinz" to match "node.0034_Hinze_Dam.volume".
+        String enteredText = getAlreadyEnteredText(tc);
+        List<Completion> results;
+
+        if (enteredText == null || enteredText.isEmpty()) {
+            results = new ArrayList<>(completions);
+        } else {
+            String filterLower = enteredText.toLowerCase();
+            results = new ArrayList<>();
+            for (Completion c : completions) {
+                if (c.getReplacementText().toLowerCase().contains(filterLower)) {
+                    results.add(c);
+                }
+            }
+        }
 
         // Return a placeholder when no matches so the popup stays open.
         // The user can backspace to see real completions reappear.
         if (results.isEmpty() && currentContext.type != ContextType.UNKNOWN) {
-            String alreadyEntered = getAlreadyEnteredText(tc);
             List<Completion> placeholder = new ArrayList<>();
             BasicCompletion noMatch = new BasicCompletion(this,
-                    alreadyEntered != null ? alreadyEntered : "", "No matches");
+                    enteredText != null ? enteredText : "", "No matches");
             placeholder.add(noMatch);
             return placeholder;
         }
@@ -123,9 +155,8 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
                 case DOWNSTREAM_REFERENCE:
                 case GENERAL_VALUE:
-                    int equalsIdx = lineBeforeCursor.indexOf('=');
-                    if (equalsIdx >= 0) {
-                        return lineBeforeCursor.substring(equalsIdx + 1).stripLeading();
+                    if (valueAnchorOffset >= 0 && caretPos >= valueAnchorOffset) {
+                        return tc.getText(valueAnchorOffset, caretPos - valueAnchorOffset);
                     }
                     return "";
 
@@ -140,6 +171,29 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     @Override
     protected boolean isValidChar(char ch) {
         return super.isValidChar(ch) || ch == '[' || ch == ']' || ch == '.' || ch == '=';
+    }
+
+    /**
+     * Scans left from the given offset to find the start of a contiguous word
+     * (alphanumeric, '.', '_' characters). Returns the offset where the word starts.
+     * If no word chars are found (e.g., cursor is after a space), returns caretPos itself.
+     */
+    private int computeWordStartOffset(JTextComponent tc, int caretPos) {
+        try {
+            String text = tc.getText(0, caretPos);
+            int i = text.length() - 1;
+            while (i >= 0) {
+                char ch = text.charAt(i);
+                if (Character.isLetterOrDigit(ch) || ch == '.' || ch == '_') {
+                    i--;
+                } else {
+                    break;
+                }
+            }
+            return i + 1;
+        } catch (BadLocationException e) {
+            return caretPos;
+        }
     }
 
     // --- Context detection ---
