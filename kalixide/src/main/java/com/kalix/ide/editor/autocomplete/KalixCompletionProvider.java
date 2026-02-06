@@ -328,14 +328,13 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             String headerText = "[" + sectionName + "]";
 
             BasicCompletion completion = new BasicCompletion(this, headerText + "\n",
-                    sectionDef.required ? "required section" : "section",
-                    formatSectionDescription(sectionName, sectionDef));
+                    null, formatSectionDescription(sectionName, sectionDef));
             addCompletion(completion);
         }
 
         // Node section prefix
         BasicCompletion nodeCompletion = new BasicCompletion(this, "[node.",
-                "node section",
+                null,
                 "<html><b>[node.&lt;type&gt;.&lt;name&gt;]</b><br><br>"
                         + "Define a new model node.<br>"
                         + "Format: <code>[node.name]</code><br>"
@@ -367,7 +366,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             if (kalixSection != null && kalixSection.properties != null) {
                 for (SectionDefinition.PropertyDefinition prop : kalixSection.properties.values()) {
                     BasicCompletion completion = new BasicCompletion(this, prop.name + " = ",
-                            prop.required ? "required" : "optional",
+                            null,
                             "<html><b>" + prop.name + "</b>"
                                     + (prop.type != null ? "<br>Type: <code>" + prop.type + "</code>" : "")
                                     + "</html>");
@@ -383,7 +382,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         String description = formatParameterDescription(paramName, paramDef, category);
 
         BasicCompletion completion = new BasicCompletion(this, paramName + " = ",
-                category, description);
+                null, description);
         addCompletion(completion);
     }
 
@@ -408,7 +407,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             for (String recorder : nodeDef.allowedOutputs) {
                 String completionText = "node." + nodeName + "." + recorder;
                 BasicCompletion completion = new BasicCompletion(this, completionText,
-                        nodeType,
+                        null,
                         formatRecorderDescription(nodeName, nodeType, recorder));
                 addCompletion(completion);
             }
@@ -426,7 +425,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             String nodeType = node.getNodeType();
 
             BasicCompletion completion = new BasicCompletion(this, nodeName,
-                    nodeType != null ? nodeType : "node",
+                    null,
                     "<html><b>" + nodeName + "</b>"
                             + (nodeType != null ? "<br>Type: " + nodeType : "")
                             + "</html>");
@@ -456,7 +455,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             for (String recorder : nodeDef.allowedOutputs) {
                 String completionText = "node." + nodeName + "." + recorder;
                 BasicCompletion completion = new BasicCompletion(this, completionText,
-                        nodeType,
+                        null,
                         formatRecorderDescription(nodeName, nodeType, recorder));
                 addCompletion(completion);
             }
@@ -486,7 +485,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             // by_index.1 completion (always available)
             String byIndexText = "data." + cleansedName + ".by_index.1";
             BasicCompletion byIndexCompletion = new BasicCompletion(this, byIndexText,
-                    "data reference",
+                    null,
                     "<html><b>" + byIndexText + "</b>"
                             + "<br><br>Data source: " + cleansedName
                             + "<br>File: " + filePath
@@ -502,7 +501,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     for (String seriesName : cached.getSeriesNames()) {
                         String byNameText = "data." + cleansedName + ".by_name." + seriesName;
                         BasicCompletion byNameCompletion = new BasicCompletion(this, byNameText,
-                                "data reference",
+                                null,
                                 "<html><b>" + byNameText + "</b>"
                                         + "<br><br>Data source: " + cleansedName
                                         + "<br>File: " + filePath

@@ -10,10 +10,13 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.JWindow;
 import javax.swing.KeyStroke;
+import java.awt.Dimension;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.function.Supplier;
 
 /**
@@ -29,8 +32,12 @@ public class AutoCompleteManager {
     private final SchemaManager schemaManager;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final Supplier<File> baseDirectorySupplier;
+    private static final int POPUP_WIDTH = 500;
+    private static final int POPUP_HEIGHT = 300;
+
     private AutoCompletion autoCompletion;
     private InputDataRegistry inputDataRegistry;
+    private boolean popupSized = false;
 
     public AutoCompleteManager(RSyntaxTextArea textArea,
                                SchemaManager schemaManager,
@@ -55,9 +62,21 @@ public class AutoCompleteManager {
         inputDataRegistry = new InputDataRegistry(baseDirectorySupplier);
         KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry);
 
-        autoCompletion = new AutoCompletion(provider);
+        autoCompletion = new AutoCompletion(provider) {
+            @Override
+            protected int refreshPopupWindow() {
+                int result = super.refreshPopupWindow();
+                if (!popupSized) {
+                    applyPopupSize(this);
+                    // Hide and re-show so the description window is positioned
+                    // relative to the resized popup, not the original packed size
+                    hidePopupWindow();
+                    result = super.refreshPopupWindow();
+                }
+                return result;
+            }
+        };
         autoCompletion.setShowDescWindow(true);
-        autoCompletion.setChoicesWindowSize(1200, 600);
         autoCompletion.setAutoActivationEnabled(false);
         autoCompletion.setAutoCompleteSingleChoices(false);
         autoCompletion.setParameterAssistanceEnabled(false);
@@ -73,6 +92,27 @@ public class AutoCompleteManager {
     /**
      * Removes auto-completion from the text area.
      */
+    /**
+     * Applies the desired popup size by accessing the private popupWindow field
+     * and setting the preferred size on its content pane before re-packing.
+     * The library's setChoicesWindowSize uses setSize() after pack(), which the
+     * layout manager overrides. Setting preferredSize + pack() is reliable.
+     */
+    private void applyPopupSize(AutoCompletion ac) {
+        try {
+            Field popupField = AutoCompletion.class.getDeclaredField("popupWindow");
+            popupField.setAccessible(true);
+            Object popup = popupField.get(ac);
+            if (popup instanceof JWindow popupWindow) {
+                popupWindow.getContentPane().setPreferredSize(new Dimension(POPUP_WIDTH, POPUP_HEIGHT));
+                popupWindow.pack();
+                popupSized = true;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not resize autocomplete popup: {}", e.getMessage());
+        }
+    }
+
     public void dispose() {
         if (autoCompletion != null) {
             autoCompletion.uninstall();
