@@ -141,15 +141,17 @@ public class EnhancedTextEditor extends JPanel {
      * Initialize the auto-complete system.
      * This should be called after the EnhancedTextEditor is created.
      *
-     * @param schemaManager  Schema manager for node types and parameters
-     * @param modelSupplier  Supplier for the current parsed model
+     * @param schemaManager           Schema manager for node types and parameters
+     * @param modelSupplier           Supplier for the current parsed model
+     * @param baseDirectorySupplier   Supplier for the base directory to resolve relative input file paths
      */
     public void initializeAutoComplete(SchemaManager schemaManager,
-                                       java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+                                       java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier,
+                                       java.util.function.Supplier<java.io.File> baseDirectorySupplier) {
         if (autoCompleteManager != null) {
             autoCompleteManager.dispose();
         }
-        autoCompleteManager = new AutoCompleteManager(textArea, schemaManager, modelSupplier);
+        autoCompleteManager = new AutoCompleteManager(textArea, schemaManager, modelSupplier, baseDirectorySupplier);
         autoCompleteManager.install();
     }
 

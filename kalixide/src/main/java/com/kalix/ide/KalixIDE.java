@@ -260,8 +260,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Initialize context-aware command system
         textEditor.initializeContextCommands(this, modelSupplier, () -> fileOperations.getCurrentFile());
 
-        // Initialize auto-complete for text editor
-        textEditor.initializeAutoComplete(schemaManager, modelSupplier);
+        // Initialize auto-complete for text editor (with base directory for resolving input file paths)
+        textEditor.initializeAutoComplete(schemaManager, modelSupplier, () -> {
+            if (fileOperations != null) {
+                return fileOperations.getCurrentWorkingDirectory();
+            }
+            return null;
+        });
 
         // Set up linter base directory supplier to use current file's directory
         textEditor.setLinterBaseDirectorySupplier(() -> {

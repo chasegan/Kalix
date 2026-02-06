@@ -1,5 +1,6 @@
 package com.kalix.ide.editor;
 
+import com.kalix.ide.editor.autocomplete.InputDataRegistry;
 import com.kalix.ide.editor.autocomplete.KalixCompletionProvider;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.SchemaManager;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.KeyStroke;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.io.File;
 import java.util.function.Supplier;
 
 /**
@@ -26,14 +28,18 @@ public class AutoCompleteManager {
     private final RSyntaxTextArea textArea;
     private final SchemaManager schemaManager;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private final Supplier<File> baseDirectorySupplier;
     private AutoCompletion autoCompletion;
+    private InputDataRegistry inputDataRegistry;
 
     public AutoCompleteManager(RSyntaxTextArea textArea,
                                SchemaManager schemaManager,
-                               Supplier<INIModelParser.ParsedModel> modelSupplier) {
+                               Supplier<INIModelParser.ParsedModel> modelSupplier,
+                               Supplier<File> baseDirectorySupplier) {
         this.textArea = textArea;
         this.schemaManager = schemaManager;
         this.modelSupplier = modelSupplier;
+        this.baseDirectorySupplier = baseDirectorySupplier;
     }
 
     /**
@@ -46,11 +52,12 @@ public class AutoCompleteManager {
             return;
         }
 
-        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier);
+        inputDataRegistry = new InputDataRegistry(baseDirectorySupplier);
+        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry);
 
         autoCompletion = new AutoCompletion(provider);
         autoCompletion.setShowDescWindow(true);
-        autoCompletion.setChoicesWindowSize(600, 300);
+        autoCompletion.setChoicesWindowSize(1200, 600);
         autoCompletion.setAutoActivationEnabled(false);
         autoCompletion.setAutoCompleteSingleChoices(false);
         autoCompletion.setParameterAssistanceEnabled(false);
@@ -70,6 +77,10 @@ public class AutoCompleteManager {
         if (autoCompletion != null) {
             autoCompletion.uninstall();
             autoCompletion = null;
+        }
+        if (inputDataRegistry != null) {
+            inputDataRegistry.dispose();
+            inputDataRegistry = null;
         }
     }
 }

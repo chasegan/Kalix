@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.autocomplete;
 
+import com.kalix.ide.io.DataSourceHeaderReader;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
@@ -32,6 +33,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
     private final LinterSchema schema;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private final InputDataRegistry inputDataRegistry;
 
     private CompletionContext currentContext;
 
@@ -56,9 +58,11 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     }
 
     public KalixCompletionProvider(LinterSchema schema,
-                                   Supplier<INIModelParser.ParsedModel> modelSupplier) {
+                                   Supplier<INIModelParser.ParsedModel> modelSupplier,
+                                   InputDataRegistry inputDataRegistry) {
         this.schema = schema;
         this.modelSupplier = modelSupplier;
+        this.inputDataRegistry = inputDataRegistry;
     }
 
     @Override
@@ -468,21 +472,45 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             return;
         }
 
+        // Trigger a non-blocking refresh check on the registry
+        if (inputDataRegistry != null) {
+            inputDataRegistry.refresh(inputFiles);
+        }
+
         for (String filePath : inputFiles) {
             String cleansedName = cleanseFileName(filePath);
             if (cleansedName.isEmpty()) {
                 continue;
             }
 
-            String completionText = "data." + cleansedName + ".by_index.1";
-            BasicCompletion completion = new BasicCompletion(this, completionText,
+            // by_index.1 completion (always available)
+            String byIndexText = "data." + cleansedName + ".by_index.1";
+            BasicCompletion byIndexCompletion = new BasicCompletion(this, byIndexText,
                     "data reference",
-                    "<html><b>" + completionText + "</b>"
+                    "<html><b>" + byIndexText + "</b>"
                             + "<br><br>Data source: " + cleansedName
                             + "<br>File: " + filePath
                             + "<br><br>Change the index number to select"
                             + "<br>a different series from this file.</html>");
-            addCompletion(completion);
+            addCompletion(byIndexCompletion);
+
+            // by_name completions from cached file headers
+            if (inputDataRegistry != null) {
+                InputDataRegistry.CachedDataSource cached =
+                        inputDataRegistry.getDataSources().get(filePath);
+                if (cached != null) {
+                    for (String seriesName : cached.getSeriesNames()) {
+                        String byNameText = "data." + cleansedName + ".by_name." + seriesName;
+                        BasicCompletion byNameCompletion = new BasicCompletion(this, byNameText,
+                                "data reference",
+                                "<html><b>" + byNameText + "</b>"
+                                        + "<br><br>Data source: " + cleansedName
+                                        + "<br>File: " + filePath
+                                        + "<br>Series: " + seriesName + "</html>");
+                        addCompletion(byNameCompletion);
+                    }
+                }
+            }
         }
     }
 
@@ -498,8 +526,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         if (lastSlash >= 0) {
             fileName = filePath.substring(lastSlash + 1);
         }
-        // Replace all non-alphanumeric characters with underscore
-        return fileName.replaceAll("[^a-zA-Z0-9]", "_");
+        return DataSourceHeaderReader.cleanseName(fileName);
     }
 
     // --- Description formatting ---
