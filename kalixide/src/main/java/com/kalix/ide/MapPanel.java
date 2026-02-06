@@ -20,6 +20,7 @@ import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.interaction.MapClipboardManager;
 import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
+import com.kalix.ide.interaction.MapSearchManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
@@ -63,6 +64,7 @@ public class MapPanel extends JPanel implements KeyListener {
     private MapInteractionManager interactionManager;
     private MapContextMenuManager contextMenuManager;
     private MapClipboardManager clipboardManager;
+    private MapSearchManager mapSearchManager;
     private EnhancedTextEditor textEditor;
 
     // Rendering
@@ -396,6 +398,7 @@ public class MapPanel extends JPanel implements KeyListener {
             this.model.addChangeListener(event -> repaint());
             this.interactionManager = new MapInteractionManager(this, this.model);
             this.contextMenuManager = new MapContextMenuManager(this, this.interactionManager, this.model);
+            this.mapSearchManager = new MapSearchManager(this, this.model);
 
             // Auto-fit the model content to the current component size
             if (getWidth() > 0 && getHeight() > 0) {
@@ -404,6 +407,7 @@ public class MapPanel extends JPanel implements KeyListener {
         } else {
             this.interactionManager = null;
             this.contextMenuManager = null;
+            this.mapSearchManager = null;
         }
         
         repaint();
@@ -704,6 +708,14 @@ public class MapPanel extends JPanel implements KeyListener {
         // Check for modifier key (Ctrl on Windows/Linux, Cmd on macOS)
         boolean isModifierDown = (e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0 ||
                                  (e.getModifiersEx() & InputEvent.META_DOWN_MASK) != 0;
+
+        // Find Node: Ctrl+F / Cmd+F
+        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_F) {
+            if (mapSearchManager != null) {
+                mapSearchManager.showFindDialog();
+            }
+            return;
+        }
 
         // Undo: Ctrl+Z / Cmd+Z
         if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Z) {
