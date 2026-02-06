@@ -30,7 +30,8 @@ public class ModelLinter {
             new ReferenceValidator(),
             new NodeOrderingValidator(),
             new NodeValidator(),
-            new UniqueNameValidator()
+            new UniqueNameValidator(),
+            new DuplicatePropertyValidator()
         );
     }
 

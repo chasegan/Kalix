@@ -501,6 +501,11 @@
       "description": "Node names must be unique"
     },
 
+    "unique_properties": {
+      "severity": "warning",
+      "description": "This property is defined on another line."
+    },
+
     "data_reference_files": {
       "severity": "warning",
       "description": "Data references should point to files listed in inputs section"

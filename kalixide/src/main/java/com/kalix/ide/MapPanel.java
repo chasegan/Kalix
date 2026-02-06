@@ -451,6 +451,32 @@ public class MapPanel extends JPanel implements KeyListener {
         repaint();
     }
 
+    /**
+     * Selects a node and centers the view on it, without triggering the
+     * map→editor scroll callback. Used by the editor's "Show on Map" action.
+     *
+     * @param nodeName The name of the node to select and center on
+     */
+    public void selectNodeFromEditor(String nodeName) {
+        if (model == null || nodeName == null) {
+            return;
+        }
+
+        ModelNode node = model.getNode(nodeName);
+        if (node == null) {
+            return;
+        }
+
+        // Select the node (replace selection)
+        model.selectNode(nodeName, false);
+
+        // Center the view on the node
+        panX = getWidth() / 2.0 - node.getX() * zoomLevel;
+        panY = getHeight() / 2.0 - node.getY() * zoomLevel;
+
+        repaint();
+    }
+
     public void clearModel() {
         repaint();
     }

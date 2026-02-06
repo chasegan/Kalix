@@ -379,7 +379,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Set up bidirectional text synchronization
         mapPanel.setupTextSynchronization(textEditor);
-        
+
+        // Wire map panel to editor for "Show on Map" context menu action
+        textEditor.setMapPanel(mapPanel);
+
         // Register theme-aware components with theme manager
         themeManager.registerThemeAwareComponents(mapPanel, textEditor);
         

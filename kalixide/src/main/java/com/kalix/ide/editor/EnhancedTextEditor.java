@@ -69,6 +69,9 @@ public class EnhancedTextEditor extends JPanel {
     // Context command dependencies (stored for programmatic rename access)
     private JFrame commandParentFrame;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> commandModelSupplier;
+
+    // Map panel reference for "Show on Map" context menu action
+    private com.kalix.ide.MapPanel mapPanel;
     
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
@@ -179,6 +182,15 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Sets the map panel reference for the "Show on Map" context menu action.
+     *
+     * @param mapPanel The map panel to navigate to
+     */
+    public void setMapPanel(com.kalix.ide.MapPanel mapPanel) {
+        this.mapPanel = mapPanel;
+    }
+
+    /**
      * Sets up the right-click context menu with context-aware commands.
      */
     private void setupContextMenu() {
@@ -235,6 +247,21 @@ public class EnhancedTextEditor extends JPanel {
                 menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION)));
                 menu.addSeparator();
                 menu.add(createMenuItem("Select All", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
+
+                // Add "Show on Map" if cursor is in a node section
+                if (mapPanel != null && commandModelSupplier != null) {
+                    com.kalix.ide.editor.commands.ContextDetector contextDetector = new com.kalix.ide.editor.commands.ContextDetector();
+                    com.kalix.ide.editor.commands.EditorContext ctx = contextDetector.detectContext(
+                        textArea.getCaretPosition(), textArea.getText(),
+                        textArea.getSelectedText(), commandModelSupplier.get());
+                    if (ctx.getNodeName().isPresent()) {
+                        String nodeName = ctx.getNodeName().get();
+                        menu.addSeparator();
+                        JMenuItem showOnMapItem = new JMenuItem("Show on Map");
+                        showOnMapItem.addActionListener(ae -> mapPanel.selectNodeFromEditor(nodeName));
+                        menu.add(showOnMapItem);
+                    }
+                }
 
                 // Add context-aware commands if available
                 if (contextCommandManager != null) {

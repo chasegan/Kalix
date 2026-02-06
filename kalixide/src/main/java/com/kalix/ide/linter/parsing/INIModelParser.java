@@ -42,6 +42,7 @@ public class INIModelParser {
         private final int startLine;
         private int endLine;
         private final Map<String, Property> properties = new LinkedHashMap<>();
+        private final List<Property> allProperties = new ArrayList<>();
 
         public Section(String name, int startLine) {
             this.name = name;
@@ -53,6 +54,7 @@ public class INIModelParser {
         public int getStartLine() { return startLine; }
         public int getEndLine() { return endLine; }
         public Map<String, Property> getProperties() { return properties; }
+        public List<Property> getAllProperties() { return allProperties; }
 
         public void updateEndLine(int lineNumber) {
             this.endLine = lineNumber;
@@ -60,6 +62,7 @@ public class INIModelParser {
 
         public void addProperty(String key, String value, int lineNumber) {
             properties.put(key, new Property(key, value, lineNumber));
+            allProperties.add(new Property(key, value, lineNumber));
         }
     }
 
@@ -280,6 +283,27 @@ public class INIModelParser {
         }
 
         return references;
+    }
+
+    /**
+     * Find duplicate properties within a section.
+     * Returns a map of property key to list of line numbers where it appears (only keys with 2+ occurrences).
+     */
+    public static Map<String, List<Integer>> findDuplicateProperties(Section section) {
+        Map<String, List<Integer>> propertyLines = new HashMap<>();
+
+        for (Property prop : section.getAllProperties()) {
+            propertyLines.computeIfAbsent(prop.getKey(), k -> new ArrayList<>()).add(prop.getLineNumber());
+        }
+
+        Map<String, List<Integer>> duplicates = new HashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : propertyLines.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                duplicates.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return duplicates;
     }
 
     /**
