@@ -399,6 +399,7 @@ public class MapPanel extends JPanel implements KeyListener {
             this.interactionManager = new MapInteractionManager(this, this.model);
             this.contextMenuManager = new MapContextMenuManager(this, this.interactionManager, this.model);
             this.mapSearchManager = new MapSearchManager(this, this.model);
+            this.contextMenuManager.setMapSearchManager(this.mapSearchManager);
 
             // Auto-fit the model content to the current component size
             if (getWidth() > 0 && getHeight() > 0) {

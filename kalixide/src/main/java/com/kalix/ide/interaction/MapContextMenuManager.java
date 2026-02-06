@@ -29,6 +29,9 @@ public class MapContextMenuManager {
     // Text editor for rename operations
     private EnhancedTextEditor textEditor;
 
+    // Search manager for find node dialog
+    private MapSearchManager mapSearchManager;
+
     // Track where the context menu was invoked for potential future use (e.g., paste location)
     private Point lastContextMenuLocation;
 
@@ -53,6 +56,14 @@ public class MapContextMenuManager {
      */
     public void setTextEditor(EnhancedTextEditor textEditor) {
         this.textEditor = textEditor;
+    }
+
+    /**
+     * Set the search manager for the "Find Node" menu item.
+     * @param mapSearchManager The map search manager
+     */
+    public void setMapSearchManager(MapSearchManager mapSearchManager) {
+        this.mapSearchManager = mapSearchManager;
     }
 
     /**
@@ -167,6 +178,17 @@ public class MapContextMenuManager {
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+
+        // Find Node
+        JMenuItem findNodeItem = new JMenuItem("Find Node...");
+        findNodeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, shortcutMask));
+        findNodeItem.setEnabled(mapSearchManager != null);
+        findNodeItem.addActionListener(e -> {
+            if (mapSearchManager != null) {
+                mapSearchManager.showFindDialog();
+            }
+        });
+        menu.add(findNodeItem);
     }
 
     /**
