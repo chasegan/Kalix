@@ -50,6 +50,7 @@ public class AutoCompleteManager {
 
         autoCompletion = new AutoCompletion(provider);
         autoCompletion.setShowDescWindow(true);
+        autoCompletion.setChoicesWindowSize(600, 300);
         autoCompletion.setAutoActivationEnabled(false);
         autoCompletion.setAutoCompleteSingleChoices(false);
         autoCompletion.setParameterAssistanceEnabled(false);

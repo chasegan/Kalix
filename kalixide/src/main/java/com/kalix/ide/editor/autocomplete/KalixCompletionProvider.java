@@ -35,9 +35,9 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
     private CompletionContext currentContext;
 
-    // Anchor offset for value contexts: locked when the popup opens so that
-    // typing non-word chars (spaces, operators) extends the filter text rather
-    // than resetting it. -1 means not set.
+    // Anchor offset for value contexts: computed by scanning left from the caret
+    // for contiguous word characters (alphanumeric, '.', '_'). Recomputed on each
+    // invocation so it stays correct across multiple completion sessions.
     private int valueAnchorOffset = -1;
 
     enum ContextType {
@@ -67,15 +67,13 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
         currentContext = detectContext(tc);
 
-        // Manage the value anchor for value contexts
+        // Manage the value anchor for value contexts.
+        // Always recompute by scanning left for word characters so the anchor
+        // stays correct across multiple completion sessions on the same line.
         boolean isValueContext = currentContext.type == ContextType.DOWNSTREAM_REFERENCE
                 || currentContext.type == ContextType.GENERAL_VALUE;
         if (isValueContext) {
-            int caretPos = tc.getCaretPosition();
-            // Lock the anchor on first invocation; reset if caret moved before it
-            if (valueAnchorOffset < 0 || caretPos < valueAnchorOffset) {
-                valueAnchorOffset = computeWordStartOffset(tc, caretPos);
-            }
+            valueAnchorOffset = computeWordStartOffset(tc, tc.getCaretPosition());
         } else {
             valueAnchorOffset = -1;
         }
@@ -460,8 +458,48 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             }
         }
 
-        // TODO: Add data series references (e.g., data.flows_csv.by_index.1)
-        // This requires parsing the [inputs] section to extract file names and column headers
+        // Data series references from [inputs] section
+        addDataSeriesCompletions(model);
+    }
+
+    private void addDataSeriesCompletions(INIModelParser.ParsedModel model) {
+        List<String> inputFiles = model.getInputFiles();
+        if (inputFiles == null) {
+            return;
+        }
+
+        for (String filePath : inputFiles) {
+            String cleansedName = cleanseFileName(filePath);
+            if (cleansedName.isEmpty()) {
+                continue;
+            }
+
+            String completionText = "data." + cleansedName + ".by_index.1";
+            BasicCompletion completion = new BasicCompletion(this, completionText,
+                    "data reference",
+                    "<html><b>" + completionText + "</b>"
+                            + "<br><br>Data source: " + cleansedName
+                            + "<br>File: " + filePath
+                            + "<br><br>Change the index number to select"
+                            + "<br>a different series from this file.</html>");
+            addCompletion(completion);
+        }
+    }
+
+    /**
+     * Extracts the filename from a path and cleanses it for use as a data reference.
+     * All non-alphanumeric characters are replaced with underscores.
+     * e.g., "./some/folder/GS_daily-flows(all flows).csv" → "GS_daily_flows_all_flows__csv"
+     */
+    static String cleanseFileName(String filePath) {
+        // Extract filename from path
+        String fileName = filePath;
+        int lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        if (lastSlash >= 0) {
+            fileName = filePath.substring(lastSlash + 1);
+        }
+        // Replace all non-alphanumeric characters with underscore
+        return fileName.replaceAll("[^a-zA-Z0-9]", "_");
     }
 
     // --- Description formatting ---
