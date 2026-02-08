@@ -168,12 +168,45 @@ impl SimpleNodewiseOrderingSystem {
             self.links_simple_ordering.push(new_link_item);
         }
 
-        // Phase 2: Build CSR-style regulated node list and flat incoming links vec.
-        // First, collect incoming regulated links per node into a temporary structure,
-        // then flatten into contiguous storage in reverse node order.
+        // Phase 2: Determine which regulated nodes actually need to be visited.
+        // A node only needs ordering if it (or a downstream node reachable through
+        // regulated links) is an order-generating type: storage, regulated_user, or
+        // order_constraint. Nodes below the last order-generating node on any branch
+        // will only ever see zero dsorders, so visiting them is wasted work.
+        let mut needed = vec![false; nodes.len()];
+        for (i, node) in nodes.iter().enumerate() {
+            match node {
+                NodeEnum::StorageNode(_) |
+                NodeEnum::RegulatedUserNode(_) |
+                NodeEnum::OrderConstraintNode(_) => needed[i] = true,
+                _ => {}
+            }
+        }
+        // Propagate backward through regulated links: if to_node is needed, from_node is too.
+        // Reverse iteration ensures transitivity (links are ordered with from_node < to_node).
+        for li in self.links_simple_ordering.iter().rev() {
+            if li.zone_idx.is_some() && needed[li.to_node] {
+                needed[li.from_node] = true;
+            }
+        }
+
+        // Phase 2b: Reset is_regulated on pruned InflowNodes.
+        // Phase 1 marks inflow nodes as is_regulated=true when they're on regulated links.
+        // If pruning excludes them from ordering visits, order_phase_inflow_value is never set,
+        // but the flow phase would still use it (stale) if is_regulated remains true.
+        for (i, node) in nodes.iter_mut().enumerate() {
+            if let NodeEnum::InflowNode(inflow_node) = node {
+                if inflow_node.is_regulated && !needed[i] {
+                    inflow_node.is_regulated = false;
+                }
+            }
+        }
+
+        // Phase 3: Build CSR-style regulated node list and flat incoming links vec.
+        // Only include nodes that are both regulated and needed.
         let mut per_node_links: Vec<Vec<IncomingRegulatedLink>> = vec![Vec::new(); nodes.len()];
         for li in &self.links_simple_ordering {
-            if li.zone_idx.is_some() {
+            if li.zone_idx.is_some() && needed[li.to_node] {
                 per_node_links[li.to_node].push(IncomingRegulatedLink {
                     link_idx: li.link_idx,
                     from_node: li.from_node,
