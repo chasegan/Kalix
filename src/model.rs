@@ -449,7 +449,7 @@ impl Model {
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
-        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &self.data_cache);
+        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache);
 
         // Execute nodes with flow phase
         set_context_phase(SimPhase::Flow);

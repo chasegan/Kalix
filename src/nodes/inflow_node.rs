@@ -87,7 +87,7 @@ impl Node for InflowNode {
 
         // Get lateral inflow
         self.lateral_inflow = if self.is_regulated {
-            // Was evaluated in ordering phase
+            // We calculated the inflow early to account for it during ordering
             self.order_phase_inflow_value
         } else {
             // Evaluate now

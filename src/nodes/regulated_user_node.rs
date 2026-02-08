@@ -24,6 +24,7 @@ pub struct RegulatedUserNode {
 
     // Internal state only
     pub dsorders: [f64; MAX_DS_LINKS],
+    order_due: f64,
     usflow: f64,
     dsflow_primary: f64,
     diversion: f64,
@@ -52,6 +53,23 @@ impl RegulatedUserNode {
             order_input: DynamicInput::default(),
             order_buffer: FifoBuffer::default(),
             ..Default::default()
+        }
+    }
+
+    pub fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Get demand value (this is equal to our old order, which is due to arrive today)
+        self.order_due = self.order_buffer.push(self.order_value);
+
+        // Order phase recorders
+        if let Some(idx) = self.recorder_idx_order {
+            data_cache.add_value_at_index(idx, self.order_value);
+        }
+        if let Some(idx) = self.recorder_idx_order_due {
+            data_cache.add_value_at_index(idx, self.order_due);
+        }
+        if let Some(idx) = self.recorder_idx_demand {
+            data_cache.add_value_at_index(idx, self.order_due);
         }
     }
 }
@@ -105,11 +123,12 @@ impl Node for RegulatedUserNode {
 
     fn get_name(&self) -> &str { &self.name }
 
+
+
+
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
-        // Get demand value (this is equal to our old order, which is due to arrive today)
-        let order_due = self.order_buffer.push(self.order_value);
-        let new_demand = order_due;
+        //let new_demand = order_due;
 
         // Work out availability
         let mut available = self.usflow;
@@ -124,7 +143,7 @@ impl Node for RegulatedUserNode {
         };
 
         // Determine the diversion value
-        self.diversion = new_demand.min(available);
+        self.diversion = self.order_due.min(available);
 
         // Extract the water and update mbal
         self.dsflow_primary = self.usflow - self.diversion;
@@ -133,15 +152,6 @@ impl Node for RegulatedUserNode {
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
-        }
-        if let Some(idx) = self.recorder_idx_order {
-            data_cache.add_value_at_index(idx, self.order_value);
-        }
-        if let Some(idx) = self.recorder_idx_order_due {
-            data_cache.add_value_at_index(idx, order_due);
-        }
-        if let Some(idx) = self.recorder_idx_demand {
-            data_cache.add_value_at_index(idx, new_demand);
         }
         if let Some(idx) = self.recorder_idx_diversion {
             data_cache.add_value_at_index(idx, self.diversion);

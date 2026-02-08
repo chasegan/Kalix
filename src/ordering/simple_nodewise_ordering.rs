@@ -210,7 +210,7 @@ impl SimpleNodewiseOrderingSystem {
     /// Unlike simple_ordering.rs which iterates links in reverse, this method iterates only
     /// regulated nodes in reverse definition order, with incoming links stored in a flat
     /// contiguous vec for cache locality.
-    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &DataCache) {
+    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache) {
 
         // Guard to save computation time if there is no ordering!
         if !self.model_has_ordering {
@@ -317,6 +317,7 @@ impl SimpleNodewiseOrderingSystem {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
                         n_orders += 1;
                     }
+                    n.run_order_phase(data_cache);
                 },
                 other => {
                     // For all other nodes, we follow a greedy philosophy, propagating all orders
