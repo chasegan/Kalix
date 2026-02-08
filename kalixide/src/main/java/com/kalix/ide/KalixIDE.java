@@ -1281,6 +1281,19 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void copyModelPath() {
+        File currentFile = fileOperations.getCurrentFile();
+        if (currentFile != null) {
+            String path = currentFile.getAbsolutePath();
+            java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(path);
+            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
+            updateStatus("Copied: " + path);
+        } else {
+            updateStatus("No model file is currently open");
+        }
+    }
+
+    @Override
     public void openTerminalHere() {
         File targetDirectory = null;
 

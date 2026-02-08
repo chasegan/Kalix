@@ -79,6 +79,7 @@ public class MenuBarBuilder {
         boolean isAutoReloadEnabled();
 
         // System menu
+        void copyModelPath();
         void openTerminalHere();
 
         // External editor
@@ -269,6 +270,8 @@ public class MenuBarBuilder {
     private JMenu createSystemMenu() {
         JMenu systemMenu = new JMenu("System");
 
+        systemMenu.add(createMenuItem("Copy Model Path", e -> callbacks.copyModelPath()));
+        systemMenu.addSeparator();
         systemMenu.add(createMenuItem("Terminal", e -> callbacks.openTerminalHere()));
         systemMenu.add(createMenuItem("Visual Studio Code", e -> callbacks.openExternalEditor()));
         systemMenu.add(createMenuItem("File Manager", e -> callbacks.openFileManager()));
