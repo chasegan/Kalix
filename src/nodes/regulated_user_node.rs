@@ -55,23 +55,6 @@ impl RegulatedUserNode {
             ..Default::default()
         }
     }
-
-    pub fn run_order_phase(&mut self, data_cache: &mut DataCache) {
-
-        // Get demand value (this is equal to our old order, which is due to arrive today)
-        self.order_due = self.order_buffer.push(self.order_value);
-
-        // Order phase recorders
-        if let Some(idx) = self.recorder_idx_order {
-            data_cache.add_value_at_index(idx, self.order_value);
-        }
-        if let Some(idx) = self.recorder_idx_order_due {
-            data_cache.add_value_at_index(idx, self.order_due);
-        }
-        if let Some(idx) = self.recorder_idx_demand {
-            data_cache.add_value_at_index(idx, self.order_due);
-        }
-    }
 }
 
 impl Node for RegulatedUserNode {
@@ -123,8 +106,22 @@ impl Node for RegulatedUserNode {
 
     fn get_name(&self) -> &str { &self.name }
 
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Get demand value (this is equal to our old order, which is due to arrive today)
+        self.order_due = self.order_buffer.push(self.order_value);
 
+        // Order phase recorders
+        if let Some(idx) = self.recorder_idx_order {
+            data_cache.add_value_at_index(idx, self.order_value);
+        }
+        if let Some(idx) = self.recorder_idx_order_due {
+            data_cache.add_value_at_index(idx, self.order_due);
+        }
+        if let Some(idx) = self.recorder_idx_demand {
+            data_cache.add_value_at_index(idx, self.order_due);
+        }
+    }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 

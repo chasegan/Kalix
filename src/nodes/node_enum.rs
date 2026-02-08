@@ -147,6 +147,24 @@ impl Node for NodeEnum {
         }
     }
 
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::ConfluenceNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::GaugeNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::LossNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::SplitterNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::UnregulatedUserNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::RegulatedUserNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::Gr4jNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::InflowNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::RoutingNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::SacramentoNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::StorageNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::OrderConstraintNode(node) => node.run_order_phase(data_cache),
+        }
+    }
+
     fn dsorders_mut(&mut self) -> &mut [f64] {
         match self {
             NodeEnum::BlackholeNode(node) => node.dsorders_mut(),
