@@ -1,0 +1,3177 @@
+[kalix]
+start = 2000-01-01
+end = 2000-12-31
+
+[inputs]
+
+[node.dam_1]
+loc = 0, 0
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_0_u1
+
+[node.dam_2]
+loc = 40, 10
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_1_u1
+
+[node.dam_3]
+loc = 80, 20
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_2_u1
+
+[node.dam_4]
+loc = 120, 30
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_3_u1
+
+[node.dam_5]
+loc = 160, 40
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_4_u1
+
+[node.dam_6]
+loc = 200, 50
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_5_u1
+
+[node.dam_7]
+loc = 240, 60
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_6_u1
+
+[node.dam_8]
+loc = 280, 70
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_7_u1
+
+[node.dam_9]
+loc = 320, 80
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_8_u1
+
+[node.dam_10]
+loc = 360, 90
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_9_u1
+
+[node.dam_11]
+loc = 400, 100
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_10_u1
+
+[node.dam_12]
+loc = 440, 110
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_11_u1
+
+[node.dam_13]
+loc = 480, 120
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_12_u1
+
+[node.dam_14]
+loc = 520, 130
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_13_u1
+
+[node.dam_15]
+loc = 560, 140
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_14_u1
+
+[node.dam_16]
+loc = 600, 150
+type = storage
+initial_volume = 10000
+dimensions = Level [m]         , Volume [ML], Area [km2]        , Spill [ML], 
+             0.0               , 0.0        , 0.0               , 0.0, 
+             2.5               , 156.25     , 0.1875            , 0.0, 
+             5.0               , 1250.0     , 0.75              , 0.0, 
+             7.5               , 4218.75    , 1.6875            , 0.0, 
+             10.0              , 10000.0    , 3.0               , 0.0, 
+             10.000333322222838, 10001.0    , 3.0001999966668147, 1.0E9, 
+             464.15888336127784, 1.0E9      , 6463.304070095651 , 1.0E9,
+ds_1_outlet = 5
+ds_1 = b0_15_u1
+
+[node.b0_0_u1]
+loc = 0, 160
+type = regulated_user
+order = 2
+ds_1 = b0_0_l1
+
+[node.b0_0_l1]
+loc = 0, 170
+type = routing
+lag = 1
+ds_1 = b0_0_u2
+
+[node.b0_0_u2]
+loc = 0, 180
+type = regulated_user
+order = 2
+ds_1 = b0_0_l2
+
+[node.b0_0_l2]
+loc = 0, 190
+type = routing
+lag = 1
+ds_1 = b0_0_u3
+
+[node.b0_0_u3]
+loc = 0, 200
+type = regulated_user
+order = 2
+ds_1 = b0_0_l3
+
+[node.b0_0_l3]
+loc = 0, 210
+type = routing
+lag = 1
+ds_1 = b0_0_u4
+
+[node.b0_0_u4]
+loc = 0, 220
+type = regulated_user
+order = 2
+ds_1 = b0_0_l4
+
+[node.b0_0_l4]
+loc = 0, 230
+type = routing
+lag = 1
+ds_1 = b0_0_u5
+
+[node.b0_0_u5]
+loc = 0, 240
+type = regulated_user
+order = 2
+ds_1 = b0_0_l5
+
+[node.b0_0_l5]
+loc = 0, 250
+type = routing
+lag = 1
+ds_1 = b0_0_u6
+
+[node.b0_0_u6]
+loc = 0, 260
+type = regulated_user
+order = 2
+ds_1 = b0_0_l6
+
+[node.b0_0_l6]
+loc = 0, 270
+type = routing
+lag = 1
+ds_1 = b0_0_u7
+
+[node.b0_0_u7]
+loc = 0, 280
+type = regulated_user
+order = 2
+ds_1 = b0_0_l7
+
+[node.b0_0_l7]
+loc = 0, 290
+type = routing
+lag = 1
+ds_1 = b0_0_u8
+
+[node.b0_0_u8]
+loc = 0, 300
+type = regulated_user
+order = 2
+ds_1 = b0_0_l8
+
+[node.b0_0_l8]
+loc = 0, 310
+type = routing
+lag = 1
+ds_1 = b0_0_u9
+
+[node.b0_0_u9]
+loc = 0, 320
+type = regulated_user
+order = 2
+ds_1 = b0_0_l9
+
+[node.b0_0_l9]
+loc = 0, 330
+type = routing
+lag = 1
+ds_1 = b0_0_u10
+
+[node.b0_0_u10]
+loc = 0, 340
+type = regulated_user
+order = 2
+ds_1 = b0_0_l10
+
+[node.b0_0_l10]
+loc = 0, 350
+type = routing
+lag = 1
+ds_1 = conf_L1_0
+
+[node.b0_1_u1]
+loc = 40, 360
+type = regulated_user
+order = 2
+ds_1 = b0_1_l1
+
+[node.b0_1_l1]
+loc = 40, 370
+type = routing
+lag = 1
+ds_1 = b0_1_u2
+
+[node.b0_1_u2]
+loc = 40, 380
+type = regulated_user
+order = 2
+ds_1 = b0_1_l2
+
+[node.b0_1_l2]
+loc = 40, 390
+type = routing
+lag = 1
+ds_1 = b0_1_u3
+
+[node.b0_1_u3]
+loc = 40, 400
+type = regulated_user
+order = 2
+ds_1 = b0_1_l3
+
+[node.b0_1_l3]
+loc = 40, 410
+type = routing
+lag = 1
+ds_1 = b0_1_u4
+
+[node.b0_1_u4]
+loc = 40, 420
+type = regulated_user
+order = 2
+ds_1 = b0_1_l4
+
+[node.b0_1_l4]
+loc = 40, 430
+type = routing
+lag = 1
+ds_1 = b0_1_u5
+
+[node.b0_1_u5]
+loc = 40, 440
+type = regulated_user
+order = 2
+ds_1 = b0_1_l5
+
+[node.b0_1_l5]
+loc = 40, 450
+type = routing
+lag = 1
+ds_1 = b0_1_u6
+
+[node.b0_1_u6]
+loc = 40, 460
+type = regulated_user
+order = 2
+ds_1 = b0_1_l6
+
+[node.b0_1_l6]
+loc = 40, 470
+type = routing
+lag = 1
+ds_1 = b0_1_u7
+
+[node.b0_1_u7]
+loc = 40, 480
+type = regulated_user
+order = 2
+ds_1 = b0_1_l7
+
+[node.b0_1_l7]
+loc = 40, 490
+type = routing
+lag = 1
+ds_1 = b0_1_u8
+
+[node.b0_1_u8]
+loc = 40, 500
+type = regulated_user
+order = 2
+ds_1 = b0_1_l8
+
+[node.b0_1_l8]
+loc = 40, 510
+type = routing
+lag = 1
+ds_1 = b0_1_u9
+
+[node.b0_1_u9]
+loc = 40, 520
+type = regulated_user
+order = 2
+ds_1 = b0_1_l9
+
+[node.b0_1_l9]
+loc = 40, 530
+type = routing
+lag = 1
+ds_1 = b0_1_u10
+
+[node.b0_1_u10]
+loc = 40, 540
+type = regulated_user
+order = 2
+ds_1 = b0_1_l10
+
+[node.b0_1_l10]
+loc = 40, 550
+type = routing
+lag = 1
+ds_1 = conf_L1_0
+
+[node.b0_2_u1]
+loc = 80, 560
+type = regulated_user
+order = 2
+ds_1 = b0_2_l1
+
+[node.b0_2_l1]
+loc = 80, 570
+type = routing
+lag = 1
+ds_1 = b0_2_u2
+
+[node.b0_2_u2]
+loc = 80, 580
+type = regulated_user
+order = 2
+ds_1 = b0_2_l2
+
+[node.b0_2_l2]
+loc = 80, 590
+type = routing
+lag = 1
+ds_1 = b0_2_u3
+
+[node.b0_2_u3]
+loc = 80, 600
+type = regulated_user
+order = 2
+ds_1 = b0_2_l3
+
+[node.b0_2_l3]
+loc = 80, 610
+type = routing
+lag = 1
+ds_1 = b0_2_u4
+
+[node.b0_2_u4]
+loc = 80, 620
+type = regulated_user
+order = 2
+ds_1 = b0_2_l4
+
+[node.b0_2_l4]
+loc = 80, 630
+type = routing
+lag = 1
+ds_1 = b0_2_u5
+
+[node.b0_2_u5]
+loc = 80, 640
+type = regulated_user
+order = 2
+ds_1 = b0_2_l5
+
+[node.b0_2_l5]
+loc = 80, 650
+type = routing
+lag = 1
+ds_1 = b0_2_u6
+
+[node.b0_2_u6]
+loc = 80, 660
+type = regulated_user
+order = 2
+ds_1 = b0_2_l6
+
+[node.b0_2_l6]
+loc = 80, 670
+type = routing
+lag = 1
+ds_1 = b0_2_u7
+
+[node.b0_2_u7]
+loc = 80, 680
+type = regulated_user
+order = 2
+ds_1 = b0_2_l7
+
+[node.b0_2_l7]
+loc = 80, 690
+type = routing
+lag = 1
+ds_1 = b0_2_u8
+
+[node.b0_2_u8]
+loc = 80, 700
+type = regulated_user
+order = 2
+ds_1 = b0_2_l8
+
+[node.b0_2_l8]
+loc = 80, 710
+type = routing
+lag = 1
+ds_1 = b0_2_u9
+
+[node.b0_2_u9]
+loc = 80, 720
+type = regulated_user
+order = 2
+ds_1 = b0_2_l9
+
+[node.b0_2_l9]
+loc = 80, 730
+type = routing
+lag = 1
+ds_1 = b0_2_u10
+
+[node.b0_2_u10]
+loc = 80, 740
+type = regulated_user
+order = 2
+ds_1 = b0_2_l10
+
+[node.b0_2_l10]
+loc = 80, 750
+type = routing
+lag = 1
+ds_1 = conf_L1_1
+
+[node.b0_3_u1]
+loc = 120, 760
+type = regulated_user
+order = 2
+ds_1 = b0_3_l1
+
+[node.b0_3_l1]
+loc = 120, 770
+type = routing
+lag = 1
+ds_1 = b0_3_u2
+
+[node.b0_3_u2]
+loc = 120, 780
+type = regulated_user
+order = 2
+ds_1 = b0_3_l2
+
+[node.b0_3_l2]
+loc = 120, 790
+type = routing
+lag = 1
+ds_1 = b0_3_u3
+
+[node.b0_3_u3]
+loc = 120, 800
+type = regulated_user
+order = 2
+ds_1 = b0_3_l3
+
+[node.b0_3_l3]
+loc = 120, 810
+type = routing
+lag = 1
+ds_1 = b0_3_u4
+
+[node.b0_3_u4]
+loc = 120, 820
+type = regulated_user
+order = 2
+ds_1 = b0_3_l4
+
+[node.b0_3_l4]
+loc = 120, 830
+type = routing
+lag = 1
+ds_1 = b0_3_u5
+
+[node.b0_3_u5]
+loc = 120, 840
+type = regulated_user
+order = 2
+ds_1 = b0_3_l5
+
+[node.b0_3_l5]
+loc = 120, 850
+type = routing
+lag = 1
+ds_1 = b0_3_u6
+
+[node.b0_3_u6]
+loc = 120, 860
+type = regulated_user
+order = 2
+ds_1 = b0_3_l6
+
+[node.b0_3_l6]
+loc = 120, 870
+type = routing
+lag = 1
+ds_1 = b0_3_u7
+
+[node.b0_3_u7]
+loc = 120, 880
+type = regulated_user
+order = 2
+ds_1 = b0_3_l7
+
+[node.b0_3_l7]
+loc = 120, 890
+type = routing
+lag = 1
+ds_1 = b0_3_u8
+
+[node.b0_3_u8]
+loc = 120, 900
+type = regulated_user
+order = 2
+ds_1 = b0_3_l8
+
+[node.b0_3_l8]
+loc = 120, 910
+type = routing
+lag = 1
+ds_1 = b0_3_u9
+
+[node.b0_3_u9]
+loc = 120, 920
+type = regulated_user
+order = 2
+ds_1 = b0_3_l9
+
+[node.b0_3_l9]
+loc = 120, 930
+type = routing
+lag = 1
+ds_1 = b0_3_u10
+
+[node.b0_3_u10]
+loc = 120, 940
+type = regulated_user
+order = 2
+ds_1 = b0_3_l10
+
+[node.b0_3_l10]
+loc = 120, 950
+type = routing
+lag = 1
+ds_1 = conf_L1_1
+
+[node.b0_4_u1]
+loc = 160, 960
+type = regulated_user
+order = 2
+ds_1 = b0_4_l1
+
+[node.b0_4_l1]
+loc = 160, 970
+type = routing
+lag = 1
+ds_1 = b0_4_u2
+
+[node.b0_4_u2]
+loc = 160, 980
+type = regulated_user
+order = 2
+ds_1 = b0_4_l2
+
+[node.b0_4_l2]
+loc = 160, 990
+type = routing
+lag = 1
+ds_1 = b0_4_u3
+
+[node.b0_4_u3]
+loc = 160, 1000
+type = regulated_user
+order = 2
+ds_1 = b0_4_l3
+
+[node.b0_4_l3]
+loc = 160, 1010
+type = routing
+lag = 1
+ds_1 = b0_4_u4
+
+[node.b0_4_u4]
+loc = 160, 1020
+type = regulated_user
+order = 2
+ds_1 = b0_4_l4
+
+[node.b0_4_l4]
+loc = 160, 1030
+type = routing
+lag = 1
+ds_1 = b0_4_u5
+
+[node.b0_4_u5]
+loc = 160, 1040
+type = regulated_user
+order = 2
+ds_1 = b0_4_l5
+
+[node.b0_4_l5]
+loc = 160, 1050
+type = routing
+lag = 1
+ds_1 = b0_4_u6
+
+[node.b0_4_u6]
+loc = 160, 1060
+type = regulated_user
+order = 2
+ds_1 = b0_4_l6
+
+[node.b0_4_l6]
+loc = 160, 1070
+type = routing
+lag = 1
+ds_1 = b0_4_u7
+
+[node.b0_4_u7]
+loc = 160, 1080
+type = regulated_user
+order = 2
+ds_1 = b0_4_l7
+
+[node.b0_4_l7]
+loc = 160, 1090
+type = routing
+lag = 1
+ds_1 = b0_4_u8
+
+[node.b0_4_u8]
+loc = 160, 1100
+type = regulated_user
+order = 2
+ds_1 = b0_4_l8
+
+[node.b0_4_l8]
+loc = 160, 1110
+type = routing
+lag = 1
+ds_1 = b0_4_u9
+
+[node.b0_4_u9]
+loc = 160, 1120
+type = regulated_user
+order = 2
+ds_1 = b0_4_l9
+
+[node.b0_4_l9]
+loc = 160, 1130
+type = routing
+lag = 1
+ds_1 = b0_4_u10
+
+[node.b0_4_u10]
+loc = 160, 1140
+type = regulated_user
+order = 2
+ds_1 = b0_4_l10
+
+[node.b0_4_l10]
+loc = 160, 1150
+type = routing
+lag = 1
+ds_1 = conf_L1_2
+
+[node.b0_5_u1]
+loc = 200, 1160
+type = regulated_user
+order = 2
+ds_1 = b0_5_l1
+
+[node.b0_5_l1]
+loc = 200, 1170
+type = routing
+lag = 1
+ds_1 = b0_5_u2
+
+[node.b0_5_u2]
+loc = 200, 1180
+type = regulated_user
+order = 2
+ds_1 = b0_5_l2
+
+[node.b0_5_l2]
+loc = 200, 1190
+type = routing
+lag = 1
+ds_1 = b0_5_u3
+
+[node.b0_5_u3]
+loc = 200, 1200
+type = regulated_user
+order = 2
+ds_1 = b0_5_l3
+
+[node.b0_5_l3]
+loc = 200, 1210
+type = routing
+lag = 1
+ds_1 = b0_5_u4
+
+[node.b0_5_u4]
+loc = 200, 1220
+type = regulated_user
+order = 2
+ds_1 = b0_5_l4
+
+[node.b0_5_l4]
+loc = 200, 1230
+type = routing
+lag = 1
+ds_1 = b0_5_u5
+
+[node.b0_5_u5]
+loc = 200, 1240
+type = regulated_user
+order = 2
+ds_1 = b0_5_l5
+
+[node.b0_5_l5]
+loc = 200, 1250
+type = routing
+lag = 1
+ds_1 = b0_5_u6
+
+[node.b0_5_u6]
+loc = 200, 1260
+type = regulated_user
+order = 2
+ds_1 = b0_5_l6
+
+[node.b0_5_l6]
+loc = 200, 1270
+type = routing
+lag = 1
+ds_1 = b0_5_u7
+
+[node.b0_5_u7]
+loc = 200, 1280
+type = regulated_user
+order = 2
+ds_1 = b0_5_l7
+
+[node.b0_5_l7]
+loc = 200, 1290
+type = routing
+lag = 1
+ds_1 = b0_5_u8
+
+[node.b0_5_u8]
+loc = 200, 1300
+type = regulated_user
+order = 2
+ds_1 = b0_5_l8
+
+[node.b0_5_l8]
+loc = 200, 1310
+type = routing
+lag = 1
+ds_1 = b0_5_u9
+
+[node.b0_5_u9]
+loc = 200, 1320
+type = regulated_user
+order = 2
+ds_1 = b0_5_l9
+
+[node.b0_5_l9]
+loc = 200, 1330
+type = routing
+lag = 1
+ds_1 = b0_5_u10
+
+[node.b0_5_u10]
+loc = 200, 1340
+type = regulated_user
+order = 2
+ds_1 = b0_5_l10
+
+[node.b0_5_l10]
+loc = 200, 1350
+type = routing
+lag = 1
+ds_1 = conf_L1_2
+
+[node.b0_6_u1]
+loc = 240, 1360
+type = regulated_user
+order = 2
+ds_1 = b0_6_l1
+
+[node.b0_6_l1]
+loc = 240, 1370
+type = routing
+lag = 1
+ds_1 = b0_6_u2
+
+[node.b0_6_u2]
+loc = 240, 1380
+type = regulated_user
+order = 2
+ds_1 = b0_6_l2
+
+[node.b0_6_l2]
+loc = 240, 1390
+type = routing
+lag = 1
+ds_1 = b0_6_u3
+
+[node.b0_6_u3]
+loc = 240, 1400
+type = regulated_user
+order = 2
+ds_1 = b0_6_l3
+
+[node.b0_6_l3]
+loc = 240, 1410
+type = routing
+lag = 1
+ds_1 = b0_6_u4
+
+[node.b0_6_u4]
+loc = 240, 1420
+type = regulated_user
+order = 2
+ds_1 = b0_6_l4
+
+[node.b0_6_l4]
+loc = 240, 1430
+type = routing
+lag = 1
+ds_1 = b0_6_u5
+
+[node.b0_6_u5]
+loc = 240, 1440
+type = regulated_user
+order = 2
+ds_1 = b0_6_l5
+
+[node.b0_6_l5]
+loc = 240, 1450
+type = routing
+lag = 1
+ds_1 = b0_6_u6
+
+[node.b0_6_u6]
+loc = 240, 1460
+type = regulated_user
+order = 2
+ds_1 = b0_6_l6
+
+[node.b0_6_l6]
+loc = 240, 1470
+type = routing
+lag = 1
+ds_1 = b0_6_u7
+
+[node.b0_6_u7]
+loc = 240, 1480
+type = regulated_user
+order = 2
+ds_1 = b0_6_l7
+
+[node.b0_6_l7]
+loc = 240, 1490
+type = routing
+lag = 1
+ds_1 = b0_6_u8
+
+[node.b0_6_u8]
+loc = 240, 1500
+type = regulated_user
+order = 2
+ds_1 = b0_6_l8
+
+[node.b0_6_l8]
+loc = 240, 1510
+type = routing
+lag = 1
+ds_1 = b0_6_u9
+
+[node.b0_6_u9]
+loc = 240, 1520
+type = regulated_user
+order = 2
+ds_1 = b0_6_l9
+
+[node.b0_6_l9]
+loc = 240, 1530
+type = routing
+lag = 1
+ds_1 = b0_6_u10
+
+[node.b0_6_u10]
+loc = 240, 1540
+type = regulated_user
+order = 2
+ds_1 = b0_6_l10
+
+[node.b0_6_l10]
+loc = 240, 1550
+type = routing
+lag = 1
+ds_1 = conf_L1_3
+
+[node.b0_7_u1]
+loc = 280, 1560
+type = regulated_user
+order = 2
+ds_1 = b0_7_l1
+
+[node.b0_7_l1]
+loc = 280, 1570
+type = routing
+lag = 1
+ds_1 = b0_7_u2
+
+[node.b0_7_u2]
+loc = 280, 1580
+type = regulated_user
+order = 2
+ds_1 = b0_7_l2
+
+[node.b0_7_l2]
+loc = 280, 1590
+type = routing
+lag = 1
+ds_1 = b0_7_u3
+
+[node.b0_7_u3]
+loc = 280, 1600
+type = regulated_user
+order = 2
+ds_1 = b0_7_l3
+
+[node.b0_7_l3]
+loc = 280, 1610
+type = routing
+lag = 1
+ds_1 = b0_7_u4
+
+[node.b0_7_u4]
+loc = 280, 1620
+type = regulated_user
+order = 2
+ds_1 = b0_7_l4
+
+[node.b0_7_l4]
+loc = 280, 1630
+type = routing
+lag = 1
+ds_1 = b0_7_u5
+
+[node.b0_7_u5]
+loc = 280, 1640
+type = regulated_user
+order = 2
+ds_1 = b0_7_l5
+
+[node.b0_7_l5]
+loc = 280, 1650
+type = routing
+lag = 1
+ds_1 = b0_7_u6
+
+[node.b0_7_u6]
+loc = 280, 1660
+type = regulated_user
+order = 2
+ds_1 = b0_7_l6
+
+[node.b0_7_l6]
+loc = 280, 1670
+type = routing
+lag = 1
+ds_1 = b0_7_u7
+
+[node.b0_7_u7]
+loc = 280, 1680
+type = regulated_user
+order = 2
+ds_1 = b0_7_l7
+
+[node.b0_7_l7]
+loc = 280, 1690
+type = routing
+lag = 1
+ds_1 = b0_7_u8
+
+[node.b0_7_u8]
+loc = 280, 1700
+type = regulated_user
+order = 2
+ds_1 = b0_7_l8
+
+[node.b0_7_l8]
+loc = 280, 1710
+type = routing
+lag = 1
+ds_1 = b0_7_u9
+
+[node.b0_7_u9]
+loc = 280, 1720
+type = regulated_user
+order = 2
+ds_1 = b0_7_l9
+
+[node.b0_7_l9]
+loc = 280, 1730
+type = routing
+lag = 1
+ds_1 = b0_7_u10
+
+[node.b0_7_u10]
+loc = 280, 1740
+type = regulated_user
+order = 2
+ds_1 = b0_7_l10
+
+[node.b0_7_l10]
+loc = 280, 1750
+type = routing
+lag = 1
+ds_1 = conf_L1_3
+
+[node.b0_8_u1]
+loc = 320, 1760
+type = regulated_user
+order = 2
+ds_1 = b0_8_l1
+
+[node.b0_8_l1]
+loc = 320, 1770
+type = routing
+lag = 1
+ds_1 = b0_8_u2
+
+[node.b0_8_u2]
+loc = 320, 1780
+type = regulated_user
+order = 2
+ds_1 = b0_8_l2
+
+[node.b0_8_l2]
+loc = 320, 1790
+type = routing
+lag = 1
+ds_1 = b0_8_u3
+
+[node.b0_8_u3]
+loc = 320, 1800
+type = regulated_user
+order = 2
+ds_1 = b0_8_l3
+
+[node.b0_8_l3]
+loc = 320, 1810
+type = routing
+lag = 1
+ds_1 = b0_8_u4
+
+[node.b0_8_u4]
+loc = 320, 1820
+type = regulated_user
+order = 2
+ds_1 = b0_8_l4
+
+[node.b0_8_l4]
+loc = 320, 1830
+type = routing
+lag = 1
+ds_1 = b0_8_u5
+
+[node.b0_8_u5]
+loc = 320, 1840
+type = regulated_user
+order = 2
+ds_1 = b0_8_l5
+
+[node.b0_8_l5]
+loc = 320, 1850
+type = routing
+lag = 1
+ds_1 = b0_8_u6
+
+[node.b0_8_u6]
+loc = 320, 1860
+type = regulated_user
+order = 2
+ds_1 = b0_8_l6
+
+[node.b0_8_l6]
+loc = 320, 1870
+type = routing
+lag = 1
+ds_1 = b0_8_u7
+
+[node.b0_8_u7]
+loc = 320, 1880
+type = regulated_user
+order = 2
+ds_1 = b0_8_l7
+
+[node.b0_8_l7]
+loc = 320, 1890
+type = routing
+lag = 1
+ds_1 = b0_8_u8
+
+[node.b0_8_u8]
+loc = 320, 1900
+type = regulated_user
+order = 2
+ds_1 = b0_8_l8
+
+[node.b0_8_l8]
+loc = 320, 1910
+type = routing
+lag = 1
+ds_1 = b0_8_u9
+
+[node.b0_8_u9]
+loc = 320, 1920
+type = regulated_user
+order = 2
+ds_1 = b0_8_l9
+
+[node.b0_8_l9]
+loc = 320, 1930
+type = routing
+lag = 1
+ds_1 = b0_8_u10
+
+[node.b0_8_u10]
+loc = 320, 1940
+type = regulated_user
+order = 2
+ds_1 = b0_8_l10
+
+[node.b0_8_l10]
+loc = 320, 1950
+type = routing
+lag = 1
+ds_1 = conf_L1_4
+
+[node.b0_9_u1]
+loc = 360, 1960
+type = regulated_user
+order = 2
+ds_1 = b0_9_l1
+
+[node.b0_9_l1]
+loc = 360, 1970
+type = routing
+lag = 1
+ds_1 = b0_9_u2
+
+[node.b0_9_u2]
+loc = 360, 1980
+type = regulated_user
+order = 2
+ds_1 = b0_9_l2
+
+[node.b0_9_l2]
+loc = 360, 1990
+type = routing
+lag = 1
+ds_1 = b0_9_u3
+
+[node.b0_9_u3]
+loc = 360, 2000
+type = regulated_user
+order = 2
+ds_1 = b0_9_l3
+
+[node.b0_9_l3]
+loc = 360, 2010
+type = routing
+lag = 1
+ds_1 = b0_9_u4
+
+[node.b0_9_u4]
+loc = 360, 2020
+type = regulated_user
+order = 2
+ds_1 = b0_9_l4
+
+[node.b0_9_l4]
+loc = 360, 2030
+type = routing
+lag = 1
+ds_1 = b0_9_u5
+
+[node.b0_9_u5]
+loc = 360, 2040
+type = regulated_user
+order = 2
+ds_1 = b0_9_l5
+
+[node.b0_9_l5]
+loc = 360, 2050
+type = routing
+lag = 1
+ds_1 = b0_9_u6
+
+[node.b0_9_u6]
+loc = 360, 2060
+type = regulated_user
+order = 2
+ds_1 = b0_9_l6
+
+[node.b0_9_l6]
+loc = 360, 2070
+type = routing
+lag = 1
+ds_1 = b0_9_u7
+
+[node.b0_9_u7]
+loc = 360, 2080
+type = regulated_user
+order = 2
+ds_1 = b0_9_l7
+
+[node.b0_9_l7]
+loc = 360, 2090
+type = routing
+lag = 1
+ds_1 = b0_9_u8
+
+[node.b0_9_u8]
+loc = 360, 2100
+type = regulated_user
+order = 2
+ds_1 = b0_9_l8
+
+[node.b0_9_l8]
+loc = 360, 2110
+type = routing
+lag = 1
+ds_1 = b0_9_u9
+
+[node.b0_9_u9]
+loc = 360, 2120
+type = regulated_user
+order = 2
+ds_1 = b0_9_l9
+
+[node.b0_9_l9]
+loc = 360, 2130
+type = routing
+lag = 1
+ds_1 = b0_9_u10
+
+[node.b0_9_u10]
+loc = 360, 2140
+type = regulated_user
+order = 2
+ds_1 = b0_9_l10
+
+[node.b0_9_l10]
+loc = 360, 2150
+type = routing
+lag = 1
+ds_1 = conf_L1_4
+
+[node.b0_10_u1]
+loc = 400, 2160
+type = regulated_user
+order = 2
+ds_1 = b0_10_l1
+
+[node.b0_10_l1]
+loc = 400, 2170
+type = routing
+lag = 1
+ds_1 = b0_10_u2
+
+[node.b0_10_u2]
+loc = 400, 2180
+type = regulated_user
+order = 2
+ds_1 = b0_10_l2
+
+[node.b0_10_l2]
+loc = 400, 2190
+type = routing
+lag = 1
+ds_1 = b0_10_u3
+
+[node.b0_10_u3]
+loc = 400, 2200
+type = regulated_user
+order = 2
+ds_1 = b0_10_l3
+
+[node.b0_10_l3]
+loc = 400, 2210
+type = routing
+lag = 1
+ds_1 = b0_10_u4
+
+[node.b0_10_u4]
+loc = 400, 2220
+type = regulated_user
+order = 2
+ds_1 = b0_10_l4
+
+[node.b0_10_l4]
+loc = 400, 2230
+type = routing
+lag = 1
+ds_1 = b0_10_u5
+
+[node.b0_10_u5]
+loc = 400, 2240
+type = regulated_user
+order = 2
+ds_1 = b0_10_l5
+
+[node.b0_10_l5]
+loc = 400, 2250
+type = routing
+lag = 1
+ds_1 = b0_10_u6
+
+[node.b0_10_u6]
+loc = 400, 2260
+type = regulated_user
+order = 2
+ds_1 = b0_10_l6
+
+[node.b0_10_l6]
+loc = 400, 2270
+type = routing
+lag = 1
+ds_1 = b0_10_u7
+
+[node.b0_10_u7]
+loc = 400, 2280
+type = regulated_user
+order = 2
+ds_1 = b0_10_l7
+
+[node.b0_10_l7]
+loc = 400, 2290
+type = routing
+lag = 1
+ds_1 = b0_10_u8
+
+[node.b0_10_u8]
+loc = 400, 2300
+type = regulated_user
+order = 2
+ds_1 = b0_10_l8
+
+[node.b0_10_l8]
+loc = 400, 2310
+type = routing
+lag = 1
+ds_1 = b0_10_u9
+
+[node.b0_10_u9]
+loc = 400, 2320
+type = regulated_user
+order = 2
+ds_1 = b0_10_l9
+
+[node.b0_10_l9]
+loc = 400, 2330
+type = routing
+lag = 1
+ds_1 = b0_10_u10
+
+[node.b0_10_u10]
+loc = 400, 2340
+type = regulated_user
+order = 2
+ds_1 = b0_10_l10
+
+[node.b0_10_l10]
+loc = 400, 2350
+type = routing
+lag = 1
+ds_1 = conf_L1_5
+
+[node.b0_11_u1]
+loc = 440, 2360
+type = regulated_user
+order = 2
+ds_1 = b0_11_l1
+
+[node.b0_11_l1]
+loc = 440, 2370
+type = routing
+lag = 1
+ds_1 = b0_11_u2
+
+[node.b0_11_u2]
+loc = 440, 2380
+type = regulated_user
+order = 2
+ds_1 = b0_11_l2
+
+[node.b0_11_l2]
+loc = 440, 2390
+type = routing
+lag = 1
+ds_1 = b0_11_u3
+
+[node.b0_11_u3]
+loc = 440, 2400
+type = regulated_user
+order = 2
+ds_1 = b0_11_l3
+
+[node.b0_11_l3]
+loc = 440, 2410
+type = routing
+lag = 1
+ds_1 = b0_11_u4
+
+[node.b0_11_u4]
+loc = 440, 2420
+type = regulated_user
+order = 2
+ds_1 = b0_11_l4
+
+[node.b0_11_l4]
+loc = 440, 2430
+type = routing
+lag = 1
+ds_1 = b0_11_u5
+
+[node.b0_11_u5]
+loc = 440, 2440
+type = regulated_user
+order = 2
+ds_1 = b0_11_l5
+
+[node.b0_11_l5]
+loc = 440, 2450
+type = routing
+lag = 1
+ds_1 = b0_11_u6
+
+[node.b0_11_u6]
+loc = 440, 2460
+type = regulated_user
+order = 2
+ds_1 = b0_11_l6
+
+[node.b0_11_l6]
+loc = 440, 2470
+type = routing
+lag = 1
+ds_1 = b0_11_u7
+
+[node.b0_11_u7]
+loc = 440, 2480
+type = regulated_user
+order = 2
+ds_1 = b0_11_l7
+
+[node.b0_11_l7]
+loc = 440, 2490
+type = routing
+lag = 1
+ds_1 = b0_11_u8
+
+[node.b0_11_u8]
+loc = 440, 2500
+type = regulated_user
+order = 2
+ds_1 = b0_11_l8
+
+[node.b0_11_l8]
+loc = 440, 2510
+type = routing
+lag = 1
+ds_1 = b0_11_u9
+
+[node.b0_11_u9]
+loc = 440, 2520
+type = regulated_user
+order = 2
+ds_1 = b0_11_l9
+
+[node.b0_11_l9]
+loc = 440, 2530
+type = routing
+lag = 1
+ds_1 = b0_11_u10
+
+[node.b0_11_u10]
+loc = 440, 2540
+type = regulated_user
+order = 2
+ds_1 = b0_11_l10
+
+[node.b0_11_l10]
+loc = 440, 2550
+type = routing
+lag = 1
+ds_1 = conf_L1_5
+
+[node.b0_12_u1]
+loc = 480, 2560
+type = regulated_user
+order = 2
+ds_1 = b0_12_l1
+
+[node.b0_12_l1]
+loc = 480, 2570
+type = routing
+lag = 1
+ds_1 = b0_12_u2
+
+[node.b0_12_u2]
+loc = 480, 2580
+type = regulated_user
+order = 2
+ds_1 = b0_12_l2
+
+[node.b0_12_l2]
+loc = 480, 2590
+type = routing
+lag = 1
+ds_1 = b0_12_u3
+
+[node.b0_12_u3]
+loc = 480, 2600
+type = regulated_user
+order = 2
+ds_1 = b0_12_l3
+
+[node.b0_12_l3]
+loc = 480, 2610
+type = routing
+lag = 1
+ds_1 = b0_12_u4
+
+[node.b0_12_u4]
+loc = 480, 2620
+type = regulated_user
+order = 2
+ds_1 = b0_12_l4
+
+[node.b0_12_l4]
+loc = 480, 2630
+type = routing
+lag = 1
+ds_1 = b0_12_u5
+
+[node.b0_12_u5]
+loc = 480, 2640
+type = regulated_user
+order = 2
+ds_1 = b0_12_l5
+
+[node.b0_12_l5]
+loc = 480, 2650
+type = routing
+lag = 1
+ds_1 = b0_12_u6
+
+[node.b0_12_u6]
+loc = 480, 2660
+type = regulated_user
+order = 2
+ds_1 = b0_12_l6
+
+[node.b0_12_l6]
+loc = 480, 2670
+type = routing
+lag = 1
+ds_1 = b0_12_u7
+
+[node.b0_12_u7]
+loc = 480, 2680
+type = regulated_user
+order = 2
+ds_1 = b0_12_l7
+
+[node.b0_12_l7]
+loc = 480, 2690
+type = routing
+lag = 1
+ds_1 = b0_12_u8
+
+[node.b0_12_u8]
+loc = 480, 2700
+type = regulated_user
+order = 2
+ds_1 = b0_12_l8
+
+[node.b0_12_l8]
+loc = 480, 2710
+type = routing
+lag = 1
+ds_1 = b0_12_u9
+
+[node.b0_12_u9]
+loc = 480, 2720
+type = regulated_user
+order = 2
+ds_1 = b0_12_l9
+
+[node.b0_12_l9]
+loc = 480, 2730
+type = routing
+lag = 1
+ds_1 = b0_12_u10
+
+[node.b0_12_u10]
+loc = 480, 2740
+type = regulated_user
+order = 2
+ds_1 = b0_12_l10
+
+[node.b0_12_l10]
+loc = 480, 2750
+type = routing
+lag = 1
+ds_1 = conf_L1_6
+
+[node.b0_13_u1]
+loc = 520, 2760
+type = regulated_user
+order = 2
+ds_1 = b0_13_l1
+
+[node.b0_13_l1]
+loc = 520, 2770
+type = routing
+lag = 1
+ds_1 = b0_13_u2
+
+[node.b0_13_u2]
+loc = 520, 2780
+type = regulated_user
+order = 2
+ds_1 = b0_13_l2
+
+[node.b0_13_l2]
+loc = 520, 2790
+type = routing
+lag = 1
+ds_1 = b0_13_u3
+
+[node.b0_13_u3]
+loc = 520, 2800
+type = regulated_user
+order = 2
+ds_1 = b0_13_l3
+
+[node.b0_13_l3]
+loc = 520, 2810
+type = routing
+lag = 1
+ds_1 = b0_13_u4
+
+[node.b0_13_u4]
+loc = 520, 2820
+type = regulated_user
+order = 2
+ds_1 = b0_13_l4
+
+[node.b0_13_l4]
+loc = 520, 2830
+type = routing
+lag = 1
+ds_1 = b0_13_u5
+
+[node.b0_13_u5]
+loc = 520, 2840
+type = regulated_user
+order = 2
+ds_1 = b0_13_l5
+
+[node.b0_13_l5]
+loc = 520, 2850
+type = routing
+lag = 1
+ds_1 = b0_13_u6
+
+[node.b0_13_u6]
+loc = 520, 2860
+type = regulated_user
+order = 2
+ds_1 = b0_13_l6
+
+[node.b0_13_l6]
+loc = 520, 2870
+type = routing
+lag = 1
+ds_1 = b0_13_u7
+
+[node.b0_13_u7]
+loc = 520, 2880
+type = regulated_user
+order = 2
+ds_1 = b0_13_l7
+
+[node.b0_13_l7]
+loc = 520, 2890
+type = routing
+lag = 1
+ds_1 = b0_13_u8
+
+[node.b0_13_u8]
+loc = 520, 2900
+type = regulated_user
+order = 2
+ds_1 = b0_13_l8
+
+[node.b0_13_l8]
+loc = 520, 2910
+type = routing
+lag = 1
+ds_1 = b0_13_u9
+
+[node.b0_13_u9]
+loc = 520, 2920
+type = regulated_user
+order = 2
+ds_1 = b0_13_l9
+
+[node.b0_13_l9]
+loc = 520, 2930
+type = routing
+lag = 1
+ds_1 = b0_13_u10
+
+[node.b0_13_u10]
+loc = 520, 2940
+type = regulated_user
+order = 2
+ds_1 = b0_13_l10
+
+[node.b0_13_l10]
+loc = 520, 2950
+type = routing
+lag = 1
+ds_1 = conf_L1_6
+
+[node.b0_14_u1]
+loc = 560, 2960
+type = regulated_user
+order = 2
+ds_1 = b0_14_l1
+
+[node.b0_14_l1]
+loc = 560, 2970
+type = routing
+lag = 1
+ds_1 = b0_14_u2
+
+[node.b0_14_u2]
+loc = 560, 2980
+type = regulated_user
+order = 2
+ds_1 = b0_14_l2
+
+[node.b0_14_l2]
+loc = 560, 2990
+type = routing
+lag = 1
+ds_1 = b0_14_u3
+
+[node.b0_14_u3]
+loc = 560, 3000
+type = regulated_user
+order = 2
+ds_1 = b0_14_l3
+
+[node.b0_14_l3]
+loc = 560, 3010
+type = routing
+lag = 1
+ds_1 = b0_14_u4
+
+[node.b0_14_u4]
+loc = 560, 3020
+type = regulated_user
+order = 2
+ds_1 = b0_14_l4
+
+[node.b0_14_l4]
+loc = 560, 3030
+type = routing
+lag = 1
+ds_1 = b0_14_u5
+
+[node.b0_14_u5]
+loc = 560, 3040
+type = regulated_user
+order = 2
+ds_1 = b0_14_l5
+
+[node.b0_14_l5]
+loc = 560, 3050
+type = routing
+lag = 1
+ds_1 = b0_14_u6
+
+[node.b0_14_u6]
+loc = 560, 3060
+type = regulated_user
+order = 2
+ds_1 = b0_14_l6
+
+[node.b0_14_l6]
+loc = 560, 3070
+type = routing
+lag = 1
+ds_1 = b0_14_u7
+
+[node.b0_14_u7]
+loc = 560, 3080
+type = regulated_user
+order = 2
+ds_1 = b0_14_l7
+
+[node.b0_14_l7]
+loc = 560, 3090
+type = routing
+lag = 1
+ds_1 = b0_14_u8
+
+[node.b0_14_u8]
+loc = 560, 3100
+type = regulated_user
+order = 2
+ds_1 = b0_14_l8
+
+[node.b0_14_l8]
+loc = 560, 3110
+type = routing
+lag = 1
+ds_1 = b0_14_u9
+
+[node.b0_14_u9]
+loc = 560, 3120
+type = regulated_user
+order = 2
+ds_1 = b0_14_l9
+
+[node.b0_14_l9]
+loc = 560, 3130
+type = routing
+lag = 1
+ds_1 = b0_14_u10
+
+[node.b0_14_u10]
+loc = 560, 3140
+type = regulated_user
+order = 2
+ds_1 = b0_14_l10
+
+[node.b0_14_l10]
+loc = 560, 3150
+type = routing
+lag = 1
+ds_1 = conf_L1_7
+
+[node.b0_15_u1]
+loc = 600, 3160
+type = regulated_user
+order = 2
+ds_1 = b0_15_l1
+
+[node.b0_15_l1]
+loc = 600, 3170
+type = routing
+lag = 1
+ds_1 = b0_15_u2
+
+[node.b0_15_u2]
+loc = 600, 3180
+type = regulated_user
+order = 2
+ds_1 = b0_15_l2
+
+[node.b0_15_l2]
+loc = 600, 3190
+type = routing
+lag = 1
+ds_1 = b0_15_u3
+
+[node.b0_15_u3]
+loc = 600, 3200
+type = regulated_user
+order = 2
+ds_1 = b0_15_l3
+
+[node.b0_15_l3]
+loc = 600, 3210
+type = routing
+lag = 1
+ds_1 = b0_15_u4
+
+[node.b0_15_u4]
+loc = 600, 3220
+type = regulated_user
+order = 2
+ds_1 = b0_15_l4
+
+[node.b0_15_l4]
+loc = 600, 3230
+type = routing
+lag = 1
+ds_1 = b0_15_u5
+
+[node.b0_15_u5]
+loc = 600, 3240
+type = regulated_user
+order = 2
+ds_1 = b0_15_l5
+
+[node.b0_15_l5]
+loc = 600, 3250
+type = routing
+lag = 1
+ds_1 = b0_15_u6
+
+[node.b0_15_u6]
+loc = 600, 3260
+type = regulated_user
+order = 2
+ds_1 = b0_15_l6
+
+[node.b0_15_l6]
+loc = 600, 3270
+type = routing
+lag = 1
+ds_1 = b0_15_u7
+
+[node.b0_15_u7]
+loc = 600, 3280
+type = regulated_user
+order = 2
+ds_1 = b0_15_l7
+
+[node.b0_15_l7]
+loc = 600, 3290
+type = routing
+lag = 1
+ds_1 = b0_15_u8
+
+[node.b0_15_u8]
+loc = 600, 3300
+type = regulated_user
+order = 2
+ds_1 = b0_15_l8
+
+[node.b0_15_l8]
+loc = 600, 3310
+type = routing
+lag = 1
+ds_1 = b0_15_u9
+
+[node.b0_15_u9]
+loc = 600, 3320
+type = regulated_user
+order = 2
+ds_1 = b0_15_l9
+
+[node.b0_15_l9]
+loc = 600, 3330
+type = routing
+lag = 1
+ds_1 = b0_15_u10
+
+[node.b0_15_u10]
+loc = 600, 3340
+type = regulated_user
+order = 2
+ds_1 = b0_15_l10
+
+[node.b0_15_l10]
+loc = 600, 3350
+type = routing
+lag = 1
+ds_1 = conf_L1_7
+
+[node.conf_L1_0]
+loc = 20.0, 3360
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_0_u1
+
+[node.conf_L1_1]
+loc = 100.0, 3370
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_1_u1
+
+[node.conf_L1_2]
+loc = 180.0, 3380
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_2_u1
+
+[node.conf_L1_3]
+loc = 260.0, 3390
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_3_u1
+
+[node.conf_L1_4]
+loc = 340.0, 3400
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_4_u1
+
+[node.conf_L1_5]
+loc = 420.0, 3410
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_5_u1
+
+[node.conf_L1_6]
+loc = 500.0, 3420
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_6_u1
+
+[node.conf_L1_7]
+loc = 580.0, 3430
+type = confluence
+harmony_fraction = 0.6
+ds_1 = b2_7_u1
+
+[node.b2_0_u1]
+loc = 20.0, 3440
+type = regulated_user
+order = 2
+ds_1 = b2_0_l1
+
+[node.b2_0_l1]
+loc = 20.0, 3450
+type = routing
+lag = 1
+ds_1 = b2_0_u2
+
+[node.b2_0_u2]
+loc = 20.0, 3460
+type = regulated_user
+order = 2
+ds_1 = b2_0_l2
+
+[node.b2_0_l2]
+loc = 20.0, 3470
+type = routing
+lag = 1
+ds_1 = b2_0_u3
+
+[node.b2_0_u3]
+loc = 20.0, 3480
+type = regulated_user
+order = 2
+ds_1 = b2_0_l3
+
+[node.b2_0_l3]
+loc = 20.0, 3490
+type = routing
+lag = 1
+ds_1 = b2_0_u4
+
+[node.b2_0_u4]
+loc = 20.0, 3500
+type = regulated_user
+order = 2
+ds_1 = b2_0_l4
+
+[node.b2_0_l4]
+loc = 20.0, 3510
+type = routing
+lag = 1
+ds_1 = b2_0_u5
+
+[node.b2_0_u5]
+loc = 20.0, 3520
+type = regulated_user
+order = 2
+ds_1 = b2_0_l5
+
+[node.b2_0_l5]
+loc = 20.0, 3530
+type = routing
+lag = 1
+ds_1 = conf_L3_0
+
+[node.b2_1_u1]
+loc = 100.0, 3540
+type = regulated_user
+order = 2
+ds_1 = b2_1_l1
+
+[node.b2_1_l1]
+loc = 100.0, 3550
+type = routing
+lag = 1
+ds_1 = b2_1_u2
+
+[node.b2_1_u2]
+loc = 100.0, 3560
+type = regulated_user
+order = 2
+ds_1 = b2_1_l2
+
+[node.b2_1_l2]
+loc = 100.0, 3570
+type = routing
+lag = 1
+ds_1 = b2_1_u3
+
+[node.b2_1_u3]
+loc = 100.0, 3580
+type = regulated_user
+order = 2
+ds_1 = b2_1_l3
+
+[node.b2_1_l3]
+loc = 100.0, 3590
+type = routing
+lag = 1
+ds_1 = b2_1_u4
+
+[node.b2_1_u4]
+loc = 100.0, 3600
+type = regulated_user
+order = 2
+ds_1 = b2_1_l4
+
+[node.b2_1_l4]
+loc = 100.0, 3610
+type = routing
+lag = 1
+ds_1 = b2_1_u5
+
+[node.b2_1_u5]
+loc = 100.0, 3620
+type = regulated_user
+order = 2
+ds_1 = b2_1_l5
+
+[node.b2_1_l5]
+loc = 100.0, 3630
+type = routing
+lag = 1
+ds_1 = conf_L3_0
+
+[node.b2_2_u1]
+loc = 180.0, 3640
+type = regulated_user
+order = 2
+ds_1 = b2_2_l1
+
+[node.b2_2_l1]
+loc = 180.0, 3650
+type = routing
+lag = 1
+ds_1 = b2_2_u2
+
+[node.b2_2_u2]
+loc = 180.0, 3660
+type = regulated_user
+order = 2
+ds_1 = b2_2_l2
+
+[node.b2_2_l2]
+loc = 180.0, 3670
+type = routing
+lag = 1
+ds_1 = b2_2_u3
+
+[node.b2_2_u3]
+loc = 180.0, 3680
+type = regulated_user
+order = 2
+ds_1 = b2_2_l3
+
+[node.b2_2_l3]
+loc = 180.0, 3690
+type = routing
+lag = 1
+ds_1 = b2_2_u4
+
+[node.b2_2_u4]
+loc = 180.0, 3700
+type = regulated_user
+order = 2
+ds_1 = b2_2_l4
+
+[node.b2_2_l4]
+loc = 180.0, 3710
+type = routing
+lag = 1
+ds_1 = b2_2_u5
+
+[node.b2_2_u5]
+loc = 180.0, 3720
+type = regulated_user
+order = 2
+ds_1 = b2_2_l5
+
+[node.b2_2_l5]
+loc = 180.0, 3730
+type = routing
+lag = 1
+ds_1 = conf_L3_1
+
+[node.b2_3_u1]
+loc = 260.0, 3740
+type = regulated_user
+order = 2
+ds_1 = b2_3_l1
+
+[node.b2_3_l1]
+loc = 260.0, 3750
+type = routing
+lag = 1
+ds_1 = b2_3_u2
+
+[node.b2_3_u2]
+loc = 260.0, 3760
+type = regulated_user
+order = 2
+ds_1 = b2_3_l2
+
+[node.b2_3_l2]
+loc = 260.0, 3770
+type = routing
+lag = 1
+ds_1 = b2_3_u3
+
+[node.b2_3_u3]
+loc = 260.0, 3780
+type = regulated_user
+order = 2
+ds_1 = b2_3_l3
+
+[node.b2_3_l3]
+loc = 260.0, 3790
+type = routing
+lag = 1
+ds_1 = b2_3_u4
+
+[node.b2_3_u4]
+loc = 260.0, 3800
+type = regulated_user
+order = 2
+ds_1 = b2_3_l4
+
+[node.b2_3_l4]
+loc = 260.0, 3810
+type = routing
+lag = 1
+ds_1 = b2_3_u5
+
+[node.b2_3_u5]
+loc = 260.0, 3820
+type = regulated_user
+order = 2
+ds_1 = b2_3_l5
+
+[node.b2_3_l5]
+loc = 260.0, 3830
+type = routing
+lag = 1
+ds_1 = conf_L3_1
+
+[node.b2_4_u1]
+loc = 340.0, 3840
+type = regulated_user
+order = 2
+ds_1 = b2_4_l1
+
+[node.b2_4_l1]
+loc = 340.0, 3850
+type = routing
+lag = 1
+ds_1 = b2_4_u2
+
+[node.b2_4_u2]
+loc = 340.0, 3860
+type = regulated_user
+order = 2
+ds_1 = b2_4_l2
+
+[node.b2_4_l2]
+loc = 340.0, 3870
+type = routing
+lag = 1
+ds_1 = b2_4_u3
+
+[node.b2_4_u3]
+loc = 340.0, 3880
+type = regulated_user
+order = 2
+ds_1 = b2_4_l3
+
+[node.b2_4_l3]
+loc = 340.0, 3890
+type = routing
+lag = 1
+ds_1 = b2_4_u4
+
+[node.b2_4_u4]
+loc = 340.0, 3900
+type = regulated_user
+order = 2
+ds_1 = b2_4_l4
+
+[node.b2_4_l4]
+loc = 340.0, 3910
+type = routing
+lag = 1
+ds_1 = b2_4_u5
+
+[node.b2_4_u5]
+loc = 340.0, 3920
+type = regulated_user
+order = 2
+ds_1 = b2_4_l5
+
+[node.b2_4_l5]
+loc = 340.0, 3930
+type = routing
+lag = 1
+ds_1 = conf_L3_2
+
+[node.b2_5_u1]
+loc = 420.0, 3940
+type = regulated_user
+order = 2
+ds_1 = b2_5_l1
+
+[node.b2_5_l1]
+loc = 420.0, 3950
+type = routing
+lag = 1
+ds_1 = b2_5_u2
+
+[node.b2_5_u2]
+loc = 420.0, 3960
+type = regulated_user
+order = 2
+ds_1 = b2_5_l2
+
+[node.b2_5_l2]
+loc = 420.0, 3970
+type = routing
+lag = 1
+ds_1 = b2_5_u3
+
+[node.b2_5_u3]
+loc = 420.0, 3980
+type = regulated_user
+order = 2
+ds_1 = b2_5_l3
+
+[node.b2_5_l3]
+loc = 420.0, 3990
+type = routing
+lag = 1
+ds_1 = b2_5_u4
+
+[node.b2_5_u4]
+loc = 420.0, 4000
+type = regulated_user
+order = 2
+ds_1 = b2_5_l4
+
+[node.b2_5_l4]
+loc = 420.0, 4010
+type = routing
+lag = 1
+ds_1 = b2_5_u5
+
+[node.b2_5_u5]
+loc = 420.0, 4020
+type = regulated_user
+order = 2
+ds_1 = b2_5_l5
+
+[node.b2_5_l5]
+loc = 420.0, 4030
+type = routing
+lag = 1
+ds_1 = conf_L3_2
+
+[node.b2_6_u1]
+loc = 500.0, 4040
+type = regulated_user
+order = 2
+ds_1 = b2_6_l1
+
+[node.b2_6_l1]
+loc = 500.0, 4050
+type = routing
+lag = 1
+ds_1 = b2_6_u2
+
+[node.b2_6_u2]
+loc = 500.0, 4060
+type = regulated_user
+order = 2
+ds_1 = b2_6_l2
+
+[node.b2_6_l2]
+loc = 500.0, 4070
+type = routing
+lag = 1
+ds_1 = b2_6_u3
+
+[node.b2_6_u3]
+loc = 500.0, 4080
+type = regulated_user
+order = 2
+ds_1 = b2_6_l3
+
+[node.b2_6_l3]
+loc = 500.0, 4090
+type = routing
+lag = 1
+ds_1 = b2_6_u4
+
+[node.b2_6_u4]
+loc = 500.0, 4100
+type = regulated_user
+order = 2
+ds_1 = b2_6_l4
+
+[node.b2_6_l4]
+loc = 500.0, 4110
+type = routing
+lag = 1
+ds_1 = b2_6_u5
+
+[node.b2_6_u5]
+loc = 500.0, 4120
+type = regulated_user
+order = 2
+ds_1 = b2_6_l5
+
+[node.b2_6_l5]
+loc = 500.0, 4130
+type = routing
+lag = 1
+ds_1 = conf_L3_3
+
+[node.b2_7_u1]
+loc = 580.0, 4140
+type = regulated_user
+order = 2
+ds_1 = b2_7_l1
+
+[node.b2_7_l1]
+loc = 580.0, 4150
+type = routing
+lag = 1
+ds_1 = b2_7_u2
+
+[node.b2_7_u2]
+loc = 580.0, 4160
+type = regulated_user
+order = 2
+ds_1 = b2_7_l2
+
+[node.b2_7_l2]
+loc = 580.0, 4170
+type = routing
+lag = 1
+ds_1 = b2_7_u3
+
+[node.b2_7_u3]
+loc = 580.0, 4180
+type = regulated_user
+order = 2
+ds_1 = b2_7_l3
+
+[node.b2_7_l3]
+loc = 580.0, 4190
+type = routing
+lag = 1
+ds_1 = b2_7_u4
+
+[node.b2_7_u4]
+loc = 580.0, 4200
+type = regulated_user
+order = 2
+ds_1 = b2_7_l4
+
+[node.b2_7_l4]
+loc = 580.0, 4210
+type = routing
+lag = 1
+ds_1 = b2_7_u5
+
+[node.b2_7_u5]
+loc = 580.0, 4220
+type = regulated_user
+order = 2
+ds_1 = b2_7_l5
+
+[node.b2_7_l5]
+loc = 580.0, 4230
+type = routing
+lag = 1
+ds_1 = conf_L3_3
+
+[node.conf_L3_0]
+loc = 60, 4240
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b4_0_u1
+
+[node.conf_L3_1]
+loc = 220, 4250
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b4_1_u1
+
+[node.conf_L3_2]
+loc = 380, 4260
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b4_2_u1
+
+[node.conf_L3_3]
+loc = 540, 4270
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b4_3_u1
+
+[node.b4_0_u1]
+loc = 60, 4280
+type = regulated_user
+order = 2
+ds_1 = b4_0_l1
+
+[node.b4_0_l1]
+loc = 60, 4290
+type = routing
+lag = 1
+ds_1 = b4_0_u2
+
+[node.b4_0_u2]
+loc = 60, 4300
+type = regulated_user
+order = 2
+ds_1 = b4_0_l2
+
+[node.b4_0_l2]
+loc = 60, 4310
+type = routing
+lag = 1
+ds_1 = b4_0_u3
+
+[node.b4_0_u3]
+loc = 60, 4320
+type = regulated_user
+order = 2
+ds_1 = b4_0_l3
+
+[node.b4_0_l3]
+loc = 60, 4330
+type = routing
+lag = 1
+ds_1 = b4_0_u4
+
+[node.b4_0_u4]
+loc = 60, 4340
+type = regulated_user
+order = 2
+ds_1 = b4_0_l4
+
+[node.b4_0_l4]
+loc = 60, 4350
+type = routing
+lag = 1
+ds_1 = b4_0_u5
+
+[node.b4_0_u5]
+loc = 60, 4360
+type = regulated_user
+order = 2
+ds_1 = b4_0_l5
+
+[node.b4_0_l5]
+loc = 60, 4370
+type = routing
+lag = 1
+ds_1 = conf_L5_0
+
+[node.b4_1_u1]
+loc = 220, 4380
+type = regulated_user
+order = 2
+ds_1 = b4_1_l1
+
+[node.b4_1_l1]
+loc = 220, 4390
+type = routing
+lag = 1
+ds_1 = b4_1_u2
+
+[node.b4_1_u2]
+loc = 220, 4400
+type = regulated_user
+order = 2
+ds_1 = b4_1_l2
+
+[node.b4_1_l2]
+loc = 220, 4410
+type = routing
+lag = 1
+ds_1 = b4_1_u3
+
+[node.b4_1_u3]
+loc = 220, 4420
+type = regulated_user
+order = 2
+ds_1 = b4_1_l3
+
+[node.b4_1_l3]
+loc = 220, 4430
+type = routing
+lag = 1
+ds_1 = b4_1_u4
+
+[node.b4_1_u4]
+loc = 220, 4440
+type = regulated_user
+order = 2
+ds_1 = b4_1_l4
+
+[node.b4_1_l4]
+loc = 220, 4450
+type = routing
+lag = 1
+ds_1 = b4_1_u5
+
+[node.b4_1_u5]
+loc = 220, 4460
+type = regulated_user
+order = 2
+ds_1 = b4_1_l5
+
+[node.b4_1_l5]
+loc = 220, 4470
+type = routing
+lag = 1
+ds_1 = conf_L5_0
+
+[node.b4_2_u1]
+loc = 380, 4480
+type = regulated_user
+order = 2
+ds_1 = b4_2_l1
+
+[node.b4_2_l1]
+loc = 380, 4490
+type = routing
+lag = 1
+ds_1 = b4_2_u2
+
+[node.b4_2_u2]
+loc = 380, 4500
+type = regulated_user
+order = 2
+ds_1 = b4_2_l2
+
+[node.b4_2_l2]
+loc = 380, 4510
+type = routing
+lag = 1
+ds_1 = b4_2_u3
+
+[node.b4_2_u3]
+loc = 380, 4520
+type = regulated_user
+order = 2
+ds_1 = b4_2_l3
+
+[node.b4_2_l3]
+loc = 380, 4530
+type = routing
+lag = 1
+ds_1 = b4_2_u4
+
+[node.b4_2_u4]
+loc = 380, 4540
+type = regulated_user
+order = 2
+ds_1 = b4_2_l4
+
+[node.b4_2_l4]
+loc = 380, 4550
+type = routing
+lag = 1
+ds_1 = b4_2_u5
+
+[node.b4_2_u5]
+loc = 380, 4560
+type = regulated_user
+order = 2
+ds_1 = b4_2_l5
+
+[node.b4_2_l5]
+loc = 380, 4570
+type = routing
+lag = 1
+ds_1 = conf_L5_1
+
+[node.b4_3_u1]
+loc = 540, 4580
+type = regulated_user
+order = 2
+ds_1 = b4_3_l1
+
+[node.b4_3_l1]
+loc = 540, 4590
+type = routing
+lag = 1
+ds_1 = b4_3_u2
+
+[node.b4_3_u2]
+loc = 540, 4600
+type = regulated_user
+order = 2
+ds_1 = b4_3_l2
+
+[node.b4_3_l2]
+loc = 540, 4610
+type = routing
+lag = 1
+ds_1 = b4_3_u3
+
+[node.b4_3_u3]
+loc = 540, 4620
+type = regulated_user
+order = 2
+ds_1 = b4_3_l3
+
+[node.b4_3_l3]
+loc = 540, 4630
+type = routing
+lag = 1
+ds_1 = b4_3_u4
+
+[node.b4_3_u4]
+loc = 540, 4640
+type = regulated_user
+order = 2
+ds_1 = b4_3_l4
+
+[node.b4_3_l4]
+loc = 540, 4650
+type = routing
+lag = 1
+ds_1 = b4_3_u5
+
+[node.b4_3_u5]
+loc = 540, 4660
+type = regulated_user
+order = 2
+ds_1 = b4_3_l5
+
+[node.b4_3_l5]
+loc = 540, 4670
+type = routing
+lag = 1
+ds_1 = conf_L5_1
+
+[node.conf_L5_0]
+loc = 140, 4680
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b6_0_u1
+
+[node.conf_L5_1]
+loc = 460, 4690
+type = confluence
+harmony_fraction = 0.5
+ds_1 = b6_1_u1
+
+[node.b6_0_u1]
+loc = 140, 4700
+type = regulated_user
+order = 2
+ds_1 = b6_0_l1
+
+[node.b6_0_l1]
+loc = 140, 4710
+type = routing
+lag = 1
+ds_1 = b6_0_u2
+
+[node.b6_0_u2]
+loc = 140, 4720
+type = regulated_user
+order = 2
+ds_1 = b6_0_l2
+
+[node.b6_0_l2]
+loc = 140, 4730
+type = routing
+lag = 1
+ds_1 = b6_0_u3
+
+[node.b6_0_u3]
+loc = 140, 4740
+type = regulated_user
+order = 2
+ds_1 = b6_0_l3
+
+[node.b6_0_l3]
+loc = 140, 4750
+type = routing
+lag = 1
+ds_1 = b6_0_u4
+
+[node.b6_0_u4]
+loc = 140, 4760
+type = regulated_user
+order = 2
+ds_1 = b6_0_l4
+
+[node.b6_0_l4]
+loc = 140, 4770
+type = routing
+lag = 1
+ds_1 = b6_0_u5
+
+[node.b6_0_u5]
+loc = 140, 4780
+type = regulated_user
+order = 2
+ds_1 = b6_0_l5
+
+[node.b6_0_l5]
+loc = 140, 4790
+type = routing
+lag = 1
+ds_1 = conf_L7_0
+
+[node.b6_1_u1]
+loc = 460, 4800
+type = regulated_user
+order = 2
+ds_1 = b6_1_l1
+
+[node.b6_1_l1]
+loc = 460, 4810
+type = routing
+lag = 1
+ds_1 = b6_1_u2
+
+[node.b6_1_u2]
+loc = 460, 4820
+type = regulated_user
+order = 2
+ds_1 = b6_1_l2
+
+[node.b6_1_l2]
+loc = 460, 4830
+type = routing
+lag = 1
+ds_1 = b6_1_u3
+
+[node.b6_1_u3]
+loc = 460, 4840
+type = regulated_user
+order = 2
+ds_1 = b6_1_l3
+
+[node.b6_1_l3]
+loc = 460, 4850
+type = routing
+lag = 1
+ds_1 = b6_1_u4
+
+[node.b6_1_u4]
+loc = 460, 4860
+type = regulated_user
+order = 2
+ds_1 = b6_1_l4
+
+[node.b6_1_l4]
+loc = 460, 4870
+type = routing
+lag = 1
+ds_1 = b6_1_u5
+
+[node.b6_1_u5]
+loc = 460, 4880
+type = regulated_user
+order = 2
+ds_1 = b6_1_l5
+
+[node.b6_1_l5]
+loc = 460, 4890
+type = routing
+lag = 1
+ds_1 = conf_L7_0
+
+[node.conf_L7_0]
+loc = 300, 4900
+type = confluence
+harmony_fraction = 0.5
+ds_1 = bfinal_u1
+
+[node.bfinal_u1]
+loc = 300, 4910
+type = regulated_user
+order = 2
+ds_1 = bfinal_l1
+
+[node.bfinal_l1]
+loc = 300, 4920
+type = routing
+lag = 1
+ds_1 = bfinal_u2
+
+[node.bfinal_u2]
+loc = 300, 4930
+type = regulated_user
+order = 2
+ds_1 = bfinal_l2
+
+[node.bfinal_l2]
+loc = 300, 4940
+type = routing
+lag = 1
+ds_1 = bfinal_u3
+
+[node.bfinal_u3]
+loc = 300, 4950
+type = regulated_user
+order = 2
+ds_1 = bfinal_l3
+
+[node.bfinal_l3]
+loc = 300, 4960
+type = routing
+lag = 1
+ds_1 = bfinal_u4
+
+[node.bfinal_u4]
+loc = 300, 4970
+type = regulated_user
+order = 2
+ds_1 = bfinal_l4
+
+[node.bfinal_l4]
+loc = 300, 4980
+type = routing
+lag = 1
+ds_1 = bfinal_u5
+
+[node.bfinal_u5]
+loc = 300, 4990
+type = regulated_user
+order = 2
+ds_1 = bfinal_l5
+
+[node.bfinal_l5]
+loc = 300, 5000
+type = routing
+lag = 1
+ds_1 = bh_end
+
+[node.bh_end]
+loc = 300, 5010
+type = blackhole
+
+[outputs]
+# node.dam_1.volume
+# node.dam_2.volume
+# node.dam_3.volume
+# node.dam_4.volume
+# node.dam_5.volume
+# node.dam_6.volume
+# node.dam_7.volume
+# node.dam_8.volume
+# node.dam_9.volume
+# node.dam_10.volume
+# node.dam_11.volume
+# node.dam_12.volume
+# node.dam_13.volume
+# node.dam_14.volume
+# node.dam_15.volume
+# node.dam_16.volume

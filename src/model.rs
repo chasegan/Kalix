@@ -11,7 +11,7 @@ use crate::misc::simulation_context::{
     set_context_phase, set_context_node,
     clear_context, format_simulation_error, SimPhase
 };
-use crate::ordering::simple_ordering::SimpleOrderingSystem;
+use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
@@ -43,7 +43,7 @@ pub struct Model {
     pub execution_order: Vec<usize>,
 
     // Ordering system
-    pub simple_ordering_system: SimpleOrderingSystem,
+    pub simple_ordering_system: SimpleNodewiseOrderingSystem,
 
     // Fast node name lookup (keys are lowercase for case-insensitive matching)
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index

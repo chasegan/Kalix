@@ -1,0 +1,38 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 16
+  Timesteps: 731
+  Stepsize (s): 86400
+  Period: 2021-01-01T00:00:00.000Z, 2023-01-01T00:00:00.000Z
+  Note: units are ML/timestep
+
+REGULATED_USER NODES
+  user1, -3.5294117647058822
+  user2, -3.5294117647058822
+  user3, -5.198358413132695
+  user4, -5.198358413132695
+  user5, -4.521203830369357
+  user6, -3.5020519835841313
+
+STORAGE NODES
+  dam1, 11.969904240766073
+  dam2, 13.50889192886457
+
+ROUTING NODES
+  lag1, 0
+  lag2, 0
+  lag3, 0
+  lag4, 0
+  lag5, 0
+  lag6, 0
+
+CONFLUENCE NODES
+  c1, 0
+
+BLACKHOLE NODES
+  bh1, 0
+
+----------------------------------
+TOTAL = -0.000000000000005329070518200751
+----------------------------------

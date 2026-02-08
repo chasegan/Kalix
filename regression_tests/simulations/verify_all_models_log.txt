@@ -1,6 +1,6 @@
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 18 model file(s)
+Found 19 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   ✓ VERIFIED!
@@ -27,6 +27,9 @@ Verifying: 17_storage_outlets/model.ini
   ✓ VERIFIED!
 
 Verifying: 18_filling_emptying_storage/model.ini
+  ✓ VERIFIED!
+
+Verifying: 19_lots_of_ordering/model.ini
   ✓ VERIFIED!
 
 Verifying: 1_picnic_gr4j/kalix.ini
@@ -59,9 +62,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-08T17:13:51.397100
-Total: 18
-Passed: 18
+Timestamp: 2026-02-09T00:42:10.608892
+Total: 19
+Passed: 19
 Failed: 0
 
 ✓ All models verified successfully!
