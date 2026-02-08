@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
@@ -6,6 +7,10 @@ use crate::data_management::data_cache::DataCache;
 use crate::io::csv_io::write_ts;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
+use crate::misc::simulation_context::{
+    set_context_phase, set_context_node,
+    clear_context, format_simulation_error, SimPhase
+};
 use crate::ordering::simple_ordering::SimpleOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
@@ -215,54 +220,87 @@ impl Model {
         // Maybe we need an "initialize()" and a "reset()" on each node?
         self.initialize_network()?;
 
+        // Clear any stale simulation context
+        clear_context();
+
         //Run all timesteps
         self.data_cache.set_current_step(0);
         while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
 
-            //Run the network
-            self.run_timestep(self.data_cache.current_timestamp);
+            // Run the network with panic catching for better error messages
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                self.run_timestep(self.data_cache.current_timestamp);
+            }));
+
+            if let Err(panic_info) = result {
+                return Err(format_simulation_error(
+                    panic_info,
+                    self.data_cache.current_timestamp,
+                    |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                ));
+            }
 
             //Increment time
             self.data_cache.increment_current_step();
         }
 
+        // Clear context on successful completion
+        clear_context();
+
         // Return success
         Ok(())
     }
-    
-    pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String> 
+
+    pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String>
     where
         F: Fn() -> bool,
     {
         //Initialise the node network
         self.initialize_network()?;
-        
+
+        // Clear any stale simulation context
+        clear_context();
+
         //Calculate total steps for progress reporting
-        let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp) 
+        let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
             / self.configuration.sim_stepsize) + 1;
-        
+
         //Run all timesteps
         self.data_cache.set_current_step(0);
         while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
 
             // Check for interrupt at start of each timestep
             if interrupt_check() {
+                clear_context();
                 return Ok(false); // Simulation was interrupted
             }
-            
-            //Run the network
-            self.run_timestep(self.data_cache.current_timestamp);
-            
+
+            // Run the network with panic catching for better error messages
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                self.run_timestep(self.data_cache.current_timestamp);
+            }));
+
+            if let Err(panic_info) = result {
+                return Err(format_simulation_error(
+                    panic_info,
+                    self.data_cache.current_timestamp,
+                    |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                ));
+            }
+
             //Report progress if callback provided
             if let Some(ref mut callback) = progress_callback {
                 let step = self.data_cache.current_step as u64;
                 callback(step, total_steps);
             }
-            
+
             //Increment time
             self.data_cache.increment_current_step();
         }
-        
+
+        // Clear context on successful completion
+        clear_context();
+
         Ok(true) // Simulation completed successfully
     }
 
@@ -410,10 +448,15 @@ impl Model {
     pub fn run_timestep(&mut self, _t: u64) {
 
         // Execute order phase
+        set_context_phase(SimPhase::Ordering);
         self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &self.data_cache);
 
         // Execute nodes with flow phase
+        set_context_phase(SimPhase::Flow);
         for &node_idx in &self.execution_order {
+
+            // Set node context for error reporting (just stores the index)
+            set_context_node(node_idx);
 
             // Run the node's flow phase
             self.nodes[node_idx].run_flow_phase(&mut self.data_cache);
@@ -429,7 +472,6 @@ impl Model {
             }
         }
     }
-
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
 

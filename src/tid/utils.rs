@@ -150,6 +150,30 @@ pub fn u64_to_iso_datetime_string(value: u64) -> String {
     }
 }
 
+/// Converts a u64 timestamp to a date/datetime string, automatically choosing the format.
+///
+/// # Arguments
+///
+/// * `value` - A u64 timestamp (wrapped UNIX timestamp in seconds)
+///
+/// # Returns
+///
+/// * `YYYY-MM-DD` if the time is exactly midnight (00:00:00)
+/// * `YYYY-MM-DDTHH:MM:SS` if there is any partial-day information
+pub fn u64_to_auto_datetime_string(value: u64) -> String {
+    match DateTime::from_timestamp(wrap_to_i64(value), 0) {
+        Some(dt) => {
+            // Check if it's a whole day (midnight)
+            if dt.hour() == 0 && dt.minute() == 0 && dt.second() == 0 {
+                dt.format("%Y-%m-%d").to_string()
+            } else {
+                dt.format("%Y-%m-%dT%H:%M:%S").to_string()
+            }
+        }
+        None => format!("INVALID_TIMESTAMP_{}", value),
+    }
+}
+
 
 pub fn u64_to_year_month_day_and_seconds(value: u64) -> (i32, u32, u32, u32) {
     match DateTime::from_timestamp(wrap_to_i64(value), 0) {

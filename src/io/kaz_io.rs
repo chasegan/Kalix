@@ -1,9 +1,9 @@
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{u64_to_date_string, wrap_to_u64, wrap_to_i64};
+use crate::tid::utils::{u64_to_date_string, u64_to_auto_datetime_string, wrap_to_u64, wrap_to_i64};
 use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble, TimeValueFloat};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use chrono::{Utc, NaiveDateTime, TimeZone, Timelike};
+use chrono::NaiveDateTime;
 
 const CODEC_GORILLA_DOUBLE: u16 = 0;
 const CODEC_GORILLA_FLOAT: u16 = 1;
@@ -488,8 +488,8 @@ fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) ->
 
     // Write data rows
     for meta in metadata_list {
-        let start_time = format_timestamp(meta.start_time);
-        let end_time = format_timestamp(meta.end_time);
+        let start_time = u64_to_auto_datetime_string(meta.start_time);
+        let end_time = u64_to_auto_datetime_string(meta.end_time);
 
         writeln!(
             writer,
@@ -506,23 +506,6 @@ fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) ->
 
     writer.flush()?;
     Ok(())
-}
-
-fn format_timestamp(timestamp: u64) -> String {
-    match Utc.timestamp_opt(wrap_to_i64(timestamp), 0) {
-        chrono::LocalResult::Single(dt) => {
-            // Check if it's a whole day (midnight)
-            if dt.time().hour() == 0 && dt.time().minute() == 0 && dt.time().second() == 0 {
-                dt.format("%Y-%m-%d").to_string()
-            } else {
-                dt.format("%Y-%m-%dT%H:%M:%S").to_string()
-            }
-        }
-        _ => {
-            // Fallback for invalid timestamps
-            format!("INVALID_TIMESTAMP_{}", timestamp)
-        }
-    }
 }
 
 fn read_u16(file: &mut File) -> Result<u16, KazError> {

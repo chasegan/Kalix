@@ -7,6 +7,7 @@
 // The ordering system thus runs before the flow-phase
 
 use crate::data_management::data_cache::DataCache;
+use crate::misc::simulation_context::set_context_node;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -183,6 +184,9 @@ impl SimpleOrderingSystem {
             if li.zone_idx.is_none() {
                 continue;
             }
+
+            // Set node context for error reporting (just stores the index)
+            set_context_node(li.to_node);
 
             // Determine the order on this link (depends on the downstream node)
             match &mut nodes[li.to_node] {

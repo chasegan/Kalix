@@ -2,6 +2,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::perf::benchmarks;
 use kalix::misc::cli_helpers::describe_cli_api;
+use kalix::misc::simulation_context::install_simulation_panic_hook;
 use kalix::apis::stdio::handlers::run_stdio_session;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -75,6 +76,7 @@ enum Commands {
 }
 
 fn main() {
+    install_simulation_panic_hook();
     let cli = Cli::parse();
 
     match cli.command {
@@ -145,7 +147,8 @@ fn main() {
 
             let sim_start = Instant::now();
             if let Err(e) = m.run() {
-                panic!("Error: {}", e); // TODO: handle error properly
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
             let sim_time = sim_start.elapsed();
 
