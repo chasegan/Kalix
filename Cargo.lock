@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "kalix"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64",
  "chrono",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "kalixpy"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "csv",
