@@ -406,7 +406,9 @@ public class AxisRenderer {
      */
     private String formatValue(double value, int decimalPlaces) {
         String formatted = String.format("%." + decimalPlaces + "f", value);
-        formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
+        if (formatted.contains(".")) {
+            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
+        }
         return formatted;
     }
 
