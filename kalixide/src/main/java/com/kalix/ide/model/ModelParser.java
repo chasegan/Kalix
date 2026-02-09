@@ -31,9 +31,9 @@ public class ModelParser {
     private static final Logger logger = LoggerFactory.getLogger(ModelParser.class);
 
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
-    private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+)$");
-    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)$");
-    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+)$");
+    private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
+    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)(?:\\s*[#;].*)?$");
+    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
 
     /**
      * Parse INI model text and extract nodes and links.
