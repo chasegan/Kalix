@@ -59,6 +59,10 @@ public class OutputsTreeBuilder {
     private final Function<Object, List<String>> getSeriesNamesCallback;  // Gets series from RunInfo or LoadedDatasetInfo
     private final BiFunction<String, String, Integer> naturalCompareCallback;  // Natural sorting function
 
+    // Filter state
+    private String filterText = "";
+    private List<TreePath> preFilterExpansionState = null;
+
     /**
      * Creates a new OutputsTreeBuilder.
      *
@@ -76,6 +80,18 @@ public class OutputsTreeBuilder {
         this.timeseriesTreeModel = timeseriesTreeModel;
         this.getSeriesNamesCallback = getSeriesNamesCallback;
         this.naturalCompareCallback = naturalCompareCallback;
+    }
+
+    /**
+     * Sets the filter text. When non-empty, only nodes matching the filter
+     * (case-insensitive) and their ancestors are shown after rebuild.
+     */
+    public void setFilterText(String filterText) {
+        this.filterText = (filterText == null) ? "" : filterText.trim();
+    }
+
+    public String getFilterText() {
+        return filterText;
     }
 
     /**
@@ -145,11 +161,33 @@ public class OutputsTreeBuilder {
             isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
         }
 
+        // Apply filter pruning before reload
+        pruneNonMatchingNodes(root);
+
         timeseriesTreeModel.reload();
 
-        // Expand all if: (1) first time (no previous paths), OR (2) switching between run/dataset trees
+        // Save pre-filter expansion state when first entering filter mode
+        if (!filterText.isEmpty() && preFilterExpansionState == null) {
+            preFilterExpansionState = new ArrayList<>(expandedPaths);
+        }
+
+        // Expansion logic
         boolean switchedContext = (isDatasetTree != hadDatasetPaths);
-        if (expandedPaths.isEmpty() || switchedContext) {
+        if (!filterText.isEmpty()) {
+            // Filter active - expand all to show matches in context
+            for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                timeseriesTree.expandRow(i);
+            }
+        } else if (preFilterExpansionState != null) {
+            // Filter just cleared - restore pre-filter expansion state
+            for (TreePath expandedPath : preFilterExpansionState) {
+                TreePath newPath = findEquivalentPath(expandedPath);
+                if (newPath != null) {
+                    timeseriesTree.expandPath(newPath);
+                }
+            }
+            preFilterExpansionState = null;
+        } else if (expandedPaths.isEmpty() || switchedContext) {
             // First time or switched context - expand all nodes
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
@@ -406,6 +444,54 @@ public class OutputsTreeBuilder {
                variableName.equals("No outputs available from selected sources") ||
                variableName.equals("No series available from this dataset") ||
                variableName.equals("Select one or more runs or datasets");
+    }
+
+    // ========== Filtering ==========
+
+    /**
+     * Removes nodes that don't match the current filter text.
+     * Parent/intermediate nodes are kept if any descendant matches.
+     * Called after the tree is fully built but before reload().
+     */
+    private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
+        if (filterText.isEmpty()) return;
+
+        // Work backwards to avoid index shifting during removal
+        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (!nodeMatchesFilter(child)) {
+                parent.remove(i);
+            } else if (child.getUserObject() instanceof String && !isSpecialMessageNode(child)) {
+                // Recurse into intermediate nodes to prune non-matching subtrees
+                pruneNonMatchingNodes(child);
+                if (child.getChildCount() == 0) {
+                    parent.remove(i);
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks if a node or any of its descendants matches the current filter.
+     * Matches against display text (toString()), case-insensitive.
+     */
+    private boolean nodeMatchesFilter(DefaultMutableTreeNode node) {
+        if (filterText.isEmpty()) return true;
+
+        String lowerFilter = filterText.toLowerCase();
+        Object userObject = node.getUserObject();
+
+        if (userObject != null && userObject.toString().toLowerCase().contains(lowerFilter)) {
+            return true;
+        }
+
+        // Check descendants
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (nodeMatchesFilter((DefaultMutableTreeNode) node.getChildAt(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ========== Inner Classes ==========

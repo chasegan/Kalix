@@ -6,6 +6,7 @@ import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.SeriesColorManager;
+import com.kalix.ide.managers.TreeFilterManager;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.utils.NaturalSortUtils;
@@ -124,6 +125,7 @@ public class RunManager extends JFrame {
     private DatasetLoaderManager datasetLoaderManager;
     private RunContextMenuManager runContextMenuManager;
     private SeriesColorManager seriesColorManager;
+    private TreeFilterManager treeFilterManager;
 
     // === SELECTION STATE ===
     // selectedSeries tracks what's plotted, independent of tree selection
@@ -343,6 +345,9 @@ public class RunManager extends JFrame {
 
         timeseriesScrollPane = new JScrollPane(timeseriesTree);
 
+        // Initialize tree filter manager
+        treeFilterManager = new TreeFilterManager(this::onFilterTextChanged);
+
         // Create shared dataset
         plotDataSet = new DataSet();
 
@@ -377,9 +382,10 @@ public class RunManager extends JFrame {
         JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
         runsPanel.add(treeScrollPane, BorderLayout.CENTER);
 
-        // Bottom of left side: timeseries tree
+        // Bottom of left side: timeseries tree with filter
         JPanel timeseriesPanel = new JPanel(new BorderLayout());
         timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
+        timeseriesPanel.add(treeFilterManager.getFilterField(), BorderLayout.NORTH);
         timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
@@ -1145,6 +1151,21 @@ public class RunManager extends JFrame {
     }
 
     /**
+     * Handles filter text changes. Rebuilds the timeseries tree with the current filter
+     * applied. Purely visual - does NOT change selection or affect plots.
+     */
+    private void onFilterTextChanged() {
+        isUpdatingSelection = true;
+        try {
+            outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
+            updateOutputsTree();
+            restoreTreeSelectionFromSelectedSeries();
+        } finally {
+            isUpdatingSelection = false;
+        }
+    }
+
+    /**
      * Updates the timeseries tree based on current run tree selection.
      */
     private void updateOutputsTree() {
@@ -1248,6 +1269,17 @@ public class RunManager extends JFrame {
             }
             newSelectedSeries.add(seriesKey);
             seriesKeyToLeaf.put(seriesKey, leaf);
+        }
+
+        // When filtering, preserve series that are hidden by the filter.
+        // Hidden series can't be in the tree selection, but they should stay plotted.
+        if (treeFilterManager.isFiltering()) {
+            Set<String> visibleSeriesKeys = getVisibleSeriesKeys();
+            for (String key : selectedSeries) {
+                if (!visibleSeriesKeys.contains(key)) {
+                    newSelectedSeries.add(key);
+                }
+            }
         }
 
         // Check if there's overlap between old and new selections
@@ -1429,6 +1461,37 @@ public class RunManager extends JFrame {
      */
     private void collectLeafNodes(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
         outputsTreeBuilder.collectLeafNodes(node, leaves);
+    }
+
+    /**
+     * Collects all series keys visible in the current (possibly filtered) timeseries tree.
+     */
+    private Set<String> getVisibleSeriesKeys() {
+        Set<String> keys = new HashSet<>();
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
+        List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
+        collectAllLeafNodesRecursive(root, allLeaves);
+        for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
+            if (leaf.source instanceof RunInfoImpl) {
+                keys.add(leaf.seriesName + " [" + ((RunInfoImpl) leaf.source).getRunName() + "]");
+            } else if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
+                keys.add(leaf.seriesName + " [" + datasetInfo.fileName + "]");
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * Recursively collects all SeriesLeafNode objects from the entire tree (no depth guard).
+     */
+    private void collectAllLeafNodesRecursive(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
+        Object userObject = node.getUserObject();
+        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
+            leaves.add(leaf);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            collectAllLeafNodesRecursive((DefaultMutableTreeNode) node.getChildAt(i), leaves);
+        }
     }
 
     /**
