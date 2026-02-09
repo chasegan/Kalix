@@ -182,7 +182,7 @@ public class PlotPanel extends JPanel {
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
         double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
-        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
+        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
             minValue = logScaleMin;
         }
 
@@ -237,10 +237,11 @@ public class PlotPanel extends JPanel {
     private static double[] applyYAxisPadding(double minValue, double maxValue, YAxisScale yAxisScale, double paddingFraction) {
         double valueRange = maxValue - minValue;
 
-        // Handle very small value range
-        if (valueRange < 0.001) {
+        // Handle constant data (all values identical) - use relative padding based on magnitude
+        if (valueRange < 1e-15) {
             double center = (minValue + maxValue) / 2;
-            return new double[]{center - 0.5, center + 0.5};
+            double halfRange = Math.max(Math.abs(center) * 0.1, 1e-6);
+            return new double[]{center - halfRange, center + halfRange};
         }
 
         // Apply padding in transformed space for correct visual spacing

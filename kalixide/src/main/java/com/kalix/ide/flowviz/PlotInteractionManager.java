@@ -500,16 +500,17 @@ public class PlotInteractionManager {
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
         double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
-        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin) {
+        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
             minValue = logScaleMin;
         }
 
         // Add 5% padding appropriate for the current Y-axis scale
         double valueRange = maxValue - minValue;
-        if (valueRange < 0.001) { // Very small range
+        if (valueRange < 1e-15) { // Constant data - use relative padding based on magnitude
             double center = (minValue + maxValue) / 2;
-            minValue = center - 0.5;
-            maxValue = center + 0.5;
+            double halfRange = Math.max(Math.abs(center) * 0.1, 1e-6);
+            minValue = center - halfRange;
+            maxValue = center + halfRange;
         } else {
             // Apply padding in transformed space for correct visual spacing
             double transformedMin = yAxisScale.transform(minValue);

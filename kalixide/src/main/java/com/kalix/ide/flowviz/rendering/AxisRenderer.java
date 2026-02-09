@@ -295,6 +295,7 @@ public class AxisRenderer {
         int plotHeight = viewport.getPlotHeight();
 
         FontMetrics fm = g2d.getFontMetrics();
+        int decimalPlaces = decimalPlacesForTicks(axisInfo.valueTicks);
 
         for (Double tickValue : axisInfo.valueTicks) {
             int screenY = viewport.valueToScreenY(tickValue);
@@ -304,7 +305,7 @@ public class AxisRenderer {
                 g2d.drawLine(plotX - TICK_MARK_LENGTH, screenY, plotX, screenY);
 
                 // Draw label
-                String valueLabel = formatValue(tickValue);
+                String valueLabel = formatValue(tickValue, decimalPlaces);
                 int labelHeight = fm.getAscent();
                 g2d.drawString(valueLabel, plotX - VALUE_LABEL_OFFSET - fm.stringWidth(valueLabel),
                              screenY + labelHeight / 2);
@@ -379,25 +380,34 @@ public class AxisRenderer {
     }
 
     /**
-     * Formats a value for axis labels.
+     * Calculates the number of decimal places needed to distinguish tick labels,
+     * based on the spacing between consecutive ticks.
      */
-    private String formatValue(double value) {
-        // Always show full numbers, omit decimals if not needed
-        if (value == Math.floor(value)) {
-            // Integer value - no decimal places
-            return String.format("%.0f", value);
-        } else if (Math.abs(value) >= 1) {
-            // Values >= 1 - show 1-3 decimal places as needed
-            String formatted = String.format("%.3f", value);
-            // Remove trailing zeros and decimal point if not needed
-            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
-            return formatted;
-        } else {
-            // Small values < 1 - show up to 6 decimal places, remove trailing zeros
-            String formatted = String.format("%.6f", value);
-            formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
-            return formatted;
+    private int decimalPlacesForTicks(List<Double> ticks) {
+        if (ticks.size() < 2) return 9;
+
+        double minSpacing = Double.MAX_VALUE;
+        for (int i = 1; i < ticks.size(); i++) {
+            double spacing = Math.abs(ticks.get(i) - ticks.get(i - 1));
+            if (spacing > 0) {
+                minSpacing = Math.min(minSpacing, spacing);
+            }
         }
+
+        if (minSpacing == Double.MAX_VALUE) return 9;
+
+        // Enough decimal places for 2 significant figures of the tick interval
+        int places = (int) Math.ceil(-Math.log10(minSpacing)) + 2;
+        return Math.max(0, Math.min(places, 9));
+    }
+
+    /**
+     * Formats a value for axis labels with the given number of decimal places.
+     */
+    private String formatValue(double value, int decimalPlaces) {
+        String formatted = String.format("%." + decimalPlaces + "f", value);
+        formatted = formatted.replaceAll("0*$", "").replaceAll("\\.$", "");
+        return formatted;
     }
 
     /**
@@ -431,9 +441,10 @@ public class AxisRenderer {
         g2d.setFont(new Font("Arial", Font.PLAIN, 10)); // Use same font as axis labels
         FontMetrics labelFm = g2d.getFontMetrics();
         int maxLabelWidth = 0;
+        int decimalPlaces = decimalPlacesForTicks(axisInfo.valueTicks);
 
         for (Double tickValue : axisInfo.valueTicks) {
-            String valueLabel = formatValue(tickValue);
+            String valueLabel = formatValue(tickValue, decimalPlaces);
             int labelWidth = labelFm.stringWidth(valueLabel);
             maxLabelWidth = Math.max(maxLabelWidth, labelWidth);
         }
