@@ -159,6 +159,16 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Programmatically triggers the auto-completion popup.
+     * This is equivalent to pressing Ctrl+Space.
+     */
+    public void showSuggestions() {
+        if (autoCompleteManager != null) {
+            autoCompleteManager.showSuggestions();
+        }
+    }
+
+    /**
      * Initialize the context command system.
      * This enables context-aware commands like rename node and plot input files.
      *
@@ -247,6 +257,24 @@ public class EnhancedTextEditor extends JPanel {
                 menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION)));
                 menu.addSeparator();
                 menu.add(createMenuItem("Select All", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
+
+                // Show Suggestions (auto-complete)
+                // Tried event-based trigger, but couldn't get stable behaviour.
+                // Resorted to using a timer delay to allow UI to reestablish focus
+                // before launching autocomplete.
+                if (autoCompleteManager != null) {
+                    menu.addSeparator();
+                    JMenuItem suggestionsItem = new JMenuItem("Show Suggestions (Ctrl+Space)");
+                    suggestionsItem.addActionListener(ae -> {
+                        javax.swing.Timer timer = new javax.swing.Timer(150, evt -> {
+                            textArea.requestFocusInWindow();
+                            showSuggestions();
+                        });
+                        timer.setRepeats(false);
+                        timer.start();
+                    });
+                    menu.add(suggestionsItem);
+                }
 
                 // Add "Show on Map" if cursor is in a node section
                 if (mapPanel != null && commandModelSupplier != null) {

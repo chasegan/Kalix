@@ -113,6 +113,16 @@ public class AutoCompleteManager {
         }
     }
 
+    /**
+     * Programmatically triggers the auto-completion popup.
+     * This is equivalent to pressing Ctrl+Space.
+     */
+    public void showSuggestions() {
+        if (autoCompletion != null) {
+            autoCompletion.doCompletion();
+        }
+    }
+
     public void dispose() {
         if (autoCompletion != null) {
             autoCompletion.uninstall();
