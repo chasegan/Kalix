@@ -174,6 +174,20 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
+        // Copy Location - copies map coordinates of right-click location to clipboard
+        JMenuItem copyLocationItem = new JMenuItem("Copy Location");
+        copyLocationItem.addActionListener(e -> {
+            if (lastContextMenuLocation != null) {
+                double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
+                double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                String locationText = String.format("%.2f, %.2f", worldX, worldY);
+                java.awt.datatransfer.StringSelection selection =
+                    new java.awt.datatransfer.StringSelection(locationText);
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
+            }
+        });
+        menu.add(copyLocationItem);
+
         // Find Node
         JMenuItem findNodeItem = new JMenuItem("Find on Map...");
         findNodeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, shortcutMask));
