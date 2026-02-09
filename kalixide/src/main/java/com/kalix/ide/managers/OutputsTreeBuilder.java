@@ -456,16 +456,22 @@ public class OutputsTreeBuilder {
     private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
         if (filterText.isEmpty()) return;
 
+        String lowerFilter = filterText.toLowerCase();
+
         // Work backwards to avoid index shifting during removal
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
             if (!nodeMatchesFilter(child)) {
                 parent.remove(i);
             } else if (child.getUserObject() instanceof String && !isSpecialMessageNode(child)) {
-                // Recurse into intermediate nodes to prune non-matching subtrees
-                pruneNonMatchingNodes(child);
-                if (child.getChildCount() == 0) {
-                    parent.remove(i);
+                // If this node's own text matches, keep all descendants intact
+                String nodeText = child.getUserObject().toString().toLowerCase();
+                if (!nodeText.contains(lowerFilter)) {
+                    // Node kept only because of matching descendants - prune non-matching children
+                    pruneNonMatchingNodes(child);
+                    if (child.getChildCount() == 0) {
+                        parent.remove(i);
+                    }
                 }
             }
         }
