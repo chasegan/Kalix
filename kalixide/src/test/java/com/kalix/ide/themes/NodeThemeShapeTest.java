@@ -51,7 +51,7 @@ public class NodeThemeShapeTest {
     public void testAllShapeTypesCount() {
         // Test that we have the expected number of shape types
         NodeTheme.NodeShape[] shapes = NodeTheme.NodeShape.values();
-        assertEquals(10, shapes.length); // 4 triangles + circle + square + diamond + water drop + podium + arrow down
+        assertEquals(11, shapes.length); // 4 triangles + circle + square + diamond + hexagon + water drop + podium + arrow down
     }
 
     @Test
