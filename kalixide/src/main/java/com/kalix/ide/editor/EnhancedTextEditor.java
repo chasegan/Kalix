@@ -169,6 +169,64 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Scrolls the editor to show the definition of the specified node.
+     * Uses the parsed model to find the section start line, then positions
+     * the node at 1/4 from the top of the viewport for good context.
+     *
+     * @param nodeName The name of the node to scroll to
+     * @return true if the node was found and scrolled to, false otherwise
+     */
+    public boolean scrollToNode(String nodeName) {
+        if (nodeName == null || nodeName.trim().isEmpty() || commandModelSupplier == null) {
+            return false;
+        }
+
+        try {
+            // Use parsed model to find the node section
+            com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model = commandModelSupplier.get();
+            if (model == null) {
+                return false;
+            }
+
+            com.kalix.ide.linter.parsing.INIModelParser.Section section = model.getSections().get("node." + nodeName);
+            if (section == null) {
+                return false;
+            }
+
+            // Convert 1-based line number to document offset
+            int lineNumber = section.getStartLine() - 1; // Convert to 0-based
+            int offset = 0;
+            String text = textArea.getText();
+            String[] lines = text.split("\n", -1);
+
+            for (int i = 0; i < lineNumber && i < lines.length; i++) {
+                offset += lines[i].length() + 1; // +1 for newline
+            }
+
+            // Set caret position to the start of the node section
+            textArea.setCaretPosition(offset);
+
+            // Smart scroll: position the node at 1/4 from the top of the viewport
+            if (textArea.getParent() instanceof javax.swing.JViewport viewport) {
+                java.awt.Rectangle viewRect = viewport.getViewRect();
+                java.awt.Rectangle caretRect = textArea.modelToView(offset);
+
+                if (caretRect != null) {
+                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    desiredY = Math.max(0, desiredY);
+                    viewport.setViewPosition(new java.awt.Point(viewRect.x, desiredY));
+                }
+            }
+
+            return true;
+        } catch (javax.swing.text.BadLocationException e) {
+            logger.error("Error scrolling to node {}: {}", nodeName, e.getMessage());
+        }
+
+        return false;
+    }
+
+    /**
      * Initialize the context command system.
      * This enables context-aware commands like rename node and plot input files.
      *
@@ -276,15 +334,34 @@ public class EnhancedTextEditor extends JPanel {
                     menu.add(suggestionsItem);
                 }
 
-                // Add "Show on Map" if cursor is in a node section
-                if (mapPanel != null && commandModelSupplier != null) {
+                // Add navigation items based on context
+                if (commandModelSupplier != null) {
                     com.kalix.ide.editor.commands.ContextDetector contextDetector = new com.kalix.ide.editor.commands.ContextDetector();
                     com.kalix.ide.editor.commands.EditorContext ctx = contextDetector.detectContext(
                         textArea.getCaretPosition(), textArea.getText(),
                         textArea.getSelectedText(), commandModelSupplier.get());
-                    if (ctx.getNodeName().isPresent()) {
+
+                    boolean addedSeparator = false;
+
+                    // "Go to Node Definition" if cursor is on a ds_X property
+                    if (ctx.getPropertyKey().isPresent() && ctx.getPropertyValue().isPresent()) {
+                        String propKey = ctx.getPropertyKey().get();
+                        String propValue = ctx.getPropertyValue().get();
+                        if (propKey.matches("ds_\\d+") && !propValue.isEmpty()) {
+                            menu.addSeparator();
+                            addedSeparator = true;
+                            JMenuItem goToNodeItem = new JMenuItem("Go to Node Definition");
+                            goToNodeItem.addActionListener(ae -> scrollToNode(propValue));
+                            menu.add(goToNodeItem);
+                        }
+                    }
+
+                    // "Show on Map" if cursor is in a node section
+                    if (mapPanel != null && ctx.getNodeName().isPresent()) {
                         String nodeName = ctx.getNodeName().get();
-                        menu.addSeparator();
+                        if (!addedSeparator) {
+                            menu.addSeparator();
+                        }
                         JMenuItem showOnMapItem = new JMenuItem("Show on Map");
                         showOnMapItem.addActionListener(ae -> mapPanel.selectNodeFromEditor(nodeName));
                         menu.add(showOnMapItem);

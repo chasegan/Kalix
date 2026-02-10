@@ -58,6 +58,10 @@ public class EditorContext {
         return Optional.ofNullable((String) metadata.get("propertyKey"));
     }
 
+    public Optional<String> getPropertyValue() {
+        return Optional.ofNullable((String) metadata.get("propertyValue"));
+    }
+
     public Optional<String> getSectionName() {
         return Optional.ofNullable((String) metadata.get("sectionName"));
     }
@@ -110,6 +114,11 @@ public class EditorContext {
 
         public Builder propertyKey(String key) {
             this.metadata.put("propertyKey", key);
+            return this;
+        }
+
+        public Builder propertyValue(String value) {
+            this.metadata.put("propertyValue", value);
             return this;
         }
 

@@ -91,6 +91,13 @@ public class ContextDetector {
                             String key = line.substring(0, line.indexOf("=")).trim();
                             builder.propertyKey(key)
                                 .type(EditorContext.ContextType.PROPERTY);
+
+                            // Get clean property value from parsed model (already has comments stripped)
+                            INIModelParser.Property prop = section.getProperties().get(key);
+                            if (prop != null) {
+                                builder.propertyValue(prop.getValue());
+                            }
+
                             return builder.build();
                         }
                     }
