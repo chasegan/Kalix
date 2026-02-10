@@ -225,6 +225,9 @@ public class VisualizationTabManager {
         boolean defaultAutoY = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
         plotPanel.setAutoYMode(defaultAutoY);
 
+        boolean defaultLegendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
+        plotPanel.setLegendCollapsed(defaultLegendCollapsed);
+
         // Populate legend with existing series
         for (String seriesName : sharedDataSet.getSeriesNames()) {
             Color color = sharedColorMap.get(seriesName);
@@ -457,6 +460,7 @@ public class VisualizationTabManager {
             button.addActionListener(e -> {
                 boolean enabled = button.isSelected();
                 plotPanel.setAutoYMode(enabled);
+                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, enabled);
                 if (enabled) {
                     // Fit Y-axis to visible data in current X range (don't change X zoom)
                     plotPanel.fitYAxis();
@@ -469,7 +473,10 @@ public class VisualizationTabManager {
         PlotToolbarBuilder addCoordinatesToggle(boolean initialState) {
             JToggleButton button = createToggleButton(FontAwesomeSolid.CROSSHAIRS,
                 "Show Coordinates", initialState);
-            button.addActionListener(e -> plotPanel.setShowCoordinates(button.isSelected()));
+            button.addActionListener(e -> {
+                plotPanel.setShowCoordinates(button.isSelected());
+                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, button.isSelected());
+            });
             toolbar.add(button);
             return this;
         }
@@ -479,7 +486,10 @@ public class VisualizationTabManager {
                 "Show Key", initialState);
 
             // Update collapsed state when button is clicked
-            button.addActionListener(e -> plotPanel.setLegendCollapsed(!button.isSelected()));
+            button.addActionListener(e -> {
+                plotPanel.setLegendCollapsed(!button.isSelected());
+                PreferenceManager.setFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, !button.isSelected());
+            });
 
             // Set up callback to update button when collapsed state changes from other sources
             plotPanel.getLegendManager().setOnCollapsedChanged(() -> {
