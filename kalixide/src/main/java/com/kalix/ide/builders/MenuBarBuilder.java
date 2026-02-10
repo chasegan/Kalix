@@ -240,7 +240,7 @@ public class MenuBarBuilder {
      */
     private JMenu createRunMenu() {
         JMenu runMenu = new JMenu("Run");
-        runMenu.add(createMenuItem("Run Model", e -> callbacks.runModelFromMemory()));
+        runMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Run Model", "R"), e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Optimiser", e -> callbacks.showOptimisation()));
         runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));

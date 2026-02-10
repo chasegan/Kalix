@@ -598,6 +598,18 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 updateStatus("Model saved");
             }
         });
+
+        // Global Ctrl+R/Cmd+R for run model
+        KeyStroke ctrlR = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdR = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.META_DOWN_MASK);
+        inputMap.put(ctrlR, "global-run");
+        inputMap.put(cmdR, "global-run");
+        actionMap.put("global-run", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                runModelFromMemory();
+            }
+        });
     }
     
     /**
