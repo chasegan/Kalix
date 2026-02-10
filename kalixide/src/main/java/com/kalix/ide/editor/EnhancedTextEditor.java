@@ -65,6 +65,7 @@ public class EnhancedTextEditor extends JPanel {
     private LinterManager linterManager;
     private AutoCompleteManager autoCompleteManager;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
+    private NavigationHistory navigationHistory;
 
     // Context command dependencies (stored for programmatic rename access)
     private JFrame commandParentFrame;
@@ -72,7 +73,10 @@ public class EnhancedTextEditor extends JPanel {
 
     // Map panel reference for "Show on Map" context menu action
     private com.kalix.ide.MapPanel mapPanel;
-    
+
+    // Track line before mouse click for navigation history
+    private int lineBeforeMouseClick = -1;
+
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
     }
@@ -122,9 +126,51 @@ public class EnhancedTextEditor extends JPanel {
     private void initializeManagers() {
         navigationManager = new TextNavigationManager(textArea, this);
         searchManager = new TextSearchManager(textArea, this);
+        navigationHistory = new NavigationHistory();
+        navigationHistory.setDocument(textArea.getDocument());
         dropManager = new FileDropManager(file -> {
             if (fileDropHandler != null) {
                 fileDropHandler.onFileDropped(file);
+            }
+        });
+        setupNavigationMouseListener();
+    }
+
+    /**
+     * Sets up a mouse listener to track navigation jumps from mouse clicks.
+     * Records navigation history when a click causes a line change.
+     *
+     * Uses AWTEventListener to capture caret position BEFORE the click moves it,
+     * since regular MouseListener is called after the text component processes the event.
+     */
+    private void setupNavigationMouseListener() {
+        // Use AWTEventListener to capture mouse events BEFORE they're processed
+        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            if (event instanceof MouseEvent me && me.getID() == MouseEvent.MOUSE_PRESSED) {
+                if (me.getSource() == textArea) {
+                    // Capture current caret position before the click moves it
+                    lineBeforeMouseClick = getLineNumberForOffset(textArea.getCaretPosition());
+                }
+            }
+        }, java.awt.AWTEvent.MOUSE_EVENT_MASK);
+
+        // Regular mouse listener to check after the click is processed
+        textArea.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                // Check if line changed after the click
+                if (lineBeforeMouseClick >= 0) {
+                    int lineAfterClick = getLineNumberForOffset(textArea.getCaretPosition());
+                    if (lineAfterClick != lineBeforeMouseClick) {
+                        // Line changed, record in navigation history
+                        NavigationHistory.Position beforePos = new NavigationHistory.Position(
+                            0, lineBeforeMouseClick); // offset not critical, line matters
+                        NavigationHistory.Position afterPos = new NavigationHistory.Position(
+                            textArea.getCaretPosition(), lineAfterClick);
+                        navigationHistory.recordJump(beforePos, afterPos);
+                    }
+                }
+                lineBeforeMouseClick = -1;
             }
         });
     }
@@ -194,14 +240,19 @@ public class EnhancedTextEditor extends JPanel {
             }
 
             // Convert 1-based line number to document offset
-            int lineNumber = section.getStartLine() - 1; // Convert to 0-based
+            int targetLine = section.getStartLine() - 1; // Convert to 0-based
             int offset = 0;
             String text = textArea.getText();
             String[] lines = text.split("\n", -1);
 
-            for (int i = 0; i < lineNumber && i < lines.length; i++) {
+            for (int i = 0; i < targetLine && i < lines.length; i++) {
                 offset += lines[i].length() + 1; // +1 for newline
             }
+
+            // Record jump in navigation history
+            NavigationHistory.Position currentPos = getCurrentPosition();
+            NavigationHistory.Position newPos = new NavigationHistory.Position(offset, targetLine);
+            navigationHistory.recordJump(currentPos, newPos);
 
             // Set caret position to the start of the node section
             textArea.setCaretPosition(offset);
@@ -224,6 +275,91 @@ public class EnhancedTextEditor extends JPanel {
         }
 
         return false;
+    }
+
+    /**
+     * Gets the current caret position as a NavigationHistory.Position.
+     */
+    public NavigationHistory.Position getCurrentPosition() {
+        int offset = textArea.getCaretPosition();
+        int line = getLineNumberForOffset(offset);
+        return new NavigationHistory.Position(offset, line);
+    }
+
+    /**
+     * Gets the 0-based line number for a given offset.
+     */
+    private int getLineNumberForOffset(int offset) {
+        try {
+            return textArea.getLineOfOffset(offset);
+        } catch (javax.swing.text.BadLocationException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Gets the navigation history for this editor.
+     */
+    public NavigationHistory getNavigationHistory() {
+        return navigationHistory;
+    }
+
+    /**
+     * Navigates to a position, scrolling it into view.
+     */
+    public void navigateToPosition(NavigationHistory.Position position) {
+        if (position == null) return;
+
+        try {
+            textArea.setCaretPosition(position.offset());
+
+            // Smart scroll: position at 1/4 from the top of the viewport
+            if (textArea.getParent() instanceof javax.swing.JViewport viewport) {
+                java.awt.Rectangle viewRect = viewport.getViewRect();
+                java.awt.Rectangle caretRect = textArea.modelToView(position.offset());
+
+                if (caretRect != null) {
+                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    desiredY = Math.max(0, desiredY);
+                    viewport.setViewPosition(new java.awt.Point(viewRect.x, desiredY));
+                }
+            }
+        } catch (javax.swing.text.BadLocationException e) {
+            logger.error("Error navigating to position: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Goes back in navigation history.
+     */
+    public void navigateBack() {
+        NavigationHistory.Position pos = navigationHistory.goBack();
+        if (pos != null) {
+            navigateToPosition(pos);
+        }
+    }
+
+    /**
+     * Goes forward in navigation history.
+     */
+    public void navigateForward() {
+        NavigationHistory.Position pos = navigationHistory.goForward();
+        if (pos != null) {
+            navigateToPosition(pos);
+        }
+    }
+
+    /**
+     * Records a jump navigation from current position to a target line.
+     * Should be called before actually moving the caret.
+     *
+     * @param targetOffset The offset being jumped to
+     */
+    public void recordNavigationJump(int targetOffset) {
+        NavigationHistory.Position currentPos = getCurrentPosition();
+        int targetLine = getLineNumberForOffset(targetOffset);
+        NavigationHistory.Position newPos = new NavigationHistory.Position(targetOffset, targetLine);
+        navigationHistory.recordJump(currentPos, newPos);
     }
 
     /**
@@ -572,6 +708,28 @@ public class EnhancedTextEditor extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 toggleComment();
+            }
+        });
+
+        // Navigate Back
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, InputEvent.META_DOWN_MASK), "navigateBack");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, InputEvent.CTRL_DOWN_MASK), "navigateBack");
+
+        actionMap.put("navigateBack", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                navigateBack();
+            }
+        });
+
+        // Navigate Forward
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, InputEvent.META_DOWN_MASK), "navigateForward");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, InputEvent.CTRL_DOWN_MASK), "navigateForward");
+
+        actionMap.put("navigateForward", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                navigateForward();
             }
         });
     }

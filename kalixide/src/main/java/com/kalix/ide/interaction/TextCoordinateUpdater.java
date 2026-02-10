@@ -145,6 +145,9 @@ public class TextCoordinateUpdater {
             NodeSection section = findNodeSection(currentText, nodeName);
             
             if (section != null) {
+                // Record navigation jump before moving caret
+                textEditor.recordNavigationJump(section.start);
+
                 // Set caret position to the start of the node section (the [node.name] header)
                 textEditor.getTextArea().setCaretPosition(section.start);
 

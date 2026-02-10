@@ -21,7 +21,8 @@ public class TextSearchManager {
     
     private final RSyntaxTextArea textArea;
     private final JComponent parentComponent;
-    
+    private final EnhancedTextEditor textEditor;
+
     // Dialog references
     private JDialog findDialog;
     private JDialog replaceDialog;
@@ -46,6 +47,8 @@ public class TextSearchManager {
     public TextSearchManager(RSyntaxTextArea textArea, JComponent parentComponent) {
         this.textArea = textArea;
         this.parentComponent = parentComponent;
+        this.textEditor = (parentComponent instanceof EnhancedTextEditor)
+            ? (EnhancedTextEditor) parentComponent : null;
 
         // Add document listener to clear highlights when text changes
         textArea.getDocument().addDocumentListener(new DocumentListener() {
@@ -315,12 +318,17 @@ public class TextSearchManager {
         if (searchText.isEmpty()) {
             return;
         }
-        
+
+        // Record position before find for navigation history
+        NavigationHistory.Position beforePos = (textEditor != null)
+            ? textEditor.getCurrentPosition() : null;
+
         SearchContext context = createSearchContext(searchText, true);
         SearchResult result = SearchEngine.find(textArea, context);
 
         if (result.wasFound()) {
             highlightsActive = true;
+            recordNavigationIfLineChanged(beforePos);
         } else {
             showNotFoundMessage();
         }
@@ -334,12 +342,17 @@ public class TextSearchManager {
         if (searchText.isEmpty()) {
             return;
         }
-        
+
+        // Record position before find for navigation history
+        NavigationHistory.Position beforePos = (textEditor != null)
+            ? textEditor.getCurrentPosition() : null;
+
         SearchContext context = createSearchContext(searchText, false);
         SearchResult result = SearchEngine.find(textArea, context);
 
         if (result.wasFound()) {
             highlightsActive = true;
+            recordNavigationIfLineChanged(beforePos);
         } else {
             showNotFoundMessage();
         }
@@ -419,6 +432,21 @@ public class TextSearchManager {
         if (highlightsActive) {
             textArea.clearMarkAllHighlights();
             highlightsActive = false;
+        }
+    }
+
+    /**
+     * Records a navigation jump if the current position is on a different line
+     * than the position before the find operation.
+     */
+    private void recordNavigationIfLineChanged(NavigationHistory.Position beforePos) {
+        if (textEditor == null || beforePos == null) {
+            return;
+        }
+
+        NavigationHistory.Position afterPos = textEditor.getCurrentPosition();
+        if (afterPos.line() != beforePos.line()) {
+            textEditor.getNavigationHistory().recordJump(beforePos, afterPos);
         }
     }
 }

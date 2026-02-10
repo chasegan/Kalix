@@ -93,6 +93,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JToggleButton lintingToggleButton;
     private JToggleButton autoReloadToggleButton;
     private JToggleButton gridlinesToggleButton;
+
+    // Navigation buttons (stored for state synchronization)
+    private JButton backButton;
+    private JButton forwardButton;
     
     // Manager classes for specialized functionality
     private ThemeManager themeManager;
@@ -403,7 +407,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         lintingToggleButton = components.lintingToggleButton;
         autoReloadToggleButton = components.autoReloadToggleButton;
         gridlinesToggleButton = components.gridlinesToggleButton;
+        backButton = components.backButton;
+        forwardButton = components.forwardButton;
         add(toolBar, BorderLayout.NORTH);
+
+        // Set up navigation state listener after text editor is created
+        // (deferred because textEditor is created later)
+        SwingUtilities.invokeLater(this::setupNavigationStateListener);
 
         // Create a single main docking area
         mainDockingArea = new DockingArea();
@@ -471,7 +481,30 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 : "Gridlines hidden - click to show");
         }
     }
-    
+
+    /**
+     * Sets up the navigation history state change listener to update
+     * back/forward button enabled states.
+     */
+    private void setupNavigationStateListener() {
+        if (textEditor != null && textEditor.getNavigationHistory() != null) {
+            textEditor.getNavigationHistory().setStateChangeListener(this::updateNavigationButtonStates);
+            updateNavigationButtonStates();
+        }
+    }
+
+    /**
+     * Updates the enabled state of back/forward navigation buttons.
+     */
+    private void updateNavigationButtonStates() {
+        if (backButton != null) {
+            backButton.setEnabled(canNavigateBack());
+        }
+        if (forwardButton != null) {
+            forwardButton.setEnabled(canNavigateForward());
+        }
+    }
+
     /**
      * Sets up drag and drop functionality using FileDropHandler.
      */
@@ -1398,6 +1431,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         initMarkdownFile("AGENTS.md");
     }
 
+    @Override
+    public void navigateBack() {
+        textEditor.navigateBack();
+    }
+
+    @Override
+    public void navigateForward() {
+        textEditor.navigateForward();
+    }
+
+    @Override
+    public boolean canNavigateBack() {
+        return textEditor.getNavigationHistory().canGoBack();
+    }
+
+    @Override
+    public boolean canNavigateForward() {
+        return textEditor.getNavigationHistory().canGoForward();
+    }
+
     /**
      * Helper method to create a markdown file from the template in resources.
      * Both CLAUDE.md and AGENTS.md use the same template content.
@@ -1569,6 +1622,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             lintingToggleButton = components.lintingToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;
+            backButton = components.backButton;
+            forwardButton = components.forwardButton;
+            setupNavigationStateListener();
             add(toolBar, BorderLayout.NORTH);
             
             // Revalidate the layout

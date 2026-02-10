@@ -116,6 +116,8 @@ public final class AppConstants {
     public static String getToolbarSearchTooltip() { return "Search in Model (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Plotting Tool";
     public static String getToolbarRunModelTooltip() { return "Run Model (" + KeyboardShortcutManager.getInstance().getShortcutString("R") + ")"; }
+    public static String getToolbarBackTooltip() { return "Navigate Back (" + KeyboardShortcutManager.getInstance().getShortcutString("[") + ")"; }
+    public static String getToolbarForwardTooltip() { return "Navigate Forward (" + KeyboardShortcutManager.getInstance().getShortcutString("]") + ")"; }
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Run Manager";
     public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
     

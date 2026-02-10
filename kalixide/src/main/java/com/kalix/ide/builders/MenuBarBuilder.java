@@ -91,6 +91,12 @@ public class MenuBarBuilder {
         // AI menu
         void initClaudeMd();
         void initAgentsMd();
+
+        // Navigation history
+        void navigateBack();
+        void navigateForward();
+        boolean canNavigateBack();
+        boolean canNavigateForward();
     }
     
     /**

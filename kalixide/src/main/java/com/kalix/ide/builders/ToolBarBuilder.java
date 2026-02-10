@@ -24,13 +24,18 @@ public class ToolBarBuilder {
         public final JToggleButton lintingToggleButton;
         public final JToggleButton autoReloadToggleButton;
         public final JToggleButton gridlinesToggleButton;
+        public final JButton backButton;
+        public final JButton forwardButton;
 
         public ToolBarComponents(JToolBar toolBar, JToggleButton lintingToggleButton,
-                                 JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton) {
+                                 JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton,
+                                 JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
             this.lintingToggleButton = lintingToggleButton;
             this.autoReloadToggleButton = autoReloadToggleButton;
             this.gridlinesToggleButton = gridlinesToggleButton;
+            this.backButton = backButton;
+            this.forwardButton = forwardButton;
         }
     }
 
@@ -82,6 +87,25 @@ public class ToolBarBuilder {
         ));
 
         toolBar.addSeparator();
+
+        // Navigation buttons
+        JButton backButton = createToolBarButton(
+            "Back",
+            AppConstants.getToolbarBackTooltip(),
+            FontIcon.of(FontAwesomeSolid.ARROW_LEFT, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.navigateBack()
+        );
+        backButton.setEnabled(callbacks.canNavigateBack());
+        toolBar.add(backButton);
+
+        JButton forwardButton = createToolBarButton(
+            "Forward",
+            AppConstants.getToolbarForwardTooltip(),
+            FontIcon.of(FontAwesomeSolid.ARROW_RIGHT, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.navigateForward()
+        );
+        forwardButton.setEnabled(callbacks.canNavigateForward());
+        toolBar.add(forwardButton);
 
         // Utility operations
         toolBar.add(createToolBarButton(
@@ -140,7 +164,8 @@ public class ToolBarBuilder {
         toolBar.add(autoReloadButton);
         toolBar.add(gridlinesButton);
 
-        return new ToolBarComponents(toolBar, lintingButton, autoReloadButton, gridlinesButton);
+        return new ToolBarComponents(toolBar, lintingButton, autoReloadButton, gridlinesButton,
+            backButton, forwardButton);
     }
     
     /**
@@ -251,7 +276,7 @@ public class ToolBarBuilder {
         g2d.dispose();
         return image;
     }
-    
+
     /**
      * Creates a toolbar button with icon and tooltip.
      *
