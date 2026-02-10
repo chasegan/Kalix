@@ -113,7 +113,9 @@ public final class AppConstants {
     public static String getToolbarNewTooltip() { return "New Model (" + KeyboardShortcutManager.getInstance().getShortcutString("N") + ")"; }
     public static String getToolbarOpenTooltip() { return "Open Model (" + KeyboardShortcutManager.getInstance().getShortcutString("O") + ")"; }
     public static String getToolbarSaveTooltip() { return "Save Model (" + KeyboardShortcutManager.getInstance().getShortcutString("S") + ")"; }
-    public static String getToolbarSearchTooltip() { return "Search in Model (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
+    public static String getToolbarSearchTooltip() { return "Find (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
+    public static final String TOOLBAR_FIND_ON_MAP_TOOLTIP = "Find on Map";
+    public static String getToolbarFindOnMapTooltip() { return TOOLBAR_FIND_ON_MAP_TOOLTIP; }
     public static final String TOOLBAR_FLOWVIZ_TOOLTIP = "Plotting Tool";
     public static String getToolbarRunModelTooltip() { return "Run Model (" + KeyboardShortcutManager.getInstance().getShortcutString("R") + ")"; }
     public static String getToolbarBackTooltip() { return "Navigate Back (" + KeyboardShortcutManager.getInstance().getShortcutString("[") + ")"; }

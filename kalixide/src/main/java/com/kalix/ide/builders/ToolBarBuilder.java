@@ -109,10 +109,17 @@ public class ToolBarBuilder {
 
         // Utility operations
         toolBar.add(createToolBarButton(
-            "Search",
+            "Find",
             AppConstants.getToolbarSearchTooltip(),
             FontIcon.of(FontAwesomeSolid.SEARCH, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.searchModel()
+        ));
+
+        toolBar.add(createToolBarButton(
+            "Find on Map",
+            AppConstants.getToolbarFindOnMapTooltip(),
+            FontIcon.of(FontAwesomeSolid.SEARCH_LOCATION, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.findNodeOnMap()
         ));
 
         toolBar.add(createToolBarButton(
