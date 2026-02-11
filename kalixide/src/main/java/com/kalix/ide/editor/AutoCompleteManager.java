@@ -60,7 +60,7 @@ public class AutoCompleteManager {
         }
 
         inputDataRegistry = new InputDataRegistry(baseDirectorySupplier);
-        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry);
+        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry, baseDirectorySupplier);
 
         autoCompletion = new AutoCompletion(provider) {
             @Override

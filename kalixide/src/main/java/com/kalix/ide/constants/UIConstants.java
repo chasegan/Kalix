@@ -148,6 +148,20 @@ public final class UIConstants {
     }
 
     /**
+     * Auto-complete constants
+     */
+    public static final class AutoComplete {
+
+        /** Maximum directory depth when scanning for input files */
+        public static final int MAX_INPUT_FILE_SCAN_DEPTH = 3;
+
+        /** Maximum number of input files returned from a directory scan */
+        public static final int MAX_INPUT_FILE_COUNT = 200;
+
+        private AutoComplete() { throw new UnsupportedOperationException("Constants class"); }
+    }
+
+    /**
      * TableView window constants for table-based property editing
      */
     public static final class TableView {
