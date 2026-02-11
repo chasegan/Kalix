@@ -116,12 +116,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Application state
     private Preferences prefs;
     private int previousNodeCount = 0;
+    private String initialFilePath;
 
     /**
      * Creates a new KalixIDE instance.
      * Initializes all components, managers, and sets up the user interface.
+     *
+     * @param initialFilePath optional file path to open on startup (may be null)
      */
-    public KalixIDE() {
+    public KalixIDE(String initialFilePath) {
+        this.initialFilePath = initialFilePath;
         initializeApplication();
     }
     
@@ -152,8 +156,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         setVisible(true);
 
-        // Load last opened file if available and exists (after all UI initialization is complete)
-        loadLastOpenedFile();
+        // Load file: command-line argument takes priority, otherwise restore last opened file
+        if (initialFilePath != null) {
+            fileOperations.loadModelFile(new File(initialFilePath));
+        } else {
+            loadLastOpenedFile();
+        }
     }
     
     /**
@@ -1667,9 +1675,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     /**
      * Main entry point for the Kalix IDE application.
      * 
-     * @param args command line arguments (not used)
+     * @param args command line arguments; optionally pass a file path as the first argument to open on startup
      */
     public static void main(String[] args) {
+        String filePath = args.length > 0 ? args[0] : null;
         // Initialize Windows-specific integration (AppUserModelID for taskbar pinning)
         // Must be called early, before any UI is created
         WindowsIntegration.initialize();
@@ -1698,7 +1707,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             ToolTipManager.sharedInstance().setReshowDelay(100);    // 100ms for quick re-show
 
             // Create the main application window
-            new KalixIDE();
+            new KalixIDE(filePath);
         });
     }
 }
