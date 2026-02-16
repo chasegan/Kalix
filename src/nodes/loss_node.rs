@@ -86,7 +86,8 @@ impl Node for LossNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
         // Calculate loss flow from table (inflow rate -> loss rate)
-        let attempted_loss = self.loss_table.interpolate(0, 1, self.usflow);
+        //let attempted_loss = self.loss_table.interpolate(0, 1, self.usflow).min(self.usflow);
+        let attempted_loss = self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow);
         self.loss = attempted_loss.max(0f64).min(self.usflow);
 
         // Remaining flow after loss goes to ds_1

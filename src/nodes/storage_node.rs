@@ -266,7 +266,7 @@ impl StorageNode {
                 if let Some((threshold_vol, _throttled_outlet)) =
                     self.find_crossed_threshold(v_candidate, active, new_active)
                 {
-                    if let Some(thr_row) = self.d.find_row(VOLU, threshold_vol) {
+                    if let Some(thr_row) = self.d.find_row_for_interpolation(VOLU, threshold_vol) {
                         let area = self.d.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
                         let spill = self.d.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
                         let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
@@ -289,7 +289,7 @@ impl StorageNode {
         }
 
         // Fallback (rare path) - do one find_row for v_working
-        if let Some(fb_row) = self.d.find_row(VOLU, v_working) {
+        if let Some(fb_row) = self.d.find_row_for_interpolation(VOLU, v_working) {
             let spill = self.d.interpolate_row(fb_row, VOLU, SPIL, v_working).max(0.0);
             (v_working, spill, active, fb_row)
         } else {

@@ -80,10 +80,10 @@ impl Node for SplitterNode {
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
         // Determine effluent flow
-        self.ds_2_flow = self.splitter_table.interpolate(0, 1, self.usflow);
+        self.ds_2_flow = self.splitter_table.interpolate(0, 1, self.usflow).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
-            panic!("Negative ds_1 flow at '{}' when usflow={}", self.name, self.usflow);
+            panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);
         }
 
         // Update mass balance
