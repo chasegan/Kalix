@@ -35,7 +35,7 @@ UNREGULATED_USER NODES
   mcgregor_supp_div_07, -0.0399250155259956
   owens_unsupp_div_05b, -0.008527233435441204
   palmtree_supp_div_05b, -0.0008596089376442437
-  pion_supp_div_03, -0.2901757823064172
+  pion_supp_div_03, -0.2901757823064173
   septimus_supp_06, -0.7927351290336097
   silver_pipeline_out_05b, -0.4829020749136645
   silver_supp_div_07, -0.09437392283160566
@@ -43,16 +43,16 @@ UNREGULATED_USER NODES
   tannalo_supp_div_05b, -0.4570388989131807
 
 LOSS NODES
-  reach03_loss, -8.292010964185526
+  reach03_loss, -8.766749474436791
   reach06_loss, -9.99196568152451
-  reach07_loss, -9.612957466526165
-  reach2_loss, -16.144664461136273
+  reach07_loss, -9.61248930583982
+  reach2_loss, -16.354829161021176
 
 STORAGE NODES
-  marianweir, -1.1598655137844458
-  mirani, -3.629050719237126
+  marianweir, -1.159900374532302
+  mirani, -3.6290505429835735
   teemburra, 0.5152481914607243
-  waterhole, -6.466152512104503
+  waterhole, -6.108182668488234
 
 ROUTING NODES
   bigmodrouting, -0.08427380938987845
@@ -83,8 +83,8 @@ GAUGE NODES
   teemburratw, 0
 
 BLACKHOLE NODES
-  eos, -2485.3028373224797
+  eos, -2484.976337432157
 
 ----------------------------------
-TOTAL = 0.00000000001617284084431958
+TOTAL = 0.000000000011218581619232282
 ----------------------------------
