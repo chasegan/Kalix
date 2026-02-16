@@ -1,6 +1,6 @@
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 19 model file(s)
+Found 20 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   ✓ VERIFIED!
@@ -35,6 +35,9 @@ Verifying: 19_lots_of_ordering/model.ini
 Verifying: 1_picnic_gr4j/kalix.ini
   ✓ VERIFIED!
 
+Verifying: 20_loss_extrapolation/model.ini
+  ✓ VERIFIED!
+
 Verifying: 2_pioneer_val/PioneerVal_to_125001b_withLocations.ini
   ✓ VERIFIED!
 
@@ -62,9 +65,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-10T00:28:16.352097
-Total: 19
-Passed: 19
+Timestamp: 2026-02-16T16:45:31.542125
+Total: 20
+Passed: 20
 Failed: 0
 
 ✓ All models verified successfully!
