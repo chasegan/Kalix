@@ -12,7 +12,7 @@ pub struct LossNode {
     pub location: Location,
     pub mbal: f64,
     pub loss_table: Table,  // Columns: Inflow ML, Loss ML
-    pub flow_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
+    pub order_tranlation_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
 
     // Internal state only
     usflow: f64,
@@ -49,14 +49,45 @@ impl Node for LossNode {
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
 
-        // Build flow_table from loss_table (for reverse lookups during ordering)
-        self.flow_table = Table::new(2);
+        // TODO: Check loss table is monotonically increasing
+        //       It would be great to have this as a table method
+
+        // Check the loss table has
         for row in 0..self.loss_table.nrows() {
             let inflow = self.loss_table.get_value(row, 0);
             let loss = self.loss_table.get_value(row, 1);
-            let outflow = inflow - loss;
-            self.flow_table.set_value(row, 0, inflow);
-            self.flow_table.set_value(row, 1, outflow);
+            if inflow < 0f64 || loss < 0f64 { return Err(format!("Node '{}' loss table contains negative value at row {}", self.name, row + 1)); }
+            if loss > inflow  { return Err(format!("Node '{}' loss table has loss > inflow at row {}", self.name, row + 1)); }
+        }
+
+        // Build order_translation_table from loss_table (for lookups during ordering)
+        // TODO: Check the validity of reverse lookup. I require that the loss function does not
+        //       cause the outflow to decrease. This is reasonable and helps define the ordering
+        //       calculation a bit. However multiple consecutive inflow values may still produce
+        //       the same outflow, and therefore there is still ambiguity in how much to order
+        //       upstream. Moreover if the PWL has multiple segments with constant outflow, then the
+        //       interpolation may depend on which segment the binary search lands on (!). The
+        //       proper answer is to define a new type of PWL table which has (xlo, xhi), (ylo, yhi)
+        //       defined for each row but ALLOW FOR NON-CONTINUOUS y values. With a table like this
+        //       we could just ditch any rows where xlo = xhi, and the use a binary search to find
+        //       where xlo < x <= xhi, which will always give us the first answer (i.e. y = y(xhi[i])
+        //       rather than y = y(xlo[i+1])). This will ensure our u/s order is the lowest possible
+        //       that produces the required outflow.
+        self.order_tranlation_table = Table::new(2);
+        let mut previous_outflow = 0f64;
+        for row in 0..self.loss_table.nrows() {
+            // Prepare flow values
+            let inflow = self.loss_table.get_value(row, 0);
+            let loss = self.loss_table.get_value(row, 1);
+            let outflow = (inflow - loss).max(0f64);
+            if outflow < previous_outflow {
+                return Err(format!("Node '{}' loss table gradient > 1 causes outflow to decrease at row {}", self.name, row + 1));
+            } else {
+                // Set the table values for this new point
+                self.order_tranlation_table.set_value(row, 0, outflow); //downstream order (required downstream flow)
+                self.order_tranlation_table.set_value(row, 1, inflow); //upstream order (required upstream flow)
+                previous_outflow = outflow;
+            }
         }
 
         // Initialize result recorders

@@ -200,7 +200,7 @@ impl SimpleOrderingSystem {
                 },
                 NodeEnum::LossNode(node_below_link) => {
                     // Assume all orders on outlet 0 are propagated here.
-                    order = node_below_link.flow_table.interpolate(0, 1, node_below_link.dsorders[0]);
+                    order = node_below_link.order_tranlation_table.interpolate(0, 1, node_below_link.dsorders[0]);
                 }
                 NodeEnum::InflowNode(node_below_link) => {
                     // Orders are reduced based on known inflows
