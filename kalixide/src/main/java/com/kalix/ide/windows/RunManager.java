@@ -133,6 +133,7 @@ public class RunManager extends JFrame {
     // This allows restoring selection after tree rebuilds
     private Set<String> selectedSeries = new HashSet<>();
 
+
     // === RUN TRACKING ===
     private final Map<String, String> sessionToRunName = new HashMap<>();
     private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
@@ -1271,9 +1272,10 @@ public class RunManager extends JFrame {
             seriesKeyToLeaf.put(seriesKey, leaf);
         }
 
-        // When filtering, preserve series that are hidden by the filter.
-        // Hidden series can't be in the tree selection, but they should stay plotted.
-        if (treeFilterManager.isFiltering()) {
+        // When filtering with an additive click (Cmd/Ctrl/Shift), preserve series that
+        // are hidden by the filter. On a plain click, let the standard replace behaviour
+        // apply so that hidden series are deselected just like visible ones would be.
+        if (treeFilterManager.isFiltering() && isAdditiveSelectionEvent()) {
             Set<String> visibleSeriesKeys = getVisibleSeriesKeys();
             for (String key : selectedSeries) {
                 if (!visibleSeriesKeys.contains(key)) {
@@ -1461,6 +1463,22 @@ public class RunManager extends JFrame {
      */
     private void collectLeafNodes(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
         outputsTreeBuilder.collectLeafNodes(node, leaves);
+    }
+
+    /**
+     * Checks whether the event currently being dispatched is an additive selection gesture
+     * (Cmd/Ctrl/Shift held). Uses EventQueue.getCurrentEvent() so that this works correctly
+     * even when called from a TreeSelectionListener (which fires during the UI delegate's
+     * mouse handler, before any separately registered MouseListeners).
+     */
+    private boolean isAdditiveSelectionEvent() {
+        AWTEvent event = EventQueue.getCurrentEvent();
+        if (event instanceof InputEvent inputEvent) {
+            int modifiers = inputEvent.getModifiersEx()
+                    & (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK);
+            return modifiers != 0;
+        }
+        return false;
     }
 
     /**
