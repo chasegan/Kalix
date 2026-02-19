@@ -13,8 +13,7 @@ pub struct LossNode {
     pub location: Location,
     pub mbal: f64,
     pub loss_table: Table,  // Columns: Inflow ML, Loss ML
-    //pub order_tranlation_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
-    pub order_tranlation_table: TableDiscontinuous,
+    pub order_translation_table: TableDiscontinuous,
 
     // Internal state only
     usflow: f64,
@@ -51,52 +50,75 @@ impl Node for LossNode {
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
 
-        // TODO: Check loss table is monotonically increasing
-        //       It would be great to have this as a table method
+        // If the loss table is incomplete, fix it.
+        match self.loss_table.nrows() {
+            0 => {
+                //Make a table with 0 loss.
+                self.loss_table = Table::new(2);
+                //(0, 0)
+                self.loss_table.set_value(0, 0, 0.0);
+                self.loss_table.set_value(0, 1, 0.0);
+                //(100, 0)
+                self.loss_table.set_value(1, 0, 100.0);
+                self.loss_table.set_value(1, 1, 0.0);
+            }
+            1 => {
+                //A table was defined but only includes one row.
+                //Add another row to make explicit that we are assuming constant loss
+                let flow0 = self.loss_table.get_value(0, 0);
+                let loss0 = self.loss_table.get_value(0, 1);
+                self.loss_table.set_value(1, 0, flow0 + 100.0);
+                self.loss_table.set_value(1, 1, loss0 + 100.0);
+            }
+            _ => { }
+        }
 
-        // Check the loss table has
+        // Check the loss table is well-behaved:
+        //  - it must be monotonically increasing
+        //  - it must not have negative values
+        //  - it must not have loss > inflow
+        //  - it must now have decreasing outflows
+        let monotonic_result = self.loss_table.assert_monotonically_increasing(0, 1);
+        if monotonic_result.is_err() {
+            return Err(format!("Node '{}' loss table. {}", self.name, monotonic_result.err().unwrap()));
+        }
+        let mut max_outflow = 0.0;
         for row in 0..self.loss_table.nrows() {
             let inflow = self.loss_table.get_value(row, 0);
             let loss = self.loss_table.get_value(row, 1);
             if inflow < 0f64 || loss < 0f64 { return Err(format!("Node '{}' loss table contains negative value at row {}", self.name, row + 1)); }
             if loss > inflow  { return Err(format!("Node '{}' loss table has loss > inflow at row {}", self.name, row + 1)); }
+            if inflow - loss < max_outflow {
+                return Err(format!("Node '{}' loss table gradient > 1 causes outflow to decrease at row {}", self.name, row + 1));
+            } else {
+                max_outflow = inflow - loss;
+            }
         }
 
         // Build order_translation_table from loss_table (for lookups during ordering)
-        // I require that the loss function does not cause the outflow to decrease. This is
-        // reasonable and helps define the ordering calculation a bit. However, multiple consecutive
-        // inflow values may still produce the same outflow, and therefore there is still ambiguity
-        // in how much to order upstream. Moreover, if the PWL has multiple segments with constant
-        // outflow, then the interpolation may depend on which segment the binary search lands on!
+        // I require that the loss function does not cause the outflow to decrease. However,
+        // multiple consecutive inflow values may still produce the same outflow, and therefore
+        // ambiguity still exists in how much to order upstream. Moreover, if the PWL has multiple
+        // segments with constant outflow, then the interpolation may depend on which segment the
+        // binary search lands on!
         // The answer is to define a new type of PWL table which ALLOWS FOR NON-CONTINUOUS y values,
         // and to use a binary search to find where xlo < x <= xhi, which will always give us the
-        // first answer (i.e. y = y(xhi[i]) rather than y = y(xlo[i+1])). This will ensure our u/s
-        // order is the lowest possible that produces the required outflow.
-        let mut previous_outflow = 0f64;
-        for row in 0..self.loss_table.nrows() {
-            // Prepare flow values
-            let inflow = self.loss_table.get_value(row, 0);
-            let loss = self.loss_table.get_value(row, 1);
-            let outflow = (inflow - loss).max(0f64);
-            if outflow < previous_outflow {
-                return Err(format!("Node '{}' loss table gradient > 1 causes outflow to decrease at row {}", self.name, row + 1));
-            } else {
-                // Set the table values for this new point
-                self.order_tranlation_table.add_point(outflow, inflow);
-                previous_outflow = outflow;
+        // lowest possible order that produces the required outflow.
+        if max_outflow > 0.0 {
+            for row in 0..self.loss_table.nrows() {
+                let inflow = self.loss_table.get_value(row, 0);
+                let loss = self.loss_table.get_value(row, 1);
+                let outflow = inflow - loss;
+                self.order_translation_table.add_point(outflow, inflow);
             }
+        } else {
+            // Loss table has 100% loss and cant satisfy any orders.
+            // The only reasonable thing to do is to make a new table with no orders.
+            self.order_translation_table = TableDiscontinuous::new();
+            self.order_translation_table.add_point(0.0, 0.0);
+            self.order_translation_table.add_point(1.0, 0.0);
         }
-        if previous_outflow == 0f64 {
-            //return Err(format!("Node '{}' loss table with 100% loss cant pass orders.", self.name));
-            // TODO: maybe the modeller wants to do this. What is reasonable? No orders?!
-            //       I guess I should just make a new table with no orders.
-            self.order_tranlation_table = TableDiscontinuous::new();
-            self.order_tranlation_table.add_point(0.0, 0.0);
-            self.order_tranlation_table.add_point(1.0, 1.0);
-            // TODO: there is a related problem... what if the last section is flat, so that it is
-            //       impossible to get more than a certain flow. We def want to handle that case
-            //       gracefully by just passing the biggest order that is worthwhile.
-        }
+        self.order_translation_table.cap_if_unfinished();
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(

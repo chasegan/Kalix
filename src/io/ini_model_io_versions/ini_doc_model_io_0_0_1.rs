@@ -179,9 +179,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "delay_order_steps" {
-                            n.delay_order_steps = (v.parse::<usize>().map_err(|_|
+                            n.delay_order_steps = v.parse::<usize>().map_err(|_|
                                 format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                        ini_property.line_number, name, node_name))?);
+                                        ini_property.line_number, name, node_name))?;
                         } else if name_lower == "min_order" {
                             n.min_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;

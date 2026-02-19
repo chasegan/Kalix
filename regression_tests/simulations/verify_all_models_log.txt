@@ -36,7 +36,10 @@ Verifying: 1_picnic_gr4j/kalix.ini
   ✓ VERIFIED!
 
 Verifying: 20_loss_extrapolation/model.ini
-  ✓ VERIFIED!
+  ✗ Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
 
 Verifying: 2_pioneer_val/model.ini
   ✓ VERIFIED!
@@ -65,9 +68,14 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-19T15:27:07.978051
+Timestamp: 2026-02-19T17:31:40.647710
 Total: 20
-Passed: 20
-Failed: 0
+Passed: 19
+Failed: 1
 
-✓ All models verified successfully!
+Failed models:
+  - 20_loss_extrapolation/model.ini
+    Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+

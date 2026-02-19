@@ -95,6 +95,33 @@ impl TableDiscontinuous {
         }
     }
 
+    pub fn is_unfinished(&self) -> bool {
+        self.draft_seg.is_some()
+    }
+
+    /// After the initial insertion of points, it is possible to have an unfinished draft segment.
+    /// This will happen if an x value was inserted twice (or more). Technically this means that
+    /// the PWL should extrapolate to infinity, i.e. y(x>x_max) = infinity (or maybe -infinity).
+    /// But in practice, e.g. in the case of mapping outflow -> inflow for ordering through losses
+    /// we just want to cap it at the maximum value.
+    pub fn cap_if_unfinished(&mut self) {
+        if self.draft_seg.is_some() {
+            // Remove the draft and create a new segment to cap the function.
+            // Base this on the last defined segment.
+            self.draft_seg = None;
+            if self.segs.len() > 0 {
+                let temp = self.segs.last().unwrap();
+                let new_x = temp.xhi + (temp.xhi - temp.xlo);
+                let new_y = temp.yhi;
+                self.add_point(new_x, new_y);
+            } else {
+                // Just make the function y=x? Not sure how this would arise.
+                self.add_point(0.0, 0.0);
+                self.add_point(1.0, 0.0);
+            }
+        }
+    }
+
     /// Number of segments
     pub fn nsegs(&self) -> usize {
         self.segs.len()

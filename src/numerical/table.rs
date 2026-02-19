@@ -187,7 +187,11 @@ impl Table {
     /// Gets the number of rows in the table. This is the number of elements in
     /// the data divided by the ncols.
     pub fn nrows(&self) -> usize {
-        self.data.len() / self.ncols
+        if self.ncols() > 0 {
+            self.data.len() / self.ncols
+        } else {
+            0
+        }
     }
 
 
@@ -281,6 +285,35 @@ impl Table {
         }
         true
     }
+
+
+    pub fn assert_monotonically_increasing(&self, x_col: usize, y_col: usize) -> Result<(), String> {
+        let nrows = self.nrows();
+        if nrows > 1 {
+            let mut prev_x = self.get_value(0, x_col);
+            let mut prev_y = self.get_value(0, y_col);
+            for i in 1..nrows {
+                let x = self.get_value(i, x_col);
+                let y = self.get_value(i, y_col);
+
+                // Values must not decrease
+                if x < prev_x || y < prev_y {
+                    return Err(format!("Table is not monotonically increasing at row {}", i + 1));
+                }
+
+                // Any given x must have a unique value for y
+                if x == prev_x && y != prev_y {
+                    return Err(format!("Table is discontinuous at row {}", i + 1));
+                }
+
+                prev_x = x;
+                prev_y = y;
+            }
+        }
+        Ok(())
+    }
+
+
 
 
     /// This is just supposed to print out the table for debugging.

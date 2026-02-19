@@ -41,26 +41,26 @@ fn test_table_is_monotonic() {
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;
-        assert_eq!(true, tab.is_monotonically_increasing(level_col, volume_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, level_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, area_col))
+        assert_eq!(true, tab.assert_monotonically_increasing(level_col, volume_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, level_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, area_col).is_err())
     }
     {
         let tab = Table::from_csv_file("./src/tests/example_tables/test_dim_table_2.csv");
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;
-        assert_eq!(true, tab.is_monotonically_increasing(level_col, volume_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, level_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, area_col))
+        assert_eq!(true, tab.assert_monotonically_increasing(level_col, volume_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, level_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, area_col).is_err())
     }
     {
         let tab = Table::from_csv_file("./src/tests/example_tables/test_dim_table_bad.csv");
         let level_col = 0;
         let volume_col = 1;
         let area_col = 2;
-        assert_eq!(false, tab.is_monotonically_increasing(level_col, volume_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, level_col));
-        assert_eq!(true, tab.is_monotonically_increasing(volume_col, area_col))
+        assert_eq!(false, tab.assert_monotonically_increasing(level_col, volume_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, level_col).is_err());
+        assert_eq!(true, tab.assert_monotonically_increasing(volume_col, area_col).is_err())
     }
 }

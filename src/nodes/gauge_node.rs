@@ -92,7 +92,7 @@ impl Node for GaugeNode {
                     self.dsflow_primary = self.usflow;
                 } else {
                     self.dsflow_primary = force_flow_value;
-                    self.mbal += (self.dsflow_primary - self.usflow);
+                    self.mbal += self.dsflow_primary - self.usflow;
                 }
             }
         }
