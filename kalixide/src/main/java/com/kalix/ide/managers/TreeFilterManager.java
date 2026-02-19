@@ -1,8 +1,12 @@
 package com.kalix.ide.managers;
 
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.*;
 import java.awt.event.KeyEvent;
 
 /**
@@ -15,18 +19,23 @@ import java.awt.event.KeyEvent;
 public class TreeFilterManager {
 
     private static final int DEBOUNCE_DELAY_MS = 150;
+    private static final int CLEAR_ICON_SIZE = 12;
 
     private final JTextField filterField;
+    private final JButton clearButton;
+    private final JPanel filterPanel;
     private final Runnable onFilterChanged;
     private Timer debounceTimer;
 
     public TreeFilterManager(Runnable onFilterChanged) {
         this.onFilterChanged = onFilterChanged;
         this.filterField = createFilterField();
+        this.clearButton = createClearButton();
+        this.filterPanel = createFilterPanel();
     }
 
-    public JTextField getFilterField() {
-        return filterField;
+    public JPanel getFilterPanel() {
+        return filterPanel;
     }
 
     public String getFilterText() {
@@ -63,11 +72,36 @@ public class TreeFilterManager {
         return field;
     }
 
+    private JButton createClearButton() {
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.TIMES_CIRCLE, CLEAR_ICON_SIZE);
+        icon.setIconColor(UIManager.getColor("Label.disabledForeground"));
+
+        JButton button = new JButton(icon);
+        button.setToolTipText("Clear filter");
+        button.setFocusable(false);
+        button.setBorderPainted(false);
+        button.setContentAreaFilled(false);
+        button.setMargin(new Insets(0, 2, 0, 2));
+        button.setVisible(false);
+        button.addActionListener(e -> clearFilter());
+        return button;
+    }
+
+    private JPanel createFilterPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(filterField, BorderLayout.CENTER);
+        panel.add(clearButton, BorderLayout.EAST);
+        return panel;
+    }
+
     private void scheduleFilterUpdate() {
         if (debounceTimer != null && debounceTimer.isRunning()) {
             debounceTimer.stop();
         }
-        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> onFilterChanged.run());
+        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> {
+            clearButton.setVisible(isFiltering());
+            onFilterChanged.run();
+        });
         debounceTimer.setRepeats(false);
         debounceTimer.start();
     }

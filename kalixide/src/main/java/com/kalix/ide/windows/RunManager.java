@@ -386,7 +386,7 @@ public class RunManager extends JFrame {
         // Bottom of left side: timeseries tree with filter
         JPanel timeseriesPanel = new JPanel(new BorderLayout());
         timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
-        timeseriesPanel.add(treeFilterManager.getFilterField(), BorderLayout.NORTH);
+        timeseriesPanel.add(treeFilterManager.getFilterPanel(), BorderLayout.NORTH);
         timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
