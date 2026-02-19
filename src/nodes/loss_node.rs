@@ -3,6 +3,7 @@ use crate::misc::misc_functions::make_result_name;
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::numerical::table_discontinuous::TableDiscontinuous;
 
 const MAX_DS_LINKS: usize = 1;
 
@@ -12,7 +13,8 @@ pub struct LossNode {
     pub location: Location,
     pub mbal: f64,
     pub loss_table: Table,  // Columns: Inflow ML, Loss ML
-    pub order_tranlation_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
+    //pub order_tranlation_table: Table,  // Columns: Inflow ML, Outflow ML (derived from loss_table)
+    pub order_tranlation_table: TableDiscontinuous,
 
     // Internal state only
     usflow: f64,
@@ -61,19 +63,15 @@ impl Node for LossNode {
         }
 
         // Build order_translation_table from loss_table (for lookups during ordering)
-        // TODO: Check the validity of reverse lookup. I require that the loss function does not
-        //       cause the outflow to decrease. This is reasonable and helps define the ordering
-        //       calculation a bit. However multiple consecutive inflow values may still produce
-        //       the same outflow, and therefore there is still ambiguity in how much to order
-        //       upstream. Moreover if the PWL has multiple segments with constant outflow, then the
-        //       interpolation may depend on which segment the binary search lands on (!). The
-        //       proper answer is to define a new type of PWL table which has (xlo, xhi), (ylo, yhi)
-        //       defined for each row but ALLOW FOR NON-CONTINUOUS y values. With a table like this
-        //       we could just ditch any rows where xlo = xhi, and the use a binary search to find
-        //       where xlo < x <= xhi, which will always give us the first answer (i.e. y = y(xhi[i])
-        //       rather than y = y(xlo[i+1])). This will ensure our u/s order is the lowest possible
-        //       that produces the required outflow.
-        self.order_tranlation_table = Table::new(2);
+        // I require that the loss function does not cause the outflow to decrease. This is
+        // reasonable and helps define the ordering calculation a bit. However, multiple consecutive
+        // inflow values may still produce the same outflow, and therefore there is still ambiguity
+        // in how much to order upstream. Moreover, if the PWL has multiple segments with constant
+        // outflow, then the interpolation may depend on which segment the binary search lands on!
+        // The answer is to define a new type of PWL table which ALLOWS FOR NON-CONTINUOUS y values,
+        // and to use a binary search to find where xlo < x <= xhi, which will always give us the
+        // first answer (i.e. y = y(xhi[i]) rather than y = y(xlo[i+1])). This will ensure our u/s
+        // order is the lowest possible that produces the required outflow.
         let mut previous_outflow = 0f64;
         for row in 0..self.loss_table.nrows() {
             // Prepare flow values
@@ -84,10 +82,20 @@ impl Node for LossNode {
                 return Err(format!("Node '{}' loss table gradient > 1 causes outflow to decrease at row {}", self.name, row + 1));
             } else {
                 // Set the table values for this new point
-                self.order_tranlation_table.set_value(row, 0, outflow); //downstream order (required downstream flow)
-                self.order_tranlation_table.set_value(row, 1, inflow); //upstream order (required upstream flow)
+                self.order_tranlation_table.add_point(outflow, inflow);
                 previous_outflow = outflow;
             }
+        }
+        if previous_outflow == 0f64 {
+            //return Err(format!("Node '{}' loss table with 100% loss cant pass orders.", self.name));
+            // TODO: maybe the modeller wants to do this. What is reasonable? No orders?!
+            //       I guess I should just make a new table with no orders.
+            self.order_tranlation_table = TableDiscontinuous::new();
+            self.order_tranlation_table.add_point(0.0, 0.0);
+            self.order_tranlation_table.add_point(1.0, 1.0);
+            // TODO: there is a related problem... what if the last section is flat, so that it is
+            //       impossible to get more than a certain flow. We def want to handle that case
+            //       gracefully by just passing the biggest order that is worthwhile.
         }
 
         // Initialize result recorders

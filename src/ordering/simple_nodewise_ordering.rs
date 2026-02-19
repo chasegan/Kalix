@@ -276,7 +276,8 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 },
                 NodeEnum::LossNode(node) => {
-                    let order = node.order_tranlation_table.interpolate(0, 1, node.dsorders[0]);
+                    //let order = node.order_tranlation_table.interpolate(0, 1, node.dsorders[0]);
+                    let order = node.order_tranlation_table.interpolate_or_extrapolate(node.dsorders[0]);
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
                         n_orders += 1;

@@ -87,3 +87,6 @@ mod test_fifo_buffer;
 
 #[cfg(test)]
 mod test_interpolation;
+
+#[cfg(test)]
+mod test_table_discontinuous;
