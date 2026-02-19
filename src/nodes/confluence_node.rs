@@ -94,6 +94,12 @@ impl Node for ConfluenceNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // For confluence nodes, outflow equals upstream inflow
         self.dsflow_primary = self.usflow;
 
@@ -101,9 +107,6 @@ impl Node for ConfluenceNode {
         // self.mbal = 0.0; // This is always zero for Confluence nodes
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }

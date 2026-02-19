@@ -116,6 +116,11 @@ impl Node for OrderConstraintNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Recall the order that is due today (and push the current order into the buffer)
         // TODO: can I just move this into the recorder if block? Is it okay to only do this if we are recording?
         let order_due = self.sent_order_buffer.push(self.sent_order_value);
@@ -124,9 +129,6 @@ impl Node for OrderConstraintNode {
         self.dsflow_primary = self.usflow;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }

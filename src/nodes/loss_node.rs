@@ -124,6 +124,12 @@ impl Node for LossNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Calculate loss flow from table (inflow rate -> loss rate)
         //let attempted_loss = self.loss_table.interpolate(0, 1, self.usflow).min(self.usflow);
         let attempted_loss = self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow);
@@ -140,9 +146,6 @@ impl Node for LossNode {
         self.mbal -= self.loss;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }

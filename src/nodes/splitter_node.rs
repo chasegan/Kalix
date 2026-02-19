@@ -79,6 +79,11 @@ impl Node for SplitterNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Determine effluent flow
         self.ds_2_flow = self.splitter_table.interpolate(0, 1, self.usflow).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
@@ -90,9 +95,6 @@ impl Node for SplitterNode {
         // self.mbal = 0.0; // This is always zero for Splitter nodes. The water on ds_2 is not lost in this node.
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.usflow); //Total dsflow is same as usflow
         }

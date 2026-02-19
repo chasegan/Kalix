@@ -125,7 +125,10 @@ impl Node for RegulatedUserNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
-        //let new_demand = order_due;
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
 
         // Work out availability
         let mut available = self.usflow;
@@ -140,6 +143,7 @@ impl Node for RegulatedUserNode {
         };
 
         // Determine the diversion value
+        // assume demand = order_due
         self.diversion = self.order_due.min(available);
 
         // Extract the water and update mbal
@@ -147,9 +151,6 @@ impl Node for RegulatedUserNode {
         self.mbal -= self.diversion;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_diversion {
             data_cache.add_value_at_index(idx, self.diversion);
         }

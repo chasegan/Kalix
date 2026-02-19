@@ -63,13 +63,15 @@ impl Node for BlackholeNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
-        // Update mass balance
-        self.mbal -= self.usflow; // All the water goes behind the event horizon
-
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
         }
+
+        // Update mass balance
+        self.mbal -= self.usflow; // All the water goes behind the event horizon
+
+        // Record results
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, 0f64);
         }

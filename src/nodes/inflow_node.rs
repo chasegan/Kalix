@@ -85,6 +85,11 @@ impl Node for InflowNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Get lateral inflow
         self.lateral_inflow = if self.is_regulated {
             // We calculated the inflow early to account for it during ordering
@@ -101,9 +106,6 @@ impl Node for InflowNode {
         self.mbal += self.lateral_inflow;
         
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_inflow {
             data_cache.add_value_at_index(idx, self.lateral_inflow);
         }

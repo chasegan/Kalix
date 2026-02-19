@@ -209,6 +209,11 @@ impl Node for RoutingNode {
     /// Runs the node for the current timestep and updates the node state
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Lag routing first
         // Put the new inflow into the lag array
         self.lag_sto_array[self.lag_iter_index] = self.usflow;
@@ -268,9 +273,6 @@ impl Node for RoutingNode {
         self.mbal += self.dsflow_primary - self.usflow;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_volume {
             self.storage_volume = self.calculate_storage();
             data_cache.add_value_at_index(idx, self.storage_volume);

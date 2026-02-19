@@ -141,6 +141,12 @@ impl Node for SacramentoNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Get driving data
         self.rain = self.rain_mm_input.get_value(data_cache);
         self.pet = self.evap_mm_input.get_value(data_cache);
@@ -154,9 +160,6 @@ impl Node for SacramentoNode {
         self.mbal += self.runoff_volume_megs;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_rain_mm {
             data_cache.add_value_at_index(idx, self.rain);
         }

@@ -105,6 +105,12 @@ impl Node for Gr4jNode {
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Get driving data
         self.rain = self.rain_mm_input.get_value(data_cache);
         self.pet = self.evap_mm_input.get_value(data_cache);
@@ -118,9 +124,6 @@ impl Node for Gr4jNode {
         self.mbal += self.runoff_volume_megs;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_runoff_volume_megs {
             data_cache.add_value_at_index(idx, self.runoff_volume_megs);
         }

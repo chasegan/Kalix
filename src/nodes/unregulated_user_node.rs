@@ -138,6 +138,11 @@ impl Node for UnregulatedUserNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Get demand value
         let new_demand = self.demand_input.get_value(data_cache);
 
@@ -213,9 +218,6 @@ impl Node for UnregulatedUserNode {
         self.mbal -= self.diversion;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_order {
             data_cache.add_value_at_index(idx, 0.0);
         }

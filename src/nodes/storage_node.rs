@@ -539,6 +539,11 @@ impl Node for StorageNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Get the driving data
         let rain_mm = self.rain_mm_input.get_value(data_cache);
         let evap_mm = self.evap_mm_input.get_value(data_cache);
@@ -585,9 +590,6 @@ impl Node for StorageNode {
         self.mbal += self.dsflow - self.usflow;
 
         // Record results
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
-        }
         if let Some(idx) = self.recorder_idx_volume {
             data_cache.add_value_at_index(idx, self.v);
         }

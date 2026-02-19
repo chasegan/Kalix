@@ -76,6 +76,11 @@ impl Node for GaugeNode {
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
 
+        // Record results
+        if let Some(idx) = self.recorder_idx_usflow {
+            data_cache.add_value_at_index(idx, self.usflow);
+        }
+
         // Force flows if required, otherwise pass upstream value
         match self.force_flow_input {
             DynamicInput::None { .. } => {
@@ -101,9 +106,6 @@ impl Node for GaugeNode {
             }
             let delta = self.usflow - reference_flow_value;
             data_cache.add_value_at_index(idx, delta);
-        }
-        if let Some(idx) = self.recorder_idx_usflow {
-            data_cache.add_value_at_index(idx, self.usflow);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
