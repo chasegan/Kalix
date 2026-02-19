@@ -14,7 +14,7 @@ mod tests {
 
         // Set up rainfall as linear combination
         let original_expr = "0.3 * data.rain1 + 0.7 * data.rain2";
-        gr4j.rain_mm_input = DynamicInput::from_string(original_expr, &mut data_cache, true).unwrap();
+        gr4j.rain_mm_input = DynamicInput::from_string(original_expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
         gr4j.initialise(&mut data_cache).unwrap();
@@ -43,7 +43,7 @@ mod tests {
         assert_eq!(gr4j.get_param("rf_d0").unwrap(), 0.8);
 
         // Parse the updated expression again and ensure it still works
-        let updated_input = DynamicInput::from_string(&after_dist_update, &mut data_cache, true).unwrap();
+        let updated_input = DynamicInput::from_string(&after_dist_update, &mut data_cache, true, None).unwrap();
         assert!(matches!(updated_input, DynamicInput::LinearCombination { .. }));
     }
 }

@@ -16,7 +16,7 @@ fn test_inflow_node_with_timeseries() {
     //Create an inflow node and add it to the model
     let mut n = InflowNode::new();
     n.name = "my_inflow_node".to_owned();
-    n.inflow_input = DynamicInput::from_string("data.test_csv.by_name.value", &mut m.data_cache, true)
+    n.inflow_input = DynamicInput::from_string("data.test_csv.by_name.value", &mut m.data_cache, true, None)
         .expect("Failed to parse inflow expression");
     m.add_node(NodeEnum::InflowNode(n));
 

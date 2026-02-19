@@ -9,7 +9,7 @@ mod tests {
 
         // Test case 1: Coefficients that sum to 0.5
         let expr1 = "0.25 * data.rain1 + 0.25 * data.rain2";
-        let input1 = DynamicInput::from_string(expr1, &mut data_cache, true).unwrap();
+        let input1 = DynamicInput::from_string(expr1, &mut data_cache, true, None).unwrap();
 
         if let DynamicInput::LinearCombination { coefficients, bias, .. } = &input1 {
             let weight_sum: f64 = coefficients.iter().sum();
@@ -32,7 +32,7 @@ mod tests {
 
         // Test case 2: Coefficients that sum to 1.0
         let expr2 = "0.3 * data.rain1 + 0.7 * data.rain2";
-        let input2 = DynamicInput::from_string(expr2, &mut data_cache, true).unwrap();
+        let input2 = DynamicInput::from_string(expr2, &mut data_cache, true, None).unwrap();
 
         if let DynamicInput::LinearCombination { bias, coefficients, .. } = &input2 {
             let weight_sum: f64 = coefficients.iter().sum();
@@ -43,7 +43,7 @@ mod tests {
 
         // Test case 3: Coefficients that sum to 2.0
         let expr3 = "1.5 * data.rain1 + 0.5 * data.rain2";
-        let input3 = DynamicInput::from_string(expr3, &mut data_cache, true).unwrap();
+        let input3 = DynamicInput::from_string(expr3, &mut data_cache, true, None).unwrap();
 
         if let DynamicInput::LinearCombination { bias, coefficients, .. } = &input3 {
             let weight_sum: f64 = coefficients.iter().sum();
@@ -59,7 +59,7 @@ mod tests {
 
         // Simulate an optimized expression that was saved to file
         let saved_expr = "0.1371563839 * data.rain1 + 0.5095107995 * data.rain2 + 0.5975703828 * data.rain3";
-        let input = DynamicInput::from_string(saved_expr, &mut data_cache, true).unwrap();
+        let input = DynamicInput::from_string(saved_expr, &mut data_cache, true, None).unwrap();
 
         if let DynamicInput::LinearCombination { coefficients, bias, .. } = &input {
             // The weights should be exactly as specified in the saved expression

@@ -25,10 +25,10 @@ fn test_model_with_function() {
     {
         let mut n = Gr4jNode::new();
         n.name = "node6_gr4j".to_string();
-        n.rain_mm_input = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true)
+        n.rain_mm_input = DynamicInput::from_string("data.rex_rain_csv.by_name.value", &mut model.data_cache, true, None)
             .expect("Failed to parse rain expression");
         // Test DynamicInput with a constant expression (evap data is constant 5.0)
-        n.evap_mm_input = DynamicInput::from_string("2 + 3", &mut model.data_cache, true)
+        n.evap_mm_input = DynamicInput::from_string("2 + 3", &mut model.data_cache, true, None)
             .expect("Failed to parse evap expression");
         n.area_km2 = 80.0;
         let params = csv_string_to_f64_vec("350.0, 0.0, 90.0, 1.7").unwrap();
@@ -88,7 +88,7 @@ fn test_model_with_changing_constant() {
     {
         let mut n = InflowNode::new();
         n.name = "node1_inflow".to_string();
-        n.inflow_input = DynamicInput::from_string("0 * data.constants_csv.by_index.1", &mut model.data_cache, true)
+        n.inflow_input = DynamicInput::from_string("0 * data.constants_csv.by_index.1", &mut model.data_cache, true, None)
             .expect("Failed to parse expression");
         node1_idx = model.add_node(NodeEnum::InflowNode(n));
 
@@ -103,7 +103,7 @@ fn test_model_with_changing_constant() {
     {
         let mut n = InflowNode::new();
         n.name = "node2_inflow".to_string();
-        n.inflow_input = DynamicInput::from_string("c.run_counter * c.run_counter", &mut model.data_cache, true)
+        n.inflow_input = DynamicInput::from_string("c.run_counter * c.run_counter", &mut model.data_cache, true, None)
             .expect("Failed to parse expression");
         node2_idx = model.add_node(NodeEnum::InflowNode(n));
 

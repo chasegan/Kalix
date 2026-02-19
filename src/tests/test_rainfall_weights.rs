@@ -26,19 +26,19 @@ fn test_list_params() {
 
     // Test with linear combination of 2 stations
     let expr = "0.3 * data.rain1 + 0.7 * data.rain2";
-    let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+    let input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
     let params = RainfallWeightHandler::list_params(&input);
     assert_eq!(params, vec!["rf_bias", "rf_d0"]);
 
     // Test with single station (no distribution params)
     let expr2 = "1.0 * data.rain";
-    let input2 = DynamicInput::from_string(expr2, &mut data_cache, true).unwrap();
+    let input2 = DynamicInput::from_string(expr2, &mut data_cache, true, None).unwrap();
     let params2 = RainfallWeightHandler::list_params(&input2);
     assert_eq!(params2, vec!["rf_bias"]);
 
     // Test with direct reference (no params)
     let expr3 = "data.rain";
-    let input3 = DynamicInput::from_string(expr3, &mut data_cache, true).unwrap();
+    let input3 = DynamicInput::from_string(expr3, &mut data_cache, true, None).unwrap();
     let params3 = RainfallWeightHandler::list_params(&input3);
     assert!(params3.is_empty());
 }

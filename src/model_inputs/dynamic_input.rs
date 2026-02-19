@@ -30,6 +30,39 @@ use crate::functions::operators::{BinaryOperator, UnaryOperator};
 use crate::model_inputs::linear_combination::detect_linear_combination;
 use crate::misc::misc_functions::format_f64;
 
+/// Expand `this.` references in an expression to the full node reference.
+///
+/// Only replaces `this.` when it appears at a word boundary (i.e., not preceded by
+/// an alphanumeric character or underscore). This avoids false matches inside node
+/// names like `node.that_and_this.inflow`.
+///
+/// # Arguments
+/// * `expression` - The expression string potentially containing `this.`
+/// * `self_context` - The expanded prefix, e.g. `"node.my_node_name"`
+///
+/// # Returns
+/// A new string with `this.` replaced by `"{self_context}."` at word boundaries
+fn expand_this(expression: &str, self_context: &str) -> String {
+    let pattern = b"this.";
+    let bytes = expression.as_bytes();
+    let mut result = String::with_capacity(expression.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + pattern.len() <= bytes.len() && &bytes[i..i + pattern.len()] == pattern {
+            let at_word_boundary = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            if at_word_boundary {
+                result.push_str(self_context);
+                result.push('.');
+                i += pattern.len();
+                continue;
+            }
+        }
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+    result
+}
+
 /// Simulation context field types for the `sim.*` namespace
 ///
 /// These fields provide access to simulation date/time information within expressions.
@@ -378,7 +411,7 @@ impl DynamicInput {
     /// # Returns
     ///
     /// A DynamicInput that needs initialization, or an error if parsing fails
-    pub fn from_string(expression: &str, data_cache: &mut DataCache, flag_as_critical: bool) -> Result<Self, String> {
+    pub fn from_string(expression: &str, data_cache: &mut DataCache, flag_as_critical: bool, self_context: Option<&str>) -> Result<Self, String> {
         let trimmed = expression.trim();
 
         if trimmed.is_empty() {
@@ -387,8 +420,14 @@ impl DynamicInput {
             });
         }
 
-        // Parse the expression
-        let parsed = parse_function(trimmed)
+        // Expand "this." references if a self_context is provided
+        let working_copy = match self_context {
+            Some(ctx) => expand_this(trimmed, ctx),
+            None => trimmed.to_string(),
+        };
+
+        // Parse the expression (using the expanded form)
+        let parsed = parse_function(&working_copy)
             .map_err(|e| format!("Failed to parse expression '{}': {}", trimmed, e))?;
 
         // Check if it's a linear combination pattern first

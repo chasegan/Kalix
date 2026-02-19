@@ -67,7 +67,7 @@ fn test_invalid_data_reference_caught_at_configure() {
     n.inflow_input = DynamicInput::from_string(
         "data.test_csv.by_name.valuee",  // <-- typo: "valuee" instead of "value"
         &mut model.data_cache,
-        true
+        true, None
     ).expect("Failed to parse inflow expression");
     let n_idx = model.add_node(NodeEnum::InflowNode(n));
 
@@ -109,7 +109,7 @@ fn test_valid_data_reference_works() {
     n.inflow_input = DynamicInput::from_string(
         "data.test_csv.by_name.value",  // Correct reference
         &mut model.data_cache,
-        true
+        true, None
     ).expect("Failed to parse inflow expression");
     let n_idx = model.add_node(NodeEnum::InflowNode(n));
 
@@ -146,7 +146,7 @@ fn test_multiple_invalid_references_caught() {
     n1.inflow_input = DynamicInput::from_string(
         "data.nonexistent_file.by_name.col1",
         &mut model.data_cache,
-        true
+        true, None
     ).expect("Failed to parse expression");
     let n1_idx = model.add_node(NodeEnum::InflowNode(n1));
 
@@ -156,7 +156,7 @@ fn test_multiple_invalid_references_caught() {
     n2.inflow_input = DynamicInput::from_string(
         "data.another_missing.by_index.0",
         &mut model.data_cache,
-        true
+        true, None
     ).expect("Failed to parse expression");
     let n2_idx = model.add_node(NodeEnum::InflowNode(n2));
 

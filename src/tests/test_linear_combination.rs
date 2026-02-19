@@ -101,7 +101,7 @@ mod tests {
 
         // Test creation of LinearCombination from expression with multiple terms
         let expr = "0.3 * data.rain_station1 + 0.7 * data.rain_station2";
-        let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Verify it created a LinearCombination variant
         match input {
@@ -122,7 +122,7 @@ mod tests {
 
         // Test that "1.0 * data.rain" creates a LinearCombination
         let expr = "1.0 * data.rain";
-        let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         match input {
             DynamicInput::LinearCombination { coefficients, u_params, bias, .. } => {
@@ -136,7 +136,7 @@ mod tests {
 
         // Also test with a non-unity coefficient
         let expr2 = "2.5 * data.rain";
-        let input2 = DynamicInput::from_string(expr2, &mut data_cache, true).unwrap();
+        let input2 = DynamicInput::from_string(expr2, &mut data_cache, true, None).unwrap();
 
         match input2 {
             DynamicInput::LinearCombination { coefficients, .. } => {
@@ -153,7 +153,7 @@ mod tests {
 
         // Test that bare "data.rain" creates a DirectReference, not LinearCombination
         let expr = "data.rain";
-        let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         match input {
             DynamicInput::DirectReference { .. } => {
@@ -178,7 +178,7 @@ mod tests {
         // Note: coefficients are preserved as-is from parsing. The update_weights()
         // function must be called explicitly to recalculate from u_params and bias.
         let expr = "0.2 * data.rain1 + 0.8 * data.rain2";
-        let input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Add test data to cache
         let idx1 = data_cache.get_or_add_new_series("data.rain1", true);
@@ -203,7 +203,7 @@ mod tests {
 
         // Set up rainfall as linear combination
         let expr = "0.25 * data.rain1 + 0.75 * data.rain2";
-        gr4j.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        gr4j.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
         gr4j.initialise(&mut data_cache).unwrap();
@@ -239,7 +239,7 @@ mod tests {
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as simple data reference (not linear combination)
-        gr4j.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true).unwrap();
+        gr4j.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true, None).unwrap();
 
         // Initialize the node
         gr4j.initialise(&mut data_cache).unwrap();
@@ -262,7 +262,7 @@ mod tests {
 
         // Set up rainfall as linear combination
         let expr = "0.4 * data.rain1 + 0.6 * data.rain2";
-        sacramento.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        sacramento.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
         sacramento.initialise(&mut data_cache).unwrap();
@@ -304,7 +304,7 @@ mod tests {
 
         // Create a linear combination
         let expr = "0.3 * data.rain1 + 0.7 * data.rain2";
-        let mut input = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let mut input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Check that original_string returns the original expression
         assert_eq!(input.original_string(), expr);
@@ -365,7 +365,7 @@ mod tests {
 
         // Test that "1 * data.rain" round-trips as LinearCombination
         let expr = "1 * data.rain";
-        let input1 = DynamicInput::from_string(expr, &mut data_cache, true).unwrap();
+        let input1 = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Should be a LinearCombination
         assert!(matches!(input1, DynamicInput::LinearCombination { .. }));
@@ -375,12 +375,12 @@ mod tests {
         assert_eq!(serialized, "1 * data.rain");
 
         // Parse it again - should still be LinearCombination
-        let input2 = DynamicInput::from_string(&serialized, &mut data_cache, true).unwrap();
+        let input2 = DynamicInput::from_string(&serialized, &mut data_cache, true, None).unwrap();
         assert!(matches!(input2, DynamicInput::LinearCombination { .. }));
 
         // Test that bare "data.rain" is still DirectReference
         let bare_expr = "data.rain";
-        let bare_input = DynamicInput::from_string(bare_expr, &mut data_cache, true).unwrap();
+        let bare_input = DynamicInput::from_string(bare_expr, &mut data_cache, true, None).unwrap();
         assert!(matches!(bare_input, DynamicInput::DirectReference { .. }));
     }
 
@@ -391,7 +391,7 @@ mod tests {
         let mut data_cache = DataCache::new();
 
         // Set up rainfall as simple data reference (not linear combination)
-        sacramento.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true).unwrap();
+        sacramento.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true, None).unwrap();
 
         // Initialize the node
         sacramento.initialise(&mut data_cache).unwrap();

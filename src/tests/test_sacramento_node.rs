@@ -19,9 +19,9 @@ fn test_sacramento_node_with_timeseries() {
     let mut n = SacramentoNode::new();
     n.name = "my_sac_node".to_owned();
     n.area_km2 = 228.0;
-    n.rain_mm_input = DynamicInput::from_string("data.rain_infilled_csv.by_name.value", &mut m.data_cache, true)
+    n.rain_mm_input = DynamicInput::from_string("data.rain_infilled_csv.by_name.value", &mut m.data_cache, true, None)
         .expect("Failed to parse rain expression");
-    n.evap_mm_input = DynamicInput::from_string("data.mpot_rolled_csv.by_name.value", &mut m.data_cache, true)
+    n.evap_mm_input = DynamicInput::from_string("data.mpot_rolled_csv.by_name.value", &mut m.data_cache, true, None)
         .expect("Failed to parse evap expression");
     n.sacramento_model.set_params(0.0,45.0,60.0,0.01,
                  0.01,150.0,0.0,0.11,
@@ -62,9 +62,9 @@ fn test_sacramento_node_with_timeseries_by_index() {
     let mut n = SacramentoNode::new();
     n.name = "my_sac_node".to_owned();
     n.area_km2 = 228.0;
-    n.rain_mm_input = DynamicInput::from_string("data.rain_infilled_csv.by_index.1", &mut m.data_cache, true)
+    n.rain_mm_input = DynamicInput::from_string("data.rain_infilled_csv.by_index.1", &mut m.data_cache, true, None)
         .expect("Failed to parse rain expression");
-    n.evap_mm_input = DynamicInput::from_string("data.mpot_rolled_csv.by_index.1", &mut m.data_cache, true)
+    n.evap_mm_input = DynamicInput::from_string("data.mpot_rolled_csv.by_index.1", &mut m.data_cache, true, None)
         .expect("Failed to parse evap expression");
     n.sacramento_model.set_params(0.0,45.0,60.0,0.01,
                                   0.01,150.0,0.0,0.11,

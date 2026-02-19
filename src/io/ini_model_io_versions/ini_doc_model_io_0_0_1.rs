@@ -90,6 +90,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
 
             // Get the name and type
             let node_name = &section_name[5..];
+            let self_context = format!("node.{}", node_name);
+            let self_ctx = Some(self_context.as_str());
             let node_type = ini_section.properties.get("type")
                 .ok_or(format!("Error on line {}: Missing 'type'", ini_section.line_number))?.value.to_lowercase();
 
@@ -129,7 +131,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "harmony_fraction" {
-                            n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name));
@@ -151,10 +153,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "force_flow" {
-                            n.force_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                            n.force_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "reference_flow" {
-                            n.reference_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                            n.reference_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -181,13 +183,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
                                         ini_property.line_number, name, node_name))?);
                         } else if name_lower == "min_order" {
-                            n.min_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                            n.min_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "max_order" {
-                            n.max_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                            n.max_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "set_order" {
-                            n.set_order_input = DynamicInput::from_string(v, &mut model.data_cache, false)
+                            n.set_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -210,10 +212,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "evap" {
-                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "rain" {
-                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "area" {
                             n.area_km2 = v.parse::<f64>()
@@ -251,7 +253,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "inflow" {
-                            n.inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "recession_factor" {
                             n.recession_factor = v.parse::<f64>()
@@ -373,10 +375,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "evap" {
-                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "rain" {
-                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "area" {
                             n.area_km2 = v.parse::<f64>()
@@ -454,16 +456,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number)),
                             }
                         } else if name_lower == "evap" {
-                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "rain" {
-                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "seep" {
-                            n.seep_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.seep_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "pond_demand" {
-                            n.pond_demand_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.pond_demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "dimensions" {
                             n.d = Table::from_csv_string(v, 4, false)
@@ -497,7 +499,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "demand" {
-                            n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "annual_cap" {
                             let params = csv_string_to_f64_vec(v)
@@ -509,10 +511,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.annual_cap = Some(params[0]);
                             n.annual_cap_reset_month = params[1] as u8;
                         } else if name_lower == "pump" {
-                            n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "flow_threshold" {
-                            n.flow_threshold = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.flow_threshold = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "demand_carryover" {
                             (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u8(v)
@@ -538,10 +540,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "order" {
-                            n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "pump" {
-                            n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true)
+                            n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",

@@ -13,7 +13,7 @@ fn test_dynamic_input_constant() {
     let mut data_cache = DataCache::new();
 
     // Test simple constant
-    let input = DynamicInput::from_string("5.0", &mut data_cache, true)
+    let input = DynamicInput::from_string("5.0", &mut data_cache, true, None)
         .expect("Failed to parse constant");
 
     // Should be optimised to Constant variant
@@ -32,7 +32,7 @@ fn test_dynamic_input_constant_expression() {
     let mut data_cache = DataCache::new();
 
     // Test constant expression
-    let input = DynamicInput::from_string("2 + 3 * 4", &mut data_cache, true)
+    let input = DynamicInput::from_string("2 + 3 * 4", &mut data_cache, true, None)
         .expect("Failed to parse expression");
 
     // Should be optimised to Constant variant (no variables)
@@ -62,7 +62,7 @@ fn test_dynamic_input_direct_reference() {
     data_cache.series[idx] = ts;
 
     // Test direct reference
-    let input = DynamicInput::from_string("data.test", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.test", &mut data_cache, true, None)
         .expect("Failed to parse reference");
 
     // Should be optimised to DirectReference variant
@@ -108,7 +108,7 @@ fn test_dynamic_input_function_expression() {
     data_cache.series[idx2] = ts2;
 
     // Test function expression with multiple variables
-    let input = DynamicInput::from_string("data.temp * data.adjustment", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.temp * data.adjustment", &mut data_cache, true, None)
         .expect("Failed to parse function");
 
     // Should be Function variant (multiple variables)
@@ -149,7 +149,7 @@ fn test_dynamic_input_conditional() {
     let input = DynamicInput::from_string(
         "if(data.temperature > 20, 10.0, 5.0)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse conditional");
 
     data_cache.set_current_step(0);
@@ -186,7 +186,7 @@ fn test_dynamic_input_complex_expression() {
     let input = DynamicInput::from_string(
         "max(data.rex_rain_csv.by_name.value * data.evap.factor, 0)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse complex expression");
 
     data_cache.set_current_step(0);
@@ -198,7 +198,7 @@ fn test_dynamic_input_none() {
     let mut data_cache = DataCache::new();
 
     // Test empty string
-    let input = DynamicInput::from_string("", &mut data_cache, true)
+    let input = DynamicInput::from_string("", &mut data_cache, true, None)
         .expect("Failed to parse empty");
 
     // Should be None variant
@@ -227,7 +227,7 @@ fn test_dynamic_input_case_insensitive_data_references() {
     data_cache.series[idx] = ts;
 
     // Reference with CAPITALIZED name should work
-    let input = DynamicInput::from_string("data.EVAP * 2", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.EVAP * 2", &mut data_cache, true, None)
         .expect("Failed to parse capitalized reference");
 
     data_cache.set_current_step(0);
@@ -255,7 +255,7 @@ fn test_dynamic_input_mixed_case_data_references() {
     data_cache.series[idx_b] = ts_b;
 
     // Use various capitalizations in expression
-    let input = DynamicInput::from_string("data.RAINFALL - data.Evap", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.RAINFALL - data.Evap", &mut data_cache, true, None)
         .expect("Failed to parse mixed case references");
 
     data_cache.set_current_step(0);
@@ -285,27 +285,27 @@ fn test_dynamic_input_case_insensitive_functions() {
     data_cache.set_current_step(0);
 
     // Test MAX (uppercase)
-    let input_max = DynamicInput::from_string("MAX(data.a, data.b)", &mut data_cache, true)
+    let input_max = DynamicInput::from_string("MAX(data.a, data.b)", &mut data_cache, true, None)
         .expect("Failed to parse MAX");
     assert_eq!(input_max.get_value(&data_cache), 5.0);
 
     // Test Max (mixed case)
-    let input_max_mixed = DynamicInput::from_string("Max(data.a, data.b)", &mut data_cache, true)
+    let input_max_mixed = DynamicInput::from_string("Max(data.a, data.b)", &mut data_cache, true, None)
         .expect("Failed to parse Max");
     assert_eq!(input_max_mixed.get_value(&data_cache), 5.0);
 
     // Test IF (uppercase)
-    let input_if = DynamicInput::from_string("IF(data.a > data.b, 10, 20)", &mut data_cache, true)
+    let input_if = DynamicInput::from_string("IF(data.a > data.b, 10, 20)", &mut data_cache, true, None)
         .expect("Failed to parse IF");
     assert_eq!(input_if.get_value(&data_cache), 10.0);
 
     // Test ABS (uppercase)
-    let input_abs = DynamicInput::from_string("ABS(-5)", &mut data_cache, true)
+    let input_abs = DynamicInput::from_string("ABS(-5)", &mut data_cache, true, None)
         .expect("Failed to parse ABS");
     assert_eq!(input_abs.get_value(&data_cache), 5.0);
 
     // Test SQRT (uppercase)
-    let input_sqrt = DynamicInput::from_string("SQRT(16)", &mut data_cache, true)
+    let input_sqrt = DynamicInput::from_string("SQRT(16)", &mut data_cache, true, None)
         .expect("Failed to parse SQRT");
     assert_eq!(input_sqrt.get_value(&data_cache), 4.0);
 }
@@ -318,7 +318,7 @@ fn test_dynamic_input_direct_constant_reference() {
     data_cache.constants.set_value("c.gravity", 9.81);
 
     // Test direct constant reference
-    let input = DynamicInput::from_string("c.gravity", &mut data_cache, true)
+    let input = DynamicInput::from_string("c.gravity", &mut data_cache, true, None)
         .expect("Failed to parse constant reference");
 
     // Should be optimised to DirectConstantReference variant
@@ -352,7 +352,7 @@ fn test_dynamic_input_constant_in_expression() {
     data_cache.series[idx] = ts;
 
     // Test expression mixing constant and data
-    let input = DynamicInput::from_string("c.factor * data.rain", &mut data_cache, true)
+    let input = DynamicInput::from_string("c.factor * data.rain", &mut data_cache, true, None)
         .expect("Failed to parse constant expression");
 
     // Should be Function variant (has both constant and data variable)
@@ -382,7 +382,7 @@ fn test_dynamic_input_multiple_constants() {
     data_cache.constants.set_value("c.b", 3.0);
 
     // Test expression with multiple constants
-    let input = DynamicInput::from_string("c.a + c.b", &mut data_cache, true)
+    let input = DynamicInput::from_string("c.a + c.b", &mut data_cache, true, None)
         .expect("Failed to parse multi-constant expression");
 
     // Should be Function variant (multiple variables)
@@ -419,7 +419,7 @@ fn test_dynamic_input_constant_conditional() {
     let input = DynamicInput::from_string(
         "if(data.temperature > c.threshold, 1.0, 0.0)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse conditional with constant");
 
     data_cache.set_current_step(0);
@@ -440,7 +440,7 @@ fn test_dynamic_input_constant_case_insensitive() {
     data_cache.constants.set_value("c.my_constant", 42.0);
 
     // Reference with mixed case
-    let input = DynamicInput::from_string("C.MY_CONSTANT * 2", &mut data_cache, true)
+    let input = DynamicInput::from_string("C.MY_CONSTANT * 2", &mut data_cache, true, None)
         .expect("Failed to parse mixed case constant");
 
     assert_eq!(input.get_value(&data_cache), 84.0); // 42.0 * 2
@@ -451,7 +451,7 @@ fn test_dynamic_input_unassigned_constant_registers() {
     let mut data_cache = DataCache::new();
 
     // Parse expression with constant that hasn't been assigned yet
-    let input = DynamicInput::from_string("c.unassigned * 10", &mut data_cache, true)
+    let input = DynamicInput::from_string("c.unassigned * 10", &mut data_cache, true, None)
         .expect("Failed to parse unassigned constant");
 
     // The constant should be registered (but not assigned)
@@ -481,7 +481,7 @@ fn test_dynamic_input_mixed_case_same_constant() {
 
     // Expression uses the same constant with different cases
     // This tests that we don't create duplicate map entries
-    let input = DynamicInput::from_string("c.FACTOR + C.Factor + C.factor", &mut data_cache, true)
+    let input = DynamicInput::from_string("c.FACTOR + C.Factor + C.factor", &mut data_cache, true, None)
         .expect("Failed to parse mixed-case constant expression");
 
     // Should evaluate to 2.0 + 2.0 + 2.0 = 6.0
@@ -507,7 +507,7 @@ fn test_dynamic_input_mixed_case_constant_and_data() {
     data_cache.series[idx] = ts;
 
     // Use mixed cases for both constant and data variable
-    let input = DynamicInput::from_string("C.MULTIPLIER * DATA.VALUE", &mut data_cache, true)
+    let input = DynamicInput::from_string("C.MULTIPLIER * DATA.VALUE", &mut data_cache, true, None)
         .expect("Failed to parse mixed-case expression");
 
     data_cache.set_current_step(0);
@@ -535,7 +535,7 @@ fn test_dynamic_input_node_direct_reference() {
     data_cache.series[idx] = ts;
 
     // Test direct reference to node output
-    let input = DynamicInput::from_string("node.upstream.ds_1", &mut data_cache, true)
+    let input = DynamicInput::from_string("node.upstream.ds_1", &mut data_cache, true, None)
         .expect("Failed to parse node reference");
 
     // Should be optimised to DirectReference variant
@@ -564,7 +564,7 @@ fn test_dynamic_input_node_reference_not_critical() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Parse a node reference - should NOT be marked as critical
-    let _input = DynamicInput::from_string("node.upstream.ds_1", &mut data_cache, true)
+    let _input = DynamicInput::from_string("node.upstream.ds_1", &mut data_cache, true, None)
         .expect("Failed to parse node reference");
 
     // Find the series and verify it's NOT critical
@@ -573,7 +573,7 @@ fn test_dynamic_input_node_reference_not_critical() {
     assert!(!data_cache.is_critical[idx], "node.* references should NOT be marked as critical");
 
     // Now parse a data reference with the same flag - should be critical
-    let _input2 = DynamicInput::from_string("data.rainfall", &mut data_cache, true)
+    let _input2 = DynamicInput::from_string("data.rainfall", &mut data_cache, true, None)
         .expect("Failed to parse data reference");
 
     let idx2 = data_cache.get_existing_series_idx("data.rainfall")
@@ -605,7 +605,7 @@ fn test_dynamic_input_node_in_expression() {
     let input = DynamicInput::from_string(
         "node.catchment1.dsflow + node.catchment2.dsflow",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse node expression");
 
     data_cache.set_current_step(0);
@@ -637,7 +637,7 @@ fn test_dynamic_input_node_and_data_mixed() {
     let input = DynamicInput::from_string(
         "node.upstream.dsflow * data.evap_factor",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse mixed expression");
 
     data_cache.set_current_step(0);
@@ -665,7 +665,7 @@ fn test_dynamic_input_node_with_constant() {
     let input = DynamicInput::from_string(
         "node.catchment.dsflow * (1 - c.loss_factor)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse node + constant expression");
 
     data_cache.set_current_step(0);
@@ -691,7 +691,7 @@ fn test_dynamic_input_node_conditional() {
     let input = DynamicInput::from_string(
         "if(node.reservoir.volume > 10000, 100, 50)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse node conditional");
 
     data_cache.set_current_step(0);
@@ -716,7 +716,7 @@ fn test_dynamic_input_node_case_insensitive() {
     data_cache.series[idx] = ts;
 
     // Reference with mixed case should work
-    let input = DynamicInput::from_string("NODE.MyNode.DSFlow", &mut data_cache, true)
+    let input = DynamicInput::from_string("NODE.MyNode.DSFlow", &mut data_cache, true, None)
         .expect("Failed to parse mixed case node reference");
 
     data_cache.set_current_step(0);
@@ -732,7 +732,7 @@ fn test_dynamic_input_node_creates_series_if_not_exists() {
 
     // Parse a node reference before any data exists
     // This simulates parsing during INI load, before nodes initialize
-    let _input = DynamicInput::from_string("node.future_node.ds_1", &mut data_cache, true)
+    let _input = DynamicInput::from_string("node.future_node.ds_1", &mut data_cache, true, None)
         .expect("Failed to parse node reference");
 
     // The series should have been created
@@ -765,7 +765,7 @@ fn test_dynamic_input_offset_zero_same_as_direct() {
     data_cache.series[idx] = ts;
 
     // Parse with offset [0, 0.0] - should optimize to DirectReference (same as no offset)
-    let input = DynamicInput::from_string("data.flow[0, 0.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.flow[0, 0.0]", &mut data_cache, true, None)
         .expect("Failed to parse offset reference");
 
     // Should be DirectReference (optimized away the [0, default])
@@ -799,7 +799,7 @@ fn test_dynamic_input_offset_previous_timestep() {
     data_cache.series[idx] = ts;
 
     // Parse with offset [-1, 0.0] - yesterday's value, default 0.0
-    let input = DynamicInput::from_string("data.flow[-1, 0.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.flow[-1, 0.0]", &mut data_cache, true, None)
         .expect("Failed to parse offset reference");
 
     // Should be DirectReferenceWithOffset
@@ -841,7 +841,7 @@ fn test_dynamic_input_offset_with_nonzero_default() {
     data_cache.series[idx] = ts;
 
     // Parse with offset [-1, 5000.0] - default to initial volume
-    let input = DynamicInput::from_string("data.volume[-1, 5000.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.volume[-1, 5000.0]", &mut data_cache, true, None)
         .expect("Failed to parse offset reference");
 
     // At step 0, no yesterday - should return default 5000.0
@@ -870,7 +870,7 @@ fn test_dynamic_input_offset_multiple_days() {
     data_cache.series[idx] = ts;
 
     // Parse with offset [-3, -999.0] - value from 3 days ago, obvious default
-    let input = DynamicInput::from_string("data.rainfall[-3, -999.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.rainfall[-3, -999.0]", &mut data_cache, true, None)
         .expect("Failed to parse offset reference");
 
     data_cache.set_current_step(5);
@@ -905,7 +905,7 @@ fn test_dynamic_input_offset_in_expression() {
     let input = DynamicInput::from_string(
         "data.dam.dsflow - data.dam.dsflow[-1, 100.0]",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse expression with offset");
 
     data_cache.set_current_step(0);
@@ -940,7 +940,7 @@ fn test_dynamic_input_offset_in_conditional() {
     let input = DynamicInput::from_string(
         "if(data.reservoir.volume > data.reservoir.volume[-1, 0.0], 1, 0)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse conditional with offset");
 
     data_cache.set_current_step(0);
@@ -964,7 +964,7 @@ fn test_dynamic_input_offset_constant_not_supported() {
     data_cache.constants.set_value("c.threshold", 100.0);
 
     // Offset on constants should fail
-    let result = DynamicInput::from_string("c.threshold[-1, 0.0]", &mut data_cache, true);
+    let result = DynamicInput::from_string("c.threshold[-1, 0.0]", &mut data_cache, true, None);
     assert!(result.is_err(), "Offset syntax should not be supported for constants");
     assert!(result.unwrap_err().contains("not supported for constants"));
 }
@@ -975,7 +975,7 @@ fn test_dynamic_input_offset_requires_default() {
     data_cache.get_or_add_new_series("data.test", true);
 
     // Missing default should fail at parse time
-    let result = DynamicInput::from_string("data.test[-1]", &mut data_cache, true);
+    let result = DynamicInput::from_string("data.test[-1]", &mut data_cache, true, None);
     assert!(result.is_err(), "Offset syntax should require default value");
     assert!(result.unwrap_err().contains("requires default value"));
 }
@@ -994,7 +994,7 @@ fn test_dynamic_input_offset_negative_default() {
     data_cache.series[idx] = ts;
 
     // Negative default value should work (e.g., for temperatures)
-    let input = DynamicInput::from_string("data.temp[-1, -10.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.temp[-1, -10.0]", &mut data_cache, true, None)
         .expect("Failed to parse offset with negative default");
 
     data_cache.set_current_step(0);
@@ -1016,7 +1016,7 @@ fn test_dynamic_input_offset_nan_default() {
     data_cache.series[idx] = ts;
 
     // NaN default - makes missing data explicit in output
-    let input = DynamicInput::from_string("data.flow[-1, nan]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.flow[-1, nan]", &mut data_cache, true, None)
         .expect("Failed to parse offset with nan default");
 
     data_cache.set_current_step(0);
@@ -1026,12 +1026,12 @@ fn test_dynamic_input_offset_nan_default() {
     assert_eq!(input.get_value(&data_cache), 100.0); // Normal lookback works
 
     // Also test case-insensitive: NaN, NAN
-    let input2 = DynamicInput::from_string("data.flow[-1, NaN]", &mut data_cache, true)
+    let input2 = DynamicInput::from_string("data.flow[-1, NaN]", &mut data_cache, true, None)
         .expect("Failed to parse offset with NaN default");
     data_cache.set_current_step(0);
     assert!(input2.get_value(&data_cache).is_nan());
 
-    let input3 = DynamicInput::from_string("data.flow[-1, NAN]", &mut data_cache, true)
+    let input3 = DynamicInput::from_string("data.flow[-1, NAN]", &mut data_cache, true, None)
         .expect("Failed to parse offset with NAN default");
     data_cache.set_current_step(0);
     assert!(input3.get_value(&data_cache).is_nan());
@@ -1059,7 +1059,7 @@ fn test_dynamic_input_forward_lookup() {
     data_cache.series[idx] = ts;
 
     // Forward lookup: tomorrow's value
-    let input = DynamicInput::from_string("data.forecast[1, -999.0]", &mut data_cache, true)
+    let input = DynamicInput::from_string("data.forecast[1, -999.0]", &mut data_cache, true, None)
         .expect("Failed to parse forward lookup");
 
     data_cache.set_current_step(0);
@@ -1082,7 +1082,7 @@ fn test_dynamic_input_forward_lookup_rejected_for_node() {
     data_cache.get_or_add_new_series("node.dam.storage", false);
 
     // Forward lookup on node.* should fail - future values haven't been computed
-    let result = DynamicInput::from_string("node.dam.storage[1, 0.0]", &mut data_cache, true);
+    let result = DynamicInput::from_string("node.dam.storage[1, 0.0]", &mut data_cache, true, None);
     assert!(result.is_err(), "Forward lookup should be rejected for node.*");
     assert!(result.unwrap_err().contains("Forward lookup not supported"));
 }
@@ -1100,7 +1100,7 @@ fn test_sim_year() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.year", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.year", &mut data_cache, true, None)
         .expect("Failed to parse sim.year");
 
     assert_eq!(input.get_value(&data_cache), 2020.0);
@@ -1115,7 +1115,7 @@ fn test_sim_month() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.month", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.month", &mut data_cache, true, None)
         .expect("Failed to parse sim.month");
 
     assert_eq!(input.get_value(&data_cache), 6.0);
@@ -1130,7 +1130,7 @@ fn test_sim_day() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.day", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.day", &mut data_cache, true, None)
         .expect("Failed to parse sim.day");
 
     assert_eq!(input.get_value(&data_cache), 15.0);
@@ -1146,7 +1146,7 @@ fn test_sim_day_of_year() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
     assert_eq!(input.get_value(&data_cache), 167.0);
@@ -1162,7 +1162,7 @@ fn test_sim_day_of_year_non_leap() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
     assert_eq!(input.get_value(&data_cache), 60.0);
@@ -1178,7 +1178,7 @@ fn test_sim_day_of_year_leap_year() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
     data_cache.set_current_step(0);
 
-    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
     assert_eq!(input.get_value(&data_cache), 61.0);
@@ -1191,7 +1191,7 @@ fn test_sim_step() {
     data_cache.initialize(start_timestamp);
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
-    let input = DynamicInput::from_string("sim.step", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.step", &mut data_cache, true, None)
         .expect("Failed to parse sim.step");
 
     data_cache.set_current_step(0);
@@ -1217,7 +1217,7 @@ fn test_sim_in_expression() {
     let input = DynamicInput::from_string(
         "if(sim.month >= 6 && sim.month <= 8, 1.5, 1.0)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse conditional with sim.month");
 
     // July is summer, should return 1.5
@@ -1234,7 +1234,7 @@ fn test_sim_in_arithmetic() {
     data_cache.set_current_step(0);
 
     // Test arithmetic with sim values
-    let input = DynamicInput::from_string("sim.year + sim.month", &mut data_cache, true)
+    let input = DynamicInput::from_string("sim.year + sim.month", &mut data_cache, true, None)
         .expect("Failed to parse sim arithmetic");
 
     assert_eq!(input.get_value(&data_cache), 2026.0); // 2020 + 6
@@ -1249,11 +1249,11 @@ fn test_sim_case_insensitive() {
     data_cache.set_current_step(0);
 
     // Test various case combinations
-    let input1 = DynamicInput::from_string("SIM.YEAR", &mut data_cache, true)
+    let input1 = DynamicInput::from_string("SIM.YEAR", &mut data_cache, true, None)
         .expect("Failed to parse SIM.YEAR");
-    let input2 = DynamicInput::from_string("Sim.Month", &mut data_cache, true)
+    let input2 = DynamicInput::from_string("Sim.Month", &mut data_cache, true, None)
         .expect("Failed to parse Sim.Month");
-    let input3 = DynamicInput::from_string("SIM.day_of_year", &mut data_cache, true)
+    let input3 = DynamicInput::from_string("SIM.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse SIM.day_of_year");
 
     assert_eq!(input1.get_value(&data_cache), 2020.0);
@@ -1269,7 +1269,7 @@ fn test_sim_offset_not_supported() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Offset syntax should not be supported for sim.* variables
-    let result = DynamicInput::from_string("sim.year[1, 0]", &mut data_cache, true);
+    let result = DynamicInput::from_string("sim.year[1, 0]", &mut data_cache, true, None);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Offset syntax not supported"));
 }
@@ -1294,9 +1294,150 @@ fn test_sim_with_data_reference() {
     let input = DynamicInput::from_string(
         "data.base_value * (1 + (sim.month - 6) * 0.1)",
         &mut data_cache,
-        true
+        true, None
     ).expect("Failed to parse mixed expression");
 
     // month=6, so (6-6)*0.1 = 0, result = 100 * 1 = 100
     assert_eq!(input.get_value(&data_cache), 100.0);
+}
+
+// ============================================================================
+// Tests for "this." self-reference expansion
+// ============================================================================
+
+#[test]
+fn test_this_simple_reference() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Register a node output series and populate it
+    let idx = data_cache.get_or_add_new_series("node.my_dam.volume", false);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(42.0);
+    data_cache.series[idx] = ts;
+    data_cache.set_current_step(0);
+
+    // Parse "this.volume" with self_context = "node.my_dam"
+    let input = DynamicInput::from_string(
+        "this.volume", &mut data_cache, false, Some("node.my_dam")
+    ).expect("Failed to parse this. reference");
+
+    // Should resolve to the node output
+    assert_eq!(input.get_value(&data_cache), 42.0);
+
+    // Round-trip should preserve "this.volume"
+    assert_eq!(input.to_string(), "this.volume");
+}
+
+#[test]
+fn test_this_in_expression() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Register node output and data series
+    let idx1 = data_cache.get_or_add_new_series("node.big_node.dsflow", false);
+    let idx2 = data_cache.get_or_add_new_series("data.threshold", false);
+    let mut ts1 = Timeseries::new_daily();
+    ts1.start_timestamp = start_timestamp;
+    ts1.push_value(100.0);
+    data_cache.series[idx1] = ts1;
+    let mut ts2 = Timeseries::new_daily();
+    ts2.start_timestamp = start_timestamp;
+    ts2.push_value(30.0);
+    data_cache.series[idx2] = ts2;
+    data_cache.set_current_step(0);
+
+    // Parse expression mixing this. with data.
+    let input = DynamicInput::from_string(
+        "this.dsflow - data.threshold", &mut data_cache, false, Some("node.big_node")
+    ).expect("Failed to parse expression with this.");
+
+    assert_eq!(input.get_value(&data_cache), 70.0);
+    assert_eq!(input.to_string(), "this.dsflow - data.threshold");
+}
+
+#[test]
+fn test_this_not_replaced_inside_node_name() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // Register a node with "this" embedded in its name
+    let idx = data_cache.get_or_add_new_series("node.that_and_this.inflow", false);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(55.0);
+    data_cache.series[idx] = ts;
+    data_cache.set_current_step(0);
+
+    // "this." inside the node name should NOT be expanded
+    let input = DynamicInput::from_string(
+        "node.that_and_this.inflow", &mut data_cache, false, Some("node.other_node")
+    ).expect("Failed to parse node reference with 'this' in name");
+
+    assert_eq!(input.get_value(&data_cache), 55.0);
+}
+
+#[test]
+fn test_this_without_context_is_passthrough() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    // With self_context=None, "this." is not expanded, so it gets treated as a
+    // literal variable name "this.dsflow" rather than being resolved to a node output.
+    // Verify it creates a separate series from "node.mynode.dsflow".
+    let idx_node = data_cache.get_or_add_new_series("node.mynode.dsflow", false);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    ts.push_value(99.0);
+    data_cache.series[idx_node] = ts;
+
+    let input = DynamicInput::from_string(
+        "this.dsflow", &mut data_cache, false, None
+    ).expect("Parses as a literal variable name");
+
+    // The input should NOT resolve to node.mynode.dsflow — it should
+    // have created a separate "this.dsflow" series (different index)
+    match &input {
+        DynamicInput::DirectReference { idx, .. } => {
+            assert_ne!(*idx, idx_node, "this.dsflow should not resolve to node.mynode.dsflow");
+        }
+        _ => panic!("Expected DirectReference variant"),
+    }
+}
+
+#[test]
+fn test_this_multiple_references() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    let idx1 = data_cache.get_or_add_new_series("node.mynode.dsflow", false);
+    let idx2 = data_cache.get_or_add_new_series("node.mynode.usflow", false);
+    let mut ts1 = Timeseries::new_daily();
+    ts1.start_timestamp = start_timestamp;
+    ts1.push_value(80.0);
+    data_cache.series[idx1] = ts1;
+    let mut ts2 = Timeseries::new_daily();
+    ts2.start_timestamp = start_timestamp;
+    ts2.push_value(50.0);
+    data_cache.series[idx2] = ts2;
+    data_cache.set_current_step(0);
+
+    // Expression with multiple this. references
+    let input = DynamicInput::from_string(
+        "this.dsflow - this.usflow", &mut data_cache, false, Some("node.mynode")
+    ).expect("Failed to parse multiple this. references");
+
+    assert_eq!(input.get_value(&data_cache), 30.0);
+    assert_eq!(input.to_string(), "this.dsflow - this.usflow");
 }
