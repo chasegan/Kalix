@@ -2,6 +2,7 @@ package com.kalix.ide.linter.validators;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.model.ValidationContext;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.schema.DataType;
@@ -90,7 +91,7 @@ public class NodeValidator implements ValidationStrategy {
         // Validate based on parameter type from schema
         switch (paramDef.type) {
             case "function_expression":
-                validateFunctionExpression(prop, model, schema, result);
+                validateFunctionExpression(node, prop, model, schema, result);
                 break;
             case "number":
                 validateNumber(prop, schema, result, paramDef.min, paramDef.max);
@@ -123,10 +124,18 @@ public class NodeValidator implements ValidationStrategy {
         }
     }
 
-    private void validateFunctionExpression(INIModelParser.Property prop, INIModelParser.ParsedModel model,
-                                          LinterSchema schema, ValidationResult result) {
-        // Validate with model and schema to enable node reference validation
-        List<String> errors = functionValidator.validate(prop.getValue(), model, schema);
+    private void validateFunctionExpression(INIModelParser.NodeSection node, INIModelParser.Property prop,
+                                          INIModelParser.ParsedModel model, LinterSchema schema,
+                                          ValidationResult result) {
+        // Build context with current node for 'this' reference validation
+        ValidationContext context = ValidationContext.builder()
+            .model(model)
+            .schema(schema)
+            .currentNode(node)
+            .build();
+
+        // Validate with full context
+        List<String> errors = functionValidator.validate(prop.getValue(), context);
 
         for (String error : errors) {
             // Determine severity - warnings for division by zero, errors for everything else

@@ -2,6 +2,8 @@ package com.kalix.ide.linter.validators;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.model.ValidationContext;
+import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.util.*;
@@ -9,10 +11,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates function expressions used in model parameters.
- * Supports six types of inputs:
+ * Supports seven types of inputs:
  * - Data references: "data.evap", "data.field.subfield"
  * - Constant references: "c.pi", "c.node_1_demand_levels.high"
  * - Node output references: "node.node13_inflow.ds_1"
+ * - This references: "this.dsflow", "this.volume" (shorthand for current node outputs)
  * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
@@ -76,10 +79,13 @@ public class FunctionExpressionValidator {
     /**
      * Validate a function expression and return a list of error messages.
      * Returns empty list if expression is valid.
-     * Note: This method cannot validate node references without model context.
+     * Note: This method cannot validate node or 'this' references without context.
+     *
+     * @deprecated Use {@link #validate(String, ValidationContext)} instead
      */
+    @Deprecated
     public List<String> validate(String expression) {
-        return validate(expression, null, null);
+        return validate(expression, ValidationContext.empty());
     }
 
     /**
@@ -90,23 +96,50 @@ public class FunctionExpressionValidator {
      * @param model The parsed model (optional, for node reference validation)
      * @param schema The linter schema (optional, for node reference validation)
      * @return List of error messages, empty if valid
+     * @deprecated Use {@link #validate(String, ValidationContext)} instead
      */
+    @Deprecated
     public List<String> validate(String expression, INIModelParser.ParsedModel model, LinterSchema schema) {
+        ValidationContext context = ValidationContext.builder()
+            .model(model)
+            .schema(schema)
+            .build();
+        return validate(expression, context);
+    }
+
+    /**
+     * Validate a function expression with full context.
+     * Returns empty list if expression is valid.
+     *
+     * <p>The context enables validation of:</p>
+     * <ul>
+     *   <li>node.xxx.yyy references - validates node exists and output is allowed</li>
+     *   <li>this.yyy references - validates output is allowed for current node type</li>
+     * </ul>
+     *
+     * @param expression The expression to validate
+     * @param context The validation context (use {@link ValidationContext#empty()} for basic validation)
+     * @return List of error messages, empty if valid
+     */
+    public List<String> validate(String expression, ValidationContext context) {
         if (expression == null) {
             return List.of("Expression is null");
+        }
+        if (context == null) {
+            context = ValidationContext.empty();
         }
 
         String trimmed = expression.trim();
 
-        // Check cache first (only if no model/schema, since validation may differ)
-        if (model == null && schema == null && validationCache.containsKey(trimmed)) {
+        // Check cache first (only if no context, since validation may differ)
+        if (!context.hasModelAndSchema() && !context.hasCurrentNode() && validationCache.containsKey(trimmed)) {
             return validationCache.get(trimmed);
         }
 
-        List<String> errors = performValidation(trimmed, model, schema);
+        List<String> errors = performValidation(trimmed, context);
 
-        // Cache result (with size limit, only if no model/schema)
-        if (model == null && schema == null && validationCache.size() < MAX_CACHE_SIZE) {
+        // Cache result (with size limit, only if no context)
+        if (!context.hasModelAndSchema() && !context.hasCurrentNode() && validationCache.size() < MAX_CACHE_SIZE) {
             validationCache.put(trimmed, errors);
         }
 
@@ -120,7 +153,7 @@ public class FunctionExpressionValidator {
         validationCache.clear();
     }
 
-    private List<String> performValidation(String expression, INIModelParser.ParsedModel model, LinterSchema schema) {
+    private List<String> performValidation(String expression, ValidationContext context) {
         List<String> errors = new ArrayList<>();
 
         // Fast path: empty expression
@@ -147,15 +180,21 @@ public class FunctionExpressionValidator {
         // Fast path: simple node reference
         if (isSimpleNodeReference(expression)) {
             // Validate node reference if model/schema available
-            if (model != null && schema != null) {
+            if (context.hasModelAndSchema()) {
                 // Strip optional square brackets before validation
                 String refWithoutBrackets = expression.replaceFirst("\\[.*?\\]$", "");
-                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, model, schema);
+                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, context.getModel(), context.getSchema());
                 if (error != null) {
                     errors.add(error);
                 }
             }
             return errors; // Valid format-wise
+        }
+
+        // Fast path: simple this reference
+        if (isSimpleThisReference(expression)) {
+            validateThisReference(expression, context, errors);
+            return errors;
         }
 
         // Fast path: simple sim reference
@@ -166,7 +205,7 @@ public class FunctionExpressionValidator {
         // Complex expression - tokenize and parse
         try {
             Tokenizer tokenizer = new Tokenizer(expression);
-            Parser parser = new Parser(tokenizer, model, schema);
+            Parser parser = new Parser(tokenizer, context);
             parser.parseExpression(errors);
 
             // Check for trailing tokens
@@ -209,10 +248,46 @@ public class FunctionExpressionValidator {
         return KNOWN_SIM_VARIABLES.contains(s);
     }
 
+    private static boolean isSimpleThisReference(String s) {
+        // Matches: this.xxx (this.property)
+        // Optional square brackets at the end: this.xxx[anything]
+        return s.matches("^this\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
+    }
+
+    private void validateThisReference(String thisRef, ValidationContext context, List<String> errors) {
+        // Strip optional square brackets for validation
+        String refWithoutBrackets = thisRef.replaceFirst("\\[.*?\\]$", "");
+
+        // Extract the output property (everything after "this.")
+        String outputProperty = refWithoutBrackets.substring(5); // "this.".length() == 5
+
+        // Check if we have current node context
+        if (!context.hasCurrentNode()) {
+            errors.add("Cannot use 'this' reference outside of node context: '" + thisRef + "'");
+            return;
+        }
+
+        // Get allowed outputs for current node type
+        Set<String> allowedOutputs = context.getCurrentNodeAllowedOutputs();
+
+        // If no schema or node type definition, we can't validate further
+        if (allowedOutputs.isEmpty()) {
+            // No validation possible - allow it
+            return;
+        }
+
+        // Check if the output property is allowed
+        if (!allowedOutputs.contains(outputProperty)) {
+            String nodeType = context.getCurrentNodeType();
+            errors.add("Output property '" + outputProperty + "' is not allowed for node type '" + nodeType +
+                      "'. Allowed outputs: " + allowedOutputs);
+        }
+    }
+
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, SIM_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
     }
 
     static class Token {
@@ -356,6 +431,11 @@ public class FunctionExpressionValidator {
                 return readSimReference(start);
             }
 
+            // Check if this is a 'this' reference (starts with "this.")
+            if (firstSegment.equals("this") && pos < input.length() && input.charAt(pos) == '.') {
+                return readThisReference(start);
+            }
+
             // Regular identifier (function name or variable)
             return new Token(TokenType.IDENT, firstSegment, start);
         }
@@ -418,6 +498,39 @@ public class FunctionExpressionValidator {
             return new Token(TokenType.SIM_REF, sb.toString(), start);
         }
 
+        // Read a 'this' reference (this.dsflow, this.volume, etc.)
+        private Token readThisReference(int start) {
+            StringBuilder sb = new StringBuilder("this");
+
+            // Consume the dot
+            sb.append('.');
+            pos++;
+
+            // Read the property name
+            while (pos < input.length() && (Character.isLetterOrDigit(input.charAt(pos)) || input.charAt(pos) == '_')) {
+                sb.append(input.charAt(pos));
+                pos++;
+            }
+
+            // Check for optional square brackets
+            if (pos < input.length() && input.charAt(pos) == '[') {
+                int bracketStart = pos;
+                pos++; // consume '['
+
+                // Find matching closing bracket
+                while (pos < input.length() && input.charAt(pos) != ']') {
+                    pos++;
+                }
+
+                if (pos < input.length() && input.charAt(pos) == ']') {
+                    pos++; // consume ']'
+                    sb.append(input, bracketStart, pos);
+                }
+            }
+
+            return new Token(TokenType.THIS_REF, sb.toString(), start);
+        }
+
         private boolean isOperatorChar(char ch) {
             return "+-*/%^<>=!&|".indexOf(ch) >= 0;
         }
@@ -450,14 +563,12 @@ public class FunctionExpressionValidator {
 
     static class Parser {
         private final Tokenizer tokenizer;
-        private final INIModelParser.ParsedModel model;
-        private final LinterSchema schema;
+        private final ValidationContext context;
         Token current;
 
-        Parser(Tokenizer tokenizer, INIModelParser.ParsedModel model, LinterSchema schema) throws ParseException {
+        Parser(Tokenizer tokenizer, ValidationContext context) throws ParseException {
             this.tokenizer = tokenizer;
-            this.model = model;
-            this.schema = schema;
+            this.context = context;
             this.current = tokenizer.nextToken();
         }
 
@@ -602,6 +713,9 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.SIM_REF) {
                 validateSimReference(current.value, errors);
                 advance();
+            } else if (current.type == TokenType.THIS_REF) {
+                validateThisRef(current.value, errors);
+                advance();
             } else if (current.type == TokenType.IDENT) {
                 // Function call
                 parseFunctionCall(errors);
@@ -610,7 +724,7 @@ public class FunctionExpressionValidator {
                 parseExpression(errors);
                 expect(TokenType.RPAREN, errors);
             } else {
-                throw new ParseException("Expected number, data reference, constant reference, node reference, sim reference, function, or '(' but got " + current.type);
+                throw new ParseException("Expected number, data reference, constant reference, node reference, this reference, sim reference, function, or '(' but got " + current.type);
             }
         }
 
@@ -707,8 +821,8 @@ public class FunctionExpressionValidator {
             }
 
             // Validate against model if available
-            if (model != null && schema != null) {
-                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, model, schema);
+            if (context.hasModelAndSchema()) {
+                String error = ValidationUtils.validateNodeReference(refWithoutBrackets, context.getModel(), context.getSchema());
                 if (error != null) {
                     errors.add(error);
                 }
@@ -719,6 +833,41 @@ public class FunctionExpressionValidator {
             // Check if the sim reference is one of the known variables
             if (!KNOWN_SIM_VARIABLES.contains(simRef)) {
                 errors.add("Unknown sim variable: '" + simRef + "'. Valid options are: sim.year, sim.month, sim.day, sim.day_of_year, sim.step");
+            }
+        }
+
+        private void validateThisRef(String thisRef, List<String> errors) {
+            // Strip optional square brackets for validation
+            String refWithoutBrackets = thisRef.replaceFirst("\\[.*?\\]$", "");
+
+            // Check for malformed this references
+            if (refWithoutBrackets.equals("this") || refWithoutBrackets.equals("this.")) {
+                errors.add("Incomplete this reference: '" + thisRef + "'");
+                return;
+            }
+
+            // Extract the output property (everything after "this.")
+            String outputProperty = refWithoutBrackets.substring(5); // "this.".length() == 5
+
+            // Check if we have current node context
+            if (!context.hasCurrentNode()) {
+                errors.add("Cannot use 'this' reference outside of node context: '" + thisRef + "'");
+                return;
+            }
+
+            // Get allowed outputs for current node type
+            Set<String> allowedOutputs = context.getCurrentNodeAllowedOutputs();
+
+            // If no schema or node type definition, we can't validate further
+            if (allowedOutputs.isEmpty()) {
+                return; // No validation possible - allow it
+            }
+
+            // Check if the output property is allowed
+            if (!allowedOutputs.contains(outputProperty)) {
+                String nodeType = context.getCurrentNodeType();
+                errors.add("Output property '" + outputProperty + "' is not allowed for node type '" + nodeType +
+                          "'. Allowed outputs: " + allowedOutputs);
             }
         }
 
