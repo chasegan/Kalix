@@ -182,5 +182,41 @@ impl Node for NodeEnum {
             NodeEnum::OrderConstraintNode(node) => node.dsorders_mut(),
         }
     }
+
+    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::ConfluenceNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::GaugeNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::LossNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::SplitterNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::UnregulatedUserNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::RegulatedUserNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::Gr4jNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::InflowNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::RoutingNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::SacramentoNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::StorageNode(node) => node.run_pre_order_phase(data_cache),
+            NodeEnum::OrderConstraintNode(node) => node.run_pre_order_phase(data_cache),
+        }
+    }
+
+    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::ConfluenceNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::GaugeNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::LossNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::SplitterNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::UnregulatedUserNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::RegulatedUserNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::Gr4jNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::InflowNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::RoutingNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::SacramentoNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::StorageNode(node) => node.run_post_order_phase(data_cache),
+            NodeEnum::OrderConstraintNode(node) => node.run_post_order_phase(data_cache),
+        }
+    }
 }
 
