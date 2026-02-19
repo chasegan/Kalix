@@ -12,11 +12,11 @@
       }
     },
     "inputs": {
-      "required": true,
+      "required": false,
       "validation": "file_paths"
     },
     "outputs": {
-      "required": true,
+      "required": false,
       "validation": "output_references"
     }
   },
