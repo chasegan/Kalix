@@ -4,6 +4,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
+use crate::numerical::fifo_buffer::FifoBuffer;
 
 const LEVL: usize = 0;
 const VOLU: usize = 1;
@@ -30,10 +31,12 @@ pub struct StorageNode {
     pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
     pub v: f64,
     pub v_initial: f64,
+    pub order_through: bool,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
+    pub target_level: DynamicInput,
 
     // Internal state only
     usflow: f64,
@@ -55,6 +58,8 @@ pub struct StorageNode {
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,
+    pub has_target_level: bool,
+    pub target_level_order_buffer: FifoBuffer,
 
     // Outlet definitions (MOL, capacity) - parsed from INI
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
@@ -98,6 +103,7 @@ impl StorageNode {
         Self {
             name: "".to_string(),
             d: Table::new(4),
+            order_through: false,
             usflow: 0.0,
             ..Default::default()
         }
@@ -457,6 +463,9 @@ impl Node for StorageNode {
             };
         }
 
+        // Check if the storage is targeting a level
+        self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
+
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
@@ -555,11 +564,52 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.dsorders[3]);
         }
 
-        // Calcualte orders
-        // self.usorders = 0.0
-        // TODO: allow storages to place orders
-        //   (1) to propagate orders through the storage if they opt out of delivering orders
-        //   (2) to meet target operating levels
+        // Calculate orders
+        if self.order_through {
+            //
+            // 'Order through' means (1) the ordering system does not consider this storage
+            // to be a supply, (2) total orders are propagated upstream without adjustment.
+            let total_order: f64 = self.dsorders.iter().sum();
+            self.usorders = total_order;
+            //
+        } else if self.has_target_level {
+            //
+            // 'Target level' works like this:
+            // 1) calculate the target volume
+            // 2) forecast our future volume assuming:
+            //    - all previous orders will arrive. (Previous orders are stored in the
+            //        target_level_order_buffer so we can work out what is en route. A buffer of
+            //        zero length means there is no travel time. The order we place today will
+            //        arrive today and nothing is ever en route.)
+            //    - no rainfall, evap, or seepage
+            //    - no additional inflows will arrive
+            //    - today's downstream orders will be released
+            //    - no subsequent releases will be made
+            // 3) order what is required to reach our target volume
+            let target_level = self.target_level.get_value(data_cache);
+            // TODO: we probably want a recorder for the target level
+            //if self.level > target_level {
+            if false {
+                // The level is already above the target level. No order needed.
+                self.usorders = 0.0;
+                self.target_level_order_buffer.push(self.usorders);
+            } else {
+                // The level is below the target level. We need convert this to a volume and
+                // compare it with our forecast volume.
+                let target_volume = self.d.interpolate_or_extrapolate(LEVL, VOLU, target_level);
+                //TODO: it could be possible to keep a running forecast inflow here, add new orders
+                // to it and subtract orders as they pop out of the buffer (rather than summing the
+                // order buffer every time). It may be noticeable for long travel times.
+                let inflows = self.target_level_order_buffer.sum();
+                let dsorders: f64 = self.dsorders.iter().sum();
+                let forecast_volume = self.v + inflows - dsorders;
+                self.usorders = (target_volume - forecast_volume).max(0.0);
+                self.target_level_order_buffer.push(self.usorders);
+            }
+        } else {
+            // Storage does not order upstream
+            // self.usorders = 0.0
+        }
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {

@@ -55,6 +55,11 @@ impl FifoBuffer {
         }
     }
 
+    /// Returns the sum of all values in the buffer.
+    pub fn sum(&self) -> f64 {
+        self.data.iter().sum()
+    }
+
     /// Returns the most recently inserted value without removing it.
     /// Returns None if buffer has zero capacity.
     pub fn back(&self) -> Option<f64> {

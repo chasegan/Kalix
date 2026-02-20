@@ -89,26 +89,28 @@ impl SimpleNodewiseOrderingSystem {
                 lag: 0f64,
             };
 
-            // Determine if this is a new zone, or continuation of upstream zone
-            match &nodes[new_link_item.from_node] {
-                NodeEnum::StorageNode(_) => {
-                    // This is a new zone.
-                    new_link_item.zone_idx = Some(self.regulated_zone_counter);
-                    self.regulated_zone_counter += 1;
-                }
-                _ => {
-                    // Zone info based on upstream link.
-                    // If the upstream node has multiple incoming links, we look at the one with the longest lag.
-                    for &us_link_idx in &incoming_links[new_link_item.from_node] {
-                        let us_zone_idx = self.links_simple_ordering[us_link_idx].zone_idx;
+            // Determine if this is a new zone, or continuation of upstream zone.
+            // Basically if it is a storage without 'order through', then it is a new zone.
+            let is_new_zone = match &nodes[new_link_item.from_node] {
+                NodeEnum::StorageNode(n) => { !n.order_through }
+                _ => { false }
+            };
+            if is_new_zone {
+                // This is a new zone.
+                new_link_item.zone_idx = Some(self.regulated_zone_counter);
+                self.regulated_zone_counter += 1;
+            } else {
+                // Zone info based on upstream link.
+                // If the upstream node has multiple incoming links, we look at the one with the longest lag.
+                for &us_link_idx in &incoming_links[new_link_item.from_node] {
+                    let us_zone_idx = self.links_simple_ordering[us_link_idx].zone_idx;
 
-                        // Only look at upstream links that are in regulated zones
-                        if us_zone_idx.is_some() {
-                            let us_link_lag = self.links_simple_ordering[us_link_idx].lag;
-                            if us_link_lag >= new_link_item.lag {
-                                new_link_item.lag = us_link_lag;
-                                new_link_item.zone_idx = us_zone_idx;
-                            }
+                    // Only look at upstream links that are in regulated zones
+                    if us_zone_idx.is_some() {
+                        let us_link_lag = self.links_simple_ordering[us_link_idx].lag;
+                        if us_link_lag >= new_link_item.lag {
+                            new_link_item.lag = us_link_lag;
+                            new_link_item.zone_idx = us_zone_idx;
                         }
                     }
                 }
@@ -126,40 +128,49 @@ impl SimpleNodewiseOrderingSystem {
             // Initialize node ordering aspects
             if new_link_item.zone_idx.is_some() {
                 match &mut nodes[new_link_item.to_node] {
-                    NodeEnum::RegulatedUserNode(user_node) => {
-                        let int_lag = new_link_item.lag.round() as usize;
-                        if int_lag > user_node.order_travel_time {
-                            user_node.order_travel_time = int_lag;
-                            user_node.order_buffer = FifoBuffer::new(int_lag);
+                    NodeEnum::StorageNode(node) => {
+                        if node.has_target_level {
+                            let int_lag = new_link_item.lag.round() as usize;
+                            node.target_level_order_buffer = FifoBuffer::new(int_lag);
                         }
                     },
-                    NodeEnum::InflowNode(inflow_node) => {
-                        inflow_node.is_regulated = true;
-                        inflow_node.order_travel_time = new_link_item.lag.round() as usize;
-                        inflow_node.order_travel_time_gt_0 = inflow_node.order_travel_time > 0;
-                    },
-                    NodeEnum::OrderConstraintNode(n) => {
+                    NodeEnum::RegulatedUserNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
-                        n.sent_order_buffer = FifoBuffer::new(int_lag);
-                    },
-                    NodeEnum::ConfluenceNode(n) => {
+                        if int_lag > node.order_travel_time {
+                            // TODO: why do I have the above clause? I cant remember? If you remember, make a note.
+                            //  It might be to do with making sure I pick up the longest travel time in which
+                            //  case we probably need to use the same approach for all other node types too.
+                            node.order_travel_time = int_lag;
+                            node.order_buffer = FifoBuffer::new(int_lag);
+                        }
+                    }
+                    NodeEnum::InflowNode(node) => {
+                        node.is_regulated = true;
+                        node.order_travel_time = new_link_item.lag.round() as usize;
+                        node.order_travel_time_gt_0 = node.order_travel_time > 0;
+                    }
+                    NodeEnum::OrderConstraintNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
-                        if n.us_1_link_idx.is_none() {
-                            n.us_1_lag = int_lag;
-                            n.us_1_link_idx = Some(new_link_item.link_idx);
+                        node.sent_order_buffer = FifoBuffer::new(int_lag);
+                    }
+                    NodeEnum::ConfluenceNode(node) => {
+                        let int_lag = new_link_item.lag.round() as usize;
+                        if node.us_1_link_idx.is_none() {
+                            node.us_1_lag = int_lag;
+                            node.us_1_link_idx = Some(new_link_item.link_idx);
                         } else {
-                            n.us_2_lag = int_lag;
-                            if n.us_1_lag < n.us_2_lag {
-                                let lag_differential = n.us_2_lag - n.us_1_lag;
-                                n.us_1_order_buffer = FifoBuffer::new(lag_differential);
-                                n.us_2_order_buffer = FifoBuffer::new(0);
+                            node.us_2_lag = int_lag;
+                            if node.us_1_lag < node.us_2_lag {
+                                let lag_differential = node.us_2_lag - node.us_1_lag;
+                                node.us_1_order_buffer = FifoBuffer::new(lag_differential);
+                                node.us_2_order_buffer = FifoBuffer::new(0);
                             } else {
-                                let lag_differential = n.us_1_lag - n.us_2_lag;
-                                n.us_2_order_buffer = FifoBuffer::new(lag_differential);
-                                n.us_1_order_buffer = FifoBuffer::new(0);
+                                let lag_differential = node.us_1_lag - node.us_2_lag;
+                                node.us_2_order_buffer = FifoBuffer::new(lag_differential);
+                                node.us_1_order_buffer = FifoBuffer::new(0);
                             }
                         }
-                    },
+                    }
                     _ => {}
                 }
             }

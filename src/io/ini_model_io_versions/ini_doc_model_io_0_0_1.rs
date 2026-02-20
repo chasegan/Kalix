@@ -467,6 +467,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "pond_demand" {
                             n.pond_demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "target_level" {
+                            n.target_level = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "dimensions" {
                             n.d = Table::from_csv_string(v, 4, false)
                                 .map_err(|e| format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
@@ -477,6 +480,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.v_initial = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name))?;
+                        } else if name_lower == "order_through" {
+                            (n.order_through, _) = parse_csv_to_bool_option_u8(v)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         }
                         else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
