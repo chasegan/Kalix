@@ -267,57 +267,41 @@ impl SimpleNodewiseOrderingSystem {
             match &mut nodes[node_idx] {
                 NodeEnum::StorageNode(node) => {
                     // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    // Order from storages is zero
-                    // TODO: allow storages to place orders
-                    //   (1) to propagate orders through the storage if they opt out of delivering orders
-                    //   (2) to meet target operating levels
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, 0.0);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 },
                 NodeEnum::LossNode(node) => {
                     // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    //let order = node.order_translation_table.interpolate(0, 1, node.dsorders[0]);
-                    let order = node.order_translation_table.interpolate_or_extrapolate(node.dsorders[0]);
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 },
                 NodeEnum::InflowNode(node) => {
-                    // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    // Orders are reduced based on known inflows
-                    let inflow_value = node.inflow_input.get_value(data_cache);
-                    node.order_phase_inflow_value = inflow_value;
-                    let anticipated_inflow_on_delivery_timestep = inflow_value *
-                        if node.order_travel_time_gt_0 { node.recession_factor } else { 1.0 };
-                    let order = (node.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 },
                 NodeEnum::ConfluenceNode(node) => {
-                    // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
+                    node.run_order_phase(data_cache);
+
                     // Evaluate harmony fraction once and compute both upstream orders simultaneously
                     let link_1_harmony = node.harmony_fraction.get_value(data_cache)
                         .clamp(0.0, 1.0);
                     node.harmony_fraction_value = link_1_harmony;
-
                     let link_1_order = link_1_harmony * node.dsorders[0];
                     let link_2_order = (1.0 - link_1_harmony) * node.dsorders[0];
 
+                    // Propagate orders upstream
                     for il in incoming {
                         if node.us_1_link_idx == Some(il.link_idx) {
                             upstream_orders[n_orders] = (il.from_node, il.from_outlet,
@@ -328,75 +312,79 @@ impl SimpleNodewiseOrderingSystem {
                         }
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 },
                 NodeEnum::OrderConstraintNode(node) => {
-                    // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    // Calculate orders
-                    let mut order = node.delay_order_buffer.push(node.dsorders[0]);
-                    if node.set_order_defined {
-                        node.set_order_value = node.set_order_input.get_value(data_cache);
-                        order = node.set_order_value;
-                    } else {
-                        if node.min_order_defined {
-                            node.min_order_value = node.min_order_input.get_value(data_cache);
-                            order = order.max(node.min_order_value);
-                        }
-                        if node.max_order_defined {
-                            node.max_order_value = node.max_order_input.get_value(data_cache);
-                            order = order.min(node.max_order_value);
-                        }
-                    }
-                    node.sent_order_value = order;
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 }
                 NodeEnum::SplitterNode(node) => {
-                    // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    // Splitter may have multiple downstream links. All orders propagate here.
-                    let order: f64 = node.dsorders.iter().sum();
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders.iter().sum());
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
                 }
                 NodeEnum::RegulatedUserNode(node) => {
-                    // Pre-order phase
-                    node.run_pre_order_phase(data_cache);
-                    // Calculate orders
-                    node.order_value = node.order_input.get_value(data_cache);
-                    let order = node.dsorders[0] + node.order_value;
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
-                        n_orders += 1;
-                    }
-                    // Order phase TODO: I think we can move these into the post order phase?
                     node.run_order_phase(data_cache);
-                    // Post-order phase
-                    node.run_post_order_phase(data_cache);
-                }
-                other => {
-                    // Pre-order phase
-                    other.run_pre_order_phase(data_cache);
-                    // For all other nodes, we follow a greedy philosophy, propagating all orders
-                    // up all pathways.
-                    let order = other.dsorders_mut()[0];
+                    // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, order);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0] + node.order_value);
                         n_orders += 1;
                     }
-                    // Post-order phase
-                    other.run_post_order_phase(data_cache);
-                },
+                }
+                NodeEnum::BlackholeNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream. zero.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, 0.0);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::GaugeNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::UnregulatedUserNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::Gr4jNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::RoutingNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::SacramentoNode(node) => {
+                    node.run_order_phase(data_cache);
+                    // Propagate orders upstream.
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
             }
 
             // Propagate computed orders to upstream nodes

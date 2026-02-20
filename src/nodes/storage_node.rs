@@ -54,6 +54,7 @@ pub struct StorageNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: f64,
 
     // Outlet definitions (MOL, capacity) - parsed from INI
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
@@ -97,6 +98,7 @@ impl StorageNode {
         Self {
             name: "".to_string(),
             d: Table::new(4),
+            usflow: 0.0,
             ..Default::default()
         }
     }
@@ -537,7 +539,7 @@ impl Node for StorageNode {
 
     fn get_name(&self) -> &str { &self.name }
 
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
@@ -552,10 +554,12 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_ds_4_order {
             data_cache.add_value_at_index(idx, self.dsorders[3]);
         }
-    }
 
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
-        // Nothing
+        // Calcualte orders
+        // self.usorders = 0.0
+        // TODO: allow storages to place orders
+        //   (1) to propagate orders through the storage if they opt out of delivering orders
+        //   (2) to meet target operating levels
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {

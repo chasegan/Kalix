@@ -26,6 +26,7 @@ pub struct InflowNode {
     pub order_phase_inflow_value: f64,
     pub recession_factor: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -83,16 +84,19 @@ impl Node for InflowNode {
         &self.name  // Return reference, not owned String
     }
 
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
-    }
 
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
-        // Nothing
+        // Calcualte upstream order
+        let inflow_value = self.inflow_input.get_value(data_cache);
+        self.order_phase_inflow_value = inflow_value;
+        let anticipated_inflow_on_delivery_timestep = inflow_value *
+            if self.order_travel_time_gt_0 { self.recession_factor } else { 1.0 };
+        self.usorders = (self.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {

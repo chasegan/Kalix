@@ -10,8 +10,6 @@ pub trait Node: DynClone + Sync + Send {
     fn remove_dsflow(&mut self, outlet: u8) -> f64;
     fn get_mass_balance(&self) -> f64;
     fn dsorders_mut(&mut self) -> &mut [f64];
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache);
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache);
 }
 
 clone_trait_object!(Node);

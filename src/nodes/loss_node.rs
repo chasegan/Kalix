@@ -22,6 +22,7 @@ pub struct LossNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -145,16 +146,15 @@ impl Node for LossNode {
         &self.name
     }
 
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
-    }
 
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
-        // Nothing
+        // Calculate usorders
+        self.usorders = self.order_translation_table.interpolate_or_extrapolate(self.dsorders[0]);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {

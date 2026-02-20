@@ -29,8 +29,8 @@ pub struct OrderConstraintNode {
     pub min_order_value: f64,
     pub max_order_value: f64,
     pub set_order_value: f64,
-    pub sent_order_value: f64,
     pub sent_order_buffer: FifoBuffer,
+    pub usorders: f64,
     usflow: f64,
     dsflow_primary: f64,
 
@@ -114,16 +114,29 @@ impl Node for OrderConstraintNode {
         &self.name
     }
 
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
-    }
 
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
-        // Nothing
+        // Calculate orders
+        let mut order = self.delay_order_buffer.push(self.dsorders[0]);
+        if self.set_order_defined {
+            self.set_order_value = self.set_order_input.get_value(data_cache);
+            order = self.set_order_value;
+        } else {
+            if self.min_order_defined {
+                self.min_order_value = self.min_order_input.get_value(data_cache);
+                order = order.max(self.min_order_value);
+            }
+            if self.max_order_defined {
+                self.max_order_value = self.max_order_input.get_value(data_cache);
+                order = order.min(self.max_order_value);
+            }
+        }
+        self.usorders = order;
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
@@ -135,7 +148,7 @@ impl Node for OrderConstraintNode {
 
         // Recall the order that is due today (and push the current order into the buffer)
         // TODO: can I just move this into the recorder if block? Is it okay to only do this if we are recording?
-        let order_due = self.sent_order_buffer.push(self.sent_order_value);
+        let order_due = self.sent_order_buffer.push(self.usorders);
 
         // Force flows if required, otherwise pass upstream value
         self.dsflow_primary = self.usflow;
@@ -160,7 +173,7 @@ impl Node for OrderConstraintNode {
             data_cache.add_value_at_index(idx, self.set_order_value);
         }
         if let Some(idx) = self.recorder_idx_order {
-            data_cache.add_value_at_index(idx, self.sent_order_value);
+            data_cache.add_value_at_index(idx, self.usorders);
         }
         if let Some(idx) = self.recorder_idx_order_due {
             data_cache.add_value_at_index(idx, order_due);

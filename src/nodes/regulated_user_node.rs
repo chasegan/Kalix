@@ -106,19 +106,17 @@ impl Node for RegulatedUserNode {
 
     fn get_name(&self) -> &str { &self.name }
 
-    fn run_pre_order_phase(&mut self, data_cache: &mut DataCache) {
+
+    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
-    }
 
-    fn run_post_order_phase(&mut self, data_cache: &mut DataCache) {
-        // Nothing
-    }
+        self.order_value = self.order_input.get_value(data_cache);
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+        // TODO: is this where things are supposed to happen?
 
         // Get demand value (this is equal to our old order, which is due to arrive today)
         self.order_due = self.order_buffer.push(self.order_value);
