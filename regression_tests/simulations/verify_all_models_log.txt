@@ -1,6 +1,6 @@
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 21 model file(s)
+Found 22 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   ✓ VERIFIED!
@@ -38,11 +38,23 @@ Verifying: 1_picnic_gr4j/kalix.ini
 Verifying: 20_loss_extrapolation/model.ini
   ✓ VERIFIED!
 
-Verifying: 21_storages_ordering/model.ini
-  ✓ VERIFIED!
+Verifying: 21_ordering_through_storages/model.ini
+  ✗ Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
+
+Verifying: 22_storage_target_level/model.ini
+  ✗ Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
 
 Verifying: 2_pioneer_val/model.ini
-  ✓ VERIFIED!
+  ✗ Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
 
 Verifying: 3_calibrate_constants/model.ini
   ✓ VERIFIED!
@@ -68,9 +80,24 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-20T23:20:28.999182
-Total: 21
-Passed: 21
-Failed: 0
+Timestamp: 2026-02-22T21:29:40.454313
+Total: 22
+Passed: 19
+Failed: 3
 
-✓ All models verified successfully!
+Failed models:
+  - 21_ordering_through_storages/model.ini
+    Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
+  - 22_storage_target_level/model.ini
+    Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+
+  - 2_pioneer_val/model.ini
+    Verification unclear: Loading model file: model.ini
+Running simulation...
+Done!
+

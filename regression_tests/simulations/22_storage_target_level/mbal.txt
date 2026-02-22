@@ -1,0 +1,32 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 12
+  Timesteps: 366
+  Stepsize (s): 86400
+  Period: 2011-01-01T00:00:00.000Z, 2012-01-01T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  daintree, 1.799999999999996
+
+REGULATED_USER NODES
+  avocado, -1.3999999999999766
+  herd, -1.3999999999999773
+  me, -1.3923497267759324
+
+STORAGE NODES
+  blue_lake, 3.0551799135016173
+  crater, -1.6628301867256847
+  duck_lake, -2.225222131959866
+  kings_canyon, -1.6456673148543026
+  tahoe, 3.0628301867256615
+  thousand_island, 1.825222131959889
+
+ROUTING NODES
+  lee_vining, -0.017162871871382553
+  tehachapi, 0
+
+----------------------------------
+TOTAL = 0.000000000000041300296516055823
+----------------------------------
