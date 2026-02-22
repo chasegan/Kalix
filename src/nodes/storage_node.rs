@@ -56,10 +56,15 @@ pub struct StorageNode {
     previous_istop: usize,  // Remember previous solution row for warm start
 
     // Orders
-    pub dsorders: [f64; MAX_DS_LINKS],
-    pub usorders: f64,
+    pub ds_orders: [f64; MAX_DS_LINKS],
+    pub ds_orders_due: [f64; MAX_DS_LINKS],
+    pub us_orders: f64,
     pub has_target_level: bool,
     pub target_level_order_buffer: FifoBuffer,
+    pub ds_1_order_buffer: FifoBuffer,
+    pub ds_2_order_buffer: FifoBuffer,
+    pub ds_3_order_buffer: FifoBuffer,
+    pub ds_4_order_buffer: FifoBuffer,
 
     // Outlet definitions (MOL, capacity) - parsed from INI
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
@@ -72,6 +77,7 @@ pub struct StorageNode {
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
     recorder_idx_level: Option<usize>,
+    recorder_idx_target_level: Option<usize>,
     recorder_idx_area: Option<usize>,
     recorder_idx_seep: Option<usize>,
     recorder_idx_evap: Option<usize>,
@@ -80,18 +86,22 @@ pub struct StorageNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_ds_1_order_due: Option<usize>,
     recorder_idx_ds_1_outlet: Option<usize>,
     recorder_idx_ds_1_spill: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
     recorder_idx_ds_2_order: Option<usize>,
+    recorder_idx_ds_2_order_due: Option<usize>,
     recorder_idx_ds_2_outlet: Option<usize>,
     recorder_idx_ds_2_spill: Option<usize>,
     recorder_idx_ds_3: Option<usize>,
     recorder_idx_ds_3_order: Option<usize>,
+    recorder_idx_ds_3_order_due: Option<usize>,
     recorder_idx_ds_3_outlet: Option<usize>,
     recorder_idx_ds_3_spill: Option<usize>,
     recorder_idx_ds_4: Option<usize>,
     recorder_idx_ds_4_order: Option<usize>,
+    recorder_idx_ds_4_order_due: Option<usize>,
     recorder_idx_ds_4_outlet: Option<usize>,
     recorder_idx_ds_4_spill: Option<usize>,
 }
@@ -119,7 +129,6 @@ impl StorageNode {
     // - "ds_1" (total): ds_1_spill + ds_1_outlet
     //
     // For ds_2, ds_3, ds_4: flow = outlet flow only (no spill component)
-    //
 
     /// Determines which outlets are active (able to release) at a given volume.
     /// An outlet is active if volume >= its minimum operating volume.
@@ -127,20 +136,20 @@ impl StorageNode {
     fn active_outlets_at_volume(&self, volume: f64) -> u8 {
         let mut active = 0u8;
         for i in 0..MAX_DS_LINKS {
-            if self.dsorders[i] > 0.0 && volume >= self.min_operating_volume[i] {
+            if self.ds_orders_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
                 active |= 1 << i;
             }
         }
         active
     }
 
-    /// Sums the orders for outlets specified by the mask.
+    /// Sums the orders_due for outlets specified by the mask.
     /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
-    fn sum_orders(&self, outlet_mask: u8) -> f64 {
+    fn sum_ds_orders_due(&self, outlet_mask: u8) -> f64 {
         let mut total = 0.0;
         for i in 0..MAX_DS_LINKS {
             if outlet_mask & (1 << i) != 0 {
-                total += self.dsorders[i];
+                total += self.ds_orders_due[i];
             }
         }
         total
@@ -160,18 +169,18 @@ impl StorageNode {
         net_rain_mm: f64,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize) {
         let nrows = self.d.nrows();
-        let ds_1_order = self.dsorders[0];
+        let ds_1_order_due = self.ds_orders_due[0];
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
         let (v_spill_only, spill, active_pass1, row_pass1) = self.solve_spill_limited_case(v_working, net_rain_mm, nrows);
 
         // Select which pass result to use
-        let (v_final, final_spill, active, row) = if spill >= ds_1_order {
+        let (v_final, final_spill, active, row) = if spill >= ds_1_order_due {
             // Spill satisfies ds_1 order - no controlled release needed
             (v_spill_only, spill, active_pass1, row_pass1)
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
-            self.solve_order_limited_case(v_working, net_rain_mm, ds_1_order, nrows)
+            self.solve_order_limited_case(v_working, net_rain_mm, ds_1_order_due, nrows)
         };
 
         // Compute available outflow from mass balance.
@@ -188,17 +197,17 @@ impl StorageNode {
         // ds_1: spill is uncontrollable, controlled release supplements up to order
         let ds_1_active = (active & 1) != 0;
         let ds1_flow = if ds_1_active {
-            ds_1_order.max(final_spill).min(remaining)
+            ds_1_order_due.max(final_spill).min(remaining)
         } else {
             final_spill.min(remaining)
         };
         ds_flows[0] = ds1_flow;
         remaining -= ds1_flow;
 
-        // ds_2, ds_3, ds_4: each gets min(order, remaining budget)
+        // ds_2, ds_3, ds_4: each gets min(order_due, remaining budget)
         for i in 1..MAX_DS_LINKS {
             if active & (1 << i) != 0 && remaining > EPSILON {
-                let flow = self.dsorders[i].min(remaining);
+                let flow = self.ds_orders_due[i].min(remaining);
                 ds_flows[i] = flow;
                 remaining -= flow;
             }
@@ -224,10 +233,10 @@ impl StorageNode {
         &self,
         v_working: f64,
         net_rain_mm: f64,
-        ds_1_order: f64,
+        ds_1_order_due: f64,
         nrows: usize,
     ) -> (f64, f64, u8, usize) {
-        self.solve_with_outflows(v_working, net_rain_mm, ds_1_order, nrows)
+        self.solve_with_outflows(v_working, net_rain_mm, ds_1_order_due, nrows)
     }
 
     /// Solves for equilibrium volume with a required minimum ds_1 flow.
@@ -248,14 +257,14 @@ impl StorageNode {
 
         for _iter in 0..MAX_ITERATIONS {
             // Sum orders for ds_2, ds_3, ds_4 based on active set
-            let ds234_orders = self.sum_orders(active & 0b1110);
+            let ds234_orders_due = self.sum_ds_orders_due(active & 0b1110);
 
             // ds_1 required flow is zero when ds_1 is below its MOL
             let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
 
             // Find equilibrium volume
             let (v_candidate, row) = self.find_equilibrium_volume(
-                v_working, net_rain_mm, effective_ds1, ds234_orders, nrows
+                v_working, net_rain_mm, effective_ds1, ds234_orders_due, nrows
             );
 
             // Check which outlets should be active at the candidate volume
@@ -279,7 +288,7 @@ impl StorageNode {
                         let spill = self.d.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
                         let outflow_needed = v_working + net_rain_mm * area - threshold_vol;
                         let ds1_flow = spill.max(effective_ds1);
-                        let total_outflow = ds1_flow + ds234_orders;
+                        let total_outflow = ds1_flow + ds234_orders_due;
 
                         if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
                             // Smaller active set can sustain the threshold volume
@@ -476,6 +485,9 @@ impl Node for StorageNode {
         self.recorder_idx_level = data_cache.get_series_idx(
             make_result_name(&self.name, "level").as_str(), false
         );
+        self.recorder_idx_target_level = data_cache.get_series_idx(
+            make_result_name(&self.name, "target_level").as_str(), false
+        );
         self.recorder_idx_area = data_cache.get_series_idx(
             make_result_name(&self.name, "area").as_str(), false
         );
@@ -542,6 +554,18 @@ impl Node for StorageNode {
         self.recorder_idx_ds_4_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4_order").as_str(), false
         );
+        self.recorder_idx_ds_1_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_order_due").as_str(), false
+        );
+        self.recorder_idx_ds_2_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_order_due").as_str(), false
+        );
+        self.recorder_idx_ds_3_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_order_due").as_str(), false
+        );
+        self.recorder_idx_ds_4_order_due = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_order_due").as_str(), false
+        );
 
         Ok(())
     }
@@ -550,18 +574,38 @@ impl Node for StorageNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
-        // Record downstream orders
+        // Record new downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
-            data_cache.add_value_at_index(idx, self.dsorders[0]);
+            data_cache.add_value_at_index(idx, self.ds_orders[0]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_order {
-            data_cache.add_value_at_index(idx, self.dsorders[1]);
+            data_cache.add_value_at_index(idx, self.ds_orders[1]);
         }
         if let Some(idx) = self.recorder_idx_ds_3_order {
-            data_cache.add_value_at_index(idx, self.dsorders[2]);
+            data_cache.add_value_at_index(idx, self.ds_orders[2]);
         }
         if let Some(idx) = self.recorder_idx_ds_4_order {
-            data_cache.add_value_at_index(idx, self.dsorders[3]);
+            data_cache.add_value_at_index(idx, self.ds_orders[3]);
+        }
+
+        // Update orders due
+        self.ds_orders_due[0] = self.ds_1_order_buffer.push(self.ds_orders[0]);
+        self.ds_orders_due[1] = self.ds_2_order_buffer.push(self.ds_orders[1]);
+        self.ds_orders_due[2] = self.ds_3_order_buffer.push(self.ds_orders[2]);
+        self.ds_orders_due[3] = self.ds_4_order_buffer.push(self.ds_orders[3]);
+
+        // Record orders due
+        if let Some(idx) = self.recorder_idx_ds_1_order_due {
+            data_cache.add_value_at_index(idx, self.ds_orders_due[0]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_order_due {
+            data_cache.add_value_at_index(idx, self.ds_orders_due[1]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_3_order_due {
+            data_cache.add_value_at_index(idx, self.ds_orders_due[2]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_order_due {
+            data_cache.add_value_at_index(idx, self.ds_orders_due[3]);
         }
 
         // Calculate orders
@@ -569,8 +613,7 @@ impl Node for StorageNode {
             //
             // 'Order through' means (1) the ordering system does not consider this storage
             // to be a supply, (2) total orders are propagated upstream without adjustment.
-            let total_order: f64 = self.dsorders.iter().sum();
-            self.usorders = total_order;
+            self.us_orders = self.ds_orders.iter().sum();
             //
         } else if self.has_target_level {
             //
@@ -587,25 +630,20 @@ impl Node for StorageNode {
             //    - no subsequent releases will be made
             // 3) order what is required to reach our target volume
             let target_level = self.target_level.get_value(data_cache);
-            // TODO: we probably want a recorder for the target level
-            //if self.level > target_level {
-            if false {
-                // The level is already above the target level. No order needed.
-                self.usorders = 0.0;
-                self.target_level_order_buffer.push(self.usorders);
-            } else {
-                // The level is below the target level. We need convert this to a volume and
-                // compare it with our forecast volume.
-                let target_volume = self.d.interpolate_or_extrapolate(LEVL, VOLU, target_level);
-                //TODO: it could be possible to keep a running forecast inflow here, add new orders
-                // to it and subtract orders as they pop out of the buffer (rather than summing the
-                // order buffer every time). It may be noticeable for long travel times.
-                let inflows = self.target_level_order_buffer.sum();
-                let dsorders: f64 = self.dsorders.iter().sum();
-                let forecast_volume = self.v + inflows - dsorders;
-                self.usorders = (target_volume - forecast_volume).max(0.0);
-                self.target_level_order_buffer.push(self.usorders);
+            if let Some(idx) = self.recorder_idx_target_level {
+                data_cache.add_value_at_index(idx, target_level);
             }
+            // The level is below the target level. We need convert this to a volume and
+            // compare it with our forecast volume.
+            let target_volume = self.d.interpolate_or_extrapolate(LEVL, VOLU, target_level);
+            //TODO: it could be possible to keep a running forecast inflow here, add new orders
+            // to it and subtract orders as they pop out of the buffer (rather than summing the
+            // order buffer every time). It may be noticeable for long travel times.
+            let inflows = self.target_level_order_buffer.sum();
+            let known_usage: f64 = self.ds_orders_due.iter().sum();
+            let forecast_volume = self.v + inflows - known_usage;
+            self.us_orders = (target_volume - forecast_volume).max(0.0);
+            self.target_level_order_buffer.push(self.us_orders);
         } else {
             // Storage does not order upstream
             // self.usorders = 0.0
@@ -726,18 +764,6 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_ds_4_spill {
             data_cache.add_value_at_index(idx, 0.0);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
-        // if let Some(idx) = self.recorder_idx_ds_2_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[1]);
-        // }
-        // if let Some(idx) = self.recorder_idx_ds_3_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[2]);
-        // }
-        // if let Some(idx) = self.recorder_idx_ds_4_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[3]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
@@ -784,6 +810,6 @@ impl Node for StorageNode {
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
+        &mut self.ds_orders
     }
 }
