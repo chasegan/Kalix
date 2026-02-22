@@ -112,6 +112,9 @@ public class NodeValidator implements ValidationStrategy {
                     validateStringPattern(prop, paramDef.pattern, result);
                 }
                 break;
+            case "boolean":
+                validateBoolean(prop, schema, result);
+                break;
             case "literal":
                 // Literal values are validated during parsing
                 break;
@@ -241,6 +244,15 @@ public class NodeValidator implements ValidationStrategy {
             }
         } catch (NumberFormatException e) {
             // Already handled by pattern validation above
+        }
+    }
+
+    private void validateBoolean(INIModelParser.Property prop, LinterSchema schema, ValidationResult result) {
+        DataType booleanType = schema.getDataType("boolean");
+        if (booleanType != null && !booleanType.matches(prop.getValue())) {
+            result.addIssue(prop.getLineNumber(),
+                          "Invalid boolean format: " + prop.getValue() + " (expected 'true' or 'false')",
+                          ValidationRule.Severity.ERROR, "invalid_boolean");
         }
     }
 
