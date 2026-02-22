@@ -1,4 +1,4 @@
-// About the nodewise ordering system
+// About the ordering system
 // =========================================
 // This is an alternative to simple_ordering.rs. The key difference is that this system iterates
 // over nodes in reverse definition order (highest index to lowest), rather than iterating over
@@ -129,8 +129,12 @@ impl SimpleNodewiseOrderingSystem {
             if new_link_item.zone_idx.is_some() {
                 match &mut nodes[new_link_item.to_node] {
                     NodeEnum::StorageNode(node) => {
+                        let int_lag = new_link_item.lag.round() as usize;
+                        node.ds_1_order_buffer = FifoBuffer::new(int_lag);
+                        node.ds_2_order_buffer = FifoBuffer::new(int_lag);
+                        node.ds_3_order_buffer = FifoBuffer::new(int_lag);
+                        node.ds_4_order_buffer = FifoBuffer::new(int_lag);
                         if node.has_target_level {
-                            let int_lag = new_link_item.lag.round() as usize;
                             node.target_level_order_buffer = FifoBuffer::new(int_lag);
                         }
                     },
@@ -242,6 +246,25 @@ impl SimpleNodewiseOrderingSystem {
             });
         }
 
+        // Phase 4: Include supply storages that define regulated zones but have no incoming
+        // regulated links (i.e. they are at the top of the network). These nodes still need
+        // run_order_phase() called so that their ds_orders_due buffers are updated, even though
+        // they have no upstream orders to propagate.
+        for li in &self.links_simple_ordering {
+            if li.zone_idx.is_some() {
+                if let NodeEnum::StorageNode(_) = &nodes[li.from_node] {
+                    if !self.regulated_nodes.iter().any(|e| e.node_idx == li.from_node) {
+                        let start = self.flat_incoming_links.len();
+                        self.regulated_nodes.push(RegulatedNodeEntry {
+                            node_idx: li.from_node,
+                            links_start: start,
+                            links_end: start, // empty range: no incoming regulated links
+                        });
+                    }
+                }
+            }
+        }
+
         // Do we ever need to run the ordering phase?
         self.model_has_ordering = self.regulated_zone_counter > 0;
     }
@@ -281,7 +304,7 @@ impl SimpleNodewiseOrderingSystem {
                     node.run_order_phase(data_cache);
                     // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.us_orders);
                         n_orders += 1;
                     }
                 },
