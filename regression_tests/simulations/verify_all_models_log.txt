@@ -39,10 +39,7 @@ Verifying: 20_loss_extrapolation/model.ini
   ✓ VERIFIED!
 
 Verifying: 21_ordering_through_storages/model.ini
-  ✗ Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
+  ✓ VERIFIED!
 
 Verifying: 22_storage_target_level/model.ini
   ✗ Verification unclear: Loading model file: model.ini
@@ -80,17 +77,12 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-22T21:29:40.454313
+Timestamp: 2026-02-23T11:09:44.494623
 Total: 22
-Passed: 19
-Failed: 3
+Passed: 20
+Failed: 2
 
 Failed models:
-  - 21_ordering_through_storages/model.ini
-    Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
   - 22_storage_target_level/model.ini
     Verification unclear: Loading model file: model.ini
 Running simulation...

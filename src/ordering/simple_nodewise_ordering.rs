@@ -1,21 +1,12 @@
 // About the ordering system
 // =========================================
-// This is an alternative to simple_ordering.rs. The key difference is that this system iterates
-// over nodes in reverse definition order (highest index to lowest), rather than iterating over
-// links in reverse link-index order. Since check_execution_order() enforces from_node < to_node
-// for all links, reverse node order guarantees that downstream nodes are always processed before
-// upstream nodes. This produces a strict reverse-node-definition-order execution, which the
-// link-based approach does not guarantee when branches exist (e.g. after splitters).
+// This system iterates over nodes in reverse definition order (highest index to lowest). Since
+// check_execution_order() enforces from_node < to_node for all links, reverse node order guarantees
+// that downstream nodes are always processed before upstream nodes.
 //
-// The initialize() method is identical to simple_ordering.rs (zone propagation and lag computation
-// depend on forward link iteration). The run_ordering_phase() method is restructured to iterate
-// nodes rather than links.
+// The initialize() method - zone propagation and lag computation depend on forward link iteration.
 //
-// The confluence node is handled more cleanly here: it is visited once (rather than twice, once
-// per incoming link), and both upstream orders are computed simultaneously. This eliminates the
-// need for the order_prepared_for_us_1_buffer / order_prepared_for_us_2_buffer staging fields.
-//
-// Performance notes:
+// The run_ordering_phase() - iterates nodes.
 // - Only regulated nodes are visited (pre-filtered during initialize)
 // - Incoming regulated links are stored in a flat CSR-style layout for cache locality
 
@@ -69,6 +60,12 @@ impl SimpleNodewiseOrderingSystem {
                       nodes: &mut Vec<NodeEnum>,
                       links: &Vec<Link>,
                       incoming_links: &Vec<Vec<usize>>) -> () {
+        // 'nodes' is a borrowed vector of all nodes (as NodeEnums) in definition order
+        // 'links' is a borrowed vector of all links, where a link has from_node, from_outlet,
+        //         to_node, to_inlet.
+        // 'incoming_links' is a derived adjacency list where
+        //         incoming_links[node_idx] = vec of indices for link coming into node idx. This
+        //         is handy for navigating up the network.
 
         // Start clean
         self.links_simple_ordering.clear();
@@ -438,6 +435,5 @@ struct LinkInfo {
     from_node: usize,
     from_outlet: u8,
     to_node: usize,
-    #[allow(dead_code)]
     to_inlet: u8,
 }

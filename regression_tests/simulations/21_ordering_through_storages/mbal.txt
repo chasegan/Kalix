@@ -1,26 +1,33 @@
 ==================================
 MASS BALANCE REPORT
 ==================================
-  Node count: 8
-  Timesteps: 20
+  Node count: 13
+  Timesteps: 10
   Stepsize (s): 86400
-  Period: 2011-01-01T00:00:00.000Z, 2011-01-20T00:00:00.000Z
+  Period: 2011-01-01T00:00:00.000Z, 2011-01-10T00:00:00.000Z
   Note: units are ML/timestep
 
+INFLOW NODES
+  bear_creek, 8
+  deer_creek, 8
+
 REGULATED_USER NODES
-  me, -35
-  usr, -32.5
+  dow, -40
+  me, -40
+  usr, -35
 
 STORAGE NODES
-  blue_lake, 35
-  crater, 2.5
-  kings_canyon, 2.5
+  blue_lake, 46
+  crater, 0
+  forester_pass, 45
+  kings_canyon, -4
+  muir_lake, -3
   tahoe, 35
 
 ROUTING NODES
-  lee_vining, -2.5
-  tualomine, -2.5
+  lee_vining, -10
+  sonora, -10
 
 ----------------------------------
-TOTAL = 2.5
+TOTAL = 0
 ----------------------------------
