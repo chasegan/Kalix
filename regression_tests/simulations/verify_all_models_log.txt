@@ -42,16 +42,10 @@ Verifying: 21_ordering_through_storages/model.ini
   ✓ VERIFIED!
 
 Verifying: 22_storage_target_level/model.ini
-  ✗ Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
+  ✓ VERIFIED!
 
 Verifying: 2_pioneer_val/model.ini
-  ✗ Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
+  ✓ VERIFIED!
 
 Verifying: 3_calibrate_constants/model.ini
   ✓ VERIFIED!
@@ -77,19 +71,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-02-23T11:09:44.494623
+Timestamp: 2026-02-23T12:37:12.840057
 Total: 22
-Passed: 20
-Failed: 2
+Passed: 22
+Failed: 0
 
-Failed models:
-  - 22_storage_target_level/model.ini
-    Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
-  - 2_pioneer_val/model.ini
-    Verification unclear: Loading model file: model.ini
-Running simulation...
-Done!
-
+✓ All models verified successfully!
