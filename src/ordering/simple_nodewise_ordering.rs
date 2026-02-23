@@ -127,12 +127,30 @@ impl SimpleNodewiseOrderingSystem {
                 match &mut nodes[new_link_item.to_node] {
                     NodeEnum::StorageNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
-                        node.ds_1_order_buffer = FifoBuffer::new(int_lag);
-                        node.ds_2_order_buffer = FifoBuffer::new(int_lag);
-                        node.ds_3_order_buffer = FifoBuffer::new(int_lag);
-                        node.ds_4_order_buffer = FifoBuffer::new(int_lag);
-                        if node.has_target_level {
-                            node.target_level_order_buffer = FifoBuffer::new(int_lag);
+                        if node.order_through {
+                            // Set order buffers to delay releases.
+                            node.ds_1_order_buffer = FifoBuffer::new(int_lag);
+                            node.ds_2_order_buffer = FifoBuffer::new(int_lag);
+                            node.ds_3_order_buffer = FifoBuffer::new(int_lag);
+                            node.ds_4_order_buffer = FifoBuffer::new(int_lag);
+                            // Probably not necessary:
+                            node.target_level_order_buffer = FifoBuffer::new(0);
+                        } else {
+                            // If order_through == false, then we are supplying immediately. Do
+                            // not delay releases; set ds_x_order buffers to zero length.
+                            node.ds_1_order_buffer = FifoBuffer::new(0);
+                            node.ds_2_order_buffer = FifoBuffer::new(0);
+                            node.ds_3_order_buffer = FifoBuffer::new(0);
+                            node.ds_4_order_buffer = FifoBuffer::new(0);
+                            // Initialize the buffer that remembers upstream orders associated
+                            // with ordering to meet target level.
+                            
+                            if node.has_target_level {
+                                node.target_level_order_buffer = FifoBuffer::new(int_lag);
+                            } else {
+                                // Probably not necessary:
+                                node.target_level_order_buffer = FifoBuffer::new(0);
+                            }
                         }
                     },
                     NodeEnum::RegulatedUserNode(node) => {
