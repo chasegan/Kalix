@@ -10,7 +10,7 @@ const LEVL: usize = 0;
 const VOLU: usize = 1;
 const AREA: usize = 2;
 const SPIL: usize = 3;
-const EPSILON: f64 = 1e-3;
+const EPSILON: f64 = 1e-6;
 const MAX_DS_LINKS: usize = 4;
 
 /// Defines outlet configuration including minimum operating level (MOL) and capacity.
