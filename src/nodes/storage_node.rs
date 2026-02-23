@@ -176,8 +176,11 @@ impl StorageNode {
 
         // Select which pass result to use
         let (v_final, final_spill, active, row, unconstrained) = if spill >= ds_1_order_due {
-            // Spill satisfies ds_1 order - no controlled release needed
-            (v_spill_only, spill, active_pass1, row_pass1, unc_pass1)
+            // Spill satisfies ds_1 order - no controlled release needed.
+            // Always use mass balance here (unconstrained=false): the interpolated spill
+            // can have large FP error when the volume is near a steep spill curve, whereas
+            // mass balance (v_initial - v_final) stays accurate.
+            (v_spill_only, spill, active_pass1, row_pass1, false)
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
             self.solve_order_limited_case(v_initial, net_rain_mm, ds_1_order_due, nrows)

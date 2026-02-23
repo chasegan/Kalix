@@ -1,0 +1,42 @@
+[kalix]
+start = 2011-01-01
+end = 2011-01-10
+
+#################################################################
+
+[node.blue_lake]
+loc = 4.48, -22.51
+type = storage
+initial_volume = 10000
+dimensions = Level [m], Volume [ML], Area [km2], Spill [ML], 
+             0.0      , 0.0        , 0.0       , 0.0, 
+             1.0      , 10000.0    , 3.0       , 0.0, 
+             1.0003   , 10001.0    , 3.002     , 1.0E9, 
+             100.0    , 1.0E9      , 30000.0   , 1.0E9, 
+ds_1 = kings_canyon
+
+[node.kings_canyon]
+loc = 4.48, 37.49
+type = storage
+target_level = 0.6 + 0.1*sin(3.141*sim.step/180)
+initial_volume = 100
+dimensions = Level [m], Volume [ML], Area [km2], Spill [ML], 
+             0.0      , 0.0        , 0.0       , 0.0, 
+             1.0      , 1000.0     , 3.0       , 0.0, 
+             1.0003   , 1001.0     , 3.002     , 1.0E9, 
+             100.0    , 1.0E9      , 30000.0   , 1.0E9, 
+ds_1 = me
+
+[node.me]
+loc = 4.48, 67.49
+type = regulated_user
+order = 1.4
+
+#################################################################
+
+[outputs]
+node.kings_canyon.ds_1
+node.kings_canyon.ds_1_order
+node.me.order
+node.me.diversion
+
