@@ -1,13 +1,10 @@
-[workspace]
-members = ["kalixpy"]
-
 [package]
 name = "kalix"
 version = "0.2.2"
 edition = "2021"
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -26,12 +23,6 @@ thiserror = "1.0"
 base64 = "0.22"
 rustc-hash = "2.0"
 indexmap = "2.0"
-
-[dependencies.pyo3]
-version = "0.23.1"
-features = [
-    "abi3-py38",
-] # "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
 
 [dependencies.uuid]
 version = "1.1.2"

@@ -7,7 +7,6 @@ Usage:
 
 This script reads the version from the VERSION file and updates:
     - Cargo.toml
-    - kalixpy/Cargo.toml
 """
 import re
 from pathlib import Path
@@ -26,7 +25,6 @@ def main():
 
     cargo_files = [
         root / "Cargo.toml",
-        root / "kalixpy" / "Cargo.toml"
     ]
 
     for cargo_file in cargo_files:
