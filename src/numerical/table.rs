@@ -235,7 +235,7 @@ impl Table {
     /// row if value is before (after) the table range.
     pub fn find_row_for_interpolation_or_extrapolation(&self, col: usize, value: f64) -> usize {
         let nrows = self.nrows();
-        if value < self.get_value(0, col) { 0; }
+        if value < self.get_value(0, col) { return 0; }
         if value > self.get_value(nrows-2, col) {
             // Instead of comparing to the very last value, data[nrows-1], we
             // might as well compare to data[nrows-2] since any value larger

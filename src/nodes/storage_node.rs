@@ -41,10 +41,7 @@ pub struct StorageNode {
     // Internal state only
     usflow: f64,
     dsflow: f64,
-    ds_1_flow: f64,
-    ds_2_flow: f64,
-    ds_3_flow: f64,
-    ds_4_flow: f64,
+    ds_flows: [f64; MAX_DS_LINKS],
     level: f64,
     rain_vol: f64,
     evap_vol: f64,
@@ -162,17 +159,18 @@ impl StorageNode {
     /// - If spill >= ds_1_order: done, ds_1 flow = spill
     /// - Pass 2: Solve order-limited case (ds_1_outlet = order, subject to MOL)
     ///
-    /// Returns (final_volume, ds_flows[4], spill, table_row)
+    /// Returns (final_volume, ds_flows[4], spill, table_row, area)
     fn solve_backward_euler(
         &self,
         v_initial: f64,
         net_rain_mm: f64,
-    ) -> (f64, [f64; MAX_DS_LINKS], f64, usize) {
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
         let nrows = self.d.nrows();
         let ds_1_order_due = self.ds_orders_due[0];
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
-        let (v_spill_only, spill, active_pass1, row_pass1, unc_pass1) = self.solve_spill_limited_case(v_initial, net_rain_mm, nrows);
+        let (v_spill_only, spill, active_pass1, row_pass1, _unc_pass1) =
+            self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop);
 
         // Select which pass result to use
         let (v_final, final_spill, active, row, unconstrained) = if spill >= ds_1_order_due {
@@ -183,8 +181,12 @@ impl StorageNode {
             (v_spill_only, spill, active_pass1, row_pass1, false)
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
-            self.solve_order_limited_case(v_initial, net_rain_mm, ds_1_order_due, nrows)
+            // Warm start from pass 1 row since solutions are nearby
+            self.solve_order_limited_case(v_initial, net_rain_mm, ds_1_order_due, nrows, row_pass1 + 1)
         };
+
+        // Compute area once (used by both allocation logic and caller)
+        let area = self.d.interpolate_row(row, VOLU, AREA, v_final);
 
         // Allocate outflows to each downstream link.
         // When unconstrained, use orders directly to avoid floating point noise from mass balance.
@@ -193,7 +195,6 @@ impl StorageNode {
         let mut remaining = if unconstrained {
             f64::INFINITY
         } else {
-            let area = self.d.interpolate_row(row, VOLU, AREA, v_final);
             (v_initial + net_rain_mm * area - v_final).max(0.0)
         };
 
@@ -217,25 +218,34 @@ impl StorageNode {
             }
         }
 
-        (v_final, ds_flows, final_spill, row)
+        (v_final, ds_flows, final_spill, row, area)
     }
 
     /// Solves the spill-limited case: no required ds_1 flow, spill alone determines ds_1.
     /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
+    #[inline(always)]
     fn solve_spill_limited_case(
         &self,
         v_working: f64,
         net_rain_mm: f64,
         nrows: usize,
+        start_row: usize,
     ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows)
+        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows, start_row)
     }
 
     /// Solves the order-limited case: ds_1 must flow at least the order amount.
     /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
-    fn solve_order_limited_case(&self, v_initial: f64, net_rain_mm: f64, ds_1_order_due: f64, nrows: usize)
-                                -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_order_due, nrows)
+    #[inline(always)]
+    fn solve_order_limited_case(
+        &self,
+        v_initial: f64,
+        net_rain_mm: f64,
+        ds_1_order_due: f64,
+        nrows: usize,
+        start_row: usize,
+    ) -> (f64, f64, u8, usize, bool) {
+        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_order_due, nrows, start_row)
     }
 
     /// Solves for equilibrium volume with a required minimum ds_1 flow.
@@ -245,10 +255,17 @@ impl StorageNode {
     /// `unconstrained` is true when the solver converged naturally (stable active set) — all active
     /// outlets can release their full orders. False when the solution was clamped to a threshold
     /// or the solver did not converge, meaning available outflow may be less than total orders.
-    fn solve_with_outflows(&self, v_initial: f64, net_rain_mm: f64, ds1_required_flow: f64, nrows: usize)
-                           -> (f64, f64, u8, usize, bool) {
+    fn solve_with_outflows(
+        &self,
+        v_initial: f64,
+        net_rain_mm: f64,
+        ds1_required_flow: f64,
+        nrows: usize,
+        start_row: usize,
+    ) -> (f64, f64, u8, usize, bool) {
         // Start with outlets active based on current volume
         let mut active = self.active_outlets_at_volume(v_initial);
+        let mut hint = start_row;
 
         const MAX_ITERATIONS: usize = 8;
 
@@ -261,7 +278,7 @@ impl StorageNode {
 
             // Find equilibrium volume
             let (v_candidate, row) = self.find_equilibrium_volume(
-                v_initial, net_rain_mm, effective_ds1, ds234_orders_due, nrows
+                v_initial, net_rain_mm, effective_ds1, ds234_orders_due, nrows, hint
             );
 
             // Check which outlets should be active at the candidate volume
@@ -277,7 +294,7 @@ impl StorageNode {
             // If outlets are only being deactivated, just update and re-solve.
             let reactivating = new_active & !active;
             if reactivating != 0 {
-                if let Some((threshold_vol, _throttled_outlet)) =
+                if let Some(threshold_vol) =
                     self.find_crossed_threshold(v_candidate, active, new_active)
                 {
                     if let Some(thr_row) = self.d.find_row_for_interpolation(VOLU, threshold_vol) {
@@ -299,6 +316,8 @@ impl StorageNode {
                 }
             }
 
+            // Warm start next iteration from current solution
+            hint = row + 1;
             active = new_active;
         }
 
@@ -322,6 +341,7 @@ impl StorageNode {
         ds1_required_flow: f64,
         ds234_orders: f64,
         nrows: usize,
+        start_row: usize,
     ) -> (f64, usize) {
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
@@ -335,58 +355,67 @@ impl StorageNode {
             table_vol - predicted
         };
 
-        // Exponential expansion from previous solution
-        let start = self.previous_istop.min(nrows - 1);
+        // Exponential expansion from start_row hint
+        let start = start_row.min(nrows - 1);
         let error_start = compute_error(start);
 
-        let (mut lo, mut hi) = if error_start < 0.0 {
+        let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
             // Solution is above start row - expand upward
             let mut lo = start;
+            let mut error_lo = error_start;
             let mut step = 1;
             let mut hi = (start + step).min(nrows - 1);
-            while compute_error(hi) < 0.0 && hi < nrows - 1 {
+            let mut error_hi = compute_error(hi);
+            while error_hi < 0.0 && hi < nrows - 1 {
                 lo = hi;
+                error_lo = error_hi;
                 step *= 2;
                 hi = (hi + step).min(nrows - 1);
+                error_hi = compute_error(hi);
             }
-            (lo, hi)
+            (lo, hi, error_lo, error_hi)
         } else {
             // Solution is at or below start row - expand downward
             let mut hi = start;
+            let mut error_hi = error_start;
             let mut step = 1;
             let mut lo = start.saturating_sub(step);
-            while compute_error(lo) >= 0.0 && lo > 0 {
+            let mut error_lo = compute_error(lo);
+            while error_lo >= 0.0 && lo > 0 {
                 hi = lo;
+                error_hi = error_lo;
                 step *= 2;
                 lo = lo.saturating_sub(step);
+                error_lo = compute_error(lo);
             }
-            (lo, hi)
+            (lo, hi, error_lo, error_hi)
         };
 
-        // Bisect to find exact bracket
+        // Bisect to find exact bracket, caching error values
         while hi - lo > 1 {
             let mid = lo + (hi - lo) / 2;
-            if compute_error(mid) < 0.0 {
+            let error_mid = compute_error(mid);
+            if error_mid < 0.0 {
                 lo = mid;
+                error_lo = error_mid;
             } else {
                 hi = mid;
+                error_hi = error_mid;
             }
         }
 
         let istop = hi;
-        let error_i = compute_error(istop);
 
         // Handle floor case (solution at or below row 0)
         if istop == 0 {
             return (self.d.get_value(0, VOLU), 0);
         }
-        // Ceiling case (error_i < 0): allow extrapolation beyond table max
+        // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
 
-        // Interpolate between rows
+        // Interpolate between rows using cached errors (no recomputation)
         let row = istop - 1;
-        let error_prev = compute_error(row);
-        let x = error_prev / (error_prev - error_i);
+        let x = error_lo / (error_lo - error_hi);
         let v_lo = self.d.get_value(row, VOLU);
         let v_hi = self.d.get_value(istop, VOLU);
 
@@ -394,17 +423,17 @@ impl StorageNode {
     }
 
     /// Finds which MOL threshold was crossed between old and new active sets.
-    /// Returns (threshold_volume, outlet_index) for the crossed threshold.
+    /// Returns the threshold volume closest to the candidate volume.
     fn find_crossed_threshold(
         &self,
         v_candidate: f64,
         old_active: u8,
         new_active: u8,
-    ) -> Option<(f64, usize)> {
+    ) -> Option<f64> {
         let changed = old_active ^ new_active;
 
         // Find the threshold closest to the candidate volume
-        let mut best: Option<(f64, usize)> = None;
+        let mut best: Option<f64> = None;
         let mut best_dist = f64::MAX;
 
         for i in 0..MAX_DS_LINKS {
@@ -413,7 +442,7 @@ impl StorageNode {
                 let dist = (threshold - v_candidate).abs();
                 if dist < best_dist {
                     best_dist = dist;
-                    best = Some((threshold, i));
+                    best = Some(threshold);
                 }
             }
         }
@@ -429,10 +458,7 @@ impl Node for StorageNode {
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow = 0.0;
-        self.ds_1_flow = 0.0;
-        self.ds_2_flow = 0.0;
-        self.ds_3_flow = 0.0;
-        self.ds_4_flow = 0.0;
+        self.ds_flows = [0.0; MAX_DS_LINKS];
         self.v = self.v_initial;
         self.level = 0.0;
         self.rain_vol = 0.0;
@@ -454,6 +480,17 @@ impl Node for StorageNode {
         if self.d.get_value(0, AREA) != 0_f64 {
             let message = format!("Error in node '{}'. Storage dimension table must begin with area=0.", self.name);
             return Err(message);
+        }
+
+        // Validate that volumes are strictly increasing (required for solver interpolation)
+        for i in 1..self.d.nrows() {
+            if self.d.get_value(i, VOLU) <= self.d.get_value(i - 1, VOLU) {
+                let message = format!(
+                    "Error in node '{}'. Storage dimension table volumes must be strictly increasing (violation at row {}).",
+                    self.name, i + 1
+                );
+                return Err(message);
+            }
         }
 
         // Convert outlet definitions (MOL levels) to volumes
@@ -672,21 +709,17 @@ impl Node for StorageNode {
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
 
         // Solve backward Euler
-        let (v_final, ds_flows, spill, row) = self.solve_backward_euler(self.v, net_rain_mm);
+        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.v, net_rain_mm);
 
         // Update warm-start cache for next timestep (expects upper bracket)
         self.previous_istop = row + 1;
 
-        // Update state from solution using row from solver (no extra binary searches)
+        // Update state from solution (area already computed by solver)
         self.v = v_final;
         self.level = self.d.interpolate_row(row, VOLU, LEVL, v_final);
-        let area_km2 = self.d.interpolate_row(row, VOLU, AREA, v_final);
         self.spill = spill;
-        self.ds_1_flow = ds_flows[0];
-        self.ds_2_flow = ds_flows[1];
-        self.ds_3_flow = ds_flows[2];
-        self.ds_4_flow = ds_flows[3];
-        self.dsflow = self.ds_1_flow + self.ds_2_flow + self.ds_3_flow + self.ds_4_flow;
+        self.ds_flows = ds_flows;
+        self.dsflow = self.ds_flows.iter().sum();
 
         // Compute climate volumes using solved area
         self.rain_vol = rain_mm * area_km2;
@@ -722,38 +755,38 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.dsflow);
         }
         if let Some(idx) = self.recorder_idx_ds_1 {
-            data_cache.add_value_at_index(idx, self.ds_1_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[0]);
         }
         if let Some(idx) = self.recorder_idx_ds_1_outlet {
-            let ds_1_outlet_flow = (self.ds_1_flow - self.spill).max(0.0);
+            let ds_1_outlet_flow = (self.ds_flows[0] - self.spill).max(0.0);
             data_cache.add_value_at_index(idx, ds_1_outlet_flow);
         }
         if let Some(idx) = self.recorder_idx_ds_1_spill {
             data_cache.add_value_at_index(idx, self.spill);
         }
         if let Some(idx) = self.recorder_idx_ds_2 {
-            data_cache.add_value_at_index(idx, self.ds_2_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[1]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_outlet {
-            data_cache.add_value_at_index(idx, self.ds_2_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[1]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_spill {
             data_cache.add_value_at_index(idx, 0.0);
         }
         if let Some(idx) = self.recorder_idx_ds_3 {
-            data_cache.add_value_at_index(idx, self.ds_3_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[2]);
         }
         if let Some(idx) = self.recorder_idx_ds_3_outlet {
-            data_cache.add_value_at_index(idx, self.ds_3_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[2]);
         }
         if let Some(idx) = self.recorder_idx_ds_3_spill {
             data_cache.add_value_at_index(idx, 0.0);
         }
         if let Some(idx) = self.recorder_idx_ds_4 {
-            data_cache.add_value_at_index(idx, self.ds_4_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[3]);
         }
         if let Some(idx) = self.recorder_idx_ds_4_outlet {
-            data_cache.add_value_at_index(idx, self.ds_4_flow);
+            data_cache.add_value_at_index(idx, self.ds_flows[3]);
         }
         if let Some(idx) = self.recorder_idx_ds_4_spill {
             data_cache.add_value_at_index(idx, 0.0);
@@ -774,28 +807,13 @@ impl Node for StorageNode {
     ///      * plus rainfall in excess of seep and evap
     ///      * that a large demand will leave volume = 0 at the end of the day
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.ds_1_flow;
-                self.ds_1_flow = 0.0;
-                outflow
-            }
-            1 => {
-                let outflow = self.ds_2_flow;
-                self.ds_2_flow = 0.0;
-                outflow
-            }
-            2 => {
-                let outflow = self.ds_3_flow;
-                self.ds_3_flow = 0.0;
-                outflow
-            }
-            3 => {
-                let outflow = self.ds_4_flow;
-                self.ds_4_flow = 0.0;
-                outflow
-            }
-            _ => 0.0,
+        let idx = outlet as usize;
+        if idx < MAX_DS_LINKS {
+            let outflow = self.ds_flows[idx];
+            self.ds_flows[idx] = 0.0;
+            outflow
+        } else {
+            0.0
         }
     }
 
