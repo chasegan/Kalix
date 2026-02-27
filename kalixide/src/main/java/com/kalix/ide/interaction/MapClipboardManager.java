@@ -141,11 +141,11 @@ public class MapClipboardManager {
         StringBuilder insertText = new StringBuilder();
         for (String sectionText : sectionTexts) {
             if (!insertText.isEmpty()) {
-                insertText.append("\n");
+                insertText.append("\n\n");
             }
-            // Ensure section doesn't have leading newline
-            String trimmed = sectionText.startsWith("\n") ? sectionText.substring(1) : sectionText;
-            insertText.append(trimmed);
+            // Strip trailing whitespace - the regex capture includes trailing blank lines,
+            // and we use "\n\n" as the join separator to get exactly one blank line between sections
+            insertText.append(sectionText.stripTrailing());
         }
 
         // Ensure proper formatting - add newline before if needed

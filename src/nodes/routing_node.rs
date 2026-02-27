@@ -2,7 +2,7 @@ use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::data_management::data_cache::DataCache;
 use crate::misc::location::Location;
-use super::super::numerical::mathfn::quadratic_plus;
+use crate::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
 
 const MAX_DS_LINKS: usize = 1;
@@ -121,7 +121,7 @@ impl RoutingNode {
     /// Calculate the node storage by adding up all water volumes in the
     /// lag array and pwl arrays.
     fn calculate_storage(&mut self) -> f64 {
-        let mut answer = 0f64;
+        let mut answer = 0.0;
         for i in 0..self.lag_sto_used {
             answer += self.lag_sto_array[i];
         }
@@ -142,19 +142,47 @@ impl Node for RoutingNode {
         self.dsflow_primary = 0.0;
         self.storage_volume = 0.0;
 
-        // Init for lag routing
-        for i in 0..self.lag_sto_array.len(){
-            self.lag_sto_array[i] = 0_f64;
+        // Validate array bounds
+        if self.lag >= self.lag_sto_array.len() {
+            return Err(format!(
+                "Error in node '{}'. Lag value {} exceeds maximum of {}.",
+                self.name, self.lag, self.lag_sto_array.len() - 1
+            ));
         }
+        if self.pwl_divs > self.pwl_sto_array.len() {
+            return Err(format!(
+                "Error in node '{}'. Number of divisions {} exceeds maximum of {}.",
+                self.name, self.pwl_divs, self.pwl_sto_array.len()
+            ));
+        }
+        if self.pwl_segs + 1 > self.pwl_qq.len() {
+            return Err(format!(
+                "Error in node '{}'. Routing table has {} points which exceeds maximum of {}.",
+                self.name, self.pwl_segs + 1, self.pwl_qq.len()
+            ));
+        }
+
+        // Validate index flows are strictly increasing
+        for i in 0..self.pwl_segs {
+            if self.pwl_qq[i + 1] <= self.pwl_qq[i] {
+                return Err(format!(
+                    "Error in node '{}'. Routing table index flows must be strictly increasing (violation at row {}).",
+                    self.name, i + 2
+                ));
+            }
+        }
+
+        // Init for lag routing
+        self.lag_sto_array.fill(0.0);
         self.lag_sto_used = self.lag + 1;
         self.lag_iter_index = 0;
 
-        // Here I can pre-compute all the PWL segment parameters
+        // Pre-compute PWL segment parameters
         let d = self.pwl_divs as f64;
-        let mut temp_v = 0_f64;
-        for i in 0..self.pwl_tt.len() - 1 {
-            
-            //Calculate the parameters of pwl segment 1
+        let mut temp_v = 0.0;
+        for i in 0..self.pwl_segs {
+
+            //Calculate the parameters of pwl segment i
             let q1 = self.pwl_qq[i];
             let q2 = self.pwl_qq[i+1];
             let t1 = self.pwl_tt[i] / d;
@@ -177,9 +205,7 @@ impl Node for RoutingNode {
             self.seg_par_bb[i] = b;
             self.seg_par_cc[i] = c;
         }
-        for i in 0..self.pwl_sto_array.len() {
-            self.pwl_sto_array[i] = 0_f64;
-        }
+        self.pwl_sto_array.fill(0.0);
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -233,31 +259,34 @@ impl Node for RoutingNode {
 
         // Pwl routing second
         let mut qout = flow_out_of_lag_reach; //define so it gets ingested into the first division
+        let x_is_unity = self.x > 0.999999;
         for i in 0..self.pwl_divs {
             let qin = qout;                   //inflow to this division
             let vi = self.pwl_sto_array[i];   //initial storage volume for this division
-            let mut vf = 0f64;                //variable to hold final storage volume
-            for j in 0..self.pwl_segs {
-                if self.x > 0.999999 {
-                    //For inflow bias=1, reference flow "qr" equals inflow.
-                    //TODO: I could move this loop outside the 'i' loop to avoid checking every div
-                    let qr = qin;
-                    if (qr >= self.seg_par_q1[j]) & (qr <= self.seg_par_q2[j])
-                    {
-                        let vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
+            let mut vf = 0.0;                 //variable to hold final storage volume
+
+            if x_is_unity {
+                //For inflow bias=1, reference flow "qr" equals inflow.
+                let qr = qin;
+                for j in 0..self.pwl_segs {
+                    if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
+                        vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
                         qout = vi + qin - vf;
-                        break
+                        break;
                     }
-                } else {
-                    //For inflow bias<1, reference flow "qr" is not known a priori.
+                }
+            } else {
+                //For inflow bias<1, reference flow "qr" is not known a priori.
+                let inv_one_minus_x = 1.0 / (1.0 - self.x);
+                for j in 0..self.pwl_segs {
                     let a = self.seg_par_aa[j];
-                    let b = self.seg_par_bb[j] + (1.0/(1.0 - self.x));
-                    let c = self.seg_par_cc[j] - vi - qin/(1.0 - self.x);
+                    let b = self.seg_par_bb[j] + inv_one_minus_x;
+                    let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
                     let qr = quadratic_plus(a, b, c);
 
                     //Check if qr is within the segment and if so finalise solution
                     if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
-                        qout = (qr - qin * self.x) / (1.0 - self.x);
+                        qout = (qr - qin * self.x) * inv_one_minus_x;
                         vf = vi + qin - qout;
                         break;
                     }
@@ -265,8 +294,8 @@ impl Node for RoutingNode {
             }
 
             //Do not allow water to flow upstream.
-            if qout < 0f64 {
-                qout = 0f64;
+            if qout < 0.0 {
+                qout = 0.0;
                 vf = vi + qin;
             }
 
@@ -291,10 +320,6 @@ impl Node for RoutingNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
-
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
