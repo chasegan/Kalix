@@ -413,9 +413,12 @@ impl StorageNode {
         // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
 
-        // Interpolate between rows using cached errors (no recomputation)
+        // Interpolate between rows using cached errors where possible.
+        // When lo == hi (ceiling case: solution beyond table max), row != lo
+        // so the cached error_lo is at the wrong position — recompute it.
         let row = istop - 1;
-        let x = error_lo / (error_lo - error_hi);
+        let error_prev = if row == lo { error_lo } else { compute_error(row) };
+        let x = error_prev / (error_prev - error_hi);
         let v_lo = self.d.get_value(row, VOLU);
         let v_hi = self.d.get_value(istop, VOLU);
 
