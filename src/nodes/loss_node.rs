@@ -105,6 +105,9 @@ impl Node for LossNode {
         // The answer is to define a new type of PWL table which ALLOWS FOR NON-CONTINUOUS y values,
         // and to use a binary search to find where xlo < x <= xhi, which will always give us the
         // lowest possible order that produces the required outflow.
+        self.order_translation_table = TableDiscontinuous::new();
+        self.order_translation_table.add_point(-1.0, 0.0);
+        self.order_translation_table.add_point(0.0, 0.0);
         if max_outflow > 0.0 {
             for row in 0..self.loss_table.nrows() {
                 let inflow = self.loss_table.get_value(row, 0);
@@ -115,7 +118,7 @@ impl Node for LossNode {
         } else {
             // Loss table has 100% loss and cant satisfy any orders.
             // The only reasonable thing to do is to make a new table with no orders.
-            self.order_translation_table = TableDiscontinuous::new();
+            //self.order_translation_table = TableDiscontinuous::new();
             self.order_translation_table.add_point(0.0, 0.0);
             self.order_translation_table.add_point(1.0, 0.0);
         }
