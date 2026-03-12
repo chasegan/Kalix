@@ -3,6 +3,7 @@ pub mod ini_model_io;
 pub mod custom_ini_parser;
 pub mod compression;
 pub mod kaz_io;
+pub mod kalix_path;
 pub mod optimisation_config_io;
 
 #[cfg(test)]

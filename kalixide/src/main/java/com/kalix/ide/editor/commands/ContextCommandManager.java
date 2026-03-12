@@ -70,6 +70,9 @@ public class ContextCommandManager {
         // Register plot command (appears at root level, before refactoring commands)
         registry.register(new PlotInputFileCommand(modelFileSupplier, parentFrame));
 
+        // Register reveal in file manager command
+        registry.register(new RevealInputFileCommand(modelFileSupplier, parentFrame));
+
         // Register insert file path command
         registry.register(new InsertFilePathCommand(modelFileSupplier, parentFrame));
 

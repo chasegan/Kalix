@@ -91,7 +91,7 @@ public class TextCoordinateUpdater {
             // Group 3: Comma and whitespace
             // Group 4: Y coordinate (to replace, supports scientific notation)
             String escapedNodeName = Pattern.quote(nodeName);
-            String pattern = "(\\[node\\." + escapedNodeName + "[^\\[]*?loc\\s*=\\s*)([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)";
+            String pattern = "(^\\[node\\." + escapedNodeName + "\\][^\\[]*?loc\\s*=\\s*)([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)";
             Pattern nodePattern = Pattern.compile(pattern, Pattern.DOTALL | Pattern.MULTILINE);
 
             Matcher matcher = nodePattern.matcher(currentText);
@@ -399,7 +399,7 @@ public class TextCoordinateUpdater {
         // (?:\r?\n|$)                 - Match newline or end of string after header
         // (?:(?!\[)[^\r\n]*(?:\r?\n|$))* - Match all lines that don't start with [ (non-section lines)
         String escapedNodeName = Pattern.quote(nodeName);
-        String pattern = "\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
+        String pattern = "^\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
         Pattern nodePattern = Pattern.compile(pattern, Pattern.MULTILINE);
         
         Matcher matcher = nodePattern.matcher(text);

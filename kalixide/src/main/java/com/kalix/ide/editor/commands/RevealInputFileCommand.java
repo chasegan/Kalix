@@ -1,28 +1,31 @@
 package com.kalix.ide.editor.commands;
 
-import com.kalix.ide.flowviz.FlowVizWindow;
 import com.kalix.ide.io.KalixPath;
 import com.kalix.ide.io.KalixPathResolutionException;
+import com.kalix.ide.utils.FileManagerLauncher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
 /**
- * Command to plot an input file in a FlowViz window.
+ * Command to reveal an input file in the system's file manager.
  * Applicable when the cursor is on an input file path in the [inputs] section.
+ * Resolves the path (including trailhead paths) and opens the containing folder.
  */
-public class PlotInputFileCommand implements EditorCommand {
+public class RevealInputFileCommand implements EditorCommand {
 
-    private static final Logger logger = LoggerFactory.getLogger(PlotInputFileCommand.class);
+    private static final Logger logger = LoggerFactory.getLogger(RevealInputFileCommand.class);
 
     private final Supplier<File> modelFileSupplier;
     private final JFrame parentFrame;
 
-    public PlotInputFileCommand(Supplier<File> modelFileSupplier, JFrame parentFrame) {
+    public RevealInputFileCommand(Supplier<File> modelFileSupplier, JFrame parentFrame) {
         this.modelFileSupplier = modelFileSupplier;
         this.parentFrame = parentFrame;
     }
@@ -30,10 +33,10 @@ public class PlotInputFileCommand implements EditorCommand {
     @Override
     public CommandMetadata getMetadata() {
         return new CommandMetadata.Builder()
-            .id("plot_input_file")
-            .displayName("Plot Selected Dataset")
-            .description("Plot input file data in FlowViz")
-            .category("") // Empty category = appears at root level, not in submenu
+            .id("reveal_input_file")
+            .displayName("Show in File Manager")
+            .description("Reveal input file in the system file manager")
+            .category("")
             .build();
     }
 
@@ -46,14 +49,12 @@ public class PlotInputFileCommand implements EditorCommand {
     @Override
     public void execute(EditorContext context, CommandExecutor executor) {
         try {
-            // Get the input file path from context
-            String relativeFilePath = context.getInputFilePath()
+            String filePath = context.getInputFilePath()
                 .orElseThrow(() -> new IllegalStateException("Input file path not available"));
 
-            // Get the current model file to resolve relative path
             File modelFile = modelFileSupplier.get();
             if (modelFile == null) {
-                showError("Cannot plot: No model file is currently loaded");
+                showError("Cannot reveal file: No model file is currently loaded");
                 return;
             }
 
@@ -61,26 +62,26 @@ public class PlotInputFileCommand implements EditorCommand {
             File modelDirectory = modelFile.getParentFile();
             File inputFile;
             try {
-                Path resolved = KalixPath.parse(relativeFilePath).resolve(modelDirectory.toPath());
+                Path resolved = KalixPath.parse(filePath).resolve(modelDirectory.toPath());
                 inputFile = resolved.toFile();
             } catch (IllegalArgumentException | KalixPathResolutionException e) {
                 showError("Cannot resolve input file path: " + e.getMessage());
                 return;
             }
 
-            // Check if the file exists
             if (!inputFile.exists()) {
                 showError("Input file not found: " + inputFile.getAbsolutePath());
                 return;
             }
 
-            // Create FlowViz window with the input file
-            logger.info("Opening FlowViz window for input file: {}", inputFile.getAbsolutePath());
-            FlowVizWindow.createWindowWithFile(inputFile);
+            // Open the file's parent directory in the system file manager
+            File containingFolder = inputFile.getParentFile();
+            logger.info("Revealing input file in file manager: {}", inputFile.getAbsolutePath());
+            FileManagerLauncher.openFileManagerAt(containingFolder);
 
         } catch (Exception e) {
-            logger.error("Error plotting input file", e);
-            showError("Failed to plot input file: " + e.getMessage());
+            logger.error("Error revealing input file", e);
+            showError("Failed to open file manager: " + e.getMessage());
         }
     }
 
@@ -89,7 +90,7 @@ public class PlotInputFileCommand implements EditorCommand {
             JOptionPane.showMessageDialog(
                 parentFrame,
                 message,
-                "Plot Error",
+                "Reveal File Error",
                 JOptionPane.ERROR_MESSAGE
             );
         });

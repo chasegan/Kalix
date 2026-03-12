@@ -6,7 +6,11 @@ import com.kalix.ide.io.KaiHeaderReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.kalix.ide.io.KalixPath;
+import com.kalix.ide.io.KalixPathResolutionException;
+
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -150,10 +154,12 @@ public class InputDataRegistry {
         if (baseDir == null) {
             return null;
         }
-        File file = new File(filePath);
-        if (file.isAbsolute()) {
-            return file;
+        try {
+            Path resolved = KalixPath.parse(filePath).resolve(baseDir.toPath());
+            return resolved.toFile();
+        } catch (IllegalArgumentException | KalixPathResolutionException e) {
+            logger.debug("Failed to resolve path '{}': {}", filePath, e.getMessage());
+            return null;
         }
-        return new File(baseDir, filePath);
     }
 }

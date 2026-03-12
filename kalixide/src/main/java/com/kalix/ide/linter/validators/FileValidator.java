@@ -1,11 +1,14 @@
 package com.kalix.ide.linter.validators;
 
+import com.kalix.ide.io.KalixPath;
+import com.kalix.ide.io.KalixPathResolutionException;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
@@ -52,22 +55,21 @@ public class FileValidator implements ValidationStrategy {
             return true; // Assume it still exists within cache timeout
         }
 
-        // Resolve the path relative to base directory if provided
-        java.nio.file.Path path;
-        if (baseDirectory != null && !Paths.get(filePath).isAbsolute()) {
-            path = baseDirectory.toPath().resolve(filePath);
-        } else {
-            path = Paths.get(filePath);
-        }
-
-        boolean exists = Files.exists(path);
-        if (exists) {
-            fileExistenceCache.put(cacheKey, now);
-        } else {
+        // Resolve the path using KalixPath (supports absolute, relative, and trailhead paths)
+        try {
+            Path contextDir = baseDirectory != null ? baseDirectory.toPath() : Paths.get(".");
+            Path resolved = KalixPath.parse(filePath).resolve(contextDir);
+            boolean exists = Files.exists(resolved);
+            if (exists) {
+                fileExistenceCache.put(cacheKey, now);
+            } else {
+                fileExistenceCache.remove(cacheKey);
+            }
+            return exists;
+        } catch (IllegalArgumentException | KalixPathResolutionException e) {
             fileExistenceCache.remove(cacheKey);
+            return false;
         }
-
-        return exists;
     }
 
     private int findFilePathLineNumber(INIModelParser.ParsedModel model, String filePath) {

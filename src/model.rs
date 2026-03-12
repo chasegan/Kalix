@@ -496,43 +496,20 @@ impl Model {
     }
     
 
-    /// Resolve a file path relative to the model's working directory
-    ///
-    /// # Arguments
-    /// * `path` - File path that may be relative or absolute
-    ///
-    /// # Returns
-    /// Resolved absolute path
-    ///
-    /// # Behavior
-    /// - Absolute paths are returned unchanged
-    /// - Relative paths are resolved relative to `working_directory`
-    ///
-    /// # Example
-    /// ```ignore
-    /// // Model loaded from /home/user/models/model.ini
-    /// // working_directory = /home/user/models/
-    /// model.resolve_path("./data/rain.csv")
-    /// // Returns: /home/user/models/data/rain.csv
-    /// ```
-    fn resolve_path(&self, path: &str) -> PathBuf {
-        let path_obj = std::path::Path::new(path);
-
-        if path_obj.is_absolute() {
-            // Absolute path - use as-is
-            path_obj.to_path_buf()
-        } else {
-            // Relative path - resolve relative to working_directory
-            self.working_directory.join(path)
-        }
+    /// Resolve a file path relative to the model's working directory.
+    /// Supports absolute, relative, and trailhead (`^/`) paths.
+    fn resolve_path(&self, path: &str) -> Result<PathBuf, String> {
+        let mut kp = crate::io::kalix_path::KalixPath::parse(path)?;
+        kp.resolve(&self.working_directory)?;
+        Ok(kp.resolved)
     }
 
     pub fn load_input_data(&mut self, file_path: &str) -> Result<usize, String> {
         // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
 
-        // Resolve the path relative to the model's working directory
-        let resolved_path = self.resolve_path(file_path);
+        // Resolve the path (supports absolute, relative, and trailhead paths)
+        let resolved_path = self.resolve_path(file_path)?;
 
         // Load all the data using the resolved path
         let resolved_path_str = resolved_path.to_str()
