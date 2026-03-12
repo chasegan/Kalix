@@ -515,8 +515,9 @@ impl Model {
         let resolved_path_str = resolved_path.to_str()
             .ok_or_else(|| format!("Invalid path: {}", file_path))?;
         let mut x = TimeseriesInput::load(resolved_path_str)?;
+        let len = x.len();
         self.inputs.append(&mut x);
-        Ok(x.len())
+        Ok(len)
     }
 
 
