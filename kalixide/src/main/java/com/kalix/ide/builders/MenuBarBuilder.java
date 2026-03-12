@@ -92,6 +92,9 @@ public class MenuBarBuilder {
         void initClaudeMd();
         void initAgentsMd();
 
+        // Parameter Sheet
+        void showParameterSheet();
+
         // Navigation history
         void navigateBack();
         void navigateForward();
@@ -252,8 +255,9 @@ public class MenuBarBuilder {
      */
     private JMenu createToolsMenu() {
         JMenu toolsMenu = new JMenu("Tools");
-        toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
+        toolsMenu.add(createMenuItem("Parameter Sheet", e -> callbacks.showParameterSheet()));
         toolsMenu.addSeparator();
+        toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
         toolsMenu.add(createMenuItem("KalixCLI sessions", e -> callbacks.showSessionManager()));
         return toolsMenu;
     }

@@ -82,6 +82,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Core UI components
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
+    private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
     private DockableMapPanel dockableMapPanel;
     private DockableTextEditor dockableTextEditor;
     private DockingArea mainDockingArea;
@@ -261,7 +262,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         textEditor.initializeLinter(schemaManager);
 
         // Shared model supplier for context commands and auto-complete
-        java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier = () -> {
+        modelSupplier = () -> {
             try {
                 return com.kalix.ide.linter.parsing.INIModelParser.parse(textEditor.getText());
             } catch (Exception e) {
@@ -1024,6 +1025,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void flowViz() {
         com.kalix.ide.flowviz.FlowVizWindow.createNewWindow();
+    }
+
+    @Override
+    public void showParameterSheet() {
+        new com.kalix.ide.parametersheet.ParameterSheetWindow(this, modelSupplier, textEditor).setVisible(true);
     }
 
 
