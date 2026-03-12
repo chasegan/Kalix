@@ -454,10 +454,6 @@ public class ParameterSheetWindow extends JDialog {
         String text = textEditor.getText();
         String[] lines = text.split("\n", -1);
 
-        // Temporarily remove our external edit listener so our own changes don't trigger it
-        // We use a flag approach since we can't easily remove the listener
-        // Actually, we'll just apply and close quickly
-
         // Collect all replacements
         List<EnhancedTextEditor.LineReplacement> replacements = new ArrayList<>();
 
@@ -470,49 +466,16 @@ public class ParameterSheetWindow extends JDialog {
                 continue;
             }
 
-            // Find the full extent of the property (including continuation lines)
-            int endLineIndex = lineIndex;
-            for (int i = lineIndex + 1; i < lines.length; i++) {
-                String nextLine = lines[i];
-                if (!nextLine.isEmpty() && Character.isWhitespace(nextLine.charAt(0))) {
-                    endLineIndex = i;
-                } else {
-                    break;
-                }
-            }
-
-            // Build the old text (all lines of this property)
-            StringBuilder oldText = new StringBuilder();
-            for (int i = lineIndex; i <= endLineIndex; i++) {
-                if (i > lineIndex) oldText.append("\n");
-                oldText.append(lines[i]);
-            }
-
-            // Build the new text
             String newLine = change.propertyKey + " = " + change.newValue;
 
-            // Use document-level replacement for multi-line properties
-            if (endLineIndex > lineIndex) {
-                // Multi-line property: we need to replace multiple lines with one
-                applyMultiLineReplacement(lines, lineIndex, endLineIndex, newLine);
-            } else {
-                replacements.add(new EnhancedTextEditor.LineReplacement(
-                        change.originalLineNumber,
-                        lines[lineIndex],
-                        newLine
-                ));
-            }
+            replacements.add(new EnhancedTextEditor.LineReplacement(
+                    change.originalLineNumber,
+                    lines[lineIndex],
+                    newLine
+            ));
         }
 
-        // Handle additions: insert new properties at the end of the node section
-        // Group additions by section
-        Map<String, List<ParameterSheetTableModel.CellChange>> additionsBySection = new LinkedHashMap<>();
-        for (ParameterSheetTableModel.CellChange change : additions) {
-            additionsBySection.computeIfAbsent(change.sectionName, k -> new ArrayList<>()).add(change);
-        }
-
-        // If we have both replacements and multi-line replacements or additions,
-        // fall back to full text reconstruction for safety
+        // If we have additions or multi-line properties, fall back to full text reconstruction
         if (!additions.isEmpty() || hasMultiLineUpdates(updates, lines)) {
             applyAsFullTextReconstruction(updates, additions);
             return;
@@ -630,10 +593,6 @@ public class ParameterSheetWindow extends JDialog {
         });
     }
 
-    private void applyMultiLineReplacement(String[] lines, int startLine, int endLine, String newLine) {
-        // This is handled by applyAsFullTextReconstruction
-    }
-
     private void showStaleModelError(ParameterSheetTableModel.CellChange change) {
         JOptionPane.showMessageDialog(this,
                 "The model has changed since the Parameter Sheet was opened.\n"
@@ -648,6 +607,11 @@ public class ParameterSheetWindow extends JDialog {
         // Stop any active cell editing
         if (table != null && table.isEditing()) {
             table.getCellEditor().stopCellEditing();
+        }
+        // Remove our document listener to prevent memory leak
+        if (externalEditListener != null) {
+            textEditor.removeDocumentListener(externalEditListener);
+            externalEditListener = null;
         }
         super.dispose();
     }

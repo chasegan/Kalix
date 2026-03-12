@@ -60,6 +60,10 @@ public class RevealInputFileCommand implements EditorCommand {
 
             // Resolve the input file path (supports absolute, relative, and trailhead paths)
             File modelDirectory = modelFile.getParentFile();
+            if (modelDirectory == null) {
+                showError("Cannot determine model directory");
+                return;
+            }
             File inputFile;
             try {
                 Path resolved = KalixPath.parse(filePath).resolve(modelDirectory.toPath());
@@ -76,6 +80,10 @@ public class RevealInputFileCommand implements EditorCommand {
 
             // Open the file's parent directory in the system file manager
             File containingFolder = inputFile.getParentFile();
+            if (containingFolder == null) {
+                showError("Cannot determine containing folder for: " + inputFile.getAbsolutePath());
+                return;
+            }
             logger.info("Revealing input file in file manager: {}", inputFile.getAbsolutePath());
             FileManagerLauncher.openFileManagerAt(containingFolder);
 

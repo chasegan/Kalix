@@ -1070,6 +1070,13 @@ public class EnhancedTextEditor extends JPanel {
     public void addDocumentListener(DocumentListener listener) {
         externalDocumentListeners.add(listener);
     }
+
+    /**
+     * Remove a previously added external document listener.
+     */
+    public void removeDocumentListener(DocumentListener listener) {
+        externalDocumentListeners.remove(listener);
+    }
     
     /**
      * Notify external document listeners of changes.

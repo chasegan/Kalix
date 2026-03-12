@@ -83,6 +83,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
+    private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
     private DockableMapPanel dockableMapPanel;
     private DockableTextEditor dockableTextEditor;
     private DockingArea mainDockingArea;
@@ -1029,7 +1030,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showParameterSheet() {
-        new com.kalix.ide.parametersheet.ParameterSheetWindow(this, modelSupplier, textEditor).setVisible(true);
+        // Single-instance: if already open, bring to front
+        if (parameterSheetWindow != null && parameterSheetWindow.isDisplayable()) {
+            parameterSheetWindow.toFront();
+            parameterSheetWindow.requestFocus();
+            return;
+        }
+        parameterSheetWindow = new com.kalix.ide.parametersheet.ParameterSheetWindow(this, modelSupplier, textEditor);
+        parameterSheetWindow.setVisible(true);
     }
 
 
