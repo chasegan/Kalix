@@ -493,20 +493,16 @@ public class PlotInteractionManager {
         long startTime = currentViewport.screenXToTime(leftX);
         long endTime = currentViewport.screenXToTime(rightX);
 
-        if (autoYMode) {
-            // Auto-Y: use X extent of rectangle, auto-fit Y
-            updateViewportWithFittedY(startTime, endTime);
-        } else {
-            // Standard: use both axes from the rectangle
-            double maxValue = currentViewport.screenYToValue(topY);   // top of screen = max value
-            double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
+        // Always zoom both axes — ignores auto-Y so the user can "peek" at a region.
+        // Subsequent pan or scroll-zoom will snap Y back via auto-Y.
+        double maxValue = currentViewport.screenYToValue(topY);   // top of screen = max value
+        double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
 
-            Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                    plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                    currentViewport.getYAxisScale(), currentViewport.getXAxisType());
-            viewportUpdater.accept(newViewport);
-        }
+        Rectangle plotArea = plotAreaSupplier.get();
+        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+                plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        viewportUpdater.accept(newViewport);
 
         parentComponent.repaint();
     }
