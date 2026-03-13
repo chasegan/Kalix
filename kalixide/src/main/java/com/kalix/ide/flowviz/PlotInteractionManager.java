@@ -50,6 +50,11 @@ public class PlotInteractionManager {
     private JCheckBoxMenuItem autoYMenuItem;
     private JMenu yAxisScaleMenu;
 
+    // Zoom rectangle selection state
+    private boolean isZoomSelecting = false;
+    private Point zoomRectStartPoint;
+    private Point zoomRectCurrentPoint;
+
     // Data access callbacks
     private Supplier<DataSet> dataSetSupplier;
     private Supplier<ViewPort> viewportSupplier;
@@ -157,6 +162,12 @@ public class PlotInteractionManager {
                 Rectangle plotArea = plotAreaSupplier.get();
                 if (SwingUtilities.isRightMouseButton(e) && plotArea.contains(e.getPoint())) {
                     contextMenu.show(parentComponent, e.getX(), e.getY());
+                } else if (SwingUtilities.isLeftMouseButton(e) && e.isShiftDown() && plotArea.contains(e.getPoint())) {
+                    // Shift+click: start zoom rectangle selection
+                    isZoomSelecting = true;
+                    zoomRectStartPoint = new Point(e.getPoint());
+                    zoomRectCurrentPoint = new Point(e.getPoint());
+                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
@@ -177,7 +188,13 @@ public class PlotInteractionManager {
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (SwingUtilities.isLeftMouseButton(e)) {
+                if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
+                    completeZoomRectSelection();
+                    isZoomSelecting = false;
+                    zoomRectStartPoint = null;
+                    zoomRectCurrentPoint = null;
+                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                } else if (SwingUtilities.isLeftMouseButton(e)) {
                     isDragging = false;
                     parentComponent.setCursor(Cursor.getDefaultCursor());
                 }
@@ -185,7 +202,10 @@ public class PlotInteractionManager {
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (isDragging && lastMousePos != null) {
+                if (isZoomSelecting && zoomRectStartPoint != null) {
+                    zoomRectCurrentPoint = new Point(e.getPoint());
+                    parentComponent.repaint();
+                } else if (isDragging && lastMousePos != null) {
                     handlePan(e);
                 }
             }
@@ -446,6 +466,76 @@ public class PlotInteractionManager {
 
         lastMousePos = e.getPoint();
         parentComponent.repaint();
+    }
+
+    /**
+     * Completes a zoom rectangle selection by zooming the viewport to the selected region.
+     * The rectangle must be at least 5x5 pixels to be considered meaningful.
+     */
+    private void completeZoomRectSelection() {
+        if (zoomRectStartPoint == null || zoomRectCurrentPoint == null) return;
+
+        int rectWidth = Math.abs(zoomRectCurrentPoint.x - zoomRectStartPoint.x);
+        int rectHeight = Math.abs(zoomRectCurrentPoint.y - zoomRectStartPoint.y);
+
+        // Must be at least 5x5 pixels (consistent with map panel)
+        if (rectWidth < 5 && rectHeight < 5) return;
+
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return;
+
+        // Convert screen coordinates to data coordinates
+        int leftX = Math.min(zoomRectStartPoint.x, zoomRectCurrentPoint.x);
+        int rightX = Math.max(zoomRectStartPoint.x, zoomRectCurrentPoint.x);
+        int topY = Math.min(zoomRectStartPoint.y, zoomRectCurrentPoint.y);
+        int bottomY = Math.max(zoomRectStartPoint.y, zoomRectCurrentPoint.y);
+
+        long startTime = currentViewport.screenXToTime(leftX);
+        long endTime = currentViewport.screenXToTime(rightX);
+
+        if (autoYMode) {
+            // Auto-Y: use X extent of rectangle, auto-fit Y
+            updateViewportWithFittedY(startTime, endTime);
+        } else {
+            // Standard: use both axes from the rectangle
+            double maxValue = currentViewport.screenYToValue(topY);   // top of screen = max value
+            double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
+
+            Rectangle plotArea = plotAreaSupplier.get();
+            ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+                    plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                    currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+            viewportUpdater.accept(newViewport);
+        }
+
+        parentComponent.repaint();
+    }
+
+    /**
+     * Renders the zoom selection rectangle overlay.
+     * Uses the same visual style as the map panel's selection rectangle.
+     */
+    public void renderZoomRectangle(Graphics2D g2d) {
+        if (!isZoomSelecting || zoomRectStartPoint == null || zoomRectCurrentPoint == null) return;
+
+        int x = Math.min(zoomRectStartPoint.x, zoomRectCurrentPoint.x);
+        int y = Math.min(zoomRectStartPoint.y, zoomRectCurrentPoint.y);
+        int w = Math.abs(zoomRectCurrentPoint.x - zoomRectStartPoint.x);
+        int h = Math.abs(zoomRectCurrentPoint.y - zoomRectStartPoint.y);
+
+        // Semi-transparent blue fill
+        g2d.setColor(UIConstants.Selection.RECTANGLE_FILL);
+        g2d.fillRect(x, y, w, h);
+
+        // Dashed blue border
+        g2d.setColor(UIConstants.Selection.RECTANGLE_BORDER);
+        g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                UIConstants.Selection.RECTANGLE_DASH_MITER_LIMIT,
+                UIConstants.Selection.RECTANGLE_DASH_PATTERN, 0.0f));
+        g2d.drawRect(x, y, w, h);
+
+        // Reset stroke
+        g2d.setStroke(new BasicStroke(1.0f));
     }
 
     /**

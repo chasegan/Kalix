@@ -396,6 +396,11 @@ public class PlotPanel extends JPanel {
             legendManager.render(g2d, currentViewport);
         }
 
+        // Render zoom selection rectangle (on top of everything)
+        if (plotInteractionManager != null) {
+            plotInteractionManager.renderZoomRectangle(g2d);
+        }
+
         g2d.dispose();
     }
     
