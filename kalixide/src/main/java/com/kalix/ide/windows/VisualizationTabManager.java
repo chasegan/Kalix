@@ -317,6 +317,8 @@ public class VisualizationTabManager {
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
+            .addMaskToggle()
+            .addSeparator()
             .addPlotTypeDropdown()
             .addSeparator()
             .addYSpaceDropdown()
@@ -408,6 +410,19 @@ public class VisualizationTabManager {
                 AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
                 plotPanel.setAggregation(period, method);
             }
+        }
+
+        PlotToolbarBuilder addMaskToggle() {
+            JToggleButton button = createToggleButton(FontAwesomeSolid.MASK,
+                "Mask: only include timestamps where all series have valid data", false);
+            button.addActionListener(e -> {
+                com.kalix.ide.flowviz.stats.MaskMode mode = button.isSelected()
+                    ? com.kalix.ide.flowviz.stats.MaskMode.ALL
+                    : com.kalix.ide.flowviz.stats.MaskMode.NONE;
+                plotPanel.setMaskMode(mode);
+            });
+            toolbar.add(button);
+            return this;
         }
 
         PlotToolbarBuilder addPlotTypeDropdown() {

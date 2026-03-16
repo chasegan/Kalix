@@ -11,6 +11,8 @@ import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
+import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.*;
 import java.awt.*;
@@ -50,6 +52,7 @@ import org.slf4j.LoggerFactory;
  * <pre>
  * originalDataSet (shared)
  *   → TimeSeriesAggregator.aggregate()   [aggregation: daily, monthly, etc.]
+ *   → TimeSeriesMasker (if ALL mode)     [filter to common valid timestamps]
  *   → PlotTypeTransformer.transform()    [plot type: values, cumulative, difference]
  *   → displayDataSet (cached per-panel)
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
@@ -86,6 +89,7 @@ public class PlotPanel extends JPanel {
     private AggregationMethod aggregationMethod = AggregationMethod.SUM;
     private PlotType plotType = PlotType.VALUES;
     private YAxisScale yAxisScale = YAxisScale.LINEAR;
+    private MaskMode maskMode = MaskMode.NONE;
     private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
@@ -704,6 +708,32 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Sets the mask mode for this plot.
+     * When ALL, only timestamps where all visible series have valid data are included.
+     */
+    public void setMaskMode(MaskMode mode) {
+        if (mode == null || mode == this.maskMode) {
+            return;
+        }
+        this.maskMode = mode;
+
+        rebuildDisplayDataSet();
+
+        if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
+    }
+
+    /**
+     * Gets the current mask mode.
+     */
+    public MaskMode getMaskMode() {
+        return maskMode;
+    }
+
+    /**
      * Checks if the reference series (first visible series) has changed
      * for DIFFERENCE plot types. If so, triggers recalculation.
      */
@@ -730,7 +760,7 @@ public class PlotPanel extends JPanel {
 
     /**
      * Rebuilds the display dataset by applying current transformation settings.
-     * Pipeline: Aggregation → Plot Type Transform → (Y-axis scale applied during render)
+     * Pipeline: Aggregation → Masking → Plot Type Transform → (Y-axis scale applied during render)
      * Uses caching to avoid unnecessary recomputation.
      */
     private void rebuildDisplayDataSet() {
@@ -743,7 +773,7 @@ public class PlotPanel extends JPanel {
         String referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
         String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
-            + "_" + plotType.name() + "_" + referenceKey;
+            + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name();
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
@@ -771,7 +801,23 @@ public class PlotPanel extends JPanel {
             }
         }
 
-        // Step 2: Apply plot type transformation
+        // Step 2: Apply masking (if enabled)
+        if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesCount() > 1) {
+            java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
+            for (String name : aggregatedDataSet.getSeriesNames()) {
+                allSeries.add(aggregatedDataSet.getSeries(name));
+            }
+            TimeSeriesData mask = TimeSeriesMasker.createAllMask(allSeries);
+
+            DataSet maskedDataSet = new DataSet();
+            for (String name : aggregatedDataSet.getSeriesNames()) {
+                TimeSeriesData masked = TimeSeriesMasker.applyMask(aggregatedDataSet.getSeries(name), mask);
+                maskedDataSet.addSeries(masked);
+            }
+            aggregatedDataSet = maskedDataSet;
+        }
+
+        // Step 3: Apply plot type transformation
         displayDataSet = PlotTypeTransformer.transform(
             aggregatedDataSet,
             plotType,
