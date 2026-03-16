@@ -18,8 +18,8 @@ import java.util.Map;
  * <b>IMPORTANT:</b> The cache key does NOT include the actual data values! If the underlying
  * data changes but the series name and viewport remain the same, the cache returns stale data.
  * <p>
- * When data changes, callers MUST call {@link #clearCache()} to invalidate. This is done by
- * {@link com.kalix.ide.flowviz.PlotPanel#refreshData} via {@link TimeSeriesRenderer#clearCache()}.
+ * When data changes, callers MUST call {@link #clearCache()} to invalidate. This is handled
+ * automatically by {@code PlotPanel.rebuildDisplayDataSet()} whenever the display data is rebuilt.
  *
  * <h2>Why Pan/Zoom "Fixes" Stale Data</h2>
  * Panning or zooming changes the viewport, which changes the cache key, causing a cache miss

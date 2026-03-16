@@ -616,9 +616,8 @@ public class PlotPanel extends JPanel {
      * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
     public void refreshData(boolean resetZoom) {
-        // Invalidate caches to force rebuild with new data
+        // Invalidate transform cache to force rebuild with new data
         lastTransformKey = null;
-        renderer.clearCache();  // Clear LOD rendering cache
 
         rebuildDisplayDataSet();
 
@@ -744,6 +743,9 @@ public class PlotPanel extends JPanel {
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
             return; // Already computed
         }
+
+        // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
+        renderer.clearCache();
 
         // Step 1: Build aggregated dataset
         DataSet aggregatedDataSet = new DataSet();
