@@ -35,7 +35,7 @@ import java.util.function.Function;
  * <h2>Rebuild Behavior</h2>
  * {@link #updateTree} does a full rebuild via {@code timeseriesTreeModel.reload()}.
  * Expansion state is preserved by recording expanded paths before rebuild and restoring after.
- * Tree selection is handled separately by RunManager via {@code restoreTreeSelectionFromSelectedSeries()}.
+ * Tree selection is handled separately by RunManager via {@code restoreTreeSelectionForSeries()}.
  *
  * <h2>Data Source</h2>
  * Series names come from {@code getSeriesNamesCallback} which calls:
@@ -45,7 +45,7 @@ import java.util.function.Function;
  * </ul>
  *
  * @see com.kalix.ide.windows.RunManager#onRunTreeSelectionChanged
- * @see com.kalix.ide.windows.RunManager#restoreTreeSelectionFromSelectedSeries
+ * @see com.kalix.ide.windows.RunManager#restoreTreeSelectionForSeries
  */
 public class OutputsTreeBuilder {
 

@@ -56,15 +56,15 @@ import java.util.function.Consumer;
  *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
  *   <li>User selects series in timeseries tree → {@link #onOutputsTreeSelectionChanged}</li>
  *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
- *   <li>Data is added to shared {@link DataSet} → {@link #addSeriesToPlot}</li>
+ *   <li>Data is added to shared {@link DataSet} pool → {@link #addSeriesToPool}</li>
  *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
  * </ol>
  *
  * <h2>Selection Tracking</h2>
  * <ul>
- *   <li>{@code selectedSeries} - Set of series keys currently plotted (e.g., "node.x.ds_1 [Last]")</li>
+ *   <li>Per-tab selected series stored in {@link VisualizationTabManager} TabInfo</li>
  *   <li>{@code isUpdatingSelection} - Flag to prevent listener feedback loops during programmatic updates</li>
- *   <li>Tree selection is restored after rebuilds via {@link #restoreTreeSelectionFromSelectedSeries}</li>
+ *   <li>Tree selection is restored after rebuilds via {@link #restoreTreeSelectionForSeries}</li>
  * </ul>
  *
  * <h2>"Last" Run Handling</h2>
@@ -128,10 +128,8 @@ public class RunManager extends JFrame {
     private TreeFilterManager treeFilterManager;
 
     // === SELECTION STATE ===
-    // selectedSeries tracks what's plotted, independent of tree selection
-    // Keys are "seriesName [SourceName]" e.g., "node.mygr4j.ds_1 [Last]"
-    // This allows restoring selection after tree rebuilds
-    private Set<String> selectedSeries = new HashSet<>();
+    // Per-tab selected series are managed by VisualizationTabManager (TabInfo.selectedSeries).
+    // The shared plotDataSet acts as a data pool — series are added but never removed on deselect.
 
 
     // === RUN TRACKING ===
@@ -357,6 +355,9 @@ public class RunManager extends JFrame {
 
         // Create tab manager with shared data
         tabManager = new VisualizationTabManager(plotDataSet, seriesColorManager.getColorMap());
+
+        // Sync tree selection when user switches tabs
+        tabManager.setOnTabChangedCallback(this::onTabChanged);
 
         // Add default tabs (settings are applied by the tab manager)
         tabManager.addPlotTab();
@@ -889,10 +890,11 @@ public class RunManager extends JFrame {
             updateOutputsTree();
 
             // Restore selection for series that still exist in the new tree
-            Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
+            Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+            Set<String> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
 
-            // Remove from plot any series that no longer exist (e.g., outputs that were removed)
-            reconcileSelectedSeriesWithTree(restoredSeries);
+            // Remove from tab any series that no longer exist (e.g., outputs that were removed)
+            reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
 
             isUpdatingSelection = false;
         }
@@ -940,14 +942,15 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Restores tree selection to match the current selectedSeries set.
+     * Restores tree selection to match the given series set.
      * This ensures the tree visually reflects what's plotted, even after tree rebuilds.
-     * Also reconciles selectedSeries - removes series that are no longer available in the tree.
-     * Returns the set of series that were successfully restored.
+     * Returns the set of series that were successfully restored (found in the tree).
+     *
+     * @param seriesToRestore The set of series keys to select in the tree
      */
-    private Set<String> restoreTreeSelectionFromSelectedSeries() {
-        if (selectedSeries.isEmpty()) {
-            // Nothing to restore
+    private Set<String> restoreTreeSelectionForSeries(Set<String> seriesToRestore) {
+        if (seriesToRestore.isEmpty()) {
+            timeseriesTree.clearSelection();
             return Collections.emptySet();
         }
 
@@ -955,8 +958,8 @@ public class RunManager extends JFrame {
         Set<String> restoredSeriesKeys = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
-        // Search tree for nodes matching selectedSeries, collect which ones we found
-        for (String seriesKey : selectedSeries) {
+        // Search tree for nodes matching the series set, collect which ones we found
+        for (String seriesKey : seriesToRestore) {
             List<TreePath> foundPaths = new ArrayList<>();
             searchAndCollectPaths(root, Collections.singleton(seriesKey), foundPaths);
             if (!foundPaths.isEmpty()) {
@@ -967,52 +970,40 @@ public class RunManager extends JFrame {
 
         if (!pathsToSelect.isEmpty()) {
             // Note: Caller should have isUpdatingSelection set to block events
-            // We don't set it here to avoid nesting issues
             TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
             timeseriesTree.setSelectionPaths(pathsArray);
+        } else {
+            timeseriesTree.clearSelection();
         }
-
-        // Log any series that couldn't be restored
-        Set<String> notRestored = new HashSet<>(selectedSeries);
-        notRestored.removeAll(restoredSeriesKeys);
 
         return restoredSeriesKeys;
     }
 
     /**
-     * Reconciles selectedSeries and plots with what's actually in the tree.
-     * Removes series that couldn't be restored (e.g., when a run is deselected).
+     * Reconciles the target tab's selected series with what's actually available in the tree.
+     * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
      *
-     * @param restoredSeries Set of series that were successfully found and restored in the tree
+     * @param restoredSeries Set of series that were successfully found in the tree
+     * @param tabSeries The tab's current selected series to reconcile against
      */
-    private void reconcileSelectedSeriesWithTree(Set<String> restoredSeries) {
-        // Find series that need to be removed (in selectedSeries but not restored)
-        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
+    private void reconcileSelectedSeriesWithTree(Set<String> restoredSeries, Set<String> tabSeries) {
+        // Find series that need to be removed from the tab
+        Set<String> seriesToRemove = new HashSet<>(tabSeries);
         seriesToRemove.removeAll(restoredSeries);
 
         if (seriesToRemove.isEmpty()) {
             return;
         }
 
-        // Remove from selectedSeries
-        selectedSeries.removeAll(seriesToRemove);
+        // Update the target tab's series (remove unrestorable ones)
+        Set<String> updatedSeries = new LinkedHashSet<>(tabSeries);
+        updatedSeries.removeAll(seriesToRemove);
+        tabManager.setTargetTabSelectedSeries(updatedSeries);
 
-        // Remove from plot dataset
+        // Remove from stats tables
         for (String seriesKey : seriesToRemove) {
-            plotDataSet.removeSeries(seriesKey);
-            seriesColorManager.removeColor(seriesKey);
-
-            // Remove from all stats tables
             tabManager.removeSeriesFromStatsTabs(seriesKey);
-
-            // Remove from legend in all plots
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.removeLegendSeries(seriesKey);
-            }
         }
-
-        // Update plot visibility (don't reset zoom - we're just removing series)
-        updatePlotVisibility(false);
     }
 
     /**
@@ -1045,7 +1036,7 @@ public class RunManager extends JFrame {
      * <ol>
      *   <li>Clears the {@link TimeSeriesRequestManager} cache for this session -
      *       CRITICAL because cache is keyed by kalixcliUid which persists across runs</li>
-     *   <li>For each series ending with " [Last]" in {@code selectedSeries}:
+     *   <li>For each series ending with " [Last]" across all tabs:
      *     <ul>
      *       <li>Removes old data from plot</li>
      *       <li>Requests fresh data from the new run (async)</li>
@@ -1069,8 +1060,9 @@ public class RunManager extends JFrame {
         // will fetch fresh data, even if no [Last] series are currently selected
         timeSeriesRequestManager.clearCacheForSession(newSessionKey);
 
-        // Find all series keys that end with " [Last]"
-        List<String> lastSeriesKeys = selectedSeries.stream()
+        // Find all "[Last]" series across all tabs
+        Set<String> allTabSeries = tabManager.getAllSelectedSeriesAcrossTabs();
+        List<String> lastSeriesKeys = allTabSeries.stream()
             .filter(key -> key.endsWith(" [Last]"))
             .collect(java.util.stream.Collectors.toList());
 
@@ -1078,38 +1070,30 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Refresh each "[Last]" series
+        // Refresh each "[Last]" series in the pool
         for (String seriesKey : lastSeriesKeys) {
             String seriesName = extractSeriesName(seriesKey);
-            Color seriesColor = seriesColorManager.getColor(seriesKey);
 
-            // Remove old data from plot
+            // Remove old data from pool
             plotDataSet.removeSeries(seriesKey);
 
             // Check if we have cached data from the new Last run
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(newSessionKey, seriesName);
             if (cachedData != null) {
-                // Add immediately with cached data
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                addSeriesToPlot(renamedData, seriesColor);
-
-                // Update all stats tables with aggregation
+                addSeriesToPool(renamedData);
                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
             } else if (!timeSeriesRequestManager.isRequestInProgress(newSessionKey, seriesName)) {
-                // Request the new data
                 timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
-                            // Check if this series is still selected
-                            if (selectedSeries.contains(seriesKey)) {
+                            if (tabManager.isSeriesSelectedOnAnyTab(seriesKey)) {
                                 TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
-                                addSeriesToPlot(renamedData, seriesColor);
-
-                                // Update all stats tables with aggregation
+                                addSeriesToPool(renamedData);
                                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
 
-                                // Don't reset zoom when Last updates - series keys haven't changed,
-                                // just the data they point to
+                                // Refresh all tabs that show this series (don't reset zoom)
+                                tabManager.updateAllTabs(false);
                             }
                         });
                     })
@@ -1123,11 +1107,8 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Repaint all plot panels to show the updated data
-        // Don't call refreshData() as it would reset the zoom
-        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-            panel.repaint();
-        }
+        // Refresh all tabs that show "[Last]" series (don't reset zoom)
+        tabManager.updateAllTabs(false);
     }
 
 
@@ -1144,9 +1125,10 @@ public class RunManager extends JFrame {
         isUpdatingSelection = true;
         updateOutputsTree();
 
-        // Restore visual selection to match what's currently plotted
-        Set<String> restoredSeries = restoreTreeSelectionFromSelectedSeries();
-        reconcileSelectedSeriesWithTree(restoredSeries);
+        // Restore visual selection to match what's currently plotted on active tab
+        Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+        Set<String> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
+        reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
 
         isUpdatingSelection = false;
     }
@@ -1160,7 +1142,7 @@ public class RunManager extends JFrame {
         try {
             outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
             updateOutputsTree();
-            restoreTreeSelectionFromSelectedSeries();
+            restoreTreeSelectionForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
             isUpdatingSelection = false;
         }
@@ -1231,9 +1213,8 @@ public class RunManager extends JFrame {
         TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
 
         if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear plot and stats when nothing is selected
-            clearPlotAndStats();
-            selectedSeries.clear();
+            // Clear the target tab's series when nothing is selected
+            tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
         }
 
@@ -1244,27 +1225,22 @@ public class RunManager extends JFrame {
             collectLeafNodes(node, allLeaves);
         }
 
-        // If no valid leaves found, clear everything
+        // If no valid leaves found, clear the target tab
         if (allLeaves.isEmpty()) {
-            clearPlotAndStats();
-            selectedSeries.clear();
+            tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
         }
 
         // Build new set of selected series (with unique keys)
-        // For runs: "seriesName [RunName]"
-        // For datasets: "seriesName [filename]"
-        Set<String> newSelectedSeries = new HashSet<>();
+        Set<String> newSelectedSeries = new LinkedHashSet<>();
         Map<String, OutputsTreeBuilder.SeriesLeafNode> seriesKeyToLeaf = new HashMap<>();
 
         for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
             String seriesKey;
             if (leaf.source instanceof RunInfoImpl) {
-                // Run series: add run name suffix
                 String runName = ((RunInfoImpl) leaf.source).getRunName();
                 seriesKey = leaf.seriesName + " [" + runName + "]";
             } else {
-                // Dataset series: add filename suffix for display
                 DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) leaf.source;
                 seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
             }
@@ -1272,71 +1248,51 @@ public class RunManager extends JFrame {
             seriesKeyToLeaf.put(seriesKey, leaf);
         }
 
-        // When filtering with an additive click (Cmd/Ctrl/Shift), preserve series that
-        // are hidden by the filter. On a plain click, let the standard replace behaviour
-        // apply so that hidden series are deselected just like visible ones would be.
+        // Get the target tab's current series for diffing
+        Set<String> currentTabSeries = tabManager.getTargetTabSelectedSeries();
+
+        // When filtering with an additive click, preserve series hidden by the filter
         if (treeFilterManager.isFiltering() && isAdditiveSelectionEvent()) {
             Set<String> visibleSeriesKeys = getVisibleSeriesKeys();
-            for (String key : selectedSeries) {
+            for (String key : currentTabSeries) {
                 if (!visibleSeriesKeys.contains(key)) {
                     newSelectedSeries.add(key);
                 }
             }
         }
 
-        // Check if there's overlap between old and new selections
-        // Reset zoom if: (1) first selection (old empty), OR (2) selection completely changed (no overlap)
-        // Don't reset zoom if: there's overlap (adding series or Last updating)
-        boolean hasOverlap = selectedSeries.stream().anyMatch(newSelectedSeries::contains);
-        final boolean shouldResetZoom = selectedSeries.isEmpty() || !hasOverlap;
+        // Check if there's overlap between old and new selections for zoom decision
+        boolean hasOverlap = currentTabSeries.stream().anyMatch(newSelectedSeries::contains);
+        final boolean shouldResetZoom = currentTabSeries.isEmpty() || !hasOverlap;
 
-        // Determine which series to add and which to remove
-        Set<String> seriesToAdd = new HashSet<>(newSelectedSeries);
-        seriesToAdd.removeAll(selectedSeries);
-
-        Set<String> seriesToRemove = new HashSet<>(selectedSeries);
-        seriesToRemove.removeAll(newSelectedSeries);
-
-        // Remove series that are no longer selected
-        for (String seriesKey : seriesToRemove) {
-            plotDataSet.removeSeries(seriesKey);
-            seriesColorManager.removeColor(seriesKey);
-
-            // Remove from all stats tables
-            tabManager.removeSeriesFromStatsTabs(seriesKey);
-
-            // Remove from legend in all plots
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.removeLegendSeries(seriesKey);
+        // Determine which series need data fetched (not yet in the pool)
+        Set<String> seriesToFetch = new HashSet<>(newSelectedSeries);
+        for (String key : seriesToFetch.toArray(new String[0])) {
+            if (plotDataSet.getSeries(key) != null) {
+                seriesToFetch.remove(key); // Already in pool
             }
         }
 
-        // Group series by their underlying data source
-        // For runs: sessionKey + seriesName (handles multiple series referencing same data)
-        // For datasets: just seriesName (already loaded in plotDataSet)
-        Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
-        Set<String> datasetSeriesKeys = new HashSet<>();  // Track dataset series separately
+        // Capture the target PlotPanel for async callbacks (not "active panel at callback time")
+        final PlotPanel targetPanel = tabManager.getTargetPlotPanel();
 
-        for (String seriesKey : seriesToAdd) {
+        // Group new series needing fetch by data source
+        Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
+        Set<String> datasetSeriesKeys = new HashSet<>();
+
+        for (String seriesKey : seriesToFetch) {
             OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
             if (leaf == null) continue;
 
-            // Assign consistent color to new series
-            Color seriesColor = seriesColorManager.assignColor(seriesKey);
+            // Assign color if not already assigned
+            seriesColorManager.assignColor(seriesKey);
 
             if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                // Dataset series - already loaded, just track for later processing
                 datasetSeriesKeys.add(seriesKey);
             } else {
-                // Run series - need to fetch from session
                 RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
-
-                // Resolve actual session (handles "Last" run)
                 SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
-                if (resolvedSession == null) {
-                    // Can happen if "Last" is selected but no run has completed yet
-                    continue;
-                }
+                if (resolvedSession == null) continue;
 
                 String sessionKey = resolvedSession.getSessionKey();
                 String seriesName = leaf.seriesName;
@@ -1346,7 +1302,14 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Process each unique data source once
+        // Also assign colors for series new to this tab but already in pool
+        for (String seriesKey : newSelectedSeries) {
+            if (!currentTabSeries.contains(seriesKey)) {
+                seriesColorManager.assignColor(seriesKey);
+            }
+        }
+
+        // Fetch run series data into the pool
         for (Map.Entry<String, List<String>> entry : dataSourceToSeriesKeys.entrySet()) {
             String dataSourceKey = entry.getKey();
             List<String> seriesKeys = entry.getValue();
@@ -1355,105 +1318,76 @@ public class RunManager extends JFrame {
             String sessionKey = parts[0];
             String seriesName = parts[1];
 
-            // Check if we already have this data cached
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
-                // Add immediately with cached data for ALL series keys that reference it
                 for (String seriesKey : seriesKeys) {
                     TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                    addSeriesToPlot(renamedData, seriesColorManager.getColor(seriesKey));
-
-                    // Add to all stats tables with aggregation
+                    addSeriesToPool(renamedData);
                     tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
                 }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                // Show loading state for ALL series that reference this data
                 for (String seriesKey : seriesKeys) {
                     tabManager.addLoadingSeriesInStatsTabs(seriesKey);
                 }
 
-                // Capture series keys for use in callback
                 final List<String> capturedSeriesKeys = new ArrayList<>(seriesKeys);
+                final Set<String> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
 
-                // Request the timeseries data ONCE for all series that reference it
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
-                            // Add data for ALL series keys that reference this data source
                             for (String capturedSeriesKey : capturedSeriesKeys) {
-                                // Check if this series is still selected
-                                if (selectedSeries.contains(capturedSeriesKey)) {
-                                    // Rename series to include run label
+                                // Check if series is still selected on the target tab
+                                if (capturedNewSelection.contains(capturedSeriesKey)) {
                                     TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
-                                    addSeriesToPlot(renamedData, seriesColorManager.getColor(capturedSeriesKey));
-
-                                    // Update all stats tables with aggregation
+                                    addSeriesToPool(renamedData);
                                     tabManager.updateSeriesInStatsTabsWithAggregation(capturedSeriesKey, renamedData);
                                 }
                             }
 
-                            // Zoom to fit in all plot panels (once for all series) if selection completely changed
-                            if (shouldResetZoom) {
-                                for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                                    panel.zoomToFit();
-                                }
+                            // Refresh the target tab (data now in pool)
+                            if (targetPanel != null) {
+                                tabManager.updateTab(targetPanel, shouldResetZoom);
                             }
                         });
                     })
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            // Add error for ALL series that reference this data source
                             for (String capturedSeriesKey : capturedSeriesKeys) {
-                                if (selectedSeries.contains(capturedSeriesKey)) {
-                                    // Add error to all stats tables
-                                    tabManager.addErrorSeriesInStatsTabs(capturedSeriesKey, throwable.getMessage());
-                                }
+                                tabManager.addErrorSeriesInStatsTabs(capturedSeriesKey, throwable.getMessage());
                             }
                         });
                         return null;
                     });
             } else {
-                // Request already in progress, show loading state for ALL series that reference this data
                 for (String seriesKey : seriesKeys) {
                     tabManager.addLoadingSeriesInStatsTabs(seriesKey);
                 }
             }
         }
 
-        // Process dataset series (stored in datasetSeriesCache, not plotDataSet yet)
+        // Fetch dataset series into the pool
         for (String seriesKey : datasetSeriesKeys) {
             OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
             if (leaf == null) continue;
 
-            // Get cached data (like runs do)
             TimeSeriesData cachedData = datasetSeriesCache.get(leaf.seriesName);
             if (cachedData != null) {
-                // Rename to add display suffix for legend/export
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-
-                // Add to plotDataSet and plot panels (just like runs)
-                addSeriesToPlot(renamedData, seriesColorManager.getColor(seriesKey));
-
-                // Add to stats tables with aggregation
+                addSeriesToPool(renamedData);
                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
             } else {
-                // Shouldn't happen, but handle gracefully
                 logger.warn("Dataset series not found in cache: " + leaf.seriesName);
                 tabManager.addErrorSeriesInStatsTabs(seriesKey, "Series not found");
             }
         }
 
-        // Update the selected series set
-        selectedSeries = newSelectedSeries;
+        // Update the target tab's selected series (rebuilds legend, visible series, display)
+        tabManager.setTargetTabSelectedSeries(newSelectedSeries);
 
-        // Update plot visibility, passing zoom reset flag
-        updatePlotVisibility(shouldResetZoom);
-
-        // If selection completely changed and we don't have the new data yet, zoom after data loads
-        if (!plotDataSet.isEmpty() && shouldResetZoom) {
-            for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-                panel.zoomToFit();
-            }
+        // Apply zoom if needed
+        if (shouldResetZoom && targetPanel != null) {
+            targetPanel.zoomToFit();
         }
     }
 
@@ -1543,18 +1477,11 @@ public class RunManager extends JFrame {
 
 
     /**
-     * Adds a series to plotDataSet and all plot panels with the specified color.
-     * Used for both run series (from session) and dataset series (from cache).
+     * Adds a series to the shared data pool.
+     * Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    private void addSeriesToPlot(TimeSeriesData timeSeriesData, Color seriesColor) {
+    private void addSeriesToPool(TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(timeSeriesData);
-        // Color is already managed by SeriesColorManager - no need to set here
-        updateAllTabs(false); // Don't reset zoom when adding series
-
-        // Add to legend in all plot panels
-        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-            panel.addLegendSeries(timeSeriesData.getName(), seriesColor);
-        }
     }
 
     /**
@@ -1576,19 +1503,30 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Clears all plots and stats tables.
+     * Called when the user switches tabs. Syncs the timeseries tree selection
+     * to reflect the new active tab's selected series.
+     */
+    private void onTabChanged() {
+        Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+        if (tabSeries == null) return;
+
+        isUpdatingSelection = true;
+        try {
+            restoreTreeSelectionForSeries(tabSeries);
+        } finally {
+            isUpdatingSelection = false;
+        }
+    }
+
+    /**
+     * Clears the data pool, all per-tab series, and all stats tables.
      */
     private void clearPlotAndStats() {
         plotDataSet.removeAllSeries();
         seriesColorManager.clearAll();
-        updateAllTabs(true); // Reset zoom when clearing (though no data to zoom)
+        tabManager.clearAllTabSeries();
+        tabManager.updateAllTabs(true);
 
-        // Clear legend in all plot panels
-        for (PlotPanel panel : tabManager.getAllPlotPanels()) {
-            panel.clearLegend();
-        }
-
-        // Clear all stats tables
         for (StatsTableModel model : tabManager.getAllStatsModels()) {
             model.clear();
         }

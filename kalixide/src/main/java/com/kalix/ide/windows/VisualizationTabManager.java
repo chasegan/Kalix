@@ -20,8 +20,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Manages visualization tabs (right side of RunManager) - plots and statistics.
@@ -52,7 +56,7 @@ import java.util.Map;
  * which is why new tabs show correct data even if existing tabs have stale caches.
  *
  * @see PlotPanel
- * @see com.kalix.ide.windows.RunManager#addSeriesToPlot
+ * @see com.kalix.ide.windows.RunManager#addSeriesToPool
  */
 public class VisualizationTabManager {
 
@@ -60,6 +64,10 @@ public class VisualizationTabManager {
     private final DataSet sharedDataSet;           // Single source of truth for all tabs
     private final Map<String, Color> sharedColorMap;  // Consistent colors across all tabs
     private final List<TabInfo> tabs;
+
+    // Tab change tracking
+    private int lastActivePlotTabIndex = 0;
+    private Runnable onTabChangedCallback;
 
     // Drag and drop state
     private static final int DRAG_THRESHOLD = 5;
@@ -125,10 +133,13 @@ public class VisualizationTabManager {
         public boolean showCoordinates = false;
         public boolean legendCollapsed = false;
 
+        // Series selection from source tab (null = inherit from active tab)
+        public Set<String> selectedSeries = null;
+
         /**
          * Extract settings from a plot tab.
          */
-        public static TabSettings fromPlotTab(PlotPanel plotPanel) {
+        public static TabSettings fromPlotTab(PlotPanel plotPanel, TabInfo tabInfo) {
             TabSettings settings = new TabSettings();
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
@@ -137,6 +148,7 @@ public class VisualizationTabManager {
             settings.autoYMode = plotPanel.isAutoYMode();
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
+            settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
             return settings;
         }
 
@@ -147,6 +159,7 @@ public class VisualizationTabManager {
             TabSettings settings = new TabSettings();
             settings.aggregationPeriod = statsTabInfo.statsPeriod;
             settings.aggregationMethod = statsTabInfo.statsMethod;
+            settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
             return settings;
         }
 
@@ -172,6 +185,9 @@ public class VisualizationTabManager {
         final JComponent component;
         final PlotPanel plotPanel; // null for stats tabs
         final StatsTableModel statsModel; // null for plot tabs
+
+        // Per-tab selected series (plot tabs only). Preserves insertion order for legend consistency.
+        final Set<String> selectedSeries = new LinkedHashSet<>();
 
         // Aggregation settings for stats tabs
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
@@ -201,6 +217,25 @@ public class VisualizationTabManager {
         this.tabbedPane = new JTabbedPane();
         this.tabbedPane.setTabPlacement(JTabbedPane.TOP);
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+
+        // Track tab changes for tree synchronization
+        this.tabbedPane.addChangeListener(e -> {
+            TabInfo active = getActiveTab();
+            if (active != null && active.type == TabInfo.TabType.PLOT) {
+                lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
+            }
+            if (onTabChangedCallback != null) {
+                onTabChangedCallback.run();
+            }
+        });
+    }
+
+    /**
+     * Sets a callback to be invoked when the active tab changes.
+     * Used by RunManager to synchronize tree selection with the active tab.
+     */
+    public void setOnTabChangedCallback(Runnable callback) {
+        this.onTabChangedCallback = callback;
     }
 
     /**
@@ -214,9 +249,15 @@ public class VisualizationTabManager {
         plotPanel.setDataSet(sharedDataSet);
         plotPanel.setSeriesColors(sharedColorMap);
 
-        // Get visible series from existing tabs (if any)
-        List<String> visibleSeries = getVisibleSeriesFromDataSet();
-        plotPanel.setVisibleSeries(visibleSeries);
+        // Inherit series from active plot tab, or use all series from pool for the first tab
+        TabInfo activeTab = getActivePlotTab();
+        Set<String> inheritedSeries;
+        if (activeTab != null) {
+            inheritedSeries = new LinkedHashSet<>(activeTab.selectedSeries);
+        } else {
+            inheritedSeries = new LinkedHashSet<>(sharedDataSet.getSeriesNames());
+        }
+        plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
 
         // Get default settings from preferences
         boolean defaultShowCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
@@ -228,8 +269,8 @@ public class VisualizationTabManager {
         boolean defaultLegendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
         plotPanel.setLegendCollapsed(defaultLegendCollapsed);
 
-        // Populate legend with existing series
-        for (String seriesName : sharedDataSet.getSeriesNames()) {
+        // Populate legend with inherited series
+        for (String seriesName : inheritedSeries) {
             Color color = sharedColorMap.get(seriesName);
             if (color != null) {
                 plotPanel.addLegendSeries(seriesName, color);
@@ -242,8 +283,9 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
-        // Add tab
+        // Add tab with inherited series selection
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
+        tabInfo.selectedSeries.addAll(inheritedSeries);
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
@@ -266,9 +308,17 @@ public class VisualizationTabManager {
         plotPanel.setDataSet(sharedDataSet);
         plotPanel.setSeriesColors(sharedColorMap);
 
-        // Get all series from dataset (copy all series from source tab)
-        List<String> allSeries = new ArrayList<>(sharedDataSet.getSeriesNames());
-        plotPanel.setVisibleSeries(allSeries);
+        // Use series from settings if provided, otherwise inherit from active tab
+        Set<String> inheritedSeries;
+        if (settings.selectedSeries != null) {
+            inheritedSeries = new LinkedHashSet<>(settings.selectedSeries);
+        } else {
+            TabInfo activeTab = getActivePlotTab();
+            inheritedSeries = activeTab != null
+                ? new LinkedHashSet<>(activeTab.selectedSeries)
+                : new LinkedHashSet<>(sharedDataSet.getSeriesNames());
+        }
+        plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
 
         // Apply all settings from TabSettings (must be done AFTER setVisibleSeries)
         plotPanel.setAggregation(settings.aggregationPeriod, settings.aggregationMethod);
@@ -280,8 +330,8 @@ public class VisualizationTabManager {
             plotPanel.setLegendCollapsed(true);
         }
 
-        // Populate legend with all series
-        for (String seriesName : sharedDataSet.getSeriesNames()) {
+        // Populate legend with inherited series
+        for (String seriesName : inheritedSeries) {
             Color color = sharedColorMap.get(seriesName);
             if (color != null) {
                 plotPanel.addLegendSeries(seriesName, color);
@@ -294,8 +344,9 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
-        // Add tab
+        // Add tab with inherited series selection
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
+        tabInfo.selectedSeries.addAll(inheritedSeries);
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
@@ -660,23 +711,18 @@ public class VisualizationTabManager {
             }
         }
 
-        /** Recomputes stats with current aggregation settings. */
+        /** Recomputes stats with current aggregation settings, filtered to per-tab series. */
         private void recomputeStats() {
             if (tabInfo.statsModel == null || dataSet == null) {
                 return;
             }
 
-            // Clear and rebuild stats with aggregated data
             tabInfo.statsModel.clear();
-
-            for (String seriesName : dataSet.getSeriesNames()) {
+            for (String seriesName : tabInfo.selectedSeries) {
                 TimeSeriesData originalSeries = dataSet.getSeries(seriesName);
                 if (originalSeries != null) {
-                    // Apply aggregation
                     TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                         originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
-
-                    // Update stats with aggregated data
                     if (aggregatedSeries != null) {
                         tabInfo.statsModel.addOrUpdateSeries(aggregatedSeries);
                     }
@@ -833,7 +879,19 @@ public class VisualizationTabManager {
 
         // Create tab info so we can reference it in toolbar builder
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
+
+        // Inherit series from active tab
+        TabInfo activeTab = getActiveTab();
+        if (activeTab != null && !activeTab.selectedSeries.isEmpty()) {
+            tabInfo.selectedSeries.addAll(activeTab.selectedSeries);
+        } else {
+            tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesNames());
+        }
+
         tabs.add(tabInfo);
+
+        // Populate with inherited series data
+        rebuildStatsTab(tabInfo);
 
         JToolBar toolbar = createStatsToolbar(tabInfo, table);
         containerPanel.add(toolbar, BorderLayout.NORTH);
@@ -880,7 +938,22 @@ public class VisualizationTabManager {
         tabInfo.statsPeriod = settings.aggregationPeriod;
         tabInfo.statsMethod = settings.aggregationMethod;
 
+        // Use series from settings if provided, otherwise inherit from active tab
+        if (settings.selectedSeries != null) {
+            tabInfo.selectedSeries.addAll(settings.selectedSeries);
+        } else {
+            TabInfo activeTab = getActiveTab();
+            if (activeTab != null && !activeTab.selectedSeries.isEmpty()) {
+                tabInfo.selectedSeries.addAll(activeTab.selectedSeries);
+            } else {
+                tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesNames());
+            }
+        }
+
         tabs.add(tabInfo);
+
+        // Populate with inherited series data
+        rebuildStatsTab(tabInfo);
 
         JToolBar toolbar = createStatsToolbar(tabInfo, table);
         containerPanel.add(toolbar, BorderLayout.NORTH);
@@ -889,23 +962,6 @@ public class VisualizationTabManager {
         int index = tabbedPane.getTabCount();
         tabbedPane.addTab("", containerPanel);
         setupTabIcon(index, TabInfo.TabType.STATS);
-
-        // Populate stats with all series from dataset, applying aggregation
-        if (sharedDataSet != null) {
-            for (String seriesName : sharedDataSet.getSeriesNames()) {
-                TimeSeriesData originalSeries = sharedDataSet.getSeries(seriesName);
-                if (originalSeries != null) {
-                    // Apply aggregation
-                    TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
-                        originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
-
-                    // Update stats with aggregated data
-                    if (aggregatedSeries != null) {
-                        model.addOrUpdateSeries(aggregatedSeries);
-                    }
-                }
-            }
-        }
 
         // Select the new tab
         tabbedPane.setSelectedIndex(index);
@@ -1036,7 +1092,7 @@ public class VisualizationTabManager {
                 // Extract settings from source tab
                 TabSettings settings;
                 if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel);
+                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel, sourceTab);
                 } else if (sourceTab.type == TabInfo.TabType.STATS) {
                     settings = TabSettings.fromStatsTab(sourceTab);
                 } else {
@@ -1063,7 +1119,7 @@ public class VisualizationTabManager {
                 // Extract settings from source tab
                 TabSettings settings;
                 if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel);
+                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel, sourceTab);
                 } else if (sourceTab.type == TabInfo.TabType.STATS) {
                     settings = TabSettings.fromStatsTab(sourceTab);
                 } else {
@@ -1162,20 +1218,15 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Updates all tabs with the current data from the shared dataset.
+     * Updates all plot tabs using each tab's own per-tab selected series.
      *
      * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
     public void updateAllTabs(boolean resetZoom) {
-        List<String> visibleSeries = getVisibleSeriesFromDataSet();
-
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                // Update plot tabs
                 tab.plotPanel.setSeriesColors(sharedColorMap);
-                tab.plotPanel.setVisibleSeries(visibleSeries);
-
-                // CRITICAL: Rebuild display dataset when underlying data changes
+                tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.plotPanel.refreshData(resetZoom);
             }
             // Stats tabs update automatically through their DataSet listeners
@@ -1183,13 +1234,165 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Gets the list of visible series from the shared dataset.
+     * Updates only the target plot tab (identified by PlotPanel reference).
      */
-    private List<String> getVisibleSeriesFromDataSet() {
-        if (sharedDataSet == null || sharedDataSet.isEmpty()) {
-            return new ArrayList<>();
+    public void updateTab(PlotPanel targetPanel, boolean resetZoom) {
+        for (TabInfo tab : tabs) {
+            if (tab.plotPanel == targetPanel) {
+                tab.plotPanel.setSeriesColors(sharedColorMap);
+                tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+                tab.plotPanel.refreshData(resetZoom);
+                return;
+            }
         }
-        return new ArrayList<>(sharedDataSet.getSeriesNames());
+    }
+
+    // === Active tab query methods ===
+
+    /**
+     * Returns the TabInfo for the currently selected tab, or null.
+     */
+    private TabInfo getActiveTab() {
+        int index = tabbedPane.getSelectedIndex();
+        if (index >= 0 && index < tabs.size()) {
+            return tabs.get(index);
+        }
+        return null;
+    }
+
+    /**
+     * Returns the active PLOT tab's TabInfo, or null if a STATS tab is active.
+     */
+    private TabInfo getActivePlotTab() {
+        TabInfo active = getActiveTab();
+        if (active != null && active.type == TabInfo.TabType.PLOT) {
+            return active;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the last-active plot tab (fallback when a stats tab is focused).
+     */
+    private TabInfo getLastActivePlotTab() {
+        if (lastActivePlotTabIndex >= 0 && lastActivePlotTabIndex < tabs.size()) {
+            TabInfo tab = tabs.get(lastActivePlotTabIndex);
+            if (tab.type == TabInfo.TabType.PLOT) return tab;
+        }
+        // Fallback: first plot tab
+        for (TabInfo tab : tabs) {
+            if (tab.type == TabInfo.TabType.PLOT) return tab;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the target tab for selection changes: active tab (any type), or last-active plot tab as fallback.
+     */
+    private TabInfo getTargetTab() {
+        TabInfo active = getActiveTab();
+        if (active != null) return active;
+        return getLastActivePlotTab();
+    }
+
+    /**
+     * Returns the selected series for the target tab, or empty set.
+     */
+    public Set<String> getTargetTabSelectedSeries() {
+        TabInfo tab = getTargetTab();
+        return tab != null ? Collections.unmodifiableSet(tab.selectedSeries) : Collections.emptySet();
+    }
+
+    /**
+     * Returns the PlotPanel for the target tab (null if it's a stats tab).
+     */
+    public PlotPanel getTargetPlotPanel() {
+        TabInfo tab = getTargetTab();
+        return tab != null ? tab.plotPanel : null;
+    }
+
+    /**
+     * Sets the selected series on the target tab. Updates visuals accordingly.
+     */
+    public void setTargetTabSelectedSeries(Set<String> series) {
+        TabInfo tab = getTargetTab();
+        if (tab == null) return;
+
+        tab.selectedSeries.clear();
+        tab.selectedSeries.addAll(series);
+
+        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+            // Rebuild legend
+            tab.plotPanel.clearLegend();
+            for (String seriesName : series) {
+                Color color = sharedColorMap.get(seriesName);
+                if (color != null) {
+                    tab.plotPanel.addLegendSeries(seriesName, color);
+                }
+            }
+
+            // Update visible series and refresh
+            tab.plotPanel.setSeriesColors(sharedColorMap);
+            tab.plotPanel.setVisibleSeries(new ArrayList<>(series));
+            tab.plotPanel.refreshData(false);
+        } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+            // Rebuild stats table to show only selected series
+            rebuildStatsTab(tab);
+        }
+    }
+
+    /**
+     * Rebuilds a stats tab to show only its selected series.
+     */
+    private void rebuildStatsTab(TabInfo tab) {
+        tab.statsModel.clear();
+        for (String seriesName : tab.selectedSeries) {
+            TimeSeriesData data = sharedDataSet.getSeries(seriesName);
+            if (data != null) {
+                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                    data, tab.statsPeriod, tab.statsMethod);
+                if (aggregatedData != null) {
+                    tab.statsModel.addOrUpdateSeries(aggregatedData);
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns the union of selected series across all tabs.
+     */
+    public Set<String> getAllSelectedSeriesAcrossTabs() {
+        Set<String> all = new HashSet<>();
+        for (TabInfo tab : tabs) {
+            all.addAll(tab.selectedSeries);
+        }
+        return all;
+    }
+
+    /**
+     * Clears selected series on all tabs.
+     */
+    public void clearAllTabSeries() {
+        for (TabInfo tab : tabs) {
+            tab.selectedSeries.clear();
+            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+                tab.plotPanel.clearLegend();
+            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                tab.statsModel.clear();
+            }
+        }
+    }
+
+    /**
+     * Checks whether any tab has the given series selected.
+     */
+    public boolean isSeriesSelectedOnAnyTab(String seriesKey) {
+        for (TabInfo tab : tabs) {
+            if (tab.selectedSeries.contains(seriesKey)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1234,8 +1437,8 @@ public class VisualizationTabManager {
      */
     public void updateSeriesInStatsTabsWithAggregation(String seriesName, TimeSeriesData data) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                // Apply aggregation based on tab settings
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
+                    && tab.selectedSeries.contains(seriesName)) {
                 TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
 
@@ -1253,7 +1456,8 @@ public class VisualizationTabManager {
      */
     public void addLoadingSeriesInStatsTabs(String seriesName) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
+                    && tab.selectedSeries.contains(seriesName)) {
                 tab.statsModel.addLoadingSeries(seriesName);
             }
         }
@@ -1267,7 +1471,8 @@ public class VisualizationTabManager {
      */
     public void addErrorSeriesInStatsTabs(String seriesName, String errorMessage) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
+                    && tab.selectedSeries.contains(seriesName)) {
                 tab.statsModel.addErrorSeries(seriesName, errorMessage);
             }
         }
@@ -1281,6 +1486,7 @@ public class VisualizationTabManager {
     public void removeSeriesFromStatsTabs(String seriesName) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                tab.selectedSeries.remove(seriesName);
                 tab.statsModel.removeSeries(seriesName);
             }
         }
