@@ -21,7 +21,10 @@ public enum PlotType {
     EXCEEDANCE("Exceedance", "Exceedance Probability (%)"),
 
     /** Double mass curve: cumulative reference on X-axis vs cumulative series on Y-axis. */
-    DOUBLE_MASS("Double Mass", "Cumulative Value");
+    DOUBLE_MASS("Double Mass", "Cumulative Value"),
+
+    /** Residual mass curve: cumulative deviation from mean over time. */
+    RESIDUAL_MASS("Residual Mass", "Residual Mass");
 
     private final String displayName;
     private final String yAxisLabel;

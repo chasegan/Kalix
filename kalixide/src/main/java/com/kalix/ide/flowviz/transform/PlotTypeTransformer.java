@@ -51,6 +51,7 @@ public class PlotTypeTransformer {
                 case CUMULATIVE_DIFFERENCE -> transformCumulativeDifference(input, selectedSeriesKeys);
                 case EXCEEDANCE -> transformExceedance(input, selectedSeriesKeys);
                 case DOUBLE_MASS -> transformDoubleMass(input, selectedSeriesKeys);
+                case RESIDUAL_MASS -> transformResidualMass(input, selectedSeriesKeys);
             };
         } catch (Exception e) {
             logger.error("Error transforming dataset with plot type " + type, e);
@@ -369,6 +370,66 @@ public class PlotTypeTransformer {
      *
      * The reference series itself is included as a 1:1 line (cumRef vs cumRef).
      */
+    /**
+     * Transforms each series to residual mass: cumulative deviation from mean over time.
+     * Equivalent to cumsum(value - mean) for valid points. NaN values produce NaN output
+     * without affecting the running total.
+     */
+    private static DataSet transformResidualMass(DataSet input, List<String> selectedSeriesKeys) {
+        DataSet result = new DataSet();
+
+        for (String seriesKey : selectedSeriesKeys) {
+            TimeSeriesData series = input.getSeries(seriesKey);
+            if (series == null) {
+                continue;
+            }
+
+            double[] values = series.getValues();
+            boolean[] validPoints = series.getValidPoints();
+            long[] timestamps = series.getTimestamps();
+
+            // Calculate mean of valid points
+            double sum = 0.0;
+            int validCount = 0;
+            for (int i = 0; i < values.length; i++) {
+                if (validPoints[i]) {
+                    sum += values[i];
+                    validCount++;
+                }
+            }
+
+            if (validCount == 0) {
+                continue;
+            }
+
+            double mean = sum / validCount;
+
+            // Calculate cumulative deviation from mean
+            double[] residualMass = new double[values.length];
+            double runningTotal = 0.0;
+
+            for (int i = 0; i < values.length; i++) {
+                if (validPoints[i]) {
+                    runningTotal += values[i] - mean;
+                    residualMass[i] = runningTotal;
+                } else {
+                    residualMass[i] = Double.NaN;
+                }
+            }
+
+            LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
+            TimeSeriesData residualSeries = new TimeSeriesData(
+                series.getName(),
+                dateTimes,
+                residualMass
+            );
+
+            result.addSeries(residualSeries);
+        }
+
+        return result;
+    }
+
     private static DataSet transformDoubleMass(DataSet input, List<String> selectedSeriesKeys) {
         if (selectedSeriesKeys.isEmpty()) {
             return new DataSet();
