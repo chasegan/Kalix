@@ -11,5 +11,8 @@ public enum XAxisType {
     PERCENTILE,
 
     /** Count-based X-axis for iteration/evaluation counts, event counts, etc. */
-    COUNT
+    COUNT,
+
+    /** Numeric X-axis for arbitrary value domains (e.g., double mass cumulative reference). */
+    NUMERIC
 }

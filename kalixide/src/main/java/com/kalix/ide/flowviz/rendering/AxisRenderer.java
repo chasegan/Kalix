@@ -30,6 +30,9 @@ public class AxisRenderer {
 
     private final TemporalAxisCalculator temporalCalculator;
 
+    // Decimal places for NUMERIC x-axis labels, computed per draw call
+    private int numericDecimalPlaces;
+
     public AxisRenderer() {
         this.temporalCalculator = new TemporalAxisCalculator();
     }
@@ -63,6 +66,8 @@ public class AxisRenderer {
             timeTicks = calculatePercentileTicks(viewport);
         } else if (viewport.getXAxisType() == XAxisType.COUNT) {
             timeTicks = calculateCountTicks(viewport);
+        } else if (viewport.getXAxisType() == XAxisType.NUMERIC) {
+            timeTicks = calculateNumericTicks(viewport);
         } else {
             // TIME: Calculate time ticks using temporal boundaries
             timeTicks = temporalCalculator.calculateTemporalBoundaryTicks(
@@ -153,6 +158,39 @@ public class AxisRenderer {
                 ticks.add(currentCount);
             }
             currentCount += tickInterval;
+        }
+
+        return ticks;
+    }
+
+    /**
+     * Calculates optimal tick positions for a numeric (non-time, non-percentile) X-axis.
+     * Fake timestamps encode real values via NUMERIC_SCALE.
+     */
+    private List<Long> calculateNumericTicks(ViewPort viewport) {
+        List<Long> ticks = new ArrayList<>();
+
+        long scale = com.kalix.ide.flowviz.transform.PlotTypeTransformer.NUMERIC_SCALE;
+
+        // Decode fake timestamps back to real values
+        double startValue = (double) viewport.getStartTimeMs() / scale;
+        double endValue = (double) viewport.getEndTimeMs() / scale;
+        double range = endValue - startValue;
+
+        if (range <= 0) return ticks;
+
+        // Use same nice-interval logic as value axis
+        int targetTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotWidth() / 80));
+        double tickInterval = range / (targetTicks - 1);
+        tickInterval = roundToNiceValueInterval(tickInterval);
+
+        // Generate ticks
+        double current = Math.floor(startValue / tickInterval) * tickInterval;
+        while (current <= endValue + tickInterval / 2) {
+            if (current >= startValue - tickInterval / 2) {
+                ticks.add((long) (current * scale));
+            }
+            current += tickInterval;
         }
 
         return ticks;
@@ -270,6 +308,16 @@ public class AxisRenderer {
 
         FontMetrics fm = g2d.getFontMetrics();
 
+        // Pre-compute decimal places for NUMERIC labels (consistent with Y-axis approach)
+        if (viewport.getXAxisType() == XAxisType.NUMERIC && axisInfo.timeTicks.size() >= 2) {
+            long scale = com.kalix.ide.flowviz.transform.PlotTypeTransformer.NUMERIC_SCALE;
+            List<Double> decodedTicks = new ArrayList<>();
+            for (Long tick : axisInfo.timeTicks) {
+                decodedTicks.add((double) tick / scale);
+            }
+            numericDecimalPlaces = decimalPlacesForTicks(decodedTicks);
+        }
+
         for (Long tickTime : axisInfo.timeTicks) {
             int screenX = viewport.timeToScreenX(tickTime);
 
@@ -334,6 +382,8 @@ public class AxisRenderer {
             return formatPercentile(value);
         } else if (xAxisType == XAxisType.COUNT) {
             return formatCount(value);
+        } else if (xAxisType == XAxisType.NUMERIC) {
+            return formatNumeric(value);
         } else {
             return formatTime(value, rangeMs);
         }
@@ -377,6 +427,15 @@ public class AxisRenderer {
         } else {
             return String.format("%d", count);
         }
+    }
+
+    /**
+     * Formats a fake timestamp as a numeric value label.
+     * Decodes from NUMERIC_SCALE encoding and formats consistently with Y-axis labels.
+     */
+    private String formatNumeric(long fakeTimestamp) {
+        double value = (double) fakeTimestamp / com.kalix.ide.flowviz.transform.PlotTypeTransformer.NUMERIC_SCALE;
+        return formatValue(value, numericDecimalPlaces);
     }
 
     /**
@@ -431,6 +490,8 @@ public class AxisRenderer {
             xTitle = "Exceedance Probability (%)";
         } else if (viewport.getXAxisType() == XAxisType.COUNT) {
             xTitle = "Count";
+        } else if (viewport.getXAxisType() == XAxisType.NUMERIC) {
+            xTitle = "Reference Value";
         } else {
             xTitle = "Time";
         }

@@ -267,7 +267,9 @@ public class PlotPanel extends JPanel {
         if (xAxisTypeOverride != null) {
             return xAxisTypeOverride;
         }
-        return (plotType == PlotType.EXCEEDANCE) ? XAxisType.PERCENTILE : XAxisType.TIME;
+        if (plotType == PlotType.EXCEEDANCE) return XAxisType.PERCENTILE;
+        if (plotType == PlotType.DOUBLE_MASS) return XAxisType.NUMERIC;
+        return XAxisType.TIME;
     }
 
     private void setupMouseListeners() {
@@ -676,8 +678,12 @@ public class PlotPanel extends JPanel {
 
         rebuildDisplayDataSet();
 
-        // Check if X-axis domain changed (switching to/from EXCEEDANCE)
-        boolean xAxisDomainChanged = (oldPlotType == PlotType.EXCEEDANCE) != (type == PlotType.EXCEEDANCE);
+        // Check if X-axis domain changed (switching to/from non-time X-axis types)
+        XAxisType oldAxisType = oldPlotType == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
+            : oldPlotType == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
+        XAxisType newAxisType = type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
+            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
+        boolean xAxisDomainChanged = oldAxisType != newAxisType;
 
         // If X-axis domain changed, must recalculate entire viewport (can't preserve X zoom)
         // Otherwise, follow same logic as aggregation changes

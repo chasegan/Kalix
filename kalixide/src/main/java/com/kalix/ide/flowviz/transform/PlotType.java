@@ -18,7 +18,10 @@ public enum PlotType {
     CUMULATIVE_DIFFERENCE("Cumulative Difference", "Cumulative Difference"),
 
     /** Exceedance probability distribution. */
-    EXCEEDANCE("Exceedance", "Exceedance Probability (%)");
+    EXCEEDANCE("Exceedance", "Exceedance Probability (%)"),
+
+    /** Double mass curve: cumulative reference on X-axis vs cumulative series on Y-axis. */
+    DOUBLE_MASS("Double Mass", "Cumulative Value");
 
     private final String displayName;
     private final String yAxisLabel;
@@ -47,7 +50,7 @@ public enum PlotType {
      * Reference series is the first selected series.
      */
     public boolean requiresReferenceSeries() {
-        return this == DIFFERENCE || this == CUMULATIVE_DIFFERENCE;
+        return this == DIFFERENCE || this == CUMULATIVE_DIFFERENCE || this == DOUBLE_MASS;
     }
 
     /**

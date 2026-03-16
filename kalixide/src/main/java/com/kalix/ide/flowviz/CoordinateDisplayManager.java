@@ -421,6 +421,12 @@ public class CoordinateDisplayManager {
             }
         }
 
+        // Check if we're in numeric mode (double mass plots)
+        if (currentViewport != null && currentViewport.getXAxisType() == XAxisType.NUMERIC) {
+            double value = (double) timestampMs / com.kalix.ide.flowviz.transform.PlotTypeTransformer.NUMERIC_SCALE;
+            return String.format("%.2f", value);
+        }
+
         // Standard time formatting
         LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneOffset.UTC);
 

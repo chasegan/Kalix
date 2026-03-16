@@ -17,6 +17,13 @@ public class PlotTypeTransformer {
     private static final Logger logger = LoggerFactory.getLogger(PlotTypeTransformer.class);
 
     /**
+     * Scale factor for encoding numeric values as fake timestamps.
+     * Used by DOUBLE_MASS (and potentially other NUMERIC x-axis types).
+     * Provides 6 decimal places of precision; max representable value ~9.2 × 10^12.
+     */
+    public static final long NUMERIC_SCALE = 1_000_000L;
+
+    /**
      * Transforms a dataset according to the specified plot type.
      *
      * @param input The aggregated dataset
@@ -43,6 +50,7 @@ public class PlotTypeTransformer {
                 case DIFFERENCE -> transformDifference(input, selectedSeriesKeys);
                 case CUMULATIVE_DIFFERENCE -> transformCumulativeDifference(input, selectedSeriesKeys);
                 case EXCEEDANCE -> transformExceedance(input, selectedSeriesKeys);
+                case DOUBLE_MASS -> transformDoubleMass(input, selectedSeriesKeys);
             };
         } catch (Exception e) {
             logger.error("Error transforming dataset with plot type " + type, e);
@@ -346,6 +354,96 @@ public class PlotTypeTransformer {
             );
 
             result.addSeries(exceedanceSeries);
+        }
+
+        return result;
+    }
+
+    /**
+     * Transforms to double mass curve: cumulative reference values on X-axis,
+     * cumulative series values on Y-axis.
+     *
+     * For each series, only timestamps where both the reference and the series have valid
+     * data are included. Cumulative sums are computed over these common valid points only.
+     * Reference cumulative values are encoded as fake timestamps (value * NUMERIC_SCALE).
+     *
+     * The reference series itself is included as a 1:1 line (cumRef vs cumRef).
+     */
+    private static DataSet transformDoubleMass(DataSet input, List<String> selectedSeriesKeys) {
+        if (selectedSeriesKeys.isEmpty()) {
+            return new DataSet();
+        }
+
+        DataSet result = new DataSet();
+
+        // Get reference series (first selected series)
+        String referenceKey = selectedSeriesKeys.get(0);
+        TimeSeriesData referenceSeries = input.getSeries(referenceKey);
+        if (referenceSeries == null) {
+            logger.warn("Reference series not found: {}", referenceKey);
+            return new DataSet();
+        }
+
+        // Build timestamp -> value map for reference series (valid points only)
+        long[] refTimestamps = referenceSeries.getTimestamps();
+        double[] refValues = referenceSeries.getValues();
+        boolean[] refValidPoints = referenceSeries.getValidPoints();
+
+        java.util.Map<Long, Double> referenceMap = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < refTimestamps.length; i++) {
+            if (refValidPoints[i]) {
+                referenceMap.put(refTimestamps[i], refValues[i]);
+            }
+        }
+
+        // Process each series
+        for (String seriesKey : selectedSeriesKeys) {
+            TimeSeriesData series = input.getSeries(seriesKey);
+            if (series == null) {
+                continue;
+            }
+
+            long[] timestamps = series.getTimestamps();
+            double[] values = series.getValues();
+            boolean[] validPoints = series.getValidPoints();
+
+            // Collect indices where both reference and this series have valid data
+            java.util.List<Integer> commonIndices = new java.util.ArrayList<>();
+            for (int i = 0; i < timestamps.length; i++) {
+                if (validPoints[i] && referenceMap.containsKey(timestamps[i])) {
+                    commonIndices.add(i);
+                }
+            }
+
+            if (commonIndices.isEmpty()) {
+                continue;
+            }
+
+            // Build cumulative sums over common valid points
+            int n = commonIndices.size();
+            double[] cumulativeY = new double[n];
+            long[] fakeTimestamps = new long[n];
+            double cumRef = 0.0;
+            double cumSeries = 0.0;
+
+            for (int j = 0; j < n; j++) {
+                int idx = commonIndices.get(j);
+                cumRef += referenceMap.get(timestamps[idx]);
+                cumSeries += values[idx];
+
+                fakeTimestamps[j] = (long) (cumRef * NUMERIC_SCALE);
+                cumulativeY[j] = cumSeries;
+            }
+
+            // Create new series with fake timestamps encoding cumulative reference on X
+            LocalDateTime[] dateTimes = timestampsToDateTimes(fakeTimestamps);
+            TimeSeriesData doubleMassSeries = new TimeSeriesData(
+                series.getName(),
+                dateTimes,
+                cumulativeY
+            );
+
+            result.addSeries(doubleMassSeries);
         }
 
         return result;
