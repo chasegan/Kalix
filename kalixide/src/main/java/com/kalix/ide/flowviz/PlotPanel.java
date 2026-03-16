@@ -106,6 +106,12 @@ public class PlotPanel extends JPanel {
     private final PlotInteractionManager plotInteractionManager;
     private final PlotLegendManager legendManager;
 
+    // === UNDO/REDO ===
+    private final PlotStateHistory stateHistory = new PlotStateHistory();
+    private boolean restoringState = false;  // Suppresses pushState() during restore
+    private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
+    private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
+
     public PlotPanel() {
         setBackground(Color.WHITE);
         
@@ -119,11 +125,21 @@ public class PlotPanel extends JPanel {
         plotInteractionManager = new PlotInteractionManager(this, coordinateDisplayManager);
         legendManager = new PlotLegendManager();
 
+        // Setup viewport coalescing timer for undo/redo (500ms delay)
+        viewportCoalesceTimer = new javax.swing.Timer(500, e -> pushState());
+        viewportCoalesceTimer.setRepeats(false);
+
         // Setup manager data access
         plotInteractionManager.setupDataAccess(
             () -> displayDataSet,
             () -> currentViewport,
-            viewport -> currentViewport = viewport,
+            viewport -> {
+                currentViewport = viewport;
+                // Coalesce rapid viewport changes (zoom/pan) into one history entry
+                if (!restoringState) {
+                    viewportCoalesceTimer.restart();
+                }
+            },
             () -> visibleSeries,
             this::getPlotArea
         );
@@ -163,6 +179,7 @@ public class PlotPanel extends JPanel {
         // Check if reference series changed for DIFFERENCE plot types
         checkReferenceSeriesChange();
 
+        pushState();
         repaint();
     }
     
@@ -443,6 +460,7 @@ public class PlotPanel extends JPanel {
         if (plotInteractionManager != null) {
             plotInteractionManager.setAutoYMode(autoYMode);
         }
+        pushState();
     }
 
     public void saveData() {
@@ -598,6 +616,7 @@ public class PlotPanel extends JPanel {
         } else {
             zoomToFit();
         }
+        pushState();
     }
 
     /**
@@ -657,6 +676,7 @@ public class PlotPanel extends JPanel {
         } else {
             repaint();
         }
+        pushState();
     }
 
     /**
@@ -698,6 +718,7 @@ public class PlotPanel extends JPanel {
         } else {
             zoomToFit();  // Zoom to fit both axes
         }
+        pushState();
     }
 
     /**
@@ -724,6 +745,7 @@ public class PlotPanel extends JPanel {
         } else {
             zoomToFit();
         }
+        pushState();
     }
 
     /**
@@ -732,6 +754,88 @@ public class PlotPanel extends JPanel {
     public MaskMode getMaskMode() {
         return maskMode;
     }
+
+    // === UNDO/REDO ===
+
+    /**
+     * Sets a callback invoked whenever the history changes (push/undo/redo).
+     * Used by toolbar to update button enabled state.
+     */
+    public void setOnHistoryChanged(Runnable callback) {
+        this.onHistoryChanged = callback;
+    }
+
+    /**
+     * Captures and pushes the current state to history (if changed).
+     * Called after user-initiated setting changes. Skipped during state restore.
+     */
+    public void pushState() {
+        if (restoringState) return;
+        PlotState state = PlotState.capture(
+            visibleSeries, aggregationPeriod, aggregationMethod,
+            plotType, yAxisScale, maskMode, autoYMode, currentViewport);
+        if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
+            onHistoryChanged.run();
+        }
+    }
+
+    /**
+     * Restores plot state from a snapshot without pushing to history.
+     */
+    private void restoreState(PlotState state) {
+        restoringState = true;
+        viewportCoalesceTimer.stop();
+        try {
+            // Apply settings
+            setVisibleSeries(state.getVisibleSeries());
+            setAggregation(state.getAggregationPeriod(), state.getAggregationMethod());
+            setPlotType(state.getPlotType());
+            setYAxisScale(state.getYAxisScale());
+            setMaskMode(state.getMaskMode());
+            autoYMode = state.isAutoYMode();
+
+            // Apply viewport zoom/pan
+            if (currentViewport != null) {
+                currentViewport = new com.kalix.ide.flowviz.rendering.ViewPort(
+                    state.getStartTimeMs(), state.getEndTimeMs(),
+                    state.getMinValue(), state.getMaxValue(),
+                    currentViewport.getPlotX(), currentViewport.getPlotY(),
+                    currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
+                    state.getYAxisScale(), determineXAxisType());
+            }
+
+            refreshData(false);
+        } finally {
+            restoringState = false;
+        }
+    }
+
+    /**
+     * Undoes the last state change. Returns the restored state, or null if at beginning.
+     */
+    public PlotState undo() {
+        PlotState state = stateHistory.undo();
+        if (state != null) {
+            restoreState(state);
+            if (onHistoryChanged != null) onHistoryChanged.run();
+        }
+        return state;
+    }
+
+    /**
+     * Redoes the last undone state change. Returns the restored state, or null if at end.
+     */
+    public PlotState redo() {
+        PlotState state = stateHistory.redo();
+        if (state != null) {
+            restoreState(state);
+            if (onHistoryChanged != null) onHistoryChanged.run();
+        }
+        return state;
+    }
+
+    public boolean canUndo() { return stateHistory.canUndo(); }
+    public boolean canRedo() { return stateHistory.canRedo(); }
 
     /**
      * Checks if the reference series (first visible series) has changed

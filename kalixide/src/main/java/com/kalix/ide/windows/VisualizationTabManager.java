@@ -292,6 +292,9 @@ public class VisualizationTabManager {
         tabbedPane.addTab("", containerPanel);
         setupTabIcon(index, TabInfo.TabType.PLOT);
 
+        // Push initial state to history
+        plotPanel.pushState();
+
         return plotPanel;
     }
 
@@ -356,6 +359,9 @@ public class VisualizationTabManager {
         // Select the new tab
         tabbedPane.setSelectedIndex(index);
 
+        // Push initial state to history
+        plotPanel.pushState();
+
         return plotPanel;
     }
 
@@ -363,8 +369,14 @@ public class VisualizationTabManager {
      * Creates a toolbar for a plot tab.
      */
     private JToolBar createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
-        return new PlotToolbarBuilder(plotPanel)
+        PlotToolbarBuilder builder = new PlotToolbarBuilder(plotPanel);
+        builder
+            .setOnUndoRedo(state -> {
+                syncTabSelectionFromPlotState(plotPanel, state);
+                builder.getController().updateFromState(state);
+            })
             .addSaveButton()
+            .addUndoRedoButtons()
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
@@ -374,11 +386,10 @@ public class VisualizationTabManager {
             .addSeparator()
             .addYSpaceDropdown()
             .addSeparator()
-            .addZoomButton()
             .addAutoYToggle(initialAutoY)
             .addCoordinatesToggle(initialShowCoordinates)
-            .addLegendToggle(!plotPanel.isLegendCollapsed())
-            .build();
+            .addLegendToggle(!plotPanel.isLegendCollapsed());
+        return builder.build();
     }
 
     /**
@@ -397,13 +408,71 @@ public class VisualizationTabManager {
     /**
      * Builder for creating plot toolbars with consistent styling.
      */
+    /**
+     * Controller for updating toolbar controls from a PlotState without triggering listeners.
+     */
+    static class PlotToolbarController {
+        private final JComboBox<String> aggregationPeriodCombo;
+        private final JComboBox<String> aggregationMethodCombo;
+        private final JComboBox<String> plotTypeCombo;
+        private final JComboBox<String> ySpaceCombo;
+        private final JToggleButton maskToggle;
+        private final JToggleButton autoYToggle;
+
+        PlotToolbarController(JComboBox<String> aggregationPeriodCombo,
+                              JComboBox<String> aggregationMethodCombo,
+                              JComboBox<String> plotTypeCombo,
+                              JComboBox<String> ySpaceCombo,
+                              JToggleButton maskToggle,
+                              JToggleButton autoYToggle) {
+            this.aggregationPeriodCombo = aggregationPeriodCombo;
+            this.aggregationMethodCombo = aggregationMethodCombo;
+            this.plotTypeCombo = plotTypeCombo;
+            this.ySpaceCombo = ySpaceCombo;
+            this.maskToggle = maskToggle;
+            this.autoYToggle = autoYToggle;
+        }
+
+        /**
+         * Updates all toolbar controls to reflect the given state.
+         * Temporarily removes listeners to avoid triggering state pushes.
+         */
+        void updateFromState(com.kalix.ide.flowviz.PlotState state) {
+            setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
+            setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
+            setSilently(plotTypeCombo, state.getPlotType().getDisplayName());
+            setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
+            setSilently(maskToggle, state.getMaskMode() == com.kalix.ide.flowviz.stats.MaskMode.ALL);
+            setSilently(autoYToggle, state.isAutoYMode());
+        }
+
+        private static void setSilently(JComboBox<String> combo, String value) {
+            java.awt.event.ActionListener[] listeners = combo.getActionListeners();
+            for (var l : listeners) combo.removeActionListener(l);
+            combo.setSelectedItem(value);
+            for (var l : listeners) combo.addActionListener(l);
+        }
+
+        private static void setSilently(JToggleButton toggle, boolean selected) {
+            java.awt.event.ActionListener[] listeners = toggle.getActionListeners();
+            for (var l : listeners) toggle.removeActionListener(l);
+            toggle.setSelected(selected);
+            for (var l : listeners) toggle.addActionListener(l);
+        }
+    }
+
     private static class PlotToolbarBuilder {
         private final JToolBar toolbar;
         private final PlotPanel plotPanel;
+        private java.util.function.Consumer<com.kalix.ide.flowviz.PlotState> onUndoRedo;
 
-        // Store dropdown references for coordinated updates
+        // Store references to all state-reflecting controls
         private JComboBox<String> aggregationPeriodCombo;
         private JComboBox<String> aggregationMethodCombo;
+        private JComboBox<String> plotTypeCombo;
+        private JComboBox<String> ySpaceCombo;
+        private JToggleButton maskToggle;
+        private JToggleButton autoYToggle;
 
         PlotToolbarBuilder(PlotPanel plotPanel) {
             this.plotPanel = plotPanel;
@@ -412,9 +481,42 @@ public class VisualizationTabManager {
             this.toolbar.setRollover(true);
         }
 
+        PlotToolbarBuilder setOnUndoRedo(java.util.function.Consumer<com.kalix.ide.flowviz.PlotState> callback) {
+            this.onUndoRedo = callback;
+            return this;
+        }
+
         PlotToolbarBuilder addSaveButton() {
             JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", plotPanel::saveData);
             toolbar.add(button);
+            return this;
+        }
+
+        PlotToolbarBuilder addUndoRedoButtons() {
+            JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
+                com.kalix.ide.flowviz.PlotState state = plotPanel.undo();
+                if (state != null && onUndoRedo != null) {
+                    onUndoRedo.accept(state);
+                }
+            });
+            JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
+                com.kalix.ide.flowviz.PlotState state = plotPanel.redo();
+                if (state != null && onUndoRedo != null) {
+                    onUndoRedo.accept(state);
+                }
+            });
+
+            undoButton.setEnabled(false);
+            redoButton.setEnabled(false);
+
+            // Update button state whenever history changes
+            plotPanel.setOnHistoryChanged(() -> {
+                undoButton.setEnabled(plotPanel.canUndo());
+                redoButton.setEnabled(plotPanel.canRedo());
+            });
+
+            toolbar.add(undoButton);
+            toolbar.add(redoButton);
             return this;
         }
 
@@ -464,15 +566,15 @@ public class VisualizationTabManager {
         }
 
         PlotToolbarBuilder addMaskToggle() {
-            JToggleButton button = createToggleButton(FontAwesomeSolid.MASK,
+            maskToggle = createToggleButton(FontAwesomeSolid.MASK,
                 "Mask: only include timestamps where all series have valid data", false);
-            button.addActionListener(e -> {
-                com.kalix.ide.flowviz.stats.MaskMode mode = button.isSelected()
+            maskToggle.addActionListener(e -> {
+                com.kalix.ide.flowviz.stats.MaskMode mode = maskToggle.isSelected()
                     ? com.kalix.ide.flowviz.stats.MaskMode.ALL
                     : com.kalix.ide.flowviz.stats.MaskMode.NONE;
                 plotPanel.setMaskMode(mode);
             });
-            toolbar.add(button);
+            toolbar.add(maskToggle);
             return this;
         }
 
@@ -482,7 +584,7 @@ public class VisualizationTabManager {
             toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
 
             // Plot type dropdown
-            JComboBox<String> plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
+            plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
                 UIConstants.WIDE_DROPDOWN_SIZE, "Plot type");
             // Set initial value from current PlotPanel state
             plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
@@ -499,7 +601,7 @@ public class VisualizationTabManager {
         }
 
         PlotToolbarBuilder addYSpaceDropdown() {
-            JComboBox<String> ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
+            ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
                 UIConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
             // Set initial value from current PlotPanel state
             ySpaceCombo.setSelectedItem(plotPanel.getYAxisScale().getDisplayName());
@@ -514,17 +616,12 @@ public class VisualizationTabManager {
             return this;
         }
 
-        PlotToolbarBuilder addZoomButton() {
-            JButton button = createIconButton(FontAwesomeSolid.EXPAND, "Zoom to Fit", plotPanel::zoomToFit);
-            toolbar.add(button);
-            return this;
-        }
 
         PlotToolbarBuilder addAutoYToggle(boolean initialState) {
-            JToggleButton button = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V,
+            autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V,
                 "Auto-Y Mode", initialState);
-            button.addActionListener(e -> {
-                boolean enabled = button.isSelected();
+            autoYToggle.addActionListener(e -> {
+                boolean enabled = autoYToggle.isSelected();
                 plotPanel.setAutoYMode(enabled);
                 PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, enabled);
                 if (enabled) {
@@ -532,7 +629,7 @@ public class VisualizationTabManager {
                     plotPanel.fitYAxis();
                 }
             });
-            toolbar.add(button);
+            toolbar.add(autoYToggle);
             return this;
         }
 
@@ -572,8 +669,17 @@ public class VisualizationTabManager {
             return this;
         }
 
+        private PlotToolbarController controller;
+
         JToolBar build() {
+            controller = new PlotToolbarController(
+                aggregationPeriodCombo, aggregationMethodCombo,
+                plotTypeCombo, ySpaceCombo, maskToggle, autoYToggle);
             return toolbar;
+        }
+
+        PlotToolbarController getController() {
+            return controller;
         }
 
         /** Creates a standard icon button. */
@@ -1380,6 +1486,33 @@ public class VisualizationTabManager {
             } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
                 tab.statsModel.clear();
             }
+        }
+    }
+
+    /**
+     * Syncs TabInfo.selectedSeries and tree after an undo/redo changes visible series.
+     */
+    private void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+        for (TabInfo tab : tabs) {
+            if (tab.plotPanel == panel) {
+                tab.selectedSeries.clear();
+                tab.selectedSeries.addAll(state.getVisibleSeries());
+
+                // Rebuild legend to match
+                panel.clearLegend();
+                for (String seriesName : state.getVisibleSeries()) {
+                    Color color = sharedColorMap.get(seriesName);
+                    if (color != null) {
+                        panel.addLegendSeries(seriesName, color);
+                    }
+                }
+                break;
+            }
+        }
+
+        // Trigger tree sync
+        if (onTabChangedCallback != null) {
+            onTabChangedCallback.run();
         }
     }
 
