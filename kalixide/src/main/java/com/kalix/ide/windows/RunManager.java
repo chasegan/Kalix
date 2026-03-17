@@ -868,8 +868,6 @@ public class RunManager extends JFrame {
             new RunInfoImpl("Last", newLastRun.getSession())
         );
 
-        TreePath[] selectedBefore = timeseriesSourceTree.getSelectionPaths();
-
         if (oldChildNode != null) {
             // Replacing existing child - remove old, add new
             lastRunNode.remove(oldChildNode);
@@ -903,8 +901,6 @@ public class RunManager extends JFrame {
 
             isUpdatingSelection = false;
         }
-
-        TreePath[] selectedAfter = timeseriesSourceTree.getSelectionPaths();
 
         // Expand the Last run node to show the new child
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
@@ -1493,24 +1489,6 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Updates all visualization tabs with current data.
-     *
-     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
-     */
-    private void updatePlotVisibility(boolean resetZoom) {
-        updateAllTabs(resetZoom);
-    }
-
-    /**
-     * Updates all tabs with the current dataset and color map.
-     *
-     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
-     */
-    private void updateAllTabs(boolean resetZoom) {
-        tabManager.updateAllTabs(resetZoom);
-    }
-
-    /**
      * Called when the user switches tabs. Syncs the timeseries tree selection
      * to reflect the new active tab's selected series.
      */
@@ -1525,21 +1503,5 @@ public class RunManager extends JFrame {
             isUpdatingSelection = false;
         }
     }
-
-    /**
-     * Clears the data pool, all per-tab series, and all stats tables.
-     */
-    private void clearPlotAndStats() {
-        plotDataSet.removeAllSeries();
-        seriesColorManager.clearAll();
-        tabManager.clearAllTabSeries();
-        tabManager.updateAllTabs(true);
-
-        for (StatsTableModel model : tabManager.getAllStatsModels()) {
-            model.clear();
-        }
-    }
-
-
 
 }

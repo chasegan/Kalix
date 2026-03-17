@@ -15,16 +15,6 @@ public class PlotStateHistory {
     private final List<PlotState> history = new ArrayList<>();
     private int currentIndex = -1;
 
-    public PlotStateHistory() {}
-
-    /**
-     * Copy constructor — duplicates the full history and current position.
-     * PlotState is immutable so a shallow copy of the list is sufficient.
-     */
-    public PlotStateHistory(PlotStateHistory other) {
-        this.history.addAll(other.history);
-        this.currentIndex = other.currentIndex;
-    }
 
     /**
      * Pushes a new state if it differs from the current state.
