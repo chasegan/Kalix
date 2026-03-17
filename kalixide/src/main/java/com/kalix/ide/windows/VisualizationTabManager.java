@@ -30,30 +30,27 @@ import java.util.Set;
 /**
  * Manages visualization tabs (right side of RunManager) - plots and statistics.
  *
- * <h2>Shared Data Model</h2>
- * All tabs share the same {@link DataSet} ({@code sharedDataSet}) and color map.
- * When data changes in the DataSet, all tabs see it immediately. However, each
- * {@link PlotPanel} has its own display cache that must be invalidated via
- * {@link #updateAllTabs} → {@link PlotPanel#refreshData}.
+ * <h2>Data Architecture</h2>
+ * All tabs share a {@link DataSet} ({@code sharedDataSet}) as a data pool and a color map.
+ * The pool accumulates all fetched time series and does not shrink on deselect.
+ * Each tab maintains its own {@code selectedSeries} set (in {@code TabInfo}) controlling
+ * which series from the pool it displays. Plot tabs render only their selected series;
+ * stats tabs compute statistics only for theirs.
  *
  * <h2>Tab Types</h2>
  * <ul>
- *   <li><b>PLOT</b> - Time series chart with aggregation, transforms, and LOD rendering</li>
- *   <li><b>STATS</b> - Statistics table showing min/max/mean/etc. for each series</li>
+ *   <li><b>PLOT</b> - Time series chart with per-tab aggregation, transforms, masking,
+ *       undo/redo history, and LOD rendering</li>
+ *   <li><b>STATS</b> - Statistics table showing min/max/mean/etc. for the tab's selected series</li>
  * </ul>
  *
- * <h2>Update Flow</h2>
- * When data is added/removed from the shared DataSet:
- * <ol>
- *   <li>RunManager calls {@link #updateAllTabs(boolean)}</li>
- *   <li>For each PLOT tab: calls {@link PlotPanel#refreshData} (invalidates caches, rebuilds)</li>
- *   <li>For STATS tabs: they update automatically via DataSet listeners</li>
- * </ol>
- *
  * <h2>New Tab Behavior</h2>
- * When adding a new tab ({@link #addPlotTab}), it's connected to {@code sharedDataSet}
- * and immediately sees all current data. The new tab's display cache is built fresh,
- * which is why new tabs show correct data even if existing tabs have stale caches.
+ * New tabs inherit the active tab's series selection and settings. Plot tabs created
+ * from another plot tab also inherit the full undo/redo state history.
+ *
+ * <h2>Tab Change Sync</h2>
+ * When the user switches tabs, a callback notifies RunManager to update the timeseries
+ * tree selection to match the new tab's selected series.
  *
  * @see PlotPanel
  * @see com.kalix.ide.windows.RunManager#addSeriesToPool
@@ -142,7 +139,8 @@ public class VisualizationTabManager {
         /**
          * Extract settings from a plot tab.
          */
-        public static TabSettings fromPlotTab(PlotPanel plotPanel, TabInfo tabInfo) {
+        public static TabSettings fromPlotTab(TabInfo tabInfo) {
+            PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
@@ -174,6 +172,7 @@ public class VisualizationTabManager {
             TabSettings settings = new TabSettings();
             settings.showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
             settings.autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+            settings.legendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
             return settings;
         }
     }
@@ -248,80 +247,7 @@ public class VisualizationTabManager {
      * @return The created PlotPanel
      */
     public PlotPanel addPlotTab() {
-        // Create new plot panel with shared dataset
-        PlotPanel plotPanel = new PlotPanel();
-        plotPanel.setDataSet(sharedDataSet);
-        plotPanel.setSeriesColors(sharedColorMap);
-
-        // Inherit series from active plot tab, or use all series from pool for the first tab
-        TabInfo activeTab = getActivePlotTab();
-        Set<String> inheritedSeries;
-        if (activeTab != null) {
-            inheritedSeries = new LinkedHashSet<>(activeTab.selectedSeries);
-        } else {
-            inheritedSeries = new LinkedHashSet<>(sharedDataSet.getSeriesNames());
-        }
-        plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
-
-        // Get default settings from preferences
-        boolean defaultShowCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
-        plotPanel.setShowCoordinates(defaultShowCoordinates);
-
-        boolean defaultAutoY = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
-        plotPanel.setAutoYMode(defaultAutoY);
-
-        boolean defaultLegendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
-        plotPanel.setLegendCollapsed(defaultLegendCollapsed);
-
-        // Populate legend with inherited series
-        for (String seriesName : inheritedSeries) {
-            Color color = sharedColorMap.get(seriesName);
-            if (color != null) {
-                plotPanel.addLegendSeries(seriesName, color);
-            }
-        }
-
-        // Create container panel with toolbar
-        JPanel containerPanel = new JPanel(new BorderLayout());
-        JToolBar toolbar = createPlotToolbar(plotPanel, defaultAutoY, defaultShowCoordinates);
-        containerPanel.add(toolbar, BorderLayout.NORTH);
-        containerPanel.add(plotPanel, BorderLayout.CENTER);
-
-        // Wire "New Plot Tab" / "New Stats Tab" on right-click context menu
-        plotPanel.setNewTabActions(
-            () -> {
-                for (TabInfo tab : tabs) {
-                    if (tab.plotPanel == plotPanel) {
-                        addPlotTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
-                        return;
-                    }
-                }
-                addPlotTab();
-            },
-            () -> {
-                for (TabInfo tab : tabs) {
-                    if (tab.plotPanel == plotPanel) {
-                        addStatsTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
-                        return;
-                    }
-                }
-                addStatsTab();
-            }
-        );
-
-        // Add tab with inherited series selection
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
-        tabInfo.selectedSeries.addAll(inheritedSeries);
-        tabs.add(tabInfo);
-
-        int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.PLOT);
-
-        // Push initial state to history
-        plotPanel.pushState();
-
-        return plotPanel;
+        return addPlotTabFromSettings(TabSettings.getDefaults());
     }
 
     /**
@@ -378,7 +304,7 @@ public class VisualizationTabManager {
             () -> {
                 for (TabInfo tab : tabs) {
                     if (tab.plotPanel == plotPanel) {
-                        addPlotTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        addPlotTabFromSettings(TabSettings.fromPlotTab(tab));
                         return;
                     }
                 }
@@ -387,7 +313,7 @@ public class VisualizationTabManager {
             () -> {
                 for (TabInfo tab : tabs) {
                     if (tab.plotPanel == plotPanel) {
-                        addStatsTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        addStatsTabFromSettings(TabSettings.fromPlotTab(tab));
                         return;
                     }
                 }
@@ -1017,50 +943,7 @@ public class VisualizationTabManager {
      * @return The created StatsTableModel
      */
     public StatsTableModel addStatsTab() {
-        // Create new stats table
-        StatsTableModel model = new StatsTableModel();
-        JTable table = new JTable(model);
-        table.setFillsViewportHeight(true);
-        table.setRowSelectionAllowed(false);
-
-        // Apply custom renderer to color statistics columns
-        applyStatsTableRenderer(table);
-
-        // Make the Series column wider to accommodate longer series names
-        if (table.getColumnCount() > 0) {
-            table.getColumnModel().getColumn(0).setPreferredWidth(200);
-        }
-
-        JScrollPane scrollPane = new JScrollPane(table);
-
-        // Create container panel with toolbar
-        JPanel containerPanel = new JPanel(new BorderLayout());
-
-        // Create tab info so we can reference it in toolbar builder
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
-
-        // Inherit series from active tab
-        TabInfo activeTab = getActiveTab();
-        if (activeTab != null && !activeTab.selectedSeries.isEmpty()) {
-            tabInfo.selectedSeries.addAll(activeTab.selectedSeries);
-        } else {
-            tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesNames());
-        }
-
-        tabs.add(tabInfo);
-
-        // Populate with inherited series data
-        rebuildStatsTab(tabInfo);
-
-        JToolBar toolbar = createStatsToolbar(tabInfo, table);
-        containerPanel.add(toolbar, BorderLayout.NORTH);
-        containerPanel.add(scrollPane, BorderLayout.CENTER);
-
-        int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.STATS);
-
-        return model;
+        return addStatsTabFromSettings(TabSettings.getDefaults());
     }
 
     /**
@@ -1251,7 +1134,7 @@ public class VisualizationTabManager {
                 // Extract settings from source tab
                 TabSettings settings;
                 if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel, sourceTab);
+                    settings = TabSettings.fromPlotTab(sourceTab);
                 } else if (sourceTab.type == TabInfo.TabType.STATS) {
                     settings = TabSettings.fromStatsTab(sourceTab);
                 } else {
@@ -1278,7 +1161,7 @@ public class VisualizationTabManager {
                 // Extract settings from source tab
                 TabSettings settings;
                 if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab.plotPanel, sourceTab);
+                    settings = TabSettings.fromPlotTab(sourceTab);
                 } else if (sourceTab.type == TabInfo.TabType.STATS) {
                     settings = TabSettings.fromStatsTab(sourceTab);
                 } else {

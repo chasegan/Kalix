@@ -781,10 +781,11 @@ public class PlotPanel extends JPanel {
 
     /**
      * Captures and pushes the current state to history (if changed).
-     * Called after user-initiated setting changes. Skipped during state restore.
+     * Called after user-initiated setting changes. Skipped during state restore
+     * and before data is loaded (to avoid junk history from initial setup).
      */
     public void pushState() {
-        if (restoringState) return;
+        if (restoringState || originalDataSet == null) return;
         PlotState state = PlotState.capture(
             visibleSeries, aggregationPeriod, aggregationMethod,
             plotType, yAxisScale, maskMode, autoYMode, currentViewport);
