@@ -1371,7 +1371,14 @@ public class VisualizationTabManager {
             return;
         }
 
-        // Remove tab
+        // Clean up listeners before removing
+        TabInfo tab = tabs.get(index);
+        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+            tab.plotPanel.setOnHistoryChanged(null);
+            tab.plotPanel.setNewTabActions(null, null);
+            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
+        }
+
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
     }

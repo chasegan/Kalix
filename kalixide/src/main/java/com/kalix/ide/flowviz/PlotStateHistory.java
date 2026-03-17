@@ -47,7 +47,7 @@ public class PlotStateHistory {
         }
 
         // Enforce max size by removing oldest entries
-        if (history.size() >= MAX_HISTORY_SIZE) {
+        if (history.size() >= MAX_HISTORY_SIZE && currentIndex > 0) {
             history.remove(0);
             currentIndex--;
         }

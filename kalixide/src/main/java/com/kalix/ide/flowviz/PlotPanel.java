@@ -149,7 +149,14 @@ public class PlotPanel extends JPanel {
 
         setupMouseListeners();
     }
-    
+
+    @Override
+    public void removeNotify() {
+        viewportCoalesceTimer.stop();
+        onHistoryChanged = null;
+        super.removeNotify();
+    }
+
     public void setDataSet(DataSet dataSet) {
         this.originalDataSet = dataSet;
 
@@ -898,7 +905,7 @@ public class PlotPanel extends JPanel {
             ? visibleSeries.get(0) : "none";
         String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
             + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name()
-            + "_" + visibleSeries.hashCode();
+            + "_" + String.join(",", visibleSeries);
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {

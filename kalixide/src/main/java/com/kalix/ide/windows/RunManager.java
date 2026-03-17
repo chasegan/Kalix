@@ -126,6 +126,7 @@ public class RunManager extends JFrame {
     private RunContextMenuManager runContextMenuManager;
     private SeriesColorManager seriesColorManager;
     private TreeFilterManager treeFilterManager;
+    private java.util.function.Consumer<SessionManager.SessionEvent> sessionEventListener;
 
     // === SELECTION STATE ===
     // Per-tab selected series are managed by VisualizationTabManager (TabInfo.selectedSeries).
@@ -509,6 +510,10 @@ public class RunManager extends JFrame {
 
             @Override
             public void windowClosed(WindowEvent e) {
+                // Unregister session listener to prevent memory leak
+                if (sessionEventListener != null && stdioTaskManager != null) {
+                    stdioTaskManager.getSessionManager().removeSessionEventListener(sessionEventListener);
+                }
                 // Cleanup singleton instance
                 instance = null;
             }
@@ -537,10 +542,10 @@ public class RunManager extends JFrame {
      */
     private void setupSessionEventListener() {
         // Subscribe to session events from SessionManager
-        stdioTaskManager.getSessionManager().addSessionEventListener(event -> {
-            // Marshal to EDT for UI updates
+        sessionEventListener = event -> {
             SwingUtilities.invokeLater(() -> handleSessionEvent(event));
-        });
+        };
+        stdioTaskManager.getSessionManager().addSessionEventListener(sessionEventListener);
 
         // Do initial population of runs
         refreshRuns();
