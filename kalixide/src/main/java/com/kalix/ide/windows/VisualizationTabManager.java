@@ -136,6 +136,9 @@ public class VisualizationTabManager {
         // Series selection from source tab (null = inherit from active tab)
         public Set<String> selectedSeries = null;
 
+        // Source plot panel for history duplication (null = no history to copy)
+        public PlotPanel sourcePlotPanel = null;
+
         /**
          * Extract settings from a plot tab.
          */
@@ -149,6 +152,7 @@ public class VisualizationTabManager {
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
             settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
+            settings.sourcePlotPanel = plotPanel;
             return settings;
         }
 
@@ -283,6 +287,28 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
+        // Wire "New Plot Tab" / "New Stats Tab" on right-click context menu
+        plotPanel.setNewTabActions(
+            () -> {
+                for (TabInfo tab : tabs) {
+                    if (tab.plotPanel == plotPanel) {
+                        addPlotTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        return;
+                    }
+                }
+                addPlotTab();
+            },
+            () -> {
+                for (TabInfo tab : tabs) {
+                    if (tab.plotPanel == plotPanel) {
+                        addStatsTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        return;
+                    }
+                }
+                addStatsTab();
+            }
+        );
+
         // Add tab with inherited series selection
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
@@ -347,6 +373,28 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
+        // Wire "New Plot Tab" / "New Stats Tab" on right-click context menu
+        plotPanel.setNewTabActions(
+            () -> {
+                for (TabInfo tab : tabs) {
+                    if (tab.plotPanel == plotPanel) {
+                        addPlotTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        return;
+                    }
+                }
+                addPlotTab();
+            },
+            () -> {
+                for (TabInfo tab : tabs) {
+                    if (tab.plotPanel == plotPanel) {
+                        addStatsTabFromSettings(TabSettings.fromPlotTab(plotPanel, tab));
+                        return;
+                    }
+                }
+                addStatsTab();
+            }
+        );
+
         // Add tab with inherited series selection
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
@@ -359,8 +407,12 @@ public class VisualizationTabManager {
         // Select the new tab
         tabbedPane.setSelectedIndex(index);
 
-        // Push initial state to history
-        plotPanel.pushState();
+        // Copy history from source plot tab (Chrome-style duplicate), or push initial state
+        if (settings.sourcePlotPanel != null) {
+            plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
+        } else {
+            plotPanel.pushState();
+        }
 
         return plotPanel;
     }
@@ -391,6 +443,7 @@ public class VisualizationTabManager {
             .addLegendToggle(!plotPanel.isLegendCollapsed());
         return builder.build();
     }
+
 
     /**
      * Creates a toolbar for a stats tab.

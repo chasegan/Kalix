@@ -65,6 +65,10 @@ public class PlotInteractionManager {
     private Supplier<java.io.File> baseDirectorySupplier;
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
 
+    // Tab creation callbacks (set by VisualizationTabManager after construction)
+    private Runnable newPlotTabAction;
+    private Runnable newStatsTabAction;
+
     /**
      * Creates a new plot interaction manager for handling all user interactions with the plot.
      *
@@ -139,6 +143,14 @@ public class PlotInteractionManager {
      */
     public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
         this.plotTypeSupplier = plotTypeSupplier;
+    }
+
+    /**
+     * Sets callbacks for creating new tabs from the plot context menu.
+     */
+    public void setNewTabActions(Runnable newPlotTab, Runnable newStatsTab) {
+        this.newPlotTabAction = newPlotTab;
+        this.newStatsTabAction = newStatsTab;
     }
 
     /**
@@ -652,6 +664,16 @@ public class PlotInteractionManager {
             yAxisScaleMenu.add(scaleItem);
         }
         contextMenu.add(yAxisScaleMenu);
+
+        contextMenu.addSeparator();
+
+        JMenuItem newPlotItem = new JMenuItem("New Plot Tab");
+        newPlotItem.addActionListener(e -> { if (newPlotTabAction != null) newPlotTabAction.run(); });
+        contextMenu.add(newPlotItem);
+
+        JMenuItem newStatsItem = new JMenuItem("New Stats Tab");
+        newStatsItem.addActionListener(e -> { if (newStatsTabAction != null) newStatsTabAction.run(); });
+        contextMenu.add(newStatsItem);
 
         contextMenu.addSeparator();
 

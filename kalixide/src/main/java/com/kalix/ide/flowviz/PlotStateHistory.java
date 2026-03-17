@@ -15,6 +15,17 @@ public class PlotStateHistory {
     private final List<PlotState> history = new ArrayList<>();
     private int currentIndex = -1;
 
+    public PlotStateHistory() {}
+
+    /**
+     * Copy constructor — duplicates the full history and current position.
+     * PlotState is immutable so a shallow copy of the list is sufficient.
+     */
+    public PlotStateHistory(PlotStateHistory other) {
+        this.history.addAll(other.history);
+        this.currentIndex = other.currentIndex;
+    }
+
     /**
      * Pushes a new state if it differs from the current state.
      * Truncates any redo states ahead of the current position.
@@ -74,6 +85,25 @@ public class PlotStateHistory {
 
     public boolean canRedo() {
         return currentIndex < history.size() - 1;
+    }
+
+    /**
+     * Replaces this history's contents with a copy of another's.
+     */
+    public void copyFrom(PlotStateHistory other) {
+        history.clear();
+        history.addAll(other.history);
+        currentIndex = other.currentIndex;
+    }
+
+    /**
+     * Returns the current state, or null if history is empty.
+     */
+    public PlotState current() {
+        if (currentIndex >= 0 && currentIndex < history.size()) {
+            return history.get(currentIndex);
+        }
+        return null;
     }
 
     public int size() {

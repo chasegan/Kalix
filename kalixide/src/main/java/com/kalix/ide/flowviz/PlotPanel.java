@@ -596,6 +596,13 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Sets callbacks for "New Plot Tab" / "New Stats Tab" in the right-click context menu.
+     */
+    public void setNewTabActions(Runnable newPlotTab, Runnable newStatsTab) {
+        plotInteractionManager.setNewTabActions(newPlotTab, newStatsTab);
+    }
+
+    /**
      * Sets the aggregation period and method for this plot.
      * Triggers rebuild of display dataset.
      */
@@ -836,6 +843,19 @@ public class PlotPanel extends JPanel {
 
     public boolean canUndo() { return stateHistory.canUndo(); }
     public boolean canRedo() { return stateHistory.canRedo(); }
+
+    /**
+     * Copies the full state history from another PlotPanel (Chrome-style tab duplication).
+     * Restores the current state including viewport so the new tab looks identical.
+     */
+    public void copyHistoryFrom(PlotPanel source) {
+        stateHistory.copyFrom(source.stateHistory);
+        PlotState current = stateHistory.current();
+        if (current != null) {
+            restoreState(current);
+        }
+        if (onHistoryChanged != null) onHistoryChanged.run();
+    }
 
     /**
      * Checks if the reference series (first visible series) has changed
