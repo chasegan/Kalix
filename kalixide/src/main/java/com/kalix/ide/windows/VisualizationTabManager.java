@@ -1187,8 +1187,8 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, JLabel label, TabInfo.TabType tabType) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // "Add Plot" menu item - always shown
-        JMenuItem addPlotItem = new JMenuItem("Add Plot");
+        // "New Plot Tab" menu item - always shown
+        JMenuItem addPlotItem = new JMenuItem("New Plot Tab");
         addPlotItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -1214,8 +1214,8 @@ public class VisualizationTabManager {
         });
         contextMenu.add(addPlotItem);
 
-        // "Add Stats" menu item - always shown
-        JMenuItem addStatsItem = new JMenuItem("Add Stats");
+        // "New Stats Tab" menu item - always shown
+        JMenuItem addStatsItem = new JMenuItem("New Stats Tab");
         addStatsItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);

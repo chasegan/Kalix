@@ -877,7 +877,8 @@ public class PlotPanel extends JPanel {
         String referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
         String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
-            + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name();
+            + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name()
+            + "_" + visibleSeries.hashCode();
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
@@ -887,11 +888,12 @@ public class PlotPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Build aggregated dataset
+        // Step 1: Build aggregated dataset (only for visible series, not the full pool)
         DataSet aggregatedDataSet = new DataSet();
 
-        for (String seriesName : originalDataSet.getSeriesNames()) {
+        for (String seriesName : visibleSeries) {
             TimeSeriesData originalSeries = originalDataSet.getSeries(seriesName);
+            if (originalSeries == null) continue;
 
             // Apply aggregation
             TimeSeriesData aggregatedSeries = TimeSeriesAggregator.aggregate(

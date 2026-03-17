@@ -1385,7 +1385,10 @@ public class RunManager extends JFrame {
         // Update the target tab's selected series (rebuilds legend, visible series, display)
         tabManager.setTargetTabSelectedSeries(newSelectedSeries);
 
-        // Apply zoom if needed
+        // Only reset zoom when the selection completely changed (no overlap with previous).
+        // Additive selection (Ctrl+click) intentionally preserves both X and Y zoom so the
+        // user can see how the new series looks in their current view window. Auto-Y is not
+        // triggered here — it only applies during pan/zoom interactions and setting changes.
         if (shouldResetZoom && targetPanel != null) {
             targetPanel.zoomToFit();
         }
