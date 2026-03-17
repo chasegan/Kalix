@@ -353,8 +353,10 @@ public class VisualizationTabManager {
         tabbedPane.addTab("", containerPanel);
         setupTabIcon(index, TabInfo.TabType.PLOT);
 
-        // Select the new tab
-        tabbedPane.setSelectedIndex(index);
+        // Select the new tab (only when duplicating, not for initial default tabs)
+        if (settings.selectedSeries != null) {
+            tabbedPane.setSelectedIndex(index);
+        }
 
         // Copy history from source plot tab (Chrome-style duplicate), or push initial state
         if (settings.sourcePlotPanel != null) {
@@ -569,7 +571,7 @@ public class VisualizationTabManager {
 
         PlotToolbarBuilder addMaskToggle() {
             maskToggle = createToggleButton(FontAwesomeSolid.MASK,
-                "Mask: only include timestamps where all series have valid data", false);
+                "Overlapping Data Mask", false);
             maskToggle.addActionListener(e -> {
                 com.kalix.ide.flowviz.stats.MaskMode mode = maskToggle.isSelected()
                     ? com.kalix.ide.flowviz.stats.MaskMode.ALL
@@ -1028,8 +1030,10 @@ public class VisualizationTabManager {
         tabbedPane.addTab("", containerPanel);
         setupTabIcon(index, TabInfo.TabType.STATS);
 
-        // Select the new tab
-        tabbedPane.setSelectedIndex(index);
+        // Select the new tab (only when duplicating, not for initial default tabs)
+        if (settings.selectedSeries != null) {
+            tabbedPane.setSelectedIndex(index);
+        }
 
         return model;
     }
