@@ -14,8 +14,15 @@ import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.HashMap;
 import java.util.List;
@@ -906,7 +913,7 @@ public class PlotPanel extends JPanel {
             ? visibleSeries.get(0) : "none";
         String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
             + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name()
-            + "_" + String.join(",", visibleSeries);
+            + "_" + visibleSeries.hashCode();
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
