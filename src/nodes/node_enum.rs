@@ -1,4 +1,5 @@
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode};
 
 #[derive(Clone)]
@@ -39,21 +40,21 @@ impl NodeEnum {
 }
 
 impl Node for NodeEnum {
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(),String> {
+    fn initialise(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> Result<(),String> {
         match self {
-            NodeEnum::BlackholeNode(node) => node.initialise(data_cache),
-            NodeEnum::ConfluenceNode(node) => node.initialise(data_cache),
-            NodeEnum::GaugeNode(node) => node.initialise(data_cache),
-            NodeEnum::LossNode(node) => node.initialise(data_cache),
-            NodeEnum::SplitterNode(node) => node.initialise(data_cache),
-            NodeEnum::UnregulatedUserNode(node) => node.initialise(data_cache),
-            NodeEnum::RegulatedUserNode(node) => node.initialise(data_cache),
-            NodeEnum::Gr4jNode(node) => node.initialise(data_cache),
-            NodeEnum::InflowNode(node) => node.initialise(data_cache),
-            NodeEnum::RoutingNode(node) => node.initialise(data_cache),
-            NodeEnum::SacramentoNode(node) => node.initialise(data_cache),
-            NodeEnum::StorageNode(node) => node.initialise(data_cache),
-            NodeEnum::OrderConstraintNode(node) => node.initialise(data_cache),
+            NodeEnum::BlackholeNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::ConfluenceNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::GaugeNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::LossNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::SplitterNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::UnregulatedUserNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::RegulatedUserNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::Gr4jNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::InflowNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::RoutingNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::SacramentoNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::StorageNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::OrderConstraintNode(node) => node.initialise(data_cache, account_manager),
         }
     }
 
@@ -93,21 +94,21 @@ impl Node for NodeEnum {
         }
     }
 
-    fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
         match self {
-            NodeEnum::BlackholeNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::ConfluenceNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::GaugeNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::LossNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::SplitterNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::UnregulatedUserNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::RegulatedUserNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::Gr4jNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::InflowNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::RoutingNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::SacramentoNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::StorageNode(node) => node.run_flow_phase(data_cache),
-            NodeEnum::OrderConstraintNode(node) => node.run_flow_phase(data_cache),
+            NodeEnum::BlackholeNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::ConfluenceNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::GaugeNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::LossNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::SplitterNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::UnregulatedUserNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::RegulatedUserNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::Gr4jNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::InflowNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::RoutingNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::SacramentoNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::StorageNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::OrderConstraintNode(node) => node.run_flow_phase(data_cache, account_manager),
         }
     }
 

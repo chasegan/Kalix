@@ -10,6 +10,7 @@ mod tests {
     use crate::numerical::opt::optimisable_component::OptimisableComponent;
     use crate::functions::parse_function;
     use crate::functions::ast::ExpressionNode;
+    use crate::hydrology::accounts::account_manager::AccountManager;
 
     #[test]
     fn test_detect_linear_combination_patterns() {
@@ -200,13 +201,14 @@ mod tests {
         let mut gr4j = Gr4jNode::new();
         gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
+        let mut account_manager= AccountManager::new();
 
         // Set up rainfall as linear combination
         let expr = "0.25 * data.rain1 + 0.75 * data.rain2";
         gr4j.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
-        gr4j.initialise(&mut data_cache).unwrap();
+        gr4j.initialise(&mut data_cache, &mut account_manager).unwrap();
 
         // Check that rainfall parameters are listed
         // For 2 stations, we should have rf_bias and rf_d0 (n-1 = 1 distribution param)
@@ -237,12 +239,13 @@ mod tests {
         let mut gr4j = Gr4jNode::new();
         gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
+        let mut account_manager= AccountManager::new();
 
         // Set up rainfall as simple data reference (not linear combination)
         gr4j.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true, None).unwrap();
 
         // Initialize the node
-        gr4j.initialise(&mut data_cache).unwrap();
+        gr4j.initialise(&mut data_cache, &mut account_manager).unwrap();
 
         // Check that rainfall parameters are NOT listed
         let params = gr4j.list_params();
@@ -259,13 +262,14 @@ mod tests {
         let mut sacramento = SacramentoNode::new();
         sacramento.name = "test_sacramento".to_string();
         let mut data_cache = DataCache::new();
+        let mut account_manager= AccountManager::new();
 
         // Set up rainfall as linear combination
         let expr = "0.4 * data.rain1 + 0.6 * data.rain2";
         sacramento.rain_mm_input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
-        sacramento.initialise(&mut data_cache).unwrap();
+        sacramento.initialise(&mut data_cache, &mut account_manager).unwrap();
 
         // Check that rainfall parameters are listed along with Sacramento parameters
         let params = sacramento.list_params();
@@ -389,12 +393,13 @@ mod tests {
         let mut sacramento = SacramentoNode::new();
         sacramento.name = "test_sacramento".to_string();
         let mut data_cache = DataCache::new();
+        let mut account_manager= AccountManager::new();
 
         // Set up rainfall as simple data reference (not linear combination)
         sacramento.rain_mm_input = DynamicInput::from_string("data.rain", &mut data_cache, true, None).unwrap();
 
         // Initialize the node
-        sacramento.initialise(&mut data_cache).unwrap();
+        sacramento.initialise(&mut data_cache, &mut account_manager).unwrap();
 
         // Check that rainfall parameters are NOT listed, but Sacramento ones are
         let params = sacramento.list_params();

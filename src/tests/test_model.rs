@@ -14,6 +14,7 @@ use crate::numerical::table::Table;
 use crate::timeseries::Timeseries;
 use crate::nodes::{Node, NodeEnum};
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::io::csv_io::csv_string_to_f64_vec;
 use crate::misc::misc_functions::split_interleaved;
 use crate::nodes::blackhole_node::BlackholeNode;
@@ -398,8 +399,9 @@ fn test_create_and_run_model_with_storage_node() {
     let mut st1 = StorageNode::new();
     st1.d = Table::from_csv_file("./src/tests/example_tables/test_4_dim_table.csv");
     let mut data_cache = DataCache::new();
+    let mut account_manager= AccountManager::new();
 
-    st1.initialise(&mut data_cache).expect("Initialisation error");
+    st1.initialise(&mut data_cache, &mut account_manager).expect("Initialisation error");
     println!("Initial vol = {}", st1.v_initial);
     println!("Area 0 = {}", st1.d.get_value(0, VOLU));
 
@@ -409,7 +411,7 @@ fn test_create_and_run_model_with_storage_node() {
         let mut flow = 0_f64;
         if i < 4 { flow = 100_f64 }
         st1.add_usflow(flow, 0);
-        st1.run_flow_phase(&mut data_cache);
+        st1.run_flow_phase(&mut data_cache, &mut account_manager);
         // Note: spill and v are now private - we need public getter methods or to make them public for testing
         // For now, let's comment out these lines and test basic functionality
         // spill.push(i as u64, st1.spill);

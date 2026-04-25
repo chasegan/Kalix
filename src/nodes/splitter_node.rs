@@ -2,6 +2,7 @@ use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 
 const MAX_DS_LINKS: usize = 5;
@@ -42,7 +43,7 @@ impl SplitterNode {
 }
 
 impl Node for SplitterNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
+    fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
@@ -88,7 +89,7 @@ impl Node for SplitterNode {
         }
     }
 
-    fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {

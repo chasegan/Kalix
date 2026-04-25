@@ -2,6 +2,7 @@ use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -58,7 +59,7 @@ impl RegulatedUserNode {
 }
 
 impl Node for RegulatedUserNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
+    fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
@@ -133,7 +134,7 @@ impl Node for RegulatedUserNode {
         }
     }
 
-    fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {

@@ -1,4 +1,5 @@
-use crate::io::csv_io::csv_string_to_f64_vec;
+use crate::hydrology::accounts::account::Account;
+use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
@@ -507,6 +508,26 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "demand" {
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "account" {
+                            let params =  csv_to_string_vec(v);
+                            if params.len() != 4 {
+                                return Err(format!("Error on line {}: Account def must have 4 values: {}",
+                                                   ini_property.line_number, params.len()));
+                            }
+                            let acc_name = params[0].clone();
+                            let acc_type = params[1].clone();
+                            let acc_size = params[2].parse::<f64>()
+                                .map_err(|_| format!("Error on line {}: Invalid account size for node '{}': not a valid number",
+                                                     ini_property.line_number, node_name))?;
+                            let acc_wy_month = params[3].parse::<u8>()
+                                .map_err(|_| format!("Error on line {}: Invalid account wy_month for node '{}': not a valid month",
+                                                     ini_property.line_number, node_name))?;
+                            // Defining an account involves (i) creating the account, (ii) adding it to
+                            // the account_manager, and also (iii) telling the node the idx for the account.
+                            let account = Account::new_with_size(acc_name, acc_type, acc_size, acc_wy_month, 0f64);
+                            let account_idx = model.account_manager.add_account(account)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                            n.register_account(account_idx);
                         } else if name_lower == "annual_cap" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;

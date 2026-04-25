@@ -2,6 +2,7 @@
 mod tests {
     use crate::model_inputs::DynamicInput;
     use crate::data_management::data_cache::DataCache;
+    use crate::hydrology::accounts::account_manager::AccountManager;
     use crate::nodes::gr4j_node::Gr4jNode;
     use crate::nodes::Node;
     use crate::numerical::opt::optimisable_component::OptimisableComponent;
@@ -11,13 +12,14 @@ mod tests {
         let mut gr4j = Gr4jNode::new();
         gr4j.name = "test_gr4j".to_string();
         let mut data_cache = DataCache::new();
+        let mut account_manager= AccountManager::new();
 
         // Set up rainfall as linear combination
         let original_expr = "0.3 * data.rain1 + 0.7 * data.rain2";
         gr4j.rain_mm_input = DynamicInput::from_string(original_expr, &mut data_cache, true, None).unwrap();
 
         // Initialize the node
-        gr4j.initialise(&mut data_cache).unwrap();
+        gr4j.initialise(&mut data_cache, &mut account_manager).unwrap();
 
         let initial_string = gr4j.rain_mm_input.to_string();
         println!("Original expression: {}", initial_string);

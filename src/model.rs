@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::io::csv_io::write_ts;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
@@ -22,6 +23,7 @@ pub struct Model {
     pub inputs: Vec<TimeseriesInput>,
     pub input_file_paths: Vec<String>,
     pub outputs: Vec<String>,
+    pub account_manager: AccountManager,
     pub data_cache: DataCache,
 
     /// Working directory for resolving relative file paths
@@ -214,41 +216,7 @@ impl Model {
 
 
     pub fn run(&mut self) -> Result<(), String> {
-
-        //Initialise the node network
-        //TODO: We shouldn't do a full initialisation again here!
-        // Maybe we need an "initialize()" and a "reset()" on each node?
-        self.initialize_network()?;
-
-        // Clear any stale simulation context
-        clear_context();
-
-        //Run all timesteps
-        self.data_cache.set_current_step(0);
-        while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
-
-            // Run the network with panic catching for better error messages
-            let result = catch_unwind(AssertUnwindSafe(|| {
-                self.run_timestep(self.data_cache.current_timestamp);
-            }));
-
-            if let Err(panic_info) = result {
-                return Err(format_simulation_error(
-                    panic_info,
-                    self.data_cache.current_timestamp,
-                    |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
-                ));
-            }
-
-            //Increment time
-            self.data_cache.increment_current_step();
-        }
-
-        // Clear context on successful completion
-        clear_context();
-
-        // Return success
-        Ok(())
+        self.run_with_interrupt(|| false, None).map(|_| ())
     }
 
     pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String>
@@ -257,6 +225,9 @@ impl Model {
     {
         //Initialise the node network
         self.initialize_network()?;
+
+        //Initialise the water management systems
+        self.account_manager.initialize(&mut self.data_cache);
 
         // Clear any stale simulation context
         clear_context();
@@ -447,6 +418,9 @@ impl Model {
 
     pub fn run_timestep(&mut self, _t: u64) {
 
+        // Accounting tasks
+        self.account_manager.run_maintenance(&self.data_cache);
+
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
         self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache);
@@ -459,7 +433,7 @@ impl Model {
             set_context_node(node_idx);
 
             // Run the node's flow phase
-            self.nodes[node_idx].run_flow_phase(&mut self.data_cache);
+            self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
             // Immediately propagate outflows to downstream nodes
             for &link_idx in &self.outgoing_links[node_idx] {
@@ -471,6 +445,9 @@ impl Model {
                 }
             }
         }
+
+        // Accounting recorders
+        self.account_manager.record_results(&mut self.data_cache);
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
@@ -551,7 +528,7 @@ impl Model {
     /// Initialize all the nodes
     fn initialize_nodes(&mut self) -> Result<(), String> {
         for i in 0..self.nodes.len() {
-            self.nodes[i].initialise(&mut self.data_cache)?
+            self.nodes[i].initialise(&mut self.data_cache, &mut self.account_manager)?
         }
         Ok(())
     }

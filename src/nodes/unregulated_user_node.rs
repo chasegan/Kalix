@@ -2,6 +2,7 @@ use super::Node;
 use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 
 const MAX_DS_LINKS: usize = 1;
@@ -19,6 +20,7 @@ pub struct UnregulatedUserNode {
     pub pump_capacity: DynamicInput,
     pub flow_threshold: DynamicInput,
     pub annual_cap: Option<f64>,
+    pub account_idx: Option<usize>,
     pub annual_cap_reset_month: u8,
     pub demand_carryover_allowed: bool,
     pub demand_carryover_reset_month: Option<u8>,
@@ -64,10 +66,15 @@ impl UnregulatedUserNode {
             ..Default::default()
         }
     }
+
+    /// Use this to register an account with the unregulated user node
+    pub fn register_account(&mut self, account_idx: usize) {
+        self.account_idx = Some(account_idx);
+    }
 }
 
 impl Node for UnregulatedUserNode {
-    fn initialise(&mut self, data_cache: &mut DataCache) -> Result<(), String> {
+    fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
@@ -144,7 +151,7 @@ impl Node for UnregulatedUserNode {
         }
     }
 
-    fn run_flow_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -188,6 +195,15 @@ impl Node for UnregulatedUserNode {
             }
         }
 
+        // Restrict take based on account if applicable
+        match self.account_idx {
+            None => {}
+            Some(account_idx) => {
+                let account_balance = _account_manager.get_account_balance(account_idx);
+                available = available.min(account_balance);
+            }
+        }
+
         // Carryover
         if self.demand_carryover_allowed {
             // Allowing demand carryover
@@ -217,6 +233,11 @@ impl Node for UnregulatedUserNode {
             // Not simulating carryover
             self.diversion = new_demand.min(available);
         }
+
+        // Update account to reflect this diversion
+        if let Some(account_idx) = self.account_idx {
+            _account_manager.debit_account(account_idx, self.diversion)
+        };
 
         // Update the annual diversion
         if let Some(_) = self.annual_cap { self.annual_diversion += self.diversion; }
