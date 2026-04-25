@@ -1,5 +1,5 @@
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{u64_to_date_string, u64_to_auto_datetime_string, wrap_to_u64, wrap_to_i64};
+use crate::tid::utils::{u64_to_date_string_for_step_size, u64_to_auto_datetime_string, wrap_to_u64, wrap_to_i64};
 use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble, TimeValueFloat};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -64,8 +64,8 @@ pub struct SeriesInfo {
 
 impl std::fmt::Display for SeriesInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let start_str = u64_to_date_string(self.start_time);
-        let end_str = u64_to_date_string(self.end_time);
+        let start_str = u64_to_date_string_for_step_size(self.start_time, self.timestep_seconds);
+        let end_str = u64_to_date_string_for_step_size(self.end_time, self.timestep_seconds);
         write!(
             f,
             "SeriesInfo{{name='{}', points={}, start={}, end={}, timestep={}s}}",
@@ -409,9 +409,8 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
     };
 
     // Convert to Timeseries
-    let mut timeseries = Timeseries::new_daily();
+    let mut timeseries = Timeseries::new(meta.timestep);
     timeseries.name = meta.series_name.clone();
-    timeseries.step_size = meta.timestep;
 
     for (timestamp, value) in points {
         timeseries.push(timestamp, value);

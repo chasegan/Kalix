@@ -651,9 +651,9 @@ impl Command for RunSimulationCommand {
             "simulation_completed": true,
             "timesteps_processed": total_timesteps,
             "outputs_generated": outputs_generated,
-            "simulation_period": format!("{} to {}", 
-                crate::tid::utils::u64_to_date_string(start_timestamp),
-                crate::tid::utils::u64_to_date_string(end_timestamp)
+            "simulation_period": format!("{} to {}",
+                crate::tid::utils::u64_to_date_string_for_step_size(start_timestamp, stepsize),
+                crate::tid::utils::u64_to_date_string_for_step_size(end_timestamp, stepsize)
             ),
             "execution_time_seconds": simulation_duration.as_secs(),
             "available_results": ["timeseries_data", "summary_statistics"]

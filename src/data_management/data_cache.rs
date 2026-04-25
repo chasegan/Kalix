@@ -247,10 +247,16 @@ impl DataCache {
         if let Some(idx) = self.get_series_idx(&name, flag_as_critical) {
             idx
         } else {
-            //Prep a new timeseries
-            let mut answer = Timeseries::new_daily();
+            // Prep a new timeseries that inherits the data_cache's step_size. During the
+            // pre-config phase of model initialisation (before set_start_and_stepsize() is
+            // called) self.step_size is 0; that's fine because set_start_and_stepsize()
+            // sweeps through and fixes every series's step_size when it eventually runs.
+            // For series added after configuration, this ensures they pick up the correct
+            // (possibly non-daily) step_size instead of silently defaulting to 86400s.
+            let mut answer = Timeseries::new(self.step_size);
             answer.name = name.to_string();
             answer.start_timestamp = self.start_timestamp;
+            answer.step_size = self.step_size;
 
             //Add it and return the idx
             let idx = self.series.len();

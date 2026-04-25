@@ -164,3 +164,127 @@ fn test_csv_reader_whitespace_in_column_names() {
     assert_eq!(timeseries[1].name, "col2", "Should trim leading/trailing whitespace");
     assert_eq!(timeseries[2].name, "col3", "Should trim leading/trailing whitespace");
 }
+
+
+#[test]
+fn test_csv_reader_infers_daily_step_size() {
+    let temp_path = "./src/tests/example_data/temp_step_daily.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        writeln!(file, "Date,col1").unwrap();
+        writeln!(file, "2020-01-01,1.0").unwrap();
+        writeln!(file, "2020-01-02,2.0").unwrap();
+        writeln!(file, "2020-01-03,3.0").unwrap();
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok();
+
+    let timeseries = result.expect("Should read daily CSV");
+    assert_eq!(timeseries[0].step_size, 86400, "Daily data should infer step_size of 86400s");
+}
+
+
+#[test]
+fn test_csv_reader_infers_hourly_step_size() {
+    let temp_path = "./src/tests/example_data/temp_step_hourly.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        writeln!(file, "Date,col1").unwrap();
+        writeln!(file, "2020-01-01T00:00:00,1.0").unwrap();
+        writeln!(file, "2020-01-01T01:00:00,2.0").unwrap();
+        writeln!(file, "2020-01-01T02:00:00,3.0").unwrap();
+        writeln!(file, "2020-01-01T03:00:00,4.0").unwrap();
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok();
+
+    let timeseries = result.expect("Should read hourly CSV");
+    assert_eq!(timeseries[0].step_size, 3600, "Hourly data should infer step_size of 3600s");
+}
+
+
+#[test]
+fn test_csv_reader_rejects_irregular_timestamps() {
+    let temp_path = "./src/tests/example_data/temp_step_irregular.csv";
+    {
+        let mut file = std::fs::File::create(temp_path).unwrap();
+        writeln!(file, "Date,col1").unwrap();
+        writeln!(file, "2020-01-01,1.0").unwrap();
+        writeln!(file, "2020-01-02,2.0").unwrap();
+        writeln!(file, "2020-01-04,3.0").unwrap(); // gap of 2 days, not 1
+    }
+
+    let result = read_ts(temp_path);
+    std::fs::remove_file(temp_path).ok();
+
+    match result {
+        Ok(_) => panic!("Irregularly-spaced timestamps should be rejected"),
+        Err(err) => assert!(
+            err.contains("not regularly spaced"),
+            "Error should mention irregular spacing: {}", err
+        ),
+    }
+}
+
+
+#[test]
+fn test_csv_writer_uses_iso_datetime_for_hourly() {
+    // Round-trip an hourly file and confirm the written file preserves time-of-day.
+    let in_path = "./src/tests/example_data/temp_writer_hourly_in.csv";
+    let out_path = "./src/tests/example_data/temp_writer_hourly_out.csv";
+    {
+        let mut file = std::fs::File::create(in_path).unwrap();
+        writeln!(file, "Date,col1").unwrap();
+        writeln!(file, "2020-01-01T00:00:00,1.0").unwrap();
+        writeln!(file, "2020-01-01T01:00:00,2.0").unwrap();
+        writeln!(file, "2020-01-01T02:00:00,3.0").unwrap();
+    }
+
+    let series = read_ts(in_path).expect("Should read hourly input");
+    let refs: Vec<&_> = series.iter().collect();
+    write_ts(out_path, refs).expect("Should write hourly output");
+
+    // Read raw text and confirm time-of-day appears (hour 01 in the second data row)
+    let written = std::fs::read_to_string(out_path).unwrap();
+    std::fs::remove_file(in_path).ok();
+    std::fs::remove_file(out_path).ok();
+
+    assert!(
+        written.contains("2020-01-01T01:00:00"),
+        "Hourly output should preserve time-of-day. Got:\n{}", written
+    );
+}
+
+
+#[test]
+fn test_csv_writer_uses_date_only_for_daily() {
+    // Confirm daily files still write as YYYY-MM-DD (no regression for existing daily users).
+    let in_path = "./src/tests/example_data/temp_writer_daily_in.csv";
+    let out_path = "./src/tests/example_data/temp_writer_daily_out.csv";
+    {
+        let mut file = std::fs::File::create(in_path).unwrap();
+        writeln!(file, "Date,col1").unwrap();
+        writeln!(file, "2020-01-01,1.0").unwrap();
+        writeln!(file, "2020-01-02,2.0").unwrap();
+        writeln!(file, "2020-01-03,3.0").unwrap();
+    }
+
+    let series = read_ts(in_path).expect("Should read daily input");
+    let refs: Vec<&_> = series.iter().collect();
+    write_ts(out_path, refs).expect("Should write daily output");
+
+    let written = std::fs::read_to_string(out_path).unwrap();
+    std::fs::remove_file(in_path).ok();
+    std::fs::remove_file(out_path).ok();
+
+    assert!(
+        written.contains("2020-01-02,2"),
+        "Daily output should use YYYY-MM-DD format. Got:\n{}", written
+    );
+    assert!(
+        !written.contains("T00:00:00"),
+        "Daily output should not have ISO time component. Got:\n{}", written
+    );
+}

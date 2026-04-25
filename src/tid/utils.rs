@@ -174,6 +174,36 @@ pub fn u64_to_auto_datetime_string(value: u64) -> String {
     }
 }
 
+/// Converts a u64 timestamp to a date/datetime string, using a format chosen by the step_size.
+///
+/// Unlike `u64_to_auto_datetime_string`, this picks one format for the whole timeseries based on
+/// its step_size, so every row in a file uses the same format. This avoids the visual mess of a
+/// hourly file where most rows are `YYYY-MM-DDTHH:MM:SS` but every midnight row collapses to
+/// `YYYY-MM-DD`.
+///
+/// # Arguments
+///
+/// * `value` - A u64 timestamp (wrapped UNIX timestamp in seconds)
+/// * `step_size` - Step size in seconds. A multiple of 86400 (daily or coarser) selects date-only
+///   format; anything sub-daily selects ISO datetime format. Step size 0 is treated as date-only
+///   (legacy/unconfigured fallback).
+///
+/// # Returns
+///
+/// * `YYYY-MM-DD` if step_size is 0 or a multiple of 86400
+/// * `YYYY-MM-DDTHH:MM:SS` otherwise
+pub fn u64_to_date_string_for_step_size(value: u64, step_size: u64) -> String {
+    let format = if step_size == 0 || step_size % 86400 == 0 {
+        "%Y-%m-%d"
+    } else {
+        "%Y-%m-%dT%H:%M:%S"
+    };
+    match DateTime::from_timestamp(wrap_to_i64(value), 0) {
+        Some(dt) => dt.format(format).to_string(),
+        None => value.to_string(),
+    }
+}
+
 
 pub fn u64_to_year_month_day_and_seconds(value: u64) -> (i32, u32, u32, u32) {
     match DateTime::from_timestamp(wrap_to_i64(value), 0) {

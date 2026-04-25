@@ -6,7 +6,7 @@ use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
-use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string};
+use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 use crate::nodes::storage_node::OutletDefinition;
@@ -638,12 +638,14 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     ini_doc.validate_section("kalix");
     ini_doc.validate_property("kalix", "version");
 
-    // Set start and end dates if specified
+    // Set start and end dates if specified. Format matches the simulation step_size — daily
+    // models stay as YYYY-MM-DD, sub-daily models use ISO datetime so the time-of-day isn't lost.
+    let sim_stepsize = model.configuration.sim_stepsize;
     if let Some(start_timestamp) = model.configuration.specified_sim_start_timestamp {
-        ini_doc.set_property("kalix", "start", &u64_to_date_string(start_timestamp));
+        ini_doc.set_property("kalix", "start", &u64_to_date_string_for_step_size(start_timestamp, sim_stepsize));
     }
     if let Some(end_timestamp) = model.configuration.specified_sim_end_timestamp {
-        ini_doc.set_property("kalix", "end", &u64_to_date_string(end_timestamp));
+        ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
 
     // List all input files

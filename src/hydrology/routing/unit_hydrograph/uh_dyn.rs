@@ -56,8 +56,9 @@ impl UHDyn {
     }
 
     pub fn run(&mut self, input_timeseries: Timeseries) -> Timeseries {
-        //Create an output timeseries and set up the metadata
-        let mut answer = Timeseries::new_daily();
+        //Create an output timeseries inheriting the input's timestep and start time.
+        let mut answer = Timeseries::new(input_timeseries.step_size);
+        answer.start_timestamp = input_timeseries.start_timestamp;
 
         //Reset the internal state of the unit hydrograph and run it
         self.reset();

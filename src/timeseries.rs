@@ -24,16 +24,26 @@ pub struct Timeseries {
 }
 
 impl Timeseries {
-    pub fn new_daily() -> Timeseries {
+    /// Construct a new, empty Timeseries with the given step_size (in seconds).
+    /// Production code should always call this with the model's actual timestep —
+    /// daily was the implicit assumption that broke sub-daily simulations.
+    pub fn new(step_size: u64) -> Timeseries {
         Timeseries {
             name: "Unnamed timeseries".to_string(),
             start_timestamp: 0,
-            step_size: 86400,
+            step_size,
             values: Vec::with_capacity(64_000usize),
             timestamps: Vec::with_capacity(64_000usize),
             next_played_index: 0,
             current_played_value: f64::NAN,
         }
+    }
+
+    /// Construct a new, empty Timeseries with a daily (86400s) step_size.
+    /// Convenience for tests and example code where the timestep is known to be daily.
+    /// Production code paths must use `Timeseries::new(step_size)` with the model's actual timestep.
+    pub fn new_daily() -> Timeseries {
+        Self::new(86400)
     }
 
 

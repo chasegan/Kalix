@@ -1,7 +1,7 @@
 extern crate csv;
 
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{date_string_to_u64_flexible, date_string_to_u64_with_format, u64_to_date_string};
+use crate::tid::utils::{date_string_to_u64_flexible, date_string_to_u64_with_format, u64_to_date_string_for_step_size};
 use std::fs;
 use std::path::Path;
 
@@ -53,18 +53,19 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     }
     let n_data_cols = headers_len.saturating_sub(1); // exclude the index column
 
-    // Initialize timeseries with column names
+    // Initialize timeseries with column names. step_size is left as 0 here; it gets inferred
+    // from the timestamps after the data has been loaded (see infer_step_size below).
     if has_header {
         // Use actual column names from the header row (trimmed of whitespace)
         for i in 1..headers_len {
-            let mut ts = Timeseries::new_daily();
+            let mut ts = Timeseries::new(0);
             ts.name = first_row.get(i).unwrap_or("").trim().to_string();
             answer.push(ts);
         }
     } else {
         // Generate default column names (just the column number)
         for i in 1..headers_len {
-            let mut ts = Timeseries::new_daily();
+            let mut ts = Timeseries::new(0);
             ts.name = format!("{}", i);
             answer.push(ts);
         }
@@ -148,16 +149,56 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
         }
     }
 
-    // Set the start_timestamp
+    // Set the start_timestamp and infer step_size from the loaded timestamps.
     // TODO: I should get rid of this "start_timestamp" property. It is a recipe for disaster.
+    let inferred_step_size = infer_step_size(&answer.first().map(|ts| ts.timestamps.as_slice()).unwrap_or(&[]))
+        .map_err(|e| format!("In '{}': {}", filename, e))?;
     for ts in answer.iter_mut() {
         if ts.len() > 0 {
             ts.start_timestamp = ts.timestamps[0];
         }
+        if let Some(step_size) = inferred_step_size {
+            ts.step_size = step_size;
+        }
+        // If step_size could not be inferred (single row or empty), step_size remains 0.
+        // The downstream simulation step-size validation will surface any mismatch.
     }
 
     // Return
     Ok(answer)
+}
+
+
+/// Infer the step_size (in seconds) from a sequence of timestamps. Returns None if there are
+/// fewer than two timestamps to compare. Returns an error if the spacing between consecutive
+/// timestamps is not constant (the simulation engine assumes regularly-spaced input data).
+fn infer_step_size(timestamps: &[u64]) -> Result<Option<u64>, String> {
+    if timestamps.len() < 2 {
+        return Ok(None);
+    }
+    let step_size = timestamps[1].saturating_sub(timestamps[0]);
+    if step_size == 0 {
+        return Err(format!(
+            "Input timestamps are not strictly increasing: rows 1 and 2 have the same timestamp ({}).",
+            timestamps[0]
+        ));
+    }
+    // Validate that all subsequent gaps match. Cheap to check (single pass) and catches
+    // missing/duplicated rows or DST-style shifts that would otherwise silently corrupt results.
+    for i in 2..timestamps.len() {
+        let gap = timestamps[i].saturating_sub(timestamps[i - 1]);
+        if gap != step_size {
+            return Err(format!(
+                "Input timestamps are not regularly spaced: expected step_size {}s but row {} -> {} has gap {}s. \
+                 The simulation requires evenly-spaced timestamps.",
+                step_size,
+                i,
+                i + 1,
+                gap
+            ));
+        }
+    }
+    Ok(Some(step_size))
 }
 
 
@@ -183,13 +224,15 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
     }
     data_string.push_str("\r\n");
 
-    // Build the data section
+    // Build the data section. Pick a single date format for the whole file based on the
+    // step_size of the first series (all series in a write share the same step_size in
+    // practice). Sub-daily data gets ISO datetime; daily-or-coarser gets date-only.
     let mut i = 0;
     if timeseries_vector.len() > 0 {
+        let step_size = timeseries_vector[0].step_size;
         for timestamp in timeseries_vector[0].timestamps.iter() {
-            let timestamp_string = u64_to_date_string(*timestamp);
+            let timestamp_string = u64_to_date_string_for_step_size(*timestamp, step_size);
             data_string.push_str(&timestamp_string);
-            //data_string.push_str(",");
             for ts in timeseries_vector.iter() {
                 let value = ts.values[i];
                 data_string.push_str(format!(",{value}").as_str());
@@ -224,3 +267,9 @@ pub fn csv_string_to_f64_vec(s: &str) -> Result<Vec<f64>, String> {
 }
 
 
+pub fn csv_to_string_vec(s: &str) -> Vec<String> {
+    s.trim_end_matches(|c: char| c == ',' || c.is_whitespace())
+        .split(",")
+        .map(|part| part.trim().to_lowercase())
+        .collect()
+}
