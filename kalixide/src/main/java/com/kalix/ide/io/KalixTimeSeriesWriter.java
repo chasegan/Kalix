@@ -2,13 +2,10 @@ package com.kalix.ide.io;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
+import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
@@ -162,8 +159,8 @@ public class KalixTimeSeriesWriter {
 
             // Write data rows
             for (SeriesMetadata meta : metadataList) {
-                String startTime = formatTimestamp(meta.startTime);
-                String endTime = formatTimestamp(meta.endTime);
+                String startTime = formatTimestamp(meta.startTime, meta.timestep);
+                String endTime = formatTimestamp(meta.endTime, meta.timestep);
 
                 pw.printf("%-" + widths.index + "s,%-" + widths.offset + "s,%-" + widths.startTime + "s,%-" + widths.endTime + "s,%-" + widths.timestep + "s,%-" + widths.length + "s,%s%n",
                     meta.index,
@@ -177,17 +174,8 @@ public class KalixTimeSeriesWriter {
         }
     }
 
-    private String formatTimestamp(long timestampSeconds) {
-        LocalDateTime dateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochSecond(timestampSeconds), ZoneOffset.UTC);
-
-        // Check if it's a whole day (midnight)
-        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 &&
-            dateTime.getSecond() == 0 && dateTime.getNano() == 0) {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        } else {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
-        }
+    private String formatTimestamp(long timestampSeconds, long stepSeconds) {
+        return TimeFormatUtil.formatForStepSize(timestampSeconds * 1000L, stepSeconds);
     }
 
     private ColumnWidths calculateColumnWidths(List<SeriesMetadata> metadataList) {
@@ -196,8 +184,8 @@ public class KalixTimeSeriesWriter {
         for (SeriesMetadata meta : metadataList) {
             widths.index = Math.max(widths.index, String.valueOf(meta.index).length());
             widths.offset = Math.max(widths.offset, String.valueOf(meta.offset).length());
-            widths.startTime = Math.max(widths.startTime, formatTimestamp(meta.startTime).length());
-            widths.endTime = Math.max(widths.endTime, formatTimestamp(meta.endTime).length());
+            widths.startTime = Math.max(widths.startTime, formatTimestamp(meta.startTime, meta.timestep).length());
+            widths.endTime = Math.max(widths.endTime, formatTimestamp(meta.endTime, meta.timestep).length());
             widths.timestep = Math.max(widths.timestep, String.valueOf(meta.timestep).length());
             widths.length = Math.max(widths.length, String.valueOf(meta.length).length());
         }

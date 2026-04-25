@@ -20,6 +20,10 @@ public class TemporalAxisCalculator {
 
     // Pre-computed temporal intervals to avoid recreation
     private static final TemporalInterval[] TEMPORAL_INTERVALS = {
+        new TemporalInterval("minute", 60000L),
+        new TemporalInterval("5min", 5 * 60000L),
+        new TemporalInterval("15min", 15 * 60000L),
+        new TemporalInterval("30min", 30 * 60000L),
         new TemporalInterval("hour", 3600000L),
         new TemporalInterval("6hour", 6 * 3600000L),
         new TemporalInterval("12hour", 12 * 3600000L),
@@ -116,6 +120,23 @@ public class TemporalAxisCalculator {
 
     private LocalDateTime findNextBoundary(LocalDateTime dateTime, TemporalInterval interval) {
         switch (interval.type) {
+            case "minute":
+                return dateTime.withSecond(0).withNano(0).plusMinutes(1);
+            case "5min": {
+                int min5 = (dateTime.getMinute() / 5) * 5;
+                LocalDateTime next5m = dateTime.withMinute(min5).withSecond(0).withNano(0);
+                return next5m.isAfter(dateTime) ? next5m : next5m.plusMinutes(5);
+            }
+            case "15min": {
+                int min15 = (dateTime.getMinute() / 15) * 15;
+                LocalDateTime next15m = dateTime.withMinute(min15).withSecond(0).withNano(0);
+                return next15m.isAfter(dateTime) ? next15m : next15m.plusMinutes(15);
+            }
+            case "30min": {
+                int min30 = (dateTime.getMinute() / 30) * 30;
+                LocalDateTime next30m = dateTime.withMinute(min30).withSecond(0).withNano(0);
+                return next30m.isAfter(dateTime) ? next30m : next30m.plusMinutes(30);
+            }
             case "hour":
                 return dateTime.withMinute(0).withSecond(0).withNano(0).plusHours(1);
             case "6hour":
@@ -207,6 +228,14 @@ public class TemporalAxisCalculator {
 
     private LocalDateTime advanceToBoundary(LocalDateTime dateTime, TemporalInterval interval) {
         switch (interval.type) {
+            case "minute":
+                return dateTime.plusMinutes(1);
+            case "5min":
+                return dateTime.plusMinutes(5);
+            case "15min":
+                return dateTime.plusMinutes(15);
+            case "30min":
+                return dateTime.plusMinutes(30);
             case "hour":
                 return dateTime.plusHours(1);
             case "6hour":

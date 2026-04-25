@@ -3,14 +3,11 @@ package com.kalix.ide.io;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -45,19 +42,6 @@ import java.util.TreeSet;
  */
 public class TimeSeriesCsvExporter {
 
-    /**
-     * Date formatter for dates without time components (whole days at midnight).
-     * Format: "yyyy-MM-dd"
-     */
-    private static final DateTimeFormatter DATE_FORMATTER =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
-    /**
-     * DateTime formatter for dates with time components.
-     * Format: "yyyy-MM-dd'T'HH:mm:ss"
-     */
-    private static final DateTimeFormatter DATETIME_FORMATTER =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     /**
      * Private constructor to prevent instantiation of this utility class.
@@ -140,10 +124,24 @@ public class TimeSeriesCsvExporter {
 
         boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
 
+        // Pick a single date format for the whole file based on the resolution of the data.
+        // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
+        // first regular-interval series; falls back to date-only if none is regular.
+        long stepSeconds = inferStepSeconds(allSeries);
+
         try (FileWriter writer = new FileWriter(file)) {
             writeHeader(writer, allSeries, isExceedance);
-            writeDataRows(writer, allSeries, allTimestamps, isExceedance);
+            writeDataRows(writer, allSeries, allTimestamps, isExceedance, stepSeconds);
         }
+    }
+
+    private static long inferStepSeconds(List<TimeSeriesData> allSeries) {
+        for (TimeSeriesData series : allSeries) {
+            if (series.hasRegularInterval()) {
+                return series.getIntervalMillis() / 1000;
+            }
+        }
+        return 0;
     }
 
     /**
@@ -200,7 +198,8 @@ public class TimeSeriesCsvExporter {
      * @throws IOException if writing fails
      */
     private static void writeDataRows(FileWriter writer, List<TimeSeriesData> allSeries,
-                                    Set<Long> allTimestamps, boolean isExceedance) throws IOException {
+                                    Set<Long> allTimestamps, boolean isExceedance,
+                                    long stepSeconds) throws IOException {
         for (Long timestamp : allTimestamps) {
             // Format first column based on plot type
             if (isExceedance) {
@@ -208,11 +207,7 @@ public class TimeSeriesCsvExporter {
                 double percentile = timestamp / 1_000_000.0;
                 writer.write(String.format("%.2f", percentile));
             } else {
-                // Format datetime
-                LocalDateTime dateTime = LocalDateTime.ofInstant(
-                    Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-                String dateTimeStr = formatDateTime(dateTime);
-                writer.write(dateTimeStr);
+                writer.write(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
             }
 
             // Write values for each series
@@ -225,28 +220,6 @@ public class TimeSeriesCsvExporter {
                 // For NaN/missing values, write empty cell (nothing)
             }
             writer.write("\n");
-        }
-    }
-
-    /**
-     * Formats a LocalDateTime for CSV output using adaptive precision.
-     *
-     * <p>The formatting logic:</p>
-     * <ul>
-     *   <li>If the time is exactly midnight (00:00:00.000): returns date only</li>
-     *   <li>Otherwise: returns full date and time</li>
-     * </ul>
-     *
-     * @param dateTime the datetime to format
-     * @return formatted datetime string suitable for CSV
-     */
-    private static String formatDateTime(LocalDateTime dateTime) {
-        // Check if it's a whole day (midnight with no time component)
-        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 &&
-            dateTime.getSecond() == 0 && dateTime.getNano() == 0) {
-            return dateTime.format(DATE_FORMATTER);
-        } else {
-            return dateTime.format(DATETIME_FORMATTER);
         }
     }
 

@@ -4,14 +4,11 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.utils.TimeFormatUtil;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -427,16 +424,27 @@ public class CoordinateDisplayManager {
             return String.format("%.2f", value);
         }
 
-        // Standard time formatting
-        LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneOffset.UTC);
+        // Standard time formatting. Pick the format from the visible series' step_size so the
+        // hover shows ISO datetime for sub-daily data and date-only for daily, consistently
+        // across every point in the same hover (no mid-frame format flicker on midnight rows).
+        long stepSeconds = inferStepSecondsFromVisibleSeries();
+        return TimeFormatUtil.formatForStepSize(timestampMs, stepSeconds);
+    }
 
-        // Check if it's a whole day (midnight UTC)
-        if (dateTime.getHour() == 0 && dateTime.getMinute() == 0 && dateTime.getSecond() == 0 &&
-            timestampMs % 1000 == 0) {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        } else {
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+    /**
+     * Returns the step_size (in seconds) of the first visible series with a regular interval,
+     * or 0 if no such series is available. The hover overlay uses this to choose a consistent
+     * date format for all displayed points.
+     */
+    private long inferStepSecondsFromVisibleSeries() {
+        if (dataSet == null) return 0;
+        for (String name : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(name);
+            if (series != null && series.hasRegularInterval()) {
+                return series.getIntervalMillis() / 1000;
+            }
         }
+        return 0;
     }
 
     /**

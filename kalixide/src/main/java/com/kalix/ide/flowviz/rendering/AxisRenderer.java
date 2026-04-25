@@ -1,12 +1,9 @@
 package com.kalix.ide.flowviz.rendering;
 
 import com.kalix.ide.flowviz.transform.YAxisScale;
+import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.awt.*;
-import java.time.format.DateTimeFormatter;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -318,6 +315,13 @@ public class AxisRenderer {
             numericDecimalPlaces = decimalPlacesForTicks(decodedTicks);
         }
 
+        // Tick interval drives the label format for time axes (e.g. hourly ticks need
+        // hour-of-day in the label; daily ticks don't). Falls back to the full range
+        // when there's only one tick.
+        long tickIntervalMs = axisInfo.timeTicks.size() >= 2
+            ? axisInfo.timeTicks.get(1) - axisInfo.timeTicks.get(0)
+            : axisInfo.timeRangeMs;
+
         for (Long tickTime : axisInfo.timeTicks) {
             int screenX = viewport.timeToScreenX(tickTime);
 
@@ -326,7 +330,7 @@ public class AxisRenderer {
                 g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + TICK_MARK_LENGTH);
 
                 // Draw label
-                String timeLabel = formatXAxisLabel(tickTime, axisInfo.timeRangeMs, viewport.getXAxisType());
+                String timeLabel = formatXAxisLabel(tickTime, tickIntervalMs, viewport.getXAxisType());
                 int labelWidth = fm.stringWidth(timeLabel);
                 g2d.drawString(timeLabel, screenX - labelWidth / 2,
                              plotY + plotHeight + TIME_LABEL_OFFSET);
@@ -377,7 +381,7 @@ public class AxisRenderer {
     /**
      * Formats an X-axis label based on axis type.
      */
-    private String formatXAxisLabel(long value, long rangeMs, XAxisType xAxisType) {
+    private String formatXAxisLabel(long value, long tickIntervalMs, XAxisType xAxisType) {
         if (xAxisType == XAxisType.PERCENTILE) {
             return formatPercentile(value);
         } else if (xAxisType == XAxisType.COUNT) {
@@ -385,21 +389,7 @@ public class AxisRenderer {
         } else if (xAxisType == XAxisType.NUMERIC) {
             return formatNumeric(value);
         } else {
-            return formatTime(value, rangeMs);
-        }
-    }
-
-    /**
-     * Formats a timestamp for axis labels.
-     */
-    private String formatTime(long timeMs, long timeRangeMs) {
-        LocalDateTime dateTime = LocalDateTime.ofInstant(
-            Instant.ofEpochMilli(timeMs), ZoneOffset.UTC);
-
-        if (timeRangeMs < 86400000) {  // Less than 1 day - show time
-            return dateTime.format(DateTimeFormatter.ofPattern("HH:mm"));
-        } else {  // 1 day or more - always show year with date
-            return dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            return TimeFormatUtil.formatForTickInterval(value, tickIntervalMs);
         }
     }
 

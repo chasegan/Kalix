@@ -169,6 +169,9 @@ public class RunManager extends JFrame {
     // lastRunInfo points to the most recently completed run
     // Used to resolve "[Last]" series to actual session data
     private RunInfoImpl lastRunInfo = null;
+    // Incremented each time "Last" changes. Async callbacks capture this value and discard
+    // responses if it has since changed, preventing stale data from overwriting fresh data.
+    private long lastRunGeneration = 0;
     private DefaultMutableTreeNode lastRunChildNode = null;
     private final Map<String, Long> completionTimestamps = new HashMap<>();
     private long lastRunCompletionTime = 0L;
@@ -860,6 +863,7 @@ public class RunManager extends JFrame {
      */
     private void updateLastRun(RunInfoImpl newLastRun, long completionTime) {
         lastRunInfo = newLastRun;
+        lastRunGeneration++;
         lastRunCompletionTime = completionTime;
 
         // Check if we're replacing an existing Last child or creating the first one
