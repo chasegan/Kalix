@@ -48,7 +48,11 @@ Verifying: 23_order_lag/model.ini
   ✓ VERIFIED!
 
 Verifying: 2_pioneer_val/model.ini
-  ✓ VERIFIED!
+  ✗ Failed: 
+thread 'main' (2345654) panicked at src/bin/kalix.rs:138:21:
+Error: Error on line 7: Error reading /Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv: In '/Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv': Input timestamps are not regularly spaced: expected step_size 31536000s but row 4 -> 5 has gap 31622400s. The simulation requires evenly-spaced timestamps.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 
 Verifying: 3_calibrate_constants/model.ini
   ✓ VERIFIED!
@@ -74,9 +78,15 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-03-19T15:58:37.761679
+Timestamp: 2026-04-25T09:07:59.771866
 Total: 23
-Passed: 23
-Failed: 0
+Passed: 22
+Failed: 1
 
-✓ All models verified successfully!
+Failed models:
+  - 2_pioneer_val/model.ini
+    Failed: 
+thread 'main' (2345654) panicked at src/bin/kalix.rs:138:21:
+Error: Error on line 7: Error reading /Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv: In '/Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv': Input timestamps are not regularly spaced: expected step_size 31536000s but row 4 -> 5 has gap 31622400s. The simulation requires evenly-spaced timestamps.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
