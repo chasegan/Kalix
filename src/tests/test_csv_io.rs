@@ -288,3 +288,33 @@ fn test_csv_writer_uses_date_only_for_daily() {
         "Daily output should not have ISO time component. Got:\n{}", written
     );
 }
+
+/// End-to-end check: load an hourly model, run it, write outputs. The exported CSV must
+/// preserve the hour-of-day in every row's timestamp. This guards the full chain — CSV step_size
+/// inference, sim_stepsize propagation through configure(), and writer formatter selection.
+#[test]
+fn test_hourly_model_end_to_end_preserves_step_size() {
+    use crate::io::ini_model_io::IniModelIO;
+
+    let model_filename = "./src/tests/example_models/hourly_test/hourly.ini";
+    let mut m = IniModelIO::new()
+        .read_model_file(model_filename)
+        .expect("Should load model");
+
+    m.configure().expect("Configuration should succeed");
+    assert_eq!(m.configuration.sim_stepsize, 3600,
+               "sim_stepsize should be inferred as 3600s from hourly input data");
+
+    m.run().expect("Run should succeed");
+
+    let output_path = "./src/tests/example_models/hourly_test/output.csv";
+    m.write_outputs(output_path).expect("Write should succeed");
+
+    let written = std::fs::read_to_string(output_path).unwrap();
+    let _ = std::fs::remove_file(output_path);
+
+    assert!(
+        written.contains("2020-01-01T01:00:00") && written.contains("2020-01-01T02:00:00"),
+        "Output should preserve hour-of-day in every row. Got:\n{}", written
+    );
+}
