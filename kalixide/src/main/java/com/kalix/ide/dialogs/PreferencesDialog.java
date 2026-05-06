@@ -739,6 +739,7 @@ public class PreferencesDialog extends JDialog {
         private JCheckBox showCoordinatesCheckBox;
         private JCheckBox autoYModeCheckBox;
         private JTextField logScaleMinField;
+        private JComboBox<String> stdioFormatComboBox;
 
         public CompressionPreferencePanel() {
             super("Data & Visualization");
@@ -752,7 +753,7 @@ public class PreferencesDialog extends JDialog {
             gbc.anchor = GridBagConstraints.WEST;
 
             // 64-bit precision setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             precision64CheckBox = new JCheckBox("Use 64-bit precision for data export");
             precision64CheckBox.setToolTipText("Higher accuracy but larger file sizes; 32-bit is sufficient for most applications");
             precision64CheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true));
@@ -767,7 +768,7 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(precision64CheckBox, gbc);
 
             // Show coordinates setting
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             showCoordinatesCheckBox = new JCheckBox("Show coordinates in FlowViz");
             showCoordinatesCheckBox.setToolTipText("Display current cursor position in FlowViz charts");
             showCoordinatesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false));
@@ -782,7 +783,7 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(showCoordinatesCheckBox, gbc);
 
             // Auto-Y mode setting
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             autoYModeCheckBox = new JCheckBox("Enable Auto-Y mode in FlowViz");
             autoYModeCheckBox.setToolTipText("Automatically adjust Y-axis scaling in FlowViz charts");
             autoYModeCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true));
@@ -800,7 +801,7 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
             formPanel.add(new JLabel("Log scale auto-zoom minimum:"), gbc);
 
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             logScaleMinField = new JTextField(String.valueOf(
                 PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001)), 10);
             logScaleMinField.setToolTipText("Minimum Y value for log scale auto-zoom (prevents excessive zoom-out from tiny values)");
@@ -811,6 +812,38 @@ public class PreferencesDialog extends JDialog {
                 public void changedUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
             });
             formPanel.add(logScaleMinField, gbc);
+
+            // STDIO data format setting (kaz vs csv for get_result responses)
+            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+            formPanel.add(new JLabel("STDIO data format:"), gbc);
+
+            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+            stdioFormatComboBox = new JComboBox<>(new String[]{"kaz", "csv"});
+            stdioFormatComboBox.setRenderer(new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                              boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if ("kaz".equals(value)) {
+                        setText("Compressed (kaz, recommended)");
+                    } else if ("csv".equals(value)) {
+                        setText("Plain text (csv, debug)");
+                    }
+                    return this;
+                }
+            });
+            stdioFormatComboBox.setToolTipText(
+                "Wire format for timeseries results from kalixcli. 'kaz' uses Gorilla compression "
+                + "(smaller, faster); 'csv' is human-readable plain text (larger, slower).");
+            stdioFormatComboBox.setSelectedItem(
+                PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "kaz"));
+            stdioFormatComboBox.addActionListener(e -> {
+                String selected = (String) stdioFormatComboBox.getSelectedItem();
+                if (selected != null) {
+                    PreferenceManager.setFileString(PreferenceKeys.STDIO_DATA_FORMAT, selected);
+                }
+            });
+            formPanel.add(stdioFormatComboBox, gbc);
 
             add(formPanel, BorderLayout.NORTH);
         }

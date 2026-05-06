@@ -448,13 +448,9 @@ impl Command for GetResultCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("series_name is required".to_string()))?;
 
-        let format = params.get("format")
+        let requested_format = params.get("format")
             .and_then(|v| v.as_str())
-            .unwrap_or("csv");
-
-        if format != "csv" {
-            return Err(CommandError::InvalidParameters("Only csv format is currently supported".to_string()));
-        }
+            .unwrap_or("kaz");
 
         // Get model and check if it exists
         let model = session.get_model()
@@ -465,32 +461,57 @@ impl Command for GetResultCommand {
             .ok_or_else(|| CommandError::ResultNotFound(format!("Timeseries '{}' not found in model results", series_name)))?;
 
         let timeseries = &model.data_cache.series[series_idx];
-
-        // Build CSV data string
-        let mut csv_data = String::new();
-
-        // Add start timestamp and timestep
         let start_timestamp = tid::utils::u64_to_iso_datetime_string(timeseries.start_timestamp);
 
-        csv_data.push_str(&format!("{},{}", start_timestamp, timeseries.step_size));
+        let metadata = serde_json::json!({
+            "start_timestamp": start_timestamp,
+            "timestep_seconds": timeseries.step_size,
+            "total_points": timeseries.values.len(),
+            "units": "unknown" // TODO: Add units to timeseries struct
+        });
 
-        // Add values
-        for value in &timeseries.values {
-            csv_data.push_str(&format!(",{}", value));
+        match requested_format {
+            "csv" => {
+                let mut csv_data = String::new();
+                csv_data.push_str(&format!("{},{}", start_timestamp, timeseries.step_size));
+                for value in &timeseries.values {
+                    csv_data.push_str(&format!(",{}", value));
+                }
+                Ok(serde_json::json!({
+                    "series_name": series_name,
+                    "format": "csv",
+                    "metadata": metadata,
+                    "data": csv_data
+                }))
+            }
+            "kaz" => {
+                use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble};
+                use base64::{Engine, engine::general_purpose::STANDARD};
+
+                let series: Vec<TimeValueDouble> = timeseries.values.iter().enumerate()
+                    .map(|(i, &v)| TimeValueDouble {
+                        timestamp: timeseries.start_timestamp + (i as u64 * timeseries.step_size),
+                        value: v,
+                    })
+                    .collect();
+
+                let compressor = GorillaCompressor::new(timeseries.step_size);
+                let compressed = compressor.compress_double(&series)
+                    .map_err(|e| CommandError::ExecutionError(format!("Gorilla compression failed: {}", e)))?;
+                let encoded = STANDARD.encode(&compressed);
+
+                Ok(serde_json::json!({
+                    "series_name": series_name,
+                    "format": "kaz",
+                    "codec": "gorilla_double",
+                    "metadata": metadata,
+                    "data": encoded
+                }))
+            }
+            other => Err(CommandError::InvalidParameters(
+                format!("Unsupported format '{}'; expected 'kaz' or 'csv'", other)
+            )),
         }
-
-        // Build response
-        Ok(serde_json::json!({
-            "series_name": series_name,
-            "format": format,
-            "metadata": {
-                "start_timestamp": start_timestamp,
-                "timestep_seconds": timeseries.step_size,
-                "total_points": timeseries.values.len(),
-                "units": "unknown" // TODO: Add units to timeseries struct
-            },
-            "data": csv_data
-        }))
     }
 }
 

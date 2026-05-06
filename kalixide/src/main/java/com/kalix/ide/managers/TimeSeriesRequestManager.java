@@ -3,6 +3,9 @@ package com.kalix.ide.managers;
 import com.kalix.ide.cli.JsonStdioProtocol;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
+import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.preferences.PreferenceManager;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,9 +13,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+
+/* Wire formats accepted on get_result responses. */
 
 /**
  * Manages asynchronous fetching and caching of timeseries data from kalixcli sessions.
@@ -250,8 +257,12 @@ public class TimeSeriesRequestManager {
         String cacheKey = kalixcliUid + ":" + request.seriesName;
 
         try {
-            // Create the get_result command
-            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, "csv");
+            // Wire format is user-configurable via Preferences > Data & Visualization.
+            String format = PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "kaz");
+            if (!"kaz".equals(format) && !"csv".equals(format)) {
+                format = "kaz"; // defensive: unknown saved value falls back to default
+            }
+            String command = JsonStdioProtocol.Commands.getResult(request.seriesName, format);
 
             // Send command
             sessionManager.sendCommand(request.sessionKey, command)
@@ -306,8 +317,10 @@ public class TimeSeriesRequestManager {
         }
 
         String dataString = result.path("data").asText();
+        // Format defaults to "kaz" if the field is absent (older responses or defensive fallback).
+        String format = result.path("format").asText("kaz");
         try {
-            handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
+            handleTimeSeriesResult(seriesName, dataString, kalixcliUid, format);
         } catch (Exception e) {
             logger.error("Failed to process get_result for '{}'", seriesName, e);
             failPendingFuture(cacheKey, e);
@@ -328,13 +341,22 @@ public class TimeSeriesRequestManager {
     /**
      * Handle the actual timeseries result data (common logic for both protocols)
      */
-    private void handleTimeSeriesResult(String seriesName, String dataString, String kalixcliUid) {
+    private void handleTimeSeriesResult(String seriesName, String dataString, String kalixcliUid, String format) throws java.io.IOException {
         if (seriesName.isEmpty() || dataString.isEmpty()) {
             throw new IllegalArgumentException("Invalid timeseries response: missing series_name or data");
         }
 
-        // Parse the timeseries data (may throw)
-        TimeSeriesData timeSeriesData = parseTimeSeriesData(seriesName, dataString);
+        TimeSeriesData timeSeriesData;
+        switch (format) {
+            case "kaz":
+                timeSeriesData = decodeKazPayload(seriesName, dataString);
+                break;
+            case "csv":
+                timeSeriesData = decodeCsvPayload(seriesName, dataString);
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported get_result format: '" + format + "'");
+        }
 
         // Update cache
         String cacheKey = kalixcliUid + ":" + seriesName;
@@ -349,40 +371,55 @@ public class TimeSeriesRequestManager {
     }
 
     /**
-     * Parse timeseries data from the comma-separated format
-     * Format: "start_timestamp,timestep_seconds,value1,value2,value3,..."
+     * Decode a base64-encoded Gorilla-compressed timeseries (kaz format) into TimeSeriesData.
+     * The compressed bitstream carries the timestep, count, and per-point timestamps
+     * (Unix seconds), so no additional metadata is needed.
      */
-    private TimeSeriesData parseTimeSeriesData(String seriesName, String dataString) {
-        String[] parts = dataString.split(",");
+    static TimeSeriesData decodeKazPayload(String seriesName, String base64Data) throws java.io.IOException {
+        // Constructor's timestep arg is only used by the encoder; decoder reads it from the bitstream.
+        GorillaCompressor codec = new GorillaCompressor(0);
+        List<GorillaCompressor.TimeValueDouble> points = codec.decompressDoubleBase64(base64Data);
 
+        int n = points.size();
+        LocalDateTime[] dateTimes = new LocalDateTime[n];
+        double[] values = new double[n];
+        for (int i = 0; i < n; i++) {
+            GorillaCompressor.TimeValueDouble p = points.get(i);
+            // Kalix stores timestamps in offset-binary u64: signed = bits ^ 2^63
+            // (mirrors Rust's wrap_to_i64 in src/tid/utils.rs).
+            long signedSeconds = p.timestamp ^ Long.MIN_VALUE;
+            dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
+            values[i] = p.value;
+        }
+        return new TimeSeriesData(seriesName, dateTimes, values);
+    }
+
+    /**
+     * Decode a CSV-format timeseries payload into TimeSeriesData.
+     * Format: "start_timestamp,timestep_seconds,value1,value2,..."
+     */
+    static TimeSeriesData decodeCsvPayload(String seriesName, String dataString) {
+        String[] parts = dataString.split(",");
         if (parts.length < 3) {
             throw new IllegalArgumentException("Invalid timeseries data format: need at least start_timestamp, timestep, and one value");
         }
 
-        // Parse start timestamp
-        String startTimestampStr = parts[0].trim();
-        LocalDateTime startTime = LocalDateTime.parse(startTimestampStr, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-
-        // Parse timestep in seconds
+        LocalDateTime startTime =
+            LocalDateTime.parse(parts[0].trim(), DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         long timestepSeconds = Long.parseLong(parts[1].trim());
 
-        // Parse values
         int valueCount = parts.length - 2;
         LocalDateTime[] dateTimes = new LocalDateTime[valueCount];
         double[] values = new double[valueCount];
 
         for (int i = 0; i < valueCount; i++) {
-            // Calculate timestamp for this data point
             dateTimes[i] = startTime.plusSeconds(i * timestepSeconds);
-
-            // Parse value
             try {
                 values[i] = Double.parseDouble(parts[i + 2].trim());
             } catch (NumberFormatException e) {
-                values[i] = Double.NaN; // Handle invalid values
+                values[i] = Double.NaN;
             }
         }
-
         return new TimeSeriesData(seriesName, dateTimes, values);
     }
 }

@@ -40,6 +40,9 @@ public class PreferenceKeys {
     /** Log scale auto-zoom minimum value threshold (double, default: 0.001) */
     public static final String PLOT_LOG_SCALE_MIN_THRESHOLD = "plot.logScale.minThreshold";
 
+    /** STDIO format for get_result responses ("kaz" or "csv", default: "kaz") */
+    public static final String STDIO_DATA_FORMAT = "stdio.dataFormat";
+
     /** UI theme selection (string, default: "Light") */
     public static final String UI_THEME = "ui.theme";
 
