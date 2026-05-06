@@ -12,11 +12,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Records all messages between IDE and CLI with timestamps and direction.
  */
 public class SessionCommunicationLog {
-    
+
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-    
+
+    // Cap stored messages so multi-MB payloads (e.g. get_result responses for hourly multi-decade
+    // runs ~21MB on a single line) don't bloat memory or wedge the log viewer's text component.
+    private static final int MAX_LOGGED_MESSAGE_LEN = 4096;
+
     private final List<LogEntry> entries = new CopyOnWriteArrayList<>();
     private final String sessionKey;
+
+    private static String truncate(String message) {
+        if (message == null || message.length() <= MAX_LOGGED_MESSAGE_LEN) {
+            return message;
+        }
+        return message.substring(0, MAX_LOGGED_MESSAGE_LEN)
+            + "… [truncated, original length=" + message.length() + " chars]";
+    }
     
     /**
      * Creates a new communication log for a session.
@@ -113,34 +125,34 @@ public class SessionCommunicationLog {
      * @param message the message content
      */
     public void logIdeToCli(String message) {
-        entries.add(new LogEntry(LocalDateTime.now(), Direction.GUI_TO_CLI, Stream.STDIN, message));
+        entries.add(new LogEntry(LocalDateTime.now(), Direction.GUI_TO_CLI, Stream.STDIN, truncate(message)));
     }
-    
+
     /**
      * Logs a message received from CLI stdout.
-     * 
+     *
      * @param message the message content
      */
     public void logCliToIdeStdout(String message) {
-        entries.add(new LogEntry(LocalDateTime.now(), Direction.CLI_TO_GUI, Stream.STDOUT, message));
+        entries.add(new LogEntry(LocalDateTime.now(), Direction.CLI_TO_GUI, Stream.STDOUT, truncate(message)));
     }
-    
+
     /**
      * Logs a message received from CLI stderr.
-     * 
+     *
      * @param message the message content
      */
     public void logCliToIdeStderr(String message) {
-        entries.add(new LogEntry(LocalDateTime.now(), Direction.CLI_TO_GUI, Stream.STDERR, message));
+        entries.add(new LogEntry(LocalDateTime.now(), Direction.CLI_TO_GUI, Stream.STDERR, truncate(message)));
     }
-    
+
     /**
      * Logs a system message (session events, errors, etc.).
-     * 
+     *
      * @param message the message content
      */
     public void logSystemMessage(String message) {
-        entries.add(new LogEntry(LocalDateTime.now(), Direction.SYSTEM, Stream.SYSTEM, message));
+        entries.add(new LogEntry(LocalDateTime.now(), Direction.SYSTEM, Stream.SYSTEM, truncate(message)));
     }
     
     /**
