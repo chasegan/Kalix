@@ -3,6 +3,7 @@ package com.kalix.ide.managers;
 import com.kalix.ide.cli.JsonStdioProtocol;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -50,7 +51,15 @@ public class TimeSeriesRequestManager {
 
     // Core dependencies
     private final SessionManager sessionManager;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = createObjectMapper();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper m = new ObjectMapper();
+        // Lift the 20MB default string limit so large get_result payloads parse.
+        m.getFactory().setStreamReadConstraints(
+            StreamReadConstraints.builder().maxStringLength(Integer.MAX_VALUE).build());
+        return m;
+    }
 
     // Request queue - sequential processing required by STDIO protocol
     private final ExecutorService requestExecutor;
@@ -265,37 +274,54 @@ public class TimeSeriesRequestManager {
      * Call this method when you receive JSON responses from the session
      */
     public void handleJsonResponse(String jsonResponse) {
+        JsonNode response;
         try {
-            JsonNode response = objectMapper.readTree(jsonResponse);
-
-            // Handle compact protocol format first
-            String messageType = response.path("m").asText();
-            if ("res".equals(messageType)) {
-                // Compact protocol format
-                String command = response.path("cmd").asText();
-                if (!"get_result".equals(command)) {
-                    return;
-                }
-
-                // Check if the command was successful
-                boolean success = response.path("ok").asBoolean(false);
-                if (!success) {
-                    logger.warn("get_result command failed");
-                    return;
-                }
-
-                JsonNode result = response.path("r");
-                String seriesName = result.path("series_name").asText();
-                String dataString = result.path("data").asText();
-                String kalixcliUid = response.path("uid").asText();
-
-                handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
-            }
-
-            // No legacy protocol support - all messages should be compact format
-
+            response = objectMapper.readTree(jsonResponse);
         } catch (Exception e) {
-            logger.error("Failed to handle JSON response", e);
+            logger.error("Failed to parse JSON response", e);
+            return;
+        }
+
+        String messageType = response.path("m").asText();
+        if (!"res".equals(messageType)) {
+            return;
+        }
+
+        String command = response.path("cmd").asText();
+        if (!"get_result".equals(command)) {
+            return;
+        }
+
+        JsonNode result = response.path("r");
+        String seriesName = result.path("series_name").asText();
+        String kalixcliUid = response.path("uid").asText();
+        String cacheKey = kalixcliUid + ":" + seriesName;
+
+        boolean success = response.path("ok").asBoolean(false);
+        if (!success) {
+            String errMsg = response.path("msg").asText("get_result command failed");
+            logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
+            failPendingFuture(cacheKey, new RuntimeException("get_result failed: " + errMsg));
+            return;
+        }
+
+        String dataString = result.path("data").asText();
+        try {
+            handleTimeSeriesResult(seriesName, dataString, kalixcliUid);
+        } catch (Exception e) {
+            logger.error("Failed to process get_result for '{}'", seriesName, e);
+            failPendingFuture(cacheKey, e);
+        }
+    }
+
+    /**
+     * Remove the in-progress future for the given cacheKey and complete it exceptionally.
+     * Safe to call when no future is pending.
+     */
+    private void failPendingFuture(String cacheKey, Throwable cause) {
+        CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
+        if (future != null) {
+            future.completeExceptionally(cause);
         }
     }
 
@@ -304,11 +330,10 @@ public class TimeSeriesRequestManager {
      */
     private void handleTimeSeriesResult(String seriesName, String dataString, String kalixcliUid) {
         if (seriesName.isEmpty() || dataString.isEmpty()) {
-            logger.warn("Invalid timeseries response: missing series_name or data");
-            return;
+            throw new IllegalArgumentException("Invalid timeseries response: missing series_name or data");
         }
 
-        // Parse the timeseries data
+        // Parse the timeseries data (may throw)
         TimeSeriesData timeSeriesData = parseTimeSeriesData(seriesName, dataString);
 
         // Update cache

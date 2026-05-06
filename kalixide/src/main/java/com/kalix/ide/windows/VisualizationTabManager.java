@@ -113,6 +113,7 @@ public class VisualizationTabManager {
      */
     private static final String[] AGGREGATION_OPTIONS = {
         "Original",
+        "Daily",
         "Monthly",
         "Annual (Jan-Dec)",
         "Annual (Feb-Jan)",

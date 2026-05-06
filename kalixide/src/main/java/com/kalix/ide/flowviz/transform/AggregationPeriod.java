@@ -7,6 +7,9 @@ public enum AggregationPeriod {
     /** Original resolution - no aggregation. */
     ORIGINAL("Original"),
 
+    /** Aggregate to daily values. Useful for sub-daily series (e.g. hourly). */
+    DAILY("Daily"),
+
     /** Aggregate to monthly values. */
     MONTHLY("Monthly"),
 
@@ -58,11 +61,11 @@ public enum AggregationPeriod {
 
     /**
      * Gets the starting month (1-12) for annual periods.
-     * Returns 1 for MONTHLY and ORIGINAL.
+     * Returns 1 for non-annual periods (ORIGINAL, DAILY, MONTHLY).
      */
     public int getStartMonth() {
         return switch(this) {
-            case ORIGINAL, MONTHLY -> 1;
+            case ORIGINAL, DAILY, MONTHLY -> 1;
             case ANNUAL_JAN_DEC -> 1;
             case ANNUAL_FEB_JAN -> 2;
             case ANNUAL_MAR_FEB -> 3;
@@ -82,7 +85,7 @@ public enum AggregationPeriod {
      * Checks if this is an annual aggregation period.
      */
     public boolean isAnnual() {
-        return this != ORIGINAL && this != MONTHLY;
+        return this != ORIGINAL && this != DAILY && this != MONTHLY;
     }
 
     /**

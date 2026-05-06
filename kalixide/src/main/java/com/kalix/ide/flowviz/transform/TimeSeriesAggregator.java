@@ -28,13 +28,85 @@ public class TimeSeriesAggregator {
             return original;
         }
 
-        if (period == AggregationPeriod.MONTHLY) {
+        if (period == AggregationPeriod.DAILY) {
+            return aggregateDaily(original, method);
+        } else if (period == AggregationPeriod.MONTHLY) {
             return aggregateMonthly(original, method);
         } else if (period.isAnnual()) {
             return aggregateAnnual(original, method, period.getStartMonth());
         }
 
         return original;
+    }
+
+    /**
+     * Aggregates data to daily resolution. Intended for sub-daily series (e.g. hourly).
+     * On daily-or-coarser series each bucket holds one value, so the aggregation
+     * methods become no-ops.
+     */
+    private static TimeSeriesData aggregateDaily(TimeSeriesData original, AggregationMethod method) {
+        long[] timestamps = original.getTimestamps();
+        double[] values = original.getValues();
+        boolean[] validPoints = original.getValidPoints();
+
+        if (timestamps.length == 0) {
+            return original;
+        }
+
+        // Get series temporal bounds
+        LocalDateTime seriesStart = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[0]), ZoneOffset.UTC);
+        LocalDateTime seriesEnd = LocalDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(timestamps[timestamps.length - 1]), ZoneOffset.UTC);
+
+        // Group data points by calendar day
+        Map<YearMonthDay, List<Double>> dailyBuckets = new TreeMap<>();
+        Set<YearMonthDay> bucketsWithMissingData = new java.util.HashSet<>();
+
+        for (int i = 0; i < timestamps.length; i++) {
+            LocalDateTime dateTime = LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(timestamps[i]),
+                ZoneOffset.UTC
+            );
+
+            YearMonthDay ymd = new YearMonthDay(
+                dateTime.getYear(), dateTime.getMonthValue(), dateTime.getDayOfMonth());
+
+            if (!validPoints[i]) {
+                bucketsWithMissingData.add(ymd);
+                continue;
+            }
+
+            dailyBuckets.computeIfAbsent(ymd, k -> new ArrayList<>()).add(values[i]);
+        }
+
+        // Aggregate each day
+        List<LocalDateTime> aggregatedDates = new ArrayList<>();
+        List<Double> aggregatedValues = new ArrayList<>();
+
+        for (Map.Entry<YearMonthDay, List<Double>> entry : dailyBuckets.entrySet()) {
+            YearMonthDay ymd = entry.getKey();
+            List<Double> dayValues = entry.getValue();
+
+            // Period bounds: start and end at 00:00 of the day. Mirrors the monthly
+            // approximation (which uses last-day-of-month at 00:00 as periodEnd).
+            LocalDateTime periodStart = LocalDateTime.of(ymd.year, ymd.month, ymd.day, 0, 0);
+            LocalDateTime periodEnd = periodStart;
+
+            boolean isComplete = !periodStart.isBefore(seriesStart) && !periodEnd.isAfter(seriesEnd);
+
+            double aggregatedValue = (bucketsWithMissingData.contains(ymd) || !isComplete)
+                ? Double.NaN
+                : method.aggregate(dayValues);
+
+            aggregatedDates.add(periodStart);
+            aggregatedValues.add(aggregatedValue);
+        }
+
+        LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
+        double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
+
+        return new TimeSeriesData(original.getName(), dateArray, valueArray);
     }
 
     /**
@@ -230,6 +302,42 @@ public class TimeSeriesAggregator {
             int yearComp = Integer.compare(this.year, other.year);
             if (yearComp != 0) return yearComp;
             return Integer.compare(this.month, other.month);
+        }
+    }
+
+    /**
+     * Simple year-month-day key for grouping.
+     */
+    private static class YearMonthDay implements Comparable<YearMonthDay> {
+        final int year;
+        final int month;
+        final int day;
+
+        YearMonthDay(int year, int month, int day) {
+            this.year = year;
+            this.month = month;
+            this.day = day;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof YearMonthDay that)) return false;
+            return year == that.year && month == that.month && day == that.day;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(year, month, day);
+        }
+
+        @Override
+        public int compareTo(YearMonthDay other) {
+            int yearComp = Integer.compare(this.year, other.year);
+            if (yearComp != 0) return yearComp;
+            int monthComp = Integer.compare(this.month, other.month);
+            if (monthComp != 0) return monthComp;
+            return Integer.compare(this.day, other.day);
         }
     }
 }

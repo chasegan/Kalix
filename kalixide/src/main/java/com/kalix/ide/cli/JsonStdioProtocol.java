@@ -1,6 +1,7 @@
 package com.kalix.ide.cli;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -13,7 +14,13 @@ import java.util.Optional;
  */
 public class JsonStdioProtocol {
 
+    // get_result responses encode entire timeseries as a single JSON string field.
+    // Default Jackson 2.15 maxStringLength is 20MB; hourly multi-decade runs exceed this.
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    static {
+        objectMapper.getFactory().setStreamReadConstraints(
+            StreamReadConstraints.builder().maxStringLength(Integer.MAX_VALUE).build());
+    }
 
     /**
      * Parses a JSON line into a SystemMessage.
