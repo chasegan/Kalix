@@ -147,6 +147,13 @@ public class OptimisationProgressManager {
             return;
         }
 
+        // Only refresh the visible labels/progress bar if this update is for the optimisation
+        // currently selected in the tree. The per-session OptimisationResult has already been
+        // updated upstream; this method only touches shared UI.
+        if (info != currentOptimisation) {
+            return;
+        }
+
         // Update progress bar
         if (progressBar != null && result.getCurrentProgress() != null) {
             progressBar.setProgress(result.getCurrentProgress());

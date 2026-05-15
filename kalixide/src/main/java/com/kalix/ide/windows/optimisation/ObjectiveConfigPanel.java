@@ -81,8 +81,8 @@ public class ObjectiveConfigPanel extends JPanel {
         JScrollPane tableScrollPane = new JScrollPane(termsTable);
         mainPanel.add(tableScrollPane, BorderLayout.CENTER);
 
-        // Button row below the table
-        JPanel buttonsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        // Button row above the table — right-aligned to match ParametersConfigPanel
+        JPanel buttonsRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 5));
         addButton = new JButton("+ New term");
         addButton.setToolTipText("Add a new term");
         addButton.addActionListener(e -> addTerm());
@@ -132,10 +132,8 @@ public class ObjectiveConfigPanel extends JPanel {
         // Re-validate when terms change too (renamed/added/removed)
         termsTableModel.addTableModelListener(e -> revalidateExpression());
 
-        JPanel southPanel = new JPanel(new BorderLayout());
-        southPanel.add(buttonsRow, BorderLayout.NORTH);
-        southPanel.add(expressionRow, BorderLayout.SOUTH);
-        mainPanel.add(southPanel, BorderLayout.SOUTH);
+        mainPanel.add(buttonsRow, BorderLayout.NORTH);
+        mainPanel.add(expressionRow, BorderLayout.SOUTH);
 
         add(mainPanel, BorderLayout.CENTER);
 

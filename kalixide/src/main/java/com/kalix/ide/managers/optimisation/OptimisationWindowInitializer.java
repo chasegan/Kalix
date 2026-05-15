@@ -173,7 +173,7 @@ public class OptimisationWindowInitializer {
         // Session manager callbacks
         sessionManager.setOnOptimisationCreated(optInfo -> {
             SwingUtilities.invokeLater(() -> {
-                treeManager.addOptimisation(optInfo.getName(), optInfo);
+                treeManager.addOptimisation(optInfo.getSessionKey(), optInfo);
                 // Auto-select the new optimisation
                 DefaultMutableTreeNode node = sessionManager.getTreeNode(optInfo.getSessionKey());
                 if (node != null) {
@@ -275,11 +275,9 @@ public class OptimisationWindowInitializer {
                     optInfo.getSessionKey(),
                     optInfo.getStatus() == OptimisationStatus.RUNNING
                 );
-                DefaultMutableTreeNode node = sessionManager.getTreeNode(optInfo.getSessionKey());
-                if (node != null && node.getParent() != null) {
-                    treeModel.removeNodeFromParent(node);
-                }
-                // Clear selection
+                // sessionManager.getTreeNode(...) returns an orphan node never added to the tree model;
+                // the tree manager owns the node that's actually displayed, so remove via that path.
+                treeManager.removeOptimisation(optInfo.getSessionKey());
                 optTree.clearSelection();
             }
         });

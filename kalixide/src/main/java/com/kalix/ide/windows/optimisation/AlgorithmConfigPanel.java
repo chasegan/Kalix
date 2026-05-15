@@ -1,5 +1,8 @@
 package com.kalix.ide.windows.optimisation;
 
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
+
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
@@ -53,6 +56,7 @@ public class AlgorithmConfigPanel extends JPanel {
 
         gbc.gridx = 1;
         gbc.weightx = 0.0;
+        gbc.insets = new Insets(0, 5, 0, 2);
         algorithmCombo = new JComboBox<>(new String[]{"DE", "SCE"});
         algorithmCombo.setSelectedItem("SCE");
         algorithmCombo.addActionListener(e -> onAlgorithmChanged());
@@ -60,24 +64,23 @@ public class AlgorithmConfigPanel extends JPanel {
 
         gbc.gridx = 2;
         gbc.weightx = 0.0;
+        gbc.insets = new Insets(0, 2, 0, 5);
+        JButton settingsButton = new JButton(FontIcon.of(FontAwesomeSolid.COG, 14));
+        settingsButton.setToolTipText("Algorithm settings (threads, random seed, metaparameters)");
+        settingsButton.addActionListener(e -> openSettingsDialog());
+        row.add(settingsButton, gbc);
+
+        gbc.gridx = 3;
+        gbc.weightx = 0.0;
         gbc.insets = new Insets(0, 20, 0, 5);
         row.add(new JLabel("Evaluations:"), gbc);
 
-        gbc.gridx = 3;
+        gbc.gridx = 4;
         gbc.weightx = 0.4;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 5, 0, 5);
-        terminationEvalsField = new JTextField("10000", 8);
+        terminationEvalsField = new JTextField("60000", 8);
         row.add(terminationEvalsField, gbc);
-
-        gbc.gridx = 4;
-        gbc.weightx = 0.0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.insets = new Insets(0, 20, 0, 5);
-        JButton settingsButton = new JButton("Settings…");
-        settingsButton.setToolTipText("Threads, random seed, and algorithm-specific metaparameters");
-        settingsButton.addActionListener(e -> openSettingsDialog());
-        row.add(settingsButton, gbc);
 
         // Right-side filler so the row doesn't centre
         gbc.gridx = 5;
@@ -226,7 +229,7 @@ public class AlgorithmConfigPanel extends JPanel {
 
             gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
             gbc.gridwidth = 2;
-            main.add(new JLabel("Algorithm metaparameters:"), gbc);
+            main.add(new JLabel("Other:"), gbc);
 
             paramsTableModel = new AlgorithmParamsTableModel();
             paramsTableModel.setParameters(algorithmParams);
