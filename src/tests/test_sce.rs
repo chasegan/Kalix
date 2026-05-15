@@ -176,8 +176,9 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         model,
         par_map,
         observed_timeseries,
-        target_model_output_name
-    ).with_objective(ObjectiveFunction::SDEB(SdebObjective::new()));
+        target_model_output_name,
+        ObjectiveFunction::SDEB(SdebObjective::new()),
+    );
 
     //Generation #1, Member #1
     let norm_params = [0.184152062501156,0.7804365141068352,0.9370437553745078,0.21417840875840471,

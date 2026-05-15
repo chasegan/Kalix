@@ -1,44 +1,39 @@
 /// Objective functions for model optimisation
 ///
-/// All objective functions return values where **LOWER IS BETTER** (minimization).
-/// Goodness-of-fit metrics (NSE, KGE) are negated so that optimisation minimises them.
+/// All objective functions return values in `[0, ∞)` where **LOWER IS BETTER** (0 = perfect).
+/// Goodness-of-fit metrics whose natural form is "higher better" (NSE, KGE, Pearson r) are
+/// re-expressed as `1 - x` so that every statistic obeys the same convention with no sign flips.
 
 use std::sync::{Arc, OnceLock};
 
-/// Objective function types
+/// Objective function types — all return values in `[0, ∞)`, lower is better
 #[derive(Clone, Debug)]
 pub enum ObjectiveFunction {
-    /// Nash-Sutcliffe Efficiency (NSE) - negated for minimization
-    /// Returned range: -1 to ∞ (lower is better, -1 = perfect)
-    NashSutcliffe(NseObjective),
+    /// 1 - Nash-Sutcliffe Efficiency. Range: [0, ∞), 0 = perfect.
+    OneMinusNse(NseObjective),
 
-    /// Nash-Sutcliffe Efficiency with log-transformed values - negated for minimization
-    /// Better for low flows. Returned range: -1 to ∞ (lower is better)
-    NashSutcliffeLog(LnseObjective),
+    /// 1 - log-transformed Nash-Sutcliffe Efficiency. Range: [0, ∞), 0 = perfect.
+    /// Better at penalising errors in low flows.
+    OneMinusLnse(LnseObjective),
 
-    /// Root Mean Square Error (lower is better)
+    /// Root Mean Square Error. Range: [0, ∞), 0 = perfect.
     RMSE(RmseObjective),
 
-    /// Mean Absolute Error (lower is better)
+    /// Mean Absolute Error. Range: [0, ∞), 0 = perfect.
     MAE(MaeObjective),
 
-    /// Kling-Gupta Efficiency - negated for minimization
-    /// Returned range: -1 to ∞ (lower is better, -1 = perfect)
-    KlingGupta(KgeObjective),
+    /// 1 - Kling-Gupta Efficiency. Range: [0, ∞), 0 = perfect.
+    OneMinusKge(KgeObjective),
 
-    /// Percent Bias - absolute value (lower is better)
-    /// PBIAS near 0 is better
-    PercentBias(PbiasObjective),
+    /// Absolute percent bias |PBIAS|. Range: [0, ∞), 0 = perfect.
+    AbsPbias(PbiasObjective),
 
-    /// SDEB - Sorted Data Error with Bias
-    /// Combines temporal error (SD) with distributional/ranked error (SE) and bias penalty
-    /// Lower is better (0 = perfect)
+    /// SDEB — Sorted Data Error with Bias. Combines temporal error (SD), distributional
+    /// error (SE), and a bias penalty. Range: [0, ∞), 0 = perfect.
     SDEB(SdebObjective),
 
-    /// Pearson's Correlation Coefficient (R) - negated for minimization
-    /// Measures linear correlation between observed and simulated
-    /// Returned range: -1 to 1 (negated: -1 to 1, where -1 = perfect positive correlation)
-    PEARS_R(PearsObjective),
+    /// 1 - Pearson's correlation coefficient. Range: [0, 2], 0 = perfect positive correlation.
+    OneMinusPearsR(PearsObjective),
 }
 
 /// SDEB objective with lazy-initialized cache for parallel processing
@@ -250,8 +245,8 @@ impl PearsObjective {
 
         let r = covariance / denominator;
 
-        // Negate for minimization (perfect correlation R=1 becomes -1 for minimizer)
-        Ok(-r)
+        // Convert to loss form: 0 = perfect (r=1), 2 = worst (r=-1)
+        Ok(1.0 - r)
     }
 
     /// Initialize cache on first evaluation
@@ -338,8 +333,8 @@ impl NseObjective {
 
         let nse = 1.0 - (ss_res / cache.ss_tot);
 
-        // Negate for minimization
-        Ok(-nse)
+        // Convert to loss form: 0 = perfect, increases as fit worsens
+        Ok(1.0 - nse)
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> NseCache {
@@ -427,8 +422,8 @@ impl LnseObjective {
 
         let lnse = 1.0 - (ss_res / cache.ss_tot_log);
 
-        // Negate for minimization
-        Ok(-lnse)
+        // Convert to loss form: 0 = perfect, increases as fit worsens
+        Ok(1.0 - lnse)
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> LnseCache {
@@ -668,8 +663,8 @@ impl KgeObjective {
 
         let kge = 1.0 - ((r - 1.0).powi(2) + (alpha - 1.0).powi(2) + (beta - 1.0).powi(2)).sqrt();
 
-        // Negate for minimization
-        Ok(-kge)
+        // Convert to loss form: 0 = perfect, increases as fit worsens
+        Ok(1.0 - kge)
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> KgeCache {
@@ -808,28 +803,28 @@ impl ObjectiveFunction {
         }
 
         match self {
-            ObjectiveFunction::NashSutcliffe(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::NashSutcliffeLog(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::OneMinusNse(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::OneMinusLnse(obj) => obj.calculate(observed, simulated),
             ObjectiveFunction::RMSE(obj) => obj.calculate(observed, simulated),
             ObjectiveFunction::MAE(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::KlingGupta(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::PercentBias(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::OneMinusKge(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::AbsPbias(obj) => obj.calculate(observed, simulated),
             ObjectiveFunction::SDEB(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::PEARS_R(obj) => obj.calculate(observed, simulated),
+            ObjectiveFunction::OneMinusPearsR(obj) => obj.calculate(observed, simulated),
         }
     }
 
-    /// Get name of objective function
+    /// Get name of objective function (matches the INI statistic name, uppercase)
     pub fn name(&self) -> &str {
         match self {
-            ObjectiveFunction::NashSutcliffe(_) => "NSE",
-            ObjectiveFunction::NashSutcliffeLog(_) => "NSE-Log",
+            ObjectiveFunction::OneMinusNse(_) => "ONE_MINUS_NSE",
+            ObjectiveFunction::OneMinusLnse(_) => "ONE_MINUS_LNSE",
             ObjectiveFunction::RMSE(_) => "RMSE",
             ObjectiveFunction::MAE(_) => "MAE",
-            ObjectiveFunction::KlingGupta(_) => "KGE",
-            ObjectiveFunction::PercentBias(_) => "PBIAS",
+            ObjectiveFunction::OneMinusKge(_) => "ONE_MINUS_KGE",
+            ObjectiveFunction::AbsPbias(_) => "ABS_PBIAS",
             ObjectiveFunction::SDEB(_) => "SDEB",
-            ObjectiveFunction::PEARS_R(_) => "PEARS_R",
+            ObjectiveFunction::OneMinusPearsR(_) => "ONE_MINUS_PEARS_R",
         }
     }
 }
@@ -838,14 +833,14 @@ impl PartialEq for ObjectiveFunction {
     fn eq(&self, other: &Self) -> bool {
         // All stateful objectives - we can't compare cache contents, so just check type
         match (self, other) {
-            (Self::NashSutcliffe(_), Self::NashSutcliffe(_)) => true,
-            (Self::NashSutcliffeLog(_), Self::NashSutcliffeLog(_)) => true,
+            (Self::OneMinusNse(_), Self::OneMinusNse(_)) => true,
+            (Self::OneMinusLnse(_), Self::OneMinusLnse(_)) => true,
             (Self::RMSE(_), Self::RMSE(_)) => true,
             (Self::MAE(_), Self::MAE(_)) => true,
-            (Self::KlingGupta(_), Self::KlingGupta(_)) => true,
-            (Self::PercentBias(_), Self::PercentBias(_)) => true,
+            (Self::OneMinusKge(_), Self::OneMinusKge(_)) => true,
+            (Self::AbsPbias(_), Self::AbsPbias(_)) => true,
             (Self::SDEB(_), Self::SDEB(_)) => true,
-            (Self::PEARS_R(_), Self::PEARS_R(_)) => true,
+            (Self::OneMinusPearsR(_), Self::OneMinusPearsR(_)) => true,
             _ => false,
         }
     }
@@ -860,9 +855,9 @@ mod tests {
         let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let sim = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
-        // Through ObjectiveFunction (negated for minimization, so -1 means NSE=1)
-        let obj = ObjectiveFunction::NashSutcliffe(NseObjective::new()).calculate(&obs, &sim).unwrap();
-        assert!((obj + 1.0).abs() < 1e-10, "Perfect fit should give objective=-1 (NSE=1)");
+        // Loss form 1-NSE: perfect fit (NSE=1) gives 0
+        let obj = ObjectiveFunction::OneMinusNse(NseObjective::new()).calculate(&obs, &sim).unwrap();
+        assert!(obj.abs() < 1e-10, "Perfect fit should give 1-NSE=0, got {}", obj);
     }
 
     #[test]
@@ -870,9 +865,9 @@ mod tests {
         let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let sim = vec![3.0, 3.0, 3.0, 3.0, 3.0]; // Mean of obs
 
-        // Through ObjectiveFunction (negated for minimization, so 0 means NSE=0)
-        let obj = ObjectiveFunction::NashSutcliffe(NseObjective::new()).calculate(&obs, &sim).unwrap();
-        assert!((obj - 0.0).abs() < 1e-10, "Predicting mean should give objective=0 (NSE=0)");
+        // Loss form 1-NSE: predicting the mean (NSE=0) gives 1
+        let obj = ObjectiveFunction::OneMinusNse(NseObjective::new()).calculate(&obs, &sim).unwrap();
+        assert!((obj - 1.0).abs() < 1e-10, "Predicting mean should give 1-NSE=1, got {}", obj);
     }
 
     #[test]
@@ -898,7 +893,7 @@ mod tests {
         let obs = vec![10.0, 20.0, 30.0];
         let sim = vec![11.0, 22.0, 33.0]; // 10% overestimation
 
-        let pbias = ObjectiveFunction::PercentBias(PbiasObjective::new()).calculate(&obs, &sim).unwrap();
+        let pbias = ObjectiveFunction::AbsPbias(PbiasObjective::new()).calculate(&obs, &sim).unwrap();
         assert!((pbias - 10.0).abs() < 1e-10);
     }
 
@@ -907,9 +902,9 @@ mod tests {
         let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let sim = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
-        // Through ObjectiveFunction (negated for minimization, so -1 means KGE=1)
-        let obj = ObjectiveFunction::KlingGupta(KgeObjective::new()).calculate(&obs, &sim).unwrap();
-        assert!((obj + 1.0).abs() < 1e-10, "Perfect fit should give objective=-1 (KGE=1)");
+        // Loss form 1-KGE: perfect fit (KGE=1) gives 0
+        let obj = ObjectiveFunction::OneMinusKge(KgeObjective::new()).calculate(&obs, &sim).unwrap();
+        assert!(obj.abs() < 1e-10, "Perfect fit should give 1-KGE=0, got {}", obj);
     }
 
     #[test]

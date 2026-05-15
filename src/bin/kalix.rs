@@ -223,7 +223,9 @@ fn main() {
                 OptimisationConfig, OptimisationProblem,
                 create_optimizer_with_callback, OptimizationProgress, Optimisable
             };
-            use kalix::io::optimisation_config_io::load_observed_timeseries;
+            use kalix::io::optimisation_config_io::load_observed_for_term;
+            use kalix::numerical::opt::optimisation::ComparisonPair;
+            use kalix::functions::parse_function;
             use kalix::terminal_plot::optimisation_plot::OptimisationPlot;
             use std::sync::{Arc, Mutex};
 
@@ -241,7 +243,13 @@ fn main() {
             };
 
             if !quiet {
-                println!("Objective function: {:?}", config.objective_function);
+                println!("Objective expression: {}", config.objective_expression);
+                println!("Terms ({}):", config.terms.len());
+                for term in &config.terms {
+                    println!("  {} = {}(node series '{}', obs '{}')",
+                        term.name, term.statistic.name(),
+                        term.simulated_series, term.observed_file);
+                }
                 println!("Algorithm: {}", config.algorithm.name());
                 println!("Population size: {}", config.algorithm.population_size());
                 println!("Termination evaluations: {}", config.termination_evaluations);
@@ -269,34 +277,49 @@ fn main() {
                 }
             };
 
-            // Load observed data
-            println!("Loading observed data: {}", config.observed_data_series);
-            let observed_timeseries = match load_observed_timeseries(&config.observed_data_series) {
-                Ok(ts) => ts,
+            // Build comparison pairs from terms
+            let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());
+            for term in &config.terms {
+                let observed = match load_observed_for_term(&term.observed_file, &term.observed_series) {
+                    Ok(ts) => ts,
+                    Err(e) => {
+                        eprintln!("Error loading observed data for term '{}': {}", term.name, e);
+                        std::process::exit(1);
+                    }
+                };
+                if !quiet {
+                    println!("Term '{}': loaded {} observed points from {}",
+                        term.name, observed.timeseries.len(), term.observed_file);
+                }
+                comparisons.push(ComparisonPair {
+                    name: term.name.clone(),
+                    observed: observed.timeseries,
+                    simulated_series_name: term.simulated_series.clone(),
+                    statistic: term.statistic.clone(),
+                });
+            }
+
+            let expression = match parse_function(&config.objective_expression) {
+                Ok(e) => e,
                 Err(e) => {
-                    eprintln!("Error loading observed data: {}", e);
+                    eprintln!("Error parsing objective_expression '{}': {}", config.objective_expression, e);
                     std::process::exit(1);
                 }
             };
 
-            if !quiet {
-                println!("Observed data points: {}", observed_timeseries.timeseries.len());
-            }
-
-            // Create calibration problem with temporal alignment
-            let problem = OptimisationProblem::single_comparison(
+            let problem = OptimisationProblem::new(
                 model,
                 config.parameter_config.clone(),
-                observed_timeseries.timeseries,
-                config.simulated_series.clone(),
-            ).with_objective(config.objective_function.clone());
+                comparisons,
+                expression,
+            );
 
             println!("\n=== Starting Optimisation ===");
             println!("Algorithm: {}", config.algorithm.name());
             println!("Population size: {}", config.algorithm.population_size());
             println!("Termination evaluations: {}", config.termination_evaluations);
             println!("Parameters to optimise: {}", problem.config.n_genes());
-            println!("Objective: {} (minimize)\n", config.objective_function.name());
+            println!("Objective: minimize ({})\n", config.objective_expression);
 
             // Create optimisation plot
             let opt_plot = Arc::new(Mutex::new(
@@ -389,10 +412,14 @@ fn main() {
                 writeln!(&mut output, "=== Kalix Optimisation Results ===").unwrap();
                 writeln!(&mut output, "Configuration file: {}", config_file).unwrap();
                 writeln!(&mut output, "Model file: {}", model_file_path).unwrap();
-                writeln!(&mut output, "Observed data: {}", config.observed_data_series).unwrap();
-                writeln!(&mut output, "Simulated series: {}\n", config.simulated_series).unwrap();
+                writeln!(&mut output, "Terms:").unwrap();
+                for term in &config.terms {
+                    writeln!(&mut output, "  {}: {} over (sim '{}', obs '{}')",
+                        term.name, term.statistic.name(),
+                        term.simulated_series, term.observed_file).unwrap();
+                }
+                writeln!(&mut output, "Objective expression: {}", config.objective_expression).unwrap();
                 writeln!(&mut output, "Algorithm: {}", config.algorithm.name()).unwrap();
-                writeln!(&mut output, "Objective function: {}", config.objective_function.name()).unwrap();
                 writeln!(&mut output, "Population size: {}", config.algorithm.population_size()).unwrap();
                 writeln!(&mut output, "Best objective value: {:.6}", result.best_objective).unwrap();
                 writeln!(&mut output, "Function evaluations: {}\n", result.n_evaluations).unwrap();

@@ -255,7 +255,7 @@ pub struct FunctionParser {
 /// This struct represents a successfully parsed expression that has been
 /// converted to an Abstract Syntax Tree. It can be evaluated multiple times
 /// with different variable contexts for optimal performance.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParsedFunction {
     ast: Box<dyn ASTNode>,
     variables: HashSet<String>,

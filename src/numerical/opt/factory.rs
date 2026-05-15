@@ -296,13 +296,19 @@ mod tests {
     use super::*;
     use crate::numerical::opt::parameter_mapping::ParameterMappingConfig;
     use crate::numerical::opt::objectives::ObjectiveFunction;
+    use crate::io::optimisation_config_io::{Term, SeriesSpec};
 
     fn create_test_config() -> OptimisationConfig {
         OptimisationConfig {
             model_file: None,
-            observed_data_series: "test.csv.0".to_string(),
-            simulated_series: "node.test.output".to_string(),
-            objective_function: ObjectiveFunction::NashSutcliffe(crate::numerical::opt::objectives::NseObjective::new()),
+            terms: vec![Term {
+                name: "term1".to_string(),
+                simulated_series: "node.test.output".to_string(),
+                observed_file: "test.csv".to_string(),
+                observed_series: SeriesSpec::ByIndex(1),
+                statistic: ObjectiveFunction::OneMinusNse(crate::numerical::opt::objectives::NseObjective::new()),
+            }],
+            objective_expression: "term1".to_string(),
             output_file: None,
             termination_evaluations: 1000,
             random_seed: Some(42),

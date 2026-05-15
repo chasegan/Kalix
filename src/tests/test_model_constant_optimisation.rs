@@ -38,8 +38,13 @@ fn test_model_constant_optimisation() {
 
     //
     use crate::numerical::opt::objectives::{ObjectiveFunction, NseObjective};
-    let mut problem = OptimisationProblem::single_comparison(m,
-            par_map, observed_timeseries, target_model_output_name).with_objective(ObjectiveFunction::NashSutcliffe(NseObjective::new()));
+    let mut problem = OptimisationProblem::single_comparison(
+        m,
+        par_map,
+        observed_timeseries,
+        target_model_output_name,
+        ObjectiveFunction::OneMinusNse(NseObjective::new()),
+    );
 
     // Create DE optimiser
     let de_config = DEConfig {

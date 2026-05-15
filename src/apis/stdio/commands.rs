@@ -724,7 +724,9 @@ impl Command for RunOptimisationCommand {
             OptimisationConfig, OptimisationProblem,
             Optimizer, OptimizationProgress, create_optimizer_with_callback
         };
-        use crate::io::optimisation_config_io::load_observed_timeseries;
+        use crate::io::optimisation_config_io::load_observed_for_term;
+        use crate::numerical::opt::optimisation::ComparisonPair;
+        use crate::functions::parse_function;
 
         // Extract config string parameter
         let config_str = params.get("config")
@@ -751,17 +753,33 @@ impl Command for RunOptimisationCommand {
             return Err(CommandError::ModelNotLoaded);
         };
 
-        // Load observed data
-        let observed_timeseries = load_observed_timeseries(&config.observed_data_series)
-            .map_err(|e| CommandError::ExecutionError(format!("Failed to load observed data: {}", e)))?;
+        // Build comparison pairs from terms (load each observed series)
+        let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());
+        for term in &config.terms {
+            let observed = load_observed_for_term(&term.observed_file, &term.observed_series)
+                .map_err(|e| CommandError::ExecutionError(
+                    format!("Failed to load observed data for term '{}': {}", term.name, e)
+                ))?;
+            comparisons.push(ComparisonPair {
+                name: term.name.clone(),
+                observed: observed.timeseries,
+                simulated_series_name: term.simulated_series.clone(),
+                statistic: term.statistic.clone(),
+            });
+        }
 
-        // Create optimisation problem with temporal alignment
-        let mut problem = OptimisationProblem::single_comparison(
+        // Parse the composite objective expression once
+        let expression = parse_function(&config.objective_expression)
+            .map_err(|e| CommandError::ExecutionError(
+                format!("Failed to parse objective_expression '{}': {}", config.objective_expression, e)
+            ))?;
+
+        let mut problem = OptimisationProblem::new(
             model,
             config.parameter_config.clone(),
-            observed_timeseries.timeseries,
-            config.simulated_series.clone(),
-        ).with_objective(config.objective_function.clone());
+            comparisons,
+            expression,
+        );
 
         // Get interrupt flag
         let interrupt_flag = std::sync::Arc::clone(&session.interrupt_flag);

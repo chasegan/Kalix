@@ -2,31 +2,40 @@
 ///
 /// This module wraps a hydrological Model with optimisation-specific information:
 /// - Parameter mappings (genes -> model parameters)
-/// - Observed data for comparison (with temporal alignment)
-/// - Objective function selection
+/// - One or more comparison pairs (observed/simulated/statistic terms)
+/// - A composite objective expression over the per-term losses
 ///
 /// The wrapper implements the Optimisable trait, presenting a simple normalised
 /// parameter interface to optimisation algorithms.
 
+use std::collections::HashMap;
 use crate::model::Model;
 use crate::nodes::NodeEnum;
 use crate::timeseries::Timeseries;
+use crate::functions::{ParsedFunction, VariableContext, EvaluationConfig, parse_function};
 use super::optimisable::Optimisable;
 use super::optimisable_component::OptimisableComponent;
 use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
 
-/// A pair of observed and simulated series for comparison
+/// One term in a composite optimisation objective
 ///
-/// Stores observed timeseries (with timestamps) and the name of the
-/// simulated series to extract from the model for comparison.
+/// Pairs an observed timeseries with a named simulated series and the statistic
+/// used to compare them. The per-term loss is exposed in the objective expression
+/// under [`ComparisonPair::name`].
 #[derive(Clone)]
 pub struct ComparisonPair {
+    /// Term name, used as a variable in the objective expression
+    pub name: String,
+
     /// Observed timeseries (includes timestamps and values)
     pub observed: Timeseries,
 
     /// Name of simulated series to compare (e.g., "node.sacramento_a.dsflow")
     pub simulated_series_name: String,
+
+    /// Statistic to compute over this (observed, simulated) pair (all return lower-better loss)
+    pub statistic: ObjectiveFunction,
 }
 
 /// Wraps a Model to make it Optimisable
@@ -35,19 +44,17 @@ pub struct ComparisonPair {
 /// ```ignore
 /// let config = ParameterMappingConfig::from_strings(vec![
 ///     "node.sacramento_a.lztwm = log_range(g(1), 50, 300)",
-///     "node.sacramento_a.uzk = log_range(g(2), 0.1, 0.7)",
 /// ])?;
 ///
 /// let comparison = ComparisonPair {
+///     name: "term1".to_string(),
 ///     observed: observed_timeseries,
 ///     simulated_series_name: "node.sacramento_a.dsflow".to_string(),
+///     statistic: ObjectiveFunction::OneMinusNse(NseObjective::new()),
 /// };
 ///
-/// let problem = OptimisationProblem::new(
-///     model,
-///     config,
-///     vec![comparison],
-/// );
+/// let expression = parse_function("term1").unwrap();
+/// let problem = OptimisationProblem::new(model, config, vec![comparison], expression);
 /// ```
 pub struct OptimisationProblem {
     /// The hydrological model
@@ -56,12 +63,11 @@ pub struct OptimisationProblem {
     /// Gene-based parameter configuration
     pub config: ParameterMappingConfig,
 
-    /// Comparison pairs (observed vs simulated series)
-    /// Supports multiple pairs for multi-objective optimization
+    /// Comparison pairs (one per term)
     pub comparisons: Vec<ComparisonPair>,
 
-    /// Objective function to use
-    pub objective: ObjectiveFunction,
+    /// Composite objective expression over per-term losses
+    pub expression: ParsedFunction,
 }
 
 impl OptimisationProblem {
@@ -70,37 +76,31 @@ impl OptimisationProblem {
         model: Model,
         config: ParameterMappingConfig,
         comparisons: Vec<ComparisonPair>,
+        expression: ParsedFunction,
     ) -> Self {
-        use crate::numerical::opt::objectives::NseObjective;
-        Self {
-            model,
-            config,
-            comparisons,
-            objective: ObjectiveFunction::NashSutcliffe(NseObjective::new()),
-        }
+        Self { model, config, comparisons, expression }
     }
 
-    /// Create a single-comparison problem (convenience method for backward compatibility)
+    /// Create a single-comparison problem with a trivial expression of just the term name
     pub fn single_comparison(
         model: Model,
         config: ParameterMappingConfig,
         observed: Timeseries,
         simulated_series_name: String,
+        statistic: ObjectiveFunction,
     ) -> Self {
+        let expression = parse_function("term1").expect("trivial expression parses");
         Self::new(
             model,
             config,
             vec![ComparisonPair {
+                name: "term1".to_string(),
                 observed,
                 simulated_series_name,
+                statistic,
             }],
+            expression,
         )
-    }
-
-    /// Set the objective function
-    pub fn with_objective(mut self, objective: ObjectiveFunction) -> Self {
-        self.objective = objective;
-        self
     }
 
     /// Apply parameter values to the model
@@ -243,35 +243,34 @@ impl Optimisable for OptimisationProblem {
         // Run the model
         self.model.run()?;
 
-        // For now, only support single comparison (multi-objective in future)
-        if self.comparisons.len() != 1 {
-            return Err(format!(
-                "Currently only single comparison is supported, got {} comparisons",
-                self.comparisons.len()
-            ));
+        // Compute each term's loss and stash by term name for expression evaluation
+        let mut term_values: HashMap<String, f64> = HashMap::with_capacity(self.comparisons.len());
+        for comparison in &self.comparisons {
+            let sim_idx = self
+                .model
+                .data_cache
+                .get_series_idx(&comparison.simulated_series_name, false)
+                .ok_or_else(|| {
+                    format!(
+                        "Simulated series not found for term '{}': {}",
+                        comparison.name, comparison.simulated_series_name
+                    )
+                })?;
+
+            let simulated_ts = &self.model.data_cache.series[sim_idx];
+            let (aligned_obs, aligned_sim) = self.align_timeseries(&comparison.observed, simulated_ts)
+                .map_err(|e| format!("In term '{}': {}", comparison.name, e))?;
+
+            let value = comparison.statistic.calculate(&aligned_obs, &aligned_sim)
+                .map_err(|e| format!("In term '{}': {}", comparison.name, e))?;
+            term_values.insert(comparison.name.clone(), value);
         }
 
-        let comparison = &self.comparisons[0];
-
-        // Extract simulated timeseries from model
-        let sim_idx = self
-            .model
-            .data_cache
-            .get_series_idx(&comparison.simulated_series_name, false)
-            .ok_or_else(|| {
-                format!(
-                    "Simulated series not found: {}",
-                    comparison.simulated_series_name
-                )
-            })?;
-
-        let simulated_ts = &self.model.data_cache.series[sim_idx];
-
-        // Align observed and simulated temporally
-        let (aligned_obs, aligned_sim) = self.align_timeseries(&comparison.observed, simulated_ts)?;
-
-        // Calculate objective using aligned data
-        self.objective.calculate(&aligned_obs, &aligned_sim)
+        // Evaluate the composite expression against the per-term losses
+        let eval_config = EvaluationConfig::default();
+        let context = VariableContext::new(&term_values, &eval_config);
+        self.expression.evaluate(&context)
+            .map_err(|e| format!("Failed to evaluate objective_expression: {}", e))
     }
 
     fn param_names(&self) -> Vec<String> {
@@ -283,7 +282,7 @@ impl Optimisable for OptimisationProblem {
             model: self.model.clone(),
             config: self.config.clone(),
             comparisons: self.comparisons.clone(),
-            objective: self.objective.clone(),
+            expression: self.expression.clone(),
         })
     }
 }
@@ -291,44 +290,55 @@ impl Optimisable for OptimisationProblem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numerical::opt::objectives::{NseObjective, KgeObjective};
 
-    #[test]
-    fn test_optimisation_problem_creation() {
-        let model = Model::new();
-        let config = ParameterMappingConfig::new();
+    fn obs_fixture() -> Timeseries {
         let mut observed = Timeseries::new_daily();
         observed.push(0, 1.0);
         observed.push(1, 2.0);
         observed.push(2, 3.0);
-
-        let problem = OptimisationProblem::single_comparison(
-            model,
-            config,
-            observed,
-            "node.test.output".to_string(),
-        );
-
-        assert_eq!(problem.objective.name(), "NSE");
+        observed
     }
 
     #[test]
-    fn test_with_objective() {
-        let model = Model::new();
-        let config = ParameterMappingConfig::new();
-        let mut observed = Timeseries::new_daily();
-        observed.push(0, 1.0);
-        observed.push(1, 2.0);
-        observed.push(2, 3.0);
-
-        use crate::numerical::opt::objectives::KgeObjective;
+    fn test_optimisation_problem_creation_nse() {
         let problem = OptimisationProblem::single_comparison(
-            model,
-            config,
-            observed,
+            Model::new(),
+            ParameterMappingConfig::new(),
+            obs_fixture(),
             "node.test.output".to_string(),
-        )
-        .with_objective(ObjectiveFunction::KlingGupta(KgeObjective::new()));
+            ObjectiveFunction::OneMinusNse(NseObjective::new()),
+        );
+        assert_eq!(problem.comparisons.len(), 1);
+        assert_eq!(problem.comparisons[0].name, "term1");
+        assert_eq!(problem.comparisons[0].statistic.name(), "ONE_MINUS_NSE");
+    }
 
-        assert_eq!(problem.objective.name(), "KGE");
+    #[test]
+    fn test_optimisation_problem_creation_kge() {
+        let problem = OptimisationProblem::single_comparison(
+            Model::new(),
+            ParameterMappingConfig::new(),
+            obs_fixture(),
+            "node.test.output".to_string(),
+            ObjectiveFunction::OneMinusKge(KgeObjective::new()),
+        );
+        assert_eq!(problem.comparisons[0].statistic.name(), "ONE_MINUS_KGE");
+    }
+
+    #[test]
+    fn test_composite_expression_two_terms() {
+        // Build a problem with two comparisons; evaluate the expression manually
+        // against synthetic term-value HashMap to verify the wiring.
+        use std::collections::HashMap;
+        let expression = parse_function("term1 + 0.5 * term2").unwrap();
+        let mut values: HashMap<String, f64> = HashMap::new();
+        values.insert("term1".to_string(), 0.2);
+        values.insert("term2".to_string(), 0.4);
+
+        let cfg = EvaluationConfig::default();
+        let context = VariableContext::new(&values, &cfg);
+        let result = expression.evaluate(&context).unwrap();
+        assert!((result - (0.2 + 0.5 * 0.4)).abs() < 1e-12);
     }
 }
