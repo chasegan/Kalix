@@ -7,241 +7,270 @@ import java.util.*;
 
 /**
  * Panel for configuring optimization algorithm settings.
- * Provides algorithm selection, common parameters, and algorithm-specific parameters table.
+ *
+ * Compact layout: a single row with algorithm selector, termination evaluations,
+ * and a Settings button that opens a modal dialog for the less-frequently-edited
+ * fields (threads, random seed, algorithm-specific metaparameters).
  */
 public class AlgorithmConfigPanel extends JPanel {
 
     private final JComboBox<String> algorithmCombo;
     private final JTextField terminationEvalsField;
-    private final JTextField threadsField;
-    private final JTextField randomSeedField;
-    private final JTable paramsTable;
-    private final AlgorithmParamsTableModel paramsTableModel;
+
+    // State held outside the visible row — edited via the Settings dialog
+    private String threads = "12";
+    private String randomSeed = "";
+    private final Map<String, String> algorithmSpecificParams = new LinkedHashMap<>();
 
     // Algorithm-specific default parameters
     private static final Map<String, Map<String, String>> ALGORITHM_DEFAULTS = Map.of(
-        "DE", Map.of(
+        "DE", new LinkedHashMap<>(Map.of(
             "population_size", "50",
             "de_f", "0.8",
             "de_cr", "0.9"
-        ),
-        "SCE", Map.of(
+        )),
+        "SCE", new LinkedHashMap<>(Map.of(
             "complexes", "12"
-        )
+        ))
     );
 
     public AlgorithmConfigPanel() {
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("Algorithm"));
+        // No TitledBorder — this is a single-row strip that sits at the top of the Config tab.
+        // The labels on the row make its purpose self-evident.
 
-        JPanel mainPanel = new JPanel(new GridBagLayout());
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel row = new JPanel(new GridBagLayout());
+        row.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
 
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(0, 5, 0, 5);
         gbc.anchor = GridBagConstraints.WEST;
-
-        // Left column: Algorithm selection and common parameters
-        JPanel leftPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints leftGbc = new GridBagConstraints();
-        leftGbc.insets = new Insets(5, 5, 5, 5);
-        leftGbc.anchor = GridBagConstraints.WEST;
-
-        // Algorithm selection
-        leftGbc.gridx = 0;
-        leftGbc.gridy = 0;
-        leftGbc.weightx = 0.0;
-        leftPanel.add(new JLabel("Algorithm:"), leftGbc);
-
-        leftGbc.gridx = 1;
-        leftGbc.weightx = 1.0;
-        leftGbc.fill = GridBagConstraints.HORIZONTAL;
-        algorithmCombo = new JComboBox<>(new String[]{"DE", "SCE"});
-        algorithmCombo.setSelectedItem("SCE"); // Default to SCE
-        algorithmCombo.addActionListener(e -> updateAlgorithmSpecificParams());
-        leftPanel.add(algorithmCombo, leftGbc);
-
-        // Termination Evaluations
-        leftGbc.gridx = 0;
-        leftGbc.gridy = 1;
-        leftGbc.weightx = 0.0;
-        leftGbc.fill = GridBagConstraints.NONE;
-        leftPanel.add(new JLabel("Termination Evaluations:"), leftGbc);
-
-        leftGbc.gridx = 1;
-        leftGbc.weightx = 1.0;
-        leftGbc.fill = GridBagConstraints.HORIZONTAL;
-        terminationEvalsField = new JTextField("10000");
-        leftPanel.add(terminationEvalsField, leftGbc);
-
-        // Threads
-        leftGbc.gridx = 0;
-        leftGbc.gridy = 2;
-        leftGbc.weightx = 0.0;
-        leftGbc.fill = GridBagConstraints.NONE;
-        leftPanel.add(new JLabel("Threads:"), leftGbc);
-
-        leftGbc.gridx = 1;
-        leftGbc.weightx = 1.0;
-        leftGbc.fill = GridBagConstraints.HORIZONTAL;
-        threadsField = new JTextField("12");
-        leftPanel.add(threadsField, leftGbc);
-
-        // Random Seed
-        leftGbc.gridx = 0;
-        leftGbc.gridy = 3;
-        leftGbc.weightx = 0.0;
-        leftGbc.fill = GridBagConstraints.NONE;
-        leftPanel.add(new JLabel("Random Seed:"), leftGbc);
-
-        leftGbc.gridx = 1;
-        leftGbc.weightx = 1.0;
-        leftGbc.fill = GridBagConstraints.HORIZONTAL;
-        randomSeedField = new JTextField("");
-        leftPanel.add(randomSeedField, leftGbc);
-
-        // Right column: Algorithm-specific parameters table
-        paramsTableModel = new AlgorithmParamsTableModel();
-        paramsTable = new JTable(paramsTableModel);
-        paramsTable.setRowHeight(25);
-        paramsTable.setShowGrid(true);
-        paramsTable.setGridColor(new Color(220, 220, 220));
-        JScrollPane tableScrollPane = new JScrollPane(paramsTable);
-        tableScrollPane.setPreferredSize(new Dimension(250, 120));
-
-        // Add left and right panels to main panel
-        gbc.gridx = 0;
         gbc.gridy = 0;
-        gbc.weightx = 0.5;
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.BOTH;
-        mainPanel.add(leftPanel, gbc);
+
+        gbc.gridx = 0;
+        gbc.weightx = 0.0;
+        row.add(new JLabel("Algorithm:"), gbc);
 
         gbc.gridx = 1;
-        gbc.weightx = 0.5;
-        mainPanel.add(tableScrollPane, gbc);
+        gbc.weightx = 0.0;
+        algorithmCombo = new JComboBox<>(new String[]{"DE", "SCE"});
+        algorithmCombo.setSelectedItem("SCE");
+        algorithmCombo.addActionListener(e -> onAlgorithmChanged());
+        row.add(algorithmCombo, gbc);
 
-        add(mainPanel, BorderLayout.CENTER);
+        gbc.gridx = 2;
+        gbc.weightx = 0.0;
+        gbc.insets = new Insets(0, 20, 0, 5);
+        row.add(new JLabel("Evaluations:"), gbc);
 
-        // Initialize with DE defaults
-        updateAlgorithmSpecificParams();
+        gbc.gridx = 3;
+        gbc.weightx = 0.4;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 5, 0, 5);
+        terminationEvalsField = new JTextField("10000", 8);
+        row.add(terminationEvalsField, gbc);
+
+        gbc.gridx = 4;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.insets = new Insets(0, 20, 0, 5);
+        JButton settingsButton = new JButton("Settings…");
+        settingsButton.setToolTipText("Threads, random seed, and algorithm-specific metaparameters");
+        settingsButton.addActionListener(e -> openSettingsDialog());
+        row.add(settingsButton, gbc);
+
+        // Right-side filler so the row doesn't centre
+        gbc.gridx = 5;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        row.add(Box.createHorizontalGlue(), gbc);
+
+        add(row, BorderLayout.NORTH);
+
+        // Initialize algorithm-specific params for the default selection
+        onAlgorithmChanged();
     }
 
-    /**
-     * Updates the algorithm-specific parameters table based on selected algorithm.
-     */
-    private void updateAlgorithmSpecificParams() {
+    /** Refresh the algorithm-specific params when the algorithm changes. */
+    private void onAlgorithmChanged() {
         String algorithm = (String) algorithmCombo.getSelectedItem();
         Map<String, String> defaults = ALGORITHM_DEFAULTS.get(algorithm);
+        algorithmSpecificParams.clear();
         if (defaults != null) {
-            paramsTableModel.setParameters(defaults);
+            algorithmSpecificParams.putAll(defaults);
         }
     }
 
-    /**
-     * Gets the selected algorithm.
-     */
+    /** Open the modal Settings dialog. */
+    private void openSettingsDialog() {
+        SettingsDialog dialog = new SettingsDialog(
+            SwingUtilities.getWindowAncestor(this),
+            (String) algorithmCombo.getSelectedItem(),
+            threads,
+            randomSeed,
+            algorithmSpecificParams
+        );
+        dialog.setVisible(true);
+        if (dialog.wasAccepted()) {
+            threads = dialog.getThreadsValue();
+            randomSeed = dialog.getRandomSeedValue();
+            algorithmSpecificParams.clear();
+            algorithmSpecificParams.putAll(dialog.getAlgorithmParams());
+        }
+    }
+
     public String getAlgorithm() {
         return (String) algorithmCombo.getSelectedItem();
     }
 
-    /**
-     * Sets the selected algorithm.
-     */
     public void setAlgorithm(String algorithm) {
         algorithmCombo.setSelectedItem(algorithm);
     }
 
-    /**
-     * Gets the termination evaluations.
-     */
     public String getTerminationEvaluations() {
         return terminationEvalsField.getText().trim();
     }
 
-    /**
-     * Sets the termination evaluations.
-     */
     public void setTerminationEvaluations(String value) {
         terminationEvalsField.setText(value);
     }
 
-    /**
-     * Gets the number of threads.
-     */
     public String getThreads() {
-        return threadsField.getText().trim();
+        return threads;
     }
 
-    /**
-     * Sets the number of threads.
-     */
     public void setThreads(String value) {
-        threadsField.setText(value);
+        this.threads = value != null ? value.trim() : "";
     }
 
-    /**
-     * Gets the random seed.
-     */
     public String getRandomSeed() {
-        return randomSeedField.getText().trim();
+        return randomSeed;
     }
 
-    /**
-     * Sets the random seed.
-     */
     public void setRandomSeed(String value) {
-        randomSeedField.setText(value);
+        this.randomSeed = value != null ? value.trim() : "";
     }
 
-    /**
-     * Gets all algorithm-specific parameters as a map.
-     */
     public Map<String, String> getAlgorithmSpecificParams() {
-        return paramsTableModel.getParametersAsMap();
+        return new LinkedHashMap<>(algorithmSpecificParams);
     }
 
-    /**
-     * Validates that all fields contain valid values.
-     */
     public boolean validateInputs() {
-        // Validate termination evaluations is a positive integer
         try {
             int termEvals = Integer.parseInt(getTerminationEvaluations());
             if (termEvals <= 0) {
                 JOptionPane.showMessageDialog(this,
-                    "Termination Evaluations must be a positive integer",
+                    "Evaluations must be a positive integer",
                     "Validation Error",
                     JOptionPane.ERROR_MESSAGE);
                 return false;
             }
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this,
-                "Termination Evaluations must be a valid integer",
+                "Evaluations must be a valid integer",
                 "Validation Error",
                 JOptionPane.ERROR_MESSAGE);
             return false;
         }
 
-        // Validate threads is a positive integer
         try {
-            int threads = Integer.parseInt(getThreads());
-            if (threads <= 0) {
+            int t = Integer.parseInt(threads);
+            if (t <= 0) {
                 JOptionPane.showMessageDialog(this,
-                    "Threads must be a positive integer",
+                    "Threads (in Settings) must be a positive integer",
                     "Validation Error",
                     JOptionPane.ERROR_MESSAGE);
                 return false;
             }
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this,
-                "Threads must be a valid integer",
+                "Threads (in Settings) must be a valid integer",
                 "Validation Error",
                 JOptionPane.ERROR_MESSAGE);
             return false;
         }
-
         return true;
+    }
+
+    /** Modal dialog for the lesser-edited algorithm settings. */
+    private static class SettingsDialog extends JDialog {
+        private final JTextField threadsField;
+        private final JTextField randomSeedField;
+        private final AlgorithmParamsTableModel paramsTableModel;
+        private boolean accepted = false;
+
+        SettingsDialog(Window owner, String algorithm, String threads, String randomSeed,
+                       Map<String, String> algorithmParams) {
+            super(owner, "Algorithm Settings — " + algorithm, ModalityType.APPLICATION_MODAL);
+            setLayout(new BorderLayout());
+
+            JPanel main = new JPanel(new GridBagLayout());
+            main.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.anchor = GridBagConstraints.WEST;
+
+            gbc.gridx = 0; gbc.gridy = 0;
+            main.add(new JLabel("Threads:"), gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            threadsField = new JTextField(threads, 10);
+            main.add(threadsField, gbc);
+
+            gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
+            main.add(new JLabel("Random seed:"), gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            randomSeedField = new JTextField(randomSeed, 10);
+            randomSeedField.setToolTipText("Leave blank for a non-deterministic seed");
+            main.add(randomSeedField, gbc);
+
+            gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE;
+            gbc.gridwidth = 2;
+            main.add(new JLabel("Algorithm metaparameters:"), gbc);
+
+            paramsTableModel = new AlgorithmParamsTableModel();
+            paramsTableModel.setParameters(algorithmParams);
+            JTable paramsTable = new JTable(paramsTableModel);
+            paramsTable.setRowHeight(25);
+            paramsTable.setShowGrid(true);
+            paramsTable.setGridColor(new Color(220, 220, 220));
+            paramsTable.setPreferredScrollableViewportSize(
+                new Dimension(280, paramsTable.getRowHeight() * 4));
+            JScrollPane tableScrollPane = new JScrollPane(paramsTable);
+
+            gbc.gridx = 0; gbc.gridy = 3;
+            gbc.weightx = 1.0; gbc.weighty = 1.0;
+            gbc.fill = GridBagConstraints.BOTH;
+            gbc.gridwidth = 2;
+            main.add(tableScrollPane, gbc);
+
+            add(main, BorderLayout.CENTER);
+
+            // OK / Cancel
+            JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 5));
+            JButton okButton = new JButton("OK");
+            okButton.addActionListener(e -> {
+                if (paramsTable.isEditing()) {
+                    paramsTable.getCellEditor().stopCellEditing();
+                }
+                accepted = true;
+                dispose();
+            });
+            JButton cancelButton = new JButton("Cancel");
+            cancelButton.addActionListener(e -> dispose());
+            buttonRow.add(okButton);
+            buttonRow.add(cancelButton);
+            add(buttonRow, BorderLayout.SOUTH);
+
+            getRootPane().setDefaultButton(okButton);
+            pack();
+            setLocationRelativeTo(owner);
+        }
+
+        boolean wasAccepted() { return accepted; }
+        String getThreadsValue() { return threadsField.getText().trim(); }
+        String getRandomSeedValue() { return randomSeedField.getText().trim(); }
+        Map<String, String> getAlgorithmParams() { return paramsTableModel.getParametersAsMap(); }
     }
 
     /**
@@ -295,7 +324,6 @@ public class AlgorithmConfigPanel extends JPanel {
 
         @Override
         public boolean isCellEditable(int rowIndex, int columnIndex) {
-            // Only value column (column 1) is editable
             return columnIndex == 1;
         }
 

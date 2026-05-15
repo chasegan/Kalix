@@ -322,23 +322,39 @@ public class OptimisationConfigManager {
     /**
      * Validates the current configuration.
      *
+     * Requires:
+     * <ul>
+     *   <li>[optimisation] section</li>
+     *   <li>[parameters] section</li>
+     *   <li>At least one [term.NAME] section</li>
+     *   <li>An {@code objective_expression} key (inside [optimisation])</li>
+     * </ul>
+     *
      * @return true if valid, false otherwise
      */
     public boolean validateConfiguration() {
         String config = getCurrentConfig();
 
-        // Basic validation - check not empty
         if (config == null || config.trim().isEmpty()) {
             return false;
         }
 
-        // Check for required sections - case-insensitive since backend accepts both
         String configLower = config.toLowerCase();
         boolean hasOptimisation = configLower.contains("[optimisation]");
         boolean hasParameters = configLower.contains("[parameters]");
+        boolean hasTerm = configLower.contains("[term.");
+        boolean hasObjectiveExpression = configLower.contains("objective_expression");
 
         if (!hasOptimisation || !hasParameters) {
             logger.warn("Configuration missing required sections [optimisation] or [parameters]");
+            return false;
+        }
+        if (!hasTerm) {
+            logger.warn("Configuration missing required [term.NAME] section (need at least one)");
+            return false;
+        }
+        if (!hasObjectiveExpression) {
+            logger.warn("Configuration missing required objective_expression in [optimisation]");
             return false;
         }
 

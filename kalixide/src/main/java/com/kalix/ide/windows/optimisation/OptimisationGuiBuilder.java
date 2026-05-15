@@ -44,19 +44,19 @@ public class OptimisationGuiBuilder extends JPanel {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 10, 0); // 10px bottom margin (gap between panels)
 
-        // Objective panel - fixed height, no vertical expansion
+        // Algorithm panel - single unframed row at the top, never expands
         gbc.gridy = 0;
-        gbc.weighty = 0.0;
-        contentPanel.add(objectivePanel, gbc);
-
-        // Algorithm panel - fixed height, no vertical expansion
-        gbc.gridy = 1;
         gbc.weighty = 0.0;
         contentPanel.add(algorithmPanel, gbc);
 
-        // Parameters panel - expands to fill remaining vertical space
+        // Objective panel - grows with extra vertical space (1/2 share)
+        gbc.gridy = 1;
+        gbc.weighty = 0.5;
+        contentPanel.add(objectivePanel, gbc);
+
+        // Parameters panel - grows with extra vertical space (1/2 share)
         gbc.gridy = 2;
-        gbc.weighty = 1.0;
+        gbc.weighty = 0.5;
         gbc.insets = new Insets(0, 0, 0, 0); // No bottom margin on last panel
         contentPanel.add(parametersPanel, gbc);
 
@@ -90,41 +90,17 @@ public class OptimisationGuiBuilder extends JPanel {
 
     /**
      * Generates INI-formatted configuration text from GUI inputs in kalixcli format.
+     *
+     * Emits one [term.NAME] section per row plus an objective_expression in [optimisation].
      * Uses ParameterExpressionLibrary to auto-generate expressions for parameters without them.
      */
     public String generateConfigText() {
         StringBuilder sb = new StringBuilder();
 
-        // [optimisation] section (merged General + Algorithm sections)
+        // [optimisation] section — algorithm config + objective expression
         sb.append("[optimisation]\n");
+        sb.append("objective_expression = ").append(objectivePanel.getObjectiveExpression()).append("\n");
 
-        // Determine observed_data_by_index vs observed_data_by_name
-        String observedDataFile = objectivePanel.getObservedDataFile();
-        String series = objectivePanel.getSeries();
-
-        if (series.isEmpty()) {
-            // Empty series defaults to index 1
-            sb.append("observed_data_by_index = ").append(observedDataFile).append(".1\n");
-        } else {
-            // Try to parse as integer
-            try {
-                int seriesIndex = Integer.parseInt(series);
-                if (seriesIndex > 0) {
-                    sb.append("observed_data_by_index = ").append(observedDataFile).append(".").append(seriesIndex).append("\n");
-                } else {
-                    // Non-positive integer, treat as name
-                    sb.append("observed_data_by_name = ").append(observedDataFile).append(".").append(series).append("\n");
-                }
-            } catch (NumberFormatException e) {
-                // Not an integer, use by_name
-                sb.append("observed_data_by_name = ").append(observedDataFile).append(".").append(series).append("\n");
-            }
-        }
-
-        sb.append("simulated_series = ").append(objectivePanel.getSimulatedSeries()).append("\n");
-        sb.append("objective_function = ").append(objectivePanel.getObjectiveFunction()).append("\n");
-
-        // Algorithm settings (now in same section)
         sb.append("algorithm = ").append(algorithmPanel.getAlgorithm()).append("\n");
 
         // Add algorithm-specific parameters first (like population_size)
@@ -144,6 +120,16 @@ public class OptimisationGuiBuilder extends JPanel {
         }
 
         sb.append("\n");
+
+        // One [term.NAME] section per row, in row order
+        for (ObjectiveConfigPanel.TermRow term : objectivePanel.getTerms()) {
+            sb.append("[term.").append(term.name).append("]\n");
+            sb.append("simulated = ").append(term.simulatedSeries).append("\n");
+            sb.append("observed_file = ").append(term.observedFile).append("\n");
+            sb.append("observed_series = ").append(term.observedSeries).append("\n");
+            sb.append("statistic = ").append(term.statistic).append("\n");
+            sb.append("\n");
+        }
 
         // [parameters] section - generate expressions for parameters
         Map<String, String> optimizationParams = parametersPanel.getOptimizationParameters();
