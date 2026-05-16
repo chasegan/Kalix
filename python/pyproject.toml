@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "kalix"
+version = "0.1.0"
+description = "Python interface for Kalix: hydrological modelling and Gorilla-compressed timeseries I/O"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "TBD" }
+authors = [{ name = "Kalix contributors" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Hydrology",
+]
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=1.5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "kalix._native"
+features = ["pyo3/extension-module"]
+strip = true
