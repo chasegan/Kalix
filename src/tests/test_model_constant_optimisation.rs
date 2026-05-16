@@ -1,6 +1,6 @@
 use crate::io::csv_io::read_ts;
 use crate::io::ini_model_io::IniModelIO;
-use crate::numerical::opt::{DEConfig, DifferentialEvolution, ObjectiveFunction, OptimisationProblem, ParameterMapping, ParameterMappingConfig, Transform};
+use crate::numerical::opt::{DEConfig, DifferentialEvolution, ObjectiveFunction, OptimisationProblem, ParameterMappingConfig};
 
 
 #[test]
@@ -19,17 +19,10 @@ fn test_model_constant_optimisation() {
     m.run().expect("Simulation error");
 
     // Configure the optimisation
-    let mut par_map = ParameterMappingConfig::new();
-    par_map.add_mapping(ParameterMapping {
-        target: "c.a".to_string(),
-        gene_index: 1,
-        transform: Transform::Linear { min: 0.0, max: 10.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "c.b".to_string(),
-        gene_index: 2,
-        transform: Transform::Linear { min: 0.0, max: 10.0 },
-    });
+    let par_map = ParameterMappingConfig::from_strings(vec![
+        "c.a = lin_range(g(1), 0.0, 10.0)",
+        "c.b = lin_range(g(2), 0.0, 10.0)",
+    ]).unwrap();
 
     // Set optimisation target
     let all_data = read_ts("./src/tests/example_models/5/data.csv").unwrap();

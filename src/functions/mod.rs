@@ -21,7 +21,7 @@ pub mod operators;
 pub mod parser;
 
 pub use errors::{EvaluationError, ParseError};
-pub use evaluator::{EvaluationConfig, VariableContext};
+pub use evaluator::{ContextFn, EvaluationConfig, FunctionRegistry, VariableContext};
 pub use parser::{FunctionParser, ParsedFunction};
 
 use std::collections::HashMap;

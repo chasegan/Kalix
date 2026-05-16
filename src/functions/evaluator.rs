@@ -152,6 +152,47 @@ impl Default for EvaluationConfig {
 pub struct VariableContext<'a> {
     variables: &'a HashMap<String, f64>,
     config: &'a EvaluationConfig,
+    functions: Option<&'a FunctionRegistry>,
+}
+
+/// A callable function registered in a [`FunctionRegistry`].
+///
+/// The closure form lets registered functions capture state (e.g. a `Gene` object
+/// in the optimisation context) without polluting the global built-in function set.
+/// Closures are not required to be `Send`/`Sync` because a `FunctionRegistry` is
+/// constructed per-evaluation by the host and not shared across threads. Parallel
+/// optimisation workers each build their own registry.
+pub type ContextFn = Box<dyn Fn(&[f64]) -> Result<f64, EvaluationError>>;
+
+/// Per-evaluation registry of context-specific functions.
+///
+/// Functions registered here take precedence over the global math built-ins
+/// (`abs`, `sqrt`, `sin`, …) defined in [`crate::functions::functions`]. This is
+/// how non-pure or context-only operations like `g(i)` (gene lookup) and
+/// `lin_range`/`log_range` (used only inside parameter expressions) are exposed
+/// to the parser without leaking into other expression contexts.
+pub struct FunctionRegistry {
+    functions: HashMap<String, ContextFn>,
+}
+
+impl FunctionRegistry {
+    pub fn new() -> Self {
+        Self { functions: HashMap::new() }
+    }
+
+    pub fn register(&mut self, name: &str, f: ContextFn) {
+        self.functions.insert(name.to_string(), f);
+    }
+
+    /// Invoke a registered function. Returns `None` if no function with that name is registered,
+    /// allowing the caller to fall back to global built-ins.
+    pub fn call(&self, name: &str, args: &[f64]) -> Option<Result<f64, EvaluationError>> {
+        self.functions.get(name).map(|f| f(args))
+    }
+}
+
+impl Default for FunctionRegistry {
+    fn default() -> Self { Self::new() }
 }
 
 impl<'a> VariableContext<'a> {
@@ -175,7 +216,20 @@ impl<'a> VariableContext<'a> {
     /// let config = EvaluationConfig::default();
     /// let context = VariableContext::new(&vars, &config);
     pub fn new(variables: &'a HashMap<String, f64>, config: &'a EvaluationConfig) -> Self {
-        Self { variables, config }
+        Self { variables, config, functions: None }
+    }
+
+    /// Attach a [`FunctionRegistry`] for context-specific function calls.
+    ///
+    /// Functions in the registry take precedence over the global math built-ins.
+    pub fn with_functions(mut self, functions: &'a FunctionRegistry) -> Self {
+        self.functions = Some(functions);
+        self
+    }
+
+    /// Access the attached function registry, if any.
+    pub fn functions(&self) -> Option<&FunctionRegistry> {
+        self.functions
     }
     
     /// Get the value of a variable from the context.

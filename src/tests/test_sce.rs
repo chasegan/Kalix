@@ -4,7 +4,7 @@
 /// to verify correctness of the algorithm's building blocks.
 
 use crate::numerical::opt::sce::{Sce, Individual};
-use crate::numerical::opt::{OptimisationProblem, ParameterMapping, ParameterMappingConfig, Transform};
+use crate::numerical::opt::{OptimisationProblem, ParameterMappingConfig};
 use crate::numerical::opt::objectives::{ObjectiveFunction, SdebObjective};
 use crate::numerical::opt::optimisable::Optimisable;
 use crate::io::ini_model_io::IniModelIO;
@@ -80,95 +80,25 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
     let observed_timeseries = all_data[0].clone();
 
     // Define parameter mappings for all 17 Sacramento parameters with typical bounds
-    // Based on typical Sacramento parameter ranges
-    let mut par_map = ParameterMappingConfig::new();
-
-    // Parameter bounds matching optimization configuration
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.adimp".to_string(),
-        gene_index: 1,
-        transform: Transform::Log { min: 1e-05, max: 0.15 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.lzfpm".to_string(),
-        gene_index: 2,
-        transform: Transform::Log { min: 1.0, max: 300.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.lzfsm".to_string(),
-        gene_index: 3,
-        transform: Transform::Log { min: 1.0, max: 350.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.lzpk".to_string(),
-        gene_index: 4,
-        transform: Transform::Log { min: 0.001, max: 0.6 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.lzsk".to_string(),
-        gene_index: 5,
-        transform: Transform::Log { min: 0.001, max: 0.9 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.lztwm".to_string(),
-        gene_index: 6,
-        transform: Transform::Log { min: 10.0, max: 600.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.pctim".to_string(),
-        gene_index: 7,
-        transform: Transform::Log { min: 1e-05, max: 0.11 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.pfree".to_string(),
-        gene_index: 8,
-        transform: Transform::Log { min: 0.01, max: 0.5 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.rexp".to_string(),
-        gene_index: 9,
-        transform: Transform::Log { min: 1.0, max: 6.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.sarva".to_string(),
-        gene_index: 10,
-        transform: Transform::Log { min: 1e-05, max: 0.11 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.side".to_string(),
-        gene_index: 11,
-        transform: Transform::Log { min: 1e-05, max: 0.1 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.ssout".to_string(),
-        gene_index: 12,
-        transform: Transform::Log { min: 1e-05, max: 0.1 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.uzfwm".to_string(),
-        gene_index: 13,
-        transform: Transform::Log { min: 5.0, max: 155.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.uzk".to_string(),
-        gene_index: 14,
-        transform: Transform::Log { min: 0.1, max: 1.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.uztwm".to_string(),
-        gene_index: 15,
-        transform: Transform::Log { min: 12.0, max: 180.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.zperc".to_string(),
-        gene_index: 16,
-        transform: Transform::Log { min: 1.0, max: 600.0 },
-    });
-    par_map.add_mapping(ParameterMapping {
-        target: "node.my_sac.laguh".to_string(),
-        gene_index: 17,
-        transform: Transform::Linear { min: 0.0, max: 3.0 },
-    });
+    let par_map = ParameterMappingConfig::from_strings(vec![
+        "node.my_sac.adimp = log_range(g(1), 1e-05, 0.15)",
+        "node.my_sac.lzfpm = log_range(g(2), 1.0, 300.0)",
+        "node.my_sac.lzfsm = log_range(g(3), 1.0, 350.0)",
+        "node.my_sac.lzpk = log_range(g(4), 0.001, 0.6)",
+        "node.my_sac.lzsk = log_range(g(5), 0.001, 0.9)",
+        "node.my_sac.lztwm = log_range(g(6), 10.0, 600.0)",
+        "node.my_sac.pctim = log_range(g(7), 1e-05, 0.11)",
+        "node.my_sac.pfree = log_range(g(8), 0.01, 0.5)",
+        "node.my_sac.rexp = log_range(g(9), 1.0, 6.0)",
+        "node.my_sac.sarva = log_range(g(10), 1e-05, 0.11)",
+        "node.my_sac.side = log_range(g(11), 1e-05, 0.1)",
+        "node.my_sac.ssout = log_range(g(12), 1e-05, 0.1)",
+        "node.my_sac.uzfwm = log_range(g(13), 5.0, 155.0)",
+        "node.my_sac.uzk = log_range(g(14), 0.1, 1.0)",
+        "node.my_sac.uztwm = log_range(g(15), 12.0, 180.0)",
+        "node.my_sac.zperc = log_range(g(16), 1.0, 600.0)",
+        "node.my_sac.laguh = lin_range(g(17), 0.0, 3.0)",
+    ]).unwrap();
 
     // Create optimisation problem with SDEB objective
     let target_model_output_name = "node.my_sac.ds_1".to_string();

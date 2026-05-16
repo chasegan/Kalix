@@ -177,7 +177,7 @@ impl ASTNode for ExpressionNode {
                     .map(|arg| arg.evaluate(context))
                     .collect();
                 let arg_values = arg_values?;
-                evaluate_function(name, &arg_values)
+                evaluate_function(name, &arg_values, context)
             }
         }
     }
@@ -257,6 +257,14 @@ pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, Evaluat
 }
 
 /// Evaluate a function call
-fn evaluate_function(name: &str, args: &[f64]) -> Result<f64, EvaluationError> {
+///
+/// Context-registered functions (e.g. `lin_range`, `log_range`, `g` in an optimisation
+/// context) take precedence over the global math built-ins.
+fn evaluate_function(name: &str, args: &[f64], context: &VariableContext) -> Result<f64, EvaluationError> {
+    if let Some(registry) = context.functions() {
+        if let Some(result) = registry.call(name, args) {
+            return result;
+        }
+    }
     crate::functions::functions::evaluate_builtin_function(name, args)
 }

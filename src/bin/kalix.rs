@@ -378,8 +378,10 @@ fn main() {
             println!("Function evaluations: {}", result.n_evaluations);
             println!("Best objective value: {:.6}", result.best_objective);
             println!("\nOptimized Parameters (normalized [0,1]):");
+            let gene_names = problem_mut.config.gene_names();
             for (i, val) in result.best_params.iter().enumerate() {
-                println!("  g({}) = {:.6}", i + 1, val);
+                let name = gene_names.get(i).cloned().unwrap_or_else(|| format!("g[{}]", i));
+                println!("  {} = {:.6}", name, val);
             }
 
             // Evaluate parameters to get physical values (compute once, use twice)
