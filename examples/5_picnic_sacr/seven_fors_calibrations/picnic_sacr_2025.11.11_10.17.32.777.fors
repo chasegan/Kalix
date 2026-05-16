@@ -1,0 +1,44 @@
+// fors model saved at 11/11/2025 10:20:55.335
+
+///////////////////////////////////////
+// input data definitions
+
+[input]
+name = rain
+file = formatted_rain.csv
+
+[input]
+name = evap
+file = formatted_mpot.csv
+
+///////////////////////////////////////
+// node definitions
+
+[sacramento]
+name = my_sac_node
+location = 30.34761, 75.91433
+area = 228
+model = my_sac_model
+
+///////////////////////////////////////
+// sacramento models
+
+[sacramento model]
+name = my_sac_model
+rainfall = 1*rain
+evaporation = evap
+parameters = +
+    1.01434057002083E-05, 299.913532389383, 153.917511364141, 0.00702705269104867, + //adimp, lzfpm, lzfsm, lzpk
+    0.0321473042529831, 10.0748025258255, 0.00418255347843237, 0.498957540388256, + //lzsk, lztwm, pctim, pfree
+    2.15451226733794, 1.16441375942393E-06, 0.000386973100012231, 0.000514041384206179, + //rexp, sarva, side, ssout
+    76.1567486470929, 0.185930546169019, 62.5746050872855, 22.2786220235319 //uzfwm, uzk, uztwm, zperc
+uh = 0, 0.340444496358512, 0.659555503641488
+
+///////////////////////////////////////
+// recorders
+
+[recorder]
+node = my_sac_node
+outno = 0
+filename = picnic_sacr_fors_dsflow.csv
+

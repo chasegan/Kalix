@@ -1,0 +1,34 @@
+[optimera settings]
+algorithm = sce
+threads = 12
+complexes = 12
+runs = 40000
+seeded = false
+seed = -1
+objective = SDEB
+
+[model]
+filename = c:\users\theco\onedrive\desktop\comparison\picnic_sacr.fors
+
+[observed data]
+my_sac_node\0 = c:\users\theco\onedrive\desktop\comparison\formatted_11000a.csv
+
+[calibration parameters]
+"sac\my_sac_model\adimp"="log_range(g(1), 1E-05, 0.15)"
+"sac\my_sac_model\lzfpm"="log_range(g(2), 1, 300)"
+"sac\my_sac_model\lzfsm"="log_range(g(3), 1, 350)"
+"sac\my_sac_model\lzpkonlzsk"="log_range(g(4), 0.001, 1)"
+"sac\my_sac_model\lzsk"="log_range(g(5), 0.001, 0.9)"
+"sac\my_sac_model\lztwm"="log_range(g(6), 10, 600)"
+"sac\my_sac_model\pctim"="log_range(g(7), 1E-05, 0.11)"
+"sac\my_sac_model\pfree"="log_range(g(8), 0.01, 0.5)"
+"sac\my_sac_model\rexp"="log_range(g(9), 1, 6)"
+"sac\my_sac_model\sarvaonpctim"="log_range(g(10), 0.0001, 1)"
+"sac\my_sac_model\side"="log_range(g(11), 1E-05, 0.1)"
+"sac\my_sac_model\ssout"="log_range(g(12), 1E-05, 0.1)"
+"sac\my_sac_model\uzfwm"="log_range(g(13), 5, 155)"
+"sac\my_sac_model\uzk"="log_range(g(14), 0.1, 1)"
+"sac\my_sac_model\uztwm"="log_range(g(15), 12, 180)"
+"sac\my_sac_model\zperc"="log_range(g(16), 1, 600)"
+"sac\my_sac_model\laguh"="lin_range(g(17), 0, 3)"
+"sac\my_sac_model\rfsum"=""
