@@ -7,7 +7,30 @@
 use std::collections::HashSet;
 use crate::functions::errors::EvaluationError;
 use crate::functions::evaluator::VariableContext;
+use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
+
+/// A function reference resolved at parse time.
+///
+/// Built-ins resolve to a tagged enum at parse time (fast dispatch via direct match).
+/// Names that don't match any built-in resolve to `Named`, deferring lookup to the
+/// per-evaluation [`crate::functions::FunctionRegistry`].
+#[derive(Debug, Clone)]
+pub enum FunctionRef {
+    Builtin(BuiltinFunction),
+    Named(String),
+}
+
+impl FunctionRef {
+    /// Construct from a (lowercased) function name. Built-in matches are preferred;
+    /// anything else falls through to `Named` for late binding.
+    pub fn from_name(name: &str) -> Self {
+        match BuiltinFunction::from_name(name) {
+            Some(b) => FunctionRef::Builtin(b),
+            None => FunctionRef::Named(name.to_string()),
+        }
+    }
+}
 
 /// Trait for all AST nodes that can be evaluated.
 ///
@@ -90,12 +113,17 @@ pub enum ExpressionNode {
         operand: Box<dyn ASTNode>,
     },
     
-    /// A function call with name and arguments.
+    /// A function call with a pre-resolved reference and arguments.
     ///
-    /// Examples: `sin(x)`, `max(a, b, c)`, `if(condition, true_val, false_val)`
+    /// Function names are resolved against the built-in set at **parse time**, so the
+    /// AST stores either a tagged enum [`crate::functions::functions::BuiltinFunction`]
+    /// (direct jump-table dispatch at eval time) or a `Named` string (for late binding
+    /// against the per-evaluation [`crate::functions::FunctionRegistry`]).
+    ///
+    /// Examples: `sin(x)`, `max(a, b, c)`, `lin_range(g(1), 0, 100)`
     FunctionCall {
-        /// The name of the function to call
-        name: String,
+        /// The resolved function reference (built-in or named context function)
+        func: FunctionRef,
         /// The arguments to pass to the function
         args: Vec<Box<dyn ASTNode>>,
     },
@@ -171,13 +199,13 @@ impl ASTNode for ExpressionNode {
                 evaluate_unary_op(*op, val)
             }
             
-            ExpressionNode::FunctionCall { name, args } => {
+            ExpressionNode::FunctionCall { func, args } => {
                 let arg_values: Result<Vec<f64>, EvaluationError> = args
                     .iter()
                     .map(|arg| arg.evaluate(context))
                     .collect();
                 let arg_values = arg_values?;
-                evaluate_function(name, &arg_values, context)
+                evaluate_function(func, &arg_values, context)
             }
         }
     }
@@ -256,15 +284,24 @@ pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, Evaluat
     }
 }
 
-/// Evaluate a function call
+/// Evaluate a function call.
 ///
-/// Context-registered functions (e.g. `lin_range`, `log_range`, `g` in an optimisation
-/// context) take precedence over the global math built-ins.
-fn evaluate_function(name: &str, args: &[f64], context: &VariableContext) -> Result<f64, EvaluationError> {
-    if let Some(registry) = context.functions() {
-        if let Some(result) = registry.call(name, args) {
-            return result;
+/// Built-ins were resolved at parse time and dispatch directly via enum match —
+/// the hot path for model simulation. Named (unresolved) references fall back to
+/// the per-evaluation [`crate::functions::FunctionRegistry`], used for context
+/// functions like `lin_range`/`log_range`/`g` in optimisation parameter expressions.
+fn evaluate_function(func: &FunctionRef, args: &[f64], context: &VariableContext) -> Result<f64, EvaluationError> {
+    match func {
+        FunctionRef::Builtin(b) => b.call(args),
+        FunctionRef::Named(name) => {
+            if let Some(registry) = context.functions() {
+                if let Some(result) = registry.call(name, args) {
+                    return result;
+                }
+            }
+            Err(EvaluationError::InvalidOperation {
+                message: format!("Unknown function: {}", name),
+            })
         }
     }
-    crate::functions::functions::evaluate_builtin_function(name, args)
 }

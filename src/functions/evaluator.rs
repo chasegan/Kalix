@@ -159,10 +159,9 @@ pub struct VariableContext<'a> {
 ///
 /// The closure form lets registered functions capture state (e.g. a `Gene` object
 /// in the optimisation context) without polluting the global built-in function set.
-/// Closures are not required to be `Send`/`Sync` because a `FunctionRegistry` is
-/// constructed per-evaluation by the host and not shared across threads. Parallel
-/// optimisation workers each build their own registry.
-pub type ContextFn = Box<dyn Fn(&[f64]) -> Result<f64, EvaluationError>>;
+/// `Send` is required because a registry may be cached on a host struct (e.g.
+/// `ParameterMappingConfig`) that is moved between optimiser worker threads.
+pub type ContextFn = Box<dyn Fn(&[f64]) -> Result<f64, EvaluationError> + Send>;
 
 /// Per-evaluation registry of context-specific functions.
 ///

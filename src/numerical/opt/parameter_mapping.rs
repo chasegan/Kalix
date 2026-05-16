@@ -144,20 +144,37 @@ impl ParameterMapping {
 }
 
 /// All parameter mappings for an optimisation, plus the [`Gene`] backing `g(i)` lookups.
-#[derive(Debug)]
+///
+/// Eval-path objects (function registry, empty variable map, evaluation config) are
+/// built once at construction time and reused across all subsequent [`Self::evaluate`]
+/// calls — this is the optimiser's hot path (one evaluation per population member per
+/// generation), so we avoid allocating a fresh registry on every call.
 pub struct ParameterMappingConfig {
     pub mappings: Vec<ParameterMapping>,
     /// Shared gene state used by the `g(i)` function closure.
     /// Cloned (deep-cloned, see [`Clone`] impl) per parallel worker.
     gene: Arc<Gene>,
+    /// Pre-built `lin_range`/`log_range`/`g` registry, captured over `gene`.
+    /// Rebuilt on [`Clone`] because the captured `Arc<Gene>` points at the
+    /// cloned config's gene, not the original's.
+    registry: FunctionRegistry,
+    /// Empty variable map reused across evaluations (parameter expressions don't
+    /// take user variables — only the registered functions).
+    empty_vars: HashMap<String, f64>,
+    /// Cached evaluation config (stateless; cloned cheaply on each evaluation).
+    eval_config: EvaluationConfig,
 }
 
 impl ParameterMappingConfig {
     /// Create empty configuration (no mappings, no genes).
     pub fn new() -> Self {
+        let gene = Arc::new(Gene::new());
         Self {
             mappings: Vec::new(),
-            gene: Arc::new(Gene::new()),
+            registry: build_opt_registry(gene.clone()),
+            gene,
+            empty_vars: HashMap::new(),
+            eval_config: EvaluationConfig::default(),
         }
     }
 
@@ -169,38 +186,31 @@ impl ParameterMappingConfig {
             .collect::<Result<_, _>>()?;
 
         let gene = Arc::new(Gene::new());
-        Self::run_discovery_pass(&mappings, &gene)?;
-
-        Ok(Self { mappings, gene })
-    }
-
-    /// Evaluate every expression once with the gene in discovery mode, then switch to run mode.
-    fn run_discovery_pass(mappings: &[ParameterMapping], gene: &Arc<Gene>) -> Result<(), String> {
-        gene.set_mode(GeneMode::Discovery);
-
         let registry = build_opt_registry(gene.clone());
         let empty_vars: HashMap<String, f64> = HashMap::new();
-        let cfg = EvaluationConfig::default();
-        let ctx = VariableContext::new(&empty_vars, &cfg).with_functions(&registry);
+        let eval_config = EvaluationConfig::default();
 
-        for m in mappings {
+        // Discovery pass: registry & empty_vars & eval_config are all reusable afterwards.
+        gene.set_mode(GeneMode::Discovery);
+        let ctx = VariableContext::new(&empty_vars, &eval_config).with_functions(&registry);
+        for m in &mappings {
             m.expression.evaluate(&ctx).map_err(|e| {
                 format!("While discovering genes for '{}': {}", m.target, e)
             })?;
         }
-
         gene.set_mode(GeneMode::Run);
-        Ok(())
+        drop(ctx);
+
+        Ok(Self { mappings, gene, registry, empty_vars, eval_config })
     }
 
     pub fn add_mapping(&mut self, mapping: ParameterMapping) {
         // Run a single-expression discovery pass to register any new genes
         self.gene.set_mode(GeneMode::Discovery);
-        let registry = build_opt_registry(self.gene.clone());
-        let empty_vars: HashMap<String, f64> = HashMap::new();
-        let cfg = EvaluationConfig::default();
-        let ctx = VariableContext::new(&empty_vars, &cfg).with_functions(&registry);
+        let ctx = VariableContext::new(&self.empty_vars, &self.eval_config)
+            .with_functions(&self.registry);
         let _ = mapping.expression.evaluate(&ctx);
+        drop(ctx);
         self.gene.set_mode(GeneMode::Run);
         self.mappings.push(mapping);
     }
@@ -218,10 +228,8 @@ impl ParameterMappingConfig {
     pub fn evaluate(&self, genes: &[f64]) -> Vec<(String, f64)> {
         self.gene.set_values(genes);
 
-        let registry = build_opt_registry(self.gene.clone());
-        let empty_vars: HashMap<String, f64> = HashMap::new();
-        let cfg = EvaluationConfig::default();
-        let ctx = VariableContext::new(&empty_vars, &cfg).with_functions(&registry);
+        let ctx = VariableContext::new(&self.empty_vars, &self.eval_config)
+            .with_functions(&self.registry);
 
         self.mappings.iter()
             .map(|m| {
@@ -242,12 +250,27 @@ impl Default for ParameterMappingConfig {
     fn default() -> Self { Self::new() }
 }
 
-/// Custom [`Clone`] that deep-clones the [`Gene`] so parallel workers don't share state.
+impl std::fmt::Debug for ParameterMappingConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParameterMappingConfig")
+            .field("mappings", &self.mappings)
+            .field("gene", &self.gene)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Custom [`Clone`] that deep-clones the [`Gene`] (so parallel workers don't share state)
+/// and rebuilds the [`FunctionRegistry`] over the new gene.
 impl Clone for ParameterMappingConfig {
     fn clone(&self) -> Self {
+        let gene = Arc::new(self.gene.deep_clone());
+        let registry = build_opt_registry(gene.clone());
         Self {
             mappings: self.mappings.clone(),
-            gene: Arc::new(self.gene.deep_clone()),
+            gene,
+            registry,
+            empty_vars: self.empty_vars.clone(),
+            eval_config: self.eval_config.clone(),
         }
     }
 }

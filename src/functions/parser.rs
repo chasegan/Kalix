@@ -665,7 +665,10 @@ impl FunctionParser {
                     }
 
                     self.consume_token()?; // consume ')'
-                    Ok(Box::new(ExpressionNode::FunctionCall { name: name.to_lowercase(), args }))
+                    Ok(Box::new(ExpressionNode::FunctionCall {
+                        func: crate::functions::ast::FunctionRef::from_name(&name.to_lowercase()),
+                        args,
+                    }))
                 } else if self.current_token == Token::LeftBracket {
                     // Variable with offset: node.x.ds_1[offset, default]
                     // Both offset and default are required

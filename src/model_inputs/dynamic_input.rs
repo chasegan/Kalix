@@ -133,9 +133,13 @@ pub enum OptimizedExpressionNode {
         operand: Box<OptimizedExpressionNode>,
     },
 
-    /// Function call with optimised arguments
+    /// Function call with optimised arguments.
+    ///
+    /// The function reference was resolved at parse time (see
+    /// [`crate::functions::ast::FunctionRef`]) so evaluation dispatches via an enum
+    /// match — no string compare or HashMap lookup on the hot path.
     FunctionCall {
-        name: String,
+        func: crate::functions::ast::FunctionRef,
         args: Vec<Box<OptimizedExpressionNode>>,
     },
 
@@ -180,13 +184,13 @@ impl OptimizedExpressionNode {
                     .map_err(|e| format!("{}", e))
             }
 
-            OptimizedExpressionNode::FunctionCall { name, args } => {
+            OptimizedExpressionNode::FunctionCall { func, args } => {
                 let arg_values: Result<Vec<f64>, String> = args
                     .iter()
                     .map(|arg| arg.evaluate(data_cache))
                     .collect();
                 let arg_values = arg_values?;
-                evaluate_function(name, &arg_values)
+                evaluate_function(func, &arg_values)
             }
 
             OptimizedExpressionNode::SimContext { field } => {
@@ -294,7 +298,7 @@ impl OptimizedExpressionNode {
                     operand: Box::new(operand_opt),
                 })
             }
-            ExpressionNode::FunctionCall { name, args } => {
+            ExpressionNode::FunctionCall { func, args } => {
                 let args_opt: Result<Vec<_>, String> = args
                     .iter()
                     .map(|arg| {
@@ -307,7 +311,7 @@ impl OptimizedExpressionNode {
                 let args_opt = args_opt?;
 
                 Ok(OptimizedExpressionNode::FunctionCall {
-                    name: name.clone(),
+                    func: func.clone(),
                     args: args_opt.into_iter().map(Box::new).collect(),
                 })
             }
@@ -699,9 +703,21 @@ fn transform_to_optimised_ast(
     }
 }
 
-// Function evaluation
-fn evaluate_function(name: &str, args: &[f64]) -> Result<f64, String> {
-    crate::functions::functions::evaluate_builtin_function(name, args)
-        .map_err(|e| format!("Function error: {}", e))
+// Function evaluation. The simulation hot path: dispatches via the parse-time-resolved
+// FunctionRef. Built-in calls hit an enum jump table directly; Named falls back to an
+// error here (model evaluation has no FunctionRegistry — context functions like
+// `lin_range`/`log_range`/`g` are only meaningful inside the optimisation parameter path).
+fn evaluate_function(
+    func: &crate::functions::ast::FunctionRef,
+    args: &[f64],
+) -> Result<f64, String> {
+    use crate::functions::ast::FunctionRef;
+    match func {
+        FunctionRef::Builtin(b) => b.call(args).map_err(|e| format!("Function error: {}", e)),
+        FunctionRef::Named(name) => Err(format!(
+            "Unknown function: {} (no context function registry available here)",
+            name
+        )),
+    }
 }
 
