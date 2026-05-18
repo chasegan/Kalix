@@ -279,6 +279,9 @@ public class VisualizationTabManager {
             if (tab.plotPanel != null) {
                 tab.plotPanel.setLabelResolver(resolver);
             }
+            if (tab.statsModel != null) {
+                tab.statsModel.setLabelResolver(resolver);
+            }
         }
     }
 
@@ -1002,6 +1005,9 @@ public class VisualizationTabManager {
     public StatsTableModel addStatsTabFromSettings(TabSettings settings) {
         // Create new stats table
         StatsTableModel model = new StatsTableModel();
+        if (labelResolver != null) {
+            model.setLabelResolver(labelResolver);
+        }
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);

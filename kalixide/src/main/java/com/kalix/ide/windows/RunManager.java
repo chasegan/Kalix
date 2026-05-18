@@ -399,6 +399,11 @@ public class RunManager extends JFrame {
         // Create tab manager with shared data
         tabManager = new VisualizationTabManager(plotDataSet, seriesColorManager.getColorMap());
 
+        // Wire the label resolver so legends, stats column 0, etc. project SeriesRef
+        // → user-visible label at render time. Must happen *before* the default plot
+        // tab is added so the new PlotPanel picks it up.
+        tabManager.setLabelResolver(labelResolver);
+
         // Sync tree selection when user switches tabs
         tabManager.setOnTabChangedCallback(this::onTabChanged);
 
