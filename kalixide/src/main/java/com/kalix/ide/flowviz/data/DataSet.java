@@ -1,7 +1,9 @@
 package com.kalix.ide.flowviz.data;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -24,15 +26,21 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * @see com.kalix.ide.windows.VisualizationTabManager
  */
 public class DataSet {
+    // Legacy storage keyed by the rendered string name. Will be removed once all
+    // call sites use the SeriesRef-keyed API below.
     private final List<TimeSeriesData> series;
+    // New storage keyed by SeriesRef. Populated in parallel by the new API; the two
+    // are kept independent during the Phase 1 migration so the old API behaviour is
+    // unchanged. Insertion order preserved (matches plot series stacking order).
+    private final Map<SeriesRef, TimeSeriesData> seriesByRef = new LinkedHashMap<>();
     private long globalMinTime = Long.MAX_VALUE;
     private long globalMaxTime = Long.MIN_VALUE;
     private Double globalMinValue;
     private Double globalMaxValue;
-    
+
     // Thread-safe list for concurrent access during rendering
     private final List<DataSetListener> listeners = new CopyOnWriteArrayList<>();
-    
+
     public DataSet() {
         this.series = new ArrayList<>();
     }
@@ -97,6 +105,12 @@ public class DataSet {
         for (TimeSeriesData seriesData : series) {
             updateGlobalBounds(seriesData);
         }
+        // Phase 1: also include refs-keyed sidecar storage so bounds stay coherent
+        // when both APIs are in use. Folds into a single loop when the legacy
+        // string-keyed storage is removed.
+        for (TimeSeriesData seriesData : seriesByRef.values()) {
+            updateGlobalBounds(seriesData);
+        }
     }
     
     private void resetGlobalBounds() {
@@ -133,7 +147,59 @@ public class DataSet {
     public boolean hasSeries(String name) {
         return series.stream().anyMatch(s -> s.getName().equals(name));
     }
-    
+
+    // ====================================================================
+    // SeriesRef-keyed API (Phase 1 — additive; coexists with the string API
+    // above during the identity refactor). Listeners are not fired by this
+    // path yet; that wiring lands when the legacy API is removed and the two
+    // storage models are unified.
+    // ====================================================================
+
+    /**
+     * Adds (or replaces) a series under the given {@link SeriesRef}. The {@code data}'s
+     * legacy name field is ignored — only the {@code ref} is used as identity. Recomputes
+     * global bounds when the ref already existed; otherwise extends bounds incrementally.
+     */
+    public void addSeries(SeriesRef ref, TimeSeriesData data) {
+        boolean existed = seriesByRef.containsKey(ref);
+        seriesByRef.put(ref, data);
+        if (existed) {
+            recomputeGlobalBounds();
+        } else {
+            updateGlobalBounds(data);
+        }
+    }
+
+    /**
+     * Removes the series identified by {@code ref}. No-op if absent.
+     */
+    public void removeSeries(SeriesRef ref) {
+        if (seriesByRef.remove(ref) != null) {
+            recomputeGlobalBounds();
+        }
+    }
+
+    /**
+     * Returns the series identified by {@code ref}, or {@code null} if absent.
+     */
+    public TimeSeriesData getSeries(SeriesRef ref) {
+        return seriesByRef.get(ref);
+    }
+
+    /**
+     * Returns true if a series is present under {@code ref}.
+     */
+    public boolean hasSeries(SeriesRef ref) {
+        return seriesByRef.containsKey(ref);
+    }
+
+    /**
+     * Returns the refs currently in this dataset, in insertion order.
+     */
+    public List<SeriesRef> getSeriesRefs() {
+        return new ArrayList<>(seriesByRef.keySet());
+    }
+
     // Global bounds
     public long getGlobalMinTime() {
         return globalMinTime == Long.MAX_VALUE ? 0 : globalMinTime;

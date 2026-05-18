@@ -22,6 +22,23 @@ public class TimeSeriesData {
     private final long intervalMillis;
     private final long firstTimestamp;
     
+    /**
+     * Constructs a nameless time series. Series identity is supplied externally via
+     * {@link SeriesRef} when the data is added to a {@link DataSet}. Prefer this
+     * constructor; the legacy named form below is retained only until all call sites
+     * have migrated.
+     */
+    public TimeSeriesData(LocalDateTime[] dateTimes, double[] values) {
+        this(null, dateTimes, values);
+    }
+
+    /**
+     * @deprecated Identity belongs on {@link SeriesRef}, not on the data. Use
+     * {@link #TimeSeriesData(LocalDateTime[], double[])} and pass the ref separately
+     * when inserting into a {@link DataSet}. Will be removed once Phase 1 callers are
+     * migrated.
+     */
+    @Deprecated
     public TimeSeriesData(String name, LocalDateTime[] dateTimes, double[] values) {
         this.name = name;
         this.pointCount = dateTimes.length;
@@ -223,6 +240,15 @@ public class TimeSeriesData {
     }
 
     // Getters
+
+    /**
+     * @deprecated The name is a legacy field carrying display-only metadata. Series
+     * identity lives on {@link SeriesRef}, projected to a display string by
+     * {@link LabelResolver} at render time. Callers should retrieve the {@code SeriesRef}
+     * via {@link DataSet#getSeriesRefs()} and resolve the label there. Will be removed
+     * along with the {@link #name} field.
+     */
+    @Deprecated
     public String getName() { return name; }
     public int getPointCount() { return pointCount; }
     public long[] getTimestamps() { return timestamps; }

@@ -1114,10 +1114,12 @@ public class RunManager extends JFrame {
             return "This run is no longer available.";
         }
 
-        // Build a fresh RunInfoImpl so the tree node's identity for this run is immutable
-        // post-rename. Shares the same session reference (the underlying simulation is
-        // unchanged).
-        RunInfoImpl newRunInfo = new RunInfoImpl(newName, oldRunInfo.getSession());
+        // Construct a renamed instance that preserves the runId. The runId is the
+        // durable internal handle (used by RunSeries in the post-refactor identity
+        // model); renaming must NOT mint a new id, otherwise plotted series stored
+        // under the old runId would be orphaned the next time the pool is keyed by
+        // ref. The label changes; identity does not.
+        RunInfoImpl newRunInfo = oldRunInfo.withName(newName);
         node.setUserObject(newRunInfo);
         treeModel.nodeChanged(node);
 
