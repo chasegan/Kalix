@@ -38,11 +38,14 @@ public class RunInfoImpl implements RunContextMenuManager.RunInfo {
         }
     }
 
-    private String runName; // Mutable to allow renaming
+    private final String runName;
     private final SessionManager.KalixSession session;
 
     /**
-     * Creates a new RunInfo instance.
+     * Creates a new RunInfo instance. {@code RunInfoImpl} is immutable once constructed —
+     * renaming a run constructs a fresh instance via {@link com.kalix.ide.windows.RunManager#renameRun},
+     * which also propagates the new name to all dependent state (plot pool, color map,
+     * tab selections, stats models, outputs tree).
      *
      * @param runName The display name for this run
      * @param session The underlying Kalix session
@@ -55,11 +58,6 @@ public class RunInfoImpl implements RunContextMenuManager.RunInfo {
     @Override
     public String getRunName() {
         return runName;
-    }
-
-    @Override
-    public void setRunName(String newName) {
-        this.runName = newName;
     }
 
     @Override

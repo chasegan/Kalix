@@ -470,7 +470,8 @@ public class RunManager extends JFrame {
             () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null,  // Base directory supplier
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
             sessionToRunName,                 // Session to run name map
-            this::refreshRuns                 // Refresh callback
+            this::refreshRuns,                // Refresh callback
+            this::renameRun                   // Rename delegate (validation + propagation)
         );
 
         // Set up context menus
@@ -1065,6 +1066,116 @@ public class RunManager extends JFrame {
             return seriesKey.substring(0, bracketIndex);
         }
         return seriesKey;
+    }
+
+    /**
+     * Renames a run and propagates the new name across every place a series key derived
+     * from its old name is held: the shared {@link #plotDataSet}, the color map, every
+     * tab's {@code selectedSeries}, every stats model, and the outputs tree. Tree node
+     * user objects are swapped to a fresh {@link RunInfoImpl} so the run's identity is
+     * immutable once observed.
+     *
+     * <p>Validates the new name on entry. Returns {@code null} on success, or a
+     * user-facing error string on rejection. EDT-only.</p>
+     *
+     * <p>The reserved name {@code "Last"} is rejected: the Last child node is an alias
+     * over whichever run completed most recently, and {@code refreshLastSeries} matches
+     * series keys by the literal {@code " [Last]"} suffix. Allowing a user-renamed run
+     * to share that token would silently corrupt its plotted data on the next completion.</p>
+     */
+    public String renameRun(RunContextMenuManager.RunInfo oldRunInfoIface, String newName) {
+        if (!(oldRunInfoIface instanceof RunInfoImpl oldRunInfo)) {
+            return "Only simulation runs can be renamed.";
+        }
+
+        String oldName = oldRunInfo.getRunName();
+        if (newName.equals(oldName)) {
+            return null;
+        }
+
+        if (newName.isEmpty()) {
+            return "Run name cannot be empty.";
+        }
+        if ("Last".equals(newName)) {
+            return "'Last' is reserved and cannot be used as a run name.";
+        }
+        for (String existing : sessionToRunName.values()) {
+            if (existing.equals(newName)) {
+                return "A run with the name '" + newName + "' already exists.";
+            }
+        }
+
+        // Defensive: rename is initiated from a tree-node context menu, but the node may
+        // have been removed asynchronously between click and dialog close (rare; e.g. a
+        // concurrent session-terminate). Reject rather than leave inconsistent state.
+        String sessionKey = oldRunInfo.getSession().getSessionKey();
+        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
+        if (node == null) {
+            return "This run is no longer available.";
+        }
+
+        // Build a fresh RunInfoImpl so the tree node's identity for this run is immutable
+        // post-rename. Shares the same session reference (the underlying simulation is
+        // unchanged).
+        RunInfoImpl newRunInfo = new RunInfoImpl(newName, oldRunInfo.getSession());
+        node.setUserObject(newRunInfo);
+        treeModel.nodeChanged(node);
+
+        sessionToRunName.put(sessionKey, newName);
+
+        // Keep lastRunInfo pointing at the live RunInfoImpl for this session — otherwise
+        // it would dangle to the now-orphan instance. The Last child node's wrapper
+        // (with name "Last") is untouched; refreshLastSeries resolves Last via session.
+        if (lastRunInfo == oldRunInfo) {
+            lastRunInfo = newRunInfo;
+        }
+
+        // Propagate to every series key carrying the old run-name suffix.
+        String oldSuffix = " [" + oldName + "]";
+        String newSuffix = " [" + newName + "]";
+
+        // Snapshot first — plotDataSet is mutated in the loop.
+        List<TimeSeriesData> affected = new ArrayList<>();
+        for (TimeSeriesData s : plotDataSet.getAllSeries()) {
+            if (s.getName().endsWith(oldSuffix)) {
+                affected.add(s);
+            }
+        }
+
+        for (TimeSeriesData s : affected) {
+            String oldKey = s.getName();
+            String newKey = oldKey.substring(0, oldKey.length() - oldSuffix.length()) + newSuffix;
+
+            // Atomic key swap in the pool (DataSet.addSeries removes-then-adds by name).
+            plotDataSet.addSeries(s.withName(newKey));
+            plotDataSet.removeSeries(oldKey);
+
+            seriesColorManager.renameSeries(oldKey, newKey);
+            tabManager.renameSeriesAcrossTabs(oldKey, newKey);
+        }
+
+        // Outputs tree leaves construct their seriesKey from the source RunInfoImpl held
+        // by reference; rebuild so leaves regenerate against the new instance. The rebuild
+        // implicitly clears the outputs tree selection, which would fire
+        // onOutputsTreeSelectionChanged with an empty path set and clobber the target tab's
+        // selectedSeries — wipe-out the plot we just renamed. Block listener side-effects
+        // and re-select the renamed series afterwards to keep the tree visually in sync
+        // with what's plotted.
+        isUpdatingSelection = true;
+        try {
+            updateOutputsTree();
+            Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+            restoreTreeSelectionForSeries(tabSeries);
+        } finally {
+            isUpdatingSelection = false;
+        }
+
+        // Plot panels still hold the old keys in their visibleSeries field. updateAllTabs
+        // calls setVisibleSeries(tab.selectedSeries) — which now contains the new keys —
+        // and refreshes the cached displayDataSet so the rename is visible.
+        tabManager.updateAllTabs(false);
+
+        return null;
     }
 
     /**

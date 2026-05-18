@@ -1488,6 +1488,47 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Renames a series key from {@code oldKey} to {@code newKey} across every tab's
+     * {@code selectedSeries} (preserving insertion order), and renames it in every stats
+     * tab's model. Plot tabs that have the series selected also have their legend rebuilt
+     * so the new key is shown as the label.
+     *
+     * Callers are responsible for renaming the entry in the shared {@code DataSet} and in
+     * the shared color map *before* invoking this method, so that legend rebuild and any
+     * subsequent {@code refreshData} read the new key consistently.
+     */
+    public void renameSeriesAcrossTabs(String oldKey, String newKey) {
+        if (oldKey.equals(newKey)) return;
+
+        for (TabInfo tab : tabs) {
+            boolean tabHadKey = tab.selectedSeries.contains(oldKey);
+            if (tabHadKey) {
+                // Rebuild the set preserving order; swap oldKey → newKey at its position
+                Set<String> rebuilt = new LinkedHashSet<>(tab.selectedSeries.size());
+                for (String key : tab.selectedSeries) {
+                    rebuilt.add(key.equals(oldKey) ? newKey : key);
+                }
+                tab.selectedSeries.clear();
+                tab.selectedSeries.addAll(rebuilt);
+            }
+
+            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null && tabHadKey) {
+                // Rebuild the legend to reflect the new key as a label.
+                tab.plotPanel.clearLegend();
+                for (String key : tab.selectedSeries) {
+                    Color color = sharedColorMap.get(key);
+                    if (color != null) {
+                        tab.plotPanel.addLegendSeries(key, color);
+                    }
+                }
+            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                // Stats model owns its own data; rename unconditionally — no-op if absent.
+                tab.statsModel.renameSeries(oldKey, newKey);
+            }
+        }
+    }
+
+    /**
      * Checks whether any tab has the given series selected.
      */
     public boolean isSeriesSelectedOnAnyTab(String seriesKey) {

@@ -100,6 +100,19 @@ public class SeriesColorManager {
     }
 
     /**
+     * Transfers an existing color assignment from one series key to another.
+     * No-op if the old key has no assignment. The user-visible color of the renamed
+     * series is preserved.
+     */
+    public void renameSeries(String oldName, String newName) {
+        if (oldName.equals(newName)) return;
+        Color color = seriesColorMap.remove(oldName);
+        if (color != null) {
+            seriesColorMap.put(newName, color);
+        }
+    }
+
+    /**
      * Clears all color assignments.
      */
     public void clearAll() {

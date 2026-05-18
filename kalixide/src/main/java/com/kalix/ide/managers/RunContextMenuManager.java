@@ -18,6 +18,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -50,6 +51,9 @@ public class RunContextMenuManager {
 
     // Callbacks to RunManager
     private final Runnable refreshRunsCallback;
+    // Rename delegate: applied with (runInfo, newName). Returns null on success, or a
+    // user-facing error string. Owns all validation and propagation.
+    private final BiFunction<RunInfo, String, String> renameRunDelegate;
 
     /**
      * Represents run status for context menu decisions.
@@ -62,11 +66,12 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Interface for accessing run information.
+     * Interface for accessing run information. Implementations are immutable post-
+     * construction; renaming is performed via the owner (RunManager), which constructs
+     * a fresh instance and propagates the change to all dependent state.
      */
     public interface RunInfo {
         String getRunName();
-        void setRunName(String newName);
         SessionManager.KalixSession getSession();
         RunStatus getRunStatus();
     }
@@ -95,7 +100,8 @@ public class RunContextMenuManager {
             Supplier<File> baseDirectorySupplier,
             Supplier<String> editorTextSupplier,
             Map<String, String> sessionToRunName,
-            Runnable refreshRunsCallback) {
+            Runnable refreshRunsCallback,
+            BiFunction<RunInfo, String, String> renameRunDelegate) {
         this.parentFrame = parentFrame;
         this.runTree = runTree;
         this.outputsTree = outputsTree;
@@ -106,6 +112,7 @@ public class RunContextMenuManager {
         this.editorTextSupplier = editorTextSupplier;
         this.sessionToRunName = sessionToRunName;
         this.refreshRunsCallback = refreshRunsCallback;
+        this.renameRunDelegate = renameRunDelegate;
     }
 
     /**
@@ -224,7 +231,9 @@ public class RunContextMenuManager {
     // ========== Context Menu Actions ==========
 
     /**
-     * Shows a dialog to rename the selected run.
+     * Shows a dialog to rename the selected run. Validation and propagation are owned by
+     * the rename delegate (RunManager); this method handles only the input dialog and
+     * displays any rejection message back to the user.
      */
     public void renameRun() {
         TreePath selectedPath = runTree.getSelectionPath();
@@ -235,7 +244,6 @@ public class RunContextMenuManager {
 
         String currentName = runInfo.getRunName();
 
-        // Show input dialog for new name
         String newName = (String) JOptionPane.showInputDialog(
             parentFrame,
             "Enter new name for the run:",
@@ -246,41 +254,18 @@ public class RunContextMenuManager {
             currentName
         );
 
-        if (newName != null) {
-            newName = newName.trim();
+        if (newName == null) return; // cancelled
+        newName = newName.trim();
 
-            // Validate the new name
-            if (newName.isEmpty()) {
-                JOptionPane.showMessageDialog(parentFrame,
-                    "Run name cannot be empty.",
-                    "Invalid Name",
-                    JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+        String error = renameRunDelegate.apply(runInfo, newName);
+        if (error != null) {
+            JOptionPane.showMessageDialog(parentFrame, error, "Invalid Name",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
-            // Check if name is already in use by another run
-            String sessionKey = runInfo.getSession().getSessionKey();
-            for (String existingName : sessionToRunName.values()) {
-                if (existingName.equals(newName) && !existingName.equals(currentName)) {
-                    JOptionPane.showMessageDialog(parentFrame,
-                        "A run with the name '" + newName + "' already exists.\nPlease choose a different name.",
-                        "Duplicate Name",
-                        JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-            }
-
-            // Update the run name
-            runInfo.setRunName(newName);
-            sessionToRunName.put(sessionKey, newName);
-
-            // Simple node refresh - just update this one node
-            runTreeModel.nodeChanged(selectedNode);
-
-            // Update status
-            if (statusUpdater != null) {
-                statusUpdater.accept("Renamed run '" + currentName + "' to '" + newName + "'");
-            }
+        if (statusUpdater != null && !newName.equals(currentName)) {
+            statusUpdater.accept("Renamed run '" + currentName + "' to '" + newName + "'");
         }
     }
 

@@ -176,6 +176,51 @@ public class StatsTableModel extends AbstractTableModel {
     }
 
     /**
+     * Renames a series from {@code oldName} to {@code newName} while preserving its
+     * computed statistics, its position in the table, and the original-data cache.
+     * No-op if {@code oldName} is not present. The reference series is updated if it
+     * matches the renamed series.
+     */
+    public void renameSeries(String oldName, String newName) {
+        if (oldName.equals(newName)) return;
+        boolean changed = false;
+
+        // Rebuild seriesData preserving position; replace SeriesStats with renamed copy
+        for (int i = 0; i < seriesData.size(); i++) {
+            SeriesStats s = seriesData.get(i);
+            if (s.name.equals(oldName)) {
+                seriesData.set(i, new SeriesStats(newName, s.statisticValues));
+                changed = true;
+            }
+        }
+
+        // Rebuild originalSeriesCache preserving insertion order; rename the inner
+        // TimeSeriesData so its .getName() stays consistent with the cache key
+        if (originalSeriesCache.containsKey(oldName)) {
+            LinkedHashMap<String, TimeSeriesData> rebuilt = new LinkedHashMap<>();
+            for (Map.Entry<String, TimeSeriesData> e : originalSeriesCache.entrySet()) {
+                if (e.getKey().equals(oldName)) {
+                    rebuilt.put(newName, e.getValue().withName(newName));
+                } else {
+                    rebuilt.put(e.getKey(), e.getValue());
+                }
+            }
+            originalSeriesCache.clear();
+            originalSeriesCache.putAll(rebuilt);
+            changed = true;
+        }
+
+        if (oldName.equals(referenceSeries)) {
+            referenceSeries = newName;
+            changed = true;
+        }
+
+        if (changed) {
+            fireTableDataChanged();
+        }
+    }
+
+    /**
      * Removes a series from the table.
      */
     public void removeSeries(String seriesName) {
