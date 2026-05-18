@@ -29,7 +29,7 @@ public class TimeSeriesMasker {
     public static TimeSeriesData createAllMask(List<TimeSeriesData> allSeries) {
         if (allSeries == null || allSeries.isEmpty()) {
             // Empty mask
-            return new TimeSeriesData("mask", new LocalDateTime[0], new double[0]);
+            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
         }
 
         // Collect all unique timestamps and their validity across all series
@@ -70,7 +70,7 @@ public class TimeSeriesMasker {
         }
 
         // Convert to arrays
-        return buildMaskFromValidityMap(timestampValidity, "mask_all");
+        return buildMaskFromValidityMap(timestampValidity);
     }
 
     /**
@@ -84,7 +84,7 @@ public class TimeSeriesMasker {
     public static TimeSeriesData createEachMask(TimeSeriesData reference, TimeSeriesData series) {
         if (reference == null || series == null) {
             // Empty mask
-            return new TimeSeriesData("mask", new LocalDateTime[0], new double[0]);
+            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
         }
 
         // Collect union of timestamps and validity for both series
@@ -118,7 +118,7 @@ public class TimeSeriesMasker {
         }
 
         // Convert to arrays
-        return buildMaskFromValidityMap(timestampValidity, "mask_each");
+        return buildMaskFromValidityMap(timestampValidity);
     }
 
     /**
@@ -131,7 +131,7 @@ public class TimeSeriesMasker {
      */
     public static TimeSeriesData applyMask(TimeSeriesData series, TimeSeriesData mask) {
         if (series == null) {
-            return new TimeSeriesData("masked", new LocalDateTime[0], new double[0]);
+            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
         }
 
         if (mask == null) {
@@ -169,13 +169,13 @@ public class TimeSeriesMasker {
         LocalDateTime[] timesArray = filteredTimes.toArray(new LocalDateTime[0]);
         double[] valuesArray = filteredValues.stream().mapToDouble(Double::doubleValue).toArray();
 
-        return new TimeSeriesData(series.getName(), timesArray, valuesArray);
+        return new TimeSeriesData(timesArray, valuesArray);
     }
 
     /**
      * Helper method to build a TimeSeriesData mask from a validity map.
      */
-    private static TimeSeriesData buildMaskFromValidityMap(Map<Long, Boolean> timestampValidity, String maskName) {
+    private static TimeSeriesData buildMaskFromValidityMap(Map<Long, Boolean> timestampValidity) {
         List<Long> sortedTimestamps = new ArrayList<>(timestampValidity.keySet());
         Collections.sort(sortedTimestamps);
 
@@ -190,6 +190,6 @@ public class TimeSeriesMasker {
             maskValues[i] = timestampValidity.get(timestamp) ? 1.0 : Double.NaN;
         }
 
-        return new TimeSeriesData(maskName, maskTimes, maskValues);
+        return new TimeSeriesData(maskTimes, maskValues);
     }
 }

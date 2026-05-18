@@ -1,6 +1,7 @@
 package com.kalix.ide.flowviz.rendering;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.awt.*;
@@ -11,9 +12,9 @@ import java.util.Map;
 public class TimeSeriesRenderer {
 
     private final LODManager lodManager;
-    private final Map<String, Color> seriesColors;
-    private final List<String> visibleSeries;
-    private final Map<String, SeriesRenderMode> seriesRenderModes;
+    private final Map<SeriesRef, Color> seriesColors;
+    private final List<SeriesRef> visibleSeries;
+    private final Map<SeriesRef, SeriesRenderMode> seriesRenderModes;
     private final AxisRenderer axisRenderer;
 
     // Rendering options
@@ -21,7 +22,7 @@ public class TimeSeriesRenderer {
     private boolean showGrid = true;
     private boolean antiAliasing = true;
 
-    public TimeSeriesRenderer(Map<String, Color> seriesColors, List<String> visibleSeries) {
+    public TimeSeriesRenderer(Map<SeriesRef, Color> seriesColors, List<SeriesRef> visibleSeries) {
         this.lodManager = new LODManager();
         this.seriesColors = seriesColors;
         this.visibleSeries = visibleSeries;
@@ -58,12 +59,12 @@ public class TimeSeriesRenderer {
         axisRenderer.drawAxes(g2d, viewport, axisInfo);
         
         // Draw time series data in legend order (visibleSeries list order)
-        for (String seriesName : visibleSeries) {
-            TimeSeriesData series = dataSet.getSeries(seriesName);
+        for (SeriesRef ref : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(ref);
             if (series != null) {
-                Color seriesColor = seriesColors.get(seriesName);
+                Color seriesColor = seriesColors.get(ref);
                 if (seriesColor != null) {
-                    renderSeries(g2d, series, viewport, seriesColor);
+                    renderSeries(g2d, ref, series, viewport, seriesColor);
                 }
             }
         }
@@ -72,11 +73,11 @@ public class TimeSeriesRenderer {
         drawPlotBorder(g2d, viewport);
     }
     
-    private void renderSeries(Graphics2D g2d, TimeSeriesData series, ViewPort viewport, Color color) {
-        LODManager.RenderStrategy strategy = lodManager.determineRenderStrategy(series, viewport);
+    private void renderSeries(Graphics2D g2d, SeriesRef ref, TimeSeriesData series, ViewPort viewport, Color color) {
+        LODManager.RenderStrategy strategy = lodManager.determineRenderStrategy(ref, series, viewport);
 
         // Get render mode for this series (default to LINE)
-        SeriesRenderMode renderMode = seriesRenderModes.getOrDefault(series.getName(), SeriesRenderMode.LINE);
+        SeriesRenderMode renderMode = seriesRenderModes.getOrDefault(ref, SeriesRenderMode.LINE);
 
         g2d.setColor(color);
         g2d.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -384,16 +385,16 @@ public class TimeSeriesRenderer {
     public boolean isAntiAliasing() { return antiAliasing; }
 
     // Series render mode management
-    public void setSeriesRenderMode(String seriesName, SeriesRenderMode renderMode) {
+    public void setSeriesRenderMode(SeriesRef seriesRef, SeriesRenderMode renderMode) {
         if (renderMode == null) {
-            seriesRenderModes.remove(seriesName);
+            seriesRenderModes.remove(seriesRef);
         } else {
-            seriesRenderModes.put(seriesName, renderMode);
+            seriesRenderModes.put(seriesRef, renderMode);
         }
     }
 
-    public SeriesRenderMode getSeriesRenderMode(String seriesName) {
-        return seriesRenderModes.getOrDefault(seriesName, SeriesRenderMode.LINE);
+    public SeriesRenderMode getSeriesRenderMode(SeriesRef seriesRef) {
+        return seriesRenderModes.getOrDefault(seriesRef, SeriesRenderMode.LINE);
     }
 
     public void clearSeriesRenderModes() {

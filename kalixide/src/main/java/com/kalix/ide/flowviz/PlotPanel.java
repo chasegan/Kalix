@@ -1,6 +1,8 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
@@ -87,8 +89,8 @@ public class PlotPanel extends JPanel {
     private DataSet displayDataSet;   // Transformed data for display (CACHED - see lastTransformKey)
     private final TimeSeriesRenderer renderer;  // Contains LOD cache - clear via renderer.clearCache()
     private ViewPort currentViewport;
-    private final Map<String, Color> seriesColors;
-    private final List<String> visibleSeries;
+    private final Map<SeriesRef, Color> seriesColors;
+    private final List<SeriesRef> visibleSeries;
     private boolean autoYMode = false;
 
     // Transform settings (per-tab) - changes trigger displayDataSet rebuild
@@ -100,7 +102,11 @@ public class PlotPanel extends JPanel {
     private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
-    private String lastReferenceSeries = null;
+    private SeriesRef lastReferenceSeries = null;
+
+    // LabelResolver for projecting refs to display labels (legend, hover, etc.).
+    // Set by the owner (typically RunManager via VisualizationTabManager) after construction.
+    private LabelResolver labelResolver;
 
     // === TRANSFORM CACHE ===
     // displayDataSet is cached and only rebuilt when transform settings change.
@@ -180,13 +186,13 @@ public class PlotPanel extends JPanel {
         repaint();
     }
     
-    public void setSeriesColors(Map<String, Color> colors) {
+    public void setSeriesColors(Map<SeriesRef, Color> colors) {
         this.seriesColors.clear();
         this.seriesColors.putAll(colors);
         repaint();
     }
-    
-    public void setVisibleSeries(List<String> visibleSeries) {
+
+    public void setVisibleSeries(List<SeriesRef> visibleSeries) {
         this.visibleSeries.clear();
         this.visibleSeries.addAll(visibleSeries);
 
@@ -195,6 +201,18 @@ public class PlotPanel extends JPanel {
 
         pushState();
         repaint();
+    }
+
+    /**
+     * Sets the {@link LabelResolver} used to project {@link SeriesRef}s to display
+     * labels. Required for any UI surface that renders series identity (legend,
+     * coordinate hover).
+     */
+    public void setLabelResolver(LabelResolver labelResolver) {
+        this.labelResolver = labelResolver;
+        if (legendManager != null) {
+            legendManager.setLabelResolver(labelResolver);
+        }
     }
     
     private void zoomToFitData() {
@@ -521,9 +539,9 @@ public class PlotPanel extends JPanel {
     /**
      * Sets the render mode for a specific series (LINE, POINTS, or LINE_AND_POINTS).
      */
-    public void setSeriesRenderMode(String seriesName, com.kalix.ide.flowviz.rendering.SeriesRenderMode renderMode) {
+    public void setSeriesRenderMode(SeriesRef ref, com.kalix.ide.flowviz.rendering.SeriesRenderMode renderMode) {
         if (renderer != null) {
-            renderer.setSeriesRenderMode(seriesName, renderMode);
+            renderer.setSeriesRenderMode(ref, renderMode);
             repaint();
         }
     }
@@ -531,9 +549,9 @@ public class PlotPanel extends JPanel {
     /**
      * Gets the render mode for a specific series.
      */
-    public com.kalix.ide.flowviz.rendering.SeriesRenderMode getSeriesRenderMode(String seriesName) {
+    public com.kalix.ide.flowviz.rendering.SeriesRenderMode getSeriesRenderMode(SeriesRef ref) {
         if (renderer != null) {
-            return renderer.getSeriesRenderMode(seriesName);
+            return renderer.getSeriesRenderMode(ref);
         }
         return com.kalix.ide.flowviz.rendering.SeriesRenderMode.LINE;
     }
@@ -573,11 +591,13 @@ public class PlotPanel extends JPanel {
     // Legend management methods
 
     /**
-     * Adds a series to the plot legend.
+     * Adds a series to the plot legend. Legend stores the ref for identity; the display
+     * label is projected via the {@link LabelResolver} at render time so it tracks
+     * renames automatically.
      */
-    public void addLegendSeries(String name, Color color) {
+    public void addLegendSeries(SeriesRef ref, Color color) {
         if (legendManager != null) {
-            legendManager.addSeries(name, color);
+            legendManager.addSeries(ref, color);
             repaint();
         }
     }
@@ -585,9 +605,9 @@ public class PlotPanel extends JPanel {
     /**
      * Removes a series from the plot legend.
      */
-    public void removeLegendSeries(String name) {
+    public void removeLegendSeries(SeriesRef ref) {
         if (legendManager != null) {
-            legendManager.removeSeries(name);
+            legendManager.removeSeries(ref);
             repaint();
         }
     }
@@ -884,7 +904,7 @@ public class PlotPanel extends JPanel {
         }
 
         // Determine new reference series
-        String newReference = visibleSeries.isEmpty() ? null : visibleSeries.get(0);
+        SeriesRef newReference = visibleSeries.isEmpty() ? null : visibleSeries.get(0);
 
         // Check if reference changed
         if (!java.util.Objects.equals(lastReferenceSeries, newReference)) {
@@ -908,8 +928,10 @@ public class PlotPanel extends JPanel {
             return;
         }
 
-        // Generate cache key from current transform settings
-        String referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
+        // Generate cache key from current transform settings. The hash of visibleSeries
+        // captures both ref content and order (record equals + List.hashCode); when the
+        // ref-typed list changes the key changes.
+        Object referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
         String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
             + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name()
@@ -923,14 +945,16 @@ public class PlotPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Build aggregated dataset (only for visible series, not the full pool)
+        // Step 1: Build aggregated dataset (only for visible series, not the full pool).
+        // The transient aggregatedDataSet is keyed by SeriesRef directly — the pipeline
+        // never touches string identity.
         DataSet aggregatedDataSet = new DataSet();
 
-        for (String seriesName : visibleSeries) {
-            TimeSeriesData originalSeries = originalDataSet.getSeries(seriesName);
+        for (SeriesRef ref : visibleSeries) {
+            TimeSeriesData originalSeries = originalDataSet.getSeries(ref);
             if (originalSeries == null) continue;
 
-            // Apply aggregation
+            // Apply aggregation (returns nameless data; identity is the ref)
             TimeSeriesData aggregatedSeries = TimeSeriesAggregator.aggregate(
                 originalSeries,
                 aggregationPeriod,
@@ -938,22 +962,22 @@ public class PlotPanel extends JPanel {
             );
 
             if (aggregatedSeries != null) {
-                aggregatedDataSet.addSeries(aggregatedSeries);
+                aggregatedDataSet.addSeries(ref, aggregatedSeries);
             }
         }
 
         // Step 2: Apply masking (if enabled)
-        if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesCount() > 1) {
+        if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
             java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
-            for (String name : aggregatedDataSet.getSeriesNames()) {
-                allSeries.add(aggregatedDataSet.getSeries(name));
+            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
+                allSeries.add(aggregatedDataSet.getSeries(ref));
             }
             TimeSeriesData mask = TimeSeriesMasker.createAllMask(allSeries);
 
             DataSet maskedDataSet = new DataSet();
-            for (String name : aggregatedDataSet.getSeriesNames()) {
-                TimeSeriesData masked = TimeSeriesMasker.applyMask(aggregatedDataSet.getSeries(name), mask);
-                maskedDataSet.addSeries(masked);
+            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
+                TimeSeriesData masked = TimeSeriesMasker.applyMask(aggregatedDataSet.getSeries(ref), mask);
+                maskedDataSet.addSeries(ref, masked);
             }
             aggregatedDataSet = maskedDataSet;
         }

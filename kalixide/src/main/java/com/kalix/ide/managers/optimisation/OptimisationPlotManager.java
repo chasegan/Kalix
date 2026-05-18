@@ -2,6 +2,8 @@ package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
@@ -30,6 +32,12 @@ public class OptimisationPlotManager {
     private static final int PLOT_HEIGHT = 300;
     private static final Color COLOR_BEST_OBJECTIVE = new Color(0, 100, 200);  // Blue
     private static final Color COLOR_POPULATION = new Color(255, 140, 0);      // Orange
+
+    // Synthetic refs for the two convergence-plot series. The "dataset id" here is a
+    // sentinel string — the data isn't from a file or a run, but the SeriesRef sealed
+    // type requires one of the three variants.
+    private static final SeriesRef REF_BEST_OBJECTIVE = new DatasetSeries("(optimisation)", "Best Objective");
+    private static final SeriesRef REF_POPULATION = new DatasetSeries("(optimisation)", "Population");
 
     private final PlotPanel convergencePlot;
     private final DataSet convergenceDataSet;
@@ -115,8 +123,8 @@ public class OptimisationPlotManager {
             bestValues[i] = point.getBestObjective();
         }
 
-        TimeSeriesData bestSeries = new TimeSeriesData("Best Objective", timestamps, bestValues);
-        convergenceDataSet.addSeries(bestSeries);
+        TimeSeriesData bestSeries = new TimeSeriesData(timestamps, bestValues);
+        convergenceDataSet.addSeries(REF_BEST_OBJECTIVE, bestSeries);
     }
 
     /**
@@ -143,8 +151,8 @@ public class OptimisationPlotManager {
                 popValuesArray[i] = popValues.get(i);
             }
 
-            TimeSeriesData popSeries = new TimeSeriesData("Population", popTimestampsArray, popValuesArray);
-            convergenceDataSet.addSeries(popSeries);
+            TimeSeriesData popSeries = new TimeSeriesData(popTimestampsArray, popValuesArray);
+            convergenceDataSet.addSeries(REF_POPULATION, popSeries);
         }
     }
 
@@ -152,21 +160,21 @@ public class OptimisationPlotManager {
      * Configures the appearance of the series.
      */
     private void configureSeriesAppearance() {
-        Map<String, Color> colors = new HashMap<>();
-        colors.put("Best Objective", COLOR_BEST_OBJECTIVE);
-        colors.put("Population", COLOR_POPULATION);
+        Map<SeriesRef, Color> colors = new HashMap<>();
+        colors.put(REF_BEST_OBJECTIVE, COLOR_BEST_OBJECTIVE);
+        colors.put(REF_POPULATION, COLOR_POPULATION);
 
         // Add series in rendering order: Population first (back), then Best Objective (front)
-        List<String> visibleSeries = new ArrayList<>();
-        visibleSeries.add("Population");
-        visibleSeries.add("Best Objective");
+        List<SeriesRef> visibleSeries = new ArrayList<>();
+        visibleSeries.add(REF_POPULATION);
+        visibleSeries.add(REF_BEST_OBJECTIVE);
 
         convergencePlot.setSeriesColors(colors);
         convergencePlot.setVisibleSeries(visibleSeries);
 
         // Configure rendering modes: Best Objective as LINE, Population as POINTS only
-        convergencePlot.setSeriesRenderMode("Best Objective", SeriesRenderMode.LINE);
-        convergencePlot.setSeriesRenderMode("Population", SeriesRenderMode.POINTS);
+        convergencePlot.setSeriesRenderMode(REF_BEST_OBJECTIVE, SeriesRenderMode.LINE);
+        convergencePlot.setSeriesRenderMode(REF_POPULATION, SeriesRenderMode.POINTS);
     }
 
     /**

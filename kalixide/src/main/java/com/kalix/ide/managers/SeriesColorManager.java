@@ -1,5 +1,7 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.flowviz.data.SeriesRef;
+
 import java.awt.Color;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,7 +33,7 @@ public class SeriesColorManager {
         new Color(0x17becf)   // Cyan
     };
 
-    private final Map<String, Color> seriesColorMap = new HashMap<>();
+    private final Map<SeriesRef, Color> seriesColorMap = new HashMap<>();
 
     /**
      * Assigns a color to a series.
@@ -40,14 +42,11 @@ public class SeriesColorManager {
      * 1. Finds which color indices are currently in use
      * 2. Assigns the first unused color from the palette
      * 3. If all colors are used (10+ series), wraps around
-     *
-     * @param seriesName The series to assign a color to
-     * @return The assigned color
      */
-    public Color assignColor(String seriesName) {
+    public Color assignColor(SeriesRef ref) {
         // Check if already assigned
-        if (seriesColorMap.containsKey(seriesName)) {
-            return seriesColorMap.get(seriesName);
+        if (seriesColorMap.containsKey(ref)) {
+            return seriesColorMap.get(ref);
         }
 
         // Find which color indices are currently in use
@@ -75,41 +74,22 @@ public class SeriesColorManager {
             assignedColor = SERIES_COLORS[seriesColorMap.size() % SERIES_COLORS.length];
         }
 
-        seriesColorMap.put(seriesName, assignedColor);
+        seriesColorMap.put(ref, assignedColor);
         return assignedColor;
     }
 
     /**
-     * Gets the color assigned to a series.
-     *
-     * @param seriesName The series name
-     * @return The assigned color, or null if not assigned
+     * Gets the color assigned to a series, or {@code null} if not assigned.
      */
-    public Color getColor(String seriesName) {
-        return seriesColorMap.get(seriesName);
+    public Color getColor(SeriesRef ref) {
+        return seriesColorMap.get(ref);
     }
 
     /**
-     * Removes color assignment for a series.
-     * This makes the color available for reuse by future series.
-     *
-     * @param seriesName The series to remove
+     * Removes color assignment for a series, freeing the slot for reuse.
      */
-    public void removeColor(String seriesName) {
-        seriesColorMap.remove(seriesName);
-    }
-
-    /**
-     * Transfers an existing color assignment from one series key to another.
-     * No-op if the old key has no assignment. The user-visible color of the renamed
-     * series is preserved.
-     */
-    public void renameSeries(String oldName, String newName) {
-        if (oldName.equals(newName)) return;
-        Color color = seriesColorMap.remove(oldName);
-        if (color != null) {
-            seriesColorMap.put(newName, color);
-        }
+    public void removeColor(SeriesRef ref) {
+        seriesColorMap.remove(ref);
     }
 
     /**
@@ -120,13 +100,10 @@ public class SeriesColorManager {
     }
 
     /**
-     * Gets the color map reference for direct access.
-     * Note: This returns the actual map, not a copy.
-     * Changes to this map will affect the SeriesColorManager's state.
-     *
-     * @return The actual color map reference
+     * Gets the color map reference for direct access. Returns the live backing map;
+     * mutations affect the manager's state.
      */
-    public Map<String, Color> getColorMap() {
+    public Map<SeriesRef, Color> getColorMap() {
         return seriesColorMap;
     }
 

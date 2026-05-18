@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -68,6 +70,10 @@ public class PlotLegendManager {
     // Series data
     private final List<LegendEntry> entries = new ArrayList<>();
 
+    // Label resolver — projects SeriesRef to display string at render time so renames
+    // are reflected automatically. Optional; defaults to ref.toString() if absent.
+    private LabelResolver labelResolver;
+
     // Interaction state
     private boolean isDragging = false;
     private int dragOffsetX = 0;
@@ -88,14 +94,16 @@ public class PlotLegendManager {
     private final Rectangle titleBounds = new Rectangle();
 
     /**
-     * Represents a single series entry in the legend.
+     * Represents a single series entry in the legend. Identity is the {@link SeriesRef};
+     * the display label is projected via the {@link LabelResolver} at render time so it
+     * automatically tracks rename operations.
      */
     private static class LegendEntry {
-        final String name;
+        final SeriesRef ref;
         final Color color;
 
-        LegendEntry(String name, Color color) {
-            this.name = name;
+        LegendEntry(SeriesRef ref, Color color) {
+            this.ref = ref;
             this.color = color;
         }
     }
@@ -104,20 +112,28 @@ public class PlotLegendManager {
         loadPreferences();
     }
 
+    public void setLabelResolver(LabelResolver labelResolver) {
+        this.labelResolver = labelResolver;
+    }
+
+    private String labelFor(SeriesRef ref) {
+        return labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
+    }
+
     /**
      * Adds a series to the legend.
      */
-    public void addSeries(String name, Color color) {
-        // Remove existing entry with same name if present
-        entries.removeIf(e -> e.name.equals(name));
-        entries.add(new LegendEntry(name, color));
+    public void addSeries(SeriesRef ref, Color color) {
+        // Remove existing entry with same ref if present
+        entries.removeIf(e -> e.ref.equals(ref));
+        entries.add(new LegendEntry(ref, color));
     }
 
     /**
      * Removes a series from the legend.
      */
-    public void removeSeries(String name) {
-        entries.removeIf(e -> e.name.equals(name));
+    public void removeSeries(SeriesRef ref) {
+        entries.removeIf(e -> e.ref.equals(ref));
     }
 
     /**
@@ -383,8 +399,9 @@ public class PlotLegendManager {
             g.setFont(new Font("Dialog", Font.PLAIN, 10));
             int nameX = x + PADDING + LINE_SAMPLE_WIDTH + 6;
 
-            // Transform name based on display mode, then truncate if too long
-            String transformedName = transformName(entry.name);
+            // Project ref → label at render time, then transform + truncate.
+            String fullLabel = labelFor(entry.ref);
+            String transformedName = transformName(fullLabel);
             String displayName = truncateText(g, transformedName, width - (PADDING * 2 + LINE_SAMPLE_WIDTH + 6));
             g.drawString(displayName, nameX, entryY + 14);
 
@@ -424,8 +441,8 @@ public class PlotLegendManager {
         FontMetrics nameFm = g.getFontMetrics(new Font("Dialog", Font.PLAIN, 10));
 
         for (LegendEntry entry : entries) {
-            // Use transformed name for width calculation to match displayed text
-            String displayedName = transformName(entry.name);
+            // Use transformed label for width calculation to match displayed text
+            String displayedName = transformName(labelFor(entry.ref));
             int nameWidth = nameFm.stringWidth(displayedName);
             int totalWidth = PADDING + LINE_SAMPLE_WIDTH + 6 + nameWidth + PADDING;
             maxWidth = Math.max(maxWidth, totalWidth);

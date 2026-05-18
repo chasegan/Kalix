@@ -73,7 +73,7 @@ public class PlotInteractionManager {
     private Supplier<DataSet> dataSetSupplier;
     private Supplier<ViewPort> viewportSupplier;
     private Consumer<ViewPort> viewportUpdater;
-    private Supplier<List<String>> visibleSeriesSupplier;
+    private Supplier<List<com.kalix.ide.flowviz.data.SeriesRef>> visibleSeriesSupplier;
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
@@ -122,7 +122,7 @@ public class PlotInteractionManager {
     public void setupDataAccess(Supplier<DataSet> dataSetSupplier,
                                Supplier<ViewPort> viewportSupplier,
                                Consumer<ViewPort> viewportUpdater,
-                               Supplier<List<String>> visibleSeriesSupplier,
+                               Supplier<List<com.kalix.ide.flowviz.data.SeriesRef>> visibleSeriesSupplier,
                                Supplier<Rectangle> plotAreaSupplier) {
         this.dataSetSupplier = dataSetSupplier;
         this.viewportSupplier = viewportSupplier;
@@ -565,7 +565,7 @@ public class PlotInteractionManager {
      */
     private double[] calculateVisibleYRange(long startTime, long endTime) {
         DataSet dataSet = dataSetSupplier.get();
-        List<String> visibleSeries = visibleSeriesSupplier.get();
+        List<com.kalix.ide.flowviz.data.SeriesRef> visibleSeries = visibleSeriesSupplier.get();
 
         if (dataSet == null || dataSet.isEmpty() || visibleSeries.isEmpty()) {
             return new double[]{-1.0, 1.0}; // Default range
@@ -580,8 +580,8 @@ public class PlotInteractionManager {
         boolean hasValidData = false;
 
         // Check each visible series for data in the time range
-        for (String seriesName : visibleSeries) {
-            var series = dataSet.getSeries(seriesName);
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : visibleSeries) {
+            var series = dataSet.getSeries(ref);
             if (series == null) continue;
 
             long[] timestamps = series.getTimestamps();
@@ -820,8 +820,8 @@ public class PlotInteractionManager {
             java.util.List<com.kalix.ide.flowviz.data.TimeSeriesData> seriesList =
                 new java.util.ArrayList<>();
 
-            for (String seriesName : dataSet.getSeriesNames()) {
-                com.kalix.ide.flowviz.data.TimeSeriesData series = dataSet.getSeries(seriesName);
+            for (com.kalix.ide.flowviz.data.SeriesRef ref : dataSet.getSeriesRefs()) {
+                com.kalix.ide.flowviz.data.TimeSeriesData series = dataSet.getSeries(ref);
                 if (series != null) {
                     seriesList.add(series);
                 }

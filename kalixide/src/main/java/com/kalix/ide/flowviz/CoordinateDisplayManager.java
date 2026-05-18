@@ -1,6 +1,8 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
@@ -25,8 +27,9 @@ import java.util.Map;
 public class CoordinateDisplayManager {
 
     private final JComponent parentComponent;
-    private final Map<String, Color> seriesColors;
-    private final List<String> visibleSeries;
+    private final Map<SeriesRef, Color> seriesColors;
+    private final List<SeriesRef> visibleSeries;
+    private LabelResolver labelResolver;  // set by PlotPanel after construction
 
     // Coordinate display state
     private boolean showCoordinates = false;
@@ -45,7 +48,7 @@ public class CoordinateDisplayManager {
      * @param seriesColors Map of series names to their display colors for consistent theming
      * @param visibleSeries List of currently visible series names to filter coordinate display
      */
-    public CoordinateDisplayManager(JComponent parentComponent, Map<String, Color> seriesColors, List<String> visibleSeries) {
+    public CoordinateDisplayManager(JComponent parentComponent, Map<SeriesRef, Color> seriesColors, List<SeriesRef> visibleSeries) {
         this.parentComponent = parentComponent;
         this.seriesColors = seriesColors;
         this.visibleSeries = visibleSeries;
@@ -195,10 +198,10 @@ public class CoordinateDisplayManager {
 
         // Find closest points for all visible series
         List<CoordinateInfo> newCoordinates = new ArrayList<>();
-        for (String seriesName : visibleSeries) {
-            TimeSeriesData series = dataSet.getSeries(seriesName);
+        for (SeriesRef ref : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(ref);
             if (series != null) {
-                CoordinateInfo coord = findNearestPoint(series, mouseTime, seriesName);
+                CoordinateInfo coord = findNearestPoint(series, mouseTime, ref);
                 if (coord != null) {
                     newCoordinates.add(coord);
                 }
@@ -229,7 +232,7 @@ public class CoordinateDisplayManager {
      * @param seriesName The name of the series for coordinate info creation
      * @return CoordinateInfo containing the nearest valid point, or null if no valid point exists
      */
-    private CoordinateInfo findNearestPoint(TimeSeriesData series, long targetTime, String seriesName) {
+    private CoordinateInfo findNearestPoint(TimeSeriesData series, long targetTime, SeriesRef seriesRef) {
         long[] timestamps = series.getTimestamps();
         double[] values = series.getValues();
         boolean[] validPoints = series.getValidPoints();
@@ -257,11 +260,19 @@ public class CoordinateDisplayManager {
         if (bestIndex == -1) return null;
 
         return new CoordinateInfo(
-            seriesName,
+            seriesRef,
             timestamps[bestIndex],
             values[bestIndex],
-            seriesColors.get(seriesName)
+            seriesColors.get(seriesRef)
         );
+    }
+
+    /**
+     * Sets the {@link LabelResolver} used for hover display labels (currently unused
+     * in the rendered overlay text, but available for future tooltip enhancements).
+     */
+    public void setLabelResolver(LabelResolver resolver) {
+        this.labelResolver = resolver;
     }
 
     /**
@@ -438,8 +449,8 @@ public class CoordinateDisplayManager {
      */
     private long inferStepSecondsFromVisibleSeries() {
         if (dataSet == null) return 0;
-        for (String name : visibleSeries) {
-            TimeSeriesData series = dataSet.getSeries(name);
+        for (SeriesRef ref : visibleSeries) {
+            TimeSeriesData series = dataSet.getSeries(ref);
             if (series != null && series.hasRegularInterval()) {
                 return series.getIntervalMillis() / 1000;
             }
@@ -474,13 +485,13 @@ public class CoordinateDisplayManager {
      * Data class to hold coordinate information for display.
      */
     private static class CoordinateInfo {
-        final String seriesName;
+        final SeriesRef seriesRef;
         final long timestamp;
         final double value;
         final Color color;
 
-        CoordinateInfo(String seriesName, long timestamp, double value, Color color) {
-            this.seriesName = seriesName;
+        CoordinateInfo(SeriesRef seriesRef, long timestamp, double value, Color color) {
+            this.seriesRef = seriesRef;
             this.timestamp = timestamp;
             this.value = value;
             this.color = color;
@@ -490,14 +501,14 @@ public class CoordinateDisplayManager {
         public boolean equals(Object obj) {
             if (this == obj) return true;
             if (!(obj instanceof CoordinateInfo other)) return false;
-            return seriesName.equals(other.seriesName) &&
+            return seriesRef.equals(other.seriesRef) &&
                    timestamp == other.timestamp &&
                    Double.compare(value, other.value) == 0;
         }
 
         @Override
         public int hashCode() {
-            return seriesName.hashCode() + Long.hashCode(timestamp) + Double.hashCode(value);
+            return seriesRef.hashCode() + Long.hashCode(timestamp) + Double.hashCode(value);
         }
     }
 }

@@ -187,6 +187,12 @@ public class RunManager extends JFrame {
     // Set to true before modifying tree selection, false after
     private boolean isUpdatingSelection = false;
 
+    // Single point of authority for projecting SeriesRef → display label.
+    // Consumed by stats tables, legends, and the outputs tree so that the user-visible
+    // string for a run-derived series tracks the current run name automatically.
+    private final com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+        new com.kalix.ide.flowviz.data.DefaultLabelResolver(this::runNameForId);
+
     /**
      * Private constructor for singleton pattern.
      */
@@ -931,8 +937,8 @@ public class RunManager extends JFrame {
             updateOutputsTree();
 
             // Restore selection for series that still exist in the new tree
-            Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<String> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
+            Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+            Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
 
             // Remove from tab any series that no longer exist (e.g., outputs that were removed)
             reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
@@ -950,24 +956,17 @@ public class RunManager extends JFrame {
     /**
      * Recursively searches tree nodes for matching series keys and collects their paths.
      */
-    private void searchAndCollectPaths(DefaultMutableTreeNode node, Set<String> targetKeys, List<TreePath> results) {
+    private void searchAndCollectPaths(DefaultMutableTreeNode node,
+                                        Set<com.kalix.ide.flowviz.data.SeriesRef> targetRefs,
+                                        List<TreePath> results) {
         if (node == null) return;
 
         Object userObject = node.getUserObject();
 
-        // Check if this is a SeriesLeafNode that matches one of our target keys
+        // Check if this is a SeriesLeafNode that maps to one of our target refs
         if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-            String seriesKey;
-            if (leaf.source instanceof RunInfoImpl) {
-                // Run series: add run name suffix
-                String runName = ((RunInfoImpl) leaf.source).getRunName();
-                seriesKey = leaf.seriesName + " [" + runName + "]";
-            } else {
-                // Dataset series: add filename suffix
-                DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) leaf.source;
-                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
-            }
-            if (targetKeys.contains(seriesKey)) {
+            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
+            if (ref != null && targetRefs.contains(ref)) {
                 TreePath path = new TreePath(node.getPath());
                 results.add(path);
             }
@@ -976,8 +975,28 @@ public class RunManager extends JFrame {
         // Recurse into children
         for (int i = 0; i < node.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
-            searchAndCollectPaths(child, targetKeys, results);
+            searchAndCollectPaths(child, targetRefs, results);
         }
+    }
+
+    /**
+     * Constructs the {@link com.kalix.ide.flowviz.data.SeriesRef} that identifies the
+     * data behind a {@link OutputsTreeBuilder.SeriesLeafNode}. The leaf still carries
+     * the legacy {@code source} object (RunInfoImpl or LoadedDatasetInfo) plus
+     * {@code seriesName} — this helper produces the typed ref from that pair.
+     * Will move onto the leaf itself when OutputsTreeBuilder is migrated.
+     */
+    private com.kalix.ide.flowviz.data.SeriesRef seriesRefForLeaf(OutputsTreeBuilder.SeriesLeafNode leaf) {
+        if (leaf.source instanceof RunInfoImpl runInfo) {
+            if ("Last".equals(runInfo.getRunName())) {
+                return new com.kalix.ide.flowviz.data.LastSeries(leaf.seriesName);
+            }
+            return new com.kalix.ide.flowviz.data.RunSeries(runInfo.getRunId(), leaf.seriesName);
+        }
+        if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
+            return new com.kalix.ide.flowviz.data.DatasetSeries(info.file.getAbsolutePath(), leaf.seriesName);
+        }
+        return null;
     }
 
     /**
@@ -987,23 +1006,24 @@ public class RunManager extends JFrame {
      *
      * @param seriesToRestore The set of series keys to select in the tree
      */
-    private Set<String> restoreTreeSelectionForSeries(Set<String> seriesToRestore) {
+    private Set<com.kalix.ide.flowviz.data.SeriesRef> restoreTreeSelectionForSeries(
+            Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
             timeseriesTree.clearSelection();
             return Collections.emptySet();
         }
 
         List<TreePath> pathsToSelect = new ArrayList<>();
-        Set<String> restoredSeriesKeys = new HashSet<>();
+        Set<com.kalix.ide.flowviz.data.SeriesRef> restoredRefs = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
-        // Search tree for nodes matching the series set, collect which ones we found
-        for (String seriesKey : seriesToRestore) {
+        // Search tree for nodes matching the ref set, collect which ones we found
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToRestore) {
             List<TreePath> foundPaths = new ArrayList<>();
-            searchAndCollectPaths(root, Collections.singleton(seriesKey), foundPaths);
+            searchAndCollectPaths(root, Collections.singleton(ref), foundPaths);
             if (!foundPaths.isEmpty()) {
                 pathsToSelect.addAll(foundPaths);
-                restoredSeriesKeys.add(seriesKey);
+                restoredRefs.add(ref);
             }
         }
 
@@ -1015,19 +1035,17 @@ public class RunManager extends JFrame {
             timeseriesTree.clearSelection();
         }
 
-        return restoredSeriesKeys;
+        return restoredRefs;
     }
 
     /**
      * Reconciles the target tab's selected series with what's actually available in the tree.
      * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
-     *
-     * @param restoredSeries Set of series that were successfully found in the tree
-     * @param tabSeries The tab's current selected series to reconcile against
      */
-    private void reconcileSelectedSeriesWithTree(Set<String> restoredSeries, Set<String> tabSeries) {
+    private void reconcileSelectedSeriesWithTree(Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries,
+                                                  Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries) {
         // Find series that need to be removed from the tab
-        Set<String> seriesToRemove = new HashSet<>(tabSeries);
+        Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
         seriesToRemove.removeAll(restoredSeries);
 
         if (seriesToRemove.isEmpty()) {
@@ -1035,14 +1053,43 @@ public class RunManager extends JFrame {
         }
 
         // Update the target tab's series (remove unrestorable ones)
-        Set<String> updatedSeries = new LinkedHashSet<>(tabSeries);
+        Set<com.kalix.ide.flowviz.data.SeriesRef> updatedSeries = new LinkedHashSet<>(tabSeries);
         updatedSeries.removeAll(seriesToRemove);
         tabManager.setTargetTabSelectedSeries(updatedSeries);
 
         // Remove from stats tables
-        for (String seriesKey : seriesToRemove) {
-            tabManager.removeSeriesFromStatsTabs(seriesKey);
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToRemove) {
+            tabManager.removeSeriesFromStatsTabs(ref);
         }
+    }
+
+    /**
+     * Returns the current display name for a given {@code runId}, or {@code null} if
+     * no run with that id is currently known. Used by {@link com.kalix.ide.flowviz.data.DefaultLabelResolver}
+     * to project {@link com.kalix.ide.flowviz.data.RunSeries} refs to user-visible
+     * labels.
+     *
+     * <p>Linear over current runs; trivially small in practice. If profiling later
+     * shows this on a hot path, swap to an explicit {@code Map<Long, RunInfoImpl>}
+     * maintained in {@code refreshRuns} and {@code renameRun}.</p>
+     */
+    private String runNameForId(long runId) {
+        for (DefaultMutableTreeNode node : sessionToTreeNode.values()) {
+            if (node.getUserObject() instanceof RunInfoImpl info && info.getRunId() == runId) {
+                return info.getRunName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link com.kalix.ide.flowviz.data.LabelResolver} bound to this
+     * RunManager's state. Components that need to render series labels — stats tables,
+     * plot legends, the outputs tree — should obtain the resolver here rather than
+     * constructing label strings themselves.
+     */
+    public com.kalix.ide.flowviz.data.LabelResolver getLabelResolver() {
+        return labelResolver;
     }
 
     /**
@@ -1056,17 +1103,8 @@ public class RunManager extends JFrame {
         return runInfo.getSession();
     }
 
-    /**
-     * Extracts the base series name from a series key.
-     * Series keys have format: "seriesName [RunName]"
-     */
-    private String extractSeriesName(String seriesKey) {
-        int bracketIndex = seriesKey.lastIndexOf(" [");
-        if (bracketIndex > 0) {
-            return seriesKey.substring(0, bracketIndex);
-        }
-        return seriesKey;
-    }
+    // extractSeriesName removed — there are no series-key strings to parse anymore.
+    // Identity is the typed SeriesRef; baseName comes from ref.baseName().
 
     /**
      * Renames a run and propagates the new name across every place a series key derived
@@ -1132,49 +1170,27 @@ public class RunManager extends JFrame {
             lastRunInfo = newRunInfo;
         }
 
-        // Propagate to every series key carrying the old run-name suffix.
-        String oldSuffix = " [" + oldName + "]";
-        String newSuffix = " [" + newName + "]";
-
-        // Snapshot first — plotDataSet is mutated in the loop.
-        List<TimeSeriesData> affected = new ArrayList<>();
-        for (TimeSeriesData s : plotDataSet.getAllSeries()) {
-            if (s.getName().endsWith(oldSuffix)) {
-                affected.add(s);
-            }
-        }
-
-        for (TimeSeriesData s : affected) {
-            String oldKey = s.getName();
-            String newKey = oldKey.substring(0, oldKey.length() - oldSuffix.length()) + newSuffix;
-
-            // Atomic key swap in the pool (DataSet.addSeries removes-then-adds by name).
-            plotDataSet.addSeries(s.withName(newKey));
-            plotDataSet.removeSeries(oldKey);
-
-            seriesColorManager.renameSeries(oldKey, newKey);
-            tabManager.renameSeriesAcrossTabs(oldKey, newKey);
-        }
-
-        // Outputs tree leaves construct their seriesKey from the source RunInfoImpl held
-        // by reference; rebuild so leaves regenerate against the new instance. The rebuild
-        // implicitly clears the outputs tree selection, which would fire
-        // onOutputsTreeSelectionChanged with an empty path set and clobber the target tab's
-        // selectedSeries — wipe-out the plot we just renamed. Block listener side-effects
-        // and re-select the renamed series afterwards to keep the tree visually in sync
-        // with what's plotted.
+        // No propagation needed: series identity is the runId on RunSeries refs, which is
+        // preserved by RunInfoImpl.withName. The pool, color map, tab selections, stats
+        // models, and undo history all key by ref — they don't know or care that the
+        // user-visible run name changed. The label is reprojected via LabelResolver on
+        // the next paint, so legends and the stats column refresh automatically.
+        //
+        // We just need to: (a) rebuild the outputs tree so its leaves regenerate against
+        // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
+        // and (b) trigger a repaint so any text surfaces that aren't actively reading the
+        // resolver see the update.
         isUpdatingSelection = true;
         try {
             updateOutputsTree();
-            Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+            Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
             restoreTreeSelectionForSeries(tabSeries);
         } finally {
             isUpdatingSelection = false;
         }
 
-        // Plot panels still hold the old keys in their visibleSeries field. updateAllTabs
-        // calls setVisibleSeries(tab.selectedSeries) — which now contains the new keys —
-        // and refreshes the cached displayDataSet so the rename is visible.
+        // Cheap repaint to pick up the new label in plot legends / stats column headers
+        // that already cache projected strings.
         tabManager.updateAllTabs(false);
 
         return null;
@@ -1225,56 +1241,48 @@ public class RunManager extends JFrame {
         // will fetch fresh data, even if no [Last] series are currently selected
         timeSeriesRequestManager.clearCacheForSession(newSessionKey);
 
-        // Find all "[Last]" series across all tabs
-        Set<String> allTabSeries = tabManager.getAllSelectedSeriesAcrossTabs();
-        List<String> lastSeriesKeys = allTabSeries.stream()
-            .filter(key -> key.endsWith(" [Last]"))
+        // Find all LastSeries refs across all tabs. Identity is the typed ref now —
+        // the obsolete `endsWith(" [Last]")` string matching has been deleted, which
+        // structurally closes issue #8 (no string-suffix collisions are possible).
+        Set<com.kalix.ide.flowviz.data.SeriesRef> allTabSeries = tabManager.getAllSelectedSeriesAcrossTabs();
+        List<com.kalix.ide.flowviz.data.LastSeries> lastSeriesRefs = allTabSeries.stream()
+            .filter(r -> r instanceof com.kalix.ide.flowviz.data.LastSeries)
+            .map(r -> (com.kalix.ide.flowviz.data.LastSeries) r)
             .collect(java.util.stream.Collectors.toList());
 
-        if (lastSeriesKeys.isEmpty()) {
+        if (lastSeriesRefs.isEmpty()) {
             return;
         }
 
         boolean anySyncReplacement = false;
 
-        for (String seriesKey : lastSeriesKeys) {
-            String seriesName = extractSeriesName(seriesKey);
-
-            // Note: old data for this series stays in plotDataSet until the replacement is
-            // ready. addSeriesToPool below relies on DataSet.addSeries doing an atomic
-            // remove-then-add by name in a single EDT call.
+        for (com.kalix.ide.flowviz.data.LastSeries ref : lastSeriesRefs) {
+            String seriesName = ref.baseName();
 
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(newSessionKey, seriesName);
             if (cachedData != null) {
-                // Synchronous replacement — happens on EDT, no opportunity for a paint between
-                // the old data leaving and the new data arriving.
-                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                addSeriesToPool(renamedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+                // Synchronous replacement on EDT — atomic via DataSet.addSeries replacing
+                // the existing entry for this ref.
+                addSeriesToPool(ref, cachedData);
+                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
                 anySyncReplacement = true;
             } else {
-                // Async fetch. If a request for this series is already in flight (e.g. from a
-                // concurrent selection-change handler), requestTimeSeries returns the existing
-                // future and we attach a second callback to it — cheap and correct.
+                // Async fetch. requestTimeSeries returns an existing in-flight future
+                // for the same (session, seriesName) if one exists, so duplicate
+                // requests piggyback cheaply.
                 timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
                             // Drop response if a newer run has become "Last" since this
-                            // request was issued. The newer updateLastRun() will have already
-                            // issued (or will issue) a fetch carrying the new generation.
+                            // request was issued.
                             if (capturedGeneration != lastRunGeneration) {
                                 return;
                             }
-                            // Always update the pool, even if no tab currently shows this
-                            // series. Otherwise the stale prior-Last data left in the pool
-                            // would be served by the line 1302 short-circuit on a later
-                            // re-selection.
-                            TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
-                            addSeriesToPool(renamedData);
-                            tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+                            addSeriesToPool(ref, timeSeriesData);
+                            tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
 
                             // Only refresh tabs if something on screen needs to redraw.
-                            if (tabManager.isSeriesSelectedOnAnyTab(seriesKey)) {
+                            if (tabManager.isSeriesSelectedOnAnyTab(ref)) {
                                 tabManager.updateAllTabs(false);
                             }
                         });
@@ -1313,8 +1321,8 @@ public class RunManager extends JFrame {
         updateOutputsTree();
 
         // Restore visual selection to match what's currently plotted on active tab
-        Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
-        Set<String> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
+        Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+        Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
         reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
 
         isUpdatingSelection = false;
@@ -1368,23 +1376,9 @@ public class RunManager extends JFrame {
     }
 
 
-    /**
-     * Creates a new TimeSeriesData with a different name but same data.
-     */
-    private TimeSeriesData renameTimeSeriesData(TimeSeriesData original, String newName) {
-        // Convert timestamps back to LocalDateTime array
-        long[] timestamps = original.getTimestamps();
-        java.time.LocalDateTime[] dateTimes = new java.time.LocalDateTime[timestamps.length];
-        for (int i = 0; i < timestamps.length; i++) {
-            dateTimes[i] = java.time.LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamps[i]),
-                java.time.ZoneOffset.UTC
-            );
-        }
-
-        // Create new TimeSeriesData with new name
-        return new TimeSeriesData(newName, dateTimes, original.getValues());
-    }
+    // renameTimeSeriesData removed — TimeSeriesData no longer carries identity, so
+    // there's no rename operation. The pool stores (ref, data) pairs and the same
+    // TimeSeriesData instance can sit under any ref.
 
     /**
      * Handles selection changes in the timeseries tree.
@@ -1418,32 +1412,26 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Build new set of selected series (with unique keys)
-        Set<String> newSelectedSeries = new LinkedHashSet<>();
-        Map<String, OutputsTreeBuilder.SeriesLeafNode> seriesKeyToLeaf = new HashMap<>();
+        // Build new set of selected series, ref-keyed directly from the leaves
+        Set<com.kalix.ide.flowviz.data.SeriesRef> newSelectedSeries = new LinkedHashSet<>();
+        Map<com.kalix.ide.flowviz.data.SeriesRef, OutputsTreeBuilder.SeriesLeafNode> refToLeaf = new HashMap<>();
 
         for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
-            String seriesKey;
-            if (leaf.source instanceof RunInfoImpl) {
-                String runName = ((RunInfoImpl) leaf.source).getRunName();
-                seriesKey = leaf.seriesName + " [" + runName + "]";
-            } else {
-                DatasetLoaderManager.LoadedDatasetInfo datasetInfo = (DatasetLoaderManager.LoadedDatasetInfo) leaf.source;
-                seriesKey = leaf.seriesName + " [" + datasetInfo.fileName + "]";
-            }
-            newSelectedSeries.add(seriesKey);
-            seriesKeyToLeaf.put(seriesKey, leaf);
+            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
+            if (ref == null) continue;
+            newSelectedSeries.add(ref);
+            refToLeaf.put(ref, leaf);
         }
 
         // Get the target tab's current series for diffing
-        Set<String> currentTabSeries = tabManager.getTargetTabSelectedSeries();
+        Set<com.kalix.ide.flowviz.data.SeriesRef> currentTabSeries = tabManager.getTargetTabSelectedSeries();
 
         // When filtering with an additive click, preserve series hidden by the filter
         if (treeFilterManager.isFiltering() && isAdditiveSelectionEvent()) {
-            Set<String> visibleSeriesKeys = getVisibleSeriesKeys();
-            for (String key : currentTabSeries) {
-                if (!visibleSeriesKeys.contains(key)) {
-                    newSelectedSeries.add(key);
+            Set<com.kalix.ide.flowviz.data.SeriesRef> visibleRefs = getVisibleSeriesKeys();
+            for (com.kalix.ide.flowviz.data.SeriesRef ref : currentTabSeries) {
+                if (!visibleRefs.contains(ref)) {
+                    newSelectedSeries.add(ref);
                 }
             }
         }
@@ -1453,29 +1441,26 @@ public class RunManager extends JFrame {
         final boolean shouldResetZoom = currentTabSeries.isEmpty() || !hasOverlap;
 
         // Determine which series need data fetched (not yet in the pool)
-        Set<String> seriesToFetch = new HashSet<>(newSelectedSeries);
-        for (String key : seriesToFetch.toArray(new String[0])) {
-            if (plotDataSet.getSeries(key) != null) {
-                seriesToFetch.remove(key); // Already in pool
-            }
-        }
+        Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToFetch = new HashSet<>(newSelectedSeries);
+        seriesToFetch.removeIf(ref -> plotDataSet.getSeries(ref) != null);
 
-        // Capture the target PlotPanel for async callbacks (not "active panel at callback time")
+        // Capture the target PlotPanel for async callbacks
         final PlotPanel targetPanel = tabManager.getTargetPlotPanel();
 
-        // Group new series needing fetch by data source
-        Map<String, List<String>> dataSourceToSeriesKeys = new LinkedHashMap<>();
-        Set<String> datasetSeriesKeys = new HashSet<>();
+        // Group new run series needing fetch by data source. Dataset series take their own
+        // path below.
+        Map<String, List<com.kalix.ide.flowviz.data.SeriesRef>> dataSourceToRefs = new LinkedHashMap<>();
+        Set<com.kalix.ide.flowviz.data.SeriesRef> datasetRefs = new HashSet<>();
 
-        for (String seriesKey : seriesToFetch) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToFetch) {
+            OutputsTreeBuilder.SeriesLeafNode leaf = refToLeaf.get(ref);
             if (leaf == null) continue;
 
             // Assign color if not already assigned
-            seriesColorManager.assignColor(seriesKey);
+            seriesColorManager.assignColor(ref);
 
             if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                datasetSeriesKeys.add(seriesKey);
+                datasetRefs.add(ref);
             } else {
                 RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
                 SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
@@ -1485,21 +1470,21 @@ public class RunManager extends JFrame {
                 String seriesName = leaf.seriesName;
                 String dataSourceKey = sessionKey + "|" + seriesName;
 
-                dataSourceToSeriesKeys.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(seriesKey);
+                dataSourceToRefs.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(ref);
             }
         }
 
         // Also assign colors for series new to this tab but already in pool
-        for (String seriesKey : newSelectedSeries) {
-            if (!currentTabSeries.contains(seriesKey)) {
-                seriesColorManager.assignColor(seriesKey);
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : newSelectedSeries) {
+            if (!currentTabSeries.contains(ref)) {
+                seriesColorManager.assignColor(ref);
             }
         }
 
         // Fetch run series data into the pool
-        for (Map.Entry<String, List<String>> entry : dataSourceToSeriesKeys.entrySet()) {
+        for (Map.Entry<String, List<com.kalix.ide.flowviz.data.SeriesRef>> entry : dataSourceToRefs.entrySet()) {
             String dataSourceKey = entry.getKey();
-            List<String> seriesKeys = entry.getValue();
+            List<com.kalix.ide.flowviz.data.SeriesRef> refs = entry.getValue();
 
             String[] parts = dataSourceKey.split("\\|", 2);
             String sessionKey = parts[0];
@@ -1507,40 +1492,37 @@ public class RunManager extends JFrame {
 
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
-                for (String seriesKey : seriesKeys) {
-                    TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                    addSeriesToPool(renamedData);
-                    tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+                    addSeriesToPool(ref, cachedData);
+                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
                 }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                for (String seriesKey : seriesKeys) {
-                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
+                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+                    tabManager.addLoadingSeriesInStatsTabs(ref);
                 }
 
-                final List<String> capturedSeriesKeys = new ArrayList<>(seriesKeys);
-                final Set<String> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
-                // Captured at issue time so that on response we can detect whether the "Last"
-                // run resolved by this selection still points to the same underlying run.
-                // Only applied to series keys ending in " [Last]"; specific-run keys remain
-                // tied to their own RunInfo's session and are not generation-dependent.
+                final List<com.kalix.ide.flowviz.data.SeriesRef> capturedRefs = new ArrayList<>(refs);
+                final Set<com.kalix.ide.flowviz.data.SeriesRef> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
+                // Captured to detect whether "Last" has changed since this request was issued.
+                // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
+                // their own immutable identity and are not generation-dependent.
                 final long capturedGeneration = lastRunGeneration;
 
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
                             final boolean lastIsStale = capturedGeneration != lastRunGeneration;
-                            for (String capturedSeriesKey : capturedSeriesKeys) {
-                                // Drop [Last] writes if Last has changed since this request
-                                // was issued — refreshLastSeries() for the new Last will fetch
-                                // the correct data.
-                                if (lastIsStale && capturedSeriesKey.endsWith(" [Last]")) {
+                            for (com.kalix.ide.flowviz.data.SeriesRef capturedRef : capturedRefs) {
+                                // Drop LastSeries writes if Last has changed since this
+                                // request was issued — refreshLastSeries() for the new Last
+                                // will fetch the correct data.
+                                if (lastIsStale && capturedRef instanceof com.kalix.ide.flowviz.data.LastSeries) {
                                     continue;
                                 }
                                 // Check if series is still selected on the target tab
-                                if (capturedNewSelection.contains(capturedSeriesKey)) {
-                                    TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
-                                    addSeriesToPool(renamedData);
-                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedSeriesKey, renamedData);
+                                if (capturedNewSelection.contains(capturedRef)) {
+                                    addSeriesToPool(capturedRef, timeSeriesData);
+                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedRef, timeSeriesData);
                                 }
                             }
 
@@ -1552,32 +1534,33 @@ public class RunManager extends JFrame {
                     })
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            for (String capturedSeriesKey : capturedSeriesKeys) {
-                                tabManager.addErrorSeriesInStatsTabs(capturedSeriesKey, throwable.getMessage());
+                            for (com.kalix.ide.flowviz.data.SeriesRef capturedRef : capturedRefs) {
+                                tabManager.addErrorSeriesInStatsTabs(capturedRef, throwable.getMessage());
                             }
                         });
                         return null;
                     });
             } else {
-                for (String seriesKey : seriesKeys) {
-                    tabManager.addLoadingSeriesInStatsTabs(seriesKey);
+                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+                    tabManager.addLoadingSeriesInStatsTabs(ref);
                 }
             }
         }
 
-        // Fetch dataset series into the pool
-        for (String seriesKey : datasetSeriesKeys) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = seriesKeyToLeaf.get(seriesKey);
+        // Fetch dataset series into the pool. The dataset cache is keyed by the column's
+        // base name (the legacy string). We look up the data there and store it in the
+        // pool under the ref.
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : datasetRefs) {
+            OutputsTreeBuilder.SeriesLeafNode leaf = refToLeaf.get(ref);
             if (leaf == null) continue;
 
             TimeSeriesData cachedData = datasetSeriesCache.get(leaf.seriesName);
             if (cachedData != null) {
-                TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
-                addSeriesToPool(renamedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+                addSeriesToPool(ref, cachedData);
+                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
             } else {
                 logger.warn("Dataset series not found in cache: " + leaf.seriesName);
-                tabManager.addErrorSeriesInStatsTabs(seriesKey, "Series not found");
+                tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
             }
         }
 
@@ -1620,19 +1603,18 @@ public class RunManager extends JFrame {
     /**
      * Collects all series keys visible in the current (possibly filtered) timeseries tree.
      */
-    private Set<String> getVisibleSeriesKeys() {
-        Set<String> keys = new HashSet<>();
+    private Set<com.kalix.ide.flowviz.data.SeriesRef> getVisibleSeriesKeys() {
+        Set<com.kalix.ide.flowviz.data.SeriesRef> refs = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
         List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
         collectAllLeafNodesRecursive(root, allLeaves);
         for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
-            if (leaf.source instanceof RunInfoImpl) {
-                keys.add(leaf.seriesName + " [" + ((RunInfoImpl) leaf.source).getRunName() + "]");
-            } else if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
-                keys.add(leaf.seriesName + " [" + datasetInfo.fileName + "]");
+            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
+            if (ref != null) {
+                refs.add(ref);
             }
         }
-        return keys;
+        return refs;
     }
 
     /**
@@ -1679,11 +1661,12 @@ public class RunManager extends JFrame {
 
 
     /**
-     * Adds a series to the shared data pool.
+     * Adds a series to the shared data pool under the given {@link com.kalix.ide.flowviz.data.SeriesRef}.
+     * The data's legacy name field is ignored — identity comes from the ref.
      * Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    private void addSeriesToPool(TimeSeriesData timeSeriesData) {
-        plotDataSet.addSeries(timeSeriesData);
+    private void addSeriesToPool(com.kalix.ide.flowviz.data.SeriesRef ref, TimeSeriesData timeSeriesData) {
+        plotDataSet.addSeries(ref, timeSeriesData);
     }
 
     /**
@@ -1691,7 +1674,7 @@ public class RunManager extends JFrame {
      * to reflect the new active tab's selected series.
      */
     private void onTabChanged() {
-        Set<String> tabSeries = tabManager.getTargetTabSelectedSeries();
+        Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
         if (tabSeries == null) return;
 
         isUpdatingSelection = true;

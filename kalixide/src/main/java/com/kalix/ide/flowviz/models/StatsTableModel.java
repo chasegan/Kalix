@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.models;
 
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.Statistic;
@@ -23,24 +25,28 @@ public class StatsTableModel extends AbstractTableModel {
 
     // Masking configuration
     private MaskMode maskMode = MaskMode.ALL;
-    private String referenceSeries = null;  // Name of first series
+    private SeriesRef referenceSeries = null;  // First series, used for bivariate stats
 
-    // Cache of original (unmasked) series data
-    // Using LinkedHashMap to preserve insertion order
-    private final Map<String, TimeSeriesData> originalSeriesCache = new LinkedHashMap<>();
+    // Cache of original (unmasked) series data, keyed by ref. LinkedHashMap preserves
+    // insertion order so the table rows stay in the order the user added them.
+    private final Map<SeriesRef, TimeSeriesData> originalSeriesCache = new LinkedHashMap<>();
+
+    // Label resolver — projects SeriesRef → display string for column 0. Set by the
+    // owner (typically VisualizationTabManager wiring from RunManager).
+    private LabelResolver labelResolver;
 
     /**
      * Statistics for a single time series with all computed values.
      */
     public static class SeriesStats {
-        public final String name;
+        public final SeriesRef ref;
         public final Map<String, String> statisticValues;  // Statistic name -> computed value
 
         /**
          * Creates empty/loading stats for a series.
          */
-        public SeriesStats(String name) {
-            this.name = name;
+        public SeriesStats(SeriesRef ref) {
+            this.ref = ref;
             this.statisticValues = new HashMap<>();
             // Initialize with empty values
             for (Statistic stat : StatisticsRegistry.getAll()) {
@@ -51,10 +57,19 @@ public class StatsTableModel extends AbstractTableModel {
         /**
          * Creates stats with computed values.
          */
-        public SeriesStats(String name, Map<String, String> statisticValues) {
-            this.name = name;
+        public SeriesStats(SeriesRef ref, Map<String, String> statisticValues) {
+            this.ref = ref;
             this.statisticValues = new HashMap<>(statisticValues);
         }
+    }
+
+    public void setLabelResolver(LabelResolver labelResolver) {
+        this.labelResolver = labelResolver;
+        fireTableDataChanged();
+    }
+
+    private String labelFor(SeriesRef ref) {
+        return labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
     }
 
     @Override
@@ -83,8 +98,9 @@ public class StatsTableModel extends AbstractTableModel {
         SeriesStats stats = seriesData.get(rowIndex);
 
         if (columnIndex == 0) {
-            // First column is series name
-            return stats.name;
+            // First column is the projected display label (recomputed each render so it
+            // tracks renames automatically).
+            return labelFor(stats.ref);
         }
 
         // Remaining columns are statistics
@@ -124,24 +140,24 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Adds a loading placeholder for a series being fetched.
      */
-    public void addLoadingSeries(String seriesName) {
+    public void addLoadingSeries(SeriesRef ref) {
         // Remove existing entry if present
-        seriesData.removeIf(stats -> stats.name.equals(seriesName));
-        seriesData.add(new SeriesStats(seriesName));
+        seriesData.removeIf(stats -> stats.ref.equals(ref));
+        seriesData.add(new SeriesStats(ref));
         fireTableDataChanged();
     }
 
     /**
-     * Adds or updates series with actual data.
-     * Stores the original data and computes statistics with current mask mode.
+     * Adds or updates a series's stats. Identity comes from the {@link SeriesRef}; the
+     * {@link TimeSeriesData}'s legacy name field is ignored.
      */
-    public void addOrUpdateSeries(TimeSeriesData data) {
-        // Cache original data
-        originalSeriesCache.put(data.getName(), data);
+    public void addOrUpdateSeries(SeriesRef ref, TimeSeriesData data) {
+        // Cache original data keyed by ref
+        originalSeriesCache.put(ref, data);
 
         // Update reference series if this is the first series
         if (referenceSeries == null) {
-            referenceSeries = data.getName();
+            referenceSeries = ref;
         }
 
         // If mask mode is ALL, adding a new series changes the mask for all existing series
@@ -153,8 +169,8 @@ public class StatsTableModel extends AbstractTableModel {
             Map<String, String> statisticValues = computeStatistics(data);
 
             // Remove existing entry if present
-            seriesData.removeIf(stats -> stats.name.equals(data.getName()));
-            seriesData.add(new SeriesStats(data.getName(), statisticValues));
+            seriesData.removeIf(stats -> stats.ref.equals(ref));
+            seriesData.add(new SeriesStats(ref, statisticValues));
             fireTableDataChanged();
         }
     }
@@ -162,74 +178,29 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Adds an error entry for a series that failed to load.
      */
-    public void addErrorSeries(String seriesName, String errorMessage) {
+    public void addErrorSeries(SeriesRef ref, String errorMessage) {
         // Remove existing entry if present
-        seriesData.removeIf(stats -> stats.name.equals(seriesName));
+        seriesData.removeIf(stats -> stats.ref.equals(ref));
 
         // Add error stats with "Error" in all columns
         Map<String, String> errorValues = new HashMap<>();
         for (Statistic stat : StatisticsRegistry.getAll()) {
             errorValues.put(stat.getName(), "Error");
         }
-        seriesData.add(new SeriesStats(seriesName, errorValues));
+        seriesData.add(new SeriesStats(ref, errorValues));
         fireTableDataChanged();
-    }
-
-    /**
-     * Renames a series from {@code oldName} to {@code newName} while preserving its
-     * computed statistics, its position in the table, and the original-data cache.
-     * No-op if {@code oldName} is not present. The reference series is updated if it
-     * matches the renamed series.
-     */
-    public void renameSeries(String oldName, String newName) {
-        if (oldName.equals(newName)) return;
-        boolean changed = false;
-
-        // Rebuild seriesData preserving position; replace SeriesStats with renamed copy
-        for (int i = 0; i < seriesData.size(); i++) {
-            SeriesStats s = seriesData.get(i);
-            if (s.name.equals(oldName)) {
-                seriesData.set(i, new SeriesStats(newName, s.statisticValues));
-                changed = true;
-            }
-        }
-
-        // Rebuild originalSeriesCache preserving insertion order; rename the inner
-        // TimeSeriesData so its .getName() stays consistent with the cache key
-        if (originalSeriesCache.containsKey(oldName)) {
-            LinkedHashMap<String, TimeSeriesData> rebuilt = new LinkedHashMap<>();
-            for (Map.Entry<String, TimeSeriesData> e : originalSeriesCache.entrySet()) {
-                if (e.getKey().equals(oldName)) {
-                    rebuilt.put(newName, e.getValue().withName(newName));
-                } else {
-                    rebuilt.put(e.getKey(), e.getValue());
-                }
-            }
-            originalSeriesCache.clear();
-            originalSeriesCache.putAll(rebuilt);
-            changed = true;
-        }
-
-        if (oldName.equals(referenceSeries)) {
-            referenceSeries = newName;
-            changed = true;
-        }
-
-        if (changed) {
-            fireTableDataChanged();
-        }
     }
 
     /**
      * Removes a series from the table.
      */
-    public void removeSeries(String seriesName) {
-        seriesData.removeIf(stats -> stats.name.equals(seriesName));
-        originalSeriesCache.remove(seriesName);
+    public void removeSeries(SeriesRef ref) {
+        seriesData.removeIf(stats -> stats.ref.equals(ref));
+        originalSeriesCache.remove(ref);
 
         // Update reference if we removed it
-        if (seriesName.equals(referenceSeries)) {
-            referenceSeries = seriesData.isEmpty() ? null : seriesData.get(0).name;
+        if (ref.equals(referenceSeries)) {
+            referenceSeries = seriesData.isEmpty() ? null : seriesData.get(0).ref;
         }
 
         // If mask mode is ALL, removing a series changes the mask for all remaining series
@@ -258,11 +229,11 @@ public class StatsTableModel extends AbstractTableModel {
         // Rebuild seriesData from scratch based on originalSeriesCache
         List<SeriesStats> newSeriesData = new ArrayList<>();
 
-        for (String seriesName : originalSeriesCache.keySet()) {
-            TimeSeriesData originalData = originalSeriesCache.get(seriesName);
+        for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
+            TimeSeriesData originalData = entry.getValue();
             if (originalData != null) {
                 Map<String, String> newValues = computeStatistics(originalData);
-                newSeriesData.add(new SeriesStats(seriesName, newValues));
+                newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
             }
         }
 

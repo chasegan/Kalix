@@ -137,11 +137,13 @@ public class DataSet {
     }
     
     public int getSeriesCount() {
-        return series.size();
+        // Both storages are populated during the Phase 1 migration; the count is the
+        // union (callers don't care which API the data came in through).
+        return series.size() + seriesByRef.size();
     }
-    
+
     public boolean isEmpty() {
-        return series.isEmpty();
+        return series.isEmpty() && seriesByRef.isEmpty();
     }
     
     public boolean hasSeries(String name) {

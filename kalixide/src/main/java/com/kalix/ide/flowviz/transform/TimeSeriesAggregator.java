@@ -106,7 +106,7 @@ public class TimeSeriesAggregator {
         LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
         double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
 
-        return new TimeSeriesData(original.getName(), dateArray, valueArray);
+        return new TimeSeriesData(dateArray, valueArray);
     }
 
     /**
@@ -176,7 +176,7 @@ public class TimeSeriesAggregator {
         LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
         double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
 
-        return new TimeSeriesData(original.getName(), dateArray, valueArray);
+        return new TimeSeriesData(dateArray, valueArray);
     }
 
     /**
@@ -254,7 +254,7 @@ public class TimeSeriesAggregator {
         LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
         double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
 
-        return new TimeSeriesData(original.getName(), dateArray, valueArray);
+        return new TimeSeriesData(dateArray, valueArray);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.kalix.ide.flowviz.transform;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +32,7 @@ public class PlotTypeTransformer {
      * @param selectedSeriesKeys Ordered list of selected series (first is reference for DIFFERENCE types)
      * @return Transformed dataset
      */
-    public static DataSet transform(DataSet input, PlotType type, List<String> selectedSeriesKeys) {
+    public static DataSet transform(DataSet input, PlotType type, List<SeriesRef> selectedSeriesKeys) {
         // Validate inputs
         if (input == null || type == null) {
             logger.warn("Invalid input to transform: input={}, type={}", input, type);
@@ -64,10 +65,10 @@ public class PlotTypeTransformer {
      * Cumulative starts at the first value, so output has same length as input.
      * NaN values do not contribute to the running total but result in NaN at that position.
      */
-    private static DataSet transformCumulative(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformCumulative(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         DataSet result = new DataSet();
 
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -94,12 +95,11 @@ public class PlotTypeTransformer {
             // Create new series with cumulative values
             LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
             TimeSeriesData cumulativeSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 cumulativeValues
             );
 
-            result.addSeries(cumulativeSeries);
+            result.addSeries(seriesKey, cumulativeSeries);
         }
 
         return result;
@@ -111,7 +111,7 @@ public class PlotTypeTransformer {
      * Calculation: answer[i] = value[i] - reference[i]
      * Only exact timestamp matches are used. Missing values in either series result in NaN.
      */
-    private static DataSet transformDifference(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformDifference(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         if (selectedSeriesKeys.isEmpty()) {
             return new DataSet();
         }
@@ -119,7 +119,7 @@ public class PlotTypeTransformer {
         DataSet result = new DataSet();
 
         // Get reference series (first selected series)
-        String referenceKey = selectedSeriesKeys.get(0);
+        SeriesRef referenceKey = selectedSeriesKeys.get(0);
         TimeSeriesData referenceSeries = input.getSeries(referenceKey);
         if (referenceSeries == null) {
             logger.warn("Reference series not found: {}", referenceKey);
@@ -143,7 +143,7 @@ public class PlotTypeTransformer {
         }
 
         // Process each series
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -178,12 +178,11 @@ public class PlotTypeTransformer {
             // Create new series with difference values
             LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
             TimeSeriesData differenceSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 differences
             );
 
-            result.addSeries(differenceSeries);
+            result.addSeries(seriesKey, differenceSeries);
         }
 
         return result;
@@ -195,7 +194,7 @@ public class PlotTypeTransformer {
      * Calculation: cumsum(series[i] - reference[i])
      * Only exact timestamp matches are used. Missing values in either series result in NaN.
      */
-    private static DataSet transformCumulativeDifference(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformCumulativeDifference(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         if (selectedSeriesKeys.isEmpty()) {
             return new DataSet();
         }
@@ -203,7 +202,7 @@ public class PlotTypeTransformer {
         DataSet result = new DataSet();
 
         // Get reference series (first selected series)
-        String referenceKey = selectedSeriesKeys.get(0);
+        SeriesRef referenceKey = selectedSeriesKeys.get(0);
         TimeSeriesData referenceSeries = input.getSeries(referenceKey);
         if (referenceSeries == null) {
             logger.warn("Reference series not found: {}", referenceKey);
@@ -225,7 +224,7 @@ public class PlotTypeTransformer {
         }
 
         // Process each series
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -263,12 +262,11 @@ public class PlotTypeTransformer {
             // Create new series with cumulative difference values
             LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
             TimeSeriesData cumulativeDifferenceSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 cumulativeDifferences
             );
 
-            result.addSeries(cumulativeDifferenceSeries);
+            result.addSeries(seriesKey, cumulativeDifferenceSeries);
         }
 
         return result;
@@ -284,10 +282,10 @@ public class PlotTypeTransformer {
      * Plotting positions are stored as "fake timestamps" (percentile * 1,000,000) for rendering.
      * Each series is independent.
      */
-    private static DataSet transformExceedance(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformExceedance(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         DataSet result = new DataSet();
 
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -349,12 +347,11 @@ public class PlotTypeTransformer {
             // Create new series with sorted values and percentile timestamps
             LocalDateTime[] dateTimes = timestampsToDateTimes(percentileTimestamps);
             TimeSeriesData exceedanceSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 sortedValues
             );
 
-            result.addSeries(exceedanceSeries);
+            result.addSeries(seriesKey, exceedanceSeries);
         }
 
         return result;
@@ -375,10 +372,10 @@ public class PlotTypeTransformer {
      * Equivalent to cumsum(value - mean) for valid points. NaN values produce NaN output
      * without affecting the running total.
      */
-    private static DataSet transformResidualMass(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformResidualMass(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         DataSet result = new DataSet();
 
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -419,18 +416,17 @@ public class PlotTypeTransformer {
 
             LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
             TimeSeriesData residualSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 residualMass
             );
 
-            result.addSeries(residualSeries);
+            result.addSeries(seriesKey, residualSeries);
         }
 
         return result;
     }
 
-    private static DataSet transformDoubleMass(DataSet input, List<String> selectedSeriesKeys) {
+    private static DataSet transformDoubleMass(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         if (selectedSeriesKeys.isEmpty()) {
             return new DataSet();
         }
@@ -438,7 +434,7 @@ public class PlotTypeTransformer {
         DataSet result = new DataSet();
 
         // Get reference series (first selected series)
-        String referenceKey = selectedSeriesKeys.get(0);
+        SeriesRef referenceKey = selectedSeriesKeys.get(0);
         TimeSeriesData referenceSeries = input.getSeries(referenceKey);
         if (referenceSeries == null) {
             logger.warn("Reference series not found: {}", referenceKey);
@@ -458,7 +454,7 @@ public class PlotTypeTransformer {
         }
 
         // Process each series
-        for (String seriesKey : selectedSeriesKeys) {
+        for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
             if (series == null) {
                 continue;
@@ -499,12 +495,11 @@ public class PlotTypeTransformer {
             // Create new series with fake timestamps encoding cumulative reference on X
             LocalDateTime[] dateTimes = timestampsToDateTimes(fakeTimestamps);
             TimeSeriesData doubleMassSeries = new TimeSeriesData(
-                series.getName(),
                 dateTimes,
                 cumulativeY
             );
 
-            result.addSeries(doubleMassSeries);
+            result.addSeries(seriesKey, doubleMassSeries);
         }
 
         return result;

@@ -2,6 +2,8 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
@@ -82,7 +84,8 @@ public class VisualizationTabManager {
 
     private final JTabbedPane tabbedPane;
     private final DataSet sharedDataSet;           // Single source of truth for all tabs
-    private final Map<String, Color> sharedColorMap;  // Consistent colors across all tabs
+    private final Map<SeriesRef, Color> sharedColorMap;  // Consistent colors across all tabs
+    private LabelResolver labelResolver;  // injected by owner; passed down to PlotPanels
     private final List<TabInfo> tabs;
 
     // Tab change tracking
@@ -155,7 +158,7 @@ public class VisualizationTabManager {
         public boolean legendCollapsed = false;
 
         // Series selection from source tab (null = inherit from active tab)
-        public Set<String> selectedSeries = null;
+        public Set<SeriesRef> selectedSeries = null;
 
         // Source plot panel for history duplication (null = no history to copy)
         public PlotPanel sourcePlotPanel = null;
@@ -214,7 +217,7 @@ public class VisualizationTabManager {
         final StatsTableModel statsModel; // null for plot tabs
 
         // Per-tab selected series (plot tabs only). Preserves insertion order for legend consistency.
-        final Set<String> selectedSeries = new LinkedHashSet<>();
+        final Set<SeriesRef> selectedSeries = new LinkedHashSet<>();
 
         // Aggregation settings for stats tabs
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
@@ -235,7 +238,7 @@ public class VisualizationTabManager {
      * @param sharedDataSet The dataset shared across all tabs
      * @param sharedColorMap The color mapping shared across all tabs
      */
-    public VisualizationTabManager(DataSet sharedDataSet, Map<String, Color> sharedColorMap) {
+    public VisualizationTabManager(DataSet sharedDataSet, Map<SeriesRef, Color> sharedColorMap) {
         this.sharedDataSet = sharedDataSet;
         this.sharedColorMap = sharedColorMap;
         this.tabs = new ArrayList<>();
@@ -266,6 +269,20 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Sets the {@link LabelResolver} used by child PlotPanels (and indirectly by their
+     * legend / hover overlays) to project {@link SeriesRef}s to display strings. Called
+     * by the owning RunManager during initialization.
+     */
+    public void setLabelResolver(LabelResolver resolver) {
+        this.labelResolver = resolver;
+        for (TabInfo tab : tabs) {
+            if (tab.plotPanel != null) {
+                tab.plotPanel.setLabelResolver(resolver);
+            }
+        }
+    }
+
+    /**
      * Adds a new plot tab with default settings from preferences.
      *
      * @return The created PlotPanel
@@ -286,16 +303,19 @@ public class VisualizationTabManager {
         PlotPanel plotPanel = new PlotPanel();
         plotPanel.setDataSet(sharedDataSet);
         plotPanel.setSeriesColors(sharedColorMap);
+        if (labelResolver != null) {
+            plotPanel.setLabelResolver(labelResolver);
+        }
 
         // Use series from settings if provided, otherwise inherit from active tab
-        Set<String> inheritedSeries;
+        Set<SeriesRef> inheritedSeries;
         if (settings.selectedSeries != null) {
             inheritedSeries = new LinkedHashSet<>(settings.selectedSeries);
         } else {
             TabInfo activeTab = getActivePlotTab();
             inheritedSeries = activeTab != null
                 ? new LinkedHashSet<>(activeTab.selectedSeries)
-                : new LinkedHashSet<>(sharedDataSet.getSeriesNames());
+                : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
         }
         plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
 
@@ -310,10 +330,10 @@ public class VisualizationTabManager {
         }
 
         // Populate legend with inherited series
-        for (String seriesName : inheritedSeries) {
-            Color color = sharedColorMap.get(seriesName);
+        for (SeriesRef ref : inheritedSeries) {
+            Color color = sharedColorMap.get(ref);
             if (color != null) {
-                plotPanel.addLegendSeries(seriesName, color);
+                plotPanel.addLegendSeries(ref, color);
             }
         }
 
@@ -829,13 +849,13 @@ public class VisualizationTabManager {
             }
 
             tabInfo.statsModel.clear();
-            for (String seriesName : tabInfo.selectedSeries) {
-                TimeSeriesData originalSeries = dataSet.getSeries(seriesName);
+            for (SeriesRef ref : tabInfo.selectedSeries) {
+                TimeSeriesData originalSeries = dataSet.getSeries(ref);
                 if (originalSeries != null) {
                     TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                         originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
                     if (aggregatedSeries != null) {
-                        tabInfo.statsModel.addOrUpdateSeries(aggregatedSeries);
+                        tabInfo.statsModel.addOrUpdateSeries(ref, aggregatedSeries);
                     }
                 }
             }
@@ -1014,7 +1034,7 @@ public class VisualizationTabManager {
             if (activeTab != null && !activeTab.selectedSeries.isEmpty()) {
                 tabInfo.selectedSeries.addAll(activeTab.selectedSeries);
             } else {
-                tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesNames());
+                tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesRefs());
             }
         }
 
@@ -1375,7 +1395,7 @@ public class VisualizationTabManager {
     /**
      * Returns the selected series for the target tab, or empty set.
      */
-    public Set<String> getTargetTabSelectedSeries() {
+    public Set<SeriesRef> getTargetTabSelectedSeries() {
         TabInfo tab = getTargetTab();
         return tab != null ? Collections.unmodifiableSet(tab.selectedSeries) : Collections.emptySet();
     }
@@ -1391,7 +1411,7 @@ public class VisualizationTabManager {
     /**
      * Sets the selected series on the target tab. Updates visuals accordingly.
      */
-    public void setTargetTabSelectedSeries(Set<String> series) {
+    public void setTargetTabSelectedSeries(Set<SeriesRef> series) {
         TabInfo tab = getTargetTab();
         if (tab == null) return;
 
@@ -1401,10 +1421,10 @@ public class VisualizationTabManager {
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
             // Rebuild legend
             tab.plotPanel.clearLegend();
-            for (String seriesName : series) {
-                Color color = sharedColorMap.get(seriesName);
+            for (SeriesRef ref : series) {
+                Color color = sharedColorMap.get(ref);
                 if (color != null) {
-                    tab.plotPanel.addLegendSeries(seriesName, color);
+                    tab.plotPanel.addLegendSeries(ref, color);
                 }
             }
 
@@ -1423,13 +1443,13 @@ public class VisualizationTabManager {
      */
     private void rebuildStatsTab(TabInfo tab) {
         tab.statsModel.clear();
-        for (String seriesName : tab.selectedSeries) {
-            TimeSeriesData data = sharedDataSet.getSeries(seriesName);
+        for (SeriesRef ref : tab.selectedSeries) {
+            TimeSeriesData data = sharedDataSet.getSeries(ref);
             if (data != null) {
                 TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
                 if (aggregatedData != null) {
-                    tab.statsModel.addOrUpdateSeries(aggregatedData);
+                    tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
                 }
             }
         }
@@ -1438,8 +1458,8 @@ public class VisualizationTabManager {
     /**
      * Returns the union of selected series across all tabs.
      */
-    public Set<String> getAllSelectedSeriesAcrossTabs() {
-        Set<String> all = new HashSet<>();
+    public Set<SeriesRef> getAllSelectedSeriesAcrossTabs() {
+        Set<SeriesRef> all = new HashSet<>();
         for (TabInfo tab : tabs) {
             all.addAll(tab.selectedSeries);
         }
@@ -1471,10 +1491,10 @@ public class VisualizationTabManager {
 
                 // Rebuild legend to match
                 panel.clearLegend();
-                for (String seriesName : state.getVisibleSeries()) {
-                    Color color = sharedColorMap.get(seriesName);
+                for (SeriesRef ref : state.getVisibleSeries()) {
+                    Color color = sharedColorMap.get(ref);
                     if (color != null) {
-                        panel.addLegendSeries(seriesName, color);
+                        panel.addLegendSeries(ref, color);
                     }
                 }
                 break;
@@ -1487,53 +1507,16 @@ public class VisualizationTabManager {
         }
     }
 
-    /**
-     * Renames a series key from {@code oldKey} to {@code newKey} across every tab's
-     * {@code selectedSeries} (preserving insertion order), and renames it in every stats
-     * tab's model. Plot tabs that have the series selected also have their legend rebuilt
-     * so the new key is shown as the label.
-     *
-     * Callers are responsible for renaming the entry in the shared {@code DataSet} and in
-     * the shared color map *before* invoking this method, so that legend rebuild and any
-     * subsequent {@code refreshData} read the new key consistently.
-     */
-    public void renameSeriesAcrossTabs(String oldKey, String newKey) {
-        if (oldKey.equals(newKey)) return;
-
-        for (TabInfo tab : tabs) {
-            boolean tabHadKey = tab.selectedSeries.contains(oldKey);
-            if (tabHadKey) {
-                // Rebuild the set preserving order; swap oldKey → newKey at its position
-                Set<String> rebuilt = new LinkedHashSet<>(tab.selectedSeries.size());
-                for (String key : tab.selectedSeries) {
-                    rebuilt.add(key.equals(oldKey) ? newKey : key);
-                }
-                tab.selectedSeries.clear();
-                tab.selectedSeries.addAll(rebuilt);
-            }
-
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null && tabHadKey) {
-                // Rebuild the legend to reflect the new key as a label.
-                tab.plotPanel.clearLegend();
-                for (String key : tab.selectedSeries) {
-                    Color color = sharedColorMap.get(key);
-                    if (color != null) {
-                        tab.plotPanel.addLegendSeries(key, color);
-                    }
-                }
-            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                // Stats model owns its own data; rename unconditionally — no-op if absent.
-                tab.statsModel.renameSeries(oldKey, newKey);
-            }
-        }
-    }
+    // (renameSeriesAcrossTabs removed — identity is now SeriesRef-typed, which is stable
+    // across renames. The label projected by LabelResolver picks up the new name on the
+    // next render; no per-collection rewriting required.)
 
     /**
      * Checks whether any tab has the given series selected.
      */
-    public boolean isSeriesSelectedOnAnyTab(String seriesKey) {
+    public boolean isSeriesSelectedOnAnyTab(SeriesRef seriesRef) {
         for (TabInfo tab : tabs) {
-            if (tab.selectedSeries.contains(seriesKey)) {
+            if (tab.selectedSeries.contains(seriesRef)) {
                 return true;
             }
         }
@@ -1580,59 +1563,52 @@ public class VisualizationTabManager {
      * @param seriesName The name of the series
      * @param data The original (unaggregated) time series data
      */
-    public void updateSeriesInStatsTabsWithAggregation(String seriesName, TimeSeriesData data) {
+    public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(seriesName)) {
+                    && tab.selectedSeries.contains(ref)) {
                 TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
 
                 if (aggregatedData != null) {
-                    tab.statsModel.addOrUpdateSeries(aggregatedData);
+                    tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
                 }
             }
         }
     }
 
     /**
-     * Adds a loading series entry to all stats tabs.
-     *
-     * @param seriesName The name of the series being loaded
+     * Adds a loading series entry to all stats tabs that include the given ref.
      */
-    public void addLoadingSeriesInStatsTabs(String seriesName) {
+    public void addLoadingSeriesInStatsTabs(SeriesRef ref) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(seriesName)) {
-                tab.statsModel.addLoadingSeries(seriesName);
+                    && tab.selectedSeries.contains(ref)) {
+                tab.statsModel.addLoadingSeries(ref);
             }
         }
     }
 
     /**
-     * Adds an error series entry to all stats tabs.
-     *
-     * @param seriesName The name of the series
-     * @param errorMessage The error message
+     * Adds an error series entry to all stats tabs that include the given ref.
      */
-    public void addErrorSeriesInStatsTabs(String seriesName, String errorMessage) {
+    public void addErrorSeriesInStatsTabs(SeriesRef ref, String errorMessage) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(seriesName)) {
-                tab.statsModel.addErrorSeries(seriesName, errorMessage);
+                    && tab.selectedSeries.contains(ref)) {
+                tab.statsModel.addErrorSeries(ref, errorMessage);
             }
         }
     }
 
     /**
      * Removes a series from all stats tabs.
-     *
-     * @param seriesName The name of the series to remove
      */
-    public void removeSeriesFromStatsTabs(String seriesName) {
+    public void removeSeriesFromStatsTabs(SeriesRef ref) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                tab.selectedSeries.remove(seriesName);
-                tab.statsModel.removeSeries(seriesName);
+                tab.selectedSeries.remove(ref);
+                tab.statsModel.removeSeries(ref);
             }
         }
     }

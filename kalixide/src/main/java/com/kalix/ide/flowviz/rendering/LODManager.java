@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -68,34 +69,34 @@ public class LODManager {
         }
     }
     
-    public RenderStrategy determineRenderStrategy(TimeSeriesData series, ViewPort viewport) {
+    public RenderStrategy determineRenderStrategy(SeriesRef ref, TimeSeriesData series, ViewPort viewport) {
         // Get the visible data range
         TimeSeriesData.IndexRange indexRange = series.getIndexRange(
             viewport.getStartTimeMs(), viewport.getEndTimeMs());
-        
+
         if (indexRange.isEmpty()) {
             return new RenderStrategy(true, null, indexRange);
         }
-        
+
         // Calculate points per pixel
         int visiblePoints = indexRange.size();
         int plotWidth = viewport.getPlotWidth();
-        
+
         if (plotWidth <= 0) {
             return new RenderStrategy(true, null, indexRange);
         }
-        
+
         double pointsPerPixel = (double) visiblePoints / plotWidth;
-        
+
         // Use full resolution if density is low enough
         if (pointsPerPixel <= POINTS_PER_PIXEL_THRESHOLD) {
             return new RenderStrategy(true, null, indexRange);
         }
-        
+
         // Use LOD rendering - compute or retrieve cached LOD data
-        String cacheKey = generateCacheKey(series, viewport);
+        String cacheKey = generateCacheKey(ref, viewport);
         LODData lodData = lodCache.get(cacheKey);
-        
+
         if (lodData == null) {
             lodData = computeLODData(series, viewport, indexRange);
             // Cache with size limit to prevent memory issues
@@ -103,13 +104,15 @@ public class LODManager {
                 lodCache.put(cacheKey, lodData);
             }
         }
-        
+
         return new RenderStrategy(false, lodData, indexRange);
     }
-    
-    private String generateCacheKey(TimeSeriesData series, ViewPort viewport) {
+
+    private String generateCacheKey(SeriesRef ref, ViewPort viewport) {
+        // Refs have value equality (sealed records). Their .toString() is sufficient to
+        // produce a stable, collision-free cache key.
         return String.format("%s_%d_%d_%d_%d",
-            series.getName(),
+            ref,
             viewport.getStartTimeMs(),
             viewport.getEndTimeMs(),
             viewport.getPlotWidth(),

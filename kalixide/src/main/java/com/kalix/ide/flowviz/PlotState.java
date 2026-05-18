@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
@@ -13,10 +14,15 @@ import java.util.Objects;
 /**
  * Immutable snapshot of all user-facing plot state.
  * Used by {@link PlotStateHistory} for undo/redo navigation.
+ *
+ * <p>Identity in {@code visibleSeries} is carried as {@link SeriesRef}, not as a
+ * rendered label. This means undo restores the same logical series even if the run
+ * has since been renamed — the ref is stable across renames, so the snapshot remains
+ * coherent and {@code F2} (undo-after-rename) cannot occur.</p>
  */
 public final class PlotState {
 
-    private final List<String> visibleSeries;
+    private final List<SeriesRef> visibleSeries;
     private final AggregationPeriod aggregationPeriod;
     private final AggregationMethod aggregationMethod;
     private final PlotType plotType;
@@ -30,7 +36,7 @@ public final class PlotState {
     private final double minValue;
     private final double maxValue;
 
-    public PlotState(List<String> visibleSeries,
+    public PlotState(List<SeriesRef> visibleSeries,
                      AggregationPeriod aggregationPeriod,
                      AggregationMethod aggregationMethod,
                      PlotType plotType,
@@ -57,7 +63,7 @@ public final class PlotState {
     /**
      * Captures the current state from a PlotPanel's fields.
      */
-    public static PlotState capture(List<String> visibleSeries,
+    public static PlotState capture(List<SeriesRef> visibleSeries,
                                     AggregationPeriod aggregationPeriod,
                                     AggregationMethod aggregationMethod,
                                     PlotType plotType,
@@ -74,7 +80,7 @@ public final class PlotState {
             plotType, yAxisScale, maskMode, autoYMode, startTime, endTime, min, max);
     }
 
-    public List<String> getVisibleSeries() { return visibleSeries; }
+    public List<SeriesRef> getVisibleSeries() { return visibleSeries; }
     public AggregationPeriod getAggregationPeriod() { return aggregationPeriod; }
     public AggregationMethod getAggregationMethod() { return aggregationMethod; }
     public PlotType getPlotType() { return plotType; }
