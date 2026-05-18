@@ -169,9 +169,16 @@ public class RunManager extends JFrame {
     // lastRunInfo points to the most recently completed run
     // Used to resolve "[Last]" series to actual session data
     private RunInfoImpl lastRunInfo = null;
-    // Incremented each time "Last" changes. Async callbacks capture this value and discard
-    // responses if it has since changed, preventing stale data from overwriting fresh data.
-    private long lastRunGeneration = 0;
+    // Generation counter for "Last" run identity. Incremented inside updateLastRun() each time
+    // a new run becomes "Last". Async fetches for "[Last]" series capture this value at issue
+    // time and verify it has not changed before applying the result on the EDT. If the value
+    // has changed, the response belongs to a previous Last run and is discarded — the newer
+    // updateLastRun() has already issued (or will issue) a fetch for the correct data.
+    //
+    // Mutated only on the EDT (updateLastRun is invoked from session-event handlers via
+    // SwingUtilities.invokeLater). Marked volatile so future cross-thread reads see the
+    // current value; the increment is safe because it has a single writer thread.
+    private volatile long lastRunGeneration = 0;
     private DefaultMutableTreeNode lastRunChildNode = null;
     private final Map<String, Long> completionTimestamps = new HashMap<>();
     private long lastRunCompletionTime = 0L;
@@ -1069,20 +1076,34 @@ public class RunManager extends JFrame {
      *       CRITICAL because cache is keyed by kalixcliUid which persists across runs</li>
      *   <li>For each series ending with " [Last]" across all tabs:
      *     <ul>
-     *       <li>Removes old data from plot</li>
-     *       <li>Requests fresh data from the new run (async)</li>
-     *       <li>Callback adds new data and triggers plot refresh</li>
+     *       <li>Requests fresh data from the new run (sync if cached, async otherwise)</li>
+     *       <li>When data is ready, atomically replaces the existing pool entry via
+     *           {@link com.kalix.ide.flowviz.data.DataSet#addSeries} (which removes-then-adds
+     *           in a single EDT operation)</li>
      *     </ul>
      *   </li>
      * </ol>
      *
      * The cache clear happens unconditionally (even if no "[Last]" series are selected)
      * so that future selections will fetch fresh data.
+     *
+     * <h3>Atomic swap (no empty-plot gap)</h3>
+     * The previous Last's data is intentionally left in {@code plotDataSet} until the
+     * replacement arrives, then swapped in one EDT operation. Removing eagerly created an
+     * "empty plot during fetch" window and — if {@code isSeriesSelectedOnAnyTab} flipped to
+     * false before the response arrived — permanently lost the series from the pool. With
+     * the swap-on-arrival design, the user sees the prior data briefly, then the new data.
+     * The pool is also kept fresh regardless of selection state at response time, so the
+     * line 1302 "already in pool" short-circuit cannot serve stale data on reselection.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {
             return;
         }
+
+        // Capture the generation at issue time. All async fetches below carry this value so
+        // that responses arriving after a newer updateLastRun() can be detected and dropped.
+        final long capturedGeneration = lastRunGeneration;
 
         String newSessionKey = lastRunInfo.getSession().getSessionKey();
 
@@ -1101,29 +1122,46 @@ public class RunManager extends JFrame {
             return;
         }
 
-        // Refresh each "[Last]" series in the pool
+        boolean anySyncReplacement = false;
+
         for (String seriesKey : lastSeriesKeys) {
             String seriesName = extractSeriesName(seriesKey);
 
-            // Remove old data from pool
-            plotDataSet.removeSeries(seriesKey);
+            // Note: old data for this series stays in plotDataSet until the replacement is
+            // ready. addSeriesToPool below relies on DataSet.addSeries doing an atomic
+            // remove-then-add by name in a single EDT call.
 
-            // Check if we have cached data from the new Last run
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(newSessionKey, seriesName);
             if (cachedData != null) {
+                // Synchronous replacement — happens on EDT, no opportunity for a paint between
+                // the old data leaving and the new data arriving.
                 TimeSeriesData renamedData = renameTimeSeriesData(cachedData, seriesKey);
                 addSeriesToPool(renamedData);
                 tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
-            } else if (!timeSeriesRequestManager.isRequestInProgress(newSessionKey, seriesName)) {
+                anySyncReplacement = true;
+            } else {
+                // Async fetch. If a request for this series is already in flight (e.g. from a
+                // concurrent selection-change handler), requestTimeSeries returns the existing
+                // future and we attach a second callback to it — cheap and correct.
                 timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
-                            if (tabManager.isSeriesSelectedOnAnyTab(seriesKey)) {
-                                TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
-                                addSeriesToPool(renamedData);
-                                tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
+                            // Drop response if a newer run has become "Last" since this
+                            // request was issued. The newer updateLastRun() will have already
+                            // issued (or will issue) a fetch carrying the new generation.
+                            if (capturedGeneration != lastRunGeneration) {
+                                return;
+                            }
+                            // Always update the pool, even if no tab currently shows this
+                            // series. Otherwise the stale prior-Last data left in the pool
+                            // would be served by the line 1302 short-circuit on a later
+                            // re-selection.
+                            TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, seriesKey);
+                            addSeriesToPool(renamedData);
+                            tabManager.updateSeriesInStatsTabsWithAggregation(seriesKey, renamedData);
 
-                                // Refresh all tabs that show this series (don't reset zoom)
+                            // Only refresh tabs if something on screen needs to redraw.
+                            if (tabManager.isSeriesSelectedOnAnyTab(seriesKey)) {
                                 tabManager.updateAllTabs(false);
                             }
                         });
@@ -1138,8 +1176,13 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Refresh all tabs that show "[Last]" series (don't reset zoom)
-        tabManager.updateAllTabs(false);
+        // Refresh once after the synchronous work, only if any series was swapped now. Async
+        // callbacks refresh independently when their data arrives. Avoids the prior bug
+        // where this unconditional refresh fired before async data was ready, rebuilding
+        // displayDataSet with the series missing.
+        if (anySyncReplacement) {
+            tabManager.updateAllTabs(false);
+        }
     }
 
 
@@ -1363,11 +1406,23 @@ public class RunManager extends JFrame {
 
                 final List<String> capturedSeriesKeys = new ArrayList<>(seriesKeys);
                 final Set<String> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
+                // Captured at issue time so that on response we can detect whether the "Last"
+                // run resolved by this selection still points to the same underlying run.
+                // Only applied to series keys ending in " [Last]"; specific-run keys remain
+                // tied to their own RunInfo's session and are not generation-dependent.
+                final long capturedGeneration = lastRunGeneration;
 
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
+                            final boolean lastIsStale = capturedGeneration != lastRunGeneration;
                             for (String capturedSeriesKey : capturedSeriesKeys) {
+                                // Drop [Last] writes if Last has changed since this request
+                                // was issued — refreshLastSeries() for the new Last will fetch
+                                // the correct data.
+                                if (lastIsStale && capturedSeriesKey.endsWith(" [Last]")) {
+                                    continue;
+                                }
                                 // Check if series is still selected on the target tab
                                 if (capturedNewSelection.contains(capturedSeriesKey)) {
                                     TimeSeriesData renamedData = renameTimeSeriesData(timeSeriesData, capturedSeriesKey);
