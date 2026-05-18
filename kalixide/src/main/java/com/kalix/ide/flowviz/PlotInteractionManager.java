@@ -78,6 +78,7 @@ public class PlotInteractionManager {
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
+    private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
 
     // Tab creation callbacks (set by VisualizationTabManager after construction)
     private Runnable newPlotTabAction;
@@ -157,6 +158,15 @@ public class PlotInteractionManager {
      */
     public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
         this.plotTypeSupplier = plotTypeSupplier;
+    }
+
+    /**
+     * Supplies the {@link com.kalix.ide.flowviz.data.LabelResolver} used to project
+     * ref-keyed series to column headers when exporting CSV. May supply {@code null};
+     * the exporter falls back to {@code ref.toString()} in that case.
+     */
+    public void setLabelResolverSupplier(Supplier<com.kalix.ide.flowviz.data.LabelResolver> supplier) {
+        this.labelResolverSupplier = supplier;
     }
 
     /**
@@ -784,7 +794,9 @@ public class PlotInteractionManager {
             DataSet dataSet = dataSetSupplier.get();
             com.kalix.ide.flowviz.transform.PlotType plotType =
                 (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
-            TimeSeriesCsvExporter.export(dataSet, file, plotType);
+            com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+                (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
+            TimeSeriesCsvExporter.export(dataSet, file, plotType, labelResolver);
             JOptionPane.showMessageDialog(parentComponent,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",

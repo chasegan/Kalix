@@ -160,6 +160,9 @@ public class PlotPanel extends JPanel {
         // Setup plot type supplier for format-aware export
         plotInteractionManager.setPlotTypeSupplier(() -> plotType);
 
+        // Resolver for projecting ref-keyed series to column headers on CSV export.
+        plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
+
         setupMouseListeners();
     }
 

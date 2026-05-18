@@ -233,15 +233,22 @@ public class DataSet {
         return globalMaxValue - globalMinValue;
     }
     
-    // Statistics
+    // Statistics — both storages contribute during the Phase 1 migration; folds into a
+    // single stream when the legacy string-keyed storage is removed.
     public int getTotalPointCount() {
-        return series.stream().mapToInt(TimeSeriesData::getPointCount).sum();
+        int legacy = series.stream().mapToInt(TimeSeriesData::getPointCount).sum();
+        int ref = seriesByRef.values().stream().mapToInt(TimeSeriesData::getPointCount).sum();
+        return legacy + ref;
     }
-    
+
     public int getTotalValidPointCount() {
-        return series.stream()
+        int legacy = series.stream()
             .mapToInt(s -> s.getValidPointCount() != null ? s.getValidPointCount() : 0)
             .sum();
+        int ref = seriesByRef.values().stream()
+            .mapToInt(s -> s.getValidPointCount() != null ? s.getValidPointCount() : 0)
+            .sum();
+        return legacy + ref;
     }
     
     // Event listeners for UI updates

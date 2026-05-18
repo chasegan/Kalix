@@ -54,6 +54,11 @@ public class OptimisationPlotManager {
 
         // Initialize plot panel
         this.convergencePlot = new PlotPanel();
+        // Synthetic refs carry the human-readable base name directly; no run-name
+        // projection is needed.
+        this.convergencePlot.setLabelResolver(ref -> ref instanceof DatasetSeries d
+            ? d.baseName()
+            : String.valueOf(ref));
         this.convergencePlot.setDataSet(convergenceDataSet);
         this.convergencePlot.setXAxisType(XAxisType.COUNT); // Use COUNT x-axis for evaluation numbers
         this.convergencePlot.setYAxisScale(YAxisScale.LOG); // Use LOG scale for objective values

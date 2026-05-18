@@ -221,23 +221,6 @@ public class TimeSeriesData {
         
         return Math.max(0, Math.min(result, pointCount));
     }
-    
-    /**
-     * Returns a new TimeSeriesData with the same timestamps/values but a different name.
-     * Used when renaming series keys (e.g. after a run is renamed).
-     */
-    public TimeSeriesData withName(String newName) {
-        if (this.name.equals(newName)) {
-            return this;
-        }
-        LocalDateTime[] dateTimes = new LocalDateTime[pointCount];
-        for (int i = 0; i < pointCount; i++) {
-            dateTimes[i] = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamps[i]),
-                ZoneOffset.UTC);
-        }
-        return new TimeSeriesData(newName, dateTimes, values);
-    }
 
     // Getters
 

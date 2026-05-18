@@ -61,36 +61,49 @@ public class RunInfoImpl implements RunContextMenuManager.RunInfo {
     private final long runId;
     private final String runName;
     private final SessionManager.KalixSession session;
+    /**
+     * Distinguishes the singleton "Last" tree-node placeholder from a regular run that
+     * happens to be named "Last". Set only via {@link #lastAlias(SessionManager.KalixSession)};
+     * preserved across {@link #withName(String)}.
+     */
+    private final boolean isLastAlias;
 
     /**
      * Creates a new RunInfo instance. {@code RunInfoImpl} is immutable once constructed —
-     * renaming a run constructs a fresh instance via {@link com.kalix.ide.windows.RunManager#renameRun},
-     * which also propagates the new name to all dependent state (plot pool, color map,
-     * tab selections, stats models, outputs tree).
+     * renaming a run constructs a fresh instance via {@link com.kalix.ide.windows.RunManager#renameRun}.
      *
-     * <p>The constructor allocates a fresh {@link #getRunId() runId}; in the
-     * post-refactor world this is the durable internal handle used by all series
-     * identity ({@link com.kalix.ide.flowviz.data.RunSeries}). The propagation work
-     * done by {@code RunManager.renameRun} today disappears once collections are
-     * keyed by runId rather than by the rendered string.</p>
+     * <p>The constructor allocates a fresh {@link #getRunId() runId}; this is the durable
+     * internal handle used by all series identity ({@link com.kalix.ide.flowviz.data.RunSeries}).
+     * Rename operations preserve the runId so plotted data isn't orphaned.</p>
      *
      * @param runName The display name for this run
      * @param session The underlying Kalix session
      */
     public RunInfoImpl(String runName, SessionManager.KalixSession session) {
-        this(NEXT_RUN_ID.getAndIncrement(), runName, session);
+        this(NEXT_RUN_ID.getAndIncrement(), runName, session, false);
     }
 
     /**
-     * Internal constructor used by {@link #withName(String)} to construct a renamed
-     * instance that shares the same {@code runId} as the original. Direct callers
-     * should use {@link #RunInfoImpl(String, SessionManager.KalixSession)}, which
-     * allocates a fresh id.
+     * Constructs the "Last" tree-node placeholder. The returned instance has
+     * {@link #isLastAlias()} {@code true}, which is the structural marker used by
+     * {@link com.kalix.ide.windows.RunManager} to discriminate
+     * {@link com.kalix.ide.flowviz.data.LastSeries} vs {@link com.kalix.ide.flowviz.data.RunSeries}
+     * at ref-construction time (instead of string-comparing {@code runName}).
      */
-    private RunInfoImpl(long runId, String runName, SessionManager.KalixSession session) {
+    public static RunInfoImpl lastAlias(SessionManager.KalixSession session) {
+        return new RunInfoImpl(NEXT_RUN_ID.getAndIncrement(), "Last", session, true);
+    }
+
+    /**
+     * Internal constructor used by {@link #withName(String)} and {@link #lastAlias} to
+     * construct an instance with explicit runId / alias state.
+     */
+    private RunInfoImpl(long runId, String runName, SessionManager.KalixSession session,
+                        boolean isLastAlias) {
         this.runId = runId;
         this.runName = runName;
         this.session = session;
+        this.isLastAlias = isLastAlias;
     }
 
     /**
@@ -112,7 +125,16 @@ public class RunInfoImpl implements RunContextMenuManager.RunInfo {
         if (newName.equals(this.runName)) {
             return this;
         }
-        return new RunInfoImpl(this.runId, newName, this.session);
+        return new RunInfoImpl(this.runId, newName, this.session, this.isLastAlias);
+    }
+
+    /**
+     * Returns {@code true} for the singleton placeholder produced by
+     * {@link #lastAlias(SessionManager.KalixSession)}. Regular runs return {@code false},
+     * even if a user names one "Last" — identity is structural, not name-based.
+     */
+    public boolean isLastAlias() {
+        return isLastAlias;
     }
 
     @Override

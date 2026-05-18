@@ -1,5 +1,6 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.KalixTimeSeriesReader;
@@ -42,7 +43,7 @@ public class DatasetLoaderManager {
 
     // Dependencies
     private final JFrame parentFrame;
-    private final Map<String, TimeSeriesData> datasetSeriesCache;
+    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache;
     private final DefaultMutableTreeNode loadedDatasetsNode;
     private final DefaultTreeModel treeModel;
     private final Consumer<String> statusUpdater;
@@ -62,7 +63,7 @@ public class DatasetLoaderManager {
      */
     public DatasetLoaderManager(
             JFrame parentFrame,
-            Map<String, TimeSeriesData> datasetSeriesCache,
+            Map<DatasetSeries, TimeSeriesData> datasetSeriesCache,
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
             Consumer<String> statusUpdater,
@@ -340,8 +341,11 @@ public class DatasetLoaderManager {
                 series.getValues()
             );
 
-            // Store in cache (NOT in plotDataSet yet - added when plotted, like runs)
-            datasetSeriesCache.put(seriesName, namedSeries);
+            // Store in cache (NOT in plotDataSet yet - added when plotted, like runs).
+            // Key by DatasetSeries ref so the absolute path qualifies the entry — two
+            // files whose names sanitize to the same identifier are kept separate.
+            DatasetSeries ref = new DatasetSeries(csvFile.getAbsolutePath(), seriesName);
+            datasetSeriesCache.put(ref, namedSeries);
             seriesAdded++;
         }
 
@@ -457,8 +461,10 @@ public class DatasetLoaderManager {
                             series.getValues()
                         );
 
-                        // Store in cache (NOT in plotDataSet yet - added when plotted, like runs)
-                        datasetSeriesCache.put(seriesName, namedSeries);
+                        // Store in cache (NOT in plotDataSet yet - added when plotted, like runs).
+                        // Key by DatasetSeries ref so the absolute path qualifies the entry.
+                        DatasetSeries ref = new DatasetSeries(kaiFile.getAbsolutePath(), seriesName);
+                        datasetSeriesCache.put(ref, namedSeries);
                     }
 
                     // Add file to loaded datasets tree

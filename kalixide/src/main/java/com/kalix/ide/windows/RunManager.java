@@ -140,11 +140,15 @@ public class RunManager extends JFrame {
     private VisualizationTabManager tabManager;
     private DataSet plotDataSet;
 
-    // Cache for loaded dataset series (base names without display suffix)
-    // Key: base series name (e.g., "file.mydata_csv.column1")
+    // Cache for loaded dataset series.
+    // Key: DatasetSeries ref qualifying by absolute path + base name. The path qualifier
+    // matters because the legacy base name embeds only the sanitized filename (replaceAll
+    // "[^a-zA-Z0-9]" → "_"), so two distinct files whose names sanitize to the same
+    // identifier would collide on the bare base name. Keying by ref preserves their
+    // separate identity.
     // Value: TimeSeriesData
-    // This mirrors how runs store data in TimeSeriesRequestManager cache
-    private final Map<String, TimeSeriesData> datasetSeriesCache = new HashMap<>();
+    // Mirrors how runs store data in TimeSeriesRequestManager's cache.
+    private final Map<com.kalix.ide.flowviz.data.DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
 
     // Manager instances
     private OutputsTreeBuilder outputsTreeBuilder;
@@ -457,7 +461,9 @@ public class RunManager extends JFrame {
             timeseriesTree,
             timeseriesTreeModel,
             this::getSeriesNamesFromSource,  // Callback to get series names
-            NaturalSortUtils::naturalCompare  // Natural sorting callback
+            NaturalSortUtils::naturalCompare,  // Natural sorting callback
+            this::refForSource,                // Project (seriesName, source) to SeriesRef
+            labelResolver                      // Display label projection
         );
 
         // DatasetLoaderManager - handles dataset file loading
@@ -515,12 +521,12 @@ public class RunManager extends JFrame {
      * @return List of series names from this dataset
      */
     private List<String> getSeriesNamesFromDataset(DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
-        String sanitizedFilename = sanitizeToIdentifier(datasetInfo.fileName);
-        String prefix = "file." + sanitizedFilename + ".";
+        String datasetId = datasetInfo.file.getAbsolutePath();
 
         // Get series from cache (NOT plotDataSet) - mirrors how runs work
         return datasetSeriesCache.keySet().stream()
-            .filter(name -> name.startsWith(prefix))
+            .filter(ref -> ref.datasetId().equals(datasetId))
+            .map(com.kalix.ide.flowviz.data.DatasetSeries::baseName)
             .sorted(NaturalSortUtils::naturalCompare)
             .collect(java.util.stream.Collectors.toList());
     }
@@ -534,19 +540,6 @@ public class RunManager extends JFrame {
         refreshRuns();
     }
 
-    /**
-     * Sanitizes a string by converting all non-alphanumeric characters to underscores.
-     * Used for creating valid hierarchical series names from filenames and column headers.
-     *
-     * @param input The string to sanitize
-     * @return Sanitized string with only alphanumeric characters and underscores
-     */
-    private String sanitizeToIdentifier(String input) {
-        if (input == null) {
-            return "";
-        }
-        return input.replaceAll("[^a-zA-Z0-9]", "_");
-    }
 
     private void setupWindowListeners() {
         addWindowListener(new WindowAdapter() {
@@ -912,9 +905,11 @@ public class RunManager extends JFrame {
             isUpdatingSelection = true;
         }
 
-        // Create new child node
+        // Create new child node. The Last subtree's wrapper carries the structural
+        // "is last alias" marker via RunInfoImpl.lastAlias — seriesRefForLeaf consults
+        // that marker (not the runName string) to mint LastSeries refs.
         lastRunChildNode = new DefaultMutableTreeNode(
-            new RunInfoImpl("Last", newLastRun.getSession())
+            RunInfoImpl.lastAlias(newLastRun.getSession())
         );
 
         if (oldChildNode != null) {
@@ -992,14 +987,23 @@ public class RunManager extends JFrame {
      * Will move onto the leaf itself when OutputsTreeBuilder is migrated.
      */
     private com.kalix.ide.flowviz.data.SeriesRef seriesRefForLeaf(OutputsTreeBuilder.SeriesLeafNode leaf) {
-        if (leaf.source instanceof RunInfoImpl runInfo) {
-            if ("Last".equals(runInfo.getRunName())) {
-                return new com.kalix.ide.flowviz.data.LastSeries(leaf.seriesName);
+        return leaf.ref;
+    }
+
+    /**
+     * Constructs the {@link com.kalix.ide.flowviz.data.SeriesRef} for a (seriesName, source)
+     * pair. Used by {@link OutputsTreeBuilder} when building leaves and parents — the
+     * resulting ref is cached on the leaf so subsequent lookups don't re-project.
+     */
+    private com.kalix.ide.flowviz.data.SeriesRef refForSource(String seriesName, Object source) {
+        if (source instanceof RunInfoImpl runInfo) {
+            if (runInfo.isLastAlias()) {
+                return new com.kalix.ide.flowviz.data.LastSeries(seriesName);
             }
-            return new com.kalix.ide.flowviz.data.RunSeries(runInfo.getRunId(), leaf.seriesName);
+            return new com.kalix.ide.flowviz.data.RunSeries(runInfo.getRunId(), seriesName);
         }
-        if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
-            return new com.kalix.ide.flowviz.data.DatasetSeries(info.file.getAbsolutePath(), leaf.seriesName);
+        if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
+            return new com.kalix.ide.flowviz.data.DatasetSeries(info.file.getAbsolutePath(), seriesName);
         }
         return null;
     }
@@ -1102,7 +1106,7 @@ public class RunManager extends JFrame {
      * If the run is "Last", returns the session of the actual last completed run.
      */
     private SessionManager.KalixSession resolveRunInfoSession(RunInfoImpl runInfo) {
-        if ("Last".equals(runInfo.getRunName()) && lastRunInfo != null) {
+        if (runInfo.isLastAlias() && lastRunInfo != null) {
             return lastRunInfo.getSession();
         }
         return runInfo.getSession();
@@ -1112,19 +1116,22 @@ public class RunManager extends JFrame {
     // Identity is the typed SeriesRef; baseName comes from ref.baseName().
 
     /**
-     * Renames a run and propagates the new name across every place a series key derived
-     * from its old name is held: the shared {@link #plotDataSet}, the color map, every
-     * tab's {@code selectedSeries}, every stats model, and the outputs tree. Tree node
-     * user objects are swapped to a fresh {@link RunInfoImpl} so the run's identity is
-     * immutable once observed.
+     * Renames a run. Series identity in the pool, color map, tab selections, stats models,
+     * and undo history is the runId on {@link com.kalix.ide.flowviz.data.RunSeries}, which
+     * is preserved by {@link RunInfoImpl#withName} — no data structures need propagation.
+     * The tree node's user object is swapped to a fresh {@link RunInfoImpl} carrying the
+     * same runId, and the outputs tree is rebuilt so leaf labels re-render via the new
+     * name; the {@link com.kalix.ide.flowviz.data.LabelResolver} reprojects every other
+     * surface on the next paint.
      *
      * <p>Validates the new name on entry. Returns {@code null} on success, or a
      * user-facing error string on rejection. EDT-only.</p>
      *
-     * <p>The reserved name {@code "Last"} is rejected: the Last child node is an alias
-     * over whichever run completed most recently, and {@code refreshLastSeries} matches
-     * series keys by the literal {@code " [Last]"} suffix. Allowing a user-renamed run
-     * to share that token would silently corrupt its plotted data on the next completion.</p>
+     * <p>The reserved name {@code "Last"} is rejected for display-disambiguation only:
+     * series identity is structural ({@code RunInfoImpl.isLastAlias()} distinguishes the
+     * placeholder from user runs), so a user-named "Last" run wouldn't corrupt data —
+     * but its rendered label {@code "<base> [Last]"} would be indistinguishable from the
+     * actual {@code LastSeries} alias, which is a UX hazard.</p>
      */
     public String renameRun(RunContextMenuManager.RunInfo oldRunInfoIface, String newName) {
         if (!(oldRunInfoIface instanceof RunInfoImpl oldRunInfo)) {
@@ -1552,19 +1559,17 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Fetch dataset series into the pool. The dataset cache is keyed by the column's
-        // base name (the legacy string). We look up the data there and store it in the
-        // pool under the ref.
+        // Fetch dataset series into the pool. The dataset cache is keyed by the
+        // DatasetSeries ref (absolutePath + baseName); we already have that ref.
         for (com.kalix.ide.flowviz.data.SeriesRef ref : datasetRefs) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = refToLeaf.get(ref);
-            if (leaf == null) continue;
+            if (!(ref instanceof com.kalix.ide.flowviz.data.DatasetSeries datasetRef)) continue;
 
-            TimeSeriesData cachedData = datasetSeriesCache.get(leaf.seriesName);
+            TimeSeriesData cachedData = datasetSeriesCache.get(datasetRef);
             if (cachedData != null) {
                 addSeriesToPool(ref, cachedData);
                 tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
             } else {
-                logger.warn("Dataset series not found in cache: " + leaf.seriesName);
+                logger.warn("Dataset series not found in cache: {}", datasetRef);
                 tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
             }
         }

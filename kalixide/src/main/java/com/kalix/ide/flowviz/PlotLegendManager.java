@@ -120,6 +120,22 @@ public class PlotLegendManager {
         return labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
     }
 
+    private String sourceLabel(SeriesRef ref) {
+        return labelResolver != null ? labelResolver.sourceLabel(ref) : "";
+    }
+
+    /**
+     * Drops everything before and including the first {@code "."} in {@code baseName}.
+     * If no dot is present (or it's the last character), returns the input unchanged.
+     */
+    private static String dropBasePrefix(String baseName) {
+        int firstDot = baseName.indexOf('.');
+        if (firstDot >= 0 && firstDot < baseName.length() - 1) {
+            return baseName.substring(firstDot + 1);
+        }
+        return baseName;
+    }
+
     /**
      * Adds a series to the legend.
      */
@@ -144,45 +160,30 @@ public class PlotLegendManager {
     }
 
     /**
-     * Transforms a series name based on the current display mode.
-     * FULL_NAME: Full name - "node.my_node_1.rainfall [Run_1]"
-     * DROP_PREFIX: Drop prefix up to first "." - "my_node_1.rainfall [Run_1]"
-     * DROP_PREFIX_AND_RUN: Drop prefix and run label - "my_node_1.rainfall"
+     * Projects a {@link SeriesRef} to the legend's display string under the current
+     * {@link #displayMode}. Builds the label from {@link SeriesRef#baseName()} plus the
+     * resolver's {@link LabelResolver#sourceLabel} so the various modes don't have to
+     * parse the {@code labelFor} output.
+     * <ul>
+     *   <li>FULL_NAME: {@code "node.my_node_1.rainfall [Run_1]"}</li>
+     *   <li>DROP_PREFIX: {@code "my_node_1.rainfall [Run_1]"}</li>
+     *   <li>DROP_PREFIX_AND_RUN: {@code "my_node_1.rainfall"}</li>
+     * </ul>
      */
-    private String transformName(String fullName) {
+    private String displayLabel(SeriesRef ref) {
+        String base = ref.baseName();
         switch (displayMode) {
             case FULL_NAME:
-                // Full name, no transformation
-                return fullName;
-
-            case DROP_PREFIX:
-                // Drop prefix up to and including first "."
-                int firstDot = fullName.indexOf('.');
-                if (firstDot >= 0 && firstDot < fullName.length() - 1) {
-                    return fullName.substring(firstDot + 1);
-                }
-                return fullName;
-
+                return labelFor(ref);
+            case DROP_PREFIX: {
+                String source = sourceLabel(ref);
+                String prefixDropped = dropBasePrefix(base);
+                return source.isEmpty() ? prefixDropped : prefixDropped + " [" + source + "]";
+            }
             case DROP_PREFIX_AND_RUN:
-                // Drop prefix AND run label
-                String nameWithoutPrefix = fullName;
-
-                // First, drop prefix up to and including first "."
-                int dot = nameWithoutPrefix.indexOf('.');
-                if (dot >= 0 && dot < nameWithoutPrefix.length() - 1) {
-                    nameWithoutPrefix = nameWithoutPrefix.substring(dot + 1);
-                }
-
-                // Then, drop run label if it exists (e.g., " [Run_1]")
-                int bracketStart = nameWithoutPrefix.lastIndexOf(" [");
-                if (bracketStart > 0 && nameWithoutPrefix.endsWith("]")) {
-                    nameWithoutPrefix = nameWithoutPrefix.substring(0, bracketStart);
-                }
-
-                return nameWithoutPrefix;
-
+                return dropBasePrefix(base);
             default:
-                return fullName;
+                return labelFor(ref);
         }
     }
 
@@ -399,9 +400,8 @@ public class PlotLegendManager {
             g.setFont(new Font("Dialog", Font.PLAIN, 10));
             int nameX = x + PADDING + LINE_SAMPLE_WIDTH + 6;
 
-            // Project ref → label at render time, then transform + truncate.
-            String fullLabel = labelFor(entry.ref);
-            String transformedName = transformName(fullLabel);
+            // Project ref → display label (display-mode aware) at render time, then truncate.
+            String transformedName = displayLabel(entry.ref);
             String displayName = truncateText(g, transformedName, width - (PADDING * 2 + LINE_SAMPLE_WIDTH + 6));
             g.drawString(displayName, nameX, entryY + 14);
 
@@ -441,8 +441,8 @@ public class PlotLegendManager {
         FontMetrics nameFm = g.getFontMetrics(new Font("Dialog", Font.PLAIN, 10));
 
         for (LegendEntry entry : entries) {
-            // Use transformed label for width calculation to match displayed text
-            String displayedName = transformName(labelFor(entry.ref));
+            // Use display label (display-mode aware) for width calculation to match displayed text
+            String displayedName = displayLabel(entry.ref);
             int nameWidth = nameFm.stringWidth(displayedName);
             int totalWidth = PADDING + LINE_SAMPLE_WIDTH + 6 + nameWidth + PADDING;
             maxWidth = Math.max(maxWidth, totalWidth);

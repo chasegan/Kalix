@@ -24,4 +24,18 @@ public interface LabelResolver {
      * cache index, or comparison target.
      */
     String labelFor(SeriesRef ref);
+
+    /**
+     * Returns just the source-identifier portion of the label — the text that would
+     * appear inside the brackets in {@link #labelFor(SeriesRef)} (e.g. {@code "Run_1"},
+     * {@code "Last"}, {@code "mydata.csv"}), with no brackets. Used by display modes
+     * that want to assemble a custom label format from {@link SeriesRef#baseName()} and
+     * the source identifier without parsing the rendered {@code labelFor} string.
+     *
+     * <p>Default returns an empty string, suitable for resolvers that don't distinguish
+     * a source.</p>
+     */
+    default String sourceLabel(SeriesRef ref) {
+        return "";
+    }
 }

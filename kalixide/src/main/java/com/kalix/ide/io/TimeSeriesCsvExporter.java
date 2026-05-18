@@ -1,6 +1,8 @@
 package com.kalix.ide.io;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.utils.TimeFormatUtil;
@@ -8,6 +10,8 @@ import com.kalix.ide.utils.TimeFormatUtil;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -71,7 +75,7 @@ public class TimeSeriesCsvExporter {
      * @see #exportDataToCsv(DataSet, File, PlotType)
      */
     public static void export(DataSet dataSet, File outputFile) throws IOException {
-        export(dataSet, outputFile, null);
+        export(dataSet, outputFile, null, null);
     }
 
     /**
@@ -87,6 +91,28 @@ public class TimeSeriesCsvExporter {
      * @throws IllegalArgumentException if dataSet is null or empty
      */
     public static void export(DataSet dataSet, File outputFile, PlotType plotType) throws IOException {
+        export(dataSet, outputFile, plotType, null);
+    }
+
+    /**
+     * Exports a dataset to a CSV file, with plot-type awareness and an optional
+     * {@link LabelResolver} for projecting ref-keyed series identity to column headers.
+     *
+     * <p>The dataset may carry data under either the legacy named-series API or the
+     * ref-keyed API (or both during the migration). Ref-keyed series get their column
+     * header via {@code labelResolver.labelFor(ref)} when a resolver is supplied,
+     * otherwise from {@code ref.toString()}. Legacy named series use their {@code name}
+     * field.</p>
+     *
+     * @param dataSet the dataset to export; must not be null
+     * @param outputFile the target CSV file; will be created or overwritten
+     * @param plotType the plot type (null or VALUES for standard temporal export)
+     * @param labelResolver projects {@link SeriesRef} → column header; may be null
+     * @throws IOException if an I/O error occurs while writing the file
+     * @throws IllegalArgumentException if dataSet is null or empty
+     */
+    public static void export(DataSet dataSet, File outputFile, PlotType plotType,
+                              LabelResolver labelResolver) throws IOException {
         if (dataSet == null) {
             throw new IllegalArgumentException("DataSet cannot be null");
         }
@@ -97,7 +123,7 @@ public class TimeSeriesCsvExporter {
             throw new IllegalArgumentException("Output file cannot be null");
         }
 
-        exportDataToCsv(dataSet, outputFile, plotType);
+        exportDataToCsv(dataSet, outputFile, plotType, labelResolver);
     }
 
     /**
@@ -113,11 +139,27 @@ public class TimeSeriesCsvExporter {
      * @param plotType the plot type (null for default behavior)
      * @throws IOException if writing fails
      */
-    private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType) throws IOException {
-        List<TimeSeriesData> allSeries = dataSet.getAllSeries();
-        if (allSeries.isEmpty()) {
+    private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType,
+                                        LabelResolver labelResolver) throws IOException {
+        // Build (header → data) pairs covering both storages. Ref-keyed entries come
+        // first so they preserve insertion order from the pool; legacy named entries
+        // are appended only if they don't duplicate a label already produced.
+        LinkedHashMap<String, TimeSeriesData> labeled = new LinkedHashMap<>();
+        for (SeriesRef ref : dataSet.getSeriesRefs()) {
+            TimeSeriesData data = dataSet.getSeries(ref);
+            if (data == null) continue;
+            String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
+            labeled.put(label, data);
+        }
+        for (TimeSeriesData s : dataSet.getAllSeries()) {
+            labeled.putIfAbsent(s.getName(), s);
+        }
+        if (labeled.isEmpty()) {
             return;
         }
+
+        List<String> headers = new ArrayList<>(labeled.keySet());
+        List<TimeSeriesData> allSeries = new ArrayList<>(labeled.values());
 
         // Collect all unique timestamps across all series
         Set<Long> allTimestamps = collectAllTimestamps(allSeries);
@@ -130,7 +172,7 @@ public class TimeSeriesCsvExporter {
         long stepSeconds = inferStepSeconds(allSeries);
 
         try (FileWriter writer = new FileWriter(file)) {
-            writeHeader(writer, allSeries, isExceedance);
+            writeHeader(writer, headers, isExceedance);
             writeDataRows(writer, allSeries, allTimestamps, isExceedance, stepSeconds);
         }
     }
@@ -174,12 +216,12 @@ public class TimeSeriesCsvExporter {
      * @param isExceedance true if this is exceedance data
      * @throws IOException if writing fails
      */
-    private static void writeHeader(FileWriter writer, List<TimeSeriesData> allSeries, boolean isExceedance)
+    private static void writeHeader(FileWriter writer, List<String> headers, boolean isExceedance)
             throws IOException {
         writer.write(isExceedance ? "Percentile" : "Datetime");
-        for (TimeSeriesData series : allSeries) {
+        for (String header : headers) {
             writer.write(",");
-            writer.write(escapeCsvField(series.getName()));
+            writer.write(escapeCsvField(header));
         }
         writer.write("\n");
     }

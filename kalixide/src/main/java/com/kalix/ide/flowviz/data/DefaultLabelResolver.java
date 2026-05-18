@@ -29,13 +29,18 @@ public final class DefaultLabelResolver implements LabelResolver {
 
     @Override
     public String labelFor(SeriesRef ref) {
+        return ref.baseName() + " [" + sourceLabel(ref) + "]";
+    }
+
+    @Override
+    public String sourceLabel(SeriesRef ref) {
         return switch (ref) {
             case RunSeries r -> {
                 String runName = runNameLookup.apply(r.runId());
-                yield r.baseName() + " [" + (runName != null ? runName : "?") + "]";
+                yield runName != null ? runName : "?";
             }
-            case LastSeries l -> l.baseName() + " [Last]";
-            case DatasetSeries d -> d.baseName() + " [" + new File(d.datasetId()).getName() + "]";
+            case LastSeries l -> "Last";
+            case DatasetSeries d -> new File(d.datasetId()).getName();
         };
     }
 }

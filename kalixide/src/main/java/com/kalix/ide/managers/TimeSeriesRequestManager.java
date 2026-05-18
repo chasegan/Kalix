@@ -374,6 +374,10 @@ public class TimeSeriesRequestManager {
      * Decode a base64-encoded Gorilla-compressed timeseries (kaz format) into TimeSeriesData.
      * The compressed bitstream carries the timestep, count, and per-point timestamps
      * (Unix seconds), so no additional metadata is needed.
+     *
+     * <p>The {@code seriesName} argument is retained for diagnostic context only — it is
+     * not stored on the returned {@link TimeSeriesData}. Identity in the ref-keyed pool
+     * comes from the {@link com.kalix.ide.flowviz.data.SeriesRef} the caller writes under.</p>
      */
     static TimeSeriesData decodeKazPayload(String seriesName, String base64Data) throws java.io.IOException {
         // Constructor's timestep arg is only used by the encoder; decoder reads it from the bitstream.
@@ -391,12 +395,16 @@ public class TimeSeriesRequestManager {
             dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
             values[i] = p.value;
         }
-        return new TimeSeriesData(seriesName, dateTimes, values);
+        return new TimeSeriesData(dateTimes, values);
     }
 
     /**
      * Decode a CSV-format timeseries payload into TimeSeriesData.
      * Format: "start_timestamp,timestep_seconds,value1,value2,..."
+     *
+     * <p>The {@code seriesName} argument is retained for diagnostic context only — it is
+     * not stored on the returned {@link TimeSeriesData}. Identity in the ref-keyed pool
+     * comes from the {@link com.kalix.ide.flowviz.data.SeriesRef} the caller writes under.</p>
      */
     static TimeSeriesData decodeCsvPayload(String seriesName, String dataString) {
         String[] parts = dataString.split(",");
@@ -420,6 +428,6 @@ public class TimeSeriesRequestManager {
                 values[i] = Double.NaN;
             }
         }
-        return new TimeSeriesData(seriesName, dateTimes, values);
+        return new TimeSeriesData(dateTimes, values);
     }
 }

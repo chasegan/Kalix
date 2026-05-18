@@ -115,6 +115,12 @@ public class FlowVizWindow extends JFrame {
     
     private void initializeComponents() {
         plotPanel = new PlotPanel();
+        // FlowVizWindow only ever mints DatasetSeries refs (via refFor); the baseName
+        // already encodes "filename: SeriesName" from the loader, so projecting it back
+        // to a label is just the baseName — adding " [filename.csv]" would be redundant.
+        plotPanel.setLabelResolver(ref -> ref instanceof com.kalix.ide.flowviz.data.DatasetSeries d
+            ? d.baseName()
+            : String.valueOf(ref));
         // Auto-Y mode and precision will be initialized by action manager
         plotPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
         plotPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());

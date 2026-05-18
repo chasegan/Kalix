@@ -30,7 +30,6 @@ class TimeSeriesRequestManagerKazTest {
 
         TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("test.series", b64);
 
-        assertEquals("test.series", decoded.getName());
         assertEquals(expected.length, decoded.getValues().length);
         for (int i = 0; i < expected.length; i++) {
             assertEquals(expected[i], decoded.getValues()[i], 0.0,

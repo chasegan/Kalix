@@ -1,5 +1,7 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +12,7 @@ import javax.swing.tree.TreePath;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Builds and updates the timeseries tree (left-bottom panel) in RunManager.
@@ -58,6 +61,8 @@ public class OutputsTreeBuilder {
     // Dependencies (callbacks to RunManager)
     private final Function<Object, List<String>> getSeriesNamesCallback;  // Gets series from RunInfo or LoadedDatasetInfo
     private final BiFunction<String, String, Integer> naturalCompareCallback;  // Natural sorting function
+    private final BiFunction<String, Object, SeriesRef> refForSource;  // (seriesName, source) → SeriesRef
+    private final LabelResolver labelResolver;  // Projects refs to display labels
 
     // Filter state
     private String filterText = "";
@@ -75,11 +80,15 @@ public class OutputsTreeBuilder {
             JTree timeseriesTree,
             DefaultTreeModel timeseriesTreeModel,
             Function<Object, List<String>> getSeriesNamesCallback,
-            BiFunction<String, String, Integer> naturalCompareCallback) {
+            BiFunction<String, String, Integer> naturalCompareCallback,
+            BiFunction<String, Object, SeriesRef> refForSource,
+            LabelResolver labelResolver) {
         this.timeseriesTree = timeseriesTree;
         this.timeseriesTreeModel = timeseriesTreeModel;
         this.getSeriesNamesCallback = getSeriesNamesCallback;
         this.naturalCompareCallback = naturalCompareCallback;
+        this.refForSource = refForSource;
+        this.labelResolver = labelResolver;
     }
 
     /**
@@ -503,93 +512,74 @@ public class OutputsTreeBuilder {
     // ========== Inner Classes ==========
 
     /**
-     * Represents a leaf node that is a plottable series from a specific source (run or dataset).
+     * Extracts the last dot-delimited segment from {@code seriesName} (e.g. {@code "ds_1"}
+     * from {@code "node.node9.ds_1"}). Returns the input unchanged if no dot is present.
      */
-    public static class SeriesLeafNode {
+    private static String lastSegmentOf(String seriesName) {
+        return seriesName.contains(".")
+            ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
+            : seriesName;
+    }
+
+    /**
+     * Represents a leaf node that is a plottable series from a specific source (run or dataset).
+     *
+     * <p>Non-static so it can read {@link OutputsTreeBuilder#labelResolver} from the enclosing
+     * builder. Display labels are projected via the resolver (so renames are reflected
+     * automatically); {@link #source} remains for callers that still need the original
+     * runtime object (e.g. session lookup for run series).</p>
+     */
+    public class SeriesLeafNode {
         public final String seriesName;
         public final Object source;  // The source object (RunInfo, LoadedDatasetInfo, etc.)
         public final boolean showSeriesName;  // If true, show "ds_1 [Run_1]", else just "Run_1"
+        public final SeriesRef ref;  // Stable identity; consumed by RunManager and the pool
 
         public SeriesLeafNode(String seriesName, Object source, boolean showSeriesName) {
             this.seriesName = seriesName;
             this.source = source;
             this.showSeriesName = showSeriesName;
+            this.ref = refForSource.apply(seriesName, source);
         }
 
         @Override
         public String toString() {
-            String sourceName = getSourceName(source);
-
+            String sourceName = labelResolver.sourceLabel(ref);
             if (showSeriesName) {
                 // Standalone leaf: show "ds_1 [Run_1]" or "ds_1 [data.csv]"
-                String lastSegment = seriesName.contains(".")
-                    ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
-                    : seriesName;
-                return lastSegment + " [" + sourceName + "]";
-            } else {
-                // Child of parent node: just show "Run_1" or "data.csv"
-                return sourceName;
+                return lastSegmentOf(seriesName) + " [" + sourceName + "]";
             }
-        }
-
-        private String getSourceName(Object source) {
-            // Use reflection to get the name field, works for any source type with a name field
-            try {
-                var nameField = source.getClass().getField("runName");
-                return (String) nameField.get(source);
-            } catch (NoSuchFieldException e) {
-                try {
-                    var nameField = source.getClass().getField("fileName");
-                    return (String) nameField.get(source);
-                } catch (NoSuchFieldException | IllegalAccessException ex) {
-                    return source.toString();
-                }
-            } catch (IllegalAccessException e) {
-                return source.toString();
-            }
+            // Child of parent node: just show "Run_1" or "data.csv"
+            return sourceName;
         }
     }
 
     /**
      * Represents a parent node for a series available in multiple sources (runs and/or datasets).
+     *
+     * <p>Non-static so it can read {@link OutputsTreeBuilder#labelResolver} from the enclosing
+     * builder. The per-source refs are pre-computed so the display projection is just a
+     * map over {@link LabelResolver#sourceLabel} — no reflection, no string parsing.</p>
      */
-    public static class SeriesParentNode {
+    public class SeriesParentNode {
         public final String seriesName;
         public final List<Object> sourcesWithSeries;  // List of source objects
+        public final List<SeriesRef> refs;  // Refs per source, in the same order
 
         public SeriesParentNode(String seriesName, List<Object> sourcesWithSeries) {
             this.seriesName = seriesName;
             this.sourcesWithSeries = sourcesWithSeries;
+            this.refs = sourcesWithSeries.stream()
+                .map(s -> refForSource.apply(seriesName, s))
+                .collect(Collectors.toList());
         }
 
         @Override
         public String toString() {
-            // Extract just the last segment of the series name (e.g., "ds_1" from "node.node9.ds_1")
-            String lastSegment = seriesName.contains(".")
-                ? seriesName.substring(seriesName.lastIndexOf('.') + 1)
-                : seriesName;
-
-            String[] sourceLabels = sourcesWithSeries.stream()
-                .map(this::getSourceName)
-                .toArray(String[]::new);
-            return lastSegment + " [" + String.join(", ", sourceLabels) + "]";
-        }
-
-        private String getSourceName(Object source) {
-            // Use reflection to get the name field, works for any source type
-            try {
-                var nameField = source.getClass().getField("runName");
-                return (String) nameField.get(source);
-            } catch (NoSuchFieldException e) {
-                try {
-                    var nameField = source.getClass().getField("fileName");
-                    return (String) nameField.get(source);
-                } catch (NoSuchFieldException | IllegalAccessException ex) {
-                    return source.toString();
-                }
-            } catch (IllegalAccessException e) {
-                return source.toString();
-            }
+            String joined = refs.stream()
+                .map(labelResolver::sourceLabel)
+                .collect(Collectors.joining(", "));
+            return lastSegmentOf(seriesName) + " [" + joined + "]";
         }
     }
 }
