@@ -975,11 +975,11 @@ public class PlotPanel extends JPanel {
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
                 allSeries.add(aggregatedDataSet.getSeries(ref));
             }
-            TimeSeriesData mask = TimeSeriesMasker.createAllMask(allSeries);
+            TimeSeriesMasker.Mask mask = TimeSeriesMasker.createAllMask(allSeries);
 
             DataSet maskedDataSet = new DataSet();
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
-                TimeSeriesData masked = TimeSeriesMasker.applyMask(aggregatedDataSet.getSeries(ref), mask);
+                TimeSeriesData masked = mask.apply(aggregatedDataSet.getSeries(ref));
                 maskedDataSet.addSeries(ref, masked);
             }
             aggregatedDataSet = maskedDataSet;

@@ -165,14 +165,30 @@ public class StatsTableModel extends AbstractTableModel {
         if (maskMode == MaskMode.ALL) {
             recomputeAllStatistics();
         } else {
-            // For EACH or NONE modes, only this series needs updating
-            Map<String, String> statisticValues = computeStatistics(data);
+            // For EACH or NONE modes, only this series needs updating (no ALL mask).
+            Map<String, String> statisticValues = computeStatistics(data, null);
 
             // Remove existing entry if present
             seriesData.removeIf(stats -> stats.ref.equals(ref));
             seriesData.add(new SeriesStats(ref, statisticValues));
             fireTableDataChanged();
         }
+    }
+
+    /**
+     * Replaces the entire table contents with the given series and recomputes statistics
+     * <em>once</em>. Use this instead of {@link #clear()} followed by repeated
+     * {@link #addOrUpdateSeries} when all series are known up front — the per-add path
+     * triggers a full recompute on every call, which is O(series²) for a batch.
+     *
+     * <p>Insertion order of {@code series} becomes the table row order; the first entry
+     * becomes the reference series for bivariate statistics.</p>
+     */
+    public void setSeries(LinkedHashMap<SeriesRef, TimeSeriesData> series) {
+        originalSeriesCache.clear();
+        originalSeriesCache.putAll(series);
+        referenceSeries = series.isEmpty() ? null : series.keySet().iterator().next();
+        recomputeAllStatistics();
     }
 
     /**
@@ -224,15 +240,25 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Recomputes all statistics with the current mask mode.
      * Called when mask mode changes or when series are added/removed in ALL mask mode.
+     *
+     * <p>In {@link MaskMode#ALL} the mask is identical for every series, so it is built
+     * once here and reused — rather than rebuilt inside {@code computeStatistics} per
+     * series.</p>
      */
     private void recomputeAllStatistics() {
+        // In ALL mode the mask is shared across every series — compute it a single time.
+        TimeSeriesMasker.Mask allMask = null;
+        if (maskMode == MaskMode.ALL) {
+            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
+        }
+
         // Rebuild seriesData from scratch based on originalSeriesCache
         List<SeriesStats> newSeriesData = new ArrayList<>();
 
         for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
             TimeSeriesData originalData = entry.getValue();
             if (originalData != null) {
-                Map<String, String> newValues = computeStatistics(originalData);
+                Map<String, String> newValues = computeStatistics(originalData, allMask);
                 newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
             }
         }
@@ -245,10 +271,13 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Computes all statistics for a series using the current mask mode.
      *
-     * @param series The series to compute statistics for
+     * @param series  The series to compute statistics for
+     * @param allMask The pre-built {@link MaskMode#ALL} mask; required in ALL mode,
+     *                ignored otherwise (pass {@code null} for EACH/NONE).
      * @return Map of statistic names to computed values
      */
-    private Map<String, String> computeStatistics(TimeSeriesData series) {
+    private Map<String, String> computeStatistics(TimeSeriesData series,
+                                                  TimeSeriesMasker.Mask allMask) {
         Map<String, String> values = new HashMap<>();
 
         // Get reference series data (always available for bivariate stats)
@@ -263,21 +292,19 @@ public class StatsTableModel extends AbstractTableModel {
 
         switch (maskMode) {
             case ALL:
-                // Create mask where ALL series have data
-                List<TimeSeriesData> allSeries = new ArrayList<>(originalSeriesCache.values());
-                TimeSeriesData allMask = TimeSeriesMasker.createAllMask(allSeries);
-                maskedSeries = TimeSeriesMasker.applyMask(series, allMask);
+                // Shared mask built once by recomputeAllStatistics().
+                maskedSeries = allMask.apply(series);
                 if (referenceData != null) {
-                    maskedReference = TimeSeriesMasker.applyMask(referenceData, allMask);
+                    maskedReference = allMask.apply(referenceData);
                 }
                 break;
 
             case EACH:
                 // Create mask for this series and reference
                 if (referenceData != null) {
-                    TimeSeriesData eachMask = TimeSeriesMasker.createEachMask(referenceData, series);
-                    maskedSeries = TimeSeriesMasker.applyMask(series, eachMask);
-                    maskedReference = TimeSeriesMasker.applyMask(referenceData, eachMask);
+                    TimeSeriesMasker.Mask eachMask = TimeSeriesMasker.createEachMask(referenceData, series);
+                    maskedSeries = eachMask.apply(series);
+                    maskedReference = eachMask.apply(referenceData);
                 } else {
                     // No reference available, use unmasked
                     maskedSeries = series;

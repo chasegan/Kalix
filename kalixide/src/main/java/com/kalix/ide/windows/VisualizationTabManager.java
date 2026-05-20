@@ -1445,20 +1445,23 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Rebuilds a stats tab to show only its selected series.
+     * Rebuilds a stats tab to show only its selected series. Collects all series first and
+     * hands them to {@link StatsTableModel#setSeries} so statistics are recomputed once,
+     * not once per series.
      */
     private void rebuildStatsTab(TabInfo tab) {
-        tab.statsModel.clear();
+        java.util.LinkedHashMap<SeriesRef, TimeSeriesData> series = new java.util.LinkedHashMap<>();
         for (SeriesRef ref : tab.selectedSeries) {
             TimeSeriesData data = sharedDataSet.getSeries(ref);
             if (data != null) {
                 TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
                 if (aggregatedData != null) {
-                    tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
+                    series.put(ref, aggregatedData);
                 }
             }
         }
+        tab.statsModel.setSeries(series);
     }
 
     /**

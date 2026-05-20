@@ -2,194 +2,221 @@ package com.kalix.ide.flowviz.stats;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Utilities for creating and applying masks to time series data.
- * A mask is a time series with values of 1.0 (included) or NaN (excluded).
- * Masking allows statistics to be computed only on timestamps where certain conditions are met.
+ *
+ * <p>A {@link Mask} is the sorted set of timestamps at which statistics should be
+ * computed — typically the timestamps where every selected series has valid data.
+ * Applying a mask to a series filters it to just those timestamps.</p>
+ *
+ * <p>All operations work in primitive {@code long[]}/{@code double[]} space. Because
+ * {@link TimeSeriesData} already stores its timestamps sorted ascending, mask
+ * construction and application are linear sorted-array merges — no per-timestamp
+ * hashing or boxing. When every series shares an identical regular grid (the common
+ * case for model output), construction takes an even cheaper index-aligned fast path.</p>
  */
 public class TimeSeriesMasker {
 
+    private TimeSeriesMasker() {
+        // Utility class
+    }
+
     /**
-     * Creates a mask that is 1.0 only at timestamps where ALL series have valid data.
-     * The mask will have all unique timestamps from all series, with 1.0 where all have data, NaN otherwise.
-     *
-     * @param allSeries List of all series to consider
-     * @return A mask series with 1.0 at valid timestamps, NaN at excluded timestamps
+     * An immutable, sorted set of "valid" timestamps. Applying it to a series keeps only
+     * the points whose timestamp is in the set.
      */
-    public static TimeSeriesData createAllMask(List<TimeSeriesData> allSeries) {
+    public static final class Mask {
+        /** Sorted ascending, de-duplicated. */
+        private final long[] validTimestamps;
+
+        private Mask(long[] validTimestamps) {
+            this.validTimestamps = validTimestamps;
+        }
+
+        /** Number of timestamps in the mask. */
+        public int size() {
+            return validTimestamps.length;
+        }
+
+        /**
+         * Filters {@code series} to the points whose timestamp is in this mask, returning a
+         * new series. Both the series timestamps and the mask are sorted, so this is a
+         * single linear two-pointer merge. A {@code null} series yields an empty result.
+         */
+        public TimeSeriesData apply(TimeSeriesData series) {
+            if (series == null) {
+                return new TimeSeriesData(new long[0], new double[0]);
+            }
+            long[] ts = series.getTimestamps();
+            double[] vals = series.getValues();
+            int n = ts.length;
+            int m = validTimestamps.length;
+
+            int cap = Math.min(n, m);
+            long[] outTs = new long[cap];
+            double[] outVals = new double[cap];
+            int k = 0;
+
+            int i = 0, j = 0;
+            while (i < n && j < m) {
+                long a = ts[i];
+                long b = validTimestamps[j];
+                if (a < b) {
+                    i++;
+                } else if (a > b) {
+                    j++;
+                } else {
+                    outTs[k] = a;
+                    outVals[k] = vals[i];
+                    k++;
+                    i++;
+                    j++;
+                }
+            }
+
+            if (k == outTs.length) {
+                return new TimeSeriesData(outTs, outVals);
+            }
+            return new TimeSeriesData(java.util.Arrays.copyOf(outTs, k),
+                                      java.util.Arrays.copyOf(outVals, k));
+        }
+    }
+
+    /**
+     * Creates a mask of the timestamps at which <em>all</em> the given series have valid
+     * data — i.e. the intersection of each series' valid-timestamp set.
+     *
+     * @param allSeries the series to intersect; null/empty yields an empty mask
+     */
+    public static Mask createAllMask(List<TimeSeriesData> allSeries) {
         if (allSeries == null || allSeries.isEmpty()) {
-            // Empty mask
-            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
+            return new Mask(new long[0]);
+        }
+        if (allSeries.size() == 1) {
+            return new Mask(validTimestampsOf(allSeries.get(0)));
         }
 
-        // Collect all unique timestamps and their validity across all series
-        Map<Long, Boolean> timestampValidity = new LinkedHashMap<>();
-
-        // Initialize with first series
-        TimeSeriesData firstSeries = allSeries.get(0);
-        long[] firstTimestamps = firstSeries.getTimestamps();
-        boolean[] firstValidPoints = firstSeries.getValidPoints();
-
-        for (int i = 0; i < firstSeries.getPointCount(); i++) {
-            timestampValidity.put(firstTimestamps[i], firstValidPoints[i]);
+        long[] aligned = tryAlignedAllMask(allSeries);
+        if (aligned != null) {
+            return new Mask(aligned);
         }
 
-        // Intersect with remaining series
-        for (int seriesIdx = 1; seriesIdx < allSeries.size(); seriesIdx++) {
-            TimeSeriesData series = allSeries.get(seriesIdx);
-            long[] timestamps = series.getTimestamps();
-            boolean[] validPoints = series.getValidPoints();
-
-            // Build map of timestamps to validity for this series
-            Map<Long, Boolean> seriesValidity = new HashMap<>();
-            for (int i = 0; i < series.getPointCount(); i++) {
-                seriesValidity.put(timestamps[i], validPoints[i]);
-            }
-
-            // Union: add any timestamps from this series not yet in the map
-            for (long timestamp : timestamps) {
-                timestampValidity.putIfAbsent(timestamp, false);
-            }
-
-            // Intersect validity: timestamp is valid only if valid in ALL series so far
-            for (Long timestamp : timestampValidity.keySet()) {
-                boolean currentValidity = timestampValidity.get(timestamp);
-                boolean seriesHasValid = seriesValidity.getOrDefault(timestamp, false);
-                timestampValidity.put(timestamp, currentValidity && seriesHasValid);
-            }
+        // General case: intersect each series' sorted valid-timestamp set pairwise.
+        long[] result = validTimestampsOf(allSeries.get(0));
+        for (int s = 1; s < allSeries.size() && result.length > 0; s++) {
+            result = intersectSorted(result, validTimestampsOf(allSeries.get(s)));
         }
-
-        // Convert to arrays
-        return buildMaskFromValidityMap(timestampValidity);
+        return new Mask(result);
     }
 
     /**
-     * Creates a mask that is 1.0 only at timestamps where BOTH the reference and series have valid data.
-     * The mask will have all unique timestamps from both series, with 1.0 where both have data, NaN otherwise.
-     *
-     * @param reference The reference series
-     * @param series The series to mask with reference
-     * @return A mask series with 1.0 at valid timestamps, NaN at excluded timestamps
+     * Creates a mask of the timestamps at which <em>both</em> the reference and the series
+     * have valid data. Equivalent to {@link #createAllMask} over the two series.
      */
-    public static TimeSeriesData createEachMask(TimeSeriesData reference, TimeSeriesData series) {
+    public static Mask createEachMask(TimeSeriesData reference, TimeSeriesData series) {
         if (reference == null || series == null) {
-            // Empty mask
-            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
+            return new Mask(new long[0]);
         }
-
-        // Collect union of timestamps and validity for both series
-        Map<Long, Boolean> timestampValidity = new LinkedHashMap<>();
-
-        // Add reference timestamps
-        long[] refTimestamps = reference.getTimestamps();
-        boolean[] refValidPoints = reference.getValidPoints();
-        for (int i = 0; i < reference.getPointCount(); i++) {
-            timestampValidity.put(refTimestamps[i], refValidPoints[i]);
-        }
-
-        // Build map for series
-        long[] seriesTimestamps = series.getTimestamps();
-        boolean[] seriesValidPoints = series.getValidPoints();
-        Map<Long, Boolean> seriesValidity = new HashMap<>();
-        for (int i = 0; i < series.getPointCount(); i++) {
-            seriesValidity.put(seriesTimestamps[i], seriesValidPoints[i]);
-        }
-
-        // Union timestamps
-        for (long timestamp : seriesTimestamps) {
-            timestampValidity.putIfAbsent(timestamp, false);
-        }
-
-        // Intersect validity: valid only if valid in BOTH
-        for (Long timestamp : timestampValidity.keySet()) {
-            boolean refValid = timestampValidity.get(timestamp);
-            boolean serValid = seriesValidity.getOrDefault(timestamp, false);
-            timestampValidity.put(timestamp, refValid && serValid);
-        }
-
-        // Convert to arrays
-        return buildMaskFromValidityMap(timestampValidity);
+        return new Mask(intersectSorted(validTimestampsOf(reference), validTimestampsOf(series)));
     }
 
     /**
-     * Applies a mask to a time series, returning a new series with only masked-in points.
-     * Points where the mask is NaN are excluded from the result.
+     * Fast path for the common case where every series shares an identical timestamp grid
+     * (e.g. model outputs from one simulation): the mask is simply the timestamps at
+     * indices where every series' point is valid — a per-index validity AND, no merge.
      *
-     * @param series The series to mask
-     * @param mask The mask to apply (1.0 = include, NaN = exclude)
-     * @return A new series with only masked-in points
+     * <p>Alignment is verified <em>exactly</em> via {@link java.util.Arrays#equals} on the
+     * timestamp arrays — not via the heuristic {@code hasRegularInterval} — so a wrong
+     * mask cannot result. Returns {@code null} when the grids differ, signalling the
+     * caller to fall back to the general intersection.</p>
      */
-    public static TimeSeriesData applyMask(TimeSeriesData series, TimeSeriesData mask) {
-        if (series == null) {
-            return new TimeSeriesData(new LocalDateTime[0], new double[0]);
+    private static long[] tryAlignedAllMask(List<TimeSeriesData> allSeries) {
+        TimeSeriesData first = allSeries.get(0);
+        int n = first.getPointCount();
+        if (n == 0) {
+            return null;
         }
+        long[] firstTimestamps = first.getTimestamps();
 
-        if (mask == null) {
-            // No mask = return original series
-            return series;
-        }
-
-        // Build map of mask timestamps to validity
-        Map<Long, Boolean> maskValidity = new HashMap<>();
-        long[] maskTimestamps = mask.getTimestamps();
-        boolean[] maskValidPoints = mask.getValidPoints();
-
-        for (int i = 0; i < mask.getPointCount(); i++) {
-            maskValidity.put(maskTimestamps[i], maskValidPoints[i]);
-        }
-
-        // Filter series points
-        List<LocalDateTime> filteredTimes = new ArrayList<>();
-        List<Double> filteredValues = new ArrayList<>();
-
-        long[] seriesTimestamps = series.getTimestamps();
-        double[] seriesValues = series.getValues();
-
-        for (int i = 0; i < series.getPointCount(); i++) {
-            long timestamp = seriesTimestamps[i];
-            // Include point if mask says it's valid (true in maskValidity map)
-            if (maskValidity.getOrDefault(timestamp, false)) {
-                filteredTimes.add(LocalDateTime.ofInstant(
-                    Instant.ofEpochMilli(timestamp), ZoneOffset.UTC));
-                filteredValues.add(seriesValues[i]);
+        for (int s = 1; s < allSeries.size(); s++) {
+            TimeSeriesData series = allSeries.get(s);
+            if (series.getPointCount() != n
+                    || !java.util.Arrays.equals(firstTimestamps, series.getTimestamps())) {
+                return null;
             }
         }
 
-        // Convert to arrays
-        LocalDateTime[] timesArray = filteredTimes.toArray(new LocalDateTime[0]);
-        double[] valuesArray = filteredValues.stream().mapToDouble(Double::doubleValue).toArray();
+        // All series share the grid — AND their validity index-by-index.
+        boolean[][] valid = new boolean[allSeries.size()][];
+        for (int s = 0; s < allSeries.size(); s++) {
+            valid[s] = allSeries.get(s).getValidPoints();
+        }
 
-        return new TimeSeriesData(timesArray, valuesArray);
+        long[] out = new long[n];
+        int k = 0;
+        for (int i = 0; i < n; i++) {
+            boolean allValid = true;
+            for (int s = 0; s < valid.length; s++) {
+                if (!valid[s][i]) {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (allValid) {
+                out[k++] = firstTimestamps[i];
+            }
+        }
+        return k == out.length ? out : java.util.Arrays.copyOf(out, k);
     }
 
     /**
-     * Helper method to build a TimeSeriesData mask from a validity map.
+     * Returns the sorted, de-duplicated timestamps at which {@code series} has valid data.
+     * The series' own timestamps are already sorted, so this is a single linear scan.
      */
-    private static TimeSeriesData buildMaskFromValidityMap(Map<Long, Boolean> timestampValidity) {
-        List<Long> sortedTimestamps = new ArrayList<>(timestampValidity.keySet());
-        Collections.sort(sortedTimestamps);
+    private static long[] validTimestampsOf(TimeSeriesData series) {
+        long[] ts = series.getTimestamps();
+        boolean[] valid = series.getValidPoints();
+        int n = ts.length;
 
-        LocalDateTime[] maskTimes = new LocalDateTime[sortedTimestamps.size()];
-        double[] maskValues = new double[sortedTimestamps.size()];
-
-        for (int i = 0; i < sortedTimestamps.size(); i++) {
-            long timestamp = sortedTimestamps.get(i);
-            maskTimes[i] = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-            // 1.0 if valid, NaN if not
-            maskValues[i] = timestampValidity.get(timestamp) ? 1.0 : Double.NaN;
+        long[] out = new long[n];
+        int k = 0;
+        long prev = 0;
+        for (int i = 0; i < n; i++) {
+            if (valid[i]) {
+                long t = ts[i];
+                // Skip duplicate timestamps (a single valid entry per timestamp is enough).
+                if (k == 0 || t != prev) {
+                    out[k++] = t;
+                    prev = t;
+                }
+            }
         }
+        return k == out.length ? out : java.util.Arrays.copyOf(out, k);
+    }
 
-        return new TimeSeriesData(maskTimes, maskValues);
+    /**
+     * Intersects two sorted, de-duplicated {@code long[]}s — a single linear merge.
+     */
+    private static long[] intersectSorted(long[] a, long[] b) {
+        int cap = Math.min(a.length, b.length);
+        long[] out = new long[cap];
+        int k = 0;
+        int i = 0, j = 0;
+        while (i < a.length && j < b.length) {
+            long x = a[i];
+            long y = b[j];
+            if (x < y) {
+                i++;
+            } else if (x > y) {
+                j++;
+            } else {
+                out[k++] = x;
+                i++;
+                j++;
+            }
+        }
+        return k == out.length ? out : java.util.Arrays.copyOf(out, k);
     }
 }

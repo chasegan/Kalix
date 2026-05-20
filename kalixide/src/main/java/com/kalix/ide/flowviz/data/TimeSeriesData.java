@@ -29,7 +29,7 @@ public class TimeSeriesData {
      * have migrated.
      */
     public TimeSeriesData(LocalDateTime[] dateTimes, double[] values) {
-        this(null, dateTimes, values);
+        this(null, toEpochMillis(dateTimes), values);
     }
 
     /**
@@ -40,35 +40,53 @@ public class TimeSeriesData {
      */
     @Deprecated
     public TimeSeriesData(String name, LocalDateTime[] dateTimes, double[] values) {
-        this.name = name;
-        this.pointCount = dateTimes.length;
-        
-        if (dateTimes.length != values.length) {
-            throw new IllegalArgumentException("DateTime and value arrays must have same length");
+        this(name, toEpochMillis(dateTimes), values);
+    }
+
+    /**
+     * Constructs a nameless time series directly from millisecond Unix timestamps. Avoids
+     * the {@link LocalDateTime} round-trip — intended for hot paths that already hold
+     * primitive timestamps (e.g. masking, aggregation). The arrays are defensively copied;
+     * the copy is sorted by timestamp if not already ascending.
+     */
+    public TimeSeriesData(long[] timestamps, double[] values) {
+        this(null, timestamps, values);
+    }
+
+    private TimeSeriesData(String name, long[] timestamps, double[] values) {
+        if (timestamps.length != values.length) {
+            throw new IllegalArgumentException("Timestamp and value arrays must have same length");
         }
-        
-        this.timestamps = new long[pointCount];
-        this.values = new double[pointCount];
+
+        this.name = name;
+        this.pointCount = timestamps.length;
+        this.timestamps = timestamps.clone();
+        this.values = values.clone();
         this.validPoints = new boolean[pointCount];
-        
-        // Convert LocalDateTime to Unix timestamps in milliseconds and process values
+
         for (int i = 0; i < pointCount; i++) {
-            this.timestamps[i] = dateTimes[i].toInstant(ZoneOffset.UTC).toEpochMilli();
-            this.values[i] = values[i];
             this.validPoints[i] = !Double.isNaN(values[i]) && Double.isFinite(values[i]);
         }
-        
+
         // Sort by timestamp if needed
         sortIfNeeded();
-        
+
         // Detect regular intervals
         RegularIntervalInfo intervalInfo = detectRegularInterval();
         this.hasRegularInterval = intervalInfo.isRegular;
         this.intervalMillis = intervalInfo.intervalMillis;
-        this.firstTimestamp = timestamps.length > 0 ? timestamps[0] : 0;
-        
+        this.firstTimestamp = timestamps.length > 0 ? this.timestamps[0] : 0;
+
         // Pre-compute statistics
         computeStatistics();
+    }
+
+    private static long[] toEpochMillis(LocalDateTime[] dateTimes) {
+        long[] millis = new long[dateTimes.length];
+        for (int i = 0; i < dateTimes.length; i++) {
+            millis[i] = dateTimes[i].toInstant(ZoneOffset.UTC).toEpochMilli();
+        }
+        return millis;
     }
     
     private void sortIfNeeded() {
