@@ -394,8 +394,14 @@ public class RunManager extends JFrame {
         // Initialize tree filter manager
         treeFilterManager = new TreeFilterManager(this::onFilterTextChanged);
 
-        // Create shared dataset
+        // Create shared dataset. Install the LastSeries alias resolver so the pool stores
+        // "Last" data under the underlying run's stable RunSeries identity — the pool never
+        // holds a LastSeries key, which makes stale-Last data structurally impossible.
         plotDataSet = new DataSet();
+        plotDataSet.setLastSeriesResolver(last ->
+            lastRunInfo != null
+                ? new com.kalix.ide.flowviz.data.RunSeries(lastRunInfo.getRunId(), last.baseName())
+                : null);
 
         // Initialize series color manager
         seriesColorManager = new SeriesColorManager();
@@ -1209,33 +1215,35 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Refreshes all plotted "[Last]" series to use data from the new Last run.
+     * Fetches data for the new Last run into the pool, for every plotted "[Last]" series.
      *
      * Called by {@link #updateLastRun} when a run completes. This method:
      * <ol>
      *   <li>Clears the {@link TimeSeriesRequestManager} cache for this session -
      *       CRITICAL because cache is keyed by kalixcliUid which persists across runs</li>
-     *   <li>For each series ending with " [Last]" across all tabs:
-     *     <ul>
-     *       <li>Requests fresh data from the new run (sync if cached, async otherwise)</li>
-     *       <li>When data is ready, atomically replaces the existing pool entry via
-     *           {@link com.kalix.ide.flowviz.data.DataSet#addSeries} (which removes-then-adds
-     *           in a single EDT operation)</li>
-     *     </ul>
-     *   </li>
+     *   <li>For each {@link com.kalix.ide.flowviz.data.LastSeries} ref selected across all
+     *       tabs, requests fresh data from the new run (sync if cached, async otherwise)
+     *       and writes it into {@code plotDataSet}.</li>
      * </ol>
      *
      * The cache clear happens unconditionally (even if no "[Last]" series are selected)
      * so that future selections will fetch fresh data.
      *
+     * <h3>Why no stale-data handling is needed</h3>
+     * The pool stores "Last" data under the underlying run's stable {@code RunSeries}
+     * identity — {@code plotDataSet}'s {@code LastSeriesResolver} (installed in
+     * {@code initializeManagers}) redirects every {@code LastSeries} access to
+     * {@code RunSeries(lastRunId, baseName)}. So the pool never holds a {@code LastSeries}
+     * key that could go stale: when Last changes, a {@code LastSeries} ref simply resolves
+     * to a different {@code RunSeries}. This method just ensures that target is populated.
+     * The {@code onOutputsTreeSelectionChanged} "already in pool" short-circuit is therefore
+     * correct by construction — a {@code getSeries(LastSeries)} probe resolves to the
+     * current run's data or to {@code null} (triggering a fetch).
+     *
      * <h3>Atomic swap (no empty-plot gap)</h3>
-     * The previous Last's data is intentionally left in {@code plotDataSet} until the
-     * replacement arrives, then swapped in one EDT operation. Removing eagerly created an
-     * "empty plot during fetch" window and — if {@code isSeriesSelectedOnAnyTab} flipped to
-     * false before the response arrived — permanently lost the series from the pool. With
-     * the swap-on-arrival design, the user sees the prior data briefly, then the new data.
-     * The pool is also kept fresh regardless of selection state at response time, so the
-     * line 1302 "already in pool" short-circuit cannot serve stale data on reselection.
+     * Writing the new data via {@code addSeries} replaces the {@code RunSeries} entry in a
+     * single EDT operation; the previous Last's {@code RunSeries} entry is left untouched
+     * (it remains valid data for that specific run).
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {

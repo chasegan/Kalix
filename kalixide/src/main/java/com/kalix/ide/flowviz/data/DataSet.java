@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 
 /**
  * Container for multiple time series, serving as the shared data source for all plot tabs.
@@ -41,8 +42,45 @@ public class DataSet {
     // Thread-safe list for concurrent access during rendering
     private final List<DataSetListener> listeners = new CopyOnWriteArrayList<>();
 
+    /**
+     * Optional alias resolver: maps a {@link LastSeries} ref to whichever stable-identity
+     * ref currently aliases it (typically a {@link RunSeries} for the latest completed run).
+     * When set, {@link #addSeries(SeriesRef, TimeSeriesData)}, {@link #getSeries(SeriesRef)},
+     * {@link #hasSeries(SeriesRef)} and {@link #removeSeries(SeriesRef)} transparently redirect
+     * {@code LastSeries} accesses to the resolved ref — so the pool never stores data under a
+     * {@code LastSeries} key, and "Last has changed" is just a different redirect target rather
+     * than an invalidation event. Returns {@code null} when no Last is set; the access then
+     * falls through to the {@code LastSeries} key directly (which won't exist in storage,
+     * yielding {@code null} for reads and adding a sentinel entry for writes — both intended
+     * as a "no Last available" signal).
+     */
+    private Function<LastSeries, SeriesRef> lastSeriesResolver;
+
     public DataSet() {
         this.series = new ArrayList<>();
+    }
+
+    /**
+     * Installs the {@link LastSeries} alias resolver — see {@link #lastSeriesResolver}. Pass
+     * {@code null} to disable redirection (the default).
+     */
+    public void setLastSeriesResolver(Function<LastSeries, SeriesRef> resolver) {
+        this.lastSeriesResolver = resolver;
+    }
+
+    /**
+     * Returns the storage key for {@code ref}: for {@link LastSeries} this is the resolver's
+     * target (typically a {@link RunSeries}); for any other ref the input is returned unchanged.
+     * When the resolver is absent or yields {@code null}, the input ref is also returned
+     * unchanged (callers then see either no data or write under the {@code LastSeries} key
+     * — only happens when there is genuinely no current Last).
+     */
+    private SeriesRef storageKey(SeriesRef ref) {
+        if (ref instanceof LastSeries last && lastSeriesResolver != null) {
+            SeriesRef resolved = lastSeriesResolver.apply(last);
+            return resolved != null ? resolved : ref;
+        }
+        return ref;
     }
     
     public void addSeries(TimeSeriesData seriesData) {
@@ -161,10 +199,15 @@ public class DataSet {
      * Adds (or replaces) a series under the given {@link SeriesRef}. The {@code data}'s
      * legacy name field is ignored — only the {@code ref} is used as identity. Recomputes
      * global bounds when the ref already existed; otherwise extends bounds incrementally.
+     *
+     * <p>A {@link LastSeries} ref is redirected to its current alias target (see
+     * {@link #lastSeriesResolver}), so "Last" data is stored under the underlying run's
+     * stable identity and never goes stale when the Last run changes.</p>
      */
     public void addSeries(SeriesRef ref, TimeSeriesData data) {
-        boolean existed = seriesByRef.containsKey(ref);
-        seriesByRef.put(ref, data);
+        SeriesRef key = storageKey(ref);
+        boolean existed = seriesByRef.containsKey(key);
+        seriesByRef.put(key, data);
         if (existed) {
             recomputeGlobalBounds();
         } else {
@@ -173,26 +216,30 @@ public class DataSet {
     }
 
     /**
-     * Removes the series identified by {@code ref}. No-op if absent.
+     * Removes the series identified by {@code ref}. No-op if absent. A {@link LastSeries}
+     * ref is redirected to its current alias target before removal.
      */
     public void removeSeries(SeriesRef ref) {
-        if (seriesByRef.remove(ref) != null) {
+        if (seriesByRef.remove(storageKey(ref)) != null) {
             recomputeGlobalBounds();
         }
     }
 
     /**
-     * Returns the series identified by {@code ref}, or {@code null} if absent.
+     * Returns the series identified by {@code ref}, or {@code null} if absent. A
+     * {@link LastSeries} ref is redirected to its current alias target, so the data
+     * returned always reflects whichever run is currently Last.
      */
     public TimeSeriesData getSeries(SeriesRef ref) {
-        return seriesByRef.get(ref);
+        return seriesByRef.get(storageKey(ref));
     }
 
     /**
-     * Returns true if a series is present under {@code ref}.
+     * Returns true if a series is present under {@code ref}. A {@link LastSeries} ref is
+     * redirected to its current alias target.
      */
     public boolean hasSeries(SeriesRef ref) {
-        return seriesByRef.containsKey(ref);
+        return seriesByRef.containsKey(storageKey(ref));
     }
 
     /**
