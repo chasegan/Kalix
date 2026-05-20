@@ -1,11 +1,5 @@
 package com.kalix.ide.flowviz.stats;
 
-import com.kalix.ide.flowviz.data.TimeSeriesData;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * Computes the SDEB (Sorted Distributional Error with Bias) objective function.
  * SDEB combines temporal error, distributional error, and bias penalty to evaluate
@@ -18,6 +12,14 @@ import java.util.Map;
  *   B = Bias penalty (1 + |sum(observed) - sum(simulated)| / sum(observed))
  *
  * Lower values indicate better fit (this is a minimization objective).
+ *
+ * <p>The two samples are index-aligned by construction — {@code StatsTableModel} masks
+ * series and reference with the same mask, so {@code series.values()} and
+ * {@code reference.values()} line up timestamp-for-timestamp. SDEB therefore needs no
+ * timestamp matching of its own; it asserts the alignment via a length check and uses
+ * the values, sums, and sorted distributions the samples already provide (the
+ * reference's sorted distribution is cached on the shared reference sample, so it is
+ * sorted once per recompute regardless of how many series are compared against it).</p>
  */
 public class SdebStatistic implements Statistic {
 
@@ -32,32 +34,31 @@ public class SdebStatistic implements Statistic {
     }
 
     @Override
-    public String calculate(TimeSeriesData series, TimeSeriesData reference) {
-        if (series == null || reference == null) {
+    public String calculate(StatSample series, StatSample reference) {
+        if (reference == null) {
             return "N/A";
         }
 
-        if (series.getPointCount() == 0 || reference.getPointCount() == 0) {
+        double[] observed = reference.values();
+        double[] simulated = series.values();
+
+        // Aligned and equal-length by construction (same mask applied to both). Bail
+        // defensively rather than produce a wrong number if that contract is violated.
+        if (observed.length == 0 || observed.length != simulated.length) {
             return "N/A";
         }
 
-        try {
-            // Extract matched data from the two time series
-            MatchedData matched = extractMatchedData(reference, series);
-
-            if (matched.count == 0) {
-                return "N/A";
-            }
-
-            // Calculate SDEB using the matched data
-            double sdeb = calculateSdeb(matched.observed, matched.simulated);
-
-            return String.format("%.3f", sdeb);
-
-        } catch (IllegalArgumentException e) {
-            // Handle edge cases like sum(observed) = 0
-            return "N/A";
+        double sumObserved = reference.sum();
+        if (sumObserved == 0.0) {
+            return "N/A";  // Bias penalty undefined when observed flows sum to zero.
         }
+
+        double sdeb = calculateSdeb(
+            observed, simulated,
+            reference.sortedValidValues(), series.sortedValidValues(),
+            sumObserved, series.sum());
+
+        return String.format("%.3f", sdeb);
     }
 
     @Override
@@ -66,151 +67,36 @@ public class SdebStatistic implements Statistic {
     }
 
     /**
-     * Container for matched time series data.
-     */
-    private static class MatchedData {
-        final double[] observed;
-        final double[] simulated;
-        final int count;
-
-        MatchedData(double[] observed, double[] simulated, int count) {
-            this.observed = observed;
-            this.simulated = simulated;
-            this.count = count;
-        }
-    }
-
-    /**
-     * Extracts data at matching timestamps from reference (observed) and series (simulated).
-     */
-    private MatchedData extractMatchedData(TimeSeriesData reference, TimeSeriesData series) {
-        // Build map of reference timestamps to values
-        Map<Long, Double> referenceMap = new HashMap<>();
-        long[] refTimestamps = reference.getTimestamps();
-        double[] refValues = reference.getValues();
-        boolean[] refValid = reference.getValidPoints();
-
-        for (int i = 0; i < reference.getPointCount(); i++) {
-            if (refValid[i]) {
-                referenceMap.put(refTimestamps[i], refValues[i]);
-            }
-        }
-
-        // Count matching timestamps
-        long[] seriesTimestamps = series.getTimestamps();
-        double[] seriesValues = series.getValues();
-        boolean[] seriesValid = series.getValidPoints();
-
-        int matchCount = 0;
-        for (int i = 0; i < series.getPointCount(); i++) {
-            if (seriesValid[i] && referenceMap.containsKey(seriesTimestamps[i])) {
-                matchCount++;
-            }
-        }
-
-        // Extract matched values
-        double[] observed = new double[matchCount];
-        double[] simulated = new double[matchCount];
-        int idx = 0;
-
-        for (int i = 0; i < series.getPointCount(); i++) {
-            if (seriesValid[i]) {
-                long timestamp = seriesTimestamps[i];
-                Double refValue = referenceMap.get(timestamp);
-                if (refValue != null) {
-                    observed[idx] = refValue;
-                    simulated[idx] = seriesValues[i];
-                    idx++;
-                }
-            }
-        }
-
-        return new MatchedData(observed, simulated, matchCount);
-    }
-
-    /**
-     * Calculates SDEB objective function given matched observed and simulated data.
+     * Calculates the SDEB objective from already-masked, index-aligned data.
      *
-     * @param observed Array of observed (reference) values
-     * @param simulated Array of simulated (series) values
-     * @return SDEB value (lower is better)
-     * @throws IllegalArgumentException if sum(observed) = 0
+     * @param observed        observed (reference) values, in temporal order
+     * @param simulated       simulated (series) values, temporally aligned with {@code observed}
+     * @param sortedObserved  {@code observed} sorted ascending
+     * @param sortedSimulated {@code simulated} sorted ascending
+     * @param sumObserved     sum of {@code observed} (must be non-zero)
+     * @param sumSimulated    sum of {@code simulated}
      */
-    private double calculateSdeb(double[] observed, double[] simulated) {
-        // Step 1: Create mask and extract valid data
-        boolean[] mask = new boolean[observed.length];
-        int validCount = 0;
+    private double calculateSdeb(double[] observed, double[] simulated,
+                                 double[] sortedObserved, double[] sortedSimulated,
+                                 double sumObserved, double sumSimulated) {
+        // SD — temporal error: squared differences of the sqrt-transformed series in
+        // time order.
+        double sd = 0.0;
         for (int i = 0; i < observed.length; i++) {
-            mask[i] = Double.isFinite(observed[i]) && Double.isFinite(simulated[i]);
-            if (mask[i]) validCount++;
+            double diff = Math.sqrt(observed[i]) - Math.sqrt(simulated[i]);
+            sd += diff * diff;
         }
 
-        if (validCount == 0) {
-            throw new IllegalArgumentException("No valid data points");
+        // SE — distributional error: same, but over the sorted distributions.
+        double se = 0.0;
+        for (int i = 0; i < sortedObserved.length; i++) {
+            double diff = Math.sqrt(sortedObserved[i]) - Math.sqrt(sortedSimulated[i]);
+            se += diff * diff;
         }
 
-        // Extract masked values
-        double[] QO = new double[validCount];
-        double[] QM = new double[validCount];
-        int idx = 0;
-        for (int i = 0; i < observed.length; i++) {
-            if (mask[i]) {
-                QO[idx] = observed[i];
-                QM[idx] = simulated[i];
-                idx++;
-            }
-        }
+        // B — bias penalty.
+        double b = 1.0 + Math.abs(sumObserved - sumSimulated) / sumObserved;
 
-        // Step 2: Create sorted versions
-        double[] RO = QO.clone();
-        double[] RM = QM.clone();
-        Arrays.sort(RO);
-        Arrays.sort(RM);
-
-        // Step 3: Square root transform
-        double[] sqrtQO = new double[QO.length];
-        double[] sqrtQM = new double[QM.length];
-        double[] sqrtRO = new double[RO.length];
-        double[] sqrtRM = new double[RM.length];
-
-        for (int i = 0; i < QO.length; i++) {
-            sqrtQO[i] = Math.sqrt(QO[i]);
-            sqrtQM[i] = Math.sqrt(QM[i]);
-            sqrtRO[i] = Math.sqrt(RO[i]);
-            sqrtRM[i] = Math.sqrt(RM[i]);
-        }
-
-        // Step 4: Calculate SD (temporal error)
-        double SD = 0.0;
-        for (int i = 0; i < sqrtQO.length; i++) {
-            double diff = sqrtQO[i] - sqrtQM[i];
-            SD += diff * diff;
-        }
-
-        // Step 5: Calculate SE (distributional error)
-        double SE = 0.0;
-        for (int i = 0; i < sqrtRO.length; i++) {
-            double diff = sqrtRO[i] - sqrtRM[i];
-            SE += diff * diff;
-        }
-
-        // Step 6: Calculate B (bias penalty)
-        double sumObserved = 0.0;
-        double sumSimulated = 0.0;
-        for (int i = 0; i < QO.length; i++) {
-            sumObserved += QO[i];
-            sumSimulated += QM[i];
-        }
-
-        if (sumObserved == 0.0) {
-            throw new IllegalArgumentException("Sum of observed flows is zero, cannot calculate SDEB");
-        }
-
-        double B = 1.0 + Math.abs(sumObserved - sumSimulated) / sumObserved;
-
-        // Step 7: Calculate final SDEB
-        double SDEB = (0.1 * SD + 0.9 * SE) * B;
-
-        return SDEB;
+        return (0.1 * sd + 0.9 * se) * b;
     }
 }

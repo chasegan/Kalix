@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz.stats;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,21 +55,7 @@ public class StatisticsRegistry {
     }
 
     /**
-     * Gets column names for a stats table, starting with "Series" followed by each statistic name.
-     *
-     * @return Array of column names
-     */
-    public static String[] getColumnNames() {
-        List<String> names = new ArrayList<>();
-        names.add("Series");
-        for (Statistic stat : ALL_STATISTICS) {
-            names.add(stat.getName());
-        }
-        return names.toArray(new String[0]);
-    }
-
-    /**
-     * Gets the number of statistic columns (not including the "Series" column).
+     * Gets the number of statistic columns (not including the index or "Series" columns).
      *
      * @return Number of statistics
      */

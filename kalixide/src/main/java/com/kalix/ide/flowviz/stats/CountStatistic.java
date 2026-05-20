@@ -1,9 +1,7 @@
 package com.kalix.ide.flowviz.stats;
 
-import com.kalix.ide.flowviz.data.TimeSeriesData;
-
 /**
- * Computes the number of valid data points in a time series.
+ * Computes the number of data points in a time series sample.
  */
 public class CountStatistic implements Statistic {
 
@@ -18,12 +16,8 @@ public class CountStatistic implements Statistic {
     }
 
     @Override
-    public String calculate(TimeSeriesData series, TimeSeriesData reference) {
-        if (series == null) {
-            return "0";
-        }
-
-        return String.valueOf(series.getPointCount());
+    public String calculate(StatSample series, StatSample reference) {
+        return String.valueOf(series.rawCount());
     }
 
     @Override

@@ -1,7 +1,5 @@
 package com.kalix.ide.flowviz.stats;
 
-import com.kalix.ide.flowviz.data.TimeSeriesData;
-
 /**
  * Computes the percentage bias between a series and a reference series.
  * Bias% = (mean(series) - mean(reference)) / mean(reference) * 100
@@ -20,19 +18,17 @@ public class BiasStatistic implements Statistic {
     }
 
     @Override
-    public String calculate(TimeSeriesData series, TimeSeriesData reference) {
-        if (series == null || reference == null) {
+    public String calculate(StatSample series, StatSample reference) {
+        if (reference == null) {
             return "N/A";
         }
 
-        // Use the pre-computed mean values from TimeSeriesData
-        Double seriesMean = series.getMeanValue();
-        Double referenceMean = reference.getMeanValue();
+        double seriesMean = series.mean();
+        double referenceMean = reference.mean();
 
-        if (seriesMean == null || referenceMean == null) {
+        if (Double.isNaN(seriesMean) || Double.isNaN(referenceMean)) {
             return "N/A";
         }
-
         if (referenceMean == 0.0) {
             return "N/A";  // Cannot calculate percentage bias with zero reference mean
         }

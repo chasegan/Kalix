@@ -82,6 +82,45 @@ public class TimeSeriesMasker {
             return new TimeSeriesData(java.util.Arrays.copyOf(outTs, k),
                                       java.util.Arrays.copyOf(outVals, k));
         }
+
+        /**
+         * Filters {@code series} to the values whose timestamp is in this mask, returning
+         * just the masked {@code double[]} — no {@link TimeSeriesData} construction. The
+         * result is in mask order, so applying the same mask to two series yields two
+         * index-aligned arrays. A {@code null} series yields an empty array.
+         *
+         * <p>This is the form statistics consume; {@link #apply(TimeSeriesData)} is for
+         * callers (e.g. plotting) that need a full series back.</p>
+         */
+        public double[] applyToValues(TimeSeriesData series) {
+            if (series == null) {
+                return new double[0];
+            }
+            long[] ts = series.getTimestamps();
+            double[] vals = series.getValues();
+            int n = ts.length;
+            int m = validTimestamps.length;
+
+            double[] out = new double[Math.min(n, m)];
+            int k = 0;
+
+            int i = 0, j = 0;
+            while (i < n && j < m) {
+                long a = ts[i];
+                long b = validTimestamps[j];
+                if (a < b) {
+                    i++;
+                } else if (a > b) {
+                    j++;
+                } else {
+                    out[k++] = vals[i];
+                    i++;
+                    j++;
+                }
+            }
+
+            return k == out.length ? out : java.util.Arrays.copyOf(out, k);
+        }
     }
 
     /**

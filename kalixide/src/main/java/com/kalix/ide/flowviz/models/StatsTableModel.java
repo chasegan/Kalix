@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.StatSample;
 import com.kalix.ide.flowviz.stats.Statistic;
 import com.kalix.ide.flowviz.stats.StatisticsRegistry;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
@@ -77,16 +78,29 @@ public class StatsTableModel extends AbstractTableModel {
         return seriesData.size();
     }
 
+    /** Column 0: 1-based row index. Column 1: series label. Columns 2+: statistics. */
+    private static final int COLUMN_INDEX = 0;
+    private static final int COLUMN_SERIES = 1;
+    private static final int FIRST_STAT_COLUMN = 2;
+
     @Override
     public int getColumnCount() {
-        return 1 + StatisticsRegistry.getStatisticCount();  // "Series" + all statistics
+        // "#" index + "Series" label + all statistics
+        return FIRST_STAT_COLUMN + StatisticsRegistry.getStatisticCount();
     }
 
     @Override
     public String getColumnName(int column) {
-        String[] columnNames = StatisticsRegistry.getColumnNames();
-        if (column >= 0 && column < columnNames.length) {
-            return columnNames[column];
+        if (column == COLUMN_INDEX) {
+            return "#";
+        }
+        if (column == COLUMN_SERIES) {
+            return "Series";
+        }
+        int statIndex = column - FIRST_STAT_COLUMN;
+        List<Statistic> allStats = StatisticsRegistry.getAll();
+        if (statIndex >= 0 && statIndex < allStats.size()) {
+            return allStats.get(statIndex).getName();
         }
         return "";
     }
@@ -97,15 +111,20 @@ public class StatsTableModel extends AbstractTableModel {
 
         SeriesStats stats = seriesData.get(rowIndex);
 
-        if (columnIndex == 0) {
-            // First column is the projected display label (recomputed each render so it
-            // tracks renames automatically).
+        if (columnIndex == COLUMN_INDEX) {
+            // 1-based position — rows are kept in the order the user added them, so this
+            // is the "append number". Row 1 is the bivariate reference series.
+            return String.valueOf(rowIndex + 1);
+        }
+
+        if (columnIndex == COLUMN_SERIES) {
+            // Projected display label (recomputed each render so it tracks renames).
             return labelFor(stats.ref);
         }
 
         // Remaining columns are statistics
         List<Statistic> allStats = StatisticsRegistry.getAll();
-        int statIndex = columnIndex - 1;
+        int statIndex = columnIndex - FIRST_STAT_COLUMN;
 
         if (statIndex >= 0 && statIndex < allStats.size()) {
             Statistic stat = allStats.get(statIndex);
@@ -165,8 +184,9 @@ public class StatsTableModel extends AbstractTableModel {
         if (maskMode == MaskMode.ALL) {
             recomputeAllStatistics();
         } else {
-            // For EACH or NONE modes, only this series needs updating (no ALL mask).
-            Map<String, String> statisticValues = computeStatistics(data, null);
+            // For EACH or NONE modes, only this series needs updating (no shared ALL mask
+            // or shared reference sample — EACH masks per series, NONE skips bivariate).
+            Map<String, String> statisticValues = computeStatistics(data, null, null);
 
             // Remove existing entry if present
             seriesData.removeIf(stats -> stats.ref.equals(ref));
@@ -246,10 +266,17 @@ public class StatsTableModel extends AbstractTableModel {
      * series.</p>
      */
     private void recomputeAllStatistics() {
-        // In ALL mode the mask is shared across every series — compute it a single time.
+        // In ALL mode both the mask and the masked reference are shared across every
+        // series — build each a single time, here, and reuse them for all rows.
         TimeSeriesMasker.Mask allMask = null;
+        StatSample sharedReferenceSample = null;
         if (maskMode == MaskMode.ALL) {
             allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
+            TimeSeriesData referenceData = referenceSeries != null
+                ? originalSeriesCache.get(referenceSeries) : null;
+            if (referenceData != null) {
+                sharedReferenceSample = new StatSample(allMask.applyToValues(referenceData));
+            }
         }
 
         // Rebuild seriesData from scratch based on originalSeriesCache
@@ -258,7 +285,8 @@ public class StatsTableModel extends AbstractTableModel {
         for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
             TimeSeriesData originalData = entry.getValue();
             if (originalData != null) {
-                Map<String, String> newValues = computeStatistics(originalData, allMask);
+                Map<String, String> newValues =
+                    computeStatistics(originalData, allMask, sharedReferenceSample);
                 newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
             }
         }
@@ -271,51 +299,52 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Computes all statistics for a series using the current mask mode.
      *
-     * @param series  The series to compute statistics for
-     * @param allMask The pre-built {@link MaskMode#ALL} mask; required in ALL mode,
-     *                ignored otherwise (pass {@code null} for EACH/NONE).
+     * @param series      The series to compute statistics for
+     * @param allMask     The pre-built {@link MaskMode#ALL} mask; required in ALL mode,
+     *                    ignored otherwise (pass {@code null} for EACH/NONE).
+     * @param allRefSample The shared reference {@link StatSample} for ALL mode (the
+     *                    reference series masked by {@code allMask}); ignored otherwise.
      * @return Map of statistic names to computed values
      */
     private Map<String, String> computeStatistics(TimeSeriesData series,
-                                                  TimeSeriesMasker.Mask allMask) {
+                                                  TimeSeriesMasker.Mask allMask,
+                                                  StatSample allRefSample) {
         Map<String, String> values = new HashMap<>();
 
-        // Get reference series data (always available for bivariate stats)
-        TimeSeriesData referenceData = null;
-        if (referenceSeries != null) {
-            referenceData = originalSeriesCache.get(referenceSeries);
-        }
+        TimeSeriesData referenceData = referenceSeries != null
+            ? originalSeriesCache.get(referenceSeries) : null;
 
-        // Apply masking based on mode
-        TimeSeriesData maskedSeries;
-        TimeSeriesData maskedReference = null;
+        // Build the prepared samples for this series and (where relevant) the reference.
+        // Masking with the same mask keeps the two samples index-aligned for bivariate
+        // statistics. Samples derive sum/mean/min/max/sorted lazily and cache them.
+        StatSample seriesSample;
+        StatSample referenceSample;
 
         switch (maskMode) {
             case ALL:
-                // Shared mask built once by recomputeAllStatistics().
-                maskedSeries = allMask.apply(series);
-                if (referenceData != null) {
-                    maskedReference = allMask.apply(referenceData);
-                }
+                // Mask and reference sample both built once by recomputeAllStatistics().
+                seriesSample = new StatSample(allMask.applyToValues(series));
+                referenceSample = allRefSample;
                 break;
 
             case EACH:
-                // Create mask for this series and reference
+                // The mask is specific to this (series, reference) pair.
                 if (referenceData != null) {
-                    TimeSeriesMasker.Mask eachMask = TimeSeriesMasker.createEachMask(referenceData, series);
-                    maskedSeries = eachMask.apply(series);
-                    maskedReference = eachMask.apply(referenceData);
+                    TimeSeriesMasker.Mask eachMask =
+                        TimeSeriesMasker.createEachMask(referenceData, series);
+                    seriesSample = new StatSample(eachMask.applyToValues(series));
+                    referenceSample = new StatSample(eachMask.applyToValues(referenceData));
                 } else {
-                    // No reference available, use unmasked
-                    maskedSeries = series;
+                    seriesSample = new StatSample(series.getValues());
+                    referenceSample = null;
                 }
                 break;
 
             case NONE:
             default:
-                // No masking
-                maskedSeries = series;
-                maskedReference = referenceData;
+                // No masking; bivariate statistics are skipped below, so no reference.
+                seriesSample = new StatSample(series.getValues());
+                referenceSample = null;
                 break;
         }
 
@@ -327,7 +356,7 @@ public class StatsTableModel extends AbstractTableModel {
             if (stat.isBivariate() && maskMode == MaskMode.NONE) {
                 value = "N/A";
             } else {
-                value = stat.calculate(maskedSeries, maskedReference);
+                value = stat.calculate(seriesSample, referenceSample);
             }
 
             values.put(stat.getName(), value);

@@ -938,7 +938,8 @@ public class VisualizationTabManager {
 
     /**
      * Applies a custom cell renderer to the stats table that colors statistic values.
-     * The Series column (column 0) remains default, while statistic columns use a theme color.
+     * The index (column 0) and Series (column 1) columns remain default, while statistic
+     * columns use a muted theme color.
      */
     private void applyStatsTableRenderer(JTable table) {
         table.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
@@ -953,8 +954,8 @@ public class VisualizationTabManager {
                     JLabel label = (JLabel) c;
 
                     if (!isSelected) {
-                        if (column == 0) {
-                            // Series name column - use default foreground color
+                        if (column <= 1) {
+                            // Index and Series columns - use default foreground color
                             Color defaultColor = UIManager.getColor("Table.foreground");
                             if (defaultColor != null) {
                                 label.setForeground(defaultColor);
@@ -1015,9 +1016,11 @@ public class VisualizationTabManager {
         // Apply custom renderer to color statistics columns
         applyStatsTableRenderer(table);
 
-        // Make the Series column wider to accommodate longer series names
-        if (table.getColumnCount() > 0) {
-            table.getColumnModel().getColumn(0).setPreferredWidth(200);
+        // Narrow index column (0); wider Series column (1) for longer series names.
+        if (table.getColumnCount() > 1) {
+            table.getColumnModel().getColumn(0).setMaxWidth(48);
+            table.getColumnModel().getColumn(0).setPreferredWidth(40);
+            table.getColumnModel().getColumn(1).setPreferredWidth(200);
         }
 
         JScrollPane scrollPane = new JScrollPane(table);
@@ -1416,18 +1419,34 @@ public class VisualizationTabManager {
 
     /**
      * Sets the selected series on the target tab. Updates visuals accordingly.
+     *
+     * <p>Order is preserved: series already shown keep their existing position, series
+     * no longer selected are dropped, and newly-selected series are appended at the end.
+     * This keeps the stats-table row order (and plot series order) stable as the user
+     * adds series — in particular the first row stays the first-added series, which is
+     * the bivariate reference.</p>
      */
     public void setTargetTabSelectedSeries(Set<SeriesRef> series) {
         TabInfo tab = getTargetTab();
         if (tab == null) return;
 
+        // Merge: retain still-selected series in their current order, then append the
+        // genuinely-new ones (LinkedHashSet.addAll skips refs already present).
+        Set<SeriesRef> ordered = new LinkedHashSet<>();
+        for (SeriesRef ref : tab.selectedSeries) {
+            if (series.contains(ref)) {
+                ordered.add(ref);
+            }
+        }
+        ordered.addAll(series);
+
         tab.selectedSeries.clear();
-        tab.selectedSeries.addAll(series);
+        tab.selectedSeries.addAll(ordered);
 
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
             // Rebuild legend
             tab.plotPanel.clearLegend();
-            for (SeriesRef ref : series) {
+            for (SeriesRef ref : ordered) {
                 Color color = sharedColorMap.get(ref);
                 if (color != null) {
                     tab.plotPanel.addLegendSeries(ref, color);
@@ -1436,7 +1455,7 @@ public class VisualizationTabManager {
 
             // Update visible series and refresh
             tab.plotPanel.setSeriesColors(sharedColorMap);
-            tab.plotPanel.setVisibleSeries(new ArrayList<>(series));
+            tab.plotPanel.setVisibleSeries(new ArrayList<>(ordered));
             tab.plotPanel.refreshData(false);
         } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
             // Rebuild stats table to show only selected series

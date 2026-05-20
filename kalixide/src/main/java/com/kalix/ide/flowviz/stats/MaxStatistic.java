@@ -1,7 +1,5 @@
 package com.kalix.ide.flowviz.stats;
 
-import com.kalix.ide.flowviz.data.TimeSeriesData;
-
 /**
  * Computes the maximum value in a time series.
  */
@@ -18,17 +16,9 @@ public class MaxStatistic implements Statistic {
     }
 
     @Override
-    public String calculate(TimeSeriesData series, TimeSeriesData reference) {
-        if (series == null || series.getPointCount() == 0) {
-            return "-";
-        }
-
-        Double maxValue = series.getMaxValue();
-        if (maxValue == null) {
-            return "-";
-        }
-
-        return String.format("%.3f", maxValue);
+    public String calculate(StatSample series, StatSample reference) {
+        double max = series.max();
+        return Double.isNaN(max) ? "-" : String.format("%.3f", max);
     }
 
     @Override
