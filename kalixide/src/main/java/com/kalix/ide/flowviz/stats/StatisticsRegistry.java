@@ -2,11 +2,9 @@ package com.kalix.ide.flowviz.stats;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Central registry of all available statistics.
- * Provides easy access to statistics by type (univariate, bivariate, all).
  */
 public class StatisticsRegistry {
 
@@ -30,28 +28,6 @@ public class StatisticsRegistry {
      */
     public static List<Statistic> getAll() {
         return Collections.unmodifiableList(ALL_STATISTICS);
-    }
-
-    /**
-     * Gets only univariate statistics (those that don't require a reference series).
-     *
-     * @return List of univariate statistics
-     */
-    public static List<Statistic> getUnivariateStatistics() {
-        return ALL_STATISTICS.stream()
-            .filter(stat -> !stat.isBivariate())
-            .collect(Collectors.toList());
-    }
-
-    /**
-     * Gets only bivariate statistics (those that require comparison to a reference series).
-     *
-     * @return List of bivariate statistics
-     */
-    public static List<Statistic> getBivariateStatistics() {
-        return ALL_STATISTICS.stream()
-            .filter(Statistic::isBivariate)
-            .collect(Collectors.toList());
     }
 
     /**

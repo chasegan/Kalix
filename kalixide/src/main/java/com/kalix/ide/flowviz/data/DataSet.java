@@ -288,16 +288,6 @@ public class DataSet {
         return legacy + ref;
     }
 
-    public int getTotalValidPointCount() {
-        int legacy = series.stream()
-            .mapToInt(s -> s.getValidPointCount() != null ? s.getValidPointCount() : 0)
-            .sum();
-        int ref = seriesByRef.values().stream()
-            .mapToInt(s -> s.getValidPointCount() != null ? s.getValidPointCount() : 0)
-            .sum();
-        return legacy + ref;
-    }
-    
     // Event listeners for UI updates
     public interface DataSetListener {
         void onSeriesAdded(TimeSeriesData series);

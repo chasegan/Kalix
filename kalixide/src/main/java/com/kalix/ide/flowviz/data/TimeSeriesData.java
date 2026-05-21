@@ -14,7 +14,6 @@ public class TimeSeriesData {
     // Cached statistics
     private Double minValue;
     private Double maxValue;
-    private Double meanValue;
     private Integer validPointCount;
     
     // Regular interval optimization
@@ -160,30 +159,26 @@ public class TimeSeriesData {
     }
     
     private void computeStatistics() {
-        double sum = 0.0;
         double min = Double.POSITIVE_INFINITY;
         double max = Double.NEGATIVE_INFINITY;
         int validCount = 0;
-        
+
         for (int i = 0; i < pointCount; i++) {
             if (validPoints[i]) {
                 double value = values[i];
-                sum += value;
                 min = Math.min(min, value);
                 max = Math.max(max, value);
                 validCount++;
             }
         }
-        
+
         this.validPointCount = validCount;
         if (validCount > 0) {
             this.minValue = min;
             this.maxValue = max;
-            this.meanValue = sum / validCount;
         } else {
             this.minValue = null;
             this.maxValue = null;
-            this.meanValue = null;
         }
     }
     
@@ -265,7 +260,6 @@ public class TimeSeriesData {
     // Statistics getters
     public Double getMinValue() { return minValue; }
     public Double getMaxValue() { return maxValue; }
-    public Double getMeanValue() { return meanValue; }
     public Integer getValidPointCount() { return validPointCount; }
     public int getMissingPointCount() { return pointCount - (validPointCount != null ? validPointCount : 0); }
     
