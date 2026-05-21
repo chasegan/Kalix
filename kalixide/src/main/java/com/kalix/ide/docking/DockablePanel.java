@@ -3,17 +3,21 @@ package com.kalix.ide.docking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.LayoutManager;
 import java.awt.RenderingHints;
-import java.awt.event.KeyAdapter;
+import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -41,7 +45,7 @@ import static com.kalix.ide.docking.DockingConstants.*;
  *   <li>Visual feedback with translucent blue highlighting</li>
  *   <li>Draggable grip with dotted pattern and shadow effects</li>
  *   <li>Automatic timeout after 6 seconds of inactivity</li>
- *   <li>Focus management for reliable key event handling</li>
+ *   <li>Window-scoped F9 key binding that needs no keyboard focus of its own</li>
  *   <li>Integration with {@link DockingManager} for drag operations</li>
  * </ul>
  *
@@ -56,6 +60,9 @@ import static com.kalix.ide.docking.DockingConstants.*;
  */
 public class DockablePanel extends JPanel {
 
+    /** ActionMap key for the F9 docking-mode toggle. */
+    private static final String ACTION_TOGGLE_DOCKING = "toggleDockingMode";
+
     // State management
     private boolean isHighlighted = false;
     private boolean isHovered = false;
@@ -65,7 +72,6 @@ public class DockablePanel extends JPanel {
 
     // Listeners
     private MouseListener hoverListener;
-    private KeyListener keyListener;
 
     /**
      * Creates a new DockablePanel with BorderLayout as the default layout manager.
@@ -85,24 +91,21 @@ public class DockablePanel extends JPanel {
     }
 
     /**
-     * Initializes the docking functionality for this panel by setting up mouse and keyboard listeners.
-     * This method configures hover detection, F9 key handling, focus management, and the grip component.
+     * Initializes the docking functionality for this panel by setting up hover
+     * detection, the F9 key binding, and the grip component.
      */
     private void initializeDocking() {
-        setFocusable(true);
-
         // Create grip component
         grip = new DockingGrip(this);
         grip.setVisible(false);
 
-        // Set up mouse listener for hover detection
+        // Hover detection. Mouse events do not require keyboard focus, so the
+        // panel tracks hover without ever stealing focus from its content.
         hoverListener = new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
                 isHovered = true;
                 updateHighlight();
-                // Request focus when mouse enters to ensure key events work
-                requestFocusInWindow();
             }
 
             @Override
@@ -113,25 +116,56 @@ public class DockablePanel extends JPanel {
         };
         addMouseListener(hoverListener);
 
-        // Set up key listener for F9 detection - toggle mode on/off
-        keyListener = new KeyAdapter() {
+        // F9 toggles docking mode. It is registered as a window-scoped key
+        // binding (WHEN_IN_FOCUSED_WINDOW) rather than a KeyListener so it fires
+        // regardless of which component holds keyboard focus - the panel never
+        // needs focus of its own, and so never steals it from its content.
+        //
+        // The action is enabled only while the panel is hovered. With several
+        // dockable panels in one window each registers this keystroke; Swing
+        // dispatches to them in turn and skips any whose action is disabled, so
+        // gating on enablement (rather than inside actionPerformed) ensures the
+        // keystroke falls through to the panel actually under the mouse.
+        InputMap inputMap = getInputMap(WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = getActionMap();
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0), ACTION_TOGGLE_DOCKING);
+        actionMap.put(ACTION_TOGGLE_DOCKING, new AbstractAction() {
             @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_F9) {
-                    toggleDockingMode();
+            public boolean isEnabled() {
+                return isHovered;
+            }
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleDockingMode();
+            }
+        });
+    }
+
+    /**
+     * Forwards mouse enter/exit events from a child component to this panel's
+     * hover listeners.
+     *
+     * <p>A child component that fills the panel intercepts the mouse events that
+     * would otherwise let the panel detect hover. Subclasses call this for each
+     * such child so docking-mode hover highlighting keeps working.</p>
+     *
+     * @param child the child component whose hover events should be forwarded
+     */
+    protected void forwardHoverEvents(Component child) {
+        child.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                for (MouseListener listener : getMouseListeners()) {
+                    listener.mouseEntered(e);
                 }
             }
-        };
-        addKeyListener(keyListener);
 
-        // Set focus policy to accept focus
-        setFocusable(true);
-
-        // Add focus listener to handle focus events
-        addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
-            public void focusGained(java.awt.event.FocusEvent e) {
-                // Panel gained focus - ready for key events
+            public void mouseExited(MouseEvent e) {
+                for (MouseListener listener : getMouseListeners()) {
+                    listener.mouseExited(e);
+                }
             }
         });
     }
@@ -239,13 +273,6 @@ public class DockablePanel extends JPanel {
 
             g2d.dispose();
         }
-    }
-
-    /**
-     * Forces the panel to request focus so it can receive key events.
-     */
-    public void requestDockingFocus() {
-        requestFocusInWindow();
     }
 
     /**

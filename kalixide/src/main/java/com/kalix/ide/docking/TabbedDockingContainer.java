@@ -89,9 +89,6 @@ public class TabbedDockingContainer extends JPanel {
 
         // Select the newly added tab
         tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
-
-        // Ensure the panel can receive focus for F9 key events
-        panel.requestDockingFocus();
     }
 
     @Override
@@ -212,9 +209,6 @@ public class TabbedDockingContainer extends JPanel {
                     // For other containers, just add
                     parent.add(remainingPanel);
                 }
-
-                // Ensure the panel can receive focus for F9 key events
-                remainingPanel.requestDockingFocus();
             }
 
             // Trigger parent layout update

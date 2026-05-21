@@ -4,10 +4,15 @@ import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.managers.KeyboardShortcutManager;
 import com.kalix.ide.themes.NodeTheme;
 
+import javax.swing.Action;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.KeyStroke;
+import javax.swing.text.DefaultEditorKit;
+import java.awt.Toolkit;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
 
@@ -33,9 +38,6 @@ public class MenuBarBuilder {
         void exitApplication();
         void undoAction();
         void redoAction();
-        void cutAction();
-        void copyAction();
-        void pasteAction();
         void toggleCommentAction();
         void normalizeLineEndings();
         void zoomIn();
@@ -205,9 +207,9 @@ public class MenuBarBuilder {
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Undo", "Z"), e -> callbacks.undoAction()));
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Redo", "Y"), e -> callbacks.redoAction()));
         editMenu.addSeparator();
-        editMenu.add(createMenuItem("Cut", e -> callbacks.cutAction()));
-        editMenu.add(createMenuItem("Copy", e -> callbacks.copyAction()));
-        editMenu.add(createMenuItem("Paste", e -> callbacks.pasteAction()));
+        editMenu.add(createTextActionItem("Cut", new DefaultEditorKit.CutAction(), KeyEvent.VK_X));
+        editMenu.add(createTextActionItem("Copy", new DefaultEditorKit.CopyAction(), KeyEvent.VK_C));
+        editMenu.add(createTextActionItem("Paste", new DefaultEditorKit.PasteAction(), KeyEvent.VK_V));
         editMenu.addSeparator();
         editMenu.add(createMenuItem(shortcutManager.getMenuItemWithShortcut("Toggle Comment", "/"), e -> callbacks.toggleCommentAction()));
         editMenu.add(createMenuItem("Normalize Line Endings", e -> callbacks.normalizeLineEndings()));
@@ -310,5 +312,29 @@ public class MenuBarBuilder {
         item.addActionListener(listener);
         return item;
     }
-    
+
+    /**
+     * Creates an Edit-menu item backed by a standard text-editing action.
+     *
+     * <p>{@link DefaultEditorKit} actions operate on whichever text component
+     * most recently held focus, which is the idiomatic Swing way to wire
+     * Cut/Copy/Paste menu items - no manual routing to a specific editor is
+     * needed. The accelerator uses the platform menu shortcut (Cmd on macOS,
+     * Ctrl elsewhere). When a text component has focus, its own key bindings
+     * handle the keystroke first, so the accelerator only acts as a fallback
+     * for when focus is elsewhere and never fires twice.</p>
+     *
+     * @param label   the menu item label
+     * @param action  the text-editing action to invoke
+     * @param keyCode the {@link KeyEvent} key code for the accelerator
+     * @return the configured menu item
+     */
+    private JMenuItem createTextActionItem(String label, Action action, int keyCode) {
+        JMenuItem item = new JMenuItem(action);
+        item.setText(label);
+        item.setAccelerator(KeyStroke.getKeyStroke(keyCode,
+                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        return item;
+    }
+
 }

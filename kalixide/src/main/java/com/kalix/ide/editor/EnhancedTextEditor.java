@@ -1019,19 +1019,7 @@ public class EnhancedTextEditor extends JPanel {
     public String getText() {
         return textArea.getText();
     }
-    
-    public void cut() {
-        textArea.cut();
-    }
-    
-    public void copy() {
-        textArea.copy();
-    }
-    
-    public void paste() {
-        textArea.paste();
-    }
-    
+
     // Dirty state management
     public boolean isDirty() {
         return isDirty;

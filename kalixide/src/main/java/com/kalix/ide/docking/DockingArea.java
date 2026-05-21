@@ -101,9 +101,6 @@ public class DockingArea extends JPanel {
         add(panel, BorderLayout.CENTER);
         revalidate();
         repaint();
-
-        // Ensure the panel can receive focus for F9 key events
-        panel.requestDockingFocus();
     }
 
     /**

@@ -971,24 +971,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
-    public void cutAction() {
-        textEditor.cut();
-        updateStatus(AppConstants.STATUS_CUT);
-    }
-
-    @Override
-    public void copyAction() {
-        textEditor.copy();
-        updateStatus(AppConstants.STATUS_COPY);
-    }
-
-    @Override
-    public void pasteAction() {
-        textEditor.paste();
-        updateStatus(AppConstants.STATUS_PASTE);
-    }
-
-    @Override
     public void toggleCommentAction() {
         textEditor.toggleComment();
     }

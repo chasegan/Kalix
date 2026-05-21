@@ -74,9 +74,6 @@ public final class AppConstants {
     public static final String STATUS_REDO = "Redo";
     public static final String STATUS_NOTHING_TO_UNDO = "Nothing to undo";
     public static final String STATUS_NOTHING_TO_REDO = "Nothing to redo";
-    public static final String STATUS_CUT = "Cut";
-    public static final String STATUS_COPY = "Copy";
-    public static final String STATUS_PASTE = "Paste";
     public static final String STATUS_ZOOMED_IN = "Zoomed in";
     public static final String STATUS_ZOOMED_OUT = "Zoomed out";
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
