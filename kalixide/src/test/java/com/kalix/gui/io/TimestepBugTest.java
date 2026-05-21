@@ -30,7 +30,7 @@ class TimestepBugTest {
             LocalDateTime.of(2023, 1, 4, 0, 0, 0)
         };
         double[] dailyValues = {10.0, 15.0, 12.0, 18.0};
-        TimeSeriesData dailySeries = new TimeSeriesData("daily_temperature", dailyTimes, dailyValues);
+        TimeSeriesData dailySeries = new TimeSeriesData(dailyTimes, dailyValues);
 
         // Verify the interval detection
         assertTrue(dailySeries.hasRegularInterval(), "Daily data should be detected as regular interval");
@@ -39,7 +39,7 @@ class TimestepBugTest {
         // Write to file
         String basePath = tempDir.resolve("daily_test").toString();
         KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
-        writer.writeToFile(basePath, List.of(dailySeries), false);
+        writer.writeToFile(basePath, List.of(new NamedSeries("daily_temperature", dailySeries)), false);
 
         // Read back the metadata to check timestep
         KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
@@ -67,7 +67,7 @@ class TimestepBugTest {
             LocalDateTime.of(2023, 1, 1, 3, 0, 0)
         };
         double[] hourlyValues = {20.0, 22.0, 19.0, 21.0};
-        TimeSeriesData hourlySeries = new TimeSeriesData("hourly_temperature", hourlyTimes, hourlyValues);
+        TimeSeriesData hourlySeries = new TimeSeriesData(hourlyTimes, hourlyValues);
 
         // Verify the interval detection
         assertTrue(hourlySeries.hasRegularInterval(), "Hourly data should be detected as regular interval");
@@ -76,7 +76,7 @@ class TimestepBugTest {
         // Write to file
         String basePath = tempDir.resolve("hourly_test").toString();
         KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
-        writer.writeToFile(basePath, List.of(hourlySeries), false);
+        writer.writeToFile(basePath, List.of(new NamedSeries("hourly_temperature", hourlySeries)), false);
 
         // Read back the metadata to check timestep
         KalixTimeSeriesReader reader = new KalixTimeSeriesReader();

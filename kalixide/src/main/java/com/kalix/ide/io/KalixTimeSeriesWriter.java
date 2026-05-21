@@ -32,22 +32,15 @@ public class KalixTimeSeriesWriter {
     private static final int CODEC_GORILLA_FLOAT = 1;
 
     /**
-     * Write timeseries data to files with the given base path using default 32-bit precision.
-     * Creates basePath.kaz (binary) and basePath.kai (metadata)
-     */
-    public void writeToFile(String basePath, List<TimeSeriesData> seriesList) throws IOException {
-        writeToFile(basePath, seriesList, false); // Default to 32-bit precision
-    }
-
-    /**
      * Write timeseries data to files with the given base path and specified precision.
      * Creates basePath.kaz (binary) and basePath.kai (metadata)
      *
      * @param basePath Base file path (without extension)
-     * @param seriesList List of time series data to write
+     * @param seriesList List of (name, data) pairs to write — the name becomes the
+     *                   {@code seriesName} metadata entry
      * @param use64BitPrecision true for 64-bit double precision, false for 32-bit float precision
      */
-    public void writeToFile(String basePath, List<TimeSeriesData> seriesList, boolean use64BitPrecision) throws IOException {
+    public void writeToFile(String basePath, List<NamedSeries> seriesList, boolean use64BitPrecision) throws IOException {
         if (seriesList == null || seriesList.isEmpty()) {
             throw new IllegalArgumentException("No series data to write");
         }
@@ -62,7 +55,8 @@ public class KalixTimeSeriesWriter {
             long currentOffset = 0;
 
             for (int i = 0; i < seriesList.size(); i++) {
-                TimeSeriesData series = seriesList.get(i);
+                NamedSeries named = seriesList.get(i);
+                TimeSeriesData series = named.data();
                 long offset = currentOffset; // Current byte position
 
                 // Determine codec based on precision preference
@@ -100,7 +94,7 @@ public class KalixTimeSeriesWriter {
                 metadata.endTime = series.getLastTimestamp();
                 metadata.timestep = timestepSeconds; // Already in seconds
                 metadata.length = series.getPointCount();
-                metadata.seriesName = series.getName();
+                metadata.seriesName = named.name();
                 metadataList.add(metadata);
             }
         }

@@ -2,7 +2,10 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.KalixTimeSeriesReader;
+import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import javax.swing.*;
@@ -317,13 +320,13 @@ public class FlowVizDataManager {
         progressDialog.setLocationRelativeTo(parentFrame);
 
         // Create background loading task
-        SwingWorker<List<TimeSeriesData>, Integer> loadTask = new SwingWorker<List<TimeSeriesData>, Integer>() {
+        SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer> loadTask = new SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer>() {
             @Override
-            protected List<TimeSeriesData> doInBackground() throws Exception {
+            protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
                 publish(25);
                 KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
                 publish(50);
-                List<TimeSeriesData> seriesList = reader.readAllSeries(basePath);
+                List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
                 publish(100);
                 return seriesList;
             }
@@ -342,7 +345,7 @@ public class FlowVizDataManager {
                 progressDialog.dispose();
 
                 try {
-                    List<TimeSeriesData> seriesList = get();
+                    List<com.kalix.ide.io.NamedSeries> seriesList = get();
                     handleKtmImportResult(ktmFile, seriesList);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,
@@ -368,7 +371,7 @@ public class FlowVizDataManager {
      * @param ktmFile The source KAI file
      * @param seriesList The loaded time series data
      */
-    private void handleKtmImportResult(File ktmFile, List<TimeSeriesData> seriesList) {
+    private void handleKtmImportResult(File ktmFile, List<com.kalix.ide.io.NamedSeries> seriesList) {
         if (seriesList == null || seriesList.isEmpty()) {
             JOptionPane.showMessageDialog(parentFrame,
                 "No time series data found in file: " + ktmFile.getName(),
@@ -381,19 +384,11 @@ public class FlowVizDataManager {
         String fileName = ktmFile.getName();
         int addedCount = 0;
 
-        for (TimeSeriesData series : seriesList) {
-            // Create display name: "filename.kai: SeriesName"
-            String originalName = series.getName();
-            String displayName = fileName + ": " + originalName;
-            String uniqueName = getUniqueSeriesName(displayName);
-
-            // Create new series with the display name
-            TimeSeriesData namedSeries = new TimeSeriesData(
-                uniqueName,
-                convertTimestampsToLocalDateTime(series.getTimestamps()),
-                series.getValues()
-            );
-            dataSet.addSeries(namedSeries);
+        for (NamedSeries ns : seriesList) {
+            // Display label: "filename.kai: SeriesName"; identity is a DatasetSeries ref.
+            String displayName = fileName + ": " + ns.name();
+            SeriesRef ref = uniqueRefFor(ktmFile, displayName);
+            dataSet.addSeries(ref, ns.data());
             addedCount++;
         }
 
@@ -523,19 +518,11 @@ public class FlowVizDataManager {
         // Add new data (don't clear existing data)
         String fileName = csvFile.getName();
 
-        for (TimeSeriesData series : importResult.getDataSet().getAllSeries()) {
-            // Create display name: "filename.csv: ColumnName"
-            String columnName = series.getName();
-            String displayName = fileName + ": " + columnName;
-            String uniqueName = getUniqueSeriesName(displayName);
-
-            // Create new series with the display name
-            TimeSeriesData namedSeries = new TimeSeriesData(
-                uniqueName,
-                convertTimestampsToLocalDateTime(series.getTimestamps()),
-                series.getValues()
-            );
-            dataSet.addSeries(namedSeries);
+        for (NamedSeries ns : importResult.getSeries()) {
+            // Display label: "filename.csv: ColumnName"; identity is a DatasetSeries ref.
+            String displayName = fileName + ": " + ns.name();
+            SeriesRef ref = uniqueRefFor(csvFile, displayName);
+            dataSet.addSeries(ref, ns.data());
         }
 
         currentFileUpdater.accept(csvFile);
@@ -559,41 +546,24 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Generates a unique series name by appending a counter if the base name already exists.
-     *
-     * @param baseName The base name to make unique
-     * @return A unique series name
+     * Builds a {@link DatasetSeries} ref for a series loaded from {@code file}, appending
+     * a counter to the base label if that ref is already in the pool (e.g. the same file
+     * loaded twice, or two files with a colliding display label).
      */
-    private String getUniqueSeriesName(String baseName) {
-        if (!dataSet.hasSeries(baseName)) {
-            return baseName;
+    private SeriesRef uniqueRefFor(File file, String baseName) {
+        String datasetId = file.getAbsolutePath();
+        SeriesRef ref = new DatasetSeries(datasetId, baseName);
+        if (!dataSet.hasSeries(ref)) {
+            return ref;
         }
 
-        // Find unique name by appending number
         int counter = 2;
-        String candidateName;
         do {
-            candidateName = baseName + " (" + counter + ")";
+            ref = new DatasetSeries(datasetId, baseName + " (" + counter + ")");
             counter++;
-        } while (dataSet.hasSeries(candidateName));
+        } while (dataSet.hasSeries(ref));
 
-        return candidateName;
-    }
-
-    /**
-     * Converts millisecond timestamps to LocalDateTime objects.
-     *
-     * @param timestampsMillis Array of millisecond timestamps
-     * @return Array of LocalDateTime objects
-     */
-    private java.time.LocalDateTime[] convertTimestampsToLocalDateTime(long[] timestampsMillis) {
-        java.time.LocalDateTime[] result = new java.time.LocalDateTime[timestampsMillis.length];
-        for (int i = 0; i < timestampsMillis.length; i++) {
-            result[i] = java.time.LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestampsMillis[i]),
-                java.time.ZoneOffset.UTC);
-        }
-        return result;
+        return ref;
     }
 
     /**

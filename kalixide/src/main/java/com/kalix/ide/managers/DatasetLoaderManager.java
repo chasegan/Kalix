@@ -327,25 +327,18 @@ public class DatasetLoaderManager {
         String fileName = csvFile.getName();
         int seriesAdded = 0;
 
-        for (TimeSeriesData series : importResult.getDataSet().getAllSeries()) {
+        for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
             // Create hierarchical series name: file.sanitized_filename.sanitized_column
-            String columnName = series.getName();
+            String columnName = ns.name();
             String seriesName = createDatasetSeriesName(csvFile, columnName);
 
             logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", columnName, seriesName);
 
-            // Create new series with hierarchical name
-            TimeSeriesData namedSeries = new TimeSeriesData(
-                seriesName,
-                convertTimestampsToLocalDateTime(series.getTimestamps()),
-                series.getValues()
-            );
-
-            // Store in cache (NOT in plotDataSet yet - added when plotted, like runs).
-            // Key by DatasetSeries ref so the absolute path qualifies the entry — two
-            // files whose names sanitize to the same identifier are kept separate.
+            // The importer already returns nameless data — store it directly. Identity is
+            // the DatasetSeries ref; the absolute path qualifies the entry so two files
+            // whose names sanitize to the same identifier stay separate.
             DatasetSeries ref = new DatasetSeries(csvFile.getAbsolutePath(), seriesName);
-            datasetSeriesCache.put(ref, namedSeries);
+            datasetSeriesCache.put(ref, ns.data());
             seriesAdded++;
         }
 
@@ -367,7 +360,7 @@ public class DatasetLoaderManager {
         TimeSeriesCsvImporter.ImportStatistics stats = importResult.getStatistics();
         if (statusUpdater != null) {
             statusUpdater.accept(String.format("Loaded %s: %d series, %,d total points in %d ms",
-                fileName, seriesAdded, importResult.getDataSet().getTotalPointCount(), stats.getParseTimeMs()));
+                fileName, seriesAdded, importResult.getTotalPointCount(), stats.getParseTimeMs()));
         }
 
         // Notify callback
@@ -421,13 +414,13 @@ public class DatasetLoaderManager {
         progressDialog.setLocationRelativeTo(parentFrame);
 
         // Create background loading task
-        SwingWorker<List<TimeSeriesData>, Integer> loadTask = new SwingWorker<>() {
+        SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer> loadTask = new SwingWorker<>() {
             @Override
-            protected List<TimeSeriesData> doInBackground() throws Exception {
+            protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
                 publish(25);
                 KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
                 publish(50);
-                List<TimeSeriesData> seriesList = reader.readAllSeries(basePath);
+                List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
                 publish(100);
                 return seriesList;
             }
@@ -445,26 +438,20 @@ public class DatasetLoaderManager {
                 progressDialog.dispose();
 
                 try {
-                    List<TimeSeriesData> seriesList = get();
+                    List<com.kalix.ide.io.NamedSeries> seriesList = get();
 
                     // Add all series to cache using hierarchical naming scheme
-                    for (TimeSeriesData series : seriesList) {
+                    for (com.kalix.ide.io.NamedSeries ns : seriesList) {
                         // Create hierarchical series name: file.sanitized_filename.sanitized_series
-                        String originalSeriesName = series.getName();
+                        String originalSeriesName = ns.name();
                         String seriesName = createDatasetSeriesName(kaiFile, originalSeriesName);
 
                         logger.info("Loading KAI series: originalName='{}' -> seriesName='{}'", originalSeriesName, seriesName);
 
-                        TimeSeriesData namedSeries = new TimeSeriesData(
-                            seriesName,
-                            convertTimestampsToLocalDateTime(series.getTimestamps()),
-                            series.getValues()
-                        );
-
-                        // Store in cache (NOT in plotDataSet yet - added when plotted, like runs).
+                        // The importer already returns nameless data — store it directly.
                         // Key by DatasetSeries ref so the absolute path qualifies the entry.
                         DatasetSeries ref = new DatasetSeries(kaiFile.getAbsolutePath(), seriesName);
-                        datasetSeriesCache.put(ref, namedSeries);
+                        datasetSeriesCache.put(ref, ns.data());
                     }
 
                     // Add file to loaded datasets tree
@@ -503,22 +490,6 @@ public class DatasetLoaderManager {
 
         loadTask.execute();
         progressDialog.setVisible(true);
-    }
-
-    /**
-     * Converts millisecond timestamps to LocalDateTime array.
-     *
-     * @param timestampsMillis Array of timestamps in milliseconds since epoch
-     * @return Array of LocalDateTime objects in UTC
-     */
-    private LocalDateTime[] convertTimestampsToLocalDateTime(long[] timestampsMillis) {
-        LocalDateTime[] result = new LocalDateTime[timestampsMillis.length];
-        for (int i = 0; i < timestampsMillis.length; i++) {
-            result[i] = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestampsMillis[i]),
-                ZoneOffset.UTC);
-        }
-        return result;
     }
 
     /**

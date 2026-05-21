@@ -261,34 +261,25 @@ public class FlowVizWindow extends JFrame {
     private void setupDataModel() {
         dataSet = new DataSet();
         
-        // Set up data change listeners
+        // Set up data change listeners. The DataSet delivers SeriesRef identities;
+        // FlowVizWindow only ever holds DatasetSeries refs.
         dataSet.addListener(new DataSet.DataSetListener() {
             @Override
-            public void onSeriesAdded(TimeSeriesData series) {
+            public void onSeriesAdded(SeriesRef ref, TimeSeriesData data) {
                 // Generate color for the series (cycle through predefined colors)
                 Color seriesColor = generateSeriesColor(dataSet.getSeriesCount() - 1);
 
-                String name = series.getName();
-                dataPanel.addSeries(name, seriesColor, series.getPointCount());
-
-                // Update plot panel with new data
+                dataPanel.addSeries(ref, seriesColor, data.getPointCount());
                 updatePlotPanel();
-
-                // Add to legend — use DatasetSeries ref (FlowVizWindow shows file data,
-                // not run output)
-                plotPanel.addLegendSeries(refFor(name), seriesColor);
-
+                plotPanel.addLegendSeries(ref, seriesColor);
                 updateTitle();
             }
 
             @Override
-            public void onSeriesRemoved(String seriesName) {
-                dataPanel.removeSeries(seriesName);
+            public void onSeriesRemoved(SeriesRef ref) {
+                dataPanel.removeSeries(ref);
                 updatePlotPanel();
-
-                // Remove from legend
-                plotPanel.removeLegendSeries(refFor(seriesName));
-
+                plotPanel.removeLegendSeries(ref);
                 updateTitle();
             }
 
@@ -318,32 +309,20 @@ public class FlowVizWindow extends JFrame {
         return SERIES_COLORS[seriesIndex % SERIES_COLORS.length];
     }
 
-    /**
-     * Constructs a {@link DatasetSeries} ref for a series loaded in this FlowViz window.
-     * Falls back to a synthetic datasetId ({@code "(unsaved)"}) when no file has been
-     * associated yet — sufficient to give a stable identity within the window's lifetime.
-     */
-    private SeriesRef refFor(String seriesName) {
-        String datasetId = currentFile != null ? currentFile.getAbsolutePath() : "(unsaved)";
-        return new DatasetSeries(datasetId, seriesName);
-    }
-    
     private void updateTitle() {
         String title;
 
-        // Detect if we have data from a single file by checking series names
+        // Detect whether all loaded series come from a single file by grouping on the
+        // DatasetSeries datasetId (the source file's absolute path).
         boolean isSingleFile = false;
         if (currentFile != null && dataSet.getSeriesCount() > 0) {
-            // Check if all series are from the same file
-            java.util.Set<String> fileNames = new java.util.HashSet<>();
-            for (String seriesName : dataSet.getSeriesNames()) {
-                // Series names are formatted as "filename: SeriesName"
-                if (seriesName.contains(": ")) {
-                    String fileName = seriesName.substring(0, seriesName.indexOf(": "));
-                    fileNames.add(fileName);
+            java.util.Set<String> datasetIds = new java.util.HashSet<>();
+            for (SeriesRef ref : dataSet.getSeriesRefs()) {
+                if (ref instanceof DatasetSeries ds) {
+                    datasetIds.add(ds.datasetId());
                 }
             }
-            isSingleFile = fileNames.size() == 1;
+            isSingleFile = datasetIds.size() == 1;
         }
 
         if (isSingleFile) {
@@ -363,30 +342,16 @@ public class FlowVizWindow extends JFrame {
         // Update plot panel with current data and colors
         plotPanel.setDataSet(dataSet);
 
-        // FlowVizWindow stores its data via the legacy named-DataSet API; project each
-        // series name to a DatasetSeries ref for the PlotPanel's ref-typed API.
+        // The pool is ref-keyed; build the colour map by pool insertion order.
+        List<SeriesRef> allRefs = dataSet.getSeriesRefs();
         Map<SeriesRef, Color> colorMap = new HashMap<>();
-        List<String> visibleSeriesNames = dataPanel.getVisibleSeries();
-        if (visibleSeriesNames.isEmpty() && !dataSet.isEmpty()) {
-            visibleSeriesNames = new ArrayList<>(dataSet.getSeriesNames());
+        for (int i = 0; i < allRefs.size(); i++) {
+            colorMap.put(allRefs.get(i), generateSeriesColor(i));
         }
 
-        List<String> allNames = dataSet.getSeriesNames();
-        for (String seriesName : allNames) {
-            Color color = generateSeriesColor(allNames.indexOf(seriesName));
-            colorMap.put(refFor(seriesName), color);
-        }
-
-        List<SeriesRef> visibleRefs = new ArrayList<>(visibleSeriesNames.size());
-        for (String name : visibleSeriesNames) {
-            SeriesRef ref = refFor(name);
-            visibleRefs.add(ref);
-            // Ensure pool also has the data keyed by ref so PlotPanel's ref-based
-            // lookups find it. (The legacy storage already holds it under name.)
-            TimeSeriesData data = dataSet.getSeries(name);
-            if (data != null) {
-                dataSet.addSeries(ref, data);
-            }
+        List<SeriesRef> visibleRefs = dataPanel.getVisibleSeries();
+        if (visibleRefs.isEmpty() && !dataSet.isEmpty()) {
+            visibleRefs = allRefs;
         }
 
         plotPanel.setSeriesColors(colorMap);
@@ -395,20 +360,9 @@ public class FlowVizWindow extends JFrame {
 
     private void updatePlotVisibility() {
         // Update only visibility without resetting viewport
-        List<String> visibleSeriesNames = dataPanel.getVisibleSeries();
-
-        if (visibleSeriesNames.isEmpty() && !dataSet.isEmpty()) {
-            visibleSeriesNames = new ArrayList<>(dataSet.getSeriesNames());
-        }
-
-        List<SeriesRef> visibleRefs = new ArrayList<>(visibleSeriesNames.size());
-        for (String name : visibleSeriesNames) {
-            SeriesRef ref = refFor(name);
-            visibleRefs.add(ref);
-            TimeSeriesData data = dataSet.getSeries(name);
-            if (data != null) {
-                dataSet.addSeries(ref, data);
-            }
+        List<SeriesRef> visibleRefs = dataPanel.getVisibleSeries();
+        if (visibleRefs.isEmpty() && !dataSet.isEmpty()) {
+            visibleRefs = dataSet.getSeriesRefs();
         }
         plotPanel.setVisibleSeries(visibleRefs);
     }

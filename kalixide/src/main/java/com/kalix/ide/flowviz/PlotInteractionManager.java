@@ -827,15 +827,17 @@ public class PlotInteractionManager {
 
         try {
             DataSet dataSet = dataSetSupplier.get();
+            com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+                (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
 
-            // Convert DataSet to List<TimeSeriesData>
-            java.util.List<com.kalix.ide.flowviz.data.TimeSeriesData> seriesList =
-                new java.util.ArrayList<>();
-
+            // Build (name, data) pairs — the .kai metadata needs a series name, taken
+            // from the ref's projected label.
+            java.util.List<com.kalix.ide.io.NamedSeries> seriesList = new java.util.ArrayList<>();
             for (com.kalix.ide.flowviz.data.SeriesRef ref : dataSet.getSeriesRefs()) {
                 com.kalix.ide.flowviz.data.TimeSeriesData series = dataSet.getSeries(ref);
                 if (series != null) {
-                    seriesList.add(series);
+                    String name = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
+                    seriesList.add(new com.kalix.ide.io.NamedSeries(name, series));
                 }
             }
 

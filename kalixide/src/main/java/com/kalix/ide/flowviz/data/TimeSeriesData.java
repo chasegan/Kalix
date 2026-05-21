@@ -5,7 +5,6 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 
 public class TimeSeriesData {
-    private final String name;
     private final long[] timestamps;      // Unix timestamps in milliseconds for fast math
     private final double[] values;        // Raw values (NaN for missing data)
     private final boolean[] validPoints;  // Quick missing data lookup
@@ -22,42 +21,25 @@ public class TimeSeriesData {
     private final long firstTimestamp;
     
     /**
-     * Constructs a nameless time series. Series identity is supplied externally via
-     * {@link SeriesRef} when the data is added to a {@link DataSet}. Prefer this
-     * constructor; the legacy named form below is retained only until all call sites
-     * have migrated.
+     * Constructs a time series from {@link LocalDateTime}s. Series identity is supplied
+     * externally via {@link SeriesRef} when the data is added to a {@link DataSet} — the
+     * data itself carries no name.
      */
     public TimeSeriesData(LocalDateTime[] dateTimes, double[] values) {
-        this(null, toEpochMillis(dateTimes), values);
+        this(toEpochMillis(dateTimes), values);
     }
 
     /**
-     * @deprecated Identity belongs on {@link SeriesRef}, not on the data. Use
-     * {@link #TimeSeriesData(LocalDateTime[], double[])} and pass the ref separately
-     * when inserting into a {@link DataSet}. Will be removed once Phase 1 callers are
-     * migrated.
-     */
-    @Deprecated
-    public TimeSeriesData(String name, LocalDateTime[] dateTimes, double[] values) {
-        this(name, toEpochMillis(dateTimes), values);
-    }
-
-    /**
-     * Constructs a nameless time series directly from millisecond Unix timestamps. Avoids
-     * the {@link LocalDateTime} round-trip — intended for hot paths that already hold
+     * Constructs a time series directly from millisecond Unix timestamps. Avoids the
+     * {@link LocalDateTime} round-trip — intended for hot paths that already hold
      * primitive timestamps (e.g. masking, aggregation). The arrays are defensively copied;
      * the copy is sorted by timestamp if not already ascending.
      */
     public TimeSeriesData(long[] timestamps, double[] values) {
-        this(null, timestamps, values);
-    }
-
-    private TimeSeriesData(String name, long[] timestamps, double[] values) {
         if (timestamps.length != values.length) {
             throw new IllegalArgumentException("Timestamp and value arrays must have same length");
         }
 
-        this.name = name;
         this.pointCount = timestamps.length;
         this.timestamps = timestamps.clone();
         this.values = values.clone();
@@ -236,16 +218,6 @@ public class TimeSeriesData {
     }
 
     // Getters
-
-    /**
-     * @deprecated The name is a legacy field carrying display-only metadata. Series
-     * identity lives on {@link SeriesRef}, projected to a display string by
-     * {@link LabelResolver} at render time. Callers should retrieve the {@code SeriesRef}
-     * via {@link DataSet#getSeriesRefs()} and resolve the label there. Will be removed
-     * along with the {@link #name} field.
-     */
-    @Deprecated
-    public String getName() { return name; }
     public int getPointCount() { return pointCount; }
     public long[] getTimestamps() { return timestamps; }
     public double[] getValues() { return values; }

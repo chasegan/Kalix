@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.data.SeriesRef;
+
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
@@ -81,13 +83,13 @@ public class DataPanel extends JPanel {
         repaint();
     }
 
-    public void addSeries(String seriesName, Color seriesColor, int pointCount) {
+    public void addSeries(SeriesRef ref, Color seriesColor, int pointCount) {
         // Remove empty state if this is the first series
         if (dataItems.isEmpty()) {
             seriesListPanel.removeAll();
         }
 
-        SeriesDataItem item = new SeriesDataItem(seriesName, seriesColor, pointCount,
+        SeriesDataItem item = new SeriesDataItem(ref, seriesColor, pointCount,
             () -> {
                 if (visibilityChangeListener != null) {
                     visibilityChangeListener.onVisibilityChanged();
@@ -103,8 +105,8 @@ public class DataPanel extends JPanel {
         repaint();
     }
 
-    public void removeSeries(String seriesName) {
-        dataItems.removeIf(item -> item.getSeriesName().equals(seriesName));
+    public void removeSeries(SeriesRef ref) {
+        dataItems.removeIf(item -> item.getRef().equals(ref));
         updateDataDisplay();
     }
 
@@ -130,16 +132,16 @@ public class DataPanel extends JPanel {
     }
 
 
-    public List<String> getVisibleSeries() {
+    public List<SeriesRef> getVisibleSeries() {
         return dataItems.stream()
             .filter(SeriesDataItem::isSeriesVisible)
-            .map(SeriesDataItem::getSeriesName)
+            .map(SeriesDataItem::getRef)
             .toList();
     }
 
-    public List<String> getAllSeries() {
+    public List<SeriesRef> getAllSeries() {
         return dataItems.stream()
-            .map(SeriesDataItem::getSeriesName)
+            .map(SeriesDataItem::getRef)
             .toList();
     }
 
@@ -218,7 +220,7 @@ public class DataPanel extends JPanel {
 
     // Inner class for individual data items
     private class SeriesDataItem extends JPanel {
-        private final String seriesName;
+        private final SeriesRef ref;
         private final Color seriesColor;
         private final int pointCount;
         private final Runnable visibilityChangeCallback;
@@ -226,8 +228,8 @@ public class DataPanel extends JPanel {
         private boolean seriesVisible = true;
         private boolean selected = false;
 
-        public SeriesDataItem(String seriesName, Color seriesColor, int pointCount, Runnable visibilityChangeCallback) {
-            this.seriesName = seriesName;
+        public SeriesDataItem(SeriesRef ref, Color seriesColor, int pointCount, Runnable visibilityChangeCallback) {
+            this.ref = ref;
             this.seriesColor = seriesColor;
             this.pointCount = pointCount;
             this.visibilityChangeCallback = visibilityChangeCallback;
@@ -269,7 +271,7 @@ public class DataPanel extends JPanel {
             JPanel rightPanel = new JPanel(new BorderLayout());
             rightPanel.setBackground(Color.WHITE);
 
-            JLabel nameLabel = new JLabel(seriesName);
+            JLabel nameLabel = new JLabel(ref.baseName());
             nameLabel.setFont(new Font("Arial", Font.BOLD, 11));
             nameLabel.setForeground(Color.BLACK);  // Explicitly set color
 
@@ -356,8 +358,8 @@ public class DataPanel extends JPanel {
             return components.toArray(new Component[0]);
         }
 
-        public String getSeriesName() {
-            return seriesName;
+        public SeriesRef getRef() {
+            return ref;
         }
 
         public boolean isSeriesVisible() {

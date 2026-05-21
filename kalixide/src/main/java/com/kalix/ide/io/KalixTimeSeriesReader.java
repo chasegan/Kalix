@@ -33,9 +33,10 @@ public class KalixTimeSeriesReader {
     private static final int CODEC_GORILLA_FLOAT = 1;
 
     /**
-     * Read all timeseries from the file pair
+     * Read all timeseries from the file pair. Each result pairs the series-name metadata
+     * with nameless {@link TimeSeriesData}; the caller builds the {@code SeriesRef} identity.
      */
-    public List<TimeSeriesData> readAllSeries(String basePath) throws IOException {
+    public List<NamedSeries> readAllSeries(String basePath) throws IOException {
         String metadataPath = basePath + ".kai";
         String binaryPath = basePath + ".kaz";
 
@@ -43,11 +44,11 @@ public class KalixTimeSeriesReader {
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
 
         // Read all series from binary file
-        List<TimeSeriesData> result = new ArrayList<>();
+        List<NamedSeries> result = new ArrayList<>();
         try (RandomAccessFile binaryFile = new RandomAccessFile(binaryPath, "r")) {
             for (SeriesMetadata meta : metadataList) {
                 TimeSeriesData series = readSeriesFromBinary(binaryFile, meta);
-                result.add(series);
+                result.add(new NamedSeries(meta.seriesName, series));
             }
         }
 
@@ -227,10 +228,10 @@ public class KalixTimeSeriesReader {
         }
 
         // Convert to TimeSeriesData
-        return convertToTimeSeriesData(meta.seriesName, gorillaData);
+        return convertToTimeSeriesData(gorillaData);
     }
 
-    private TimeSeriesData convertToTimeSeriesData(String name, List<GorillaCompressor.TimeValueDouble> gorillaData) {
+    private TimeSeriesData convertToTimeSeriesData(List<GorillaCompressor.TimeValueDouble> gorillaData) {
         LocalDateTime[] dateTimes = new LocalDateTime[gorillaData.size()];
         double[] values = new double[gorillaData.size()];
 
@@ -241,7 +242,7 @@ public class KalixTimeSeriesReader {
             values[i] = point.value;
         }
 
-        return new TimeSeriesData(name, dateTimes, values);
+        return new TimeSeriesData(dateTimes, values);
     }
 
     private int readUInt16(RandomAccessFile file) throws IOException {

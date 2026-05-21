@@ -1,6 +1,5 @@
 package com.kalix.ide.io;
 
-import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import javax.swing.SwingWorker;
@@ -49,7 +48,7 @@ import java.util.regex.Pattern;
  *         try {
  *             CsvImportResult result = get();
  *             if (!result.hasErrors()) {
- *                 DataSet dataSet = result.getDataSet();
+ *                 List&lt;NamedSeries&gt; series = result.getSeries();
  *                 // Process imported data...
  *             }
  *         } catch (Exception e) {
@@ -123,7 +122,7 @@ public class TimeSeriesCsvImporter {
      * during parsing, and detailed statistics about the import process.</p>
      */
     public static class CsvImportResult {
-        private final DataSet dataSet;
+        private final List<NamedSeries> series;
         private final List<String> warnings;
         private final List<String> errors;
         private final ImportStatistics statistics;
@@ -131,22 +130,29 @@ public class TimeSeriesCsvImporter {
         /**
          * Creates a new import result.
          *
-         * @param dataSet the imported dataset
+         * @param series the imported series (name + nameless data); empty if errors occurred
          * @param warnings non-fatal issues encountered during import
          * @param errors fatal errors that prevented successful import
          * @param statistics detailed import statistics
          */
-        public CsvImportResult(DataSet dataSet, List<String> warnings, List<String> errors, ImportStatistics statistics) {
-            this.dataSet = dataSet;
+        public CsvImportResult(List<NamedSeries> series, List<String> warnings, List<String> errors, ImportStatistics statistics) {
+            this.series = new ArrayList<>(series);
             this.warnings = new ArrayList<>(warnings);
             this.errors = new ArrayList<>(errors);
             this.statistics = statistics;
         }
 
         /**
-         * @return the imported dataset (may be empty if errors occurred)
+         * @return the imported series, each pairing the CSV column name with its data
          */
-        public DataSet getDataSet() { return dataSet; }
+        public List<NamedSeries> getSeries() { return series; }
+
+        /**
+         * @return total data points across all imported series
+         */
+        public int getTotalPointCount() {
+            return series.stream().mapToInt(s -> s.data().getPointCount()).sum();
+        }
 
         /**
          * @return list of non-fatal warnings encountered during import
@@ -279,7 +285,7 @@ public class TimeSeriesCsvImporter {
 
             List<String> warnings = new ArrayList<>();
             List<String> errors = new ArrayList<>();
-            DataSet dataSet = new DataSet();
+            List<NamedSeries> series = new ArrayList<>();
 
             try (BufferedReader reader = new BufferedReader(
                     new FileReader(csvFile, StandardCharsets.UTF_8))) {
@@ -293,7 +299,7 @@ public class TimeSeriesCsvImporter {
 
                 if (lines.isEmpty()) {
                     errors.add("CSV file is empty");
-                    return createResult(dataSet, warnings, errors, startTime, null, 0, 0, 0);
+                    return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
                 // Detect delimiter
@@ -303,14 +309,14 @@ public class TimeSeriesCsvImporter {
                 String[] headers = parseLine(lines.get(0), delimiter);
                 if (headers.length < 2) {
                     errors.add("CSV must have at least 2 columns (time + at least one data series)");
-                    return createResult(dataSet, warnings, errors, startTime, null, 0, 0, 0);
+                    return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
                 // Detect date format using first few data rows
                 DateTimeFormatter dateFormat = detectDateFormat(lines, delimiter, warnings);
                 if (dateFormat == null) {
                     errors.add("Could not detect date format in first column");
-                    return createResult(dataSet, warnings, errors, startTime, null, 0, 0, 0);
+                    return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
                 // Prepare data structures
@@ -328,7 +334,7 @@ public class TimeSeriesCsvImporter {
 
                 for (int lineNum = 1; lineNum < lines.size(); lineNum++) {
                     if (isCancelled()) {
-                        return createResult(dataSet, warnings, errors, startTime, dateFormat, totalRows, validRows, 0);
+                        return createResult(series, warnings, errors, startTime, dateFormat, totalRows, validRows, 0);
                     }
 
                     // Report progress
@@ -388,11 +394,11 @@ public class TimeSeriesCsvImporter {
                             .mapToDouble(v -> v != null ? v : Double.NaN)
                             .toArray();
 
-                        TimeSeriesData series = new TimeSeriesData(seriesName, dateTimeArray, valueArray);
-                        dataSet.addSeries(series);
+                        TimeSeriesData data = new TimeSeriesData(dateTimeArray, valueArray);
+                        series.add(new NamedSeries(seriesName, data));
 
                         // Validate series
-                        if (series.getValidPointCount() == null || series.getValidPointCount() == 0) {
+                        if (data.getValidPointCount() == null || data.getValidPointCount() == 0) {
                             warnings.add("Series '" + seriesName + "' contains no valid data points");
                         }
                     }
@@ -400,23 +406,23 @@ public class TimeSeriesCsvImporter {
                     errors.add("No valid data rows found");
                 }
 
-                return createResult(dataSet, warnings, errors, startTime, dateFormat, totalRows, validRows, seriesCount);
+                return createResult(series, warnings, errors, startTime, dateFormat, totalRows, validRows, seriesCount);
 
             } catch (Exception e) {
                 errors.add("Parse error: " + e.getMessage());
-                return createResult(dataSet, warnings, errors, startTime, null, 0, 0, 0);
+                return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
             }
         }
 
         /**
          * Creates an import result with the given parameters.
          */
-        private CsvImportResult createResult(DataSet dataSet, List<String> warnings, List<String> errors,
+        private CsvImportResult createResult(List<NamedSeries> series, List<String> warnings, List<String> errors,
                                            long startTime, DateTimeFormatter dateFormat, int totalRows,
                                            int validRows, int seriesCount) {
             long parseTimeMs = System.currentTimeMillis() - startTime;
             ImportStatistics stats = new ImportStatistics(totalRows, validRows, 1, seriesCount, parseTimeMs, dateFormat);
-            return new CsvImportResult(dataSet, warnings, errors, stats);
+            return new CsvImportResult(series, warnings, errors, stats);
         }
     }
 

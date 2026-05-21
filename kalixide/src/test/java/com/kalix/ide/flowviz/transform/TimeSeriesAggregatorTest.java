@@ -21,7 +21,7 @@ class TimeSeriesAggregatorTest {
             dates[i] = start.plusHours(i);
             values[i] = i + 1;
         }
-        TimeSeriesData hourly = new TimeSeriesData("flow", dates, values);
+        TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
             hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
@@ -40,7 +40,7 @@ class TimeSeriesAggregatorTest {
             dates[i] = start.plusHours(i);
             values[i] = i + 1; // 1..24
         }
-        TimeSeriesData hourly = new TimeSeriesData("flow", dates, values);
+        TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
             hourly, AggregationPeriod.DAILY, AggregationMethod.MEAN);
@@ -61,7 +61,7 @@ class TimeSeriesAggregatorTest {
             dates[i] = start.plusHours(i);
             values[i] = 1.0;
         }
-        TimeSeriesData hourly = new TimeSeriesData("flow", dates, values);
+        TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
             hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
@@ -83,7 +83,7 @@ class TimeSeriesAggregatorTest {
             dates[i] = start.plusDays(i);
             values[i] = (i + 1) * 10.0;
         }
-        TimeSeriesData daily = new TimeSeriesData("flow", dates, values);
+        TimeSeriesData daily = new TimeSeriesData(dates, values);
 
         TimeSeriesData reaggregated = TimeSeriesAggregator.aggregate(
             daily, AggregationPeriod.DAILY, AggregationMethod.SUM);

@@ -141,18 +141,14 @@ public class TimeSeriesCsvExporter {
      */
     private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType,
                                         LabelResolver labelResolver) throws IOException {
-        // Build (header → data) pairs covering both storages. Ref-keyed entries come
-        // first so they preserve insertion order from the pool; legacy named entries
-        // are appended only if they don't duplicate a label already produced.
+        // Build (header → data) pairs in pool insertion order. The header is the ref's
+        // projected label.
         LinkedHashMap<String, TimeSeriesData> labeled = new LinkedHashMap<>();
         for (SeriesRef ref : dataSet.getSeriesRefs()) {
             TimeSeriesData data = dataSet.getSeries(ref);
             if (data == null) continue;
             String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
             labeled.put(label, data);
-        }
-        for (TimeSeriesData s : dataSet.getAllSeries()) {
-            labeled.putIfAbsent(s.getName(), s);
         }
         if (labeled.isEmpty()) {
             return;
