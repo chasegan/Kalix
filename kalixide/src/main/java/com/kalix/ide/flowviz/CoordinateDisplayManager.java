@@ -1,7 +1,6 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
-import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.ViewPort;
@@ -29,7 +28,6 @@ public class CoordinateDisplayManager {
     private final JComponent parentComponent;
     private final Map<SeriesRef, Color> seriesColors;
     private final List<SeriesRef> visibleSeries;
-    private LabelResolver labelResolver;  // set by PlotPanel after construction
 
     // Coordinate display state
     private boolean showCoordinates = false;
@@ -267,13 +265,6 @@ public class CoordinateDisplayManager {
         );
     }
 
-    /**
-     * Sets the {@link LabelResolver} used for hover display labels (currently unused
-     * in the rendered overlay text, but available for future tooltip enhancements).
-     */
-    public void setLabelResolver(LabelResolver resolver) {
-        this.labelResolver = resolver;
-    }
 
     /**
      * Performs binary search to find the index of the timestamp closest to the target.

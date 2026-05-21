@@ -4,7 +4,6 @@ import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationResult;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -74,28 +73,6 @@ public class OptimisationEventHandlers {
      */
     public void setModelDisplayUpdater(Consumer<String> updater) {
         this.modelDisplayUpdater = updater;
-    }
-
-    /**
-     * Handles the list of optimisable parameters from kalixcli.
-     *
-     * @param sessionKey The session key
-     * @param parameters The list of parameter names
-     * @param guiBuilder The GUI builder to update
-     */
-    public void handleOptimisableParameters(String sessionKey, List<String> parameters,
-                                           OptimisationGuiBuilder guiBuilder) {
-        SwingUtilities.invokeLater(() -> {
-            // Update the parameters table in the GUI builder
-            guiBuilder.setOptimisableParameters(parameters);
-
-            // Auto-generate expressions for all parameters
-            guiBuilder.autoGenerateParameterExpressions();
-
-            if (statusUpdater != null) {
-                statusUpdater.accept("Found " + parameters.size() + " optimisable parameters");
-            }
-        });
     }
 
     /**

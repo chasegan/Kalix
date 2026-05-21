@@ -4,6 +4,7 @@ import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.managers.StdioTaskManager;
+import com.kalix.ide.models.optimisation.OptimisationConfigModel;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationResult;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
@@ -69,12 +70,14 @@ public class OptimisationSessionManager {
     /**
      * Creates a new optimisation session.
      *
-     * @param configText The configuration text
+     * @param configText The configuration INI text
+     * @param configModel The structured GUI form state to store on the new optimisation
      * @param progressCallback Callback for progress updates (sessionKey, progressInfo)
      * @param parametersCallback Callback for parameters (sessionKey, parameters)
      * @param resultCallback Callback for results (sessionKey, result)
      */
     public void createOptimisation(String configText,
+                                  OptimisationConfigModel configModel,
                                   java.util.function.BiConsumer<String, ProgressParser.ProgressInfo> progressCallback,
                                   java.util.function.BiConsumer<String, List<String>> parametersCallback,
                                   java.util.function.BiConsumer<String, String> resultCallback) {
@@ -140,6 +143,7 @@ public class OptimisationSessionManager {
                     // Create optimisation info
                     OptimisationInfo optInfo = new OptimisationInfo(optName, session);
                     optInfo.setConfigSnapshot(configText);
+                    optInfo.setConfigModel(configModel);
 
                     // Create result for tracking
                     OptimisationResult result = new OptimisationResult();

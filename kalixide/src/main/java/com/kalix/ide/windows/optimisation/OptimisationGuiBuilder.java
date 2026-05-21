@@ -1,8 +1,11 @@
 package com.kalix.ide.windows.optimisation;
 
+import com.kalix.ide.models.optimisation.OptimisationConfigModel;
+
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -17,6 +20,7 @@ public class OptimisationGuiBuilder extends JPanel {
     private final AlgorithmConfigPanel algorithmPanel;
     private final ParametersConfigPanel parametersPanel;
     private final Consumer<String> configTextConsumer;
+    private final JLabel iniLockedBanner;
 
     /**
      * Creates a new OptimisationGuiBuilder.
@@ -61,6 +65,26 @@ public class OptimisationGuiBuilder extends JPanel {
         contentPanel.add(parametersPanel, gbc);
 
         add(contentPanel, BorderLayout.CENTER);
+
+        // Banner shown when the optimisation has been locked to INI-text editing.
+        iniLockedBanner = new JLabel(
+            "This optimisation is configured via the Config INI tab — the form below is locked.");
+        iniLockedBanner.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        iniLockedBanner.setFont(iniLockedBanner.getFont().deriveFont(Font.ITALIC));
+        iniLockedBanner.setVisible(false);
+        add(iniLockedBanner, BorderLayout.NORTH);
+    }
+
+    /**
+     * Shows or hides the banner explaining that the GUI form is locked because
+     * the optimisation is now configured via INI text.
+     *
+     * @param visible true to show the banner
+     */
+    public void setIniLockedBannerVisible(boolean visible) {
+        iniLockedBanner.setVisible(visible);
+        revalidate();
+        repaint();
     }
 
     /**
@@ -89,40 +113,93 @@ public class OptimisationGuiBuilder extends JPanel {
     }
 
     /**
-     * Generates INI-formatted configuration text from GUI inputs in kalixcli format.
+     * Captures the current state of all three configuration panels into a
+     * structured {@link OptimisationConfigModel}.
      *
-     * Emits one [term.NAME] section per row plus an objective_expression in [optimisation].
-     * Uses ParameterExpressionLibrary to auto-generate expressions for parameters without them.
+     * @return a new model reflecting the live GUI form state
+     */
+    public OptimisationConfigModel captureToModel() {
+        OptimisationConfigModel model = new OptimisationConfigModel();
+        model.setTerms(objectivePanel.getTerms());
+        model.setObjectiveExpression(objectivePanel.getObjectiveExpression());
+        model.setAlgorithm(algorithmPanel.getAlgorithm());
+        model.setTerminationEvaluations(algorithmPanel.getTerminationEvaluations());
+        model.setThreads(algorithmPanel.getThreads());
+        model.setRandomSeed(algorithmPanel.getRandomSeed());
+        model.setAlgorithmSpecificParams(algorithmPanel.getAlgorithmSpecificParams());
+        model.setParameters(parametersPanel.getAllParameters());
+        return model;
+    }
+
+    /**
+     * Populates all three configuration panels from a structured
+     * {@link OptimisationConfigModel}, restoring the GUI form to a previously
+     * captured state.
+     *
+     * @param model the model to load (a no-op if null)
+     */
+    public void loadFromModel(OptimisationConfigModel model) {
+        if (model == null) {
+            return;
+        }
+        objectivePanel.setTerms(model.getTerms());
+        objectivePanel.setObjectiveExpression(model.getObjectiveExpression());
+        // Set the algorithm first: changing it resets the algorithm-specific
+        // params to defaults, so the explicit set below must come after.
+        algorithmPanel.setAlgorithm(model.getAlgorithm());
+        algorithmPanel.setTerminationEvaluations(model.getTerminationEvaluations());
+        algorithmPanel.setThreads(model.getThreads());
+        algorithmPanel.setRandomSeed(model.getRandomSeed());
+        algorithmPanel.setAlgorithmSpecificParams(model.getAlgorithmSpecificParams());
+        parametersPanel.setParameters(model.getParameters());
+    }
+
+    /**
+     * Generates INI-formatted configuration text from the live GUI form state.
+     *
+     * @return the generated configuration text
      */
     public String generateConfigText() {
+        return generateConfigText(captureToModel());
+    }
+
+    /**
+     * Generates INI-formatted configuration text from a structured config model,
+     * in kalixcli format.
+     *
+     * <p>Emits one [term.NAME] section per row plus an objective_expression in
+     * [optimisation]. Only parameters with a non-blank expression are written to
+     * the [parameters] section.</p>
+     *
+     * @param model the config model to render
+     * @return the generated configuration text
+     */
+    public String generateConfigText(OptimisationConfigModel model) {
         StringBuilder sb = new StringBuilder();
 
         // [optimisation] section — algorithm config + objective expression
         sb.append("[optimisation]\n");
-        sb.append("objective_expression = ").append(objectivePanel.getObjectiveExpression()).append("\n");
+        sb.append("objective_expression = ").append(model.getObjectiveExpression()).append("\n");
+        sb.append("algorithm = ").append(model.getAlgorithm()).append("\n");
 
-        sb.append("algorithm = ").append(algorithmPanel.getAlgorithm()).append("\n");
-
-        // Add algorithm-specific parameters first (like population_size)
-        Map<String, String> algoParams = algorithmPanel.getAlgorithmSpecificParams();
-        for (Map.Entry<String, String> entry : algoParams.entrySet()) {
+        // Algorithm-specific parameters first (like population_size)
+        for (Map.Entry<String, String> entry : model.getAlgorithmSpecificParams().entrySet()) {
             sb.append(entry.getKey()).append(" = ").append(entry.getValue()).append("\n");
         }
 
-        // Then add common algorithm parameters
-        sb.append("termination_evaluations = ").append(algorithmPanel.getTerminationEvaluations()).append("\n");
-        sb.append("n_threads = ").append(algorithmPanel.getThreads()).append("\n");
+        // Then common algorithm parameters
+        sb.append("termination_evaluations = ").append(model.getTerminationEvaluations()).append("\n");
+        sb.append("n_threads = ").append(model.getThreads()).append("\n");
 
         // Only include random_seed if it's not empty
-        String randomSeed = algorithmPanel.getRandomSeed();
-        if (!randomSeed.isEmpty()) {
-            sb.append("random_seed = ").append(randomSeed).append("\n");
+        if (!model.getRandomSeed().isEmpty()) {
+            sb.append("random_seed = ").append(model.getRandomSeed()).append("\n");
         }
 
         sb.append("\n");
 
         // One [term.NAME] section per row, in row order
-        for (ObjectiveConfigPanel.TermRow term : objectivePanel.getTerms()) {
+        for (ObjectiveConfigPanel.TermRow term : model.getTerms()) {
             sb.append("[term.").append(term.name).append("]\n");
             sb.append("simulated = ").append(term.simulatedSeries).append("\n");
             sb.append("observed_file = ").append(term.observedFile).append("\n");
@@ -131,53 +208,15 @@ public class OptimisationGuiBuilder extends JPanel {
             sb.append("\n");
         }
 
-        // [parameters] section - generate expressions for parameters
-        Map<String, String> optimizationParams = parametersPanel.getOptimizationParameters();
-
-        // If some parameters don't have expressions, try to auto-generate them
-        Map<String, String> finalParams = new java.util.LinkedHashMap<>();
-        int counter = 1;
-        StringBuilder warnings = new StringBuilder();
-
-        for (Map.Entry<String, String> entry : optimizationParams.entrySet()) {
-            String paramName = entry.getKey();
-            String expression = entry.getValue();
-
-            if (expression == null || expression.trim().isEmpty()) {
-                // Try to auto-generate expression
-                try {
-                    expression = ParameterExpressionLibrary.generateExpression(paramName, counter);
-                    counter++;
-                } catch (ParameterExpressionLibrary.UnrecognizedParameterTypeException e) {
-                    // Log warning but continue
-                    String type = ParameterExpressionLibrary.detectParameterType(paramName);
-                    if (type == null) {
-                        type = "unknown";
-                    }
-                    if (!warnings.isEmpty()) {
-                        warnings.append("\n");
-                    }
-                    warnings.append("  - ").append(paramName).append(" (type: ").append(type).append(")");
-                    continue; // Skip this parameter
-                }
-            }
-
-            finalParams.put(paramName, expression);
-        }
-
-        // Show warning dialog if any parameters couldn't be generated
-        if (!warnings.isEmpty()) {
-            javax.swing.JOptionPane.showMessageDialog(this,
-                "Could not auto-generate expressions for unrecognized parameter types:\n\n" + warnings +
-                "\n\nThese parameters were omitted from the configuration.\nPlease add them manually in the Text Editor if needed.",
-                "Unrecognized Parameter Types",
-                javax.swing.JOptionPane.WARNING_MESSAGE);
-        }
-
-        if (!finalParams.isEmpty()) {
+        // [parameters] section — only parameters with a non-blank expression
+        List<OptimisationConfigModel.ParamEntry> params = model.getParameters();
+        boolean anyOptimised = params.stream().anyMatch(p -> !p.expression.trim().isEmpty());
+        if (anyOptimised) {
             sb.append("[parameters]\n");
-            for (Map.Entry<String, String> entry : finalParams.entrySet()) {
-                sb.append(entry.getKey()).append(" = ").append(entry.getValue()).append("\n");
+            for (OptimisationConfigModel.ParamEntry param : params) {
+                if (!param.expression.trim().isEmpty()) {
+                    sb.append(param.name).append(" = ").append(param.expression).append("\n");
+                }
             }
         }
 

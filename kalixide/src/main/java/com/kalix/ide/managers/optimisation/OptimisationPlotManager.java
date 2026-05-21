@@ -93,7 +93,9 @@ public class OptimisationPlotManager {
 
         List<OptimisationResult.ConvergencePoint> history = result.getConvergenceHistory();
         if (history.isEmpty()) {
-            convergencePlot.repaint();
+            // refreshData (not bare repaint) so the cleared dataset is rebuilt into
+            // the display dataset — otherwise the plot renders stale cached data.
+            convergencePlot.refreshData(true);
             return;
         }
 
@@ -218,7 +220,7 @@ public class OptimisationPlotManager {
     public Map<String, String> getStatistics() {
         Map<String, String> stats = new HashMap<>();
 
-        TimeSeriesData bestSeries = convergenceDataSet.getSeries("Best Objective");
+        TimeSeriesData bestSeries = convergenceDataSet.getSeries(REF_BEST_OBJECTIVE);
         if (bestSeries != null && bestSeries.getPointCount() > 0) {
             stats.put("Evaluations", String.valueOf(bestSeries.getPointCount()));
             stats.put("Best Value", String.format("%.6f", bestSeries.getMinValue()));

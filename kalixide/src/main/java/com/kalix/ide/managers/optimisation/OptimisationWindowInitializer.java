@@ -302,8 +302,16 @@ public class OptimisationWindowInitializer {
 
     private ActionListener createGenerateConfigAction() {
         return e -> {
+            OptimisationInfo optInfo = getCurrentOptimisationInfo();
+            if (optInfo != null && optInfo.isIniLocked()) {
+                JOptionPane.showMessageDialog(optTree,
+                    "This optimisation is configured via INI text and the form is locked.\n"
+                        + "Regenerating from the form would discard your INI edits.",
+                    "Configuration Locked",
+                    JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
             configManager.getGuiBuilder().generateAndSwitchToTextEditor();
-            // Note: The actual label update would be handled by the calling code
         };
     }
 

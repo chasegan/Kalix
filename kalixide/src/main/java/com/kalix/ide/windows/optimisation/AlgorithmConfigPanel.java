@@ -158,6 +158,22 @@ public class AlgorithmConfigPanel extends JPanel {
         return new LinkedHashMap<>(algorithmSpecificParams);
     }
 
+    /**
+     * Replaces the algorithm-specific metaparameters.
+     *
+     * <p>Callers that are also restoring the algorithm selection should call
+     * {@link #setAlgorithm(String)} first, since changing the algorithm resets
+     * these parameters to that algorithm's defaults.</p>
+     *
+     * @param params the metaparameters to apply
+     */
+    public void setAlgorithmSpecificParams(Map<String, String> params) {
+        algorithmSpecificParams.clear();
+        if (params != null) {
+            algorithmSpecificParams.putAll(params);
+        }
+    }
+
     public boolean validateInputs() {
         try {
             int termEvals = Integer.parseInt(getTerminationEvaluations());

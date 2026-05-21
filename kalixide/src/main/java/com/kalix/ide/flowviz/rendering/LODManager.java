@@ -173,11 +173,7 @@ public class LODManager {
     public void clearCache() {
         lodCache.clear();
     }
-    
-    public void clearCache(String seriesName) {
-        lodCache.entrySet().removeIf(entry -> entry.getKey().startsWith(seriesName + "_"));
-    }
-    
+
     // Get cache statistics for debugging
     public int getCacheSize() {
         return lodCache.size();

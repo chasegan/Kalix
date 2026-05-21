@@ -13,8 +13,10 @@ import com.kalix.ide.managers.optimisation.OptimisationSessionManager;
 import com.kalix.ide.managers.optimisation.OptimisationTreeManager;
 import com.kalix.ide.managers.optimisation.OptimisationUpdateCoordinator;
 import com.kalix.ide.managers.optimisation.OptimisationWindowInitializer;
+import com.kalix.ide.models.optimisation.OptimisationConfigModel;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
+import com.kalix.ide.windows.optimisation.ParametersConfigPanel;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
@@ -108,12 +110,6 @@ public class OptimisationWindow extends JFrame {
     // Track currently displayed node to save config when switching
     private DefaultMutableTreeNode currentlyDisplayedNode = null;
 
-    // Flag to prevent DocumentListener from triggering during programmatic updates
-    private final boolean isUpdatingConfigEditor = false;
-
-    // Flag to prevent selection listener from firing during programmatic updates
-    private final boolean isUpdatingSelection = false;
-
     private static OptimisationWindow instance;
 
     /**
@@ -144,6 +140,7 @@ public class OptimisationWindow extends JFrame {
         initializeComponents();
         setupLayout();
         setupWindowListeners();
+        setupTabChangeListener();
     }
 
     /**
@@ -214,6 +211,9 @@ public class OptimisationWindow extends JFrame {
             updateCoordinator::updateConvergencePlotIfSelected,
             updateCoordinator::updateModelDisplayIfSelected
         );
+
+        // A direct edit of the INI text locks the GUI form for that optimisation.
+        configManager.setOnIniManuallyEditedCallback(this::handleIniManuallyEdited);
     }
 
     /**
@@ -230,14 +230,18 @@ public class OptimisationWindow extends JFrame {
         // Load configuration through managers
         configManager.loadConfiguration(optInfo);
 
-        // Set editable state based on whether optimization has started
-        boolean isEditable = !optInfo.hasStartedRunning();
-        configEditor.setEditable(isEditable);
-        guiBuilder.setComponentsEnabled(isEditable);
+        // Set editable state. The INI editor is editable unless the optimisation
+        // is running; the GUI form is additionally disabled once the optimisation
+        // is locked to INI-text editing.
+        boolean running = optInfo.hasStartedRunning();
+        boolean iniLocked = optInfo.isIniLocked();
+        configEditor.setEditable(!running);
+        guiBuilder.setComponentsEnabled(!running && !iniLocked);
+        guiBuilder.setIniLockedBannerVisible(iniLocked);
 
         // Update button states
-        runButton.setEnabled(isEditable);
-        loadConfigButton.setEnabled(isEditable);
+        runButton.setEnabled(!running);
+        loadConfigButton.setEnabled(!running);
         saveConfigButton.setEnabled(true);
 
         // Update displays based on running state
@@ -326,11 +330,7 @@ public class OptimisationWindow extends JFrame {
             optInfo -> resultsManager.compareModels(optInfo, this),
             optInfo -> resultsManager.saveResults(optInfo, this),
             () -> runOptimisation(),
-            e -> {
-                if (!isUpdatingSelection) {
-                    treeManager.handleTreeSelection(e);
-                }
-            }
+            treeManager::handleTreeSelection
         );
 
         // Store component references
@@ -393,16 +393,110 @@ public class OptimisationWindow extends JFrame {
      * This is called when the user clicks the "+ New Optimisation" button.
      */
     private void createNewOptimisation() {
-        // Get default config from GUI
-        String configText = configManager.generateConfigFromGui();
+        // Capture the current GUI form as the new optimisation's structured model,
+        // and derive its INI text from that same model so the two start in sync.
+        OptimisationConfigModel configModel = guiBuilder.captureToModel();
+        String configText = guiBuilder.generateConfigText(configModel);
 
         // Create optimisation through session manager with sessionKey passed to callbacks
         sessionManager.createOptimisation(
             configText,
+            configModel,
             (sessionKey, progressInfo) -> eventHandlers.handleOptimisationProgress(sessionKey, progressInfo),
-            (sessionKey, parameters) -> eventHandlers.handleOptimisableParameters(sessionKey, parameters, guiBuilder),
+            (sessionKey, parameters) -> handleOptimisableParameters(sessionKey, parameters),
             (sessionKey, result) -> eventHandlers.handleOptimisationResult(sessionKey, result)
         );
+    }
+
+    /**
+     * Handles the list of optimisable parameters reported by kalixcli for a session.
+     *
+     * <p>The parameters belong to a specific optimisation, so they are written into
+     * that node's config model. The shared GUI form is only refreshed when that
+     * optimisation is the one currently displayed — otherwise the parameters would
+     * leak into whichever optimisation happens to be on screen.</p>
+     */
+    private void handleOptimisableParameters(String sessionKey, java.util.List<String> parameters) {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            OptimisationInfo optInfo = sessionManager.getOptimisationInfo(sessionKey);
+            if (optInfo == null) {
+                return;
+            }
+
+            OptimisationConfigModel model = optInfo.getConfigModel();
+            if (model == null) {
+                model = new OptimisationConfigModel();
+                optInfo.setConfigModel(model);
+            }
+            model.setParameters(ParametersConfigPanel.buildAutoGeneratedEntries(parameters));
+
+            // Refresh the live GUI form only if this optimisation is on screen.
+            if (isCurrentlyDisplayed(sessionKey)) {
+                guiBuilder.loadFromModel(model);
+            }
+
+            if (statusUpdater != null) {
+                statusUpdater.accept("Found " + parameters.size() + " optimisable parameters");
+            }
+        });
+    }
+
+    /**
+     * Returns true if the given session is the optimisation currently shown in the tabs.
+     */
+    private boolean isCurrentlyDisplayed(String sessionKey) {
+        if (currentlyDisplayedNode == null || sessionKey == null) {
+            return false;
+        }
+        return currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo info
+            && sessionKey.equals(info.getSessionKey());
+    }
+
+    /**
+     * Returns the optimisation currently shown in the tabs, or null if none.
+     */
+    private OptimisationInfo getDisplayedOptimisation() {
+        if (currentlyDisplayedNode != null
+                && currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo info) {
+            return info;
+        }
+        return null;
+    }
+
+    /**
+     * Locks the currently displayed optimisation to INI-text editing in response
+     * to a direct edit of the INI text (typing, pasting, or loading a config
+     * file). The GUI form is frozen for that optimisation from this point on.
+     */
+    private void handleIniManuallyEdited() {
+        OptimisationInfo optInfo = getDisplayedOptimisation();
+        if (optInfo == null || optInfo.hasStartedRunning() || optInfo.isIniLocked()) {
+            return;
+        }
+        optInfo.setIniLocked(true);
+        guiBuilder.setComponentsEnabled(false);
+        guiBuilder.setIniLockedBannerVisible(true);
+        if (statusUpdater != null) {
+            statusUpdater.accept("'" + optInfo.getName()
+                + "' is now configured via INI text — the form is locked.");
+        }
+    }
+
+    /**
+     * Keeps the Config INI tab in sync with the GUI form: when the user switches
+     * to the INI tab for an unlocked optimisation, the INI text is regenerated
+     * from the current form so it reflects the latest edits.
+     */
+    private void setupTabChangeListener() {
+        mainTabbedPane.addChangeListener(e -> {
+            // Index 1 is the Config INI tab (after the Config GUI tab).
+            if (mainTabbedPane.getSelectedIndex() == 1) {
+                OptimisationInfo optInfo = getDisplayedOptimisation();
+                if (optInfo != null && !optInfo.isIniLocked() && !optInfo.hasStartedRunning()) {
+                    configManager.regenerateIniFromGui();
+                }
+            }
+        });
     }
 
     /**
@@ -424,6 +518,13 @@ public class OptimisationWindow extends JFrame {
     private void setupWindowListeners() {
         addWindowListener(new WindowAdapter() {
             @Override
+            public void windowClosing(WindowEvent e) {
+                // Flush the displayed optimisation's config before the window
+                // hides, so edits made without switching tree nodes are kept.
+                saveCurrentConfigToNode();
+            }
+
+            @Override
             public void windowClosed(WindowEvent e) {
                 instance = null;
             }
@@ -443,16 +544,20 @@ public class OptimisationWindow extends JFrame {
         Object userObject = currentlyDisplayedNode.getUserObject();
         if (!(userObject instanceof OptimisationInfo optInfo)) return;
 
-        // Get config from appropriate source
+        // Determine the config to run. A locked optimisation runs its INI text
+        // verbatim; an unlocked one runs config generated from the GUI form.
         String configText;
-        int selectedTabIndex = mainTabbedPane.getSelectedIndex();
-        if (selectedTabIndex == 0) { // Config tab
-            configText = configManager.generateConfigFromGui();
-            // Update the config editor with generated config
-            configManager.setConfiguration(configText);
-        } else { // Config INI tab
+        if (optInfo.isIniLocked()) {
             configText = configManager.getCurrentConfig();
+        } else {
+            configText = configManager.generateConfigFromGui();
+            // Keep the INI editor in sync with what is about to run.
+            configManager.setConfiguration(configText);
         }
+
+        // Capture the GUI form state onto the node before it is locked by running,
+        // so re-selecting a finished optimisation restores the form it ran with.
+        optInfo.setConfigModel(guiBuilder.captureToModel());
 
         // Run optimisation through manager with validation
         boolean started = sessionManager.runOptimisation(optInfo, configText,

@@ -12,10 +12,11 @@ public class OptimisationInfo {
 
     private String name;  // Mutable to allow renaming
     private final SessionManager.KalixSession session;
-    private String configSnapshot;  // Configuration text at time of run
+    private String configSnapshot;  // Configuration INI text (the per-node INI tab state)
+    private OptimisationConfigModel configModel;  // Per-node structured GUI form state
     private OptimisationResult result;  // Cached result (null if not complete)
     private boolean hasStartedRunning = false;  // True once optimisation has been started
-    private boolean isConfigModified = false;  // True if config was manually edited
+    private boolean iniLocked = false;  // True once the user has edited the INI text directly
     private LocalDateTime createdTime;
 
     /**
@@ -111,6 +112,19 @@ public class OptimisationInfo {
         this.configSnapshot = configSnapshot;
     }
 
+    /**
+     * Gets the structured GUI form state for this optimisation.
+     *
+     * @return the config model, or null if the GUI form has not yet been captured
+     */
+    public OptimisationConfigModel getConfigModel() {
+        return configModel;
+    }
+
+    public void setConfigModel(OptimisationConfigModel configModel) {
+        this.configModel = configModel;
+    }
+
     public OptimisationResult getResult() {
         return result;
     }
@@ -125,6 +139,24 @@ public class OptimisationInfo {
 
     public void setHasStartedRunning(boolean hasStartedRunning) {
         this.hasStartedRunning = hasStartedRunning;
+    }
+
+    /**
+     * Whether the user has taken direct control of this optimisation's INI text.
+     *
+     * <p>Once locked, the Config (GUI) form is frozen for this optimisation: the
+     * INI text becomes the single source of truth, since it may contain advanced
+     * configuration the GUI form cannot represent. The lock is one-way and never
+     * clears for the life of the optimisation.</p>
+     *
+     * @return true if the optimisation is configured via INI text
+     */
+    public boolean isIniLocked() {
+        return iniLocked;
+    }
+
+    public void setIniLocked(boolean iniLocked) {
+        this.iniLocked = iniLocked;
     }
 
     /**

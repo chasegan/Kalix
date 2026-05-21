@@ -403,6 +403,5 @@ public class TimeSeriesRenderer {
 
     // Cache management
     public void clearCache() { lodManager.clearCache(); }
-    public void clearCache(String seriesName) { lodManager.clearCache(seriesName); }
     public int getCacheSize() { return lodManager.getCacheSize(); }
 }

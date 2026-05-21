@@ -1335,7 +1335,9 @@ public class VisualizationTabManager {
                 tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.plotPanel.refreshData(resetZoom);
             }
-            // Stats tabs update automatically through their DataSet listeners
+            // Stats tabs are intentionally not touched here — they are refreshed via
+            // explicit calls (updateSeriesInStatsTabsWithAggregation, rebuildStatsTab),
+            // not through DataSet listeners.
         }
     }
 

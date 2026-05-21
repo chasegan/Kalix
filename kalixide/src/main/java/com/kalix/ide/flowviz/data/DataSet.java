@@ -110,8 +110,11 @@ public class DataSet {
     public void removeAllSeries() {
         List<String> removedNames = series.stream().map(TimeSeriesData::getName).toList();
         series.clear();
+        // Also clear the ref-keyed store; otherwise series added via
+        // addSeries(SeriesRef, ...) survive a "remove all" and leak into rebuilds.
+        seriesByRef.clear();
         resetGlobalBounds();
-        
+
         for (String name : removedNames) {
             notifySeriesRemoved(name);
         }

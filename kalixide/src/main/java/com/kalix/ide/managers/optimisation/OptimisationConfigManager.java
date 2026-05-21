@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
+import com.kalix.ide.models.optimisation.OptimisationConfigModel;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ public class OptimisationConfigManager {
     private Supplier<File> workingDirectorySupplier;
     private Consumer<String> statusUpdater;
     private Consumer<String> configStatusCallback;
+    private Runnable onIniManuallyEdited;
     private boolean isUpdatingEditor = false;
 
     // Configuration state tracking
@@ -112,6 +114,17 @@ public class OptimisationConfigManager {
     }
 
     /**
+     * Sets the callback invoked when the user edits the INI text directly (typing,
+     * pasting, or loading a config file). This is the trigger for locking the GUI
+     * form for the current optimisation.
+     *
+     * @param callback the callback to invoke on a genuine INI edit
+     */
+    public void setOnIniManuallyEditedCallback(Runnable callback) {
+        this.onIniManuallyEdited = callback;
+    }
+
+    /**
      * Sets up the document listener for tracking modifications.
      */
     private void setupDocumentListener() {
@@ -135,6 +148,11 @@ public class OptimisationConfigManager {
 
     /**
      * Handles configuration text changes.
+     *
+     * <p>A change while {@code isUpdatingEditor} is false is a genuine user edit
+     * (typing or pasting) as opposed to a programmatic update. Such an edit marks
+     * the configuration as modified and triggers the INI lock for the current
+     * optimisation.</p>
      */
     private void onConfigTextChanged() {
         if (!isUpdatingEditor) {
@@ -142,33 +160,71 @@ public class OptimisationConfigManager {
             if (configStatusCallback != null) {
                 configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_MODIFIED);
             }
-            logger.debug("Configuration marked as modified");
+            if (onIniManuallyEdited != null) {
+                onIniManuallyEdited.run();
+            }
+            logger.debug("Configuration marked as modified by direct INI edit");
         }
     }
 
     /**
      * Loads a configuration from the given optimisation info.
      *
+     * <p>Restores both per-node config representations: the INI editor from the
+     * config snapshot, and the GUI form from the structured config model.</p>
+     *
      * @param info The optimisation info containing the config
      */
     public void loadConfiguration(OptimisationInfo info) {
         isUpdatingEditor = true;
-        if (info != null && info.getConfigSnapshot() != null) {
-            configEditor.setText(info.getConfigSnapshot());
-            lastLoadedConfig = info.getConfigSnapshot();
-        } else {
-            configEditor.setText("");
-            lastLoadedConfig = "";
-        }
+        String iniText = resolveIniText(info);
+        configEditor.setText(iniText);
+        lastLoadedConfig = iniText;
         isConfigModified = false;
         if (configStatusCallback != null) {
             configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
         }
         isUpdatingEditor = false;
 
+        // Restore the GUI form from this node's structured model. A null model
+        // (e.g. an optimisation created before this field existed) leaves the
+        // form untouched.
+        if (info != null) {
+            guiBuilder.loadFromModel(info.getConfigModel());
+        }
+
         // Update editability based on status
         boolean isEditable = info == null || !info.hasStartedRunning();
         configEditor.setEditable(isEditable);
+    }
+
+    /**
+     * Determines the INI text to display for an optimisation.
+     *
+     * <p>For a locked optimisation the stored config snapshot is canonical. For an
+     * unlocked optimisation the INI is a derived view, regenerated from the GUI
+     * config model so it always reflects the form.</p>
+     *
+     * @param info the optimisation, or null
+     * @return the INI text to show in the editor
+     */
+    private String resolveIniText(OptimisationInfo info) {
+        if (info == null) {
+            return "";
+        }
+        if (!info.isIniLocked() && info.getConfigModel() != null) {
+            return guiBuilder.generateConfigText(info.getConfigModel());
+        }
+        return info.getConfigSnapshot() != null ? info.getConfigSnapshot() : "";
+    }
+
+    /**
+     * Regenerates the INI editor text from the current GUI form state, keeping the
+     * Config INI tab in sync for an unlocked optimisation. The update is
+     * programmatic and does not trigger the INI lock.
+     */
+    public void regenerateIniFromGui() {
+        setConfiguration(guiBuilder.generateConfigText(guiBuilder.captureToModel()));
     }
 
     /**
@@ -202,6 +258,11 @@ public class OptimisationConfigManager {
                 isConfigModified = false;
                 if (configStatusCallback != null) {
                     configStatusCallback.accept(OptimisationUIConstants.CONFIG_STATUS_ORIGINAL);
+                }
+                // Loading external INI is direct INI configuration: lock the form,
+                // since the file may contain settings the GUI cannot represent.
+                if (onIniManuallyEdited != null) {
+                    onIniManuallyEdited.run();
                 }
 
                 if (statusUpdater != null) {
@@ -374,6 +435,9 @@ public class OptimisationConfigManager {
      * Saves the current configuration to an OptimisationInfo object.
      * Only saves if the optimization hasn't started running yet.
      *
+     * <p>Captures both per-node representations: the GUI form into the structured
+     * config model, and the INI editor text into the config snapshot.</p>
+     *
      * @param optInfo The OptimisationInfo to save config to
      * @param sessionKey The session key
      * @param sessionManager The session manager to update config in
@@ -384,9 +448,18 @@ public class OptimisationConfigManager {
             return;
         }
 
-        // Save the config text from the editor (it's the source of truth)
-        String configText = configEditor.getText();
-        optInfo.setConfigSnapshot(configText);
+        String configText;
+        if (optInfo.isIniLocked()) {
+            // INI text is canonical — save the editor content verbatim.
+            configText = configEditor.getText();
+            optInfo.setConfigSnapshot(configText);
+        } else {
+            // GUI form is canonical — capture it and regenerate the INI from it.
+            OptimisationConfigModel model = guiBuilder.captureToModel();
+            optInfo.setConfigModel(model);
+            configText = guiBuilder.generateConfigText(model);
+            optInfo.setConfigSnapshot(configText);
+        }
 
         // Also update the stored config in session manager
         if (sessionManager != null && sessionKey != null) {
