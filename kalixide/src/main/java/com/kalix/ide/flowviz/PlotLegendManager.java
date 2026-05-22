@@ -13,6 +13,7 @@ import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * Manages the plot legend display with draggable and collapsible functionality.
@@ -40,6 +41,8 @@ public class PlotLegendManager {
     private static final int CORNER_RADIUS = 8;
     private static final int LINE_SAMPLE_WIDTH = 20;
     private static final int DOT_DIAMETER = 4;
+    /** Total width of a line sample (line + end dot); for components that mirror the Key. */
+    static final int SAMPLE_WIDTH = LINE_SAMPLE_WIDTH + DOT_DIAMETER;
     private static final int MIN_WIDTH = 120;
     private static final int MAX_WIDTH = 400;
     private static final int DEFAULT_OFFSET = 20;
@@ -68,6 +71,10 @@ public class PlotLegendManager {
 
     // Callback for collapsed state changes
     private Runnable onCollapsedChanged = null;
+
+    // Callback invoked when an entry's line sample is clicked, with the series and
+    // the click point. Null when style picking is unavailable (non-palette plots).
+    private BiConsumer<SeriesRef, Point> onStyleClicked = null;
 
     // Series data
     private final List<LegendEntry> entries = new ArrayList<>();
@@ -124,6 +131,36 @@ public class PlotLegendManager {
     /** Sets the resolver consulted for each entry's swatch colour at render time. */
     public void setStyleResolver(SeriesStyleResolver styleResolver) {
         this.styleResolver = styleResolver;
+    }
+
+    /**
+     * Sets the callback invoked when an entry's line sample is clicked — passed the
+     * series and the click point. Setting it to {@code null} disables line-sample
+     * clicking entirely (no hand cursor, no action).
+     */
+    public void setOnStyleClicked(BiConsumer<SeriesRef, Point> onStyleClicked) {
+        this.onStyleClicked = onStyleClicked;
+    }
+
+    /**
+     * Returns the index of the legend entry whose line sample contains the point,
+     * or {@code -1}. Always {@code -1} when style clicking is disabled, so it gates
+     * both the hand cursor and the click action.
+     */
+    private int lineSampleEntryAt(int mouseX, int mouseY) {
+        if (!enabled || collapsed || onStyleClicked == null) {
+            return -1;
+        }
+        int entryY = y + HEADER_HEIGHT + PADDING;
+        for (int i = 0; i < entries.size(); i++) {
+            Rectangle sample = new Rectangle(
+                x + PADDING - 2, entryY - 2, LINE_SAMPLE_WIDTH + 8, ENTRY_HEIGHT);
+            if (sample.contains(mouseX, mouseY)) {
+                return i;
+            }
+            entryY += ENTRY_HEIGHT + ENTRY_SPACING;
+        }
+        return -1;
     }
 
     private LineStyle lineStyleFor(SeriesRef ref) {
@@ -401,18 +438,10 @@ public class PlotLegendManager {
                 g.fillRect(x + 2, entryY - 2, width - 4, ENTRY_HEIGHT);
             }
 
-            // Draw line sample using the series' resolved colour and stroke, so the
-            // key mirrors the plotted line (thickness, dash and opacity included).
+            // Draw the line sample (line + end dot) via the shared routine, so the
+            // Key and the style picker render series styling identically.
             int lineY = entryY + ENTRY_HEIGHT / 2;
-            LineStyle style = lineStyleFor(entry.ref);
-            g.setColor(style.color());
-            g.setStroke(style.stroke().toBasicStroke());
-            g.drawLine(x + PADDING, lineY, x + PADDING + LINE_SAMPLE_WIDTH, lineY);
-
-            // Draw dot at end of line
-            int dotX = x + PADDING + LINE_SAMPLE_WIDTH - DOT_DIAMETER / 2;
-            int dotY = lineY - DOT_DIAMETER / 2;
-            g.fillOval(dotX, dotY, DOT_DIAMETER, DOT_DIAMETER);
+            paintLineSample(g, lineStyleFor(entry.ref), x + PADDING, lineY);
 
             // Draw series name (transformed based on display mode)
             g.setColor(SERIES_NAME_COLOR);
@@ -426,6 +455,20 @@ public class PlotLegendManager {
 
             entryY += ENTRY_HEIGHT + ENTRY_SPACING;
         }
+    }
+
+    /**
+     * Paints a series line sample — a short stroked line plus an end dot — starting
+     * at {@code startX} and centred on {@code lineY}. Shared by the legend Key and
+     * the style picker so both render series styling identically.
+     */
+    static void paintLineSample(Graphics2D g, LineStyle style, int startX, int lineY) {
+        g.setColor(style.color());
+        g.setStroke(style.stroke().toBasicStroke());
+        g.drawLine(startX, lineY, startX + LINE_SAMPLE_WIDTH, lineY);
+
+        int dotX = startX + LINE_SAMPLE_WIDTH - DOT_DIAMETER / 2;
+        g.fillOval(dotX, lineY - DOT_DIAMETER / 2, DOT_DIAMETER, DOT_DIAMETER);
     }
 
     private String truncateText(Graphics2D g, String text, int maxWidth) {
@@ -552,7 +595,14 @@ public class PlotLegendManager {
                     setCollapsed(!collapsed);
                     savePreferences();
                 }
-                // Else: click on legend body does nothing (just consumed the event)
+                // Check if an entry's line sample was clicked (open the style picker)
+                else {
+                    int sampleEntry = lineSampleEntryAt(mouseX, mouseY);
+                    if (sampleEntry >= 0) {
+                        onStyleClicked.accept(entries.get(sampleEntry).ref,
+                            new Point(mouseX, mouseY));
+                    }
+                }
             }
 
             hasMoved = false;
@@ -621,8 +671,9 @@ public class PlotLegendManager {
             return Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR);
         }
 
-        // Hand cursor for clickable elements (title and collapse button)
-        if (titleBounds.contains(mouseX, mouseY) || collapseButtonBounds.contains(mouseX, mouseY)) {
+        // Hand cursor for clickable elements (title, collapse button, line samples)
+        if (titleBounds.contains(mouseX, mouseY) || collapseButtonBounds.contains(mouseX, mouseY)
+                || lineSampleEntryAt(mouseX, mouseY) >= 0) {
             return Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
         }
 

@@ -6,9 +6,12 @@ import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.StrokeStyle;
 
 import javax.swing.*;
+import javax.swing.colorchooser.AbstractColorChooserPanel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Modeless editor for plot palettes — the user-facing surface of the custom
@@ -298,6 +301,26 @@ public final class PlotPaletteWindow extends JFrame {
         return new Color(r, g, b, a);
     }
 
+    // ==== Colour chooser customisation ====
+
+    /**
+     * Removes the HSL tab from a colour chooser, leaving HSV as the colour-model
+     * panel. HSL and HSV are easily confused, and HSV is the one to encourage.
+     */
+    private static void removeHslPanel(JColorChooser chooser) {
+        String hslName = UIManager.getString("ColorChooser.hslNameText");
+        List<AbstractColorChooserPanel> kept = new ArrayList<>();
+        for (AbstractColorChooserPanel panel : chooser.getChooserPanels()) {
+            String name = panel.getDisplayName();
+            boolean isHsl = name != null
+                && (name.equalsIgnoreCase("HSL") || name.equals(hslName));
+            if (!isHsl) {
+                kept.add(panel);
+            }
+        }
+        chooser.setChooserPanels(kept.toArray(new AbstractColorChooserPanel[0]));
+    }
+
     // ==== Slot row ====
 
     /**
@@ -368,16 +391,25 @@ public final class PlotPaletteWindow extends JFrame {
         }
 
         /**
-         * Opens a graphical chooser for the slot's colour. {@code JColorChooser}
-         * has no alpha channel, so the slot's current opacity is preserved — the
-         * hex field remains the way to change opacity.
+         * Opens a graphical colour chooser for the slot. {@code JColorChooser} has
+         * no alpha channel, so the slot's current opacity is preserved — the hex
+         * field remains the way to change opacity.
          */
         private void chooseColourGraphically() {
             Color current = currentPalette.entryAt(slot).color();
-            Color rgb = JColorChooser.showDialog(PlotPaletteWindow.this, "Choose Colour", current);
-            if (rgb != null) {
-                Color withAlpha = new Color(
-                    rgb.getRed(), rgb.getGreen(), rgb.getBlue(), current.getAlpha());
+
+            JColorChooser chooser = new JColorChooser(current);
+            removeHslPanel(chooser);
+            chooser.setPreviewPanel(new ColourBlockPreview(chooser));
+
+            Color[] picked = {null};
+            JDialog dialog = JColorChooser.createDialog(PlotPaletteWindow.this,
+                "Choose Colour", true, chooser, ev -> picked[0] = chooser.getColor(), null);
+            dialog.setVisible(true);  // modal — blocks until the dialog is closed
+
+            if (picked[0] != null) {
+                Color withAlpha = new Color(picked[0].getRed(), picked[0].getGreen(),
+                    picked[0].getBlue(), current.getAlpha());
                 hexField.setText(toHex(withAlpha));
                 swatch.setColour(withAlpha);
                 commitSlot(slot, currentPalette.entryAt(slot).withColor(withAlpha));
@@ -440,6 +472,30 @@ public final class PlotPaletteWindow extends JFrame {
             g.fillRect(0, 0, w, h);
             g.setColor(new Color(0x808080));
             g.drawRect(0, 0, w - 1, h - 1);
+        }
+    }
+
+    // ==== Colour chooser preview ====
+
+    /**
+     * Replaces {@code JColorChooser}'s default preview (sample text and swatches)
+     * with a plain, short rectangle of the chooser's currently-selected colour.
+     */
+    private static final class ColourBlockPreview extends JComponent {
+        private final JColorChooser chooser;
+
+        ColourBlockPreview(JColorChooser chooser) {
+            this.chooser = chooser;
+            setPreferredSize(new Dimension(360, 32));
+            chooser.getSelectionModel().addChangeListener(e -> repaint());
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            g.setColor(chooser.getColor());
+            g.fillRect(0, 0, getWidth(), getHeight());
+            g.setColor(new Color(0x808080));
+            g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
         }
     }
 

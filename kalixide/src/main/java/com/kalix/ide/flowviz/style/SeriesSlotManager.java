@@ -2,8 +2,10 @@ package com.kalix.ide.flowviz.style;
 
 import com.kalix.ide.flowviz.data.SeriesRef;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -27,6 +29,7 @@ import java.util.Set;
 public class SeriesSlotManager {
 
     private final Map<SeriesRef, Integer> slots = new HashMap<>();
+    private final List<Runnable> changeListeners = new ArrayList<>();
 
     /**
      * Returns {@code ref}'s slot, assigning the lowest free one on first request.
@@ -62,6 +65,20 @@ public class SeriesSlotManager {
         return slots.get(ref);
     }
 
+    /**
+     * Explicitly re-assigns {@code ref} to {@code slot} (wrapped modulo
+     * {@link PlotPalette#SLOT_COUNT}), notifying change listeners if it differs
+     * from the current assignment. This is the user-driven counterpart to
+     * {@link #assignSlot} — it backs the legend's style picker.
+     */
+    public void setSlot(SeriesRef ref, int slot) {
+        int normalized = Math.floorMod(slot, PlotPalette.SLOT_COUNT);
+        Integer previous = slots.put(ref, normalized);
+        if (previous == null || previous != normalized) {
+            fireChange();
+        }
+    }
+
     /** Releases {@code ref}'s slot so it can be reused by a later series. */
     public void removeSlot(SeriesRef ref) {
         slots.remove(ref);
@@ -70,5 +87,22 @@ public class SeriesSlotManager {
     /** Clears every slot assignment. */
     public void clearAll() {
         slots.clear();
+    }
+
+    /** Registers a listener invoked after a slot is explicitly reassigned via {@link #setSlot}. */
+    public void addChangeListener(Runnable listener) {
+        changeListeners.add(listener);
+    }
+
+    /** Removes a previously registered listener. */
+    public void removeChangeListener(Runnable listener) {
+        changeListeners.remove(listener);
+    }
+
+    private void fireChange() {
+        // Iterate a copy: a listener may add or remove listeners while reacting.
+        for (Runnable listener : new ArrayList<>(changeListeners)) {
+            listener.run();
+        }
     }
 }

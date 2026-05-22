@@ -31,4 +31,14 @@ public final class PaletteSeriesStyleResolver implements SeriesStyleResolver {
     public LineStyle styleFor(SeriesRef ref) {
         return paletteManager.getActivePalette().entryAt(slotManager.assignSlot(ref));
     }
+
+    /** The slot assignment this resolver reads; exposed for the legend's style picker. */
+    public SeriesSlotManager slotManager() {
+        return slotManager;
+    }
+
+    /** The palette source this resolver reads. */
+    public PlotPaletteManager paletteManager() {
+        return paletteManager;
+    }
 }

@@ -28,6 +28,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.List;
@@ -126,10 +127,15 @@ public class PlotPanel extends JPanel {
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
 
-    // Repaints this panel whenever the active palette is edited or switched, so a
-    // palette-backed resolver's new styles take effect live. Registered/unregistered
-    // with the component's display lifecycle in addNotify()/removeNotify().
+    // Repaints this panel whenever the active palette is edited or switched, or a
+    // series is moved to a different palette slot, so a palette-backed resolver's
+    // new styles take effect live. Registered/unregistered with the component's
+    // display lifecycle in addNotify()/removeNotify().
     private final Runnable paletteChangeListener = this::repaint;
+
+    // The slot manager this panel is registered with for repaint-on-slot-change;
+    // tracked so removeNotify() detaches from the exact same instance.
+    private SeriesSlotManager registeredSlotManager;
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
     public PlotPanel() {
@@ -182,11 +188,20 @@ public class PlotPanel extends JPanel {
     public void addNotify() {
         super.addNotify();
         PlotPaletteManager.getInstance().addChangeListener(paletteChangeListener);
+        // Also repaint when a series is moved to a different palette slot.
+        if (styleResolver instanceof PaletteSeriesStyleResolver psr) {
+            registeredSlotManager = psr.slotManager();
+            registeredSlotManager.addChangeListener(paletteChangeListener);
+        }
     }
 
     @Override
     public void removeNotify() {
         PlotPaletteManager.getInstance().removeChangeListener(paletteChangeListener);
+        if (registeredSlotManager != null) {
+            registeredSlotManager.removeChangeListener(paletteChangeListener);
+            registeredSlotManager = null;
+        }
         viewportCoalesceTimer.stop();
         onHistoryChanged = null;
         super.removeNotify();
@@ -219,7 +234,21 @@ public class PlotPanel extends JPanel {
         renderer.setStyleResolver(styleResolver);
         coordinateDisplayManager.setStyleResolver(styleResolver);
         legendManager.setStyleResolver(styleResolver);
+        // The legend's style picker only applies to palette-backed plots; a null
+        // callback disables line-sample clicking for fixed-colour resolvers.
+        legendManager.setOnStyleClicked(
+            styleResolver instanceof PaletteSeriesStyleResolver ? this::showStylePicker : null);
         repaint();
+    }
+
+    /**
+     * Opens the legend's line-style picker for {@code ref}. Only reachable when the
+     * style resolver is palette-backed — the legend callback is null otherwise.
+     */
+    private void showStylePicker(SeriesRef ref, Point at) {
+        if (styleResolver instanceof PaletteSeriesStyleResolver psr) {
+            LineStylePicker.show(this, at.x, at.y, ref, psr.slotManager(), psr.paletteManager());
+        }
     }
 
     public void setVisibleSeries(List<SeriesRef> visibleSeries) {
