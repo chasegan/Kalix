@@ -301,7 +301,7 @@ public class RunManager extends JFrame {
     private void setupWindow(JFrame parentFrame) {
         setTitle("Kalix - Run Manager");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        setSize(1100, 600);
+        setSize(1200, 600);
 
         if (parentFrame != null) {
             setLocationRelativeTo(parentFrame);
@@ -1373,7 +1373,7 @@ public class RunManager extends JFrame {
     private void updateOutputsTree() {
         TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
-            outputsTreeBuilder.showEmptyTree("Select one or more runs or datasets");
+            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
             return;
         }
 
@@ -1393,7 +1393,7 @@ public class RunManager extends JFrame {
         }
 
         if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
-            outputsTreeBuilder.showEmptyTree("Select one or more runs or datasets");
+            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
         } else {
             outputsTreeBuilder.updateTree(selectedRuns, selectedDatasets);
         }

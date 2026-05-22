@@ -3,7 +3,9 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
+import com.kalix.ide.flowviz.style.StrokeStyle;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -37,7 +39,6 @@ public class PlotLegendManager {
     private static final int PADDING = 8;
     private static final int CORNER_RADIUS = 8;
     private static final int LINE_SAMPLE_WIDTH = 20;
-    private static final int LINE_SAMPLE_THICKNESS = 2;
     private static final int DOT_DIAMETER = 4;
     private static final int MIN_WIDTH = 120;
     private static final int MAX_WIDTH = 400;
@@ -125,8 +126,10 @@ public class PlotLegendManager {
         this.styleResolver = styleResolver;
     }
 
-    private Color colorFor(SeriesRef ref) {
-        return styleResolver != null ? styleResolver.styleFor(ref).color() : Color.GRAY;
+    private LineStyle lineStyleFor(SeriesRef ref) {
+        return styleResolver != null
+            ? styleResolver.styleFor(ref)
+            : new LineStyle(Color.GRAY, StrokeStyle.DEFAULT);
     }
 
     private String labelFor(SeriesRef ref) {
@@ -398,10 +401,12 @@ public class PlotLegendManager {
                 g.fillRect(x + 2, entryY - 2, width - 4, ENTRY_HEIGHT);
             }
 
-            // Draw line sample
+            // Draw line sample using the series' resolved colour and stroke, so the
+            // key mirrors the plotted line (thickness, dash and opacity included).
             int lineY = entryY + ENTRY_HEIGHT / 2;
-            g.setColor(colorFor(entry.ref));
-            g.setStroke(new BasicStroke(LINE_SAMPLE_THICKNESS, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            LineStyle style = lineStyleFor(entry.ref);
+            g.setColor(style.color());
+            g.setStroke(style.stroke().toBasicStroke());
             g.drawLine(x + PADDING, lineY, x + PADDING + LINE_SAMPLE_WIDTH, lineY);
 
             // Draw dot at end of line

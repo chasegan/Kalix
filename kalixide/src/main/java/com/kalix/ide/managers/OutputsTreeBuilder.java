@@ -54,6 +54,9 @@ public class OutputsTreeBuilder {
 
     private static final Logger logger = LoggerFactory.getLogger(OutputsTreeBuilder.class);
 
+    /** Placeholder shown in the outputs tree when no run or dataset is selected. */
+    public static final String SELECT_SOURCES_MESSAGE = "Select one or more datasets";
+
     // Tree components
     private final JTree timeseriesTree;
     private final DefaultTreeModel timeseriesTreeModel;
@@ -109,7 +112,7 @@ public class OutputsTreeBuilder {
      */
     public void updateTree(List<Object> selectedRuns, List<Object> selectedDatasets) {
         if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
-            showEmptyTree("Select one or more runs or datasets");
+            showEmptyTree(SELECT_SOURCES_MESSAGE);
             return;
         }
 
@@ -452,7 +455,7 @@ public class OutputsTreeBuilder {
                variableName.equals("No outputs available from selected runs") ||
                variableName.equals("No outputs available from selected sources") ||
                variableName.equals("No series available from this dataset") ||
-               variableName.equals("Select one or more runs or datasets");
+               variableName.equals(SELECT_SOURCES_MESSAGE);
     }
 
     // ========== Filtering ==========

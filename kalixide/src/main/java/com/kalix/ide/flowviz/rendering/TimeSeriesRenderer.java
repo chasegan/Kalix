@@ -371,16 +371,28 @@ public class TimeSeriesRenderer {
                     viewport.getPlotWidth(), viewport.getPlotHeight());
     }
     
+    private static final String[] EMPTY_STATE_LINES = {
+        "# If you stare into the Abyss long enough,",
+        "# the Abyss stares back at you. - Friedrich Nietzsche"
+    };
+
     private void renderEmptyState(Graphics2D g2d, ViewPort viewport) {
         g2d.setColor(Color.LIGHT_GRAY);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 14));
-        
-        String message = "No data to display";
+        g2d.setFont(new Font("Arial", Font.ITALIC, 14));
         FontMetrics fm = g2d.getFontMetrics();
-        int messageX = viewport.getPlotX() + (viewport.getPlotWidth() - fm.stringWidth(message)) / 2;
-        int messageY = viewport.getPlotY() + viewport.getPlotHeight() / 2;
-        
-        g2d.drawString(message, messageX, messageY);
+
+        // Centre the multi-line quote as a block within the plot area.
+        int lineHeight = fm.getHeight();
+        int centerX = viewport.getPlotX() + viewport.getPlotWidth() / 2;
+        int blockTop = viewport.getPlotY()
+            + (viewport.getPlotHeight() - lineHeight * EMPTY_STATE_LINES.length) / 2;
+
+        for (int i = 0; i < EMPTY_STATE_LINES.length; i++) {
+            String line = EMPTY_STATE_LINES[i];
+            int lineX = centerX - fm.stringWidth(line) / 2;
+            int lineY = blockTop + i * lineHeight + fm.getAscent();
+            g2d.drawString(line, lineX, lineY);
+        }
     }
     
     // Rendering options
