@@ -7,6 +7,10 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
+import com.kalix.ide.flowviz.style.PlotPaletteManager;
+import com.kalix.ide.flowviz.style.SeriesSlotManager;
+import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
@@ -26,9 +30,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.preferences.PreferenceManager;
@@ -89,7 +91,7 @@ public class PlotPanel extends JPanel {
     private DataSet displayDataSet;   // Transformed data for display (CACHED - see lastTransformKey)
     private final TimeSeriesRenderer renderer;  // Contains LOD cache - clear via renderer.clearCache()
     private ViewPort currentViewport;
-    private final Map<SeriesRef, Color> seriesColors;
+    private SeriesStyleResolver styleResolver;  // Resolves each series to its colour + stroke
     private final List<SeriesRef> visibleSeries;
     private boolean autoYMode = false;
 
@@ -123,20 +125,30 @@ public class PlotPanel extends JPanel {
     private final PlotStateHistory stateHistory = new PlotStateHistory();
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
+
+    // Repaints this panel whenever the active palette is edited or switched, so a
+    // palette-backed resolver's new styles take effect live. Registered/unregistered
+    // with the component's display lifecycle in addNotify()/removeNotify().
+    private final Runnable paletteChangeListener = this::repaint;
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
     public PlotPanel() {
         setBackground(Color.WHITE);
         
         // Initialize data structures
-        seriesColors = new HashMap<>();
         visibleSeries = new java.util.ArrayList<>();
-        renderer = new TimeSeriesRenderer(seriesColors, visibleSeries);
+        renderer = new TimeSeriesRenderer(visibleSeries);
 
         // Initialize managers
-        coordinateDisplayManager = new CoordinateDisplayManager(this, seriesColors, visibleSeries);
+        coordinateDisplayManager = new CoordinateDisplayManager(this, visibleSeries);
         plotInteractionManager = new PlotInteractionManager(this, coordinateDisplayManager);
         legendManager = new PlotLegendManager();
+
+        // Default to the global palette with a private slot assignment. An owner
+        // (e.g. the Run Manager) typically injects a shared resolver afterwards via
+        // setStyleResolver() so colours stay consistent across its tabs.
+        setStyleResolver(new PaletteSeriesStyleResolver(
+            new SeriesSlotManager(), PlotPaletteManager.getInstance()));
 
         // Setup viewport coalescing timer for undo/redo (500ms delay)
         viewportCoalesceTimer = new javax.swing.Timer(500, e -> pushState());
@@ -167,7 +179,14 @@ public class PlotPanel extends JPanel {
     }
 
     @Override
+    public void addNotify() {
+        super.addNotify();
+        PlotPaletteManager.getInstance().addChangeListener(paletteChangeListener);
+    }
+
+    @Override
     public void removeNotify() {
+        PlotPaletteManager.getInstance().removeChangeListener(paletteChangeListener);
         viewportCoalesceTimer.stop();
         onHistoryChanged = null;
         super.removeNotify();
@@ -189,9 +208,17 @@ public class PlotPanel extends JPanel {
         repaint();
     }
     
-    public void setSeriesColors(Map<SeriesRef, Color> colors) {
-        this.seriesColors.clear();
-        this.seriesColors.putAll(colors);
+    /**
+     * Sets the resolver that maps each series to its colour and stroke, propagating
+     * it to the renderer, legend, and coordinate overlay. The resolver is consulted
+     * at paint time, so a shared palette-backed resolver keeps every plot in sync
+     * with the active palette automatically.
+     */
+    public void setStyleResolver(SeriesStyleResolver styleResolver) {
+        this.styleResolver = styleResolver;
+        renderer.setStyleResolver(styleResolver);
+        coordinateDisplayManager.setStyleResolver(styleResolver);
+        legendManager.setStyleResolver(styleResolver);
         repaint();
     }
 
@@ -594,13 +621,14 @@ public class PlotPanel extends JPanel {
     // Legend management methods
 
     /**
-     * Adds a series to the plot legend. Legend stores the ref for identity; the display
-     * label is projected via the {@link LabelResolver} at render time so it tracks
-     * renames automatically.
+     * Adds a series to the plot legend. The legend stores only the ref for identity;
+     * the display label and colour are projected at render time (via the
+     * {@link LabelResolver} and {@link SeriesStyleResolver}) so the entry tracks
+     * renames and palette changes automatically.
      */
-    public void addLegendSeries(SeriesRef ref, Color color) {
+    public void addLegendSeries(SeriesRef ref) {
         if (legendManager != null) {
-            legendManager.addSeries(ref, color);
+            legendManager.addSeries(ref);
             repaint();
         }
     }

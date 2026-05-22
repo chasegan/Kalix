@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -74,6 +75,10 @@ public class PlotLegendManager {
     // are reflected automatically. Optional; defaults to ref.toString() if absent.
     private LabelResolver labelResolver;
 
+    // Style resolver — projects SeriesRef to its colour at render time so palette
+    // changes are reflected automatically. Optional; defaults to grey if absent.
+    private SeriesStyleResolver styleResolver;
+
     // Interaction state
     private boolean isDragging = false;
     private int dragOffsetX = 0;
@@ -95,16 +100,15 @@ public class PlotLegendManager {
 
     /**
      * Represents a single series entry in the legend. Identity is the {@link SeriesRef};
-     * the display label is projected via the {@link LabelResolver} at render time so it
-     * automatically tracks rename operations.
+     * the display label and colour are both projected at render time (via the
+     * {@link LabelResolver} and {@link SeriesStyleResolver}) so the entry tracks
+     * renames and palette changes automatically.
      */
     private static class LegendEntry {
         final SeriesRef ref;
-        final Color color;
 
-        LegendEntry(SeriesRef ref, Color color) {
+        LegendEntry(SeriesRef ref) {
             this.ref = ref;
-            this.color = color;
         }
     }
 
@@ -114,6 +118,15 @@ public class PlotLegendManager {
 
     public void setLabelResolver(LabelResolver labelResolver) {
         this.labelResolver = labelResolver;
+    }
+
+    /** Sets the resolver consulted for each entry's swatch colour at render time. */
+    public void setStyleResolver(SeriesStyleResolver styleResolver) {
+        this.styleResolver = styleResolver;
+    }
+
+    private Color colorFor(SeriesRef ref) {
+        return styleResolver != null ? styleResolver.styleFor(ref).color() : Color.GRAY;
     }
 
     private String labelFor(SeriesRef ref) {
@@ -137,12 +150,13 @@ public class PlotLegendManager {
     }
 
     /**
-     * Adds a series to the legend.
+     * Adds a series to the legend. The swatch colour is resolved at render time
+     * via the {@link SeriesStyleResolver}, so no colour is supplied here.
      */
-    public void addSeries(SeriesRef ref, Color color) {
+    public void addSeries(SeriesRef ref) {
         // Remove existing entry with same ref if present
         entries.removeIf(e -> e.ref.equals(ref));
-        entries.add(new LegendEntry(ref, color));
+        entries.add(new LegendEntry(ref));
     }
 
     /**
@@ -386,7 +400,7 @@ public class PlotLegendManager {
 
             // Draw line sample
             int lineY = entryY + ENTRY_HEIGHT / 2;
-            g.setColor(entry.color);
+            g.setColor(colorFor(entry.ref));
             g.setStroke(new BasicStroke(LINE_SAMPLE_THICKNESS, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g.drawLine(x + PADDING, lineY, x + PADDING + LINE_SAMPLE_WIDTH, lineY);
 

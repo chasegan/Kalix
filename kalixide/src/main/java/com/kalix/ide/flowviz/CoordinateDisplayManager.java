@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.utils.TimeFormatUtil;
 
 import javax.swing.*;
@@ -12,7 +13,6 @@ import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Manages the coordinate display overlay system for the FlowViz plot panel.
@@ -26,8 +26,10 @@ import java.util.Map;
 public class CoordinateDisplayManager {
 
     private final JComponent parentComponent;
-    private final Map<SeriesRef, Color> seriesColors;
     private final List<SeriesRef> visibleSeries;
+
+    // Resolves each series to its style; consulted for the hover marker colour.
+    private SeriesStyleResolver styleResolver;
 
     // Coordinate display state
     private boolean showCoordinates = false;
@@ -43,15 +45,18 @@ public class CoordinateDisplayManager {
      * for smooth user experience during mouse movement.
      *
      * @param parentComponent The Swing component to repaint when coordinates change
-     * @param seriesColors Map of series names to their display colors for consistent theming
      * @param visibleSeries List of currently visible series names to filter coordinate display
      */
-    public CoordinateDisplayManager(JComponent parentComponent, Map<SeriesRef, Color> seriesColors, List<SeriesRef> visibleSeries) {
+    public CoordinateDisplayManager(JComponent parentComponent, List<SeriesRef> visibleSeries) {
         this.parentComponent = parentComponent;
-        this.seriesColors = seriesColors;
         this.visibleSeries = visibleSeries;
 
         setupCoordinateDisplay();
+    }
+
+    /** Sets the resolver consulted for the hover marker colour of each series. */
+    public void setStyleResolver(SeriesStyleResolver styleResolver) {
+        this.styleResolver = styleResolver;
     }
 
     /**
@@ -261,7 +266,7 @@ public class CoordinateDisplayManager {
             seriesRef,
             timestamps[bestIndex],
             values[bestIndex],
-            seriesColors.get(seriesRef)
+            styleResolver != null ? styleResolver.styleFor(seriesRef).color() : Color.GRAY
         );
     }
 

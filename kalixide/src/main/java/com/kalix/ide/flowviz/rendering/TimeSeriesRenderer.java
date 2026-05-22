@@ -3,6 +3,8 @@ package com.kalix.ide.flowviz.rendering;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.style.LineStyle;
+import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 
 import java.awt.*;
 import java.awt.geom.Path2D;
@@ -12,22 +14,29 @@ import java.util.Map;
 public class TimeSeriesRenderer {
 
     private final LODManager lodManager;
-    private final Map<SeriesRef, Color> seriesColors;
     private final List<SeriesRef> visibleSeries;
     private final Map<SeriesRef, SeriesRenderMode> seriesRenderModes;
     private final AxisRenderer axisRenderer;
+
+    // Resolves each series to its colour + stroke at paint time (late-bound, so
+    // palette edits propagate). Set by PlotPanel immediately after construction.
+    private SeriesStyleResolver styleResolver;
 
     // Rendering options
     private boolean showDataPoints = false;
     private boolean showGrid = true;
     private boolean antiAliasing = true;
 
-    public TimeSeriesRenderer(Map<SeriesRef, Color> seriesColors, List<SeriesRef> visibleSeries) {
+    public TimeSeriesRenderer(List<SeriesRef> visibleSeries) {
         this.lodManager = new LODManager();
-        this.seriesColors = seriesColors;
         this.visibleSeries = visibleSeries;
         this.seriesRenderModes = new java.util.HashMap<>();
         this.axisRenderer = new AxisRenderer();
+    }
+
+    /** Sets the resolver consulted for each series' colour and stroke. */
+    public void setStyleResolver(SeriesStyleResolver styleResolver) {
+        this.styleResolver = styleResolver;
     }
     
     public void render(Graphics2D g2d, DataSet dataSet, ViewPort viewport) {
@@ -61,11 +70,8 @@ public class TimeSeriesRenderer {
         // Draw time series data in legend order (visibleSeries list order)
         for (SeriesRef ref : visibleSeries) {
             TimeSeriesData series = dataSet.getSeries(ref);
-            if (series != null) {
-                Color seriesColor = seriesColors.get(ref);
-                if (seriesColor != null) {
-                    renderSeries(g2d, ref, series, viewport, seriesColor);
-                }
+            if (series != null && styleResolver != null) {
+                renderSeries(g2d, ref, series, viewport, styleResolver.styleFor(ref));
             }
         }
         
@@ -73,14 +79,16 @@ public class TimeSeriesRenderer {
         drawPlotBorder(g2d, viewport);
     }
     
-    private void renderSeries(Graphics2D g2d, SeriesRef ref, TimeSeriesData series, ViewPort viewport, Color color) {
+    private void renderSeries(Graphics2D g2d, SeriesRef ref, TimeSeriesData series, ViewPort viewport, LineStyle style) {
         LODManager.RenderStrategy strategy = lodManager.determineRenderStrategy(ref, series, viewport);
 
         // Get render mode for this series (default to LINE)
         SeriesRenderMode renderMode = seriesRenderModes.getOrDefault(ref, SeriesRenderMode.LINE);
 
-        g2d.setColor(color);
-        g2d.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        // Colour carries opacity in its alpha channel; the stroke carries thickness
+        // and dash. The LOD path inherits this colour but keeps its own fixed strokes.
+        g2d.setColor(style.color());
+        g2d.setStroke(style.stroke().toBasicStroke());
 
         if (strategy.useFullResolution) {
             renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode);

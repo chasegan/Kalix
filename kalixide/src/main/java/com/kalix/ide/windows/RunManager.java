@@ -5,8 +5,10 @@ import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.RunContextMenuManager;
-import com.kalix.ide.managers.SeriesColorManager;
 import com.kalix.ide.managers.TreeFilterManager;
+import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
+import com.kalix.ide.flowviz.style.PlotPaletteManager;
+import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.utils.NaturalSortUtils;
@@ -154,7 +156,7 @@ public class RunManager extends JFrame {
     private OutputsTreeBuilder outputsTreeBuilder;
     private DatasetLoaderManager datasetLoaderManager;
     private RunContextMenuManager runContextMenuManager;
-    private SeriesColorManager seriesColorManager;
+    private SeriesSlotManager seriesSlotManager;
     private TreeFilterManager treeFilterManager;
     private java.util.function.Consumer<SessionManager.SessionEvent> sessionEventListener;
 
@@ -403,11 +405,13 @@ public class RunManager extends JFrame {
                 ? new com.kalix.ide.flowviz.data.RunSeries(lastRunInfo.getRunId(), last.baseName())
                 : null);
 
-        // Initialize series color manager
-        seriesColorManager = new SeriesColorManager();
+        // Initialize series slot assignment. Slots are resolved against the global
+        // palette so every plot tab in this window styles a series consistently.
+        seriesSlotManager = new SeriesSlotManager();
 
-        // Create tab manager with shared data
-        tabManager = new VisualizationTabManager(plotDataSet, seriesColorManager.getColorMap());
+        // Create tab manager with shared data and a palette-backed style resolver
+        tabManager = new VisualizationTabManager(plotDataSet,
+            new PaletteSeriesStyleResolver(seriesSlotManager, PlotPaletteManager.getInstance()));
 
         // Wire the label resolver so legends, stats column 0, etc. project SeriesRef
         // → user-visible label at render time. Must happen *before* the default plot
@@ -1476,8 +1480,8 @@ public class RunManager extends JFrame {
             OutputsTreeBuilder.SeriesLeafNode leaf = refToLeaf.get(ref);
             if (leaf == null) continue;
 
-            // Assign color if not already assigned
-            seriesColorManager.assignColor(ref);
+            // Assign a palette slot if not already assigned
+            seriesSlotManager.assignSlot(ref);
 
             if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 datasetRefs.add(ref);
@@ -1494,10 +1498,10 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Also assign colors for series new to this tab but already in pool
+        // Also assign palette slots for series new to this tab but already in pool
         for (com.kalix.ide.flowviz.data.SeriesRef ref : newSelectedSeries) {
             if (!currentTabSeries.contains(ref)) {
-                seriesColorManager.assignColor(ref);
+                seriesSlotManager.assignSlot(ref);
             }
         }
 

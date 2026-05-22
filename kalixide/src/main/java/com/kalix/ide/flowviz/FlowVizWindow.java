@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.style.MapStyleResolver;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -271,7 +272,7 @@ public class FlowVizWindow extends JFrame {
 
                 dataPanel.addSeries(ref, seriesColor, data.getPointCount());
                 updatePlotPanel();
-                plotPanel.addLegendSeries(ref, seriesColor);
+                plotPanel.addLegendSeries(ref);
                 updateTitle();
             }
 
@@ -354,7 +355,7 @@ public class FlowVizWindow extends JFrame {
             visibleRefs = allRefs;
         }
 
-        plotPanel.setSeriesColors(colorMap);
+        plotPanel.setStyleResolver(new MapStyleResolver(colorMap));
         plotPanel.setVisibleSeries(visibleRefs);
     }
 

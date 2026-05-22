@@ -40,6 +40,12 @@ public class PreferenceKeys {
     /** Log scale auto-zoom minimum value threshold (double, default: 0.001) */
     public static final String PLOT_LOG_SCALE_MIN_THRESHOLD = "plot.logScale.minThreshold";
 
+    /** Custom plot palettes, one encoded string per user-defined palette (string list, default: empty) */
+    public static final String PLOT_PALETTES = "plot.palettes";
+
+    /** Name of the globally active plot palette (string, default: "Default") */
+    public static final String PLOT_ACTIVE_PALETTE = "plot.activePalette";
+
     /** STDIO format for get_result responses ("kaz" or "csv", default: "kaz") */
     public static final String STDIO_DATA_FORMAT = "stdio.dataFormat";
 

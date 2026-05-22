@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
@@ -49,7 +50,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -84,7 +84,7 @@ public class VisualizationTabManager {
 
     private final JTabbedPane tabbedPane;
     private final DataSet sharedDataSet;           // Single source of truth for all tabs
-    private final Map<SeriesRef, Color> sharedColorMap;  // Consistent colors across all tabs
+    private final SeriesStyleResolver styleResolver;  // Shared resolver — consistent styling across all tabs
     private LabelResolver labelResolver;  // injected by owner; passed down to PlotPanels
     private final List<TabInfo> tabs;
 
@@ -236,11 +236,11 @@ public class VisualizationTabManager {
      * Creates a new tab manager for visualization tabs.
      *
      * @param sharedDataSet The dataset shared across all tabs
-     * @param sharedColorMap The color mapping shared across all tabs
+     * @param styleResolver The series-style resolver shared across all tabs
      */
-    public VisualizationTabManager(DataSet sharedDataSet, Map<SeriesRef, Color> sharedColorMap) {
+    public VisualizationTabManager(DataSet sharedDataSet, SeriesStyleResolver styleResolver) {
         this.sharedDataSet = sharedDataSet;
-        this.sharedColorMap = sharedColorMap;
+        this.styleResolver = styleResolver;
         this.tabs = new ArrayList<>();
 
         // Create tabbed pane with close buttons
@@ -305,7 +305,7 @@ public class VisualizationTabManager {
         // Create new plot panel with shared dataset
         PlotPanel plotPanel = new PlotPanel();
         plotPanel.setDataSet(sharedDataSet);
-        plotPanel.setSeriesColors(sharedColorMap);
+        plotPanel.setStyleResolver(styleResolver);
         if (labelResolver != null) {
             plotPanel.setLabelResolver(labelResolver);
         }
@@ -332,12 +332,9 @@ public class VisualizationTabManager {
             plotPanel.setLegendCollapsed(true);
         }
 
-        // Populate legend with inherited series
+        // Populate legend with inherited series (colour resolved at render time)
         for (SeriesRef ref : inheritedSeries) {
-            Color color = sharedColorMap.get(ref);
-            if (color != null) {
-                plotPanel.addLegendSeries(ref, color);
-            }
+            plotPanel.addLegendSeries(ref);
         }
 
         // Create container panel with toolbar
@@ -404,6 +401,8 @@ public class VisualizationTabManager {
             })
             .addSaveButton()
             .addUndoRedoButtons()
+            .addSeparator()
+            .addPaletteButton()
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
@@ -516,6 +515,14 @@ public class VisualizationTabManager {
 
         PlotToolbarBuilder addSaveButton() {
             JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", plotPanel::saveData);
+            toolbar.add(button);
+            return this;
+        }
+
+        /** Adds the button that opens the global plot-palette editor window. */
+        PlotToolbarBuilder addPaletteButton() {
+            JButton button = createIconButton(FontAwesomeSolid.PALETTE,
+                "Plot Palettes…", PlotPaletteWindow::showWindow);
             toolbar.add(button);
             return this;
         }
@@ -1331,7 +1338,7 @@ public class VisualizationTabManager {
     public void updateAllTabs(boolean resetZoom) {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                tab.plotPanel.setSeriesColors(sharedColorMap);
+                tab.plotPanel.setStyleResolver(styleResolver);
                 tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.plotPanel.refreshData(resetZoom);
             }
@@ -1347,7 +1354,7 @@ public class VisualizationTabManager {
     public void updateTab(PlotPanel targetPanel, boolean resetZoom) {
         for (TabInfo tab : tabs) {
             if (tab.plotPanel == targetPanel) {
-                tab.plotPanel.setSeriesColors(sharedColorMap);
+                tab.plotPanel.setStyleResolver(styleResolver);
                 tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.plotPanel.refreshData(resetZoom);
                 return;
@@ -1446,17 +1453,14 @@ public class VisualizationTabManager {
         tab.selectedSeries.addAll(ordered);
 
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-            // Rebuild legend
+            // Rebuild legend (colour resolved at render time)
             tab.plotPanel.clearLegend();
             for (SeriesRef ref : ordered) {
-                Color color = sharedColorMap.get(ref);
-                if (color != null) {
-                    tab.plotPanel.addLegendSeries(ref, color);
-                }
+                tab.plotPanel.addLegendSeries(ref);
             }
 
             // Update visible series and refresh
-            tab.plotPanel.setSeriesColors(sharedColorMap);
+            tab.plotPanel.setStyleResolver(styleResolver);
             tab.plotPanel.setVisibleSeries(new ArrayList<>(ordered));
             tab.plotPanel.refreshData(false);
         } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
@@ -1519,13 +1523,10 @@ public class VisualizationTabManager {
                 tab.selectedSeries.clear();
                 tab.selectedSeries.addAll(state.getVisibleSeries());
 
-                // Rebuild legend to match
+                // Rebuild legend to match (colour resolved at render time)
                 panel.clearLegend();
                 for (SeriesRef ref : state.getVisibleSeries()) {
-                    Color color = sharedColorMap.get(ref);
-                    if (color != null) {
-                        panel.addLegendSeries(ref, color);
-                    }
+                    panel.addLegendSeries(ref);
                 }
                 break;
             }

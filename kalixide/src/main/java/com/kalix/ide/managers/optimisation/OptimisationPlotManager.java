@@ -1,6 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.style.MapStyleResolver;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
@@ -176,7 +177,7 @@ public class OptimisationPlotManager {
         visibleSeries.add(REF_POPULATION);
         visibleSeries.add(REF_BEST_OBJECTIVE);
 
-        convergencePlot.setSeriesColors(colors);
+        convergencePlot.setStyleResolver(new MapStyleResolver(colors));
         convergencePlot.setVisibleSeries(visibleSeries);
 
         // Configure rendering modes: Best Objective as LINE, Population as POINTS only
