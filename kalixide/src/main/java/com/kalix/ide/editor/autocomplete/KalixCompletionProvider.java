@@ -4,6 +4,7 @@ import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.io.DataSourceHeaderReader;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.linter.parsing.IniContinuation;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 import com.kalix.ide.linter.schema.SectionDefinition;
@@ -238,9 +239,23 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             // Find current section
             ctx.sectionName = findCurrentSectionName(allLines, lineIndex);
 
-            // Determine if we're in value position (after '=')
-            int equalsIndex = currentLine.indexOf('=');
-            boolean inValuePosition = equalsIndex >= 0 && textBeforeCursorOnLine.length() > equalsIndex;
+            // Determine if we're in value position (after '=' on the current
+            // line, or anywhere on a continuation of a multi-line value). For
+            // continuation lines, propertyLine/propertyEqualsIndex point at the
+            // owning header so the key can be extracted from it; on a regular
+            // property line they point at the current line.
+            String propertyLine = currentLine;
+            int propertyEqualsIndex = currentLine.indexOf('=');
+            boolean inValuePosition = propertyEqualsIndex >= 0
+                    && textBeforeCursorOnLine.length() > propertyEqualsIndex;
+            if (!inValuePosition) {
+                int ownerIdx = IniContinuation.findOwningPropertyLine(allLines, lineIndex);
+                if (ownerIdx >= 0 && ownerIdx != lineIndex) {
+                    propertyLine = allLines[ownerIdx];
+                    propertyEqualsIndex = propertyLine.indexOf('=');
+                    inValuePosition = propertyEqualsIndex >= 0;
+                }
+            }
 
             if ("inputs".equals(ctx.sectionName) && !inValuePosition) {
                 // In inputs section: offer CSV file completions (bare lines, no key=value)
@@ -266,7 +281,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             }
 
             // In value position: determine what kind of value
-            ctx.propertyKey = currentLine.substring(0, equalsIndex).trim();
+            ctx.propertyKey = propertyLine.substring(0, propertyEqualsIndex).trim();
 
             // Resolve node type for dsnode detection
             if (ctx.sectionName != null && ctx.sectionName.startsWith("node.")) {

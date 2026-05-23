@@ -1,6 +1,7 @@
 package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.linter.parsing.IniContinuation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,9 +87,17 @@ public class ContextDetector {
                             builder.nodeType(typeProp.getValue());
                         }
 
-                        // Check if we're on a property line
-                        if (line.contains("=")) {
-                            String key = line.substring(0, line.indexOf("=")).trim();
+                        // Check if we're on a property line. If the cursor is
+                        // on an indented continuation of a multi-line value,
+                        // resolve back to the owning property header so PROPERTY
+                        // context still applies (e.g. right-click Table View
+                        // works anywhere inside a multi-line value).
+                        int propertyLineIdx = IniContinuation.findOwningPropertyLine(lines, currentLine);
+                        String propertyLine = (propertyLineIdx >= 0)
+                                ? lines[propertyLineIdx].trim()
+                                : line;
+                        if (propertyLine.contains("=")) {
+                            String key = propertyLine.substring(0, propertyLine.indexOf("=")).trim();
                             builder.propertyKey(key)
                                 .type(EditorContext.ContextType.PROPERTY);
 
