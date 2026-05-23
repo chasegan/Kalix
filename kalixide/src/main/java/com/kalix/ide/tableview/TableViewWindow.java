@@ -739,17 +739,11 @@ public class TableViewWindow extends JDialog {
 
     private String formatResult() {
         String[][] values = tableModel.getNonEmptyDataValues();
-        if (multiLineFormat) {
-            return formatter.formatMultiLine(
-                values,
-                definition.getOrientation(),
-                definition.getValuesPerLine(),
-                definition.getHeaderLine(),
-                continuationIndent
-            );
-        } else {
-            return formatter.formatInline(values, definition.getOrientation());
-        }
+        // Definitions whose value shape isn't the comma-separated default
+        // (e.g. linear combinations) override formatValues; the default impl
+        // delegates back to TableValueFormatter so the existing built-ins
+        // behave exactly as before.
+        return definition.formatValues(values, multiLineFormat, formatter, continuationIndent);
     }
 
     /**

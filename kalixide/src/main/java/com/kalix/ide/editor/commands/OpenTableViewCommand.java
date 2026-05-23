@@ -43,11 +43,10 @@ public class OpenTableViewCommand implements EditorCommand {
         if (context.getType() != EditorContext.ContextType.PROPERTY) {
             return false;
         }
-
         String nodeType = context.getNodeType().orElse(null);
         String propertyKey = context.getPropertyKey().orElse(null);
-
-        return TablePropertyRegistry.getInstance().isSupported(nodeType, propertyKey);
+        String value = context.getPropertyValue().orElse("");
+        return TablePropertyRegistry.getInstance().findHandler(nodeType, propertyKey, value) != null;
     }
 
     @Override
@@ -58,15 +57,6 @@ public class OpenTableViewCommand implements EditorCommand {
 
         if (nodeType == null || propertyKey == null || nodeName == null) {
             logger.warn("Missing context information for table view");
-            return;
-        }
-
-        // Get the definition
-        TablePropertyDefinition definition = TablePropertyRegistry.getInstance()
-            .getDefinition(nodeType, propertyKey);
-
-        if (definition == null) {
-            logger.warn("No table definition found for {}:{}", nodeType, propertyKey);
             return;
         }
 
@@ -93,13 +83,22 @@ public class OpenTableViewCommand implements EditorCommand {
         String currentValue = property.getValue();
         int propertyLineNumber = property.getLineNumber();
 
-        // Open table view window
+        // Resolve the definition against the live value, mirroring isApplicable.
+        // Re-checking here is defensive against the (unlikely) race in which the
+        // value has changed since the menu was shown.
+        TablePropertyDefinition definition = TablePropertyRegistry.getInstance()
+                .findHandler(nodeType, propertyKey, currentValue);
+        if (definition == null) {
+            logger.warn("No table definition handles {}:{} for current value", nodeType, propertyKey);
+            return;
+        }
+
         TableViewWindow window = new TableViewWindow(parentFrame, definition, currentValue, nodeName);
         String newValue = window.showAndGetResult();
 
         if (newValue != null) {
-            // Always update when user clicks Accept - they may want to change formatting
-            // even if the parsed values are the same
+            // Always update when user clicks Accept - they may want to change
+            // formatting even if the parsed values are the same.
             boolean success = executor.replacePropertyValue(propertyKey, currentValue, newValue, propertyLineNumber);
             if (success) {
                 logger.info("Updated {} property via table view", propertyKey);

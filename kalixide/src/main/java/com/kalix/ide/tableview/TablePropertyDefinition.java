@@ -85,4 +85,48 @@ public interface TablePropertyDefinition {
         return getNodeType().substring(0, 1).toUpperCase() + getNodeType().substring(1)
             + " " + getPropertyName();
     }
+
+    /**
+     * Returns true if this definition can produce a meaningful table for the
+     * given raw property value.
+     *
+     * <p>Implementations should be defensive and inexpensive: this is called
+     * during right-click context-menu construction to decide whether the
+     * "Table View" item appears. The default accepts any value, preserving
+     * the historical behaviour. Definitions that handle a specific value shape
+     * (e.g. a linear combination of data references) should override this so
+     * the menu item is hidden when the value does not fit the shape.</p>
+     *
+     * <p>When several definitions are registered for the same
+     * {@code (nodeType, propertyName)} pair, the registry walks them in
+     * registration order and selects the first that returns true here, so
+     * register more specific definitions first.</p>
+     */
+    default boolean canHandleValue(String value) {
+        return true;
+    }
+
+    /**
+     * Formats edited table values back to the INI value string.
+     *
+     * <p>The default implementation delegates to {@link TableValueFormatter},
+     * producing the comma-separated layout used by all of the existing
+     * built-in definitions. Definitions whose value shape is not comma-
+     * separated (linear combinations, function calls, etc.) override this to
+     * emit their own format.</p>
+     *
+     * @param values             the non-empty rows from the table
+     * @param multiLine          true if the user chose the multi-line accept option
+     * @param formatter          the standard formatter, available for delegation
+     * @param continuationIndent number of spaces to indent continuation lines
+     * @return the formatted property value
+     */
+    default String formatValues(String[][] values, boolean multiLine,
+                                TableValueFormatter formatter, int continuationIndent) {
+        if (multiLine) {
+            return formatter.formatMultiLine(
+                    values, getOrientation(), getValuesPerLine(), getHeaderLine(), continuationIndent);
+        }
+        return formatter.formatInline(values, getOrientation());
+    }
 }
