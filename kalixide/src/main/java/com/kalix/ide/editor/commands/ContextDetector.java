@@ -1,22 +1,24 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.linter.parsing.INIModelParser;
-import com.kalix.ide.linter.parsing.IniContinuation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /**
- * Analyzes cursor position and document structure to determine editing context.
+ * Maps an {@link EditorPosition} to an {@link EditorContext} - i.e. classifies
+ * the caret's structural location into the domain enum used by the right-click
+ * command system.
+ *
+ * <p>All structural analysis (line number, section detection, continuation
+ * resolution, etc.) is delegated to {@link EditorPosition}; this class is just
+ * the per-consumer adapter that decides which {@link EditorContext.ContextType}
+ * applies and what fields the command system needs populated.</p>
  */
 public class ContextDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(ContextDetector.class);
-
-    // Pattern for node section headers: [node.NodeName]
-    private static final Pattern NODE_HEADER_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]");
+    private static final String NODE_SECTION_PREFIX = "node.";
 
     /**
      * Detects the editing context at the given cursor position.
@@ -29,120 +31,34 @@ public class ContextDetector {
      */
     public EditorContext detectContext(int caretPos, String text, String selection,
                                        INIModelParser.ParsedModel parsedModel) {
+        EditorPosition position = EditorPosition.analyze(text, caretPos, parsedModel);
         EditorContext.Builder builder = new EditorContext.Builder()
-            .caretPosition(caretPos)
-            .selectedText(selection);
+                .caretPosition(caretPos)
+                .selectedText(selection)
+                .lineNumber(position.getLineNumber());
 
         try {
-            // Find the line containing the caret
-            String[] lines = text.split("\n", -1);
-            int currentLine = findLineNumber(text, caretPos);
-            builder.lineNumber(currentLine);
-
-            if (currentLine < 0 || currentLine >= lines.length) {
-                return builder.type(EditorContext.ContextType.UNKNOWN).build();
+            String sectionName = position.getSectionName();
+            if (sectionName != null) {
+                builder.sectionName(sectionName);
             }
 
-            String line = lines[currentLine].trim();
-
-            // Check if we're on a node header line
-            Matcher nodeMatcher = NODE_HEADER_PATTERN.matcher(line);
-            if (nodeMatcher.matches()) {
-                String nodeName = nodeMatcher.group(1);
-                builder.type(EditorContext.ContextType.NODE_HEADER)
-                    .nodeName(nodeName)
-                    .sectionName("node." + nodeName);
-
-                // Try to get node type from parsed model
-                if (parsedModel != null) {
-                    INIModelParser.Section section = parsedModel.getSections().get("node." + nodeName);
-                    if (section != null) {
-                        INIModelParser.Property typeProp = section.getProperties().get("type");
-                        if (typeProp != null) {
-                            builder.nodeType(typeProp.getValue());
-                        }
-                    }
-                }
-
-                return builder.build();
+            // Node sections get their own header / property / body context types.
+            if (sectionName != null && sectionName.startsWith(NODE_SECTION_PREFIX)) {
+                return classifyNodeSection(builder, position, parsedModel);
             }
 
-            // Check if we're inside a section (use parsed model if available)
-            if (parsedModel != null) {
-                String currentSection = findCurrentSection(parsedModel, currentLine);
-
-                // Always set section name if we found one
-                if (currentSection != null) {
-                    builder.sectionName(currentSection);
-                }
-
-                if (currentSection != null && currentSection.startsWith("node.")) {
-                    String nodeName = currentSection.substring(5); // Remove "node." prefix
-                    builder.nodeName(nodeName);
-
-                    INIModelParser.Section section = parsedModel.getSections().get(currentSection);
-                    if (section != null) {
-                        INIModelParser.Property typeProp = section.getProperties().get("type");
-                        if (typeProp != null) {
-                            builder.nodeType(typeProp.getValue());
-                        }
-
-                        // Check if we're on a property line. If the cursor is
-                        // on an indented continuation of a multi-line value,
-                        // resolve back to the owning property header so PROPERTY
-                        // context still applies (e.g. right-click Table View
-                        // works anywhere inside a multi-line value).
-                        int propertyLineIdx = IniContinuation.findOwningPropertyLine(lines, currentLine);
-                        String propertyLine = (propertyLineIdx >= 0)
-                                ? lines[propertyLineIdx].trim()
-                                : line;
-                        if (propertyLine.contains("=")) {
-                            String key = propertyLine.substring(0, propertyLine.indexOf("=")).trim();
-                            builder.propertyKey(key)
-                                .type(EditorContext.ContextType.PROPERTY);
-
-                            // Get clean property value from parsed model (already has comments stripped)
-                            INIModelParser.Property prop = section.getProperties().get(key);
-                            if (prop != null) {
-                                builder.propertyValue(prop.getValue());
-                            }
-
-                            return builder.build();
-                        }
-                    }
-
-                    builder.type(EditorContext.ContextType.NODE_SECTION);
-                    return builder.build();
-                }
-
-                // Check if we're in outputs section
-                if ("outputs".equals(currentSection)) {
-                    builder.type(EditorContext.ContextType.OUTPUT_REFERENCE);
-                    return builder.build();
-                }
-
-                // Check if we're in constants section
-                if ("constants".equals(currentSection)) {
-                    builder.type(EditorContext.ContextType.CONSTANTS);
-                    return builder.build();
-                }
-
-                // Check if we're in inputs section on a file path line
-                if ("inputs".equals(currentSection)) {
-                    // Check if this line contains a file path (non-empty, non-comment line)
-                    if (!line.isEmpty() && !line.startsWith("#") && !line.startsWith(";")) {
-                        // Get the actual file path from parsed model by matching line number
-                        String filePath = findInputFileAtLine(parsedModel, currentLine + 1); // Convert 0-based to 1-based
-                        if (filePath != null) {
-                            builder.type(EditorContext.ContextType.INPUT_FILE)
-                                .inputFilePath(filePath);
-                            return builder.build();
-                        }
-                    }
+            // Other section types only get content-context on non-header lines.
+            // The header line itself falls through to UNKNOWN (preserving the
+            // pre-consolidation behavior; there is no command that targets a
+            // bare section header today).
+            if (sectionName != null && !position.isOnSectionHeader()) {
+                EditorContext sectionBody = classifySectionBody(builder, position, parsedModel, sectionName);
+                if (sectionBody != null) {
+                    return sectionBody;
                 }
             }
 
-            // Default to unknown context
             return builder.type(EditorContext.ContextType.UNKNOWN).build();
 
         } catch (Exception e) {
@@ -151,50 +67,75 @@ public class ContextDetector {
         }
     }
 
-    /**
-     * Finds the line number (0-indexed) for the given caret position.
-     */
-    private int findLineNumber(String text, int caretPos) {
-        if (caretPos < 0 || caretPos > text.length()) {
-            return -1;
+    private EditorContext classifyNodeSection(EditorContext.Builder builder,
+                                              EditorPosition position,
+                                              INIModelParser.ParsedModel parsedModel) {
+        String sectionName = position.getSectionName();
+        builder.nodeName(sectionName.substring(NODE_SECTION_PREFIX.length()));
+        if (position.getNodeType() != null) {
+            builder.nodeType(position.getNodeType());
         }
 
-        int lineNumber = 0;
-        for (int i = 0; i < caretPos && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                lineNumber++;
-            }
+        if (position.isOnSectionHeader()) {
+            return builder.type(EditorContext.ContextType.NODE_HEADER).build();
         }
-        return lineNumber;
+
+        if (position.isInProperty()) {
+            String key = position.getPropertyKey();
+            builder.propertyKey(key).type(EditorContext.ContextType.PROPERTY);
+            // Use the parser's joined, comment-stripped value if we can find
+            // it. (The cursor may sit on a continuation line; the key was
+            // resolved from the owning header inside EditorPosition.)
+            if (parsedModel != null) {
+                INIModelParser.Section section = parsedModel.getSections().get(sectionName);
+                if (section != null) {
+                    INIModelParser.Property prop = section.getProperties().get(key);
+                    if (prop != null) {
+                        builder.propertyValue(prop.getValue());
+                    }
+                }
+            }
+            return builder.build();
+        }
+
+        return builder.type(EditorContext.ContextType.NODE_SECTION).build();
+    }
+
+    private EditorContext classifySectionBody(EditorContext.Builder builder,
+                                              EditorPosition position,
+                                              INIModelParser.ParsedModel parsedModel,
+                                              String sectionName) {
+        switch (sectionName) {
+            case "outputs":
+                return builder.type(EditorContext.ContextType.OUTPUT_REFERENCE).build();
+            case "constants":
+                return builder.type(EditorContext.ContextType.CONSTANTS).build();
+            case "inputs":
+                String line = position.getCurrentLine().trim();
+                if (!line.isEmpty() && !line.startsWith("#") && !line.startsWith(";")) {
+                    // Parser stores input-file line numbers 1-based.
+                    String filePath = findInputFileAtLine(parsedModel, position.getLineNumber() + 1);
+                    if (filePath != null) {
+                        return builder.type(EditorContext.ContextType.INPUT_FILE)
+                                .inputFilePath(filePath)
+                                .build();
+                    }
+                }
+                return null;
+            default:
+                return null;
+        }
     }
 
     /**
-     * Finds which section the given line number belongs to.
+     * Finds the input file path at the given 1-based line number, or null.
      */
-    private String findCurrentSection(INIModelParser.ParsedModel model, int lineNumber) {
-        String currentSection = null;
-        int closestLineBeforeCaret = -1;
-
-        for (INIModelParser.Section section : model.getSections().values()) {
-            int sectionStartLine = section.getStartLine();
-
-            // Find the section that starts before or at the caret line
-            if (sectionStartLine <= lineNumber && sectionStartLine > closestLineBeforeCaret) {
-                currentSection = section.getName();
-                closestLineBeforeCaret = sectionStartLine;
-            }
+    private String findInputFileAtLine(INIModelParser.ParsedModel model, int lineNumber1Based) {
+        if (model == null) {
+            return null;
         }
-
-        return currentSection;
-    }
-
-    /**
-     * Finds the input file path at the given line number (1-based).
-     * Returns null if no input file is found at that line.
-     */
-    private String findInputFileAtLine(INIModelParser.ParsedModel model, int lineNumber) {
         for (java.util.Map.Entry<String, Integer> entry : model.getInputFileLineNumbers().entrySet()) {
-            if (entry.getValue() == lineNumber) {
+            if (entry.getValue() == lineNumber1Based) {
                 return entry.getKey();
             }
         }

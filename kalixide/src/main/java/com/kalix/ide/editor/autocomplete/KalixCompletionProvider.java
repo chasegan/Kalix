@@ -1,10 +1,10 @@
 package com.kalix.ide.editor.autocomplete;
 
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.io.DataSourceHeaderReader;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.parsing.INIModelParser;
-import com.kalix.ide.linter.parsing.IniContinuation;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 import com.kalix.ide.linter.schema.SectionDefinition;
@@ -21,8 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Context-aware completion provider for Kalix INI model files.
@@ -32,7 +30,6 @@ import java.util.regex.Pattern;
 public class KalixCompletionProvider extends DefaultCompletionProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(KalixCompletionProvider.class);
-    private static final Pattern SECTION_HEADER_PATTERN = Pattern.compile("^\\s*\\[([^\\]]+)]\\s*$");
 
     private final LinterSchema schema;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
@@ -217,87 +214,35 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         try {
             int caretPos = tc.getCaretPosition();
             String fullText = tc.getText(0, tc.getDocument().getLength());
-            String textUpToCaret = fullText.substring(0, caretPos);
-            String[] allLines = fullText.split("\n", -1);
+            EditorPosition position = EditorPosition.analyze(fullText, caretPos, modelSupplier.get());
 
-            // Find which line the caret is on
-            int lineIndex = 0;
-            int pos = 0;
-            for (int i = 0; i < allLines.length; i++) {
-                int lineEnd = pos + allLines[i].length();
-                if (caretPos <= lineEnd) {
-                    lineIndex = i;
-                    break;
-                }
-                pos = lineEnd + 1; // +1 for newline
-            }
+            ctx.sectionName = position.getSectionName();
+            ctx.nodeType = position.getNodeType();
 
-            String currentLine = allLines[lineIndex];
-            int lineStartOffset = textUpToCaret.lastIndexOf('\n') + 1;
-            String textBeforeCursorOnLine = textUpToCaret.substring(lineStartOffset);
-
-            // Find current section
-            ctx.sectionName = findCurrentSectionName(allLines, lineIndex);
-
-            // Determine if we're in value position (after '=' on the current
-            // line, or anywhere on a continuation of a multi-line value). For
-            // continuation lines, propertyLine/propertyEqualsIndex point at the
-            // owning header so the key can be extracted from it; on a regular
-            // property line they point at the current line.
-            String propertyLine = currentLine;
-            int propertyEqualsIndex = currentLine.indexOf('=');
-            boolean inValuePosition = propertyEqualsIndex >= 0
-                    && textBeforeCursorOnLine.length() > propertyEqualsIndex;
-            if (!inValuePosition) {
-                int ownerIdx = IniContinuation.findOwningPropertyLine(allLines, lineIndex);
-                if (ownerIdx >= 0 && ownerIdx != lineIndex) {
-                    propertyLine = allLines[ownerIdx];
-                    propertyEqualsIndex = propertyLine.indexOf('=');
-                    inValuePosition = propertyEqualsIndex >= 0;
-                }
-            }
-
-            if ("inputs".equals(ctx.sectionName) && !inValuePosition) {
-                // In inputs section: offer CSV file completions (bare lines, no key=value)
-                ctx.type = ContextType.INPUT_FILE_DEFINITIONS;
-                return ctx;
-            }
-
-            if ("outputs".equals(ctx.sectionName) && !inValuePosition) {
-                // In outputs section: offer recorder completions (bare lines, no key=value)
-                ctx.type = ContextType.OUTPUT_RECORDERS;
-                return ctx;
-            }
-
-            if (!inValuePosition) {
-                // At line start / key position
-                ctx.type = ContextType.LINE_START;
-
-                // Resolve node type if in a node section
-                if (ctx.sectionName != null && ctx.sectionName.startsWith("node.")) {
-                    ctx.nodeType = findNodeTypeInSection(allLines, lineIndex);
+            if (!position.isInValuePosition()) {
+                // Outside a value: pick the per-section bare-line context, or
+                // fall through to property-name / section-header completions.
+                if ("inputs".equals(ctx.sectionName)) {
+                    ctx.type = ContextType.INPUT_FILE_DEFINITIONS;
+                } else if ("outputs".equals(ctx.sectionName)) {
+                    ctx.type = ContextType.OUTPUT_RECORDERS;
+                } else {
+                    ctx.type = ContextType.LINE_START;
                 }
                 return ctx;
             }
 
-            // In value position: determine what kind of value
-            ctx.propertyKey = propertyLine.substring(0, propertyEqualsIndex).trim();
-
-            // Resolve node type for dsnode detection
-            if (ctx.sectionName != null && ctx.sectionName.startsWith("node.")) {
-                ctx.nodeType = findNodeTypeInSection(allLines, lineIndex);
-
-                // Check if property is a dsnode param
-                if (ctx.nodeType != null) {
-                    NodeTypeDefinition nodeDef = schema.getNodeType(ctx.nodeType);
-                    if (nodeDef != null && nodeDef.dsnodeParams.contains(ctx.propertyKey)) {
-                        ctx.type = ContextType.DOWNSTREAM_REFERENCE;
-                        return ctx;
-                    }
+            // Inside a value (including continuation lines of multi-line values):
+            // pick downstream-reference completions when the property is one of
+            // this node type's dsnode params, otherwise general value completions.
+            ctx.propertyKey = position.getPropertyKey();
+            if (ctx.nodeType != null && ctx.propertyKey != null) {
+                NodeTypeDefinition nodeDef = schema.getNodeType(ctx.nodeType);
+                if (nodeDef != null && nodeDef.dsnodeParams.contains(ctx.propertyKey)) {
+                    ctx.type = ContextType.DOWNSTREAM_REFERENCE;
+                    return ctx;
                 }
             }
-
-            // General value context
             ctx.type = ContextType.GENERAL_VALUE;
 
         } catch (Exception e) {
@@ -305,49 +250,6 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             ctx.type = ContextType.UNKNOWN;
         }
         return ctx;
-    }
-
-    private String findCurrentSectionName(String[] lines, int lineIndex) {
-        for (int i = lineIndex; i >= 0; i--) {
-            Matcher m = SECTION_HEADER_PATTERN.matcher(lines[i]);
-            if (m.matches()) {
-                return m.group(1).trim();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Finds the node type by scanning the current section for a "type = xxx" line.
-     */
-    private String findNodeTypeInSection(String[] lines, int currentLineIndex) {
-        // Find the section header start
-        int sectionStart = -1;
-        for (int i = currentLineIndex; i >= 0; i--) {
-            if (SECTION_HEADER_PATTERN.matcher(lines[i]).matches()) {
-                sectionStart = i;
-                break;
-            }
-        }
-        if (sectionStart < 0) {
-            return null;
-        }
-
-        // Scan forward from section header looking for "type = xxx"
-        for (int i = sectionStart + 1; i < lines.length; i++) {
-            String line = lines[i].trim();
-            // Stop at next section header
-            if (SECTION_HEADER_PATTERN.matcher(lines[i]).matches()) {
-                break;
-            }
-            if (line.startsWith("type") && line.contains("=")) {
-                String value = line.substring(line.indexOf('=') + 1).trim();
-                if (!value.isEmpty()) {
-                    return value;
-                }
-            }
-        }
-        return null;
     }
 
     // --- Completion builders ---
