@@ -1,7 +1,7 @@
 """Python interface for Kalix.
 
-v0.1 ships read/write of the Kalix Gorilla-compressed timeseries format
-(.kaz/.kai paired files), exposed as pandas DataFrames.
+v0.1 ships read/write of the Pixie format (Kalix's Gorilla-compressed
+timeseries format, .pxt/.pxb paired files), exposed as pandas DataFrames.
 """
 from __future__ import annotations
 
@@ -11,22 +11,22 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from kalix._native import _read_kaz_raw, _write_kaz_raw
+from kalix._native import _read_pixie_raw, _write_pixie_raw
 
-__all__ = ["read_kaz", "write_kaz", "__version__"]
+__all__ = ["read_pixie", "write_pixie", "__version__"]
 
 __version__ = "0.1.0"
 
 PathLike = Union[str, Path]
 
 
-def read_kaz(path: PathLike) -> pd.DataFrame:
-    """Read a .kaz/.kai paired file into a pandas DataFrame.
+def read_pixie(path: PathLike) -> pd.DataFrame:
+    """Read a Pixie .pxt/.pxb paired file into a pandas DataFrame.
 
     Parameters
     ----------
     path
-        Path to either the .kaz or .kai file (or the base path without
+        Path to either the .pxt or .pxb file (or the base path without
         extension). Both files must exist alongside each other.
 
     Returns
@@ -35,23 +35,23 @@ def read_kaz(path: PathLike) -> pd.DataFrame:
         Index is a UTC ``DatetimeIndex`` named ``"time"``; columns are series
         names with float64 values.
     """
-    timestamps_sec, series_dict = _read_kaz_raw(str(path))
+    timestamps_sec, series_dict = _read_pixie_raw(str(path))
     index = pd.to_datetime(timestamps_sec, unit="s", utc=True)
     index.name = "time"
     return pd.DataFrame(series_dict, index=index)
 
 
-def write_kaz(
+def write_pixie(
     path: PathLike,
     df: pd.DataFrame,
     use_64bit_precision: bool = True,
 ) -> None:
-    """Write a pandas DataFrame to a .kaz/.kai paired file.
+    """Write a pandas DataFrame to a Pixie .pxt/.pxb paired file.
 
     Parameters
     ----------
     path
-        Output path. Any ``.kaz`` or ``.kai`` extension is stripped; both
+        Output path. Any ``.pxt`` or ``.pxb`` extension is stripped; both
         files are always written using the resulting base path.
     df
         Data to write. The index must be a ``DatetimeIndex`` with a regular
@@ -76,7 +76,7 @@ def write_kaz(
         for col in df.columns
     ]
 
-    _write_kaz_raw(
+    _write_pixie_raw(
         str(path),
         series_names,
         timestamps_sec,

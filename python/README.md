@@ -3,8 +3,8 @@
 Python interface for [Kalix](https://kalix.io), wrapping the Rust implementation
 via PyO3.
 
-**v0.1** ships read/write of the Kalix Gorilla-compressed timeseries format
-(`.kaz` / `.kai` paired files) as pandas DataFrames.
+**v0.1** ships read/write of the Pixie format (Kalix's Gorilla-compressed
+timeseries format, `.pxt` / `.pxb` paired files) as pandas DataFrames.
 
 Planned for later releases: model loading & simulation, programmatic model
 building, optimisation.
@@ -20,22 +20,22 @@ pip install kalix
 ```python
 import kalix
 
-# Read a .kaz/.kai pair into a DataFrame
-df = kalix.read_kaz("results.kaz")
+# Read a .pxt/.pxb pair into a DataFrame
+df = kalix.read_pixie("results.pxb")
 print(df.head())
 
 # Write a DataFrame back out
-kalix.write_kaz("out.kaz", df)
+kalix.write_pixie("out.pxb", df)
 ```
 
 The DataFrame index is a UTC `DatetimeIndex`; each column is one timeseries.
 
-`read_kaz` accepts either extension (or no extension) and finds both files:
+`read_pixie` accepts either extension (or no extension) and finds both files:
 
 ```python
-kalix.read_kaz("results.kaz")  # same as
-kalix.read_kaz("results.kai")  # same as
-kalix.read_kaz("results")
+kalix.read_pixie("results.pxb")  # same as
+kalix.read_pixie("results.pxt")  # same as
+kalix.read_pixie("results")
 ```
 
 ## Building from source

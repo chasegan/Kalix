@@ -1,9 +1,9 @@
 //! PyO3 bindings for kalix.
 //!
-//! v0.1: just .kaz/.kai I/O. Functions are prefixed with `_` and re-exported
+//! v0.1: just Pixie (.pxt/.pxb) I/O. Functions are prefixed with `_` and re-exported
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
-use kalix::io::kaz_io;
+use kalix::io::pixie_io;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
@@ -11,27 +11,27 @@ use pyo3::exceptions::{PyIOError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-/// Strip `.kaz` or `.kai` extension from a path, returning the base.
+/// Strip `.pxt` or `.pxb` extension from a path, returning the base.
 fn strip_ext(path: &str) -> &str {
     let lower = path.to_ascii_lowercase();
-    if lower.ends_with(".kaz") || lower.ends_with(".kai") {
+    if lower.ends_with(".pxt") || lower.ends_with(".pxb") {
         &path[..path.len() - 4]
     } else {
         path
     }
 }
 
-/// Read a .kaz/.kai pair into (timestamps_unix_seconds, {series_name: values_array}).
+/// Read a Pixie .pxt/.pxb pair into (timestamps_unix_seconds, {series_name: values_array}).
 ///
 /// The Python wrapper assembles this into a pandas DataFrame.
 #[pyfunction]
-fn _read_kaz_raw<'py>(
+fn _read_pixie_raw<'py>(
     py: Python<'py>,
     path: &str,
 ) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyDict>)> {
     let base = strip_ext(path);
-    let series_list = kaz_io::read_all_series(base)
-        .map_err(|e| PyIOError::new_err(format!("Failed to read kaz: {:?}", e)))?;
+    let series_list = pixie_io::read_all_series(base)
+        .map_err(|e| PyIOError::new_err(format!("Failed to read Pixie file: {:?}", e)))?;
 
     if series_list.is_empty() {
         return Err(PyValueError::new_err("No series in file"));
@@ -70,14 +70,14 @@ fn _read_kaz_raw<'py>(
     Ok((ts_array, dict))
 }
 
-/// Write a .kaz/.kai pair from a regular-stride time grid and per-series values.
+/// Write a Pixie .pxt/.pxb pair from a regular-stride time grid and per-series values.
 ///
 /// - `timestamps_unix_seconds`: 1-D numpy array (int64) of Unix seconds; must be regular.
 /// - `series_names`: list of column names, one per array in `values_per_series`.
 /// - `values_per_series`: list of 1-D numpy arrays (float64), same length as timestamps.
 /// - `use_64bit_precision`: true → Gorilla double (lossless); false → Gorilla float.
 #[pyfunction]
-fn _write_kaz_raw(
+fn _write_pixie_raw(
     path: &str,
     series_names: Vec<String>,
     timestamps_unix_seconds: PyReadonlyArray1<i64>,
@@ -119,6 +119,11 @@ fn _write_kaz_raw(
 
     let start_timestamp = wrap_to_u64(ts[0]);
 
+    // The writer reads `series.timestamps[..]` for per-point timestamps and
+    // metadata start/end times — it doesn't derive them from start_timestamp + step_size.
+    // Pre-build the wrapped u64 timestamps once and share them across all series.
+    let timestamps_wrapped: Vec<u64> = ts.iter().map(|&t| wrap_to_u64(t)).collect();
+
     let mut series_vec: Vec<Timeseries> = Vec::with_capacity(series_names.len());
     for (name, arr) in series_names.into_iter().zip(values_per_series.iter()) {
         let values_slice = arr.as_slice()?;
@@ -133,20 +138,21 @@ fn _write_kaz_raw(
         let mut t = Timeseries::new(step_size);
         t.name = name;
         t.start_timestamp = start_timestamp;
+        t.timestamps = timestamps_wrapped.clone();
         t.values = values_slice.to_vec();
         series_vec.push(t);
     }
 
     let base = strip_ext(path);
     let refs: Vec<&Timeseries> = series_vec.iter().collect();
-    kaz_io::write_series_with_precision(base, &refs, use_64bit_precision)
-        .map_err(|e| PyIOError::new_err(format!("Failed to write kaz: {:?}", e)))?;
+    pixie_io::write_series_with_precision(base, &refs, use_64bit_precision)
+        .map_err(|e| PyIOError::new_err(format!("Failed to write Pixie file: {:?}", e)))?;
     Ok(())
 }
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_read_kaz_raw, m)?)?;
-    m.add_function(wrap_pyfunction!(_write_kaz_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
     Ok(())
 }
