@@ -732,6 +732,22 @@ public class EnhancedTextEditor extends JPanel {
                 navigateForward();
             }
         });
+
+        // Open Table View (when applicable for the current cursor context).
+        // T mnemonic for "Table"; silently does nothing if Table View is not
+        // available for the value at the cursor.
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.META_DOWN_MASK), "openTableView");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK), "openTableView");
+
+        actionMap.put("openTableView", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (contextCommandManager != null) {
+                    contextCommandManager.tryExecuteById(
+                            com.kalix.ide.editor.commands.OpenTableViewCommand.COMMAND_ID);
+                }
+            }
+        });
     }
     
     private void setupDocumentListener() {

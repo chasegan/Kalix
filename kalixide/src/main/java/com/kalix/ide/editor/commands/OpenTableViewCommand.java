@@ -16,6 +16,9 @@ import java.util.function.Supplier;
  */
 public class OpenTableViewCommand implements EditorCommand {
 
+    /** Command id, exposed so keyboard shortcuts can dispatch by id. */
+    public static final String COMMAND_ID = "open_table_view";
+
     private static final Logger logger = LoggerFactory.getLogger(OpenTableViewCommand.class);
 
     private final CommandMetadata metadata;
@@ -26,7 +29,7 @@ public class OpenTableViewCommand implements EditorCommand {
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;
         this.metadata = new CommandMetadata.Builder()
-            .id("open_table_view")
+            .id(COMMAND_ID)
             .displayName("Table View")
             .description("Edit this property in a table view")
             .category("")

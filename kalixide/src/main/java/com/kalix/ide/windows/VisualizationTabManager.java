@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -1628,6 +1629,34 @@ public class VisualizationTabManager {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
                     && tab.selectedSeries.contains(ref)) {
                 tab.statsModel.addErrorSeries(ref, errorMessage);
+            }
+        }
+    }
+
+    /**
+     * Removes the given series from <em>every</em> tab — clearing each tab's
+     * selectedSeries set, the legend and visible-series list on plot tabs, and the
+     * stats model on stats tabs. Plot data is refreshed once per affected plot tab.
+     */
+    public void removeSeriesFromAllTabs(Collection<SeriesRef> refs) {
+        if (refs.isEmpty()) {
+            return;
+        }
+        for (TabInfo tab : tabs) {
+            boolean changed = tab.selectedSeries.removeAll(refs);
+            if (!changed) {
+                continue;
+            }
+            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+                for (SeriesRef ref : refs) {
+                    tab.plotPanel.removeLegendSeries(ref);
+                }
+                tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+                tab.plotPanel.refreshData(false);
+            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+                for (SeriesRef ref : refs) {
+                    tab.statsModel.removeSeries(ref);
+                }
             }
         }
     }

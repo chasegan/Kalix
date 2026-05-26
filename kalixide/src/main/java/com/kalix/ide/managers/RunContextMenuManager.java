@@ -54,6 +54,9 @@ public class RunContextMenuManager {
     // Rename delegate: applied with (runInfo, newName). Returns null on success, or a
     // user-facing error string. Owns all validation and propagation.
     private final BiFunction<RunInfo, String, String> renameRunDelegate;
+    // Removes a loaded dataset and cleans up the shared pool, slot assignment, and
+    // every plot/stats tab that referenced its series.
+    private final Consumer<DatasetLoaderManager.LoadedDatasetInfo> removeDatasetDelegate;
 
     /**
      * Represents run status for context menu decisions.
@@ -89,6 +92,8 @@ public class RunContextMenuManager {
      * @param editorTextSupplier Supplier for editor text (diff operations)
      * @param sessionToRunName Map of session keys to run names
      * @param refreshRunsCallback Callback to refresh the runs list
+     * @param renameRunDelegate Delegate that validates and applies a run rename
+     * @param removeDatasetDelegate Delegate that removes a loaded dataset
      */
     public RunContextMenuManager(
             JFrame parentFrame,
@@ -101,7 +106,8 @@ public class RunContextMenuManager {
             Supplier<String> editorTextSupplier,
             Map<String, String> sessionToRunName,
             Runnable refreshRunsCallback,
-            BiFunction<RunInfo, String, String> renameRunDelegate) {
+            BiFunction<RunInfo, String, String> renameRunDelegate,
+            Consumer<DatasetLoaderManager.LoadedDatasetInfo> removeDatasetDelegate) {
         this.parentFrame = parentFrame;
         this.runTree = runTree;
         this.outputsTree = outputsTree;
@@ -113,6 +119,7 @@ public class RunContextMenuManager {
         this.sessionToRunName = sessionToRunName;
         this.refreshRunsCallback = refreshRunsCallback;
         this.renameRunDelegate = renameRunDelegate;
+        this.removeDatasetDelegate = removeDatasetDelegate;
     }
 
     /**
@@ -147,34 +154,45 @@ public class RunContextMenuManager {
         sessionManagerItem.addActionListener(e -> showInSessionManager());
         contextMenu.add(sessionManagerItem);
 
+        // A separate, smaller menu shown when a loaded-dataset node is right-clicked.
+        JPopupMenu datasetMenu = new JPopupMenu();
+        JMenuItem removeDatasetItem = new JMenuItem("Remove");
+        removeDatasetItem.addActionListener(e -> removeDataset());
+        datasetMenu.add(removeDatasetItem);
+
         // Add mouse listener for right-click
         runTree.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
+                    showContextMenu(e);
                 }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (e.isPopupTrigger()) {
-                    showContextMenu(e, contextMenu);
+                    showContextMenu(e);
                 }
             }
 
-            private void showContextMenu(MouseEvent e, JPopupMenu menu) {
+            private void showContextMenu(MouseEvent e) {
                 // Get the path at the mouse location
                 TreePath path = runTree.getPathForLocation(e.getX(), e.getY());
-                if (path != null) {
-                    // Select the node that was right-clicked
-                    runTree.setSelectionPath(path);
+                if (path == null) {
+                    return;
+                }
+                // Select the node that was right-clicked
+                runTree.setSelectionPath(path);
 
-                    // Check if it's a run item (not a folder)
-                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-                    if (node.getUserObject() instanceof RunInfo) {
-                        menu.show(runTree, e.getX(), e.getY());
-                    }
+                // Pick the menu by node type — runs and loaded datasets share the tree
+                // but get different actions.
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                Object userObject = node.getUserObject();
+                if (userObject instanceof RunInfo) {
+                    contextMenu.show(runTree, e.getX(), e.getY());
+                } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
+                    datasetMenu.show(runTree, e.getX(), e.getY());
                 }
             }
         });
@@ -449,6 +467,26 @@ public class RunContextMenuManager {
                         return null;
                     });
             }
+        }
+    }
+
+    /**
+     * Removes a loaded dataset from the source tree after confirmation, delegating
+     * pool/cache/tab cleanup to the owner ({@link #removeDatasetDelegate}).
+     */
+    public void removeDataset() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof DatasetLoaderManager.LoadedDatasetInfo info)) return;
+
+        String message = "Remove the dataset \"" + info.fileName + "\"?\n\n"
+            + "Any plots currently showing its series will lose them.";
+
+        if (DialogUtils.showConfirmation(parentFrame, message, "Remove Dataset")
+                && removeDatasetDelegate != null) {
+            removeDatasetDelegate.accept(info);
         }
     }
 

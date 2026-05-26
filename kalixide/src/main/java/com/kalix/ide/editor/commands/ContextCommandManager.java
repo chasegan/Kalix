@@ -115,6 +115,10 @@ public class ContextCommandManager {
     /**
      * Executes a command at the current cursor position.
      *
+     * <p>Intended for menu-click dispatch, where applicability was already
+     * verified when the menu was built. The defensive re-check logs a warning
+     * if the menu item turned stale between display and click.</p>
+     *
      * @param command The command to execute
      */
     public void executeCommand(EditorCommand command) {
@@ -140,6 +144,43 @@ public class ContextCommandManager {
                 JOptionPane.ERROR_MESSAGE
             );
         }
+    }
+
+    /**
+     * Looks up a command by id and executes it if applicable in the current
+     * context; otherwise silently does nothing.
+     *
+     * <p>Intended for keyboard-shortcut dispatch, where the keystroke fires
+     * regardless of context. A "not applicable" outcome is normal here (the
+     * user pressed the hotkey somewhere it doesn't apply) and is not logged,
+     * in contrast to {@link #executeCommand(EditorCommand)} which treats it
+     * as a stale-menu anomaly.</p>
+     *
+     * @param commandId the id from the command's {@link CommandMetadata}
+     */
+    public void tryExecuteById(String commandId) {
+        EditorCommand command = findCommandById(commandId);
+        if (command == null) {
+            logger.warn("No command registered with id '{}'", commandId);
+            return;
+        }
+        try {
+            EditorContext context = detectCurrentContext();
+            if (command.isApplicable(context)) {
+                command.execute(context, executor);
+            }
+        } catch (Exception e) {
+            logger.error("Error executing command: " + commandId, e);
+        }
+    }
+
+    private EditorCommand findCommandById(String commandId) {
+        for (EditorCommand command : registry.getAllCommands()) {
+            if (command.getMetadata().getId().equals(commandId)) {
+                return command;
+            }
+        }
+        return null;
     }
 
     /**

@@ -498,7 +498,8 @@ public class RunManager extends JFrame {
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
             sessionToRunName,                 // Session to run name map
             this::refreshRuns,                // Refresh callback
-            this::renameRun                   // Rename delegate (validation + propagation)
+            this::renameRun,                  // Rename delegate (validation + propagation)
+            this::removeLoadedDataset         // Remove-dataset delegate (pool/cache/tab cleanup)
         );
 
         // Set up context menus
@@ -1689,6 +1690,51 @@ public class RunManager extends JFrame {
      */
     private void addSeriesToPool(com.kalix.ide.flowviz.data.SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
+    }
+
+    /**
+     * Removes a loaded dataset and every trace of its series from this window:
+     * the shared {@code plotDataSet} pool, the per-context {@code datasetSeriesCache}
+     * and {@link com.kalix.ide.flowviz.style.SeriesSlotManager}, every plot and
+     * stats tab, and the source tree node itself. The outputs tree refreshes via
+     * the tree's selection-change listener if the dataset was selected.
+     *
+     * <p>Wired as the {@code removeDatasetDelegate} of {@link RunContextMenuManager}.</p>
+     */
+    public void removeLoadedDataset(DatasetLoaderManager.LoadedDatasetInfo info) {
+        String absPath = info.file.getAbsolutePath();
+
+        // Collect all DatasetSeries refs that belong to this dataset.
+        List<com.kalix.ide.flowviz.data.SeriesRef> refs = new ArrayList<>();
+        for (com.kalix.ide.flowviz.data.DatasetSeries dsRef : datasetSeriesCache.keySet()) {
+            if (dsRef.datasetId().equals(absPath)) {
+                refs.add(dsRef);
+            }
+        }
+
+        // Drop them from the shared pool, the per-context cache, and slot assignment.
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+            plotDataSet.removeSeries(ref);
+            seriesSlotManager.removeSlot(ref);
+        }
+        datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
+
+        // Strip them from every tab's selection, legend, visible-series, and stats.
+        tabManager.removeSeriesFromAllTabs(refs);
+
+        // Remove the tree node — selection changes (if any) refresh the outputs tree.
+        for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
+            if (child.getUserObject() == info) {
+                loadedDatasetsNode.remove(i);
+                treeModel.nodesWereRemoved(loadedDatasetsNode, new int[]{i}, new Object[]{child});
+                break;
+            }
+        }
+
+        if (statusUpdater != null) {
+            statusUpdater.accept("Removed dataset: " + info.fileName);
+        }
     }
 
     /**
