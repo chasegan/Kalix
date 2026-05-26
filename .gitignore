@@ -79,6 +79,7 @@ Thumbs.db
 
 # Package Files
 *.jar
+!kalixide/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 *.zip

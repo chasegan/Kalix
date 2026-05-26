@@ -1,6 +1,6 @@
 [package]
 name = "kalix"
-version = "0.2.3-dev2"
+version = "0.2.3-dev3"
 edition = "2021"
 
 [lib]
