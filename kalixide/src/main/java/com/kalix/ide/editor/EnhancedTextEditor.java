@@ -381,6 +381,12 @@ public class EnhancedTextEditor extends JPanel {
             textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
         contextCommandManager.initialize();
 
+        // Install key bindings for every command whose metadata declares a
+        // keyboard shortcut. The metadata is the single source of truth: the
+        // shortcut hint shown in the context menu and the actual binding both
+        // derive from the same KeyStroke, so they cannot drift apart.
+        contextCommandManager.installCommandShortcuts(textArea.getInputMap(), textArea.getActionMap());
+
         // Setup custom popup menu with context commands
         setupContextMenu();
     }
@@ -530,7 +536,7 @@ public class EnhancedTextEditor extends JPanel {
                                 // Commands with category - create submenu
                                 JMenu submenu = new JMenu(category);
                                 for (com.kalix.ide.editor.commands.EditorCommand command : categoryCommands) {
-                                    JMenuItem item = new JMenuItem(command.getMetadata().getDisplayName());
+                                    JMenuItem item = new JMenuItem(buildMenuLabel(command, null));
                                     item.addActionListener(ae -> contextCommandManager.executeCommand(command));
                                     submenu.add(item);
                                 }
@@ -549,7 +555,7 @@ public class EnhancedTextEditor extends JPanel {
                                         }
                                     }
 
-                                    JMenuItem item = new JMenuItem(displayName);
+                                    JMenuItem item = new JMenuItem(buildMenuLabel(command, displayName));
                                     item.addActionListener(ae -> contextCommandManager.executeCommand(command));
                                     menu.add(item);
                                 }
@@ -573,6 +579,27 @@ public class EnhancedTextEditor extends JPanel {
                 return item;
             }
         });
+    }
+
+    /**
+     * Builds the label shown in the context menu for a command, appending the
+     * platform-appropriate shortcut hint (e.g. "Table View (⌘T)") when the
+     * command's {@link com.kalix.ide.editor.commands.CommandMetadata} carries
+     * a keyboard shortcut.
+     *
+     * @param command            the command being rendered
+     * @param displayNameOverride a per-instance display name (e.g. "Rename Foo"
+     *                            for the rename command), or null to use the
+     *                            command's static display name
+     */
+    private static String buildMenuLabel(com.kalix.ide.editor.commands.EditorCommand command,
+                                         String displayNameOverride) {
+        String displayName = displayNameOverride != null
+                ? displayNameOverride
+                : command.getMetadata().getDisplayName();
+        return command.getMetadata().getShortcutHint()
+                .map(hint -> displayName + " (" + hint + ")")
+                .orElse(displayName);
     }
 
     /**
@@ -733,21 +760,10 @@ public class EnhancedTextEditor extends JPanel {
             }
         });
 
-        // Open Table View (when applicable for the current cursor context).
-        // T mnemonic for "Table"; silently does nothing if Table View is not
-        // available for the value at the cursor.
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.META_DOWN_MASK), "openTableView");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK), "openTableView");
-
-        actionMap.put("openTableView", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (contextCommandManager != null) {
-                    contextCommandManager.tryExecuteById(
-                            com.kalix.ide.editor.commands.OpenTableViewCommand.COMMAND_ID);
-                }
-            }
-        });
+        // Command-driven shortcuts (e.g. Cmd/Ctrl+T for Table View) are installed
+        // separately by ContextCommandManager.installCommandShortcuts, after the
+        // commands have been registered. Each command's metadata declares its own
+        // KeyStroke once, so the binding and the menu hint cannot disagree.
     }
     
     private void setupDocumentListener() {

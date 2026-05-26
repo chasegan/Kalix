@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.awt.Toolkit;
+import java.awt.event.KeyEvent;
 import java.util.function.Supplier;
 
 /**
@@ -33,6 +35,11 @@ public class OpenTableViewCommand implements EditorCommand {
             .displayName("Table View")
             .description("Edit this property in a table view")
             .category("")
+            // Cmd+T on macOS, Ctrl+T on Windows/Linux. Mirrors the actual
+            // keybinding in EnhancedTextEditor.setupKeyBindings; the menu
+            // builder reads this back via getShortcutHint() to show a hint.
+            .keyboardShortcut(KeyStroke.getKeyStroke(
+                    KeyEvent.VK_T, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()))
             .build();
     }
 

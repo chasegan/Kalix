@@ -6,8 +6,12 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
+import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
@@ -181,6 +185,39 @@ public class ContextCommandManager {
             }
         }
         return null;
+    }
+
+    /**
+     * Installs key bindings for every registered command whose metadata
+     * declares a {@link com.kalix.ide.editor.commands.CommandMetadata#getKeyboardShortcut keyboard shortcut}.
+     *
+     * <p>Each binding routes through {@link #tryExecuteById(String)}, so the
+     * keystroke fires the command iff it is applicable in the current context.
+     * The command's metadata is the single source of truth: the display hint
+     * shown in the context menu and the actual keybinding are derived from
+     * the same field, so they cannot drift.</p>
+     *
+     * <p>Should be called once after {@link #initialize()} has registered all
+     * commands.</p>
+     *
+     * @param inputMap  the target input map (typically the text area's
+     *                  {@code WHEN_FOCUSED} map)
+     * @param actionMap the corresponding action map
+     */
+    public void installCommandShortcuts(InputMap inputMap, ActionMap actionMap) {
+        for (EditorCommand command : registry.getAllCommands()) {
+            command.getMetadata().getKeyboardShortcut().ifPresent(keyStroke -> {
+                String commandId = command.getMetadata().getId();
+                String actionKey = "command:" + commandId;
+                inputMap.put(keyStroke, actionKey);
+                actionMap.put(actionKey, new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        tryExecuteById(commandId);
+                    }
+                });
+            });
+        }
     }
 
     /**

@@ -1,5 +1,9 @@
 package com.kalix.ide.managers;
 
+import javax.swing.KeyStroke;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+
 /**
  * Manager for handling cross-platform keyboard shortcuts and their display strings.
  * Provides platform-aware shortcut hints for menus and tooltips.
@@ -58,12 +62,23 @@ public class KeyboardShortcutManager {
     }
 
     /**
-     * Creates a complete menu item text with shortcut hint.
-     * @param menuText The menu item text (e.g., "Save", "Undo")
-     * @param key The key (e.g., "S", "Z")
-     * @return Complete menu text with tab and shortcut (e.g., "Save\t⌘S" or "Save\tCtrl+S")
+     * Formats a {@link KeyStroke} as a platform-appropriate display string,
+     * matching the style of {@link #getShortcutString(String)}: "⌘T" on macOS,
+     * "Ctrl+T" on Windows/Linux. Multi-modifier strokes are joined with the
+     * platform separator (no separator on macOS, "+" elsewhere).
+     *
+     * @param ks the keystroke, or null
+     * @return the formatted string, or null if {@code ks} is null
      */
-    public String getMenuItemWithShortcut(String menuText, String key) {
-        return menuText + "\t" + getShortcutString(key);
+    public String formatKeyStroke(KeyStroke ks) {
+        if (ks == null) {
+            return null;
+        }
+        String mods = InputEvent.getModifiersExText(ks.getModifiers());
+        String key = KeyEvent.getKeyText(ks.getKeyCode());
+        if (mods.isEmpty()) {
+            return key;
+        }
+        return IS_MAC ? mods + key : mods + "+" + key;
     }
 }

@@ -1,5 +1,7 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.managers.KeyboardShortcutManager;
+
 import javax.swing.KeyStroke;
 import java.util.Optional;
 
@@ -37,6 +39,16 @@ public class CommandMetadata {
 
     public Optional<KeyStroke> getKeyboardShortcut() {
         return Optional.ofNullable(keyboardShortcut);
+    }
+
+    /**
+     * Returns the platform-appropriate display string for
+     * {@link #getKeyboardShortcut()} (e.g. {@code "⌘T"} on macOS, {@code "Ctrl+T"}
+     * elsewhere), or empty if no shortcut is set.
+     */
+    public Optional<String> getShortcutHint() {
+        return getKeyboardShortcut()
+                .map(ks -> KeyboardShortcutManager.getInstance().formatKeyStroke(ks));
     }
 
     public String getCategory() {
