@@ -15,8 +15,8 @@ Refs are minted at the *producer* boundary:
 - `OutputsTreeBuilder` — refs are minted when the outputs tree is built: each `SeriesLeafNode` carries a `public final SeriesRef ref` computed at construction (`RunSeries` / `LastSeries` / `DatasetSeries`). `RunManager.seriesRefForLeaf(SeriesLeafNode)` is now a trivial accessor (`return leaf.ref`) used by `onOutputsTreeSelectionChanged`, `searchAndCollectPaths`, and `getVisibleSeriesKeys` so all read the one ref the leaf was built with.
 - `RunInfoImpl` carries a stable `runId` (final, `AtomicLong`-assigned at construction). `RunInfoImpl.withName` preserves the runId across rename — this is the load-bearing fact that makes the whole scheme work.
 - `OptimisationPlotManager` uses two static `DatasetSeries("(optimisation)", ...)` constants for its synthetic series.
-- `FlowVizDataManager` (the file-based viewer's loader) mints `DatasetSeries(file.absolutePath, "filename: column")` refs via `uniqueRefFor` when a CSV/KAI file is loaded, and inserts them into the window's `DataSet` through the ref API. `FlowVizWindow` receives the refs via the `DataSetListener` callbacks — it never constructs refs itself.
-- File importers (`TimeSeriesCsvImporter`, `KalixTimeSeriesReader`) return `NamedSeries(name, data)` pairs — the raw column/series name read from the file, plus nameless data. The name is file *content*, not identity; the consumer (`FlowVizDataManager`, `DatasetLoaderManager`) builds the `SeriesRef` from `(file, name)`.
+- `FlowVizDataManager` (the file-based viewer's loader) mints `DatasetSeries(file.absolutePath, "filename: column")` refs via `uniqueRefFor` when a CSV/Pixie file is loaded, and inserts them into the window's `DataSet` through the ref API. `FlowVizWindow` receives the refs via the `DataSetListener` callbacks — it never constructs refs itself.
+- File importers (`TimeSeriesCsvImporter`, `PixieReader`) return `NamedSeries(name, data)` pairs — the raw column/series name read from the file, plus nameless data. The name is file *content*, not identity; the consumer (`FlowVizDataManager`, `DatasetLoaderManager`) builds the `SeriesRef` from `(file, name)`.
 
 ## Where refs flow (storage and consumers)
 
@@ -88,7 +88,7 @@ That's the whole operation. No propagation. The pool, color map, undo history, s
 There is no longer any legacy string-keyed code path — the file-import bridge was retired. A few design points worth knowing:
 
 - **`DataSet` is purely ref-keyed.** A single `Map<SeriesRef, TimeSeriesData> seriesByRef` is the only storage. There is no string-keyed API and no second list. `addSeries`/`getSeries`/`hasSeries`/`removeSeries` all take a `SeriesRef`.
-- **File-import boundary — `NamedSeries`.** Importers cannot know a series' `SeriesRef` (that depends on which file/run the consumer is loading into), so they return `NamedSeries(name, data)` — the raw file column name plus nameless data. This is a clean boundary, not a bridge: the name is genuine file content; the consumer constructs the ref. Likewise `KalixTimeSeriesWriter.writeToFile` takes `List<NamedSeries>` because the `.kai` metadata format stores a per-series name.
+- **File-import boundary — `NamedSeries`.** Importers cannot know a series' `SeriesRef` (that depends on which file/run the consumer is loading into), so they return `NamedSeries(name, data)` — the raw file column name plus nameless data. This is a clean boundary, not a bridge: the name is genuine file content; the consumer constructs the ref. Likewise `PixieWriter.writeToFile` takes `List<NamedSeries>` because the `.pxt` metadata format stores a per-series name.
 - **`DataSetListener` is ref-typed** — `onSeriesAdded(SeriesRef, TimeSeriesData)`, `onSeriesRemoved(SeriesRef)`, `onDataChanged()`. The ref-keyed `addSeries`/`removeSeries` fire it. Only `FlowVizWindow` subscribes.
 - **`OutputsTreeBuilder.SeriesLeafNode`** carries a `public final SeriesRef ref` computed at construction. It also keeps a `source` object (`RunInfoImpl | LoadedDatasetInfo`) for callers that need session lookup. `RunManager.seriesRefForLeaf` is `return leaf.ref`.
 - **`RunInfoImpl.withName`** is the only `withName` pattern in the codebase; it's load-bearing for rename semantics — it preserves `runId`.
@@ -125,5 +125,5 @@ There is no longer any legacy string-keyed code path — the file-import bridge 
 | Color | `managers/SeriesColorManager.java` (Map<SeriesRef, Color>) |
 | Transforms | `flowviz/transform/TimeSeriesAggregator.java`, `PlotTypeTransformer.java`, `flowviz/stats/TimeSeriesMasker.java` (all return nameless data) |
 | Ref minting | `managers/OutputsTreeBuilder.java` (`SeriesLeafNode.ref`); `FlowVizDataManager.uniqueRefFor` |
-| File-import boundary | `io/NamedSeries.java`, `io/TimeSeriesCsvImporter.java`, `io/KalixTimeSeriesReader.java`, `io/KalixTimeSeriesWriter.java` |
+| File-import boundary | `io/NamedSeries.java`, `io/TimeSeriesCsvImporter.java`, `io/PixieReader.java`, `io/PixieWriter.java` |
 | FlowViz viewer | `flowviz/FlowVizWindow.java`, `flowviz/FlowVizDataManager.java`, `flowviz/DataPanel.java` (all ref-keyed) |

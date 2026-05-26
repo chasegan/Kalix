@@ -239,9 +239,9 @@ End the session and exit.
 
 **get_result**
 - Description: Retrieve timeseries result data
-- Parameters: `series_name` (string, required), `format` (string, default "kaz")
+- Parameters: `series_name` (string, required), `format` (string, default "pixie")
 - Supported formats:
-  - `"kaz"` (recommended): Gorilla-compressed bitstream (codec `gorilla_double`), base64-encoded into `r.data`. Bitstream carries timestep, count, and per-point timestamps; no separate metadata is needed to decode.
+  - `"pixie"` (recommended): Gorilla-compressed bitstream (codec `gorilla_double`), base64-encoded into `r.data`. Bitstream carries timestep, count, and per-point timestamps; no separate metadata is needed to decode.
   - `"csv"`: Comma-separated `start_timestamp,timestep_seconds,value1,value2,…` ASCII string in `r.data`. Retained for human inspection / external consumers.
 
 **save_results**
@@ -335,8 +335,8 @@ End the session and exit.
 {"m":"rdy","uid":"sess_20250908_103000_a7b9","rc":0}
 
 // 6. Frontend retrieves results
-{"m":"cmd","c":"get_result","p":{"series_name":"node.output1","format":"kaz"}}
-{"m":"res","uid":"sess_20250908_103000_a7b9","cmd":"get_result","exec_ms":23.1,"ok":true,"r":{"series_name":"node.output1","format":"kaz","codec":"gorilla_double","data":"<base64 of compressed bytes>"}}
+{"m":"cmd","c":"get_result","p":{"series_name":"node.output1","format":"pixie"}}
+{"m":"res","uid":"sess_20250908_103000_a7b9","cmd":"get_result","exec_ms":23.1,"ok":true,"r":{"series_name":"node.output1","format":"pixie","codec":"gorilla_double","data":"<base64 of compressed bytes>"}}
 
 # CSV (alternative human-readable format)
 {"m":"cmd","c":"get_result","p":{"series_name":"node.output1","format":"csv"}}

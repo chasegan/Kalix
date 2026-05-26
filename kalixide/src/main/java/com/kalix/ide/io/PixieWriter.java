@@ -9,11 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * Writer for Kalix compressed timeseries file format.
+ * Writer for Pixie format (compressed timeseries).
  *
  * Creates a pair of files:
- * - Binary file (.kaz) containing Gorilla-compressed timeseries data
- * - Metadata file (.kai) containing series metadata in CSV format
+ * - Binary file (.pxb) containing Gorilla-compressed timeseries data
+ * - Metadata file (.pxt) containing series metadata in CSV format
  *
  * File Format:
  * Binary file: Sequential blocks of [codec_id(2), length(4), compressed_data]
@@ -21,19 +21,19 @@ import java.util.*;
  *
  * Example usage:
  * <pre>
- * KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
+ * PixieWriter writer = new PixieWriter();
  * List&lt;TimeSeriesData&gt; series = Arrays.asList(flowData, tempData);
- * writer.writeToFile("/path/to/data", series); // creates data.kaz and data.kai
+ * writer.writeToFile("/path/to/data", series); // creates data.pxb and data.pxt
  * </pre>
  */
-public class KalixTimeSeriesWriter {
+public class PixieWriter {
 
     private static final int CODEC_GORILLA_DOUBLE = 0;
     private static final int CODEC_GORILLA_FLOAT = 1;
 
     /**
      * Write timeseries data to files with the given base path and specified precision.
-     * Creates basePath.kaz (binary) and basePath.kai (metadata)
+     * Creates basePath.pxb (binary) and basePath.pxt (metadata)
      *
      * @param basePath Base file path (without extension)
      * @param seriesList List of (name, data) pairs to write — the name becomes the
@@ -45,8 +45,8 @@ public class KalixTimeSeriesWriter {
             throw new IllegalArgumentException("No series data to write");
         }
 
-        String binaryPath = basePath + ".kaz";
-        String metadataPath = basePath + ".kai";
+        String binaryPath = basePath + ".pxb";
+        String metadataPath = basePath + ".pxt";
 
         List<SeriesMetadata> metadataList = new ArrayList<>();
 

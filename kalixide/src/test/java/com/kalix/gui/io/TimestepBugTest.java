@@ -38,15 +38,15 @@ class TimestepBugTest {
 
         // Write to file
         String basePath = tempDir.resolve("daily_test").toString();
-        KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
+        PixieWriter writer = new PixieWriter();
         writer.writeToFile(basePath, List.of(new NamedSeries("daily_temperature", dailySeries)), false);
 
         // Read back the metadata to check timestep
-        KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
-        List<KalixTimeSeriesReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(basePath);
+        PixieReader reader = new PixieReader();
+        List<PixieReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(basePath);
 
         assertEquals(1, seriesInfo.size());
-        KalixTimeSeriesReader.SeriesInfo info = seriesInfo.get(0);
+        PixieReader.SeriesInfo info = seriesInfo.get(0);
         assertEquals("daily_temperature", info.name);
         assertEquals(86400, info.timestepSeconds, "Timestep should be 86400 seconds for daily data, not 86");
 
@@ -75,15 +75,15 @@ class TimestepBugTest {
 
         // Write to file
         String basePath = tempDir.resolve("hourly_test").toString();
-        KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
+        PixieWriter writer = new PixieWriter();
         writer.writeToFile(basePath, List.of(new NamedSeries("hourly_temperature", hourlySeries)), false);
 
         // Read back the metadata to check timestep
-        KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
-        List<KalixTimeSeriesReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(basePath);
+        PixieReader reader = new PixieReader();
+        List<PixieReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(basePath);
 
         assertEquals(1, seriesInfo.size());
-        KalixTimeSeriesReader.SeriesInfo info = seriesInfo.get(0);
+        PixieReader.SeriesInfo info = seriesInfo.get(0);
         assertEquals("hourly_temperature", info.name);
         assertEquals(3600, info.timestepSeconds, "Timestep should be 3600 seconds for hourly data");
 

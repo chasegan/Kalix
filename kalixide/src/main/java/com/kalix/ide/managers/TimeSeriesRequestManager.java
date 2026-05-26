@@ -258,9 +258,9 @@ public class TimeSeriesRequestManager {
 
         try {
             // Wire format is user-configurable via Preferences > Data & Visualization.
-            String format = PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "kaz");
-            if (!"kaz".equals(format) && !"csv".equals(format)) {
-                format = "kaz"; // defensive: unknown saved value falls back to default
+            String format = PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "pixie");
+            if (!"pixie".equals(format) && !"csv".equals(format)) {
+                format = "pixie"; // defensive: unknown saved value falls back to default
             }
             String command = JsonStdioProtocol.Commands.getResult(request.seriesName, format);
 
@@ -317,8 +317,8 @@ public class TimeSeriesRequestManager {
         }
 
         String dataString = result.path("data").asText();
-        // Format defaults to "kaz" if the field is absent (older responses or defensive fallback).
-        String format = result.path("format").asText("kaz");
+        // Format defaults to "pixie" if the field is absent (older responses or defensive fallback).
+        String format = result.path("format").asText("pixie");
         try {
             handleTimeSeriesResult(seriesName, dataString, kalixcliUid, format);
         } catch (Exception e) {
@@ -348,8 +348,8 @@ public class TimeSeriesRequestManager {
 
         TimeSeriesData timeSeriesData;
         switch (format) {
-            case "kaz":
-                timeSeriesData = decodeKazPayload(seriesName, dataString);
+            case "pixie":
+                timeSeriesData = decodePixiePayload(seriesName, dataString);
                 break;
             case "csv":
                 timeSeriesData = decodeCsvPayload(seriesName, dataString);
@@ -371,7 +371,7 @@ public class TimeSeriesRequestManager {
     }
 
     /**
-     * Decode a base64-encoded Gorilla-compressed timeseries (kaz format) into TimeSeriesData.
+     * Decode a base64-encoded Gorilla-compressed timeseries (Pixie wire format) into TimeSeriesData.
      * The compressed bitstream carries the timestep, count, and per-point timestamps
      * (Unix seconds), so no additional metadata is needed.
      *
@@ -379,7 +379,7 @@ public class TimeSeriesRequestManager {
      * not stored on the returned {@link TimeSeriesData}. Identity in the ref-keyed pool
      * comes from the {@link com.kalix.ide.flowviz.data.SeriesRef} the caller writes under.</p>
      */
-    static TimeSeriesData decodeKazPayload(String seriesName, String base64Data) throws java.io.IOException {
+    static TimeSeriesData decodePixiePayload(String seriesName, String base64Data) throws java.io.IOException {
         // Constructor's timestep arg is only used by the encoder; decoder reads it from the bitstream.
         GorillaCompressor codec = new GorillaCompressor(0);
         List<GorillaCompressor.TimeValueDouble> points = codec.decompressDoubleBase64(base64Data);

@@ -813,19 +813,19 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(logScaleMinField, gbc);
 
-            // STDIO data format setting (kaz vs csv for get_result responses)
+            // STDIO data format setting (pixie vs csv for get_result responses)
             gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
             formPanel.add(new JLabel("STDIO data format:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            stdioFormatComboBox = new JComboBox<>(new String[]{"kaz", "csv"});
+            stdioFormatComboBox = new JComboBox<>(new String[]{"pixie", "csv"});
             stdioFormatComboBox.setRenderer(new DefaultListCellRenderer() {
                 @Override
                 public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                                                               boolean isSelected, boolean cellHasFocus) {
                     super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if ("kaz".equals(value)) {
-                        setText("Compressed (kaz, recommended)");
+                    if ("pixie".equals(value)) {
+                        setText("Compressed (pixie, recommended)");
                     } else if ("csv".equals(value)) {
                         setText("Plain text (csv, debug)");
                     }
@@ -833,10 +833,10 @@ public class PreferencesDialog extends JDialog {
                 }
             });
             stdioFormatComboBox.setToolTipText(
-                "Wire format for timeseries results from kalixcli. 'kaz' uses Gorilla compression "
+                "Wire format for timeseries results from kalixcli. 'pixie' uses Gorilla compression "
                 + "(smaller, faster); 'csv' is human-readable plain text (larger, slower).");
             stdioFormatComboBox.setSelectedItem(
-                PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "kaz"));
+                PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "pixie"));
             stdioFormatComboBox.addActionListener(e -> {
                 String selected = (String) stdioFormatComboBox.getSelectedItem();
                 if (selected != null) {

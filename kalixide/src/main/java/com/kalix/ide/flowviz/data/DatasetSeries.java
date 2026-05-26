@@ -2,7 +2,7 @@ package com.kalix.ide.flowviz.data;
 
 /**
  * {@link SeriesRef} variant for a column from a user-loaded {@code .csv} or
- * {@code .kai} dataset.
+ * {@code .pxt} dataset.
  *
  * <p>{@code datasetId} is the dataset's absolute file path — the de-facto identity
  * already used by {@code DatasetLoaderManager.isFileAlreadyLoaded} for deduplication.

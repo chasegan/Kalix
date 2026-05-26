@@ -14,30 +14,30 @@ class VerifyTimestepFixTest {
 
     @Test
     void testThreeRexRainTimesteps() throws IOException {
-        KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+        PixieReader reader = new PixieReader();
         String resourcePath = "src/test/resources/three_rex_rain";
 
         // Load series info to check timesteps
-        List<KalixTimeSeriesReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(resourcePath);
+        List<PixieReader.SeriesInfo> seriesInfo = reader.getSeriesInfo(resourcePath);
 
         assertEquals(3, seriesInfo.size());
 
         // All series should have 86400 second timestep (daily)
         for (int i = 0; i < seriesInfo.size(); i++) {
-            KalixTimeSeriesReader.SeriesInfo info = seriesInfo.get(i);
+            PixieReader.SeriesInfo info = seriesInfo.get(i);
             assertEquals(86400, info.timestepSeconds, "Series " + (i+1) + " should have 86400 second timestep (daily)");
             assertTrue(info.name.contains("rex_rain"), "Series name should contain 'rex_rain'");
         }
 
-        System.out.println("Verified timesteps in three_rex_rain.kai:");
-        for (KalixTimeSeriesReader.SeriesInfo info : seriesInfo) {
+        System.out.println("Verified timesteps in three_rex_rain.pxt:");
+        for (PixieReader.SeriesInfo info : seriesInfo) {
             System.out.println("  " + info.name + ": " + info.timestepSeconds + " seconds");
         }
     }
 
     @Test
     void testLoadActualData() throws IOException {
-        KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+        PixieReader reader = new PixieReader();
         String resourcePath = "src/test/resources/three_rex_rain";
 
         // Load all series
@@ -53,7 +53,7 @@ class VerifyTimestepFixTest {
             assertTrue(series.data().getPointCount() > 0, "Series " + (i+1) + " should have data points");
         }
 
-        System.out.println("Successfully loaded data from three_rex_rain.kai:");
+        System.out.println("Successfully loaded data from three_rex_rain.pxt:");
         for (NamedSeries series : loadedSeries) {
             System.out.println("  " + series.name() + ": " + series.data().getPointCount() + " points");
         }

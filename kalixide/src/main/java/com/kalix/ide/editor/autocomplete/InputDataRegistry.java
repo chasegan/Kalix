@@ -2,7 +2,7 @@ package com.kalix.ide.editor.autocomplete;
 
 import com.kalix.ide.io.CsvHeaderReader;
 import com.kalix.ide.io.DataSourceHeaderReader;
-import com.kalix.ide.io.KaiHeaderReader;
+import com.kalix.ide.io.PixieHeaderReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,7 +62,7 @@ public class InputDataRegistry {
 
     public InputDataRegistry(Supplier<File> baseDirectorySupplier) {
         this.baseDirectorySupplier = baseDirectorySupplier;
-        this.readers = List.of(new CsvHeaderReader(), new KaiHeaderReader());
+        this.readers = List.of(new CsvHeaderReader(), new PixieHeaderReader());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "InputDataRegistry-reader");
             t.setDaemon(true);

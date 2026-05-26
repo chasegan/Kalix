@@ -4,7 +4,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
-import com.kalix.ide.io.KalixTimeSeriesWriter;
+import com.kalix.ide.io.PixieWriter;
 
 import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
@@ -747,10 +747,10 @@ public class PlotInteractionManager {
 
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter kalixFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.kai)", "kai");
+        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
 
         fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.addChoosableFileFilter(kalixFilter);
+        fileChooser.addChoosableFileFilter(pixieFilter);
         fileChooser.setFileFilter(csvFilter); // Default to CSV
 
         fileChooser.setSelectedFile(new File("timeseries_data.csv"));
@@ -771,9 +771,9 @@ public class PlotInteractionManager {
             // Determine format based on selected filter or file extension
             FileNameExtensionFilter selectedFilter = (FileNameExtensionFilter) fileChooser.getFileFilter();
 
-            if (selectedFilter == kalixFilter || fileName.endsWith(".kai")) {
-                // Save as Kalix format
-                saveAsKalixFormat(file);
+            if (selectedFilter == pixieFilter || fileName.endsWith(".pxt")) {
+                // Save as Pixie format
+                saveAsPixieFormat(file);
             } else {
                 // Save as CSV format (default)
                 saveAsCsvFormat(file);
@@ -815,13 +815,13 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Saves data in Kalix compressed format.
+     * Saves data in Pixie format.
      */
-    private void saveAsKalixFormat(File file) {
+    private void saveAsPixieFormat(File file) {
         String filePath = file.getAbsolutePath();
 
-        // Remove .kai extension if present to get base path
-        if (filePath.toLowerCase().endsWith(".kai")) {
+        // Remove .pxt extension if present to get base path
+        if (filePath.toLowerCase().endsWith(".pxt")) {
             filePath = filePath.substring(0, filePath.length() - 4);
         }
 
@@ -830,7 +830,7 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
 
-            // Build (name, data) pairs — the .kai metadata needs a series name, taken
+            // Build (name, data) pairs — the .pxt metadata needs a series name, taken
             // from the ref's projected label.
             java.util.List<com.kalix.ide.io.NamedSeries> seriesList = new java.util.ArrayList<>();
             for (com.kalix.ide.flowviz.data.SeriesRef ref : dataSet.getSeriesRefs()) {
@@ -841,13 +841,13 @@ public class PlotInteractionManager {
                 }
             }
 
-            // Write to Kalix format
-            KalixTimeSeriesWriter writer = new KalixTimeSeriesWriter();
+            // Write to Pixie format
+            PixieWriter writer = new PixieWriter();
             boolean use64BitPrecision = precision64Supplier != null ? precision64Supplier.get() : true;
             writer.writeToFile(filePath, seriesList, use64BitPrecision);
 
             JOptionPane.showMessageDialog(parentComponent,
-                "Data saved successfully to " + new File(filePath + ".kai").getName() + " and " + new File(filePath + ".kaz").getName(),
+                "Data saved successfully to " + new File(filePath + ".pxt").getName() + " and " + new File(filePath + ".pxb").getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {

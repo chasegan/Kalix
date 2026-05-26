@@ -3,7 +3,7 @@ package com.kalix.ide.managers;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
-import com.kalix.ide.io.KalixTimeSeriesReader;
+import com.kalix.ide.io.PixieReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,12 +22,12 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Manages dataset file loading (CSV and Kalix compressed formats) for RunManager.
+ * Manages dataset file loading (CSV and Pixie formats) for RunManager.
  *
  * Responsibilities:
  * - Drag-and-drop file handling
  * - CSV file import with progress dialogs
- * - Kalix compressed format (.kai/.kaz) loading
+ * - Pixie format (.pxt/.pxb) loading
  * - File duplicate detection
  * - Hierarchical series naming (file.filename.column)
  * - Adding datasets to tree structure
@@ -88,7 +88,7 @@ public class DatasetLoaderManager {
                 if (isDragAcceptable(dtde)) {
                     dtde.acceptDrag(DnDConstants.ACTION_COPY);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Drop CSV or KAI/KAZ files to load them...");
+                        statusUpdater.accept("Drop CSV or Pixie files to load them...");
                     }
                 } else {
                     dtde.rejectDrag();
@@ -130,11 +130,11 @@ public class DatasetLoaderManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV, KAI, and KAZ)
+                        // Filter for supported files (CSV and Pixie)
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".kai") || name.endsWith(".kaz");
+                                return name.endsWith(".csv") || name.endsWith(".pxt") || name.endsWith(".pxb");
                             })
                             .toList();
 
@@ -143,7 +143,7 @@ public class DatasetLoaderManager {
                                 statusUpdater.accept("No supported files found in drop");
                             }
                             JOptionPane.showMessageDialog(parentFrame,
-                                "Please drop CSV or KAI/KAZ files only.",
+                                "Please drop CSV or Pixie files only.",
                                 "Invalid File Type",
                                 JOptionPane.WARNING_MESSAGE);
                         } else {
@@ -181,10 +181,10 @@ public class DatasetLoaderManager {
     }
 
     /**
-     * Loads a dataset file (CSV or KAI/KAZ) and adds it to the loaded datasets tree.
+     * Loads a dataset file (CSV or Pixie) and adds it to the loaded datasets tree.
      * Automatically detects file type and uses the appropriate importer.
      *
-     * @param file The dataset file to load (.csv, .kai, or .kaz)
+     * @param file The dataset file to load (.csv, .pxt, or .pxb)
      */
     public void loadDatasetFile(File file) {
         // Check if this file is already loaded
@@ -204,8 +204,8 @@ public class DatasetLoaderManager {
 
         if (fileName.endsWith(".csv")) {
             loadCsvDataset(file);
-        } else if (fileName.endsWith(".kai") || fileName.endsWith(".kaz")) {
-            loadKalixDataset(file);
+        } else if (fileName.endsWith(".pxt") || fileName.endsWith(".pxb")) {
+            loadPixieDataset(file);
         } else {
             logger.warn("Unsupported file type: " + fileName);
             if (statusUpdater != null) {
@@ -370,29 +370,29 @@ public class DatasetLoaderManager {
     }
 
     /**
-     * Loads a Kalix compressed dataset file (.kai + .kaz) with progress dialog.
+     * Loads a Pixie dataset (.pxt + .pxb) with progress dialog.
      *
-     * @param ktmFile The KAI metadata file to load (or KAZ file, will find the .kai)
+     * @param pixieFile Either the .pxt or .pxb file; the matching pair is located automatically.
      */
-    private void loadKalixDataset(File ktmFile) {
+    private void loadPixieDataset(File pixieFile) {
         if (statusUpdater != null) {
-            statusUpdater.accept("Loading Kalix dataset...");
+            statusUpdater.accept("Loading Pixie dataset...");
         }
 
-        // Ensure we're working with the .kai file
-        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.(kai|kaz)$", "");
-        File kaiFile = new File(basePath + ".kai");
-        File kazFile = new File(basePath + ".kaz");
+        // Locate the .pxt/.pxb pair regardless of which one was provided
+        String basePath = pixieFile.getAbsolutePath().replaceAll("\\.(pxt|pxb)$", "");
+        File pxtFile = new File(basePath + ".pxt");
+        File pxbFile = new File(basePath + ".pxb");
 
         // Verify both files exist
-        if (!kaiFile.exists() || !kazFile.exists()) {
+        if (!pxtFile.exists() || !pxbFile.exists()) {
             JOptionPane.showMessageDialog(parentFrame,
-                "Both .kai and .kaz files are required.\n" +
-                "Missing: " + (!kaiFile.exists() ? kaiFile.getName() : kazFile.getName()),
+                "Both .pxt and .pxb files are required.\n" +
+                "Missing: " + (!pxtFile.exists() ? pxtFile.getName() : pxbFile.getName()),
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
             if (statusUpdater != null) {
-                statusUpdater.accept("Failed to load Kalix dataset");
+                statusUpdater.accept("Failed to load Pixie dataset");
             }
             return;
         }
@@ -400,11 +400,11 @@ public class DatasetLoaderManager {
         // Create progress dialog
         JProgressBar progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
-        progressBar.setString("Loading Kalix dataset...");
+        progressBar.setString("Loading Pixie dataset...");
 
         JDialog progressDialog = new JDialog(parentFrame, "Loading Data", true);
         progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-        progressDialog.add(new JLabel("Loading: " + kaiFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(new JLabel("Loading: " + pxtFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
         progressDialog.add(progressBar, BorderLayout.CENTER);
 
         JButton cancelButton = new JButton("Cancel");
@@ -418,7 +418,7 @@ public class DatasetLoaderManager {
             @Override
             protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
                 publish(25);
-                KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+                PixieReader reader = new PixieReader();
                 publish(50);
                 List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
                 publish(100);
@@ -444,23 +444,23 @@ public class DatasetLoaderManager {
                     for (com.kalix.ide.io.NamedSeries ns : seriesList) {
                         // Create hierarchical series name: file.sanitized_filename.sanitized_series
                         String originalSeriesName = ns.name();
-                        String seriesName = createDatasetSeriesName(kaiFile, originalSeriesName);
+                        String seriesName = createDatasetSeriesName(pxtFile, originalSeriesName);
 
-                        logger.info("Loading KAI series: originalName='{}' -> seriesName='{}'", originalSeriesName, seriesName);
+                        logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", originalSeriesName, seriesName);
 
                         // The importer already returns nameless data — store it directly.
                         // Key by DatasetSeries ref so the absolute path qualifies the entry.
-                        DatasetSeries ref = new DatasetSeries(kaiFile.getAbsolutePath(), seriesName);
+                        DatasetSeries ref = new DatasetSeries(pxtFile.getAbsolutePath(), seriesName);
                         datasetSeriesCache.put(ref, ns.data());
                     }
 
                     // Add file to loaded datasets tree
-                    addLoadedDatasetToTree(kaiFile);
+                    addLoadedDatasetToTree(pxtFile);
 
                     // Update status
                     if (statusUpdater != null) {
                         statusUpdater.accept(String.format("Loaded %s: %d series",
-                            kaiFile.getName(), seriesList.size()));
+                            pxtFile.getName(), seriesList.size()));
                     }
 
                     // Notify callback
@@ -469,13 +469,13 @@ public class DatasetLoaderManager {
                     }
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,
-                        "Error loading Kalix dataset:\n" + e.getMessage(),
+                        "Error loading Pixie dataset:\n" + e.getMessage(),
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Error loading Kalix dataset");
+                        statusUpdater.accept("Error loading Pixie dataset");
                     }
-                    logger.error("Error loading Kalix dataset: " + kaiFile.getName(), e);
+                    logger.error("Error loading Pixie dataset: " + pxtFile.getName(), e);
                 }
             }
         };
@@ -484,7 +484,7 @@ public class DatasetLoaderManager {
             loadTask.cancel(true);
             progressDialog.dispose();
             if (statusUpdater != null) {
-                statusUpdater.accept("Kalix dataset load cancelled");
+                statusUpdater.accept("Pixie dataset load cancelled");
             }
         });
 

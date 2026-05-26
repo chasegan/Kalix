@@ -9,17 +9,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads series names from Kalix .kai metadata files.
- * The .kai format is a CSV with columns:
+ * Reads series names from Pixie .pxt metadata files.
+ * The .pxt format is a CSV with columns:
  * index, offset, start_time, end_time, timestep, length, seriesName
  */
-public class KaiHeaderReader implements DataSourceHeaderReader {
+public class PixieHeaderReader implements DataSourceHeaderReader {
 
     private static final int SERIES_NAME_COLUMN = 6;
 
     @Override
     public boolean canRead(String fileName) {
-        return fileName.toLowerCase().endsWith(".kai");
+        return fileName.toLowerCase().endsWith(".pxt");
     }
 
     @Override

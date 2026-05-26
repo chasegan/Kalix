@@ -75,7 +75,7 @@ import java.util.function.Consumer;
  * ├── Last run          → Most recently completed run (updates automatically)
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
- * └── Loaded datasets   → Imported CSV/KAI files
+ * └── Loaded datasets   → Imported CSV/Pixie files
  * </pre>
  *
  * <h2>Data Flow</h2>

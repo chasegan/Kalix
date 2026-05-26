@@ -1,7 +1,7 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.io.TimeSeriesCsvImporter;
-import com.kalix.ide.io.KalixTimeSeriesReader;
+import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
@@ -84,7 +84,7 @@ public class FlowVizDataManager {
 
     /**
      * Opens a file chooser dialog and loads selected files with support for multiple selection.
-     * Supports both CSV files and Kalix compressed timeseries files (.kai).
+     * Supports both CSV files and Pixie files (.pxt).
      *
      * <p>This method presents a standard file chooser dialog filtered for supported file types, allowing
      * users to select one or multiple files for import. The method automatically detects file types and
@@ -95,11 +95,11 @@ public class FlowVizDataManager {
 
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter ktmFilter = new FileNameExtensionFilter("Kalix Timeseries Files (*.kai)", "kai");
-        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.kai)", "csv", "kai");
+        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
+        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.pxt)", "csv", "pxt");
 
         fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.addChoosableFileFilter(ktmFilter);
+        fileChooser.addChoosableFileFilter(pixieFilter);
         fileChooser.addChoosableFileFilter(allFilter);
         fileChooser.setFileFilter(allFilter); // Default to all supported
 
@@ -133,17 +133,17 @@ public class FlowVizDataManager {
     /**
      * Loads a single file with progress dialog. Automatically detects file type.
      *
-     * @param file The file to load (CSV or KTM)
+     * @param file The file to load (CSV or Pixie)
      */
     public void loadFile(File file) {
         String fileName = file.getName().toLowerCase();
         if (fileName.endsWith(".csv")) {
             loadCsvFile(file);
-        } else if (fileName.endsWith(".kai")) {
-            loadKtmFile(file);
+        } else if (fileName.endsWith(".pxt")) {
+            loadPixieFile(file);
         } else {
             JOptionPane.showMessageDialog(parentFrame,
-                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .kai",
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .pxt",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
         }
@@ -152,7 +152,7 @@ public class FlowVizDataManager {
     /**
      * Loads multiple files with batch progress dialog. Automatically detects file types.
      *
-     * @param files Array of files to load (CSV or KAI)
+     * @param files Array of files to load (CSV or Pixie)
      */
     public void loadMultipleFiles(File[] files) {
         // Create progress dialog for multiple files
@@ -286,18 +286,18 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Loads a single Kalix timeseries file (.kai + .kaz) with progress dialog.
+     * Loads a single Pixie file (.pxt + .pxb) with progress dialog.
      *
-     * @param ktmFile The KAI metadata file to load
+     * @param pixieFile The .pxt metadata file to load
      */
-    public void loadKtmFile(File ktmFile) {
-        // Verify the corresponding .kaz file exists
-        String basePath = ktmFile.getAbsolutePath().replaceAll("\\.kai$", "");
-        File kazFile = new File(basePath + ".kaz");
+    public void loadPixieFile(File pixieFile) {
+        // Verify the corresponding .pxb file exists
+        String basePath = pixieFile.getAbsolutePath().replaceAll("\\.pxt$", "");
+        File pxbFile = new File(basePath + ".pxb");
 
-        if (!kazFile.exists()) {
+        if (!pxbFile.exists()) {
             JOptionPane.showMessageDialog(parentFrame,
-                "Binary data file not found: " + kazFile.getName() + "\nBoth .kai and .kaz files are required.",
+                "Binary data file not found: " + pxbFile.getName() + "\nBoth .pxt and .pxb files are required.",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
             return;
@@ -306,11 +306,11 @@ public class FlowVizDataManager {
         // Create progress dialog
         JProgressBar progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
-        progressBar.setString("Loading Kalix timeseries...");
+        progressBar.setString("Loading Pixie file...");
 
         JDialog progressDialog = new JDialog(parentFrame, "Loading Data", true);
         progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-        progressDialog.add(new JLabel("Loading: " + ktmFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(new JLabel("Loading: " + pixieFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
         progressDialog.add(progressBar, BorderLayout.CENTER);
 
         JButton cancelButton = new JButton("Cancel");
@@ -324,7 +324,7 @@ public class FlowVizDataManager {
             @Override
             protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
                 publish(25);
-                KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+                PixieReader reader = new PixieReader();
                 publish(50);
                 List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
                 publish(100);
@@ -336,7 +336,7 @@ public class FlowVizDataManager {
                 if (!chunks.isEmpty()) {
                     int progress = chunks.get(chunks.size() - 1);
                     progressBar.setValue(progress);
-                    progressBar.setString(String.format("Loading Kalix timeseries... %d%%", progress));
+                    progressBar.setString(String.format("Loading Pixie file... %d%%", progress));
                 }
             }
 
@@ -346,10 +346,10 @@ public class FlowVizDataManager {
 
                 try {
                     List<com.kalix.ide.io.NamedSeries> seriesList = get();
-                    handleKtmImportResult(ktmFile, seriesList);
+                    handlePixieImportResult(pixieFile, seriesList);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,
-                        "Error loading Kalix timeseries file:\n" + e.getMessage(),
+                        "Error loading Pixie file:\n" + e.getMessage(),
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
                 }
@@ -366,33 +366,33 @@ public class FlowVizDataManager {
     }
 
     /**
-     * Processes the result of a Kalix timeseries import operation.
+     * Processes the result of a Pixie import operation.
      *
-     * @param ktmFile The source KAI file
+     * @param pixieFile The source .pxt file
      * @param seriesList The loaded time series data
      */
-    private void handleKtmImportResult(File ktmFile, List<com.kalix.ide.io.NamedSeries> seriesList) {
+    private void handlePixieImportResult(File pixieFile, List<com.kalix.ide.io.NamedSeries> seriesList) {
         if (seriesList == null || seriesList.isEmpty()) {
             JOptionPane.showMessageDialog(parentFrame,
-                "No time series data found in file: " + ktmFile.getName(),
+                "No time series data found in file: " + pixieFile.getName(),
                 "Load Warning",
                 JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // Add new data (don't clear existing data)
-        String fileName = ktmFile.getName();
+        String fileName = pixieFile.getName();
         int addedCount = 0;
 
         for (NamedSeries ns : seriesList) {
-            // Display label: "filename.kai: SeriesName"; identity is a DatasetSeries ref.
+            // Display label: "filename.pxt: SeriesName"; identity is a DatasetSeries ref.
             String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(ktmFile, displayName);
+            SeriesRef ref = uniqueRefFor(pixieFile, displayName);
             dataSet.addSeries(ref, ns.data());
             addedCount++;
         }
 
-        currentFileUpdater.accept(ktmFile);
+        currentFileUpdater.accept(pixieFile);
         titleUpdater.run();
 
         // Zoom to fit all data (including existing + new)
@@ -628,17 +628,17 @@ public class FlowVizDataManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV and KAI)
+                        // Filter for supported files (CSV and Pixie)
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".kai");
+                                return name.endsWith(".csv") || name.endsWith(".pxt");
                             })
                             .toList();
 
                         if (supportedFiles.isEmpty()) {
                             JOptionPane.showMessageDialog(parentFrame,
-                                "Please drop CSV or KAI files only.",
+                                "Please drop CSV or Pixie files only.",
                                 "Invalid File Type",
                                 JOptionPane.WARNING_MESSAGE);
                         } else if (supportedFiles.size() == 1) {

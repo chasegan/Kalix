@@ -72,9 +72,9 @@ public class FlowVizWindow extends JFrame {
 
     /**
      * Creates a new FlowViz window and pre-loads data from the specified file.
-     * Supports CSV and Kalix timeseries (.kai) files.
+     * Supports CSV and Pixie (.pxt) files.
      *
-     * @param dataFile The file to load (CSV or KAI format)
+     * @param dataFile The file to load (CSV or Pixie format)
      */
     public FlowVizWindow(File dataFile) {
         windowCounter++;
@@ -430,7 +430,7 @@ public class FlowVizWindow extends JFrame {
     /**
      * Creates a new FlowViz window pre-loaded with data from the specified file.
      *
-     * @param dataFile The file to load (CSV or KAI format)
+     * @param dataFile The file to load (CSV or Pixie format)
      */
     public static void createWindowWithFile(File dataFile) {
         SwingUtilities.invokeLater(() -> new FlowVizWindow(dataFile));

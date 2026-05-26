@@ -46,7 +46,7 @@ public class PreferenceKeys {
     /** Name of the globally active plot palette (string, default: "Default") */
     public static final String PLOT_ACTIVE_PALETTE = "plot.activePalette";
 
-    /** STDIO format for get_result responses ("kaz" or "csv", default: "kaz") */
+    /** STDIO format for get_result responses ("pixie" or "csv", default: "pixie") */
     public static final String STDIO_DATA_FORMAT = "stdio.dataFormat";
 
     /** UI theme selection (string, default: "Light") */

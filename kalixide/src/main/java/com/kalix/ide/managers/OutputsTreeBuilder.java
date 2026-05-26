@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
  * Series names come from {@code getSeriesNamesCallback} which calls:
  * <ul>
  *   <li>For runs: {@link com.kalix.ide.cli.RunModelProgram#getOutputsGenerated()}</li>
- *   <li>For datasets: The loaded CSV/KAI column names</li>
+ *   <li>For datasets: The loaded CSV/Pixie column names</li>
  * </ul>
  *
  * @see com.kalix.ide.windows.RunManager#onRunTreeSelectionChanged

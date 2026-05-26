@@ -12,22 +12,22 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
- * Reader for Kalix compressed timeseries file format.
+ * Reader for Pixie format (compressed timeseries).
  *
  * Reads a pair of files:
- * - Binary file (.kaz) containing Gorilla-compressed timeseries data
- * - Metadata file (.kai) containing series metadata in CSV format
+ * - Binary file (.pxb) containing Gorilla-compressed timeseries data
+ * - Metadata file (.pxt) containing series metadata in CSV format
  *
  * Supports both sequential reading of all series and random access to specific series.
  *
  * Example usage:
  * <pre>
- * KalixTimeSeriesReader reader = new KalixTimeSeriesReader();
+ * PixieReader reader = new PixieReader();
  * List&lt;TimeSeriesData&gt; allSeries = reader.readAllSeries("/path/to/data");
  * TimeSeriesData specificSeries = reader.readSeries("/path/to/data", "flow_rate");
  * </pre>
  */
-public class KalixTimeSeriesReader {
+public class PixieReader {
 
     private static final int CODEC_GORILLA_DOUBLE = 0;
     private static final int CODEC_GORILLA_FLOAT = 1;
@@ -37,8 +37,8 @@ public class KalixTimeSeriesReader {
      * with nameless {@link TimeSeriesData}; the caller builds the {@code SeriesRef} identity.
      */
     public List<NamedSeries> readAllSeries(String basePath) throws IOException {
-        String metadataPath = basePath + ".kai";
-        String binaryPath = basePath + ".kaz";
+        String metadataPath = basePath + ".pxt";
+        String binaryPath = basePath + ".pxb";
 
         // Read metadata
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
@@ -59,8 +59,8 @@ public class KalixTimeSeriesReader {
      * Read a specific timeseries by name
      */
     public TimeSeriesData readSeries(String basePath, String seriesName) throws IOException {
-        String metadataPath = basePath + ".kai";
-        String binaryPath = basePath + ".kaz";
+        String metadataPath = basePath + ".pxt";
+        String binaryPath = basePath + ".pxb";
 
         // Read metadata to find the series
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
@@ -87,7 +87,7 @@ public class KalixTimeSeriesReader {
      * Get series names and metadata without reading the binary data
      */
     public List<SeriesInfo> getSeriesInfo(String basePath) throws IOException {
-        String metadataPath = basePath + ".kai";
+        String metadataPath = basePath + ".pxt";
         List<SeriesMetadata> metadataList = readMetadataFile(metadataPath);
 
         List<SeriesInfo> result = new ArrayList<>();

@@ -18,7 +18,7 @@ package com.kalix.ide.flowviz.data;
  *       stable {@code runId}.</li>
  *   <li>{@link LastSeries} — alias for the most recently completed run. Resolves at
  *       lookup time to whichever {@code RunSeries} is currently latest.</li>
- *   <li>{@link DatasetSeries} — column from a user-loaded {@code .csv}/{@code .kai}
+ *   <li>{@link DatasetSeries} — column from a user-loaded {@code .csv}/{@code .pxt}
  *       file, identified by the dataset's absolute path.</li>
  * </ul>
  *

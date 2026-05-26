@@ -14,11 +14,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Round-trip tests for the kaz wire format used by get_result responses.
+ * Round-trip tests for the Pixie wire format used by get_result responses.
  * Encodes a known series via GorillaCompressor → base64 (mimicking the CLI),
  * then decodes it via the IDE-side decoder and verifies values and timestamps.
  */
-class TimeSeriesRequestManagerKazTest {
+class TimeSeriesRequestManagerPixieTest {
 
     private static final long TIMESTEP_SECONDS = 3600L; // hourly
     private static final long START_EPOCH_SEC = 1577836800L; // 2020-01-01T00:00:00Z
@@ -28,7 +28,7 @@ class TimeSeriesRequestManagerKazTest {
         double[] expected = {1.0, 2.5, 3.14159, -7.0, 0.0, 1e-9, 1e9};
         String b64 = encode(expected);
 
-        TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("test.series", b64);
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("test.series", b64);
 
         assertEquals(expected.length, decoded.getValues().length);
         for (int i = 0; i < expected.length; i++) {
@@ -51,7 +51,7 @@ class TimeSeriesRequestManagerKazTest {
         };
         String b64 = encode(expected);
 
-        TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("nan.series", b64);
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("nan.series", b64);
 
         double[] actual = decoded.getValues();
         assertEquals(expected.length, actual.length);
@@ -68,7 +68,7 @@ class TimeSeriesRequestManagerKazTest {
         double[] vals = {10.0, 20.0, 30.0, 40.0};
         String b64 = encode(vals);
 
-        TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("ts.series", b64);
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("ts.series", b64);
 
         long[] timestamps = decoded.getTimestamps();
         assertEquals(vals.length, timestamps.length);
@@ -86,7 +86,7 @@ class TimeSeriesRequestManagerKazTest {
         double[] vals = {1.0, 2.0, 3.0};
         String b64 = encode(vals, startEpochSec);
 
-        TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("old.series", b64);
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("old.series", b64);
         long[] timestamps = decoded.getTimestamps();
         assertEquals(vals.length, timestamps.length);
         for (int i = 0; i < vals.length; i++) {
@@ -105,7 +105,7 @@ class TimeSeriesRequestManagerKazTest {
         }
 
         String b64 = encode(vals);
-        TimeSeriesData decoded = TimeSeriesRequestManager.decodeKazPayload("big.series", b64);
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("big.series", b64);
 
         assertEquals(n, decoded.getValues().length);
         for (int i = 0; i < n; i++) {

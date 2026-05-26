@@ -29,14 +29,14 @@ Hybrid preference system with portable configuration:
 
 Key files: `PreferenceManager.java`, `PreferenceKeys.java`
 
-### Compressed Timeseries Format (.kaz/.kai)
+### Pixie Format (.pxt/.pxb)
 Custom binary format using Gorilla compression:
-- **Binary format (.kaz)**: Gorilla-compressed time series data
-- **Metadata format (.kai)**: Human-readable CSV with series info
+- **Binary format (.pxb)**: Gorilla-compressed time series data
+- **Metadata format (.pxt)**: Human-readable CSV with series info
 - **FlowViz integration**: Drag-and-drop support, format auto-detection
 - **Critical fix**: Fixed decompression bugs with proper data point counting
 
-Key files: `KalixTimeSeriesWriter.java`, `KalixTimeSeriesReader.java`, `GorillaCompressor.java`
+Key files: `PixieWriter.java`, `PixieReader.java`, `GorillaCompressor.java`
 
 ### Manager Pattern Architecture
 Comprehensive refactoring using manager pattern:
@@ -49,7 +49,7 @@ Comprehensive refactoring using manager pattern:
 - `CoordinateDisplayManager` - Mouse hover display with binary search optimization
 - `PlotInteractionManager` - Mouse interactions, zooming, panning, context menus
 - `FlowVizMenuManager` - Menu system and keyboard shortcuts
-- `FlowVizDataManager` - CSV/KAI import/export with progress tracking
+- `FlowVizDataManager` - CSV/Pixie import/export with progress tracking
 
 **Architecture Benefits:**
 - Callback-based communication for loose coupling
