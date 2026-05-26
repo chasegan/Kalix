@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "kalix"
-version = "0.2.3-dev3"
+version = "0.2.3-dev5"
 dependencies = [
  "base64",
  "chrono",
