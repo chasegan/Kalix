@@ -711,7 +711,8 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "loss");
                 let loss_table_values = n.loss_table.get_values_as_vec();
                 let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
-                ini_doc.set_property(section_name.as_str(), "table", loss_table_str.as_str());
+                //ini_doc.set_property (section_name.as_str(), "table", loss_table_str.as_str());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "table", loss_table_str.as_str());
             }
             NodeEnum::RoutingNode(n) => {
                 let section_name = format!("node.{}", n.name);
