@@ -6,6 +6,8 @@ plugins {
 
 // Read version from root VERSION file
 val kalixVersion = file("../VERSION").readText().trim()
+// jpackage --app-version requires N[.N[.N]] (macOS CFBundleShortVersionString), no pre-release suffix
+val jpackageVersion = kalixVersion.substringBefore("-")
 
 group = "com.kalix"
 version = kalixVersion
@@ -91,7 +93,7 @@ runtime {
         }
 
         imageOptions = listOf(
-            "--app-version", kalixVersion,
+            "--app-version", jpackageVersion,
             "--vendor", "Kalix",
             "--copyright", "Copyright 2024-2025 Kalix",
             "--icon", iconFile.absolutePath
