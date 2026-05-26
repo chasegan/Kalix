@@ -1,11 +1,21 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Preflight: python is required (used by bump-version.py)
+where python >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: python is required but was not found on PATH
+    exit /b 1
+)
+
 :: Read version from VERSION file
 set /p VERSION=<VERSION
 echo ========================================
 echo Building Kalix v%VERSION%
 echo ========================================
+
+:: Sync VERSION into Cargo.toml + python package files
+python bump-version.py
 
 echo Building Rust CLI...
 cargo build --release

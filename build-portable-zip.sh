@@ -1,11 +1,20 @@
 #!/bin/bash
 set -e
 
+# Preflight: python3 is required (used by bump-version.py)
+if ! command -v python3 &> /dev/null; then
+    echo "ERROR: python3 is required but was not found on PATH"
+    exit 1
+fi
+
 # Read version from VERSION file
 VERSION=$(cat VERSION | tr -d '[:space:]')
 echo "========================================"
 echo "Building Kalix v${VERSION}"
 echo "========================================"
+
+# Sync VERSION into Cargo.toml + python package files
+python3 bump-version.py
 
 echo "Building Rust CLI..."
 cargo build --release
