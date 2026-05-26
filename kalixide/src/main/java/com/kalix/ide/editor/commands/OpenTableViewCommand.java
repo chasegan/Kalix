@@ -7,7 +7,8 @@ import com.kalix.ide.tableview.TableViewWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.KeyStroke;
 import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.util.function.Supplier;
