@@ -1,6 +1,6 @@
 [package]
 name = "kalix-python"
-version = "0.2.3-dev5"
+version = "0.2.3"
 edition = "2021"
 description = "Python bindings for the Kalix hydrological modelling system"
 

@@ -1,13 +1,14 @@
 # kalix (Python)
 
-Python interface for [Kalix](https://kalix.io), wrapping the Rust implementation
-via PyO3.
+Python interface for [Kalix](https://chasegan.notion.site/Kalix-User-Guide-762687200b564e8e8c82b4f98879974f).
 
-**v0.1** ships read/write of the Pixie format (Kalix's Gorilla-compressed
-timeseries format, `.pxt` / `.pxb` paired files) as pandas DataFrames.
+Current functionality:
+- read and write Pixie files (`.pxt`, `.pxb`)
 
-Planned for later releases: model loading & simulation, programmatic model
-building, optimisation.
+Planned:
+- model loading & simulation
+- programmatic model manipulation and building
+- optimisation
 
 ## Install
 
