@@ -6,7 +6,7 @@ use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::io::csv_io::write_ts;
-use crate::io::kaz_io;
+use crate::io::pixie_io;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
@@ -642,12 +642,12 @@ impl Model {
             vec_ts.push(&self.data_cache.series[idx]);
         }
 
-        // Dispatch by extension: .kaz or .kai → paired Kalix compressed format,
+        // Dispatch by extension: .pxb or .pxt → paired Pixie format,
         // anything else → CSV.
         let lower = filename.to_ascii_lowercase();
-        if lower.ends_with(".kaz") || lower.ends_with(".kai") {
+        if lower.ends_with(".pxb") || lower.ends_with(".pxt") {
             let base_path = &filename[..filename.len() - 4];
-            kaz_io::write_series(base_path, &vec_ts)
+            pixie_io::write_series(base_path, &vec_ts)
                 .map_err(|e| format!("Could not write file {}: {:?}", filename, e))
         } else {
             write_ts(filename, vec_ts)

@@ -450,7 +450,7 @@ mod tests {
     fn test_parse_single_term_config() {
         let ini_content = r#"
 [optimisation]
-model_file = test.kai
+model_file = test.ini
 objective_expression = term1
 output_file = results.txt
 algorithm = DE
@@ -472,7 +472,7 @@ node.gr4j.x2 = lin_range(g(2), -5, 3)
 
         let config = OptimisationConfig::from_ini(ini_content).unwrap();
 
-        assert_eq!(config.model_file, Some("test.kai".to_string()));
+        assert_eq!(config.model_file, Some("test.ini".to_string()));
         assert_eq!(config.terms.len(), 1);
         assert_eq!(config.terms[0].name, "term1");
         assert_eq!(config.terms[0].simulated_series, "node.gr4j.dsflow");
@@ -533,7 +533,7 @@ node.x.x1 = lin_range(g(1), 0, 10)
     fn test_case_insensitive_keys_preserve_value_case() {
         let ini_content = r#"
 [OPTIMISATION]
-MODEL_FILE = Test.KAI
+MODEL_FILE = Test.INI
 OBJECTIVE_EXPRESSION = term1
 ALGORITHM = de
 POPULATION_SIZE = 20
@@ -551,7 +551,7 @@ Node.GR4J.X1 = log_range(g(1), 100, 1200)
 
         let config = OptimisationConfig::from_ini(ini_content).unwrap();
         // File paths and node names are case-sensitive (value side preserved)
-        assert_eq!(config.model_file, Some("Test.KAI".to_string()));
+        assert_eq!(config.model_file, Some("Test.INI".to_string()));
         assert_eq!(config.terms[0].simulated_series, "node.GR4J.dsflow");
         assert_eq!(config.terms[0].observed_file, "Obs.CSV");
         // Statistic name normalized

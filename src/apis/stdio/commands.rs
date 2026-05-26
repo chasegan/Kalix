@@ -450,7 +450,7 @@ impl Command for GetResultCommand {
 
         let requested_format = params.get("format")
             .and_then(|v| v.as_str())
-            .unwrap_or("kaz");
+            .unwrap_or("pixie");
 
         // Get model and check if it exists
         let model = session.get_model()
@@ -484,7 +484,7 @@ impl Command for GetResultCommand {
                     "data": csv_data
                 }))
             }
-            "kaz" => {
+            "pixie" => {
                 use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble};
                 use base64::{Engine, engine::general_purpose::STANDARD};
 
@@ -502,14 +502,14 @@ impl Command for GetResultCommand {
 
                 Ok(serde_json::json!({
                     "series_name": series_name,
-                    "format": "kaz",
+                    "format": "pixie",
                     "codec": "gorilla_double",
                     "metadata": metadata,
                     "data": encoded
                 }))
             }
             other => Err(CommandError::InvalidParameters(
-                format!("Unsupported format '{}'; expected 'kaz' or 'csv'", other)
+                format!("Unsupported format '{}'; expected 'pixie' or 'csv'", other)
             )),
         }
     }

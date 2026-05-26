@@ -46,7 +46,7 @@ mod test_sacramento_node;
 #[cfg(test)]
 mod test_model_io_ini;
 mod test_timeseries_input;
-mod test_kai;
+mod test_pixie;
 mod test_model_with_function;
 
 #[cfg(test)]

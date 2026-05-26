@@ -9,46 +9,46 @@ const CODEC_GORILLA_DOUBLE: u16 = 0;
 const CODEC_GORILLA_FLOAT: u16 = 1;
 
 #[derive(Debug)]
-pub enum KazError {
+pub enum PixieError {
     IoError(std::io::Error),
     CompressionError(String),
     ParseError(String),
     SeriesNotFound(String),
 }
 
-impl std::fmt::Display for KazError {
+impl std::fmt::Display for PixieError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KazError::IoError(e) => write!(f, "IO error: {}", e),
-            KazError::CompressionError(msg) => write!(f, "Compression error: {}", msg),
-            KazError::ParseError(msg) => write!(f, "Parse error: {}", msg),
-            KazError::SeriesNotFound(name) => write!(f, "Series not found: {}", name),
+            PixieError::IoError(e) => write!(f, "IO error: {}", e),
+            PixieError::CompressionError(msg) => write!(f, "Compression error: {}", msg),
+            PixieError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            PixieError::SeriesNotFound(name) => write!(f, "Series not found: {}", name),
         }
     }
 }
 
-impl std::error::Error for KazError {
+impl std::error::Error for PixieError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            KazError::IoError(e) => Some(e),
+            PixieError::IoError(e) => Some(e),
             _ => None,
         }
     }
 }
 
-impl From<std::io::Error> for KazError {
+impl From<std::io::Error> for PixieError {
     fn from(error: std::io::Error) -> Self {
-        KazError::IoError(error)
+        PixieError::IoError(error)
     }
 }
 
-impl From<KazError> for String {
-    fn from(error: KazError) -> Self {
+impl From<PixieError> for String {
+    fn from(error: PixieError) -> Self {
         match error {
-            KazError::IoError(e) => format!("IO error: {}", e),
-            KazError::CompressionError(msg) => format!("Compression error: {}", msg),
-            KazError::ParseError(msg) => format!("Parse error: {}", msg),
-            KazError::SeriesNotFound(name) => format!("Series not found: {}", name),
+            PixieError::IoError(e) => format!("IO error: {}", e),
+            PixieError::CompressionError(msg) => format!("Compression error: {}", msg),
+            PixieError::ParseError(msg) => format!("Parse error: {}", msg),
+            PixieError::SeriesNotFound(name) => format!("Series not found: {}", name),
         }
     }
 }
@@ -85,19 +85,19 @@ struct SeriesMetadata {
     series_name: String,
 }
 
-/// Read all time series from Kalix compressed format (.kaz/.kai files)
+/// Read all time series from Pixie format (.pxt/.pxb files)
 ///
 /// # Arguments
-/// * `base_path` - Base path without extension (e.g. "/path/to/data" for data.kaz and data.kai)
+/// * `base_path` - Base path without extension (e.g. "/path/to/data" for data.pxt and data.pxb)
 ///
 /// # Returns
 /// * `Vec<Timeseries>` - All time series from the file
 ///
 /// # Errors
-/// * `KalixTsError` - If files cannot be read or data is invalid
-pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, KazError> {
-    let metadata_path = format!("{}.kai", base_path);
-    let binary_path = format!("{}.kaz", base_path);
+/// * `PixieError` - If files cannot be read or data is invalid
+pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, PixieError> {
+    let metadata_path = format!("{}.pxt", base_path);
+    let binary_path = format!("{}.pxb", base_path);
 
     // Read metadata
     let metadata_list = read_metadata_file(&metadata_path)?;
@@ -114,7 +114,7 @@ pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, KazError> {
     Ok(result)
 }
 
-/// Read a specific time series by name from Kalix compressed format
+/// Read a specific time series by name from Pixie format
 ///
 /// # Arguments
 /// * `base_path` - Base path without extension
@@ -124,18 +124,18 @@ pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, KazError> {
 /// * `Timeseries` - The requested time series
 ///
 /// # Errors
-/// * `KalixTsError::SeriesNotFound` - If the named series doesn't exist
-/// * `KalixTsError` - If files cannot be read or data is invalid
-pub fn read_series(base_path: &str, series_name: &str) -> Result<Timeseries, KazError> {
-    let metadata_path = format!("{}.kai", base_path);
-    let binary_path = format!("{}.kaz", base_path);
+/// * `PixieError::SeriesNotFound` - If the named series doesn't exist
+/// * `PixieError` - If files cannot be read or data is invalid
+pub fn read_series(base_path: &str, series_name: &str) -> Result<Timeseries, PixieError> {
+    let metadata_path = format!("{}.pxt", base_path);
+    let binary_path = format!("{}.pxb", base_path);
 
     // Read metadata to find the series
     let metadata_list = read_metadata_file(&metadata_path)?;
     let target_metadata = metadata_list
         .iter()
         .find(|meta| meta.series_name == series_name)
-        .ok_or_else(|| KazError::SeriesNotFound(series_name.to_string()))?;
+        .ok_or_else(|| PixieError::SeriesNotFound(series_name.to_string()))?;
 
     // Read specific series from binary file
     let mut file = File::open(binary_path)?;
@@ -151,9 +151,9 @@ pub fn read_series(base_path: &str, series_name: &str) -> Result<Timeseries, Kaz
 /// * `Vec<SeriesInfo>` - Metadata for all series in the file
 ///
 /// # Errors
-/// * `KalixTsError` - If metadata file cannot be read or is invalid
-pub fn get_series_info(base_path: &str) -> Result<Vec<SeriesInfo>, KazError> {
-    let metadata_path = format!("{}.kai", base_path);
+/// * `PixieError` - If metadata file cannot be read or is invalid
+pub fn get_series_info(base_path: &str) -> Result<Vec<SeriesInfo>, PixieError> {
+    let metadata_path = format!("{}.pxt", base_path);
     let metadata_list = read_metadata_file(&metadata_path)?;
 
     let result = metadata_list
@@ -170,19 +170,19 @@ pub fn get_series_info(base_path: &str) -> Result<Vec<SeriesInfo>, KazError> {
     Ok(result)
 }
 
-/// Write time series data to Kalix compressed format with default 32-bit precision
+/// Write time series data to Pixie format with default 32-bit precision
 ///
 /// # Arguments
 /// * `base_path` - Base path without extension
 /// * `series_list` - Vector of references to time series to write
 ///
 /// # Errors
-/// * `KalixTsError` - If files cannot be written or series list is empty
-pub fn write_series(base_path: &str, series_list: &[&Timeseries]) -> Result<(), KazError> {
+/// * `PixieError` - If files cannot be written or series list is empty
+pub fn write_series(base_path: &str, series_list: &[&Timeseries]) -> Result<(), PixieError> {
     write_series_with_precision(base_path, series_list, false)
 }
 
-/// Write time series data to Kalix compressed format with specified precision
+/// Write time series data to Pixie format with specified precision
 ///
 /// # Arguments
 /// * `base_path` - Base path without extension
@@ -190,18 +190,18 @@ pub fn write_series(base_path: &str, series_list: &[&Timeseries]) -> Result<(), 
 /// * `use_64bit_precision` - true for 64-bit double precision, false for 32-bit float precision
 ///
 /// # Errors
-/// * `KalixTsError` - If files cannot be written or series list is empty
+/// * `PixieError` - If files cannot be written or series list is empty
 pub fn write_series_with_precision(
     base_path: &str,
     series_list: &[&Timeseries],
     use_64bit_precision: bool
-) -> Result<(), KazError> {
+) -> Result<(), PixieError> {
     if series_list.is_empty() {
-        return Err(KazError::ParseError("No series data to write".to_string()));
+        return Err(PixieError::ParseError("No series data to write".to_string()));
     }
 
-    let binary_path = format!("{}.kaz", base_path);
-    let metadata_path = format!("{}.kai", base_path);
+    let binary_path = format!("{}.pxb", base_path);
+    let metadata_path = format!("{}.pxt", base_path);
 
     let mut metadata_list = Vec::new();
 
@@ -258,7 +258,7 @@ pub fn write_series_with_precision(
     Ok(())
 }
 
-fn read_metadata_file(metadata_path: &str) -> Result<Vec<SeriesMetadata>, KazError> {
+fn read_metadata_file(metadata_path: &str) -> Result<Vec<SeriesMetadata>, PixieError> {
     let file = File::open(metadata_path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
@@ -266,9 +266,9 @@ fn read_metadata_file(metadata_path: &str) -> Result<Vec<SeriesMetadata>, KazErr
     // Read and validate header
     let header = lines
         .next()
-        .ok_or_else(|| KazError::ParseError("Empty metadata file".to_string()))??;
+        .ok_or_else(|| PixieError::ParseError("Empty metadata file".to_string()))??;
     if !header.starts_with("index,") {
-        return Err(KazError::ParseError("Invalid metadata file format".to_string()));
+        return Err(PixieError::ParseError("Invalid metadata file format".to_string()));
     }
 
     let mut result = Vec::new();
@@ -289,38 +289,38 @@ fn read_metadata_file(metadata_path: &str) -> Result<Vec<SeriesMetadata>, KazErr
     Ok(result)
 }
 
-fn parse_metadata_line(line: &str, line_num: usize) -> Result<SeriesMetadata, KazError> {
+fn parse_metadata_line(line: &str, line_num: usize) -> Result<SeriesMetadata, PixieError> {
     let fields = parse_csv_line(line);
 
     if fields.len() != 7 {
-        return Err(KazError::ParseError(format!(
+        return Err(PixieError::ParseError(format!(
             "Invalid metadata line format at line {}: {}",
             line_num, line
         )));
     }
 
     let index = fields[0].trim().parse::<usize>().map_err(|_| {
-        KazError::ParseError(format!("Invalid index at line {}: {}", line_num, fields[0]))
+        PixieError::ParseError(format!("Invalid index at line {}: {}", line_num, fields[0]))
     })?;
 
     let offset = fields[1].trim().parse::<u64>().map_err(|_| {
-        KazError::ParseError(format!("Invalid offset at line {}: {}", line_num, fields[1]))
+        PixieError::ParseError(format!("Invalid offset at line {}: {}", line_num, fields[1]))
     })?;
 
     let start_time = parse_timestamp(&fields[2].trim()).map_err(|e| {
-        KazError::ParseError(format!("Invalid start time at line {}: {}", line_num, e))
+        PixieError::ParseError(format!("Invalid start time at line {}: {}", line_num, e))
     })?;
 
     let end_time = parse_timestamp(&fields[3].trim()).map_err(|e| {
-        KazError::ParseError(format!("Invalid end time at line {}: {}", line_num, e))
+        PixieError::ParseError(format!("Invalid end time at line {}: {}", line_num, e))
     })?;
 
     let timestep = fields[4].trim().parse::<u64>().map_err(|_| {
-        KazError::ParseError(format!("Invalid timestep at line {}: {}", line_num, fields[4]))
+        PixieError::ParseError(format!("Invalid timestep at line {}: {}", line_num, fields[4]))
     })?;
 
     let length = fields[5].trim().parse::<usize>().map_err(|_| {
-        KazError::ParseError(format!("Invalid length at line {}: {}", line_num, fields[5]))
+        PixieError::ParseError(format!("Invalid length at line {}: {}", line_num, fields[5]))
     })?;
 
     let series_name = fields[6].trim().to_string();
@@ -371,7 +371,7 @@ fn parse_timestamp(timestamp_str: &str) -> Result<u64, String> {
     }
 }
 
-fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Timeseries, KazError> {
+fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Timeseries, PixieError> {
     // Seek to the series block
     file.seek(SeekFrom::Start(meta.offset))?;
 
@@ -388,7 +388,7 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
         CODEC_GORILLA_DOUBLE => {
             let compressor = GorillaCompressor::new(meta.timestep); // Already in seconds
             let double_points = compressor.decompress_double(&compressed_data)
-                .map_err(|e| KazError::CompressionError(format!("Failed to decompress double data: {}", e)))?;
+                .map_err(|e| PixieError::CompressionError(format!("Failed to decompress double data: {}", e)))?;
             double_points.into_iter().map(|p| {
                 // Convert back from Unix seconds to wrapped u64
                 let wrapped_timestamp = wrap_to_u64(p.timestamp as i64);
@@ -398,14 +398,14 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
         CODEC_GORILLA_FLOAT => {
             let compressor = GorillaCompressor::new(meta.timestep); // Already in seconds
             let float_points = compressor.decompress_float(&compressed_data)
-                .map_err(|e| KazError::CompressionError(format!("Failed to decompress float data: {}", e)))?;
+                .map_err(|e| PixieError::CompressionError(format!("Failed to decompress float data: {}", e)))?;
             float_points.into_iter().map(|p| {
                 // Convert back from Unix seconds to wrapped u64
                 let wrapped_timestamp = wrap_to_u64(p.timestamp as i64);
                 (wrapped_timestamp, p.value as f64)
             }).collect()
         },
-        _ => return Err(KazError::CompressionError(format!("Unsupported codec: {}", codec))),
+        _ => return Err(PixieError::CompressionError(format!("Unsupported codec: {}", codec))),
     };
 
     // Convert to Timeseries
@@ -423,7 +423,7 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
     Ok(timeseries)
 }
 
-fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Result<Vec<u8>, KazError> {
+fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Result<Vec<u8>, PixieError> {
     if series.timestamps.is_empty() {
         return Ok(Vec::new());
     }
@@ -442,7 +442,7 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
                 .collect();
 
             compressor.compress_double(&points)
-                .map_err(|e| KazError::CompressionError(format!("Failed to compress double data: {}", e)))
+                .map_err(|e| PixieError::CompressionError(format!("Failed to compress double data: {}", e)))
         },
         CODEC_GORILLA_FLOAT => {
             // Convert to TimeValueFloat format, unwrapping timestamps to i64 for gorilla
@@ -455,9 +455,9 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
                 .collect();
 
             compressor.compress_float(&points)
-                .map_err(|e| KazError::CompressionError(format!("Failed to compress float data: {}", e)))
+                .map_err(|e| PixieError::CompressionError(format!("Failed to compress float data: {}", e)))
         },
-        _ => Err(KazError::CompressionError(format!("Unsupported codec: {}", codec))),
+        _ => Err(PixieError::CompressionError(format!("Unsupported codec: {}", codec))),
     }
 }
 
@@ -478,7 +478,7 @@ fn detect_timestep(series: &Timeseries) -> u64 {
     }
 }
 
-fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) -> Result<(), KazError> {
+fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) -> Result<(), PixieError> {
     let file = File::create(metadata_path)?;
     let mut writer = BufWriter::new(file);
 
@@ -507,24 +507,24 @@ fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) ->
     Ok(())
 }
 
-fn read_u16(file: &mut File) -> Result<u16, KazError> {
+fn read_u16(file: &mut File) -> Result<u16, PixieError> {
     let mut buf = [0u8; 2];
     file.read_exact(&mut buf)?;
     Ok(u16::from_be_bytes(buf))
 }
 
-fn read_u32(file: &mut File) -> Result<u32, KazError> {
+fn read_u32(file: &mut File) -> Result<u32, PixieError> {
     let mut buf = [0u8; 4];
     file.read_exact(&mut buf)?;
     Ok(u32::from_be_bytes(buf))
 }
 
-fn write_u16(file: &mut File, value: u16) -> Result<(), KazError> {
+fn write_u16(file: &mut File, value: u16) -> Result<(), PixieError> {
     file.write_all(&value.to_be_bytes())?;
     Ok(())
 }
 
-fn write_u32(file: &mut File, value: u32) -> Result<(), KazError> {
+fn write_u32(file: &mut File, value: u32) -> Result<(), PixieError> {
     file.write_all(&value.to_be_bytes())?;
     Ok(())
 }
@@ -565,8 +565,8 @@ mod tests {
         }
 
         // Clean up
-        let _ = fs::remove_file(format!("{}.kaz", base_path));
-        let _ = fs::remove_file(format!("{}.kai", base_path));
+        let _ = fs::remove_file(format!("{}.pxb", base_path));
+        let _ = fs::remove_file(format!("{}.pxt", base_path));
     }
 
     #[test]
@@ -599,8 +599,8 @@ mod tests {
         assert_eq!(result[1].name, "series2");
 
         // Clean up
-        let _ = fs::remove_file(format!("{}.kaz", base_path));
-        let _ = fs::remove_file(format!("{}.kai", base_path));
+        let _ = fs::remove_file(format!("{}.pxb", base_path));
+        let _ = fs::remove_file(format!("{}.pxt", base_path));
     }
 
     #[test]
@@ -632,8 +632,8 @@ mod tests {
         assert_eq!(info[0].end_time, end_timestamp);
 
         // Clean up
-        let _ = fs::remove_file(format!("{}.kaz", base_path));
-        let _ = fs::remove_file(format!("{}.kai", base_path));
+        let _ = fs::remove_file(format!("{}.pxb", base_path));
+        let _ = fs::remove_file(format!("{}.pxt", base_path));
     }
 
     #[test]
@@ -666,9 +666,9 @@ mod tests {
         assert!(double_error < float_error || double_error < 1e-15);
 
         // Clean up
-        let _ = fs::remove_file(format!("{}.kaz", base_path_double));
-        let _ = fs::remove_file(format!("{}.kai", base_path_double));
-        let _ = fs::remove_file(format!("{}.kaz", base_path_float));
-        let _ = fs::remove_file(format!("{}.kai", base_path_float));
+        let _ = fs::remove_file(format!("{}.pxb", base_path_double));
+        let _ = fs::remove_file(format!("{}.pxt", base_path_double));
+        let _ = fs::remove_file(format!("{}.pxb", base_path_float));
+        let _ = fs::remove_file(format!("{}.pxt", base_path_float));
     }
 }

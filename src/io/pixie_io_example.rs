@@ -1,12 +1,12 @@
-/// Example demonstrating how to use the Kalix time series I/O functionality
+/// Example demonstrating how to use the Pixie time series I/O functionality
 /// This shows the basic usage patterns that match the Java implementation
 
 use crate::timeseries::Timeseries;
-use crate::io::kaz_io::{write_series, write_series_with_precision, read_series, read_all_series, get_series_info};
+use crate::io::pixie_io::{write_series, write_series_with_precision, read_series, read_all_series, get_series_info};
 use crate::tid::utils::wrap_to_u64;
 
-pub fn demonstrate_kaz_io() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Kalix Time Series I/O Demonstration ===");
+pub fn demonstrate_pixie_io() -> Result<(), Box<dyn std::error::Error>> {
+    println!("=== Pixie Time Series I/O Demonstration ===");
 
     // Create some sample time series data
     let mut flow_rate = Timeseries::new_daily();
@@ -36,7 +36,7 @@ pub fn demonstrate_kaz_io() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Write multiple series with default precision (32-bit float)
     println!("\n1. Writing time series data (32-bit float precision)...");
     write_series(base_path, &[&flow_rate, &temperature])?;
-    println!("   Written to: {}.kaz and {}.kai", base_path, base_path);
+    println!("   Written to: {}.pxb and {}.pxt", base_path, base_path);
 
     // Example 2: Read series information without loading data
     println!("\n2. Reading series metadata...");
@@ -64,8 +64,8 @@ pub fn demonstrate_kaz_io() -> Result<(), Box<dyn std::error::Error>> {
     write_series_with_precision(high_precision_path, &[&flow_rate], true)?;
 
     // Compare file sizes
-    let float_size = std::fs::metadata(format!("{}.kaz", base_path))?.len();
-    let double_size = std::fs::metadata(format!("{}.kaz", high_precision_path))?.len();
+    let float_size = std::fs::metadata(format!("{}.pxb", base_path))?.len();
+    let double_size = std::fs::metadata(format!("{}.pxb", high_precision_path))?.len();
     println!("   Float file size: {} bytes", float_size);
     println!("   Double file size: {} bytes", double_size);
     println!("   Size difference: {:.1}%", ((double_size as f64 / float_size as f64) - 1.0) * 100.0);
@@ -83,16 +83,16 @@ pub fn demonstrate_kaz_io() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Maximum round-trip error: {:.2e}", max_error);
 
     // Clean up
-    let _ = std::fs::remove_file(format!("{}.kaz", base_path));
-    let _ = std::fs::remove_file(format!("{}.kai", base_path));
-    let _ = std::fs::remove_file(format!("{}.kaz", high_precision_path));
-    let _ = std::fs::remove_file(format!("{}.kai", high_precision_path));
+    let _ = std::fs::remove_file(format!("{}.pxb", base_path));
+    let _ = std::fs::remove_file(format!("{}.pxt", base_path));
+    let _ = std::fs::remove_file(format!("{}.pxb", high_precision_path));
+    let _ = std::fs::remove_file(format!("{}.pxt", high_precision_path));
 
     println!("\n=== Demonstration complete ===");
     Ok(())
 }
 
-/// Example of error handling with the Kalix time series I/O
+/// Example of error handling with the Pixie time series I/O
 pub fn demonstrate_error_handling() {
     println!("\n=== Error Handling Demonstration ===");
 
@@ -115,8 +115,8 @@ pub fn demonstrate_error_handling() {
         }
 
         // Clean up
-        let _ = std::fs::remove_file(format!("{}.kaz", temp_path));
-        let _ = std::fs::remove_file(format!("{}.kai", temp_path));
+        let _ = std::fs::remove_file(format!("{}.pxb", temp_path));
+        let _ = std::fs::remove_file(format!("{}.pxt", temp_path));
     }
 
     println!("=== Error handling complete ===");
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn test_demonstration() {
         // Run the demonstration - this also serves as an integration test
-        demonstrate_kaz_io().expect("Demonstration should complete successfully");
+        demonstrate_pixie_io().expect("Demonstration should complete successfully");
     }
 
     #[test]
