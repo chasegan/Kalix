@@ -1,0 +1,248 @@
+# Coordinated release workflow.
+#
+# Triggered by a version tag (e.g. `v0.3.0`) or manual dispatch.
+# Builds platform bundles (kalix CLI + KalixIDE) and Python wheels, then
+# performs PyPI publish before flipping the GitHub Release out of draft.
+#
+# ONE-TIME SETUP REQUIRED (before first successful release):
+#   1. PyPI Trusted Publishing
+#      - On https://pypi.org, create the `kalix` project (or claim it if
+#        it exists), then go to "Publishing" and add a trusted publisher:
+#          owner:    <your GitHub user/org>
+#          repo:     Kalix
+#          workflow: release.yml
+#          environment: pypi
+#      - For the very first release, configure a "pending publisher" on
+#        PyPI before the project exists; the first publish creates it.
+#   2. (Optional) GitHub environment named `pypi` for visibility / approvals.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.3.0). Must already exist.'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  JDK_VERSION: '23'
+  PYTHON_VERSION: '3.11'  # only used by bump-version.py during bundle builds
+
+jobs:
+  # ----------------------------------------------------------------------
+  # 1. Verify the tag matches the VERSION file before doing any heavy work.
+  # ----------------------------------------------------------------------
+  verify-version:
+    name: Verify tag matches VERSION
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      tag:     ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - id: check
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          TAG_VERSION="${TAG#v}"
+          FILE_VERSION=$(tr -d '[:space:]' < VERSION)
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "ERROR: tag '$TAG' (version '$TAG_VERSION') does not match VERSION file ('$FILE_VERSION')"
+            exit 1
+          fi
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
+          echo "Confirmed: $TAG matches VERSION file ($FILE_VERSION)"
+
+  # ----------------------------------------------------------------------
+  # 2. Build the portable bundle for each platform.
+  #    Reuses the existing build-portable-zip.{sh,bat} scripts so local and
+  #    CI builds stay in lockstep.
+  # ----------------------------------------------------------------------
+  build-bundle:
+    name: Bundle (${{ matrix.platform }})
+    needs: verify-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+          - os: macos-latest        # Apple Silicon
+            platform: macOS
+          - os: windows-latest
+            platform: Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-version.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JDK_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build portable zip (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: ./build-portable-zip.sh
+
+      - name: Build portable zip (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: build-portable-zip.bat
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.platform }}
+          path: dist/KalixIDE-${{ matrix.platform }}-${{ needs.verify-version.outputs.version }}-Portable.zip
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------------
+  # 3. Build Python wheels. abi3-py39 → one wheel per OS, no per-Python
+  #    matrix. Apple Silicon only for macOS (no universal2).
+  # ----------------------------------------------------------------------
+  build-python-wheels:
+    name: Wheel (${{ matrix.target-name }})
+    needs: verify-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            target-name: linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            target-name: macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            target-name: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-version.outputs.tag }}
+      # maturin-action installs Rust internally (in a manylinux container on
+      # Linux, on the host runner on macOS/Windows). sccache provides
+      # compilation caching across runs; rust-cache isn't useful here.
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: 'true'
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target-name }}
+          path: python/dist/*.whl
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------------
+  # 4. Build the Python sdist once (Linux is conventional).
+  # ----------------------------------------------------------------------
+  build-sdist:
+    name: sdist
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-version.outputs.tag }}
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: python/dist/*.tar.gz
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------------
+  # 5. Create a DRAFT GitHub Release with the bundle artifacts attached.
+  #    This is the last reversible step before PyPI publication.
+  # ----------------------------------------------------------------------
+  draft-github-release:
+    name: Draft GitHub Release
+    needs: [verify-version, build-bundle]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-*
+          path: artifacts
+          merge-multiple: true
+      - name: List bundle artifacts
+        run: ls -lh artifacts/
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify-version.outputs.tag }}
+          name: Kalix ${{ needs.verify-version.outputs.tag }}
+          draft: true
+          files: artifacts/*
+
+  # ----------------------------------------------------------------------
+  # 6. Publish wheels + sdist to PyPI. IRREVERSIBLE.
+  #    Uses Trusted Publishing (OIDC) — no API token needed.
+  # ----------------------------------------------------------------------
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [verify-version, build-python-wheels, build-sdist, draft-github-release]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/kalix/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: List PyPI artifacts
+        run: ls -lh dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ----------------------------------------------------------------------
+  # 7. Flip the draft release to published. This is the public "ship it".
+  # ----------------------------------------------------------------------
+  publish-github-release:
+    name: Publish GitHub Release
+    needs: [verify-version, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify-version.outputs.tag }}
+          draft: false
