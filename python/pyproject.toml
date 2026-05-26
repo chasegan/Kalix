@@ -33,3 +33,9 @@ python-source = "python"
 module-name = "kalix._native"
 features = ["pyo3/extension-module"]
 strip = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "tox>=4.30.3",
+]
