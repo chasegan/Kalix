@@ -5,6 +5,7 @@ timeseries format, .pxt/.pxb paired files), exposed as pandas DataFrames.
 """
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Union
 
@@ -15,7 +16,10 @@ from kalix._native import _read_pixie_raw, _write_pixie_raw
 
 __all__ = ["read_pixie", "write_pixie", "__version__"]
 
-__version__ = "0.1.0"
+try:
+    __version__ = _pkg_version("kalix")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 
 PathLike = Union[str, Path]
 
