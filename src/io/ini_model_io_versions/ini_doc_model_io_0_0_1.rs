@@ -745,7 +745,8 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "splitter");
                 let splitter_table_values = n.splitter_table.get_values_as_vec();
                 let splitter_table_str = format_vec_as_multiline_table(&splitter_table_values, n.splitter_table.ncols(), 4);
-                ini_doc.set_property(section_name.as_str(), "table", splitter_table_str.as_str());
+                //ini_doc.set_property(section_name.as_str(), "table", splitter_table_str.as_str());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "table", splitter_table_str.as_str());
             }
             NodeEnum::StorageNode(n) => {
                 let section_name = format!("node.{}", n.name);
