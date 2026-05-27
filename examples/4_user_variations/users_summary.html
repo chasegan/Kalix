@@ -1,0 +1,48 @@
+<table>
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Demand</th>
+      <th>Flow Threshold</th>
+      <th>Special Features</th>
+      <th>Inflow Source</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>user1</td>
+      <td>10 units</td>
+      <td>-</td>
+      <td>Simple user, no special features</td>
+      <td>inflow1</td>
+    </tr>
+    <tr>
+      <td>user2</td>
+      <td>10 units</td>
+      <td>-</td>
+      <td><strong>Pump capacity:</strong> 0.5 × inflow data<br>(Conditional pump commented out)</td>
+      <td>inflow2</td>
+    </tr>
+    <tr>
+      <td>user3</td>
+      <td>10 units</td>
+      <td>4 units</td>
+      <td>Cannot extract if downstream flow falls below threshold</td>
+      <td>inflow3</td>
+    </tr>
+    <tr>
+      <td>user4</td>
+      <td>2 units</td>
+      <td>1 unit</td>
+      <td><strong>Demand carryover:</strong> 7-day window<br>Can carry over unmet demand to future timesteps</td>
+      <td>inflow4 (10× base)</td>
+    </tr>
+    <tr>
+      <td>user5</td>
+      <td>53 units</td>
+      <td>-</td>
+      <td><strong>Annual cap:</strong> 30 units over 7-day period<br>Limits total extraction</td>
+      <td>inflow5</td>
+    </tr>
+  </tbody>
+</table>
