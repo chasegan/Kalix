@@ -141,7 +141,10 @@ mod tests {
 
     #[test]
     fn parse_absolute() {
-        let kp = KalixPath::parse("/home/user/data.csv").unwrap();
+        // Use a platform-appropriate absolute path. On Windows, "/home/..." is not
+        // absolute per Path::is_absolute() because there's no drive letter.
+        let raw = if cfg!(windows) { "C:\\Users\\test\\data.csv" } else { "/home/user/data.csv" };
+        let kp = KalixPath::parse(raw).unwrap();
         assert_eq!(kp.kind, PathKind::Absolute);
     }
 

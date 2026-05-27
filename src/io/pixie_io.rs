@@ -547,7 +547,8 @@ mod tests {
             ts.push(timestamp, value);
         }
 
-        let base_path = "/tmp/test_kalix_ts";
+        let base_path_buf = std::env::temp_dir().join("test_kalix_ts");
+        let base_path = base_path_buf.to_str().unwrap();
 
         // Write
         write_series_with_precision(base_path, &[&ts], true).unwrap();
@@ -585,7 +586,8 @@ mod tests {
             ts2.push(timestamp, (i as f64) * 100.0);
         }
 
-        let base_path = "/tmp/test_kalix_multiple";
+        let base_path_buf = std::env::temp_dir().join("test_kalix_multiple");
+        let base_path = base_path_buf.to_str().unwrap();
 
         // Write
         write_series_with_precision(base_path, &[&ts1, &ts2], false).unwrap();
@@ -616,7 +618,8 @@ mod tests {
         ts.push(start_timestamp, 1.0);
         ts.push(end_timestamp, 2.0);
 
-        let base_path = "/tmp/test_kalix_info";
+        let base_path_buf = std::env::temp_dir().join("test_kalix_info");
+        let base_path = base_path_buf.to_str().unwrap();
 
         // Write
         write_series_with_precision(base_path, &[&ts], true).unwrap();
@@ -646,8 +649,10 @@ mod tests {
         ts.push(wrap_to_u64(base_time as i64), 1.234567890123456);
         ts.push(wrap_to_u64((base_time + 86400) as i64), 2.345678901234567);
 
-        let base_path_double = "/tmp/test_kalix_double";
-        let base_path_float = "/tmp/test_kalix_float";
+        let base_path_double_buf = std::env::temp_dir().join("test_kalix_double");
+        let base_path_double = base_path_double_buf.to_str().unwrap();
+        let base_path_float_buf = std::env::temp_dir().join("test_kalix_float");
+        let base_path_float = base_path_float_buf.to_str().unwrap();
 
         // Write with double precision
         write_series_with_precision(base_path_double, &[&ts], true).unwrap();

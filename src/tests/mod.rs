@@ -1,4 +1,7 @@
 #[cfg(test)]
+mod test_helpers;
+
+#[cfg(test)]
 mod test_table;
 
 #[cfg(test)]

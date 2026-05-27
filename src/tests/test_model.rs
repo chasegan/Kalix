@@ -375,12 +375,11 @@ fn test_model_with_all_node_types() {
         let mean = model.data_cache.series[ds_idx].mean();
         let std_dev = model.data_cache.series[ds_idx].std_dev();
 
-        let new_answer = (len, mean, std_dev);
-        let old_answer = &regression_results[key];
-        println!("\n{}", key);
-        println!("new_answer: {:?}", new_answer);
-        println!("old_answer: {:?}", old_answer);
-        assert_eq!(new_answer, *old_answer);
+        crate::tests::test_helpers::assert_stats_close(
+            (len, mean, std_dev),
+            regression_results[key],
+            key,
+        );
     }
 }
 

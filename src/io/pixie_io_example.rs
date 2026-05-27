@@ -31,7 +31,8 @@ pub fn demonstrate_pixie_io() -> Result<(), Box<dyn std::error::Error>> {
         temperature.push(timestamp, value);
     }
 
-    let base_path = "/tmp/demo_hydro_data";
+    let base_path_buf = std::env::temp_dir().join("demo_hydro_data");
+    let base_path = base_path_buf.to_str().unwrap();
 
     // Example 1: Write multiple series with default precision (32-bit float)
     println!("\n1. Writing time series data (32-bit float precision)...");
@@ -59,7 +60,8 @@ pub fn demonstrate_pixie_io() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Example 5: High precision writing (64-bit double)
-    let high_precision_path = "/tmp/demo_hydro_data_hq";
+    let high_precision_path_buf = std::env::temp_dir().join("demo_hydro_data_hq");
+    let high_precision_path = high_precision_path_buf.to_str().unwrap();
     println!("\n5. Writing with high precision (64-bit double)...");
     write_series_with_precision(high_precision_path, &[&flow_rate], true)?;
 
@@ -107,7 +109,8 @@ pub fn demonstrate_error_handling() {
     temp_series.name = "temp_data".to_string();
     temp_series.push(wrap_to_u64(1640995200), 1.0);
 
-    let temp_path = "/tmp/temp_test";
+    let temp_path_buf = std::env::temp_dir().join("temp_test");
+    let temp_path = temp_path_buf.to_str().unwrap();
     if write_series(temp_path, &[&temp_series]).is_ok() {
         match read_series(temp_path, "nonexistent_series") {
             Ok(_) => println!("Unexpected success!"),

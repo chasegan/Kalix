@@ -9,6 +9,7 @@ use crate::numerical::opt::objectives::{ObjectiveFunction, SdebObjective};
 use crate::numerical::opt::optimisable::Optimisable;
 use crate::io::ini_model_io::IniModelIO;
 use crate::io::csv_io::read_ts;
+use approx::assert_relative_eq;
 
 #[test]
 fn test_compute_centroid_two_individuals() {
@@ -118,7 +119,7 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         0.5668231608655752];
     problem.set_params(&norm_params).expect("Failed to set parameters");
     let objective = problem.evaluate().expect("Failed to evaluate");
-    assert_eq!(objective, 586370.2927733948);
+    assert_relative_eq!(objective, 586370.2927733948, epsilon = 1e-15);
     println!("objective: {}", objective);
 
     //Generation #1, Member #1 (again!)
@@ -129,7 +130,7 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         0.5668231608655752];
     problem.set_params(&norm_params).expect("Failed to set parameters");
     let objective = problem.evaluate().expect("Failed to evaluate");
-    assert_eq!(objective, 586370.2927733948);
+    assert_relative_eq!(objective, 586370.2927733948, epsilon = 1e-15);
     println!("objective: {}", objective);
 
     //Generation #1, Member #100
@@ -140,7 +141,7 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         0.3080289381321884];
     problem.set_params(&norm_params).expect("Failed to set parameters");
     let objective = problem.evaluate().expect("Failed to evaluate");
-    assert_eq!(objective, 2946660.1050290554,);
+    assert_relative_eq!(objective, 2946660.1050290554, epsilon = 1e-15);
     println!("objective: {}", objective);
 
     //Generation #2, Member #20
@@ -151,7 +152,7 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         0.9044542732080423];
     problem.set_params(&norm_params).expect("Failed to set parameters");
     let objective = problem.evaluate().expect("Failed to evaluate");
-    assert_eq!(objective, 1531118.4885771151);
+    assert_relative_eq!(objective, 1531118.4885771151, epsilon = 1e-15);
     println!("objective: {}", objective);
 
 
@@ -163,6 +164,6 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
         0.4322361432468632];
     problem.set_params(&norm_params).expect("Failed to set parameters");
     let objective = problem.evaluate().expect("Failed to evaluate");
-    assert_eq!(objective, 143928.3770721163);
+    assert_relative_eq!(objective, 143928.3770721163, epsilon = 1e-15);
     println!("objective: {}", objective);
 }

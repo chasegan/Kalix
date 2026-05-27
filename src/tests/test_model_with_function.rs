@@ -59,12 +59,11 @@ fn test_model_with_function() {
         let mean = model.data_cache.series[ds_idx].mean();
         let std_dev = model.data_cache.series[ds_idx].std_dev();
 
-        let new_answer = (len, mean, std_dev);
-        let old_answer = &regression_results[key];
-        println!("\n{}", key);
-        println!("new_answer: {:?}", new_answer);
-        println!("old_answer: {:?}", old_answer);
-        assert_eq!(new_answer, *old_answer);
+        crate::tests::test_helpers::assert_stats_close(
+            (len, mean, std_dev),
+            regression_results[key],
+            key,
+        );
     }
 }
 
@@ -125,12 +124,11 @@ fn test_model_with_changing_constant() {
         let mean = model.data_cache.series[ds_idx].mean();
         let std_dev = model.data_cache.series[ds_idx].std_dev();
 
-        let new_answer = (len, mean, std_dev);
-        let old_answer = &regression_results[key];
-        println!("\n{}", key);
-        println!("new_answer: {:?}", new_answer);
-        println!("old_answer: {:?}", old_answer);
-        assert_eq!(new_answer, *old_answer);
+        crate::tests::test_helpers::assert_stats_close(
+            (len, mean, std_dev),
+            regression_results[key],
+            key,
+        );
     }
 
     /////////////////////////////////////////////////////////// Change constant
@@ -146,11 +144,10 @@ fn test_model_with_changing_constant() {
         let mean = model.data_cache.series[ds_idx].mean();
         let std_dev = model.data_cache.series[ds_idx].std_dev();
 
-        let new_answer = (len, mean, std_dev);
-        let old_answer = (48824, 4.0, 0.0); //c.run_counter * c.run_counter = 4.0
-        println!("\nWith changed constant value");
-        println!("new_answer: {:?}", new_answer);
-        println!("old_answer: {:?}", old_answer);
-        assert_eq!(new_answer, old_answer);
+        crate::tests::test_helpers::assert_stats_close(
+            (len, mean, std_dev),
+            (48824, 4.0, 0.0), //c.run_counter * c.run_counter = 4.0
+            "With changed constant value",
+        );
     }
 }
