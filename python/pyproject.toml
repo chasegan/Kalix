@@ -4,12 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "kalix"
-version = "0.2.4-dev0"
+version = "0.2.4-dev1"
 description = "Python interface for Kalix: hydrological modelling and Pixie (Gorilla-compressed) timeseries I/O"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MPL-2.0"
-license-files = ["LICENSE"]
 authors = [{ name = "Kalix contributors" }]
 classifiers = [
     "Programming Language :: Rust",
