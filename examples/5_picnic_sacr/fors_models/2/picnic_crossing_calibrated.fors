@@ -1,0 +1,43 @@
+// fors model saved at 04/11/2025 12:45:29.107
+
+///////////////////////////////////////
+// input data definitions
+
+[input]
+name = rain
+file = rain_infilled.csv
+
+[input]
+name = evap
+file = mpot_rolled.csv
+
+///////////////////////////////////////
+// node definitions
+
+[sacramento]
+name = sacnode
+area = 228
+model = sac1
+
+///////////////////////////////////////
+// sacramento models
+
+[sacramento model]
+name = sac1
+rainfall = 1.07388663689952*rain
+evaporation = evap
+parameters = +
+    5.63473557853443E-05, 299.999897237688, 349.993436076528, 0.0059066068705075, + //adimp, lzfpm, lzfsm, lzpk
+    0.0213207693504297, 78.2525262004848, 0.000383987562492787, 0.499999062054166, + //lzsk, lztwm, pctim, pfree
+    3.52820568640329, 6.1230254116388E-06, 0.00671373048138324, 1.86312459341758E-05, + //rexp, sarva, side, ssout
+    85.2608020747197, 0.184282609662892, 46.6223704395772, 25.710123842462 //uzfwm, uzk, uztwm, zperc
+uh = 0, 0.347165714951404, 0.652834285048596
+
+///////////////////////////////////////
+// recorders
+
+[recorder]
+node = sacnode
+outno = 0
+filename = modelled_flow.csv
+
