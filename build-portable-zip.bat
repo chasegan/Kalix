@@ -19,11 +19,14 @@ python bump-version.py
 
 echo Building Rust CLI...
 cargo build --release
+if errorlevel 1 exit /b 1
 
 echo Building KalixIDE...
 cd kalixide
 call gradlew.bat clean --no-daemon
+if errorlevel 1 (cd .. & exit /b 1)
 call gradlew.bat build jpackageImage --no-daemon
+if errorlevel 1 (cd .. & exit /b 1)
 cd ..
 
 echo Preparing distribution...
@@ -35,9 +38,15 @@ set ZIP_NAME=KalixIDE-Windows-%VERSION%-Portable.zip
 if exist "%DIST_FOLDER%" rmdir /s /q "%DIST_FOLDER%"
 mkdir "%DIST_FOLDER%"
 xcopy /E /I /Y kalixide\build\jpackage\KalixIDE "%DIST_FOLDER%"
+if errorlevel 1 exit /b 1
+if not exist "%DIST_FOLDER%\KalixIDE.exe" (
+    echo ERROR: KalixIDE.exe missing from jpackage output
+    exit /b 1
+)
 
 echo Copying Kalix CLI into distribution...
 copy /Y target\release\kalix.exe "%DIST_FOLDER%\"
+if errorlevel 1 exit /b 1
 
 echo Creating KalixIDE zip...
 powershell -Command "Compress-Archive -Path '%DIST_FOLDER%' -DestinationPath 'dist\%ZIP_NAME%' -Force"

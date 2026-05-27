@@ -32,7 +32,12 @@ class KalixPathTest {
 
     @Test
     void parseAbsolute() {
-        KalixPath kp = KalixPath.parse("/home/user/data.csv");
+        // Use a platform-appropriate absolute path. On Windows, "/home/..." is not
+        // absolute per Paths.get(...).isAbsolute() because there's no drive letter.
+        String absolute = System.getProperty("os.name").toLowerCase().contains("win")
+            ? "C:\\Users\\test\\data.csv"
+            : "/home/user/data.csv";
+        KalixPath kp = KalixPath.parse(absolute);
         assertEquals(KalixPath.PathKind.ABSOLUTE, kp.kind());
         assertNull(kp.target());
     }
