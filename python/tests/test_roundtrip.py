@@ -89,10 +89,83 @@ def test_write_rejects_irregular_timestep(tmp_path):
         kalix.write_pixie(tmp_path / "bad.pxb", df)
 
 
-def test_write_requires_datetime_index(tmp_path):
-    df = pd.DataFrame({"v": [1.0, 2.0, 3.0]})  # default RangeIndex
-    with pytest.raises(TypeError, match="DatetimeIndex"):
+def test_write_naive_datetime_index_treated_as_utc(tmp_path):
+    n = 24
+    idx = pd.date_range("2020-01-01", periods=n, freq="h")  # naive
+    df = pd.DataFrame({"v": np.arange(n, dtype=float)}, index=idx)
+
+    kalix.write_pixie(tmp_path / "out.pxb", df)
+    df2 = kalix.read_pixie(tmp_path / "out.pxb")
+
+    np.testing.assert_array_equal(df2["v"].to_numpy(), df["v"].to_numpy())
+    assert df2.index[0] == pd.Timestamp("2020-01-01", tz="UTC")
+    assert df2.index.tz is not None
+
+
+def test_write_promotes_zeroth_string_column_with_warning(tmp_path):
+    df = pd.DataFrame({
+        "time": ["2020-01-01", "2020-01-02", "2020-01-03"],
+        "flow": [1.0, 2.0, 3.0],
+    })
+    with pytest.warns(UserWarning, match="auto-converted"):
+        kalix.write_pixie(tmp_path / "out.pxb", df)
+
+    df2 = kalix.read_pixie(tmp_path / "out.pxb")
+    assert list(df2.columns) == ["flow"]
+    assert df2.index[0] == pd.Timestamp("2020-01-01", tz="UTC")
+    np.testing.assert_array_equal(df2["flow"].to_numpy(), [1.0, 2.0, 3.0])
+
+
+def test_write_converts_string_index_with_warning(tmp_path):
+    df = pd.DataFrame(
+        {"v": [1.0, 2.0, 3.0]},
+        index=pd.Index(["2020-01-01", "2020-01-02", "2020-01-03"]),
+    )
+    with pytest.warns(UserWarning, match="auto-converted"):
+        kalix.write_pixie(tmp_path / "out.pxb", df)
+
+    df2 = kalix.read_pixie(tmp_path / "out.pxb")
+    assert df2.index[0] == pd.Timestamp("2020-01-01", tz="UTC")
+    np.testing.assert_array_equal(df2["v"].to_numpy(), [1.0, 2.0, 3.0])
+
+
+def test_write_rejects_integer_zeroth_column(tmp_path):
+    df = pd.DataFrame({
+        "epoch_ish": [0, 1, 2],
+        "flow": [1.0, 2.0, 3.0],
+    })
+    with pytest.raises(TypeError, match="Integer/float"):
         kalix.write_pixie(tmp_path / "bad.pxb", df)
+
+
+def test_write_rejects_float_zeroth_column(tmp_path):
+    # Original failing case: a frame with default RangeIndex and a float
+    # zeroth column should error (was the old "requires DatetimeIndex" path).
+    df = pd.DataFrame({"v": [1.0, 2.0, 3.0]})
+    with pytest.raises(TypeError, match="Integer/float"):
+        kalix.write_pixie(tmp_path / "bad.pxb", df)
+
+
+def test_write_rejects_integer_index(tmp_path):
+    df = pd.DataFrame(
+        {"v": [1.0, 2.0, 3.0]},
+        index=pd.Index([100, 200, 300]),
+    )
+    with pytest.raises(TypeError, match="Integer/float"):
+        kalix.write_pixie(tmp_path / "bad.pxb", df)
+
+
+def test_write_does_not_mutate_input(tmp_path):
+    df = pd.DataFrame({
+        "time": ["2020-01-01", "2020-01-02"],
+        "v": [1.0, 2.0],
+    })
+    original = df.copy(deep=True)
+
+    with pytest.warns(UserWarning):
+        kalix.write_pixie(tmp_path / "out.pxb", df)
+
+    pd.testing.assert_frame_equal(df, original)
 
 
 def test_cli_pixie_output_is_readable(tmp_path):

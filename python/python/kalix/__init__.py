@@ -5,6 +5,7 @@ timeseries format, .pxt/.pxb paired files), exposed as pandas DataFrames.
 """
 from __future__ import annotations
 
+import warnings
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Union
@@ -45,6 +46,78 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
     return pd.DataFrame(series_dict, index=index)
 
 
+def _is_default_range_index(idx: pd.Index) -> bool:
+    return (
+        isinstance(idx, pd.RangeIndex)
+        and idx.start == 0
+        and idx.step == 1
+    )
+
+
+def _coerce_to_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a df with a tz-aware UTC DatetimeIndex, shallow-copying if needed.
+
+    Heuristics for non-DatetimeIndex inputs:
+      * default ``RangeIndex(0, n, 1)``: promote and drop the zeroth column;
+      * otherwise: convert the existing index in place.
+
+    Integer/float dtypes are never auto-interpreted as datetimes (avoids
+    silently treating values as epoch nanoseconds). A ``UserWarning`` is
+    emitted on any auto-conversion path.
+    """
+    idx = df.index
+
+    if isinstance(idx, pd.DatetimeIndex):
+        if idx.tz is None:
+            df = df.copy(deep=False)
+            df.index = idx.tz_localize("UTC")
+        return df
+
+    if _is_default_range_index(idx):
+        if df.shape[1] == 0:
+            raise ValueError(
+                "DataFrame has no DatetimeIndex and no columns to promote"
+            )
+        column_name = df.columns[0]
+        candidate = df.iloc[:, 0]
+        source_desc = f"column '{column_name}'"
+    else:
+        column_name = None
+        candidate = pd.Series(idx)
+        source_desc = "index"
+
+    # Reject numerics outright — pd.to_datetime would silently treat them as ns.
+    if candidate.dtype.kind in "iufb":
+        raise TypeError(
+            f"Cannot interpret {source_desc} as datetimes: dtype is "
+            f"{candidate.dtype}. Integer/float values are not auto-converted "
+            "(this avoids silently misinterpreting them as epoch nanoseconds). "
+            "Set a DatetimeIndex explicitly before calling write_pixie."
+        )
+
+    try:
+        new_index = pd.to_datetime(candidate, utc=True, errors="raise")
+    except (ValueError, TypeError) as e:
+        raise TypeError(
+            f"Cannot convert {source_desc} to a DatetimeIndex: {e}"
+        ) from e
+
+    new_index = pd.DatetimeIndex(new_index)
+    new_index.name = "time"
+
+    df = df.copy(deep=False)
+    if column_name is not None:
+        df = df.drop(columns=[column_name])
+    df.index = new_index
+
+    warnings.warn(
+        f"write_pixie: auto-converted {source_desc} to a UTC DatetimeIndex.",
+        UserWarning,
+        stacklevel=3,
+    )
+    return df
+
+
 def write_pixie(
     path: PathLike,
     df: pd.DataFrame,
@@ -58,20 +131,33 @@ def write_pixie(
         Output path. Any ``.pxt`` or ``.pxb`` extension is stripped; both
         files are always written using the resulting base path.
     df
-        Data to write. The index must be a ``DatetimeIndex`` with a regular
-        timestep; each column becomes one series.
+        Data to write. Preferred form: a ``DatetimeIndex`` (tz-aware UTC) with
+        a regular timestep, one series per column.
+
+        If the index is not a ``DatetimeIndex``, two heuristics are tried
+        (each emits a ``UserWarning``):
+
+        * default ``RangeIndex(0, n, 1)``: the zeroth column is promoted and
+          dropped from the body;
+        * any other non-default index: the index itself is converted.
+
+        Conversion uses ``pd.to_datetime(..., utc=True)``. Integer or float
+        dtypes are rejected to avoid silently misinterpreting values as
+        epoch nanoseconds.
+
+        A naive ``DatetimeIndex`` is localised to UTC silently.
     use_64bit_precision
         ``True`` (default) writes Gorilla-double (lossless). ``False`` writes
         Gorilla-float (about half the size, single-precision).
     """
-    if not isinstance(df.index, pd.DatetimeIndex):
-        raise TypeError("DataFrame index must be a DatetimeIndex")
+    df = _coerce_to_datetime_index(df)
     if df.empty:
         raise ValueError("DataFrame is empty")
 
-    # Unix seconds, UTC. astype(int64) gives nanoseconds since epoch.
+    # Explicit unit conversion: pandas 3.0 defaults to µs (was ns in 2.x), so
+    # don't assume astype("int64") gives nanoseconds.
     timestamps_sec = np.asarray(
-        df.index.astype("int64") // 1_000_000_000, dtype=np.int64
+        df.index.tz_convert("UTC").as_unit("s").asi8, dtype=np.int64
     )
 
     series_names = [str(col) for col in df.columns]
