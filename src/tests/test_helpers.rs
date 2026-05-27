@@ -12,6 +12,6 @@ pub fn assert_stats_close(
     println!("new_answer: {:?}", new);
     println!("old_answer: {:?}", old);
     assert_eq!(new.0, old.0, "{}: length mismatch", key);
-    assert_relative_eq!(new.1, old.1, epsilon = 1e-15);
-    assert_relative_eq!(new.2, old.2, epsilon = 1e-15);
+    assert_relative_eq!(new.1, old.1, max_relative = 1e-15);
+    assert_relative_eq!(new.2, old.2, max_relative = 1e-15);
 }
