@@ -25,7 +25,7 @@ echo Building KalixIDE...
 cd kalixide
 call gradlew.bat clean --no-daemon
 if errorlevel 1 (cd .. & exit /b 1)
-call gradlew.bat build jpackageImage --no-daemon
+call gradlew.bat assemble jpackageImage --no-daemon
 if errorlevel 1 (cd .. & exit /b 1)
 cd ..
 

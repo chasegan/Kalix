@@ -22,7 +22,7 @@ cargo build --release
 echo "Building KalixIDE..."
 cd kalixide
 ./gradlew clean --no-daemon
-./gradlew build jpackageImage --no-daemon
+./gradlew assemble jpackageImage --no-daemon
 cd ..
 
 echo "Preparing distribution..."
