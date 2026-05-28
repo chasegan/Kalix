@@ -82,9 +82,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: Linux
-          # macOS bundle disabled until project reaches 1.0.0 — jpackage
-          # rejects 0.x app-versions on macOS (CFBundleShortVersionString
-          # requires major >= 1). macOS Python wheel still builds below.
+          - os: macos-latest        # Apple Silicon
+            platform: macOS
           - os: windows-latest
             platform: Windows
     runs-on: ${{ matrix.os }}
