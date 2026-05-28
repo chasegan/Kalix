@@ -9,6 +9,14 @@ use crate::numerical::interpolation::lerp;
 const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
+pub enum StorageRoutingMethod {
+    #[default]
+    None,
+    NLMuskingum,
+    PiecewiseLinear,
+}
+
+#[derive(Default, Clone)]
 pub struct RoutingNode {
     pub name: String,
     pub location: Location,
@@ -22,11 +30,14 @@ pub struct RoutingNode {
     //Parameters
     lag: usize,         //number of days lag
     x: f64,             //inflow bias x
-    pwl_divs: usize,    //number of divisions in the pwl routing
+    n_divs: usize,      //number of divisions in the storage routing
+    routing_method: StorageRoutingMethod,
+    nlm_k: f64,         //nonlinear muskingum k parameter
+    nlm_m: f64,         //nonlinear muskingum m parameter
     pwl_segs: usize,    //number of segments defined in the seg_par_xx arrays
     pwl_qq: [f64; 32],  //pwl routing definition - index flows, supporting up to 32 points
     pwl_tt: [f64; 32],  //pwl routing definition - travel times, supporting up to 32 points
-    
+
     //State vars and calculation vars for lag routing part
     //====================================================
     //The array below is for storing flow values in the lag part of the routing. 
@@ -36,9 +47,9 @@ pub struct RoutingNode {
     lag_sto_used: usize,      //number of elements being used, set to (self.lag+1) during initialise.
     lag_iter_index: usize,    //this index keeps track of the index where the next inflows are going.
     
-    //State vars and calculation vars for pwl routing part
-    //====================================================
-    pwl_sto_array: [f64; 32], //This is storage in the divisions, supporting up to 32 divisions.
+    //State vars and calculation vars for NWM and PWL routing parts
+    //=============================================================
+    div_sto_array: [f64; 32], //This is storage in the divisions, supporting up to 32 divisions.
     //The arrays below hold parameters for the PWL segments, supporting up to 32 segments.
     seg_par_q1: [f64; 32],    //PWL segment parameters - qr at the start of the segment
     seg_par_q2: [f64; 32],    //PWL segment parameters - qr at the end of the segment
@@ -68,10 +79,12 @@ impl RoutingNode {
     pub fn new() -> RoutingNode {
         RoutingNode {
             name: "".to_string(),
-            pwl_divs: 1,
+            n_divs: 1,
             x: 0.0,
             lag: 0,
             typical_regulated_flow: 0.0,
+            nlm_k: 0.0,
+            nlm_m: 0.75,
             ..Default::default()
         }
     }
@@ -82,9 +95,9 @@ impl RoutingNode {
     pub fn get_x(&self) -> f64 { self.x }
     
     pub  fn set_divs(&mut self, value: usize) {
-        self.pwl_divs = value;
+        self.n_divs = value;
     }
-    pub fn get_divs(&self) -> usize { self.pwl_divs }
+    pub fn get_divs(&self) -> usize { self.n_divs }
 
     pub fn set_lag(&mut self, value: usize) {
         self.lag = value;
@@ -126,8 +139,8 @@ impl RoutingNode {
         for i in 0..self.lag_sto_used {
             answer += self.lag_sto_array[i];
         }
-        for i in 0..self.pwl_divs {
-            answer += self.pwl_sto_array[i];
+        for i in 0..self.n_divs {
+            answer += self.div_sto_array[i];
         }
         answer
     }
@@ -150,10 +163,10 @@ impl Node for RoutingNode {
                 self.name, self.lag, self.lag_sto_array.len() - 1
             ));
         }
-        if self.pwl_divs > self.pwl_sto_array.len() {
+        if self.n_divs > self.div_sto_array.len() {
             return Err(format!(
                 "Error in node '{}'. Number of divisions {} exceeds maximum of {}.",
-                self.name, self.pwl_divs, self.pwl_sto_array.len()
+                self.name, self.n_divs, self.div_sto_array.len()
             ));
         }
         if self.pwl_segs + 1 > self.pwl_qq.len() {
@@ -179,7 +192,7 @@ impl Node for RoutingNode {
         self.lag_iter_index = 0;
 
         // Pre-compute PWL segment parameters
-        let d = self.pwl_divs as f64;
+        let d = self.n_divs as f64;
         let mut temp_v = 0.0;
         for i in 0..self.pwl_segs {
 
@@ -206,7 +219,7 @@ impl Node for RoutingNode {
             self.seg_par_bb[i] = b;
             self.seg_par_cc[i] = c;
         }
-        self.pwl_sto_array.fill(0.0);
+        self.div_sto_array.fill(0.0);
 
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
@@ -261,9 +274,9 @@ impl Node for RoutingNode {
         // Pwl routing second
         let mut qout = flow_out_of_lag_reach; //define so it gets ingested into the first division
         let x_is_unity = self.x > 0.999999;
-        for i in 0..self.pwl_divs {
+        for i in 0..self.n_divs {
             let qin = qout;                   //inflow to this division
-            let vi = self.pwl_sto_array[i];   //initial storage volume for this division
+            let vi = self.div_sto_array[i];   //initial storage volume for this division
             let mut vf = 0.0;                 //variable to hold final storage volume
 
             if x_is_unity {
@@ -301,7 +314,7 @@ impl Node for RoutingNode {
             }
 
             //The new storage volume for this division is vf.
-            self.pwl_sto_array[i] = vf;
+            self.div_sto_array[i] = vf;
         }
 
         // Store outflow
