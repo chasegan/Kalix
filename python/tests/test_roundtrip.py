@@ -168,26 +168,61 @@ def test_write_does_not_mutate_input(tmp_path):
     pd.testing.assert_frame_equal(df, original)
 
 
+def test_simulate_roundtrip(tmp_path):
+    """End-to-end: run an example model in-process and read its outputs back."""
+    from pathlib import Path
+
+    # Resolve relative to this test file → portable across machines and CI.
+    repo_root = Path(__file__).resolve().parents[2]
+    model_ini = repo_root / "src/tests/example_models/4/linked_model.ini"
+    if not model_ini.exists():
+        pytest.skip(f"example model not found at {model_ini}")
+
+    out_base = tmp_path / "sim"
+    kalix.simulate(model_ini, output_file=str(out_base) + ".pxb")
+
+    assert (tmp_path / "sim.pxb").exists()
+    assert (tmp_path / "sim.pxt").exists()
+
+    df = kalix.read_pixie(str(out_base) + ".pxb")
+    assert len(df) > 0
+    assert len(df.columns) > 0
+
+
+def test_simulate_requires_keyword_output_file(tmp_path):
+    """output_file must be passed by name, not position."""
+    with pytest.raises(TypeError):
+        kalix.simulate("m.ini", str(tmp_path / "out.pxb"))  # type: ignore[misc]
+
+
+def test_simulate_raises_on_missing_model(tmp_path):
+    with pytest.raises(RuntimeError):
+        kalix.simulate(
+            str(tmp_path / "does_not_exist.ini"),
+            output_file=str(tmp_path / "out.pxb"),
+        )
+
+
 def test_cli_pixie_output_is_readable(tmp_path):
     """If the kalix CLI produces .pxt/.pxb files, we can read them.
 
-    Skipped if the kalix binary isn't on PATH; this is a smoke check, not
-    a strict requirement.
+    Skipped if the kalix binary or example model isn't available; this is a
+    smoke check, not a strict requirement.
     """
     import shutil
     import subprocess
+    from pathlib import Path
 
-    kalix_bin = shutil.which("kalix") or "/Users/chas/github/Kalix/target/release/kalix"
-    example_models = (
-        "/Users/chas/github/Kalix/kalixide/example_models/1/model.ini"
-    )
-    import os
-    if not os.path.exists(example_models) or not os.path.exists(kalix_bin):
+    repo_root = Path(__file__).resolve().parents[2]
+    kalix_bin = shutil.which("kalix") or str(repo_root / "target/release/kalix")
+    model_ini = repo_root / "src/tests/example_models/4/linked_model.ini"
+
+    if not model_ini.exists() or not Path(kalix_bin).exists():
         pytest.skip("kalix binary or example model unavailable")
 
     out_base = tmp_path / "sim"
     result = subprocess.run(
-        [kalix_bin, "simulate", example_models, "-o", str(out_base) + ".pxb"],
+        [kalix_bin, "simulate", str(model_ini), "-o", str(out_base) + ".pxb"],
         capture_output=True,
         text=True,
         timeout=60,

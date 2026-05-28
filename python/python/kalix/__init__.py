@@ -13,9 +13,9 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from kalix._native import _read_pixie_raw, _write_pixie_raw
+from kalix._native import _read_pixie_raw, _simulate_from_file, _write_pixie_raw
 
-__all__ = ["read_pixie", "write_pixie", "__version__"]
+__all__ = ["read_pixie", "simulate", "write_pixie", "__version__"]
 
 try:
     __version__ = _pkg_version("kalix")
@@ -44,6 +44,34 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
     index = pd.to_datetime(timestamps_sec, unit="s", utc=True)
     index.name = "time"
     return pd.DataFrame(series_dict, index=index)
+
+
+def simulate(
+    model_file: PathLike,
+    *,
+    output_file: PathLike,
+) -> None:
+    """Run a Kalix model from an INI file and write its outputs to disk.
+
+    The Python equivalent of ``kalix sim <model_file> -o <output_file>``,
+    but in-process — no separate CLI binary required.
+
+    Parameters
+    ----------
+    model_file
+        Path to the model ``.ini`` file.
+    output_file
+        Path to write outputs to. The format is inferred from the extension
+        (``.pxb`` for the Pixie pair, ``.csv`` for CSV).
+
+    Notes
+    -----
+    ``output_file`` is keyword-only — call as
+    ``kalix.simulate("m.ini", output_file="out.pxb")``. This mirrors the
+    CLI's flag-style and leaves room for additional keyword-only outputs
+    (mass balance, profiling) to be added without breaking callers.
+    """
+    _simulate_from_file(str(model_file), str(output_file))
 
 
 def _is_default_range_index(idx: pd.Index) -> bool:

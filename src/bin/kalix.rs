@@ -129,22 +129,25 @@ fn main() {
 
             let total_start = Instant::now();
 
-            // Load model from file
+            // Load + configure
             let load_start = Instant::now();
             println!("Loading model file: {}", model_file);
             let mut m = match IniModelIO::new().read_model_file(model_file.as_str()) {
                 Ok(model) => model,
                 Err(s) => {
-                    panic!("Error: {}", s); // TODO: handle error properly
+                    eprintln!("Error: {}", s);
+                    std::process::exit(1);
                 }
             };
 
             println!("Running simulation...");
-            if let Err(e) =  m.configure() {
-                panic!("Error: {}", e); // TODO: handle error properly
+            if let Err(e) = m.configure() {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
             let load_time = load_start.elapsed();
 
+            // Run
             let sim_start = Instant::now();
             if let Err(e) = m.run() {
                 eprintln!("Error: {}", e);

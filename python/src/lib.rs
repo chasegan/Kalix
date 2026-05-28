@@ -4,10 +4,11 @@
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
 use kalix::io::pixie_io;
+use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
-use pyo3::exceptions::{PyIOError, PyValueError};
+use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -150,9 +151,23 @@ fn _write_pixie_raw(
     Ok(())
 }
 
+/// Run a simulation from an INI model file and write outputs to disk.
+///
+/// Output format is inferred from the file extension (`.csv`, `.pxb`, etc.)
+/// by `Model::write_outputs`. The GIL is released during the run so other
+/// Python threads can make progress on long simulations.
+#[pyfunction]
+fn _simulate_from_file(py: Python<'_>, model_path: &str, output_path: &str) -> PyResult<()> {
+    py.allow_threads(|| {
+        run::simulate_from_file(model_path, output_path)
+            .map_err(PyRuntimeError::new_err)
+    })
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
     Ok(())
 }
