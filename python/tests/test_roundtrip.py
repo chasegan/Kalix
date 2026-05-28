@@ -203,6 +203,44 @@ def test_simulate_raises_on_missing_model(tmp_path):
         )
 
 
+def test_simulate_rejects_no_outputs():
+    with pytest.raises(ValueError, match="at least one"):
+        kalix.simulate("m.ini")
+
+
+def test_simulate_with_mass_balance(tmp_path):
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    model_ini = repo_root / "src/tests/example_models/4/linked_model.ini"
+    if not model_ini.exists():
+        pytest.skip(f"example model not found at {model_ini}")
+
+    out = tmp_path / "sim.pxb"
+    mb = tmp_path / "mass_balance.txt"
+    kalix.simulate(model_ini, output_file=out, mass_balance=mb)
+
+    assert out.exists()
+    assert mb.exists()
+    assert mb.stat().st_size > 0
+
+
+def test_simulate_mass_balance_only(tmp_path):
+    """Mass-balance-only run: no output_file, just the mass-balance report."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    model_ini = repo_root / "src/tests/example_models/4/linked_model.ini"
+    if not model_ini.exists():
+        pytest.skip(f"example model not found at {model_ini}")
+
+    mb = tmp_path / "mass_balance.txt"
+    kalix.simulate(model_ini, mass_balance=mb)
+
+    assert mb.exists()
+    assert not (tmp_path / "sim.pxb").exists()
+
+
 def test_cli_pixie_output_is_readable(tmp_path):
     """If the kalix CLI produces .pxt/.pxb files, we can read them.
 

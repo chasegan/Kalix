@@ -151,15 +151,21 @@ fn _write_pixie_raw(
     Ok(())
 }
 
-/// Run a simulation from an INI model file and write outputs to disk.
+/// Run a simulation from an INI model file and write optional outputs to disk.
 ///
 /// Output format is inferred from the file extension (`.csv`, `.pxb`, etc.)
 /// by `Model::write_outputs`. The GIL is released during the run so other
 /// Python threads can make progress on long simulations.
 #[pyfunction]
-fn _simulate_from_file(py: Python<'_>, model_path: &str, output_path: &str) -> PyResult<()> {
+#[pyo3(signature = (model_path, output_path=None, mass_balance_path=None))]
+fn _simulate_from_file(
+    py: Python<'_>,
+    model_path: &str,
+    output_path: Option<&str>,
+    mass_balance_path: Option<&str>,
+) -> PyResult<()> {
     py.allow_threads(|| {
-        run::simulate_from_file(model_path, output_path)
+        run::simulate_from_file(model_path, output_path, mass_balance_path)
             .map_err(PyRuntimeError::new_err)
     })
 }

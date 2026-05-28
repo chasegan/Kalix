@@ -1,5 +1,5 @@
 """Type stubs for the native (PyO3) module."""
-from typing import Tuple, Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,4 +12,8 @@ def _write_pixie_raw(
     values_per_series: List[NDArray[np.float64]],
     use_64bit_precision: bool,
 ) -> None: ...
-def _simulate_from_file(model_path: str, output_path: str) -> None: ...
+def _simulate_from_file(
+    model_path: str,
+    output_path: Optional[str] = None,
+    mass_balance_path: Optional[str] = None,
+) -> None: ...
