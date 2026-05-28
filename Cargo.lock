@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "kalix"
-version = "1.0.0-dev0"
+version = "0.2.5"
 dependencies = [
  "approx",
  "base64",
