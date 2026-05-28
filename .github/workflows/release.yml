@@ -82,8 +82,11 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: Linux
-          - os: macos-latest        # Apple Silicon
-            platform: macOS
+          # macOS bundle disabled: the packaged .app launches but the IDE
+          # can't locate kalix when launched via Finder (minimal PATH; the
+          # CliLocator doesn't search bundle-relative paths). Re-enable
+          # once KalixCliLocator looks inside Contents/MacOS/.
+          # macOS Python wheel still builds below.
           - os: windows-latest
             platform: Windows
     runs-on: ${{ matrix.os }}
@@ -111,7 +114,7 @@ jobs:
         shell: cmd
         run: build-portable-zip.bat
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.platform }}
           path: dist/KalixIDE-${{ matrix.platform }}-${{ needs.verify-version.outputs.version }}-Portable.zip
@@ -152,7 +155,7 @@ jobs:
           args: --release --out dist
           sccache: 'true'
           manylinux: auto
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.target-name }}
           path: python/dist/*.whl
@@ -174,7 +177,7 @@ jobs:
           working-directory: python
           command: sdist
           args: --out dist
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: python/dist/*.tar.gz
@@ -191,14 +194,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           pattern: bundle-*
           path: artifacts
           merge-multiple: true
       - name: List bundle artifacts
         run: ls -lh artifacts/
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.verify-version.outputs.tag }}
           name: Kalix ${{ needs.verify-version.outputs.tag }}
@@ -219,12 +222,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: sdist
           path: dist
@@ -242,7 +245,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.verify-version.outputs.tag }}
           draft: false

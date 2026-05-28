@@ -59,6 +59,10 @@ case "$(uname -s)" in
 esac
 
 DIST_FOLDER="dist/KalixIDE-${PLATFORM}-${VERSION}"
+# macOS bundles must end in .app for Finder/LaunchServices to recognize them.
+if [ "$PLATFORM" = "macOS" ]; then
+    DIST_FOLDER="${DIST_FOLDER}.app"
+fi
 ZIP_NAME="KalixIDE-${PLATFORM}-${VERSION}-Portable.zip"
 
 echo "Preparing KalixIDE distribution..."
@@ -70,6 +74,14 @@ echo "Copying Kalix CLI into distribution..."
 CLI_DEST="${DIST_FOLDER}${CLI_DEST_SUBDIR:+/${CLI_DEST_SUBDIR}}"
 mkdir -p "${CLI_DEST}"
 cp "target/release/${CLI_BINARY}" "${CLI_DEST}/"
+
+# Re-sign the macOS bundle: jpackage signs ad-hoc, but copying kalix into
+# Contents/MacOS/ invalidates that seal. Re-sign ad-hoc (-) over the whole
+# tree so spctl/Gatekeeper sees a consistent signature.
+if [ "$PLATFORM" = "macOS" ]; then
+    echo "Re-signing macOS bundle (ad-hoc)..."
+    codesign --force --deep --sign - "${DIST_FOLDER}"
+fi
 
 echo "Creating KalixIDE zip..."
 cd dist
