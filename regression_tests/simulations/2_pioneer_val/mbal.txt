@@ -9,54 +9,54 @@ MASS BALANCE REPORT
 
 INFLOW NODES
   palmtree_pipeline_inf_05b, 1.2957983037045029
-  reach01_predmm, 146.88778599877693
-  reach02_predmm, 477.22583318754516
-  reach03_predmm, 375.6449778335999
-  reach04_predmm, 149.36767744774298
-  reach05a_predmm, 461.94223362610376
-  reach05b_predmm_owens, 249.6528294424091
-  reach05b_predmm_palmtree, 55.576424928875674
-  reach06_predmm, 258.2343345453725
-  reach07_predmm, 365.82847541778375
+  reach01_predmm, 147.4240875948876
+  reach02_predmm, 479.49329130649164
+  reach03_predmm, 378.0664358460062
+  reach04_predmm, 149.55660953539893
+  reach05a_predmm, 463.7457143269999
+  reach05b_predmm_owens, 250.54865433111124
+  reach05b_predmm_palmtree, 55.77584884402867
+  reach06_predmm, 259.6696722072333
+  reach07_predmm, 367.17336930759177
   silver_pipeline_in_07, 0.4829020749136645
   tannalo_pipeline_inf_05b, 0.9158074147103563
 
 UNREGULATED_USER NODES
-  abovemarian_supp_div_07, -0.13230897570391428
-  cattle_supp_06, -0.024996574210062822
+  abovemarian_supp_div_07, -0.13236651084721532
+  cattle_supp_06, -0.02499657421006284
   cc_ds_tan_supp_div_05b, -0.09655771893751887
   cc_unsupp_div_dsfh_05a, -0.0006846754227686621
-  cc_unsupp_div_usfh_05a, -0.09111499727246035
-  cc_unsupp_div_ustan_05b, -0.0019537157483949506
+  cc_unsupp_div_usfh_05a, -0.09111499727246043
+  cc_unsupp_div_ustan_05b, -0.001953715748394951
   cc_us_gar_supp_div_05b, -0.04755004499958056
-  fh_unsupp_div_05a, -0.01568681549242574
-  marian_mill_supp_hp_div_07, -0.28702515630901504
+  fh_unsupp_div_05a, -0.015686815492425742
+  marian_mill_supp_hp_div_07, -0.28704529814108243
   marian_supp_div_07, 0
   mcgregor_supp_div_07, -0.0399250155259956
-  owens_unsupp_div_05b, -0.008527233435441204
-  palmtree_supp_div_05b, -0.0008596089376442437
-  pion_supp_div_03, -0.2901757823064172
-  septimus_supp_06, -0.7927351290336097
-  silver_pipeline_out_05b, -0.4829020749136645
+  owens_unsupp_div_05b, -0.008527212454366112
+  palmtree_supp_div_05b, -0.0008596089376442426
+  pion_supp_div_03, -0.28543128697914405
+  septimus_supp_06, -0.7927351290336094
+  silver_pipeline_out_05b, -0.48290207491366466
   silver_supp_div_07, -0.09437392283160566
   silvermcgregor_supp_div_07, -0.02213362259242156
   tannalo_supp_div_05b, -0.4570388989131807
 
 LOSS NODES
-  reach03_loss, -8.292010964185526
-  reach06_loss, -9.99196568152451
-  reach07_loss, -9.612957466526165
-  reach2_loss, -16.144664461136273
+  reach03_loss, -7.710119440880889
+  reach06_loss, -9.770506963546893
+  reach07_loss, -8.644286179651392
+  reach2_loss, -10.570362867505343
 
 STORAGE NODES
-  marianweir, -1.1598655137844458
-  mirani, -3.629050719237126
-  teemburra, 0.5152481914607243
-  waterhole, -6.466152512104503
+  marianweir, -0.6790156362653029
+  mirani, -3.5753977327217568
+  teemburra, 0.46227215224041157
+  waterhole, -4.388007225261832
 
 ROUTING NODES
-  bigmodrouting, -0.08427380938987845
-  pwlr2, -0.00000000002860878964875592
+  bigmodrouting, -0.07867903151357462
+  pwlr2, -0.0013458814808556257
 
 CONFLUENCE NODES
   fhccconfluence, 0
@@ -83,8 +83,8 @@ GAUGE NODES
   teemburratw, 0
 
 BLACKHOLE NODES
-  eos, -2485.3028373224797
+  eos, -2506.3108591632376
 
 ----------------------------------
-TOTAL = 0.00000000001617284084431958
+TOTAL = -0.00000000000017497114868092467
 ----------------------------------

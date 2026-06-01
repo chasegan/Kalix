@@ -51,8 +51,7 @@ Verifying: 24_nlm_routing/model.ini
   ✓ VERIFIED!
 
 Verifying: 2_pioneer_val/model.ini
-  ✗ Failed: Error: Error on line 7: Error reading /Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv: In '/Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv': Input timestamps are not regularly spaced: expected step_size 31536000s but row 4 -> 5 has gap 31622400s. The simulation requires evenly-spaced timestamps.
-
+  ✓ VERIFIED!
 
 Verifying: 3_calibrate_constants/model.ini
   ✓ VERIFIED!
@@ -78,12 +77,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-06-01T23:41:40.932044
+Timestamp: 2026-06-02T00:54:58.970270
 Total: 24
-Passed: 23
-Failed: 1
+Passed: 24
+Failed: 0
 
-Failed models:
-  - 2_pioneer_val/model.ini
-    Failed: Error: Error on line 7: Error reading /Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv: In '/Users/chas/github/Kalix/regression_tests/simulations/2_pioneer_val/data/PioneerInflows.csv': Input timestamps are not regularly spaced: expected step_size 31536000s but row 4 -> 5 has gap 31622400s. The simulation requires evenly-spaced timestamps.
-
+✓ All models verified successfully!
