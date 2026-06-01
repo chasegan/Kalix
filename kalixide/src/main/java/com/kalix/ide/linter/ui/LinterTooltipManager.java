@@ -22,10 +22,28 @@ public class LinterTooltipManager {
     private final RSyntaxTextArea textArea;
     private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine;
 
+    // Delay before a tooltip appears once the pointer settles on an issue line. Transient
+    // crossings (e.g. sweeping the mouse past several error lines) cancel the pending show
+    // before it fires, so no tooltip is ever built for lines the pointer merely passes over.
+    private static final int SHOW_DELAY_MS = 200;
+
     // Tooltip components
     private JWindow tooltipWindow;
     private JPanel tooltipPanel;
     private Timer hideTimer;
+    private Timer showTimer;
+
+    // Cached severity icons, built once to avoid re-rendering the glyph on every tooltip build.
+    private final FontIcon errorIcon = FontIcon.of(FontAwesomeSolid.TIMES, 12, Color.RED);
+    private final FontIcon warningIcon = FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 12, Color.ORANGE);
+
+    // Line number (1-based) of the issue whose tooltip is currently displayed, or -1 if none.
+    // Used to avoid rebuilding/re-showing the tooltip on every mouseMoved event while the
+    // pointer remains over the same issue line.
+    private int currentlyDisplayedLine = -1;
+
+    // Line number (1-based) of the issue whose tooltip is scheduled to appear, or -1 if none.
+    private int pendingLine = -1;
 
     public LinterTooltipManager(RSyntaxTextArea textArea, ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
         this.textArea = textArea;
@@ -54,20 +72,41 @@ public class LinterTooltipManager {
         textArea.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                // Cancel any existing hide timer
-                if (hideTimer != null && hideTimer.isRunning()) {
-                    hideTimer.stop();
-                }
-
                 ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
 
                 if (issue != null) {
-                    showCustomTooltip(issue, e.getLocationOnScreen());
+                    int line = issue.getLineNumber();
+
+                    // Pointer is still over the issue line whose tooltip is already showing:
+                    // nothing to rebuild, just keep it visible.
+                    if (line == currentlyDisplayedLine) {
+                        stopTimer(hideTimer);
+                        return;
+                    }
+
+                    // A show for this same line is already scheduled: let it fire, don't reschedule.
+                    if (line == pendingLine && showTimer != null && showTimer.isRunning()) {
+                        return;
+                    }
+
+                    // Moved onto a different issue line: hide anything currently shown, then
+                    // schedule a single build+show after a short dwell delay. If the pointer
+                    // moves on before the delay elapses, the show is cancelled and never builds.
+                    stopTimer(hideTimer);
+                    if (currentlyDisplayedLine != -1) {
+                        hideCustomTooltip();
+                    }
+                    scheduleShow(issue, e.getLocationOnScreen());
                 } else {
-                    // Hide tooltip after a short delay to prevent flickering
-                    hideTimer = new Timer(100, evt -> hideCustomTooltip());
-                    hideTimer.setRepeats(false);
-                    hideTimer.start();
+                    // Moved off an issue line: cancel any pending show, and hide after a short
+                    // delay to prevent flickering. Guard against restarting on every event.
+                    stopTimer(showTimer);
+                    pendingLine = -1;
+                    if (currentlyDisplayedLine != -1 && (hideTimer == null || !hideTimer.isRunning())) {
+                        hideTimer = new Timer(100, evt -> hideCustomTooltip());
+                        hideTimer.setRepeats(false);
+                        hideTimer.start();
+                    }
                 }
             }
         });
@@ -78,6 +117,28 @@ public class LinterTooltipManager {
                 hideCustomTooltip();
             }
         });
+    }
+
+    /**
+     * Schedule the tooltip for the given issue to appear after the dwell delay.
+     * Cancels any previously scheduled show.
+     */
+    private void scheduleShow(ValidationIssue issue, Point screenLocation) {
+        stopTimer(showTimer);
+        pendingLine = issue.getLineNumber();
+        showTimer = new Timer(SHOW_DELAY_MS, evt -> {
+            showCustomTooltip(issue, screenLocation);
+            currentlyDisplayedLine = pendingLine;
+            pendingLine = -1;
+        });
+        showTimer.setRepeats(false);
+        showTimer.start();
+    }
+
+    private static void stopTimer(Timer timer) {
+        if (timer != null && timer.isRunning()) {
+            timer.stop();
+        }
     }
 
     private void showCustomTooltip(ValidationIssue issue, Point screenLocation) {
@@ -107,6 +168,7 @@ public class LinterTooltipManager {
         if (tooltipWindow != null) {
             tooltipWindow.setVisible(false);
         }
+        currentlyDisplayedLine = -1;
     }
 
     private ValidationIssue getValidationIssueForPosition(Point point) {
@@ -128,10 +190,10 @@ public class LinterTooltipManager {
         FontIcon icon;
         Color severityColor;
         if (issue.getSeverity() == ValidationRule.Severity.ERROR) {
-            icon = FontIcon.of(FontAwesomeSolid.TIMES, 12, Color.RED);
+            icon = errorIcon;
             severityColor = Color.RED;
         } else {
-            icon = FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 12, Color.ORANGE);
+            icon = warningIcon;
             severityColor = Color.ORANGE;
         }
 
@@ -157,9 +219,8 @@ public class LinterTooltipManager {
      * Clean up resources.
      */
     public void dispose() {
-        if (hideTimer != null && hideTimer.isRunning()) {
-            hideTimer.stop();
-        }
+        stopTimer(hideTimer);
+        stopTimer(showTimer);
         if (tooltipWindow != null) {
             tooltipWindow.dispose();
         }
