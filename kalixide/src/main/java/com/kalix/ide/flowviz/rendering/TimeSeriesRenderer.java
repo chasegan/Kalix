@@ -93,7 +93,7 @@ public class TimeSeriesRenderer {
         if (strategy.useFullResolution) {
             renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode);
         } else {
-            renderLOD(g2d, series, viewport, strategy.lodData);
+            renderLOD(g2d, series, viewport, strategy.lodData, style);
         }
     }
     
@@ -266,7 +266,7 @@ public class TimeSeriesRenderer {
     }
     
     private void renderLOD(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
-                          LODManager.LODData lodData) {
+                          LODManager.LODData lodData, LineStyle style) {
         double[][] minMaxBands = lodData.minMaxBands;
         boolean[] hasValidData = lodData.hasValidData;
 
@@ -276,7 +276,10 @@ public class TimeSeriesRenderer {
         int clipTop = viewport.getPlotY();
         int clipBottom = viewport.getPlotY() + viewport.getPlotHeight();
 
-        g2d.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        // The min/max outlines are the series' line, so they take its custom stroke
+        // (thickness + dash). The vertical connectors below keep their own fixed
+        // strokes — they are a band-fill aid, not the line itself.
+        g2d.setStroke(style.stroke().toBasicStroke());
 
         // First pass: draw connected envelope (upper and lower bounds)
         Path2D.Double upperPath = new Path2D.Double();
