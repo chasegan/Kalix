@@ -318,6 +318,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.set_x(v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name))?);
+                        } else if name_lower == "nlm" {
+                            let all_values = csv_string_to_f64_vec(v)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                            if all_values.len() < 2 {
+                                return Err(format!("Error on line {}: Expected k and m values.", ini_property.line_number));
+                            }
+                            n.set_k(all_values[0]);
+                            n.set_m(all_values[1]);
                         } else if name_lower == "pwl" {
                             let all_values = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -721,6 +729,11 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 if n.get_divs() != 1 { ini_doc.set_property(section_name.as_str(), "n_divs", n.get_divs().to_string().as_str()); }
                 if n.get_x() != 0.0 { ini_doc.set_property(section_name.as_str(), "x", n.get_x().to_string().as_str()); }
                 if n.get_lag() != 0 { ini_doc.set_property(section_name.as_str(), "lag", n.get_lag().to_string().as_str()); }
+                if n.get_k() != 0.0 {
+                    let m = n.get_m();
+                    let k = n.get_k();
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "nlm", format!("{}, {}", k, m).as_str());
+                }
                 let pwl_values = n.get_routing_table_as_vec();
                 if pwl_values.len() > 0 {
                     let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
