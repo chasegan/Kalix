@@ -153,13 +153,13 @@ impl RoutingNode {
                 storage_lag + pure_lag
             }
             StorageRoutingMethod::LagPlusNLM => {
-                // Storage routing lag at a given flow is dS/dQ for the full reach.
-                // S_full = K_full * Q^m, so dS/dQ = K_full * m * Q^(m-1).
-                // Note nlm_k_working_units is per-division; full reach is *n_divs.
+                // Storage routing lag at a given flow is dS/dQ summed across divisions.
+                // Per-div S = k * Q^m so per-div dS/dQ = k * m * Q^(m-1); n_divs in series
+                // gives total reach lag = n_divs * k * m * Q^(m-1).
                 let pure_lag = self.lag as f64;
                 if flow_rate > 0.0 {
-                    let k_full = self.nlm_k_working_units * self.n_divs as f64;
-                    let storage_lag = k_full * self.nlm_m * flow_rate.powf(self.nlm_m_minus_1);
+                    let storage_lag = self.n_divs as f64 * self.nlm_k_working_units
+                                    * self.nlm_m * flow_rate.powf(self.nlm_m_minus_1);
                     storage_lag + pure_lag
                 } else {
                     // m<1 would give infinite lag at Q=0; fall back to pure lag only.
@@ -270,10 +270,19 @@ impl Node for RoutingNode {
 
         // Init for NLM routing
         if matches!(self.routing_method, StorageRoutingMethod::LagPlusNLM) {
-            // Divide k by n_divs so n sub-reaches in series reproduce the full-reach
-            // storage at steady state (S_full = K*Q^m == sum of n * (K/n)*Q^m).
-            self.nlm_k_working_units = self.nlm_k * 1e-3 * (1f64 / 86.4).powf(self.nlm_m)
-                                       / self.n_divs as f64;
+            // Convert step_size (seconds) to days. On the configure-time pass step_size
+            // is still 0; fall back to 1 day. initialise() is called again from
+            // initialize_network() once step_size is set, which overwrites these values
+            // before run_flow_phase ever fires.
+            let dt_days = if data_cache.step_size == 0 {
+                1.0
+            } else {
+                data_cache.step_size as f64 / 86400.0
+            };
+            // k applies per-division (convention matching other NLM implementations).
+            // Total reach storage at steady state is n_divs * k * Q^m.
+            self.nlm_k_working_units = self.nlm_k * 1e-3
+                                     * (1.0 / (86.4 * dt_days)).powf(self.nlm_m);
             let one_minus_x = 1.0 - self.x;
             self.nlm_one_minus_x = one_minus_x;
             self.nlm_inv_one_minus_x = if self.x_is_unity { 0.0 } else { 1.0 / one_minus_x };

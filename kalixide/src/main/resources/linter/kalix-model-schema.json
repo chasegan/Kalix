@@ -308,7 +308,7 @@
       "description": "Routing node with advanced flow distribution capabilities",
       "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc"],
-      "optional_params": ["lag", "pwl", "n_divs", "x", "typical_regulated_flow"],
+      "optional_params": ["lag", "pwl", "n_divs", "x", "typical_regulated_flow", "nlm"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {
@@ -343,6 +343,11 @@
         "typical_regulated_flow": {
           "type": "number",
           "description": "Typical regulated flow"
+        },
+        "nlm": {
+          "type": "number_sequence",
+          "count": 2,
+          "description": "Nonlinear muskingum parameters: two comma-separated numbers"
         }
       }
     },
