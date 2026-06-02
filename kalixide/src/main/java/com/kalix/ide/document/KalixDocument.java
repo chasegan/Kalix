@@ -160,6 +160,25 @@ public class KalixDocument {
         return mapPanel;
     }
 
+    /**
+     * Returns the component shown in the right-hand contextual view when this document
+     * is active, or {@code null} if this document has no contextual view (in which case
+     * the contextual view region collapses). For a model document this is the map.
+     *
+     * <p>When non-model document types are introduced (Phase 4), a base type would
+     * return {@code null} here and a data type would return a plot.
+     */
+    public java.awt.Component getContextView() {
+        return mapPanel;
+    }
+
+    /**
+     * @return a short display name for tabs and titles: the file name, or "Untitled"
+     */
+    public String getDisplayName() {
+        return file != null ? file.getName() : "Untitled";
+    }
+
     public HydrologicalModel getModel() {
         return model;
     }

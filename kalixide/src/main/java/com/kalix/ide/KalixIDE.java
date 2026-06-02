@@ -85,6 +85,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
     private WorkspacePanel workspacePanel;
     private ProjectTreePanel projectTreePanel;
+    private com.kalix.ide.workspace.DocumentTabPane documentTabPane;
+    private com.kalix.ide.workspace.ContextViewPanel contextViewPanel;
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
@@ -161,6 +163,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         } else {
             loadLastOpenedFile();
         }
+
+        // Ensure at least one document is always open.
+        if (documentManager.getActiveDocument() == null) {
+            fileOperations.newModel();
+        }
     }
     
     /**
@@ -211,105 +218,35 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * Initializes all UI components.
      */
     private void initializeComponents() {
-        // Create the active document. It constructs its own editor, map and model and
-        // owns the per-document wiring (text<->model parse, text<->map sync, per-document
-        // auto-zoom). See docs/multi-document-architecture.md.
-        KalixDocument document = new KalixDocument();
+        // The document set. Documents are created lazily (on open/new) via createDocument()
+        // so the tab strip and contextual view — built in setupLayout() — are subscribed
+        // before the first document appears.
         documentManager = new DocumentManager();
-        documentManager.setActiveDocument(document);
 
-        // Cache the active document's views for existing call sites.
-        textEditor = document.getEditor();
-        mapPanel = document.getMapPanel();
-        hydrologicalModel = document.getModel();
-
-        // Application-level status updates react to the active document's model changes.
-        hydrologicalModel.addChangeListener(this::onModelChanged);
-
-        // Initialize linter for text editor
-        textEditor.initializeLinter(schemaManager);
-
-        // Shared model supplier for context commands and auto-complete
-        modelSupplier = document.getModelSupplier();
-
-        // Initialize context-aware command system
-        textEditor.initializeContextCommands(this, modelSupplier, () -> fileOperations.getCurrentFile());
-
-        // Initialize auto-complete for text editor (with base directory for resolving input file paths)
-        textEditor.initializeAutoComplete(schemaManager, modelSupplier, () -> {
-            if (fileOperations != null) {
-                return fileOperations.getCurrentWorkingDirectory();
-            }
-            return null;
-        });
-
-        // Set up linter base directory supplier to use current file's directory
-        textEditor.setLinterBaseDirectorySupplier(() -> {
-            if (fileOperations != null) {
-                return fileOperations.getCurrentWorkingDirectory();
-            }
-            return null;
-        });
-
-        // Set up RunManager base directory supplier for file dialogs
-        RunManager.setBaseDirectorySupplier(() -> {
-            if (fileOperations != null) {
-                return fileOperations.getCurrentWorkingDirectory();
-            }
-            return null;
-        });
-
-        // Set up RunManager editor text supplier for diff operations
-        RunManager.setEditorTextSupplier(() -> {
-            if (textEditor != null) {
-                return textEditor.getText();
-            }
-            return null;
-        });
-
-        // Set up MinimalEditorWindow base directory supplier for file dialogs
-        MinimalEditorWindow.setBaseDirectorySupplier(() -> {
-            if (fileOperations != null) {
-                return fileOperations.getCurrentWorkingDirectory();
-            }
-            return null;
-        });
-
-        // Load saved node theme
-        String savedNodeTheme = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
-        NodeTheme.Theme nodeTheme = NodeTheme.themeFromString(savedNodeTheme);
-        mapPanel.setNodeTheme(nodeTheme);
-
-        // Load saved gridlines preference
-        boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true); // Default to true
-        mapPanel.setShowGridlines(showGridlines);
-        textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
-        
         statusLabel = new JLabel(AppConstants.STATUS_READY);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H,
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H
         ));
-        
+
         progressBar = new AutoHidingProgressBar();
-        
-        // Complete manager initialization now that components exist
+
+        // Model supplier reflects whichever document is currently active.
+        modelSupplier = () -> {
+            KalixDocument doc = documentManager.getActiveDocument();
+            return doc != null ? doc.getModelSupplier().get() : null;
+        };
+
+        // File operations create/focus documents via the factory and act on the active one.
         fileOperations = new FileOperationsManager(
-            this, documentManager::getActiveDocument,
+            this, documentManager, this::createDocument,
             this::updateStatus,
             recentFilesManager::addRecentFile,
-            () -> {
-                // Update title bar
-                titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
-                // Update file watcher
-                fileWatcherManager.watchFile(fileOperations.getCurrentFile());
-            },
-            () -> updateModelFromText(true), // Model update callback for when files are loaded with auto-zoom
-            fileWatcherManager // Pass file watcher for coordinating auto-reload on save
+            this::onActiveDocumentFileChanged,
+            fileWatcherManager
         );
-        
+
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
-        fileDropHandler.setBeforeLoadCallback(this::checkUnsavedChanges); // Check for unsaved changes before loading dropped files
         versionChecker = new VersionChecker(this::updateStatus);
 
         // Initialize STDIO task manager
@@ -320,25 +257,108 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             this,
             fileOperations::getCurrentWorkingDirectory
         );
-        
-        
-        // Set up component listeners
-        textEditor.setDirtyStateListener(isDirty -> titleBarManager.updateTitle(isDirty, fileOperations::getCurrentFile));
-        textEditor.setFileDropHandler(file -> {
-            // Check for unsaved changes before loading dropped file
-            if (checkUnsavedChanges()) {
-                fileOperations.loadModelFile(file);
+
+        // Suppliers for auxiliary windows always reflect the active document.
+        RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
+        RunManager.setEditorTextSupplier(() -> {
+            KalixDocument doc = documentManager.getActiveDocument();
+            return doc != null ? doc.getText() : null;
+        });
+        MinimalEditorWindow.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
+
+        // React to active-document changes: re-point cached views, title, watcher, status.
+        documentManager.addActiveDocumentChangeListener(this::onActiveDocumentChanged);
+    }
+
+    /**
+     * Creates a fresh document, wires its per-document features against shared services,
+     * and registers it with the document manager (which adds its tab). The caller sets the
+     * document's content/file and makes it active.
+     *
+     * @return the newly created, configured, registered document
+     */
+    private KalixDocument createDocument() {
+        KalixDocument document = new KalixDocument();
+        configureDocument(document);
+        documentManager.addDocument(document);
+        return document;
+    }
+
+    /**
+     * Wires a document's editor and map to shared application services, binding each
+     * feature to <em>this</em> document (not the active one) so background documents stay
+     * correct.
+     */
+    private void configureDocument(KalixDocument document) {
+        EnhancedTextEditor editor = document.getEditor();
+        MapPanel map = document.getMapPanel();
+
+        // Map appearance from saved preferences.
+        map.setNodeTheme(NodeTheme.themeFromString(
+            PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME)));
+        map.setShowGridlines(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
+
+        // Editor features, each bound to this document's own model and working directory.
+        editor.initializeLinter(schemaManager);
+        editor.initializeContextCommands(this, document.getModelSupplier(), document::getFile);
+        editor.initializeAutoComplete(schemaManager, document.getModelSupplier(), document::getWorkingDirectory);
+        editor.setLinterBaseDirectorySupplier(document::getWorkingDirectory);
+
+        // Status bar reflects the active document's model changes.
+        document.getModel().addChangeListener(this::onModelChanged);
+
+        // Dirty state updates the tab marker and (when active) the window title.
+        editor.setDirtyStateListener(isDirty -> {
+            documentTabPane.refreshTab(document);
+            if (document == documentManager.getActiveDocument()) {
+                titleBarManager.updateTitle(isDirty, document::getFile);
             }
         });
-        
-        // Note: model parsing on text changes, map<->model connection, and
-        // text<->map synchronisation are wired by KalixDocument itself.
 
-        // Register theme-aware components with theme manager
+        // Dropping a file onto this editor opens it in a tab.
+        editor.setFileDropHandler(fileOperations::loadModelFile);
+
+        // Ensure this document's map reflects the current theme.
+        SwingUtilities.invokeLater(map::updateThemeColors);
+    }
+
+    /**
+     * Re-points cached views and application-level UI at the newly active document.
+     * The argument may be {@code null} transiently when the last document is closed before
+     * a replacement is opened.
+     */
+    private void onActiveDocumentChanged(KalixDocument document) {
+        if (document == null) {
+            return;
+        }
+        textEditor = document.getEditor();
+        mapPanel = document.getMapPanel();
+        hydrologicalModel = document.getModel();
+
+        // Theme operations target the active map; refresh it in case the theme changed
+        // while this document was in the background.
         themeManager.registerThemeAwareComponents(mapPanel, textEditor);
+        SwingUtilities.invokeLater(mapPanel::updateThemeColors);
 
-        // Initial parse of default text
-        updateModelFromText();
+        titleBarManager.updateTitle(document.isDirty(), document::getFile);
+        fileWatcherManager.watchFile(document.getFile());
+        documentTabPane.refreshTab(document);
+        setupNavigationStateListener();
+        refreshModelStatus();
+    }
+
+    /**
+     * Invoked when the active document's backing file changes without a document switch
+     * (Save As). Refreshes the file-derived UI: title, tab, and file watcher.
+     */
+    private void onActiveDocumentFileChanged() {
+        KalixDocument document = documentManager.getActiveDocument();
+        if (document == null) {
+            return;
+        }
+        titleBarManager.updateTitle(document.isDirty(), document::getFile);
+        fileWatcherManager.watchFile(document.getFile());
+        documentTabPane.refreshTab(document);
     }
 
     /**
@@ -375,11 +395,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Builds the three-region work area from the active document's editor and map,
-     * restoring persisted region widths and collapsed states and persisting any changes.
+     * Builds the three-region work area: [ project tree | document tabs | contextual view ].
+     * The tab strip and contextual view observe the document manager, so they must be
+     * created (and subscribed) here, before the first document is opened. Restores persisted
+     * region widths and collapsed states and persists any changes.
      */
     private WorkspacePanel buildWorkspacePanel() {
         projectTreePanel = new ProjectTreePanel();
+        documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
+        contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
         int treeWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_TREE_WIDTH, AppConstants.DEFAULT_TREE_WIDTH);
         int mapWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_MAP_WIDTH, AppConstants.DEFAULT_MAP_WIDTH);
@@ -387,7 +411,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         boolean mapCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, false);
 
         workspacePanel = new WorkspacePanel(
-            projectTreePanel, textEditor, mapPanel,
+            projectTreePanel, documentTabPane, contextViewPanel,
             treeWidth, mapWidth, treeCollapsed, mapCollapsed);
 
         workspacePanel.setLayoutChangeListener((tw, mw, tc, mc) -> {
@@ -398,6 +422,21 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         });
 
         return workspacePanel;
+    }
+
+    /**
+     * Handles a tab close request: prompts to save if the document is dirty, closes it,
+     * and ensures at least one document remains open.
+     */
+    private void requestCloseDocument(KalixDocument document) {
+        if (!checkUnsavedChanges(document,
+                "You have unsaved changes in \"%s\".\n\nDo you want to save your changes before closing?")) {
+            return;
+        }
+        documentManager.closeDocument(document);
+        if (documentManager.getDocuments().isEmpty()) {
+            fileOperations.newModel();
+        }
     }
 
     /**
@@ -593,10 +632,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void onModelChanged(ModelChangeEvent event) {
         SwingUtilities.invokeLater(() -> {
+            if (hydrologicalModel == null) {
+                return;
+            }
             var stats = hydrologicalModel.getStatistics();
-            int currentNodeCount = stats.getNodeCount();
             String baseMessage = String.format("Model: %d nodes, %d links",
-                currentNodeCount, stats.getLinkCount());
+                stats.getNodeCount(), stats.getLinkCount());
 
             // Note: per-document auto-zoom on the 0 -> >0 transition is handled by KalixDocument.
 
@@ -610,65 +651,53 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         });
     }
-    
-    /**
-     * Updates the active document's data model from its current text editor content.
-     * Uses incremental parsing for better performance.
-     */
-    private void updateModelFromText() {
-        updateModelFromText(false);
-    }
 
-    private void updateModelFromText(boolean autoZoomToFit) {
-        documentManager.getActiveDocument().parseModelFromText(autoZoomToFit);
+    /**
+     * Updates the status bar to reflect the active document's current model statistics.
+     * Used when switching tabs (no model-change event fires on a mere switch).
+     */
+    private void refreshModelStatus() {
+        if (hydrologicalModel == null) {
+            return;
+        }
+        var stats = hydrologicalModel.getStatistics();
+        updateStatus(String.format("Model: %d nodes, %d links",
+            stats.getNodeCount(), stats.getLinkCount()));
     }
     
     /**
-     * Loads a model file from the given path.
-     * Used by recent files manager callback.
-     * Checks for unsaved changes before loading.
+     * Loads a model file from the given path into a tab (focusing it if already open).
+     * Used by the recent files manager callback.
      *
      * @param filePath The absolute path to the file to load
      */
     private void loadModelFile(String filePath) {
-        // Check for unsaved changes before loading
-        if (checkUnsavedChanges()) {
-            fileOperations.loadModelFile(filePath);
-        }
+        fileOperations.loadModelFile(filePath);
     }
-    
-    
-    
+
+
+
     //
     // MenuBarCallbacks interface implementation
     //
-    
+
     /**
-     * Creates a new model by clearing the current content.
-     * This action will prompt the user to save any unsaved changes.
+     * Creates a new untitled model in its own tab.
      */
     @Override
     public void newModel() {
-        // Check for unsaved changes before proceeding
-        if (!checkUnsavedChanges()) {
-            return; // User cancelled the operation
-        }
         fileOperations.newModel();
     }
 
     /**
-     * Opens a model file using a file chooser dialog.
+     * Opens a model file using a file chooser dialog, in its own tab.
      * Supported formats include .ini files.
      */
     @Override
     public void openModel() {
-        // Check for unsaved changes before proceeding
-        if (!checkUnsavedChanges()) {
-            return; // User cancelled the operation
-        }
         fileOperations.openModel();
     }
-    
+
     /**
      * Saves the current model to its existing file location.
      * If no file is associated, prompts for a save location.
@@ -688,33 +717,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Checks for unsaved changes and prompts the user to save if necessary.
+     * Checks for unsaved changes in a specific document and prompts the user to save if
+     * necessary. The document is made active so the user sees what they are being asked
+     * about, and Save/Save As act on it.
      *
-     * @return true if the operation should proceed (no changes, user saved, or user chose not to save),
-     *         false if the user cancelled the operation
+     * @param document the document to check
+     * @param messageFormat message format string (formatted with the file name)
+     * @return true if the operation should proceed (no changes, saved, or chose not to
+     *         save), false if the user cancelled
      */
-    private boolean checkUnsavedChanges() {
-        return checkUnsavedChanges("You have unsaved changes in \"%s\".\n\nDo you want to save your changes?");
-    }
-
-    /**
-     * Checks for unsaved changes and prompts the user to save if necessary.
-     *
-     * @param messageFormat Custom message format string (will be formatted with fileName)
-     * @return true if the operation should proceed (no changes, user saved, or user chose not to save),
-     *         false if the user cancelled the operation
-     */
-    private boolean checkUnsavedChanges(String messageFormat) {
-        // Check if we should prompt to save unsaved changes
+    private boolean checkUnsavedChanges(KalixDocument document, String messageFormat) {
         boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
 
-        if (!promptOnExit || !textEditor.isDirty()) {
+        if (!promptOnExit || !document.isDirty()) {
             return true; // No prompt needed or no unsaved changes
         }
 
-        // Show save confirmation dialog
-        String fileName = fileOperations.getCurrentFile() != null ?
-            fileOperations.getCurrentFile().getName() : "Untitled";
+        // Make the document active so Save/Save As target it and the user sees it.
+        documentManager.setActiveDocument(document);
+
+        String fileName = document.getFile() != null ? document.getFile().getName() : "Untitled";
 
         int choice = JOptionPane.showConfirmDialog(
             this,
@@ -726,16 +748,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         switch (choice) {
             case JOptionPane.YES_OPTION:
-                // Save the file first
                 try {
-                    if (fileOperations.getCurrentFile() != null) {
+                    if (document.getFile() != null) {
                         fileOperations.saveModel();
                     } else {
-                        // No current file, need to save as
                         fileOperations.saveAsModel();
-                        // Check if save succeeded by seeing if we now have a current file
-                        if (fileOperations.getCurrentFile() == null) {
-                            // User cancelled save as dialog or save failed
+                        // If still no file, the user cancelled Save As.
+                        if (document.getFile() == null) {
                             return false;
                         }
                     }
@@ -763,9 +782,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void exitApplication() {
-        // Check for unsaved changes before exiting
-        if (!checkUnsavedChanges("You have unsaved changes in \"%s\".\n\nDo you want to save your changes before closing?")) {
-            return; // User cancelled the exit
+        // Check for unsaved changes in every open document before exiting.
+        for (KalixDocument document : new java.util.ArrayList<>(documentManager.getDocuments())) {
+            if (!checkUnsavedChanges(document,
+                    "You have unsaved changes in \"%s\".\n\nDo you want to save your changes before closing?")) {
+                return; // User cancelled the exit
+            }
         }
 
         // Clean up resources before exiting
@@ -1043,7 +1065,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void setNodeTheme(NodeTheme.Theme theme) {
-        mapPanel.setNodeTheme(theme);
+        // Apply to every open document's map so background tabs stay consistent.
+        for (KalixDocument document : documentManager.getDocuments()) {
+            document.getMapPanel().setNodeTheme(theme);
+        }
         // Save the preference
         PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
@@ -1183,14 +1208,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void toggleGridlines(boolean showGridlines) {
-        mapPanel.setShowGridlines(showGridlines);
+        // Apply to every open document's map so background tabs stay consistent.
+        for (KalixDocument document : documentManager.getDocuments()) {
+            document.getMapPanel().setShowGridlines(showGridlines);
+        }
         // Save preference
         PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, showGridlines);
     }
     
     @Override
     public boolean isGridlinesVisible() {
-        return mapPanel.isShowGridlines();
+        // Falls back to the saved preference before any document/map exists (toolbar build).
+        return mapPanel != null
+            ? mapPanel.isShowGridlines()
+            : PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
     }
 
     @Override
@@ -1343,22 +1374,30 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void navigateBack() {
-        textEditor.navigateBack();
+        if (textEditor != null) {
+            textEditor.navigateBack();
+        }
     }
 
     @Override
     public void navigateForward() {
-        textEditor.navigateForward();
+        if (textEditor != null) {
+            textEditor.navigateForward();
+        }
     }
 
     @Override
     public boolean canNavigateBack() {
-        return textEditor.getNavigationHistory().canGoBack();
+        return textEditor != null
+            && textEditor.getNavigationHistory() != null
+            && textEditor.getNavigationHistory().canGoBack();
     }
 
     @Override
     public boolean canNavigateForward() {
-        return textEditor.getNavigationHistory().canGoForward();
+        return textEditor != null
+            && textEditor.getNavigationHistory() != null
+            && textEditor.getNavigationHistory().canGoForward();
     }
 
     /**
@@ -1501,15 +1540,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @param file The file that has changed
      */
     private void handleFileReload(File file) {
-        // Only reload if the file is clean (not dirty)
-        if (!textEditor.isDirty()) {
-            try {
-                fileOperations.loadModelFile(file);
-                updateStatus("File reloaded: " + file.getName());
-            } catch (Exception e) {
-                updateStatus("Failed to reload file: " + e.getMessage());
-                logger.error("Error reloading file: {}", file, e);
-            }
+        // Find the document backing this file (the watcher follows the active document).
+        KalixDocument document = documentManager.findByFile(file);
+        if (document == null) {
+            document = documentManager.getActiveDocument();
+        }
+
+        // Only reload in place if the document is clean (no unsaved changes).
+        if (document != null && !document.isDirty()) {
+            fileOperations.reloadFile(file);
         } else {
             // File is dirty, don't auto-reload but notify user
             updateStatus("File changed externally, but has unsaved changes - not reloaded");

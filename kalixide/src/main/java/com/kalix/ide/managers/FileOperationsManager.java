@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -16,136 +17,155 @@ import java.util.function.Supplier;
 
 /**
  * Manages file operations including opening, saving, and file validation.
- * Operates on the active {@link KalixDocument}: the backing file lives on the
- * document, not on this manager, so the same manager serves whichever document
- * is currently active.
+ *
+ * <p>Opening and "new" create documents through a factory and make them active, so each
+ * file lives in its own tab; if a file is already open it is simply focused. Saving acts
+ * on the active document. The backing file lives on the {@link KalixDocument}, not on this
+ * manager, so the same manager serves whichever document is active.
  */
 public class FileOperationsManager {
 
     private final Component parentComponent;
-    private final Supplier<KalixDocument> activeDocumentSupplier;
+    private final DocumentManager documentManager;
+    private final Supplier<KalixDocument> documentFactory;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
-    private final Runnable modelUpdateCallback;
     private final FileWatcherManager fileWatcherManager;
 
     /**
      * Creates a new FileOperationsManager instance.
      *
      * @param parentComponent The parent component for dialogs
-     * @param activeDocumentSupplier Supplies the document file operations act upon
+     * @param documentManager The document set / active-document owner
+     * @param documentFactory Creates and registers a fresh (configured) document
      * @param statusUpdateCallback Callback for status updates
      * @param addRecentFileCallback Callback for adding recent files
-     * @param fileChangedCallback Callback when current file changes (load/new/save as)
-     * @param modelUpdateCallback Callback to trigger model parsing after file loads
+     * @param fileChangedCallback Callback when the active document's file identity changes
+     *                            without an active-document switch (e.g. Save As, reload)
      * @param fileWatcherManager The file watcher manager for coordinating auto-reload
      */
     public FileOperationsManager(Component parentComponent,
-                               Supplier<KalixDocument> activeDocumentSupplier,
+                               DocumentManager documentManager,
+                               Supplier<KalixDocument> documentFactory,
                                Consumer<String> statusUpdateCallback,
                                Consumer<String> addRecentFileCallback,
                                Runnable fileChangedCallback,
-                               Runnable modelUpdateCallback,
                                FileWatcherManager fileWatcherManager) {
         this.parentComponent = parentComponent;
-        this.activeDocumentSupplier = activeDocumentSupplier;
+        this.documentManager = documentManager;
+        this.documentFactory = documentFactory;
         this.statusUpdateCallback = statusUpdateCallback;
         this.addRecentFileCallback = addRecentFileCallback;
         this.fileChangedCallback = fileChangedCallback;
-        this.modelUpdateCallback = modelUpdateCallback;
         this.fileWatcherManager = fileWatcherManager;
     }
 
     /**
-     * @return the document that file operations currently act upon
+     * @return the active document that save operations act upon
      */
     private KalixDocument document() {
-        return activeDocumentSupplier.get();
+        return documentManager.getActiveDocument();
     }
-    
+
     /**
-     * Creates a new model by clearing the text editor and map panel.
+     * Creates a new untitled document in its own tab and makes it active.
      */
     public void newModel() {
-        KalixDocument document = document();
+        KalixDocument document = documentFactory.get();
         document.setText(AppConstants.DEFAULT_MODEL_TEXT);
-        document.getMapPanel().clearModel();
-        document.setFile(null); // Clear current file path for new model
+        document.setFile(null);
 
         // Clear last opened file preference since user is starting fresh
         PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, "");
 
+        documentManager.setActiveDocument(document);
+        document.parseModelFromText(true);
         statusUpdateCallback.accept(AppConstants.STATUS_NEW_MODEL_CREATED);
-        fileChangedCallback.run(); // Notify title bar of file change
-
-        // Trigger model parsing to update the map with the new default content
-        modelUpdateCallback.run();
     }
-    
+
     /**
      * Shows an open file dialog and loads the selected model file.
      */
     public void openModel() {
         JFileChooser fileChooser = createFileChooser();
-        
+
         int result = fileChooser.showOpenDialog(parentComponent);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             loadModelFile(selectedFile);
         }
     }
-    
+
     /**
      * Loads a model file from the specified file path.
-     * 
+     *
      * @param filePath The absolute path to the file to load
      */
     public void loadModelFile(String filePath) {
         loadModelFile(new File(filePath));
     }
-    
+
     /**
-     * Loads a model file from the specified File object.
-     * 
+     * Opens a model file in a new tab, or focuses its existing tab if already open.
+     *
      * @param file The file to load
      */
     public void loadModelFile(File file) {
+        // If the file is already open, just focus its tab.
+        KalixDocument existing = documentManager.findByFile(file);
+        if (existing != null) {
+            documentManager.setActiveDocument(existing);
+            statusUpdateCallback.accept("Switched to: " + file.getName());
+            return;
+        }
+
+        final String content;
+        try {
+            content = Files.readString(file.toPath());
+        } catch (IOException e) {
+            showFileOpenError(file, e);
+            return;
+        }
+
+        // Create the document only after a successful read, so a failed open leaves no
+        // empty tab behind.
+        KalixDocument document = documentFactory.get();
+        document.setText(content);
+        document.setFile(file);
+
+        // Add to recent files and remember as last opened for session restoration.
+        addRecentFileCallback.accept(file.getAbsolutePath());
+        PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, file.getAbsolutePath());
+
+        documentManager.setActiveDocument(document);
+        document.parseModelFromText(true);
+
+        String format = getFileFormat(file.getName());
+        statusUpdateCallback.accept(String.format("Opened %s model: %s (%s format)",
+            format, file.getName(), format));
+    }
+
+    /**
+     * Reloads the content of the open document backed by the given file (or the active
+     * document if none matches) in place, without opening a new tab. Used for external
+     * change auto-reload.
+     *
+     * @param file The file whose content should be re-read
+     */
+    public void reloadFile(File file) {
+        KalixDocument document = documentManager.findByFile(file);
+        if (document == null) {
+            document = document();
+        }
+        if (document == null) {
+            return;
+        }
         try {
             String content = Files.readString(file.toPath());
-
-            KalixDocument document = document();
-
-            // Set content in text editor
-            document.setText(content);
-
-            // Store the current file path for save functionality
-            document.setFile(file);
-
-            // Determine file format
-            String format = getFileFormat(file.getName());
-            
-            // Update status
-            String statusMessage = String.format("Opened %s model: %s (%s format)", 
-                format, file.getName(), format);
-            statusUpdateCallback.accept(statusMessage);
-            
-            // Add to recent files
-            addRecentFileCallback.accept(file.getAbsolutePath());
-
-            // Save as last opened file for session restoration
-            PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, file.getAbsolutePath());
-
-            // Clear the map panel
-            document.getMapPanel().clearModel();
-
-            // Notify title bar of file change
-            fileChangedCallback.run();
-            
-            // Trigger model parsing since setText() suppresses document listeners
-            // Model update callback will handle zoom-to-fit after parsing is complete
-            modelUpdateCallback.run();
-            
+            document.setText(content); // setText resets dirty state
+            document.parseModelFromText(true);
+            statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
             showFileOpenError(file, e);
         }
