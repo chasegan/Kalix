@@ -99,12 +99,11 @@ runtime {
             "--icon", iconFile.absolutePath
         )
 
-        installerOptions = listOf(
-            "--win-per-user-install",
-            "--win-dir-chooser",
-            "--win-menu",
-            "--win-shortcut"
-        )
+        // No installerOptions here on purpose: the release pipeline builds only
+        // the app *image* (jpackageImage), and the Windows MSI is produced
+        // separately by build-msi.bat (per-machine, for Ivanti Trusted
+        // Ownership). Keeping installer config out of Gradle avoids a second,
+        // divergent way to build an installer.
     }
 }
 

@@ -114,10 +114,43 @@ jobs:
         shell: cmd
         run: build-portable-zip.bat
 
+      # MSI installer (Windows trial asset). Additive: the zip above is
+      # untouched. jpackage's MSI backend needs WiX Toolset *3.x* specifically
+      # (candle.exe/light.exe) -- WiX 4+ removed those tools, so do NOT use the
+      # `dotnet tool install wix` route here. windows-latest has historically
+      # shipped WiX 3.x but it's being removed from the images, so install it
+      # explicitly and put its bin dir on PATH for jpackage to find.
+      - name: Install WiX Toolset 3.x (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install wixtoolset --version=3.14.1 --no-progress -y
+          $wixBin = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
+          if (-not $wixBin) { throw "WiX 3.x bin directory not found after install" }
+          Write-Host "WiX bin: $wixBin"
+          Add-Content -Path $env:GITHUB_PATH -Value $wixBin
+
+      - name: Build MSI (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: build-msi.bat
+
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.platform }}
           path: dist/KalixIDE-${{ matrix.platform }}-${{ needs.verify-version.outputs.version }}-Portable.zip
+          if-no-files-found: error
+
+      # Separate artifact (Windows only) so the shared zip upload above stays
+      # exactly as-is and Linux isn't expected to produce an MSI. The draft
+      # release downloads `bundle-*` (merge-multiple) and attaches everything,
+      # so this MSI lands on the release alongside the zip automatically.
+      - name: Upload MSI artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-Windows-msi
+          path: dist/KalixIDE-Windows-${{ needs.verify-version.outputs.version }}.msi
           if-no-files-found: error
 
   # ----------------------------------------------------------------------
