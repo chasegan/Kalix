@@ -1,6 +1,6 @@
 # Multi-Document Workspace Architecture
 
-Status: **In progress** — design agreed. Phase 1 complete; Phase 2 next.
+Status: **In progress** — design agreed. Phases 1–2 complete; Phase 3 next.
 
 ## Goal
 
