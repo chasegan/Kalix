@@ -1,6 +1,9 @@
 # Multi-Document Workspace Architecture
 
-Status: **In progress** — design agreed. Phases 1–4 complete; Phase 5 next.
+Status: **Complete** — all five phases delivered.
+
+Map zoom/pan is intentionally not persisted per file (auto-fit-on-load is the
+chosen default); everything else in the plan below is implemented.
 
 ## Goal
 
