@@ -73,6 +73,15 @@ public class PreferenceKeys {
     /** Absolute path of the currently open project folder, or empty if none (OS UI state). */
     public static final String UI_WORKSPACE_FOLDER = "ui.workspaceFolder";
 
+    /** Newline-joined absolute paths of open document tabs, in order (OS UI state). */
+    public static final String UI_OPEN_DOCUMENTS = "ui.openDocuments";
+
+    /** Newline-joined editor caret positions aligned with {@link #UI_OPEN_DOCUMENTS} (OS UI state). */
+    public static final String UI_OPEN_DOCUMENT_CARETS = "ui.openDocumentCarets";
+
+    /** Absolute path of the active document tab to restore (OS UI state). */
+    public static final String UI_ACTIVE_DOCUMENT = "ui.activeDocument";
+
     /** Editor font size (int, default: 12) */
     public static final String EDITOR_FONT_SIZE = "editor.fontSize";
 

@@ -216,4 +216,24 @@ public class KalixDocument {
     public void setDirty(boolean dirty) {
         editor.setDirty(dirty);
     }
+
+    /** @return the editor caret offset, or 0 if unavailable */
+    public int getCaretPosition() {
+        try {
+            return editor.getTextArea().getCaretPosition();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** Sets the editor caret offset, clamped to the document bounds. */
+    public void setCaretPosition(int offset) {
+        try {
+            var textArea = editor.getTextArea();
+            int length = textArea.getDocument().getLength();
+            textArea.setCaretPosition(Math.max(0, Math.min(offset, length)));
+        } catch (Exception e) {
+            // Ignore: best-effort caret restore.
+        }
+    }
 }

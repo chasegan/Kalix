@@ -190,6 +190,34 @@ public class ProjectTree extends JTree {
                 }
             }
         });
+
+        // F2 renames the selected entry (except the root).
+        getInputMap().put(javax.swing.KeyStroke.getKeyStroke("F2"), "renameSelected");
+        getActionMap().put("renameSelected", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                FileTreeNode node = selectedNode();
+                if (node != null && !isRoot(node)) {
+                    rename(node.getFile());
+                }
+            }
+        });
+
+        // Delete removes the selected entry (except the root).
+        getInputMap().put(javax.swing.KeyStroke.getKeyStroke("DELETE"), "deleteSelected");
+        getActionMap().put("deleteSelected", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                FileTreeNode node = selectedNode();
+                if (node != null && !isRoot(node)) {
+                    delete(node.getFile());
+                }
+            }
+        });
+    }
+
+    private boolean isRoot(FileTreeNode node) {
+        return model != null && node == model.getRoot();
     }
 
     private void setHoveredRow(int row) {

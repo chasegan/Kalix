@@ -119,6 +119,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private Preferences prefs;
     private String initialFilePath;
 
+    /** Suppresses session persistence while a session is being restored at startup. */
+    private boolean restoringSession = false;
+
     /**
      * Creates a new KalixIDE instance.
      * Initializes all components, managers, and sets up the user interface.
@@ -157,10 +160,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         setVisible(true);
 
-        // Load file: command-line argument takes priority, otherwise restore last opened file
+        // Load file: command-line argument takes priority; otherwise restore the previous
+        // session of open tabs, falling back to the last opened file.
         if (initialFilePath != null) {
             fileOperations.loadModelFile(new File(initialFilePath));
-        } else {
+        } else if (!restoreSession()) {
             loadLastOpenedFile();
         }
 
@@ -277,6 +281,105 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // React to active-document changes: re-point cached views, title, watcher, status.
         documentManager.addActiveDocumentChangeListener(this::onActiveDocumentChanged);
+
+        // Persist the open-tabs session whenever the document set or active tab changes.
+        documentManager.addDocumentOpenedListener(doc -> saveSession());
+        documentManager.addDocumentClosedListener(doc -> saveSession());
+        documentManager.addActiveDocumentChangeListener(doc -> saveSession());
+    }
+
+    /**
+     * Persists the open-tab session (document paths in order, their caret positions, and the
+     * active tab) to OS preferences. Untitled documents are skipped. No-op while restoring.
+     */
+    private void saveSession() {
+        if (restoringSession) {
+            return;
+        }
+        StringBuilder paths = new StringBuilder();
+        StringBuilder carets = new StringBuilder();
+        for (KalixDocument doc : documentManager.getDocuments()) {
+            File file = doc.getFile();
+            if (file == null) {
+                continue; // untitled documents cannot be restored
+            }
+            if (paths.length() > 0) {
+                paths.append('\n');
+                carets.append('\n');
+            }
+            paths.append(file.getAbsolutePath());
+            carets.append(doc.getCaretPosition());
+        }
+        KalixDocument active = documentManager.getActiveDocument();
+        String activePath = (active != null && active.getFile() != null)
+            ? active.getFile().getAbsolutePath() : "";
+
+        // OS preference values are length-limited; degrade gracefully if the list is huge.
+        if (paths.length() < 8000) {
+            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, paths.toString());
+            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, carets.toString());
+            PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, activePath);
+        } else {
+            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
+            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, "");
+            PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
+        }
+    }
+
+    /**
+     * Restores the open-tab session saved by {@link #saveSession()}: reopens each still-existing
+     * file in order, restores its caret, and activates the saved active tab.
+     *
+     * @return true if at least one document was restored
+     */
+    private boolean restoreSession() {
+        String pathsStr = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
+        if (pathsStr.isEmpty()) {
+            return false;
+        }
+        String[] paths = pathsStr.split("\n", -1);
+        String[] carets = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, "").split("\n", -1);
+        String activePath = PreferenceManager.getOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
+
+        boolean restoredAny = false;
+        restoringSession = true;
+        try {
+            for (int i = 0; i < paths.length; i++) {
+                String path = paths[i];
+                if (path.isEmpty()) {
+                    continue;
+                }
+                File file = new File(path);
+                if (!file.isFile()) {
+                    continue; // file removed since last session
+                }
+                fileOperations.loadModelFile(file);
+                KalixDocument doc = documentManager.findByFile(file);
+                if (doc != null) {
+                    restoredAny = true;
+                    if (i < carets.length && !carets[i].isEmpty()) {
+                        try {
+                            doc.setCaretPosition(Integer.parseInt(carets[i].trim()));
+                        } catch (NumberFormatException ignored) {
+                            // best-effort caret restore
+                        }
+                    }
+                }
+            }
+            if (!activePath.isEmpty()) {
+                KalixDocument activeDoc = documentManager.findByFile(new File(activePath));
+                if (activeDoc != null) {
+                    documentManager.setActiveDocument(activeDoc);
+                }
+            }
+        } finally {
+            restoringSession = false;
+        }
+
+        if (restoredAny) {
+            saveSession(); // normalise persisted state (drops files that no longer exist)
+        }
+        return restoredAny;
     }
 
     /**
@@ -822,6 +925,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 return; // User cancelled the exit
             }
         }
+
+        // Persist the final session (captures latest caret positions) before tearing down.
+        saveSession();
 
         // Clean up resources before exiting
         // First shutdown CLI sessions to avoid ProcessExecutor waiting
