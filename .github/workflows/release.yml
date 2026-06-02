@@ -117,15 +117,23 @@ jobs:
       # MSI installer (Windows trial asset). Additive: the zip above is
       # untouched. jpackage's MSI backend needs WiX Toolset *3.x* specifically
       # (candle.exe/light.exe) -- WiX 4+ removed those tools, so do NOT use the
-      # `dotnet tool install wix` route here. windows-latest has historically
-      # shipped WiX 3.x but it's being removed from the images, so install it
-      # explicitly and put its bin dir on PATH for jpackage to find.
+      # `dotnet tool install wix` route here. windows-latest currently ships
+      # WiX 3.x already, but it's slated for removal from the images, so install
+      # it only when missing. Pinning a `choco install --version` fails when a
+      # newer 3.x is already present ("newer version already installed" -> exit
+      # 1), so detect first and skip the install; then put bin on PATH either way.
       - name: Install WiX Toolset 3.x (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          choco install wixtoolset --version=3.14.1 --no-progress -y
-          $wixBin = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
+          $wixBin = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3*\bin" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          if (-not $wixBin) {
+            Write-Host "WiX 3.x not found -- installing via Chocolatey"
+            choco install wixtoolset --version=3.14.1 --no-progress -y
+            $wixBin = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
+          } else {
+            Write-Host "WiX 3.x already present -- skipping install"
+          }
           if (-not $wixBin) { throw "WiX 3.x bin directory not found after install" }
           Write-Host "WiX bin: $wixBin"
           Add-Content -Path $env:GITHUB_PATH -Value $wixBin
