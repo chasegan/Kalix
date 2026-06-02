@@ -1,39 +1,117 @@
 package com.kalix.ide.workspace;
 
+import com.kalix.ide.workspace.tree.ProjectTree;
+
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
+import javax.swing.JScrollPane;
 import javax.swing.UIManager;
-import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.GridBagLayout;
+import java.io.File;
+import java.util.function.Consumer;
 
 /**
- * Left-hand project tree region.
+ * The left-hand project tree region. Shows an empty state ("No folder open" + an Open Folder
+ * button, à la VSCode) until a folder is opened, then the live {@link ProjectTree}.
  *
- * <p>Phase 2 placeholder: shows a muted "No folder open" message in the style of
- * VSCode's empty explorer. Phase 4 replaces the contents with the real
- * filesystem-backed {@code JTree} (see {@code docs/multi-document-architecture.md}).
- * It exists now so the three-region layout, collapse/resize, and persistence can be
- * built and exercised before the tree itself lands.
+ * <p>Opening files is delegated to the supplied consumer (which adds editor tabs); the empty
+ * state's button triggers the host's Open Folder action.
  */
 public class ProjectTreePanel extends JPanel {
 
+    private static final String CARD_EMPTY = "empty";
+    private static final String CARD_TREE = "tree";
+
+    private final CardLayout cards = new CardLayout();
+    private final ProjectTree tree;
     private final JLabel placeholder;
 
-    public ProjectTreePanel() {
-        super(new BorderLayout());
-        setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    public ProjectTreePanel(Consumer<File> fileOpenConsumer, Runnable openFolderAction) {
+        setLayout(cards);
 
-        placeholder = new JLabel("No folder open", SwingConstants.CENTER);
-        placeholder.setForeground(mutedForeground());
-        add(placeholder, BorderLayout.CENTER);
+        add(buildEmptyState(openFolderAction), CARD_EMPTY);
+
+        tree = new ProjectTree(fileOpenConsumer);
+        JScrollPane scroll = new JScrollPane(tree);
+        scroll.setBorder(null);
+        scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
+        add(scroll, CARD_TREE);
+
+        cards.show(this, CARD_EMPTY);
+
+        placeholder = findPlaceholderLabel();
+    }
+
+    /** Opens the given folder as the tree root and shows the tree. */
+    public void openFolder(File root) {
+        tree.openFolder(root);
+        cards.show(this, CARD_TREE);
+    }
+
+    /** @return the currently open root folder, or {@code null} if none */
+    public File getRootFile() {
+        return tree.getRootFile();
+    }
+
+    /** Stops the directory watcher; call when the host window is disposed. */
+    public void dispose() {
+        tree.dispose();
+    }
+
+    private JPanel buildEmptyState(Runnable openFolderAction) {
+        JPanel empty = new JPanel(new GridBagLayout());
+        empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        JPanel column = new JPanel();
+        column.setOpaque(false);
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+
+        JLabel message = new JLabel("No folder open");
+        message.setAlignmentX(Component.CENTER_ALIGNMENT);
+        message.setForeground(mutedForeground());
+        message.setName("placeholderLabel");
+
+        JButton openButton = new JButton("Open Folder...");
+        openButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        openButton.addActionListener(e -> openFolderAction.run());
+
+        column.add(message);
+        column.add(Box.createVerticalStrut(10));
+        column.add(openButton);
+
+        empty.add(column);
+        return empty;
+    }
+
+    private JLabel findPlaceholderLabel() {
+        return findByName(this, "placeholderLabel");
+    }
+
+    private static JLabel findByName(Component root, String name) {
+        if (root instanceof JLabel label && name.equals(label.getName())) {
+            return label;
+        }
+        if (root instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                JLabel found = findByName(child, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     @Override
     public void updateUI() {
         super.updateUI();
-        // Re-read the muted colour after a look-and-feel/theme change.
         if (placeholder != null) {
             placeholder.setForeground(mutedForeground());
         }

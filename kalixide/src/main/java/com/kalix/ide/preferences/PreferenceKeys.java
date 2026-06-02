@@ -70,6 +70,9 @@ public class PreferenceKeys {
     /** Whether the contextual view (map) region is collapsed (OS UI state). */
     public static final String UI_MAP_COLLAPSED = "ui.mapCollapsed";
 
+    /** Absolute path of the currently open project folder, or empty if none (OS UI state). */
+    public static final String UI_WORKSPACE_FOLDER = "ui.workspaceFolder";
+
     /** Editor font size (int, default: 12) */
     public static final String EDITOR_FONT_SIZE = "editor.fontSize";
 

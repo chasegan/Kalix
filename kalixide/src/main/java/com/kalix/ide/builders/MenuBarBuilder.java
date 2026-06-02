@@ -31,6 +31,7 @@ public class MenuBarBuilder {
     public interface MenuBarCallbacks {
         void newModel();
         void openModel();
+        void openFolder();
         void saveModel();
         void saveAsModel();
         void exitApplication();
@@ -181,6 +182,7 @@ public class MenuBarBuilder {
 
         fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
+        fileMenu.add(createMenuItem("Open Folder...", e -> callbacks.openFolder()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));

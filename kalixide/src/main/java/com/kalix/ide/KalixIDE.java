@@ -168,6 +168,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (documentManager.getActiveDocument() == null) {
             fileOperations.newModel();
         }
+
+        // Restore the last opened project folder, if any.
+        String savedFolder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        if (!savedFolder.isEmpty()) {
+            File folder = new File(savedFolder);
+            if (folder.isDirectory()) {
+                projectTreePanel.openFolder(folder);
+            }
+        }
     }
     
     /**
@@ -401,7 +410,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * region widths and collapsed states and persists any changes.
      */
     private WorkspacePanel buildWorkspacePanel() {
-        projectTreePanel = new ProjectTreePanel();
+        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile, this::openFolder);
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
@@ -699,6 +708,30 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Opens a project folder in the left-hand tree and remembers it for next launch.
+     */
+    @Override
+    public void openFolder() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Open Project Folder");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        File current = projectTreePanel.getRootFile();
+        if (current != null && current.getParentFile() != null) {
+            chooser.setCurrentDirectory(current.getParentFile());
+        }
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File folder = chooser.getSelectedFile();
+            projectTreePanel.openFolder(folder);
+            PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folder.getAbsolutePath());
+            // Ensure the tree region is visible.
+            if (workspacePanel != null && workspacePanel.isTreeCollapsed()) {
+                workspacePanel.setTreeCollapsed(false);
+            }
+            updateStatus("Opened folder: " + folder.getName());
+        }
+    }
+
+    /**
      * Saves the current model to its existing file location.
      * If no file is associated, prompts for a save location.
      */
@@ -794,6 +827,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // First shutdown CLI sessions to avoid ProcessExecutor waiting
         if (stdioTaskManager != null) {
             stdioTaskManager.getSessionManager().shutdown();
+        }
+        if (projectTreePanel != null) {
+            projectTreePanel.dispose();
         }
         if (fileWatcherManager != null) {
             fileWatcherManager.shutdown();
