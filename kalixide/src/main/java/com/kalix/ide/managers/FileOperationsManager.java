@@ -1,8 +1,7 @@
 package com.kalix.ide.managers;
 
-import com.kalix.ide.MapPanel;
 import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -13,31 +12,29 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Manages file operations including opening, saving, and file validation.
- * Handles file dialogs and integrates with the text editor and map panel.
+ * Operates on the active {@link KalixDocument}: the backing file lives on the
+ * document, not on this manager, so the same manager serves whichever document
+ * is currently active.
  */
 public class FileOperationsManager {
-    
+
     private final Component parentComponent;
-    private final EnhancedTextEditor textEditor;
-    private final MapPanel mapPanel;
+    private final Supplier<KalixDocument> activeDocumentSupplier;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
     private final Runnable modelUpdateCallback;
     private final FileWatcherManager fileWatcherManager;
 
-    // Current file tracking for save functionality
-    private File currentFile;
-
     /**
      * Creates a new FileOperationsManager instance.
      *
      * @param parentComponent The parent component for dialogs
-     * @param textEditor The text editor component
-     * @param mapPanel The map panel component
+     * @param activeDocumentSupplier Supplies the document file operations act upon
      * @param statusUpdateCallback Callback for status updates
      * @param addRecentFileCallback Callback for adding recent files
      * @param fileChangedCallback Callback when current file changes (load/new/save as)
@@ -45,30 +42,36 @@ public class FileOperationsManager {
      * @param fileWatcherManager The file watcher manager for coordinating auto-reload
      */
     public FileOperationsManager(Component parentComponent,
-                               EnhancedTextEditor textEditor,
-                               MapPanel mapPanel,
+                               Supplier<KalixDocument> activeDocumentSupplier,
                                Consumer<String> statusUpdateCallback,
                                Consumer<String> addRecentFileCallback,
                                Runnable fileChangedCallback,
                                Runnable modelUpdateCallback,
                                FileWatcherManager fileWatcherManager) {
         this.parentComponent = parentComponent;
-        this.textEditor = textEditor;
-        this.mapPanel = mapPanel;
+        this.activeDocumentSupplier = activeDocumentSupplier;
         this.statusUpdateCallback = statusUpdateCallback;
         this.addRecentFileCallback = addRecentFileCallback;
         this.fileChangedCallback = fileChangedCallback;
         this.modelUpdateCallback = modelUpdateCallback;
         this.fileWatcherManager = fileWatcherManager;
     }
+
+    /**
+     * @return the document that file operations currently act upon
+     */
+    private KalixDocument document() {
+        return activeDocumentSupplier.get();
+    }
     
     /**
      * Creates a new model by clearing the text editor and map panel.
      */
     public void newModel() {
-        textEditor.setText(AppConstants.DEFAULT_MODEL_TEXT);
-        mapPanel.clearModel();
-        currentFile = null; // Clear current file path for new model
+        KalixDocument document = document();
+        document.setText(AppConstants.DEFAULT_MODEL_TEXT);
+        document.getMapPanel().clearModel();
+        document.setFile(null); // Clear current file path for new model
 
         // Clear last opened file preference since user is starting fresh
         PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, "");
@@ -110,13 +113,15 @@ public class FileOperationsManager {
     public void loadModelFile(File file) {
         try {
             String content = Files.readString(file.toPath());
-            
+
+            KalixDocument document = document();
+
             // Set content in text editor
-            textEditor.setText(content);
-            
+            document.setText(content);
+
             // Store the current file path for save functionality
-            currentFile = file;
-            
+            document.setFile(file);
+
             // Determine file format
             String format = getFileFormat(file.getName());
             
@@ -132,8 +137,8 @@ public class FileOperationsManager {
             PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, file.getAbsolutePath());
 
             // Clear the map panel
-            mapPanel.clearModel();
-            
+            document.getMapPanel().clearModel();
+
             // Notify title bar of file change
             fileChangedCallback.run();
             
@@ -151,6 +156,8 @@ public class FileOperationsManager {
      * If no file is currently open, delegates to saveAsModel().
      */
     public void saveModel() {
+        KalixDocument document = document();
+        File currentFile = document.getFile();
         if (currentFile == null) {
             // No current file, prompt for save as
             saveAsModel();
@@ -161,11 +168,11 @@ public class FileOperationsManager {
             // Prevent file watcher from reloading the file we're about to save
             fileWatcherManager.ignoreNextChange();
 
-            String content = textEditor.getText();
+            String content = document.getText();
             Files.writeString(currentFile.toPath(), content);
 
             // Reset dirty state
-            textEditor.setDirty(false);
+            document.setDirty(false);
 
             // Save as last opened file for session restoration
             PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, currentFile.getAbsolutePath());
@@ -182,37 +189,39 @@ public class FileOperationsManager {
      * Shows a save dialog and saves the model to the selected location.
      */
     public void saveAsModel() {
+        KalixDocument document = document();
         JFileChooser fileChooser = createFileChooser();
         fileChooser.setDialogTitle("Save Kalix Model");
-        
+
         // Set default filename if there's a current file
+        File currentFile = document.getFile();
         if (currentFile != null) {
             fileChooser.setSelectedFile(currentFile);
         } else {
             fileChooser.setSelectedFile(new File("model.ini"));
         }
-        
+
         int result = fileChooser.showSaveDialog(parentComponent);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
-            
+
             // Add extension if not present
             String fileName = selectedFile.getName();
             if (!fileName.contains(".")) {
                 // Default to .ini extension
                 selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
             }
-            
+
             try {
                 // Prevent file watcher from reloading the file we're about to save
                 fileWatcherManager.ignoreNextChange();
 
-                String content = textEditor.getText();
+                String content = document.getText();
                 Files.writeString(selectedFile.toPath(), content);
 
                 // Update current file and reset dirty state
-                currentFile = selectedFile;
-                textEditor.setDirty(false);
+                document.setFile(selectedFile);
+                document.setDirty(false);
 
                 // Add to recent files
                 addRecentFileCallback.accept(selectedFile.getAbsolutePath());
@@ -258,6 +267,7 @@ public class FileOperationsManager {
         fileChooser.setDialogTitle("Open Kalix Model");
 
         // Set initial directory to current file's directory if available
+        File currentFile = document().getFile();
         if (currentFile != null) {
             fileChooser.setCurrentDirectory(currentFile.getParentFile());
         }
@@ -327,7 +337,7 @@ public class FileOperationsManager {
      * @return The current file or null if no file is loaded
      */
     public File getCurrentFile() {
-        return currentFile;
+        return document().getFile();
     }
 
     /**
@@ -338,9 +348,6 @@ public class FileOperationsManager {
      * @return The directory of the current file, or null if no file is loaded
      */
     public File getCurrentWorkingDirectory() {
-        if (currentFile != null) {
-            return currentFile.getParentFile();
-        }
-        return null;
+        return document().getWorkingDirectory();
     }
 }

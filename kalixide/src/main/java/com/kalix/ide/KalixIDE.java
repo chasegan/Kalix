@@ -19,6 +19,8 @@ import com.kalix.ide.docking.DockingManager;
 import com.kalix.ide.docking.DockingSplitPane;
 import com.kalix.ide.docking.DropZoneDetector;
 import com.kalix.ide.docking.PlaceholderComponent;
+import com.kalix.ide.document.DocumentManager;
+import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
@@ -79,7 +81,11 @@ import java.util.prefs.Preferences;
 public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks {
     private static final Logger logger = LoggerFactory.getLogger(KalixIDE.class);
 
-    // Core UI components
+    // Document management (owns open documents and the active-document concept)
+    private DocumentManager documentManager;
+
+    // Cached views of the active document, refreshed when the active document changes.
+    // In Phase 1 there is exactly one document, so these are set once at startup.
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
@@ -117,7 +123,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     // Application state
     private Preferences prefs;
-    private int previousNodeCount = 0;
     private String initialFilePath;
 
     /**
@@ -197,12 +202,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         schemaManager = new SchemaManager();
         schemaManager.initialize();
 
-        // Initialize data model with change listener
-        hydrologicalModel = new HydrologicalModel();
-        hydrologicalModel.addChangeListener(this::onModelChanged);
-        
+        // Data model and document are created in initializeComponents, alongside the
+        // editor and map views the document bundles together.
+
         // File operations manager (initialized after components)
-        
+
         // Recent files manager
         recentFilesManager = new RecentFilesManager(
             prefs,
@@ -259,17 +263,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         mapPanel = dockableMapPanel.getMapPanel();
         textEditor = dockableTextEditor.getTextEditor();
 
+        // Create the data model and bundle it with its editor and map into a document.
+        // The document owns the per-document wiring (text<->model parse, text<->map
+        // sync, per-document auto-zoom). See docs/multi-document-architecture.md.
+        hydrologicalModel = new HydrologicalModel();
+        KalixDocument document = new KalixDocument(textEditor, mapPanel, hydrologicalModel);
+        documentManager = new DocumentManager();
+        documentManager.setActiveDocument(document);
+
+        // Application-level status updates react to the active document's model changes.
+        hydrologicalModel.addChangeListener(this::onModelChanged);
+
         // Initialize linter for text editor
         textEditor.initializeLinter(schemaManager);
 
         // Shared model supplier for context commands and auto-complete
-        modelSupplier = () -> {
-            try {
-                return com.kalix.ide.linter.parsing.INIModelParser.parse(textEditor.getText());
-            } catch (Exception e) {
-                return null;
-            }
-        };
+        modelSupplier = document.getModelSupplier();
 
         // Initialize context-aware command system
         textEditor.initializeContextCommands(this, modelSupplier, () -> fileOperations.getCurrentFile());
@@ -334,7 +343,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         
         // Complete manager initialization now that components exist
         fileOperations = new FileOperationsManager(
-            this, textEditor, mapPanel,
+            this, documentManager::getActiveDocument,
             this::updateStatus,
             recentFilesManager::addRecentFile,
             () -> {
@@ -370,36 +379,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         });
         
-        // Set up model parsing from text changes
-        textEditor.addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override
-            public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                updateModelFromText();
-            }
-            
-            @Override
-            public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                updateModelFromText();
-            }
-            
-            @Override
-            public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                updateModelFromText();
-            }
-        });
-        
-        // Connect map panel to data model
-        mapPanel.setModel(hydrologicalModel);
-        
-        // Set up bidirectional text synchronization
-        mapPanel.setupTextSynchronization(textEditor);
-
-        // Wire map panel to editor for "Show on Map" context menu action
-        textEditor.setMapPanel(mapPanel);
+        // Note: model parsing on text changes, map<->model connection, and
+        // text<->map synchronisation are wired by KalixDocument itself.
 
         // Register theme-aware components with theme manager
         themeManager.registerThemeAwareComponents(mapPanel, textEditor);
-        
+
         // Initial parse of default text
         updateModelFromText();
     }
@@ -638,15 +623,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         SwingUtilities.invokeLater(() -> {
             var stats = hydrologicalModel.getStatistics();
             int currentNodeCount = stats.getNodeCount();
-            String baseMessage = String.format("Model: %d nodes, %d links", 
+            String baseMessage = String.format("Model: %d nodes, %d links",
                 currentNodeCount, stats.getLinkCount());
-            
-            // Auto-zoom to fit when transitioning from 0 to >0 nodes (text editing case)
-            if (previousNodeCount == 0 && currentNodeCount > 0) {
-                mapPanel.zoomToFit();
-            }
-            previousNodeCount = currentNodeCount;
-            
+
+            // Note: per-document auto-zoom on the 0 -> >0 transition is handled by KalixDocument.
+
             // Add affected counts if there were changes
             if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
                 String changeMessage = String.format(" (%d nodes, %d links modified)",
@@ -659,34 +640,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     /**
-     * Updates the data model from the current text editor content.
+     * Updates the active document's data model from its current text editor content.
      * Uses incremental parsing for better performance.
-     * Called whenever the text changes.
      */
     private void updateModelFromText() {
         updateModelFromText(false);
     }
 
     private void updateModelFromText(boolean autoZoomToFit) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                String text = textEditor.getText();
-                if (text != null) {
-                    // Check if we're currently updating text from model changes to prevent infinite loops
-                    // We need to access the TextCoordinateUpdater to check this flag
-                    // For now, we'll always parse - the TextCoordinateUpdater uses programmatic update flag
-                    hydrologicalModel.parseFromIniTextIncremental(text);
-
-                    // Auto-zoom to fit after parsing if requested (for file loads)
-                    if (autoZoomToFit) {
-                        mapPanel.zoomToFit();
-                    }
-                }
-            } catch (Exception e) {
-                // Log parsing errors but don't disrupt the UI
-                logger.warn("Error parsing model from text: {}", e.getMessage());
-            }
-        });
+        documentManager.getActiveDocument().parseModelFromText(autoZoomToFit);
     }
     
     /**
