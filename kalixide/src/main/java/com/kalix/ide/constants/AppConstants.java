@@ -35,9 +35,11 @@ public final class AppConstants {
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;
     public static final int DEFAULT_WINDOW_HEIGHT = 800;
-    public static final int DEFAULT_SPLIT_PANE_DIVIDER_LOCATION = 600;
-    public static final double DEFAULT_SPLIT_PANE_RESIZE_WEIGHT = 0.5;
-    
+
+    // Workspace three-region layout (tree | editor | map) default region widths
+    public static final int DEFAULT_TREE_WIDTH = 240;
+    public static final int DEFAULT_MAP_WIDTH = 420;
+
     // Recent files (Note: MAX_RECENT_FILES also defined in PreferenceKeys - should be unified)
     public static final int MAX_RECENT_FILES = 10; // Unified with PreferenceKeys value
     public static final String RECENT_FILE_PREF_PREFIX = "recentFile";

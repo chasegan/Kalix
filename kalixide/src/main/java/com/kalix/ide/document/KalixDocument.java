@@ -50,19 +50,16 @@ public class KalixDocument {
     private int previousNodeCount = 0;
 
     /**
-     * Creates a document around already-constructed views and performs all
-     * per-document wiring. In Phase 1 the editor and map are created by the
-     * (soon-to-be-removed) docking components and handed in here; once the docking
-     * layout is replaced (Phase 2) the document can own their construction directly.
-     *
-     * @param editor   the text editor for this document's content
-     * @param mapPanel the map visualising this document's model
-     * @param model    the data model parsed from this document's text
+     * Creates a document, constructing its own editor, map and model, and performs
+     * all per-document wiring. Application-level features that depend on shared
+     * services (linter, autocomplete, context commands, theme registration) are
+     * attached to {@link #getEditor()} / {@link #getMapPanel()} by the host after
+     * construction.
      */
-    public KalixDocument(EnhancedTextEditor editor, MapPanel mapPanel, HydrologicalModel model) {
-        this.editor = editor;
-        this.mapPanel = mapPanel;
-        this.model = model;
+    public KalixDocument() {
+        this.editor = new EnhancedTextEditor();
+        this.mapPanel = new MapPanel();
+        this.model = new HydrologicalModel();
 
         wire();
     }

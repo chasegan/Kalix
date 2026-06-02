@@ -58,6 +58,18 @@ public class PreferenceKeys {
     /** Syntax theme selection (string, default: "LIGHT") */
     public static final String UI_SYNTAX_THEME = "ui.syntaxTheme";
 
+    /** Width in pixels of the project tree region (OS UI state). */
+    public static final String UI_TREE_WIDTH = "ui.treeWidth";
+
+    /** Width in pixels of the contextual view (map) region (OS UI state). */
+    public static final String UI_MAP_WIDTH = "ui.mapWidth";
+
+    /** Whether the project tree region is collapsed (OS UI state). */
+    public static final String UI_TREE_COLLAPSED = "ui.treeCollapsed";
+
+    /** Whether the contextual view (map) region is collapsed (OS UI state). */
+    public static final String UI_MAP_COLLAPSED = "ui.mapCollapsed";
+
     /** Editor font size (int, default: 12) */
     public static final String EDITOR_FONT_SIZE = "editor.fontSize";
 

@@ -10,15 +10,6 @@ import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.linter.SchemaManager;
-import com.kalix.ide.docking.DockableMapPanel;
-import com.kalix.ide.docking.DockablePanel;
-import com.kalix.ide.docking.DockableTextEditor;
-import com.kalix.ide.docking.DockingArea;
-import com.kalix.ide.docking.DockingContext;
-import com.kalix.ide.docking.DockingManager;
-import com.kalix.ide.docking.DockingSplitPane;
-import com.kalix.ide.docking.DropZoneDetector;
-import com.kalix.ide.docking.PlaceholderComponent;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.editor.EnhancedTextEditor;
@@ -40,6 +31,8 @@ import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalLauncher;
 import com.kalix.ide.utils.WindowsIntegration;
+import com.kalix.ide.workspace.ProjectTreePanel;
+import com.kalix.ide.workspace.WorkspacePanel;
 import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
@@ -90,9 +83,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private EnhancedTextEditor textEditor;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
     private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
-    private DockableMapPanel dockableMapPanel;
-    private DockableTextEditor dockableTextEditor;
-    private DockingArea mainDockingArea;
+    private WorkspacePanel workspacePanel;
+    private ProjectTreePanel projectTreePanel;
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
@@ -216,60 +208,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Initializes the docking context with common services and actions.
-     */
-    private void initializeDockingContext() {
-        DockingContext context = DockingContext.getInstance();
-
-        // Register common actions that docked panels might want to access
-        context.registerAction("zoom_in", new AbstractAction("Zoom In") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                zoomIn();
-            }
-        });
-
-        context.registerAction("zoom_out", new AbstractAction("Zoom Out") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                zoomOut();
-            }
-        });
-
-        context.registerAction("save", new AbstractAction("Save") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                saveModel();
-            }
-        });
-
-        // Register status update service
-        context.registerService("statusUpdater", (Runnable) () ->
-            updateStatus("Status updated from docked panel"));
-    }
-
-    /**
      * Initializes all UI components.
      */
     private void initializeComponents() {
-        // Initialize docking context for panel communication
-        initializeDockingContext();
-
-        // Initialize dockable components
-        dockableMapPanel = new DockableMapPanel();
-        dockableTextEditor = new DockableTextEditor();
-
-        // Get references to the underlying components for existing functionality
-        mapPanel = dockableMapPanel.getMapPanel();
-        textEditor = dockableTextEditor.getTextEditor();
-
-        // Create the data model and bundle it with its editor and map into a document.
-        // The document owns the per-document wiring (text<->model parse, text<->map
-        // sync, per-document auto-zoom). See docs/multi-document-architecture.md.
-        hydrologicalModel = new HydrologicalModel();
-        KalixDocument document = new KalixDocument(textEditor, mapPanel, hydrologicalModel);
+        // Create the active document. It constructs its own editor, map and model and
+        // owns the per-document wiring (text<->model parse, text<->map sync, per-document
+        // auto-zoom). See docs/multi-document-architecture.md.
+        KalixDocument document = new KalixDocument();
         documentManager = new DocumentManager();
         documentManager.setActiveDocument(document);
+
+        // Cache the active document's views for existing call sites.
+        textEditor = document.getEditor();
+        mapPanel = document.getMapPanel();
+        hydrologicalModel = document.getModel();
 
         // Application-level status updates react to the active document's model changes.
         hydrologicalModel.addChangeListener(this::onModelChanged);
@@ -390,7 +342,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Sets up the main application layout using a single docking area.
+     * Sets up the main application layout: toolbar (north), the three-region work
+     * area (centre), and the status bar (south).
      */
     private void setupLayout() {
         setLayout(new BorderLayout());
@@ -410,15 +363,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // (deferred because textEditor is created later)
         SwingUtilities.invokeLater(this::setupNavigationStateListener);
 
-        // Create a single main docking area
-        mainDockingArea = new DockingArea();
-
-        // Initialize with both panels using a custom split layout
-        SwingUtilities.invokeLater(() -> {
-            initializeDockingLayout();
-        });
-
-        add(mainDockingArea, BorderLayout.CENTER);
+        // Build the three-region work area: [ project tree | editor | map ].
+        add(buildWorkspacePanel(), BorderLayout.CENTER);
 
         // Add status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
@@ -426,6 +372,32 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         statusPanel.add(progressBar, BorderLayout.EAST);
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         add(statusPanel, BorderLayout.SOUTH);
+    }
+
+    /**
+     * Builds the three-region work area from the active document's editor and map,
+     * restoring persisted region widths and collapsed states and persisting any changes.
+     */
+    private WorkspacePanel buildWorkspacePanel() {
+        projectTreePanel = new ProjectTreePanel();
+
+        int treeWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_TREE_WIDTH, AppConstants.DEFAULT_TREE_WIDTH);
+        int mapWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_MAP_WIDTH, AppConstants.DEFAULT_MAP_WIDTH);
+        boolean treeCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, false);
+        boolean mapCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, false);
+
+        workspacePanel = new WorkspacePanel(
+            projectTreePanel, textEditor, mapPanel,
+            treeWidth, mapWidth, treeCollapsed, mapCollapsed);
+
+        workspacePanel.setLayoutChangeListener((tw, mw, tc, mc) -> {
+            PreferenceManager.setOsInt(PreferenceKeys.UI_TREE_WIDTH, tw);
+            PreferenceManager.setOsInt(PreferenceKeys.UI_MAP_WIDTH, mw);
+            PreferenceManager.setOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, tc);
+            PreferenceManager.setOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, mc);
+        });
+
+        return workspacePanel;
     }
 
     /**
@@ -667,62 +639,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     
     
-    /**
-     * Initializes the docking layout by starting with the text editor and programmatically
-     * docking the map panel to the left using the zone-based docking system.
-     */
-    private void initializeDockingLayout() {
-        // Start with the text editor in the docking area
-        mainDockingArea.addDockablePanel(dockableTextEditor);
-
-        // Programmatically dock the map panel to the left zone
-        // This uses the existing docking system logic to create a proper split pane
-        DockingManager dockingManager = DockingManager.getInstance();
-
-        // Simulate dropping the map panel into the LEFT zone of the text editor area
-        // This will trigger the zone-based docking logic to create a horizontal split
-        simulateZoneDrop(dockingManager, dockableMapPanel, mainDockingArea,
-                        DropZoneDetector.DropZone.LEFT);
-    }
-
-    /**
-     * Simulates a zone-based drop operation using the existing docking system logic.
-     */
-    private void simulateZoneDrop(DockingManager dockingManager, DockablePanel panel,
-                                 DockingArea area, DropZoneDetector.DropZone zone) {
-        // We need to access the private handleZoneDrop method
-        // For now, let's implement the LEFT zone logic directly
-        if (zone == DropZoneDetector.DropZone.LEFT) {
-            // Get the existing content (should be the text editor)
-            Component existingContent = null;
-            for (Component comp : area.getComponents()) {
-                if (!(comp instanceof PlaceholderComponent)) {
-                    existingContent = comp;
-                    break;
-                }
-            }
-
-            if (existingContent != null) {
-                // Remove all components without triggering empty state check (avoids placeholder re-addition)
-                area.removeAllQuietly();
-
-                // Create horizontal split pane with existing content on left, map panel on right
-                DockingSplitPane splitPane = new DockingSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-                splitPane.setLeftComponent(existingContent);
-                splitPane.setRightComponent(panel);
-
-                // Set the standard divider location and resize weight
-                splitPane.setDividerLocation(AppConstants.DEFAULT_SPLIT_PANE_DIVIDER_LOCATION);
-                splitPane.setResizeWeight(AppConstants.DEFAULT_SPLIT_PANE_RESIZE_WEIGHT);
-
-                // Add split pane to area
-                area.add(splitPane, BorderLayout.CENTER);
-                area.revalidate();
-                area.repaint();
-            }
-        }
-    }
-
     //
     // MenuBarCallbacks interface implementation
     //
@@ -965,6 +881,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void zoomToFit() {
         mapPanel.zoomToFit();
         updateStatus("Zoomed to fit all nodes");
+    }
+
+    @Override
+    public void toggleFileTree() {
+        if (workspacePanel != null) {
+            workspacePanel.toggleTree();
+            updateStatus(workspacePanel.isTreeCollapsed() ? "File tree hidden" : "File tree shown");
+        }
+    }
+
+    @Override
+    public void toggleMap() {
+        if (workspacePanel != null) {
+            workspacePanel.toggleMap();
+            updateStatus(workspacePanel.isMapCollapsed() ? "Map hidden" : "Map shown");
+        }
     }
 
     @Override

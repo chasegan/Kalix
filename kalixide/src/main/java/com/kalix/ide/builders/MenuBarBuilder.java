@@ -42,6 +42,8 @@ public class MenuBarBuilder {
         void zoomOut();
         void resetZoom();
         void zoomToFit();
+        void toggleFileTree();
+        void toggleMap();
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
         void showAbout();
@@ -225,7 +227,12 @@ public class MenuBarBuilder {
     private JMenu createViewMenu() {
         JMenu viewMenu = new JMenu("View");
 
-        // Zoom to Fit at the top
+        // Panel visibility toggles at the top
+        viewMenu.add(createMenuItem("Toggle File Tree", KeyEvent.VK_B, e -> callbacks.toggleFileTree()));
+        viewMenu.add(createMenuItem("Toggle Map", e -> callbacks.toggleMap()));
+        viewMenu.addSeparator();
+
+        // Zoom to Fit
         viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
         viewMenu.addSeparator();
 
