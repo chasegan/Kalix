@@ -275,7 +275,7 @@ public class OptimisationWindow extends JFrame {
 
         // Show optimisation panel
         rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_OPTIMISATION);
-        currentlyDisplayedNode = sessionManager.getTreeNode(optInfo.getSessionKey());
+        currentlyDisplayedNode = treeManager.getNodeForSession(optInfo.getSessionKey());
 
         // Switch to appropriate tab based on status
         if (optInfo.getStatus() == OptimisationStatus.DONE) {

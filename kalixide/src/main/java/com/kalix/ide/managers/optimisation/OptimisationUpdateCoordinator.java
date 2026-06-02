@@ -39,7 +39,7 @@ public class OptimisationUpdateCoordinator {
      * @param sessionKey The session key
      */
     public void updateTreeNodeForSession(String sessionKey) {
-        DefaultMutableTreeNode node = sessionManager.getTreeNode(sessionKey);
+        DefaultMutableTreeNode node = treeManager.getNodeForSession(sessionKey);
         if (node != null) {
             // Get current status
             OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();

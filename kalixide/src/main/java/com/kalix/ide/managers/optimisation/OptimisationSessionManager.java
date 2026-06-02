@@ -11,7 +11,6 @@ import com.kalix.ide.models.optimisation.OptimisationStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -36,7 +35,13 @@ public class OptimisationSessionManager {
 
     // Session tracking
     private final Map<String, String> sessionToOptName = new HashMap<>();
-    private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
+    /**
+     * Per-session OptimisationInfo. Replaces an older `sessionToTreeNode` map that
+     * held an orphan tree node never added to the tree model. The displayed tree node
+     * lives in {@code OptimisationTreeManager}; this map exists only for callers that
+     * need the OptimisationInfo by sessionKey (e.g. {@link #getOptimisationInfo}).
+     */
+    private final Map<String, OptimisationInfo> sessionToOptInfo = new HashMap<>();
     private final Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
     private final Map<String, String> sessionToModelText = new HashMap<>();
@@ -151,11 +156,8 @@ public class OptimisationSessionManager {
 
                     // Add to tracking maps
                     sessionToOptName.put(sessionKey, optName);
+                    sessionToOptInfo.put(sessionKey, optInfo);
                     optimisationResults.put(sessionKey, result);
-
-                    // Create tree node
-                    DefaultMutableTreeNode optNode = new DefaultMutableTreeNode(optInfo);
-                    sessionToTreeNode.put(sessionKey, optNode);
 
                     // Notify callback
                     if (onOptimisationCreated != null) {
@@ -304,7 +306,7 @@ public class OptimisationSessionManager {
 
         // Remove from tracking maps
         sessionToOptName.remove(sessionKey);
-        sessionToTreeNode.remove(sessionKey);
+        sessionToOptInfo.remove(sessionKey);
         lastKnownStatus.remove(sessionKey);
         optimisationResults.remove(sessionKey);
 
@@ -352,15 +354,8 @@ public class OptimisationSessionManager {
         return true;
     }
 
-    /**
-     * Gets the tree node for a session.
-     *
-     * @param sessionKey The session key
-     * @return The tree node, or null if not found
-     */
-    public DefaultMutableTreeNode getTreeNode(String sessionKey) {
-        return sessionToTreeNode.get(sessionKey);
-    }
+    // getTreeNode removed — there is no orphan tree node any more. Callers that
+    // need the displayed node should ask OptimisationTreeManager.getNodeForSession.
 
     /**
      * Gets the optimisation name for a session.
@@ -411,11 +406,7 @@ public class OptimisationSessionManager {
      * @return The OptimisationInfo, or null if not found
      */
     public OptimisationInfo getOptimisationInfo(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
-        if (node != null && node.getUserObject() instanceof OptimisationInfo) {
-            return (OptimisationInfo) node.getUserObject();
-        }
-        return null;
+        return sessionToOptInfo.get(sessionKey);
     }
 
     /**

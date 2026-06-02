@@ -175,7 +175,7 @@ public class OptimisationWindowInitializer {
             SwingUtilities.invokeLater(() -> {
                 treeManager.addOptimisation(optInfo.getSessionKey(), optInfo);
                 // Auto-select the new optimisation
-                DefaultMutableTreeNode node = sessionManager.getTreeNode(optInfo.getSessionKey());
+                DefaultMutableTreeNode node = treeManager.getNodeForSession(optInfo.getSessionKey());
                 if (node != null) {
                     TreePath path = new TreePath(treeModel.getPathToRoot(node));
                     optTree.setSelectionPath(path);
@@ -258,8 +258,7 @@ public class OptimisationWindowInitializer {
                 boolean renamed = sessionManager.renameOptimisation(optInfo.getSessionKey(), newName);
                 if (renamed) {
                     optInfo.setName(newName.trim());
-                    treeModel.nodeChanged(sessionManager.getTreeNode(optInfo.getSessionKey()));
-                    optTree.repaint();
+                    treeManager.refreshNode(optInfo.getSessionKey());
                 }
             }
         });
