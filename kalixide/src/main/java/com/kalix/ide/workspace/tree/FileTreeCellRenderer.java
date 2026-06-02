@@ -10,7 +10,6 @@ import javax.swing.UIManager;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import java.awt.Color;
 import java.awt.Component;
-import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,20 +31,19 @@ public class FileTreeCellRenderer extends DefaultTreeCellRenderer {
                                                   boolean hasFocus) {
         super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus);
         if (value instanceof FileTreeNode node) {
-            File file = node.getFile();
-            setIcon(iconFor(file, expanded));
+            setIcon(iconFor(node, expanded));
         }
         return this;
     }
 
-    private Icon iconFor(File file, boolean expanded) {
+    private Icon iconFor(FileTreeNode node, boolean expanded) {
         Ikon glyph;
         Color color;
-        if (file.isDirectory()) {
+        if (node.isDirectory()) { // cached flag, no per-cell disk stat
             glyph = expanded ? FontAwesomeSolid.FOLDER_OPEN : FontAwesomeSolid.FOLDER;
             color = folderColor();
         } else {
-            glyph = glyphForExtension(file.getName());
+            glyph = glyphForExtension(node.getFile().getName());
             color = fileColor();
         }
         String key = glyph.getDescription() + "#" + color.getRGB();

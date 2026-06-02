@@ -147,19 +147,16 @@ public class FileOperationsManager {
     }
 
     /**
-     * Reloads the content of the open document backed by the given file (or the active
-     * document if none matches) in place, without opening a new tab. Used for external
-     * change auto-reload.
+     * Reloads, in place, the content of the open document backed by the given file.
+     * Does nothing if no open document is backed by that exact file — it must never
+     * write one file's content into a different document. Used for external-change reload.
      *
      * @param file The file whose content should be re-read
      */
     public void reloadFile(File file) {
         KalixDocument document = documentManager.findByFile(file);
         if (document == null) {
-            document = document();
-        }
-        if (document == null) {
-            return;
+            return; // no open document backs this file; nothing to reload
         }
         try {
             String content = Files.readString(file.toPath());
@@ -167,7 +164,7 @@ public class FileOperationsManager {
             document.parseModelFromText(true);
             statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
-            showFileOpenError(file, e);
+            statusUpdateCallback.accept("Failed to reload file: " + file.getName());
         }
     }
     
@@ -177,6 +174,9 @@ public class FileOperationsManager {
      */
     public void saveModel() {
         KalixDocument document = document();
+        if (document == null) {
+            return;
+        }
         File currentFile = document.getFile();
         if (currentFile == null) {
             // No current file, prompt for save as
@@ -210,6 +210,9 @@ public class FileOperationsManager {
      */
     public void saveAsModel() {
         KalixDocument document = document();
+        if (document == null) {
+            return;
+        }
         JFileChooser fileChooser = createFileChooser();
         fileChooser.setDialogTitle("Save Kalix Model");
 
@@ -230,6 +233,18 @@ public class FileOperationsManager {
             if (!fileName.contains(".")) {
                 // Default to .ini extension
                 selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
+            }
+
+            // Refuse to save onto a file already open in a different tab — that would
+            // leave two documents backed by the same file (ambiguous for findByFile,
+            // the watcher, and session save/restore).
+            KalixDocument other = documentManager.findByFile(selectedFile);
+            if (other != null && other != document) {
+                JOptionPane.showMessageDialog(parentComponent,
+                    "\"" + selectedFile.getName() + "\" is already open in another tab.\n\n"
+                        + "Close that tab first, or choose a different name.",
+                    "File Already Open", JOptionPane.WARNING_MESSAGE);
+                return;
             }
 
             try {
@@ -287,7 +302,7 @@ public class FileOperationsManager {
         fileChooser.setDialogTitle("Open Kalix Model");
 
         // Set initial directory to current file's directory if available
-        File currentFile = document().getFile();
+        File currentFile = getCurrentFile();
         if (currentFile != null) {
             fileChooser.setCurrentDirectory(currentFile.getParentFile());
         }
@@ -357,7 +372,8 @@ public class FileOperationsManager {
      * @return The current file or null if no file is loaded
      */
     public File getCurrentFile() {
-        return document().getFile();
+        KalixDocument document = document();
+        return document != null ? document.getFile() : null;
     }
 
     /**
@@ -365,9 +381,14 @@ public class FileOperationsManager {
      * This is used to set the working directory for KalixCLI processes
      * so that relative paths in model files are resolved correctly.
      *
-     * @return The directory of the current file, or null if no file is loaded
+     * <p>Returns {@code null} when there is no active document — these accessors are
+     * exposed as long-lived suppliers to background windows (RunManager, the CLI task
+     * manager) that may query them during the transient no-active-document window.
+     *
+     * @return The directory of the current file, or null if none
      */
     public File getCurrentWorkingDirectory() {
-        return document().getWorkingDirectory();
+        KalixDocument document = document();
+        return document != null ? document.getWorkingDirectory() : null;
     }
 }

@@ -26,15 +26,24 @@ public class FileTreeNode extends DefaultMutableTreeNode {
     };
 
     private final File file;
+    /** Cached once at construction: a node's file identity never changes, and isLeaf()/
+     *  getAllowsChildren() are queried by JTree per cell per repaint — avoid a disk stat each time. */
+    private final boolean directory;
     private boolean loaded;
 
     public FileTreeNode(File file) {
         super(file);
         this.file = file;
+        this.directory = file.isDirectory();
     }
 
     public File getFile() {
         return file;
+    }
+
+    /** @return whether this node is a directory (cached at construction) */
+    public boolean isDirectory() {
+        return directory;
     }
 
     public boolean isLoaded() {
@@ -43,12 +52,12 @@ public class FileTreeNode extends DefaultMutableTreeNode {
 
     @Override
     public boolean isLeaf() {
-        return !file.isDirectory();
+        return !directory;
     }
 
     @Override
     public boolean getAllowsChildren() {
-        return file.isDirectory();
+        return directory;
     }
 
     /**
@@ -59,7 +68,7 @@ public class FileTreeNode extends DefaultMutableTreeNode {
             return;
         }
         loaded = true;
-        if (!file.isDirectory()) {
+        if (!directory) {
             return;
         }
         removeAllChildren();

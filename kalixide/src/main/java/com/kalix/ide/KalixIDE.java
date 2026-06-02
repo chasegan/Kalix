@@ -289,41 +289,33 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Persists the open-tab session (document paths in order, their caret positions, and the
-     * active tab) to OS preferences. Untitled documents are skipped. No-op while restoring.
+     * Persists the open-tab session to OS preferences: one entry per document as
+     * {@code caret<TAB>absolutePath}, entries separated by newlines, plus the active path.
+     * Each entry is self-describing (no parallel arrays to fall out of alignment), and a
+     * tab in a path — unlike a newline — is rare and degrades to skipping just that entry.
+     * Untitled documents are skipped. No-op while restoring.
      */
     private void saveSession() {
         if (restoringSession) {
             return;
         }
-        StringBuilder paths = new StringBuilder();
-        StringBuilder carets = new StringBuilder();
+        StringBuilder entries = new StringBuilder();
         for (KalixDocument doc : documentManager.getDocuments()) {
             File file = doc.getFile();
             if (file == null) {
                 continue; // untitled documents cannot be restored
             }
-            if (paths.length() > 0) {
-                paths.append('\n');
-                carets.append('\n');
+            if (entries.length() > 0) {
+                entries.append('\n');
             }
-            paths.append(file.getAbsolutePath());
-            carets.append(doc.getCaretPosition());
+            entries.append(doc.getCaretPosition()).append('\t').append(file.getAbsolutePath());
         }
         KalixDocument active = documentManager.getActiveDocument();
         String activePath = (active != null && active.getFile() != null)
             ? active.getFile().getAbsolutePath() : "";
 
-        // OS preference values are length-limited; degrade gracefully if the list is huge.
-        if (paths.length() < 8000) {
-            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, paths.toString());
-            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, carets.toString());
-            PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, activePath);
-        } else {
-            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
-            PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, "");
-            PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
-        }
+        PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, entries.toString());
+        PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, activePath);
     }
 
     /**
@@ -333,36 +325,33 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @return true if at least one document was restored
      */
     private boolean restoreSession() {
-        String pathsStr = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
-        if (pathsStr.isEmpty()) {
+        String entriesStr = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
+        if (entriesStr.isEmpty()) {
             return false;
         }
-        String[] paths = pathsStr.split("\n", -1);
-        String[] carets = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENT_CARETS, "").split("\n", -1);
         String activePath = PreferenceManager.getOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
 
         boolean restoredAny = false;
         restoringSession = true;
         try {
-            for (int i = 0; i < paths.length; i++) {
-                String path = paths[i];
-                if (path.isEmpty()) {
-                    continue;
+            for (String entry : entriesStr.split("\n", -1)) {
+                int tab = entry.indexOf('\t');
+                if (tab < 0) {
+                    continue; // malformed entry; skip just this one
                 }
+                String path = entry.substring(tab + 1);
                 File file = new File(path);
-                if (!file.isFile()) {
+                if (path.isEmpty() || !file.isFile()) {
                     continue; // file removed since last session
                 }
                 fileOperations.loadModelFile(file);
                 KalixDocument doc = documentManager.findByFile(file);
                 if (doc != null) {
                     restoredAny = true;
-                    if (i < carets.length && !carets[i].isEmpty()) {
-                        try {
-                            doc.setCaretPosition(Integer.parseInt(carets[i].trim()));
-                        } catch (NumberFormatException ignored) {
-                            // best-effort caret restore
-                        }
+                    try {
+                        doc.setCaretPosition(Integer.parseInt(entry.substring(0, tab).trim()));
+                    } catch (NumberFormatException ignored) {
+                        // best-effort caret restore
                     }
                 }
             }
@@ -416,8 +405,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         editor.initializeAutoComplete(schemaManager, document.getModelSupplier(), document::getWorkingDirectory);
         editor.setLinterBaseDirectorySupplier(document::getWorkingDirectory);
 
-        // Status bar reflects the active document's model changes.
-        document.getModel().addChangeListener(this::onModelChanged);
+        // Status bar reflects model changes — but only for the active document (the
+        // listener is bound to this document so it can tell whether it is the active one).
+        document.getModel().addChangeListener(event -> onModelChanged(document, event));
 
         // Dirty state updates the tab marker and (when active) the window title.
         editor.setDirtyStateListener(isDirty -> {
@@ -638,7 +628,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public void componentResized(ComponentEvent e) {
                 // Update title bar when window is resized to ensure path still fits
-                titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
+                if (textEditor != null) {
+                    titleBarManager.updateTitle(textEditor.isDirty(), fileOperations::getCurrentFile);
+                }
             }
         });
 
@@ -742,25 +734,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     /**
      * Handles model change events and updates status bar.
      */
-    private void onModelChanged(ModelChangeEvent event) {
+    private void onModelChanged(KalixDocument document, ModelChangeEvent event) {
+        // Only the active document drives the status bar; a background document's model
+        // change (e.g. during session restore) must not overwrite the active document's stats.
+        if (document != documentManager.getActiveDocument()) {
+            return;
+        }
         SwingUtilities.invokeLater(() -> {
-            if (hydrologicalModel == null) {
-                return;
-            }
-            var stats = hydrologicalModel.getStatistics();
-            String baseMessage = String.format("Model: %d nodes, %d links",
-                stats.getNodeCount(), stats.getLinkCount());
-
+            String message = modelStatusText(document);
             // Note: per-document auto-zoom on the 0 -> >0 transition is handled by KalixDocument.
-
-            // Add affected counts if there were changes
             if (event.getAffectedNodeCount() > 0 || event.getAffectedLinkCount() > 0) {
-                String changeMessage = String.format(" (%d nodes, %d links modified)",
+                message += String.format(" (%d nodes, %d links modified)",
                     event.getAffectedNodeCount(), event.getAffectedLinkCount());
-                updateStatus(baseMessage + changeMessage);
-            } else {
-                updateStatus(baseMessage);
             }
+            updateStatus(message);
         });
     }
 
@@ -769,12 +756,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * Used when switching tabs (no model-change event fires on a mere switch).
      */
     private void refreshModelStatus() {
-        if (hydrologicalModel == null) {
-            return;
+        KalixDocument document = documentManager.getActiveDocument();
+        if (document != null) {
+            updateStatus(modelStatusText(document));
         }
-        var stats = hydrologicalModel.getStatistics();
-        updateStatus(String.format("Model: %d nodes, %d links",
-            stats.getNodeCount(), stats.getLinkCount()));
+    }
+
+    /** The "Model: N nodes, M links" summary for a document — defined in one place. */
+    private static String modelStatusText(KalixDocument document) {
+        var stats = document.getModel().getStatistics();
+        return String.format("Model: %d nodes, %d links", stats.getNodeCount(), stats.getLinkCount());
     }
     
     /**
@@ -1076,7 +1067,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             parameterSheetWindow.requestFocus();
             return;
         }
-        parameterSheetWindow = new com.kalix.ide.parametersheet.ParameterSheetWindow(this, modelSupplier, textEditor);
+        // Pin the sheet to the document it was opened for: its model supplier and its
+        // editor must refer to the SAME document, so editing the sheet after a tab switch
+        // cannot read one document's model and write another's text.
+        KalixDocument document = documentManager.getActiveDocument();
+        if (document == null) {
+            return;
+        }
+        parameterSheetWindow = new com.kalix.ide.parametersheet.ParameterSheetWindow(
+            this, document.getModelSupplier(), document.getEditor());
         parameterSheetWindow.setVisible(true);
     }
 

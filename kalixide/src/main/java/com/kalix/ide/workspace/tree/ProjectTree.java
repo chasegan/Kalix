@@ -355,8 +355,15 @@ public class ProjectTree extends JTree {
         }
         try {
             if (file.isDirectory()) {
+                // Delete depth-first (children before parents). Files.delete throws on
+                // failure, so a locked/read-only entry surfaces as an error rather than a
+                // silently half-deleted folder.
                 try (Stream<java.nio.file.Path> walk = Files.walk(file.toPath())) {
-                    walk.sorted(Comparator.reverseOrder()).map(java.nio.file.Path::toFile).forEach(File::delete);
+                    java.util.List<java.nio.file.Path> paths =
+                        walk.sorted(Comparator.reverseOrder()).collect(java.util.stream.Collectors.toList());
+                    for (java.nio.file.Path path : paths) {
+                        Files.delete(path);
+                    }
                 }
             } else {
                 Files.delete(file.toPath());

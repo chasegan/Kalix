@@ -31,7 +31,7 @@ public class ProjectTreePanel extends JPanel {
 
     private final CardLayout cards = new CardLayout();
     private final ProjectTree tree;
-    private final JLabel placeholder;
+    private final JLabel placeholder = new JLabel("No folder open");
 
     public ProjectTreePanel(Consumer<File> fileOpenConsumer, Runnable openFolderAction) {
         setLayout(cards);
@@ -45,8 +45,6 @@ public class ProjectTreePanel extends JPanel {
         add(scroll, CARD_TREE);
 
         cards.show(this, CARD_EMPTY);
-
-        placeholder = findPlaceholderLabel();
     }
 
     /** Opens the given folder as the tree root and shows the tree. */
@@ -73,40 +71,19 @@ public class ProjectTreePanel extends JPanel {
         column.setOpaque(false);
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
 
-        JLabel message = new JLabel("No folder open");
-        message.setAlignmentX(Component.CENTER_ALIGNMENT);
-        message.setForeground(mutedForeground());
-        message.setName("placeholderLabel");
+        placeholder.setAlignmentX(Component.CENTER_ALIGNMENT);
+        placeholder.setForeground(mutedForeground());
 
         JButton openButton = new JButton("Open Folder...");
         openButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         openButton.addActionListener(e -> openFolderAction.run());
 
-        column.add(message);
+        column.add(placeholder);
         column.add(Box.createVerticalStrut(10));
         column.add(openButton);
 
         empty.add(column);
         return empty;
-    }
-
-    private JLabel findPlaceholderLabel() {
-        return findByName(this, "placeholderLabel");
-    }
-
-    private static JLabel findByName(Component root, String name) {
-        if (root instanceof JLabel label && name.equals(label.getName())) {
-            return label;
-        }
-        if (root instanceof java.awt.Container container) {
-            for (Component child : container.getComponents()) {
-                JLabel found = findByName(child, name);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
     }
 
     @Override
