@@ -54,7 +54,10 @@ public class ProjectTree extends JTree {
     public ProjectTree(Consumer<File> fileOpenConsumer) {
         this.fileOpenConsumer = fileOpenConsumer;
 
-        setRootVisible(true);
+        // Hide the root node: the open folder's name is shown in the panel header instead, so
+        // the tree shows the folder's contents directly (VSCode-style). Root handles stay on so
+        // top-level directories remain expandable.
+        setRootVisible(false);
         setShowsRootHandles(true);
         getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         setCellRenderer(new FileTreeCellRenderer());
@@ -90,7 +93,8 @@ public class ProjectTree extends JTree {
         rootNode.ensureLoaded();
         model = new DefaultTreeModel(rootNode);
         setModel(model);
-        expandRow(0);
+        // Expand the (hidden) root so its children show as the top-level rows.
+        expandPath(new TreePath(rootNode));
 
         fsWatcher.watch(root.toPath());
     }
