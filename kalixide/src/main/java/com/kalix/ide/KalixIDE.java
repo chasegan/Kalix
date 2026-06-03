@@ -92,6 +92,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JToolBar toolBar;
 
     // Toolbar toggle buttons (stored for state synchronization)
+    private JToggleButton fileTreeToggleButton;
     private JToggleButton lintingToggleButton;
     private JToggleButton autoReloadToggleButton;
     private JToggleButton gridlinesToggleButton;
@@ -491,6 +492,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
         ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
         toolBar = components.toolBar;
+        fileTreeToggleButton = components.fileTreeToggleButton;
         lintingToggleButton = components.lintingToggleButton;
         autoReloadToggleButton = components.autoReloadToggleButton;
         gridlinesToggleButton = components.gridlinesToggleButton;
@@ -520,13 +522,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * region widths and collapsed states and persists any changes.
      */
     private WorkspacePanel buildWorkspacePanel() {
-        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile, this::openFolder);
+        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile);
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
         int treeWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_TREE_WIDTH, AppConstants.DEFAULT_TREE_WIDTH);
         int mapWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_MAP_WIDTH, AppConstants.DEFAULT_MAP_WIDTH);
-        boolean treeCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, false);
+        boolean treeCollapsed = computeInitialTreeCollapsed();
         boolean mapCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, false);
 
         workspacePanel = new WorkspacePanel(
@@ -541,6 +543,25 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         });
 
         return workspacePanel;
+    }
+
+    /**
+     * The tree region's initial collapsed state: collapsed whenever there is no valid saved
+     * folder to restore (regardless of the saved collapse preference); otherwise the saved
+     * preference. Passing this as the {@code WorkspacePanel} constructor's initial state means
+     * a folderless launch does not overwrite the user's saved collapse preference.
+     */
+    private boolean computeInitialTreeCollapsed() {
+        if (!savedFolderIsValid()) {
+            return true;
+        }
+        return PreferenceManager.getOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, false);
+    }
+
+    /** @return true if the saved workspace folder preference points at an existing directory */
+    private boolean savedFolderIsValid() {
+        String folder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        return !folder.isEmpty() && new File(folder).isDirectory();
     }
 
     /**
@@ -582,6 +603,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * Called when preferences are changed outside of the toolbar (e.g., via Preferences dialog).
      */
     private void syncToggleButtonStates() {
+        if (fileTreeToggleButton != null) {
+            boolean treeVisible = isFileTreeVisible();
+            fileTreeToggleButton.setSelected(treeVisible);
+            fileTreeToggleButton.setToolTipText(treeVisible ? "Hide file tree" : "Show file tree");
+        }
+
         if (lintingToggleButton != null) {
             boolean lintingEnabled = isLintingEnabled();
             lintingToggleButton.setSelected(lintingEnabled);
@@ -834,10 +861,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             File folder = chooser.getSelectedFile();
             projectTreePanel.openFolder(folder);
             PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folder.getAbsolutePath());
-            // Ensure the tree region is visible.
-            if (workspacePanel != null && workspacePanel.isTreeCollapsed()) {
+            // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
+            if (workspacePanel != null) {
                 workspacePanel.setTreeCollapsed(false);
             }
+            syncToggleButtonStates();
             updateStatus("Opened folder: " + folder.getName());
         }
     }
@@ -1057,10 +1085,29 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void toggleFileTree() {
-        if (workspacePanel != null) {
-            workspacePanel.toggleTree();
-            updateStatus(workspacePanel.isTreeCollapsed() ? "File tree hidden" : "File tree shown");
+        if (workspacePanel == null) {
+            return;
         }
+        if (workspacePanel.isTreeCollapsed()) {
+            // Showing the tree: if no folder is open, prompt for one (which expands on success);
+            // otherwise just expand. So an empty tree is never shown.
+            if (projectTreePanel.getRootFile() == null) {
+                openFolder();
+            } else {
+                workspacePanel.setTreeCollapsed(false);
+            }
+        } else {
+            workspacePanel.setTreeCollapsed(true);
+        }
+        syncToggleButtonStates();
+        updateStatus(workspacePanel.isTreeCollapsed() ? "File tree hidden" : "File tree shown");
+    }
+
+    @Override
+    public boolean isFileTreeVisible() {
+        // Before the workspace panel exists (toolbar build), fall back to the effective initial
+        // state so the toolbar button starts correct.
+        return workspacePanel != null ? !workspacePanel.isTreeCollapsed() : !computeInitialTreeCollapsed();
     }
 
     @Override

@@ -21,16 +21,19 @@ public class ToolBarBuilder {
      */
     public static class ToolBarComponents {
         public final JToolBar toolBar;
+        public final JToggleButton fileTreeToggleButton;
         public final JToggleButton lintingToggleButton;
         public final JToggleButton autoReloadToggleButton;
         public final JToggleButton gridlinesToggleButton;
         public final JButton backButton;
         public final JButton forwardButton;
 
-        public ToolBarComponents(JToolBar toolBar, JToggleButton lintingToggleButton,
+        public ToolBarComponents(JToolBar toolBar, JToggleButton fileTreeToggleButton,
+                                 JToggleButton lintingToggleButton,
                                  JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton,
                                  JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
+            this.fileTreeToggleButton = fileTreeToggleButton;
             this.lintingToggleButton = lintingToggleButton;
             this.autoReloadToggleButton = autoReloadToggleButton;
             this.gridlinesToggleButton = gridlinesToggleButton;
@@ -162,6 +165,11 @@ public class ToolBarBuilder {
 
         toolBar.addSeparator();
 
+        // Layout toggle (file tree), separated from the content toggles that follow.
+        JToggleButton fileTreeButton = createFileTreeToggleButton();
+        toolBar.add(fileTreeButton);
+        toolBar.addSeparator();
+
         // Create and store toggle buttons
         JToggleButton lintingButton = createLintingToggleButton();
         JToggleButton autoReloadButton = createAutoReloadToggleButton();
@@ -171,8 +179,35 @@ public class ToolBarBuilder {
         toolBar.add(autoReloadButton);
         toolBar.add(gridlinesButton);
 
-        return new ToolBarComponents(toolBar, lintingButton, autoReloadButton, gridlinesButton,
-            backButton, forwardButton);
+        return new ToolBarComponents(toolBar, fileTreeButton, lintingButton, autoReloadButton,
+            gridlinesButton, backButton, forwardButton);
+    }
+
+    /**
+     * Creates the file-tree toggle. Selected = tree visible. Because showing the tree with no
+     * folder open triggers an open-folder dialog, the button's state is read back from the
+     * callback after toggling rather than simply inverted.
+     */
+    private JToggleButton createFileTreeToggleButton() {
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.COLUMNS, AppConstants.TOOLBAR_ICON_SIZE);
+        icon.setIconColor(getThemeAwareIconColor());
+
+        JToggleButton treeButton = new JToggleButton(icon);
+        treeButton.setFocusPainted(false);
+
+        boolean visible = callbacks.isFileTreeVisible();
+        treeButton.setSelected(visible);
+        treeButton.setToolTipText(visible ? "Hide file tree" : "Show file tree");
+
+        treeButton.addActionListener(e -> {
+            callbacks.toggleFileTree();
+            boolean nowVisible = callbacks.isFileTreeVisible();
+            treeButton.setSelected(nowVisible);
+            treeButton.setToolTipText(nowVisible ? "Hide file tree" : "Show file tree");
+        });
+
+        treeButton.getAccessibleContext().setAccessibleName("Toggle File Tree");
+        return treeButton;
     }
     
     /**

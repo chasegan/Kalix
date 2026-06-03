@@ -3,54 +3,53 @@ package com.kalix.ide.workspace;
 import com.kalix.ide.workspace.tree.ProjectTree;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.UIManager;
-import java.awt.CardLayout;
+import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Component;
-import java.awt.GridBagLayout;
+import java.awt.Font;
 import java.io.File;
 import java.util.function.Consumer;
 
 /**
- * The left-hand project tree region. Shows an empty state ("No folder open" + an Open Folder
- * button, à la VSCode) until a folder is opened, then the live {@link ProjectTree}.
+ * The left-hand project region: a small header showing the open folder's name above the live
+ * {@link ProjectTree}. Both are inside this panel, so collapsing the region (via
+ * {@code WorkspacePanel}) hides the header and tree together.
  *
- * <p>Opening files is delegated to the supplied consumer (which adds editor tabs); the empty
- * state's button triggers the host's Open Folder action.
+ * <p>The header uses the default label font in bold on the menu bar's background colour, so it
+ * reads as part of the menu's solid style rather than inventing a new visual language.
+ *
+ * <p>There is no empty state: the region is kept collapsed whenever no folder is open, and
+ * showing it always opens a folder first, so an empty tree is never displayed.
  */
 public class ProjectTreePanel extends JPanel {
 
-    private static final String CARD_EMPTY = "empty";
-    private static final String CARD_TREE = "tree";
-
-    private final CardLayout cards = new CardLayout();
     private final ProjectTree tree;
-    private final JLabel placeholder = new JLabel("No folder open");
+    private final JLabel header = new JLabel();
 
-    public ProjectTreePanel(Consumer<File> fileOpenConsumer, Runnable openFolderAction) {
-        setLayout(cards);
+    public ProjectTreePanel(Consumer<File> fileOpenConsumer) {
+        super(new BorderLayout());
 
-        add(buildEmptyState(openFolderAction), CARD_EMPTY);
+        header.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+        applyHeaderStyle();
 
         tree = new ProjectTree(fileOpenConsumer);
         JScrollPane scroll = new JScrollPane(tree);
         scroll.setBorder(null);
         scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
-        add(scroll, CARD_TREE);
 
-        cards.show(this, CARD_EMPTY);
+        add(header, BorderLayout.NORTH);
+        add(scroll, BorderLayout.CENTER);
     }
 
-    /** Opens the given folder as the tree root and shows the tree. */
+    /** Opens the given folder: loads the tree and sets the header to the folder name. */
     public void openFolder(File root) {
         tree.openFolder(root);
-        cards.show(this, CARD_TREE);
+        String name = root.getName();
+        header.setText(name.isEmpty() ? root.getAbsolutePath() : name);
+        header.setToolTipText(root.getAbsolutePath());
     }
 
     /** @return the currently open root folder, or {@code null} if none */
@@ -63,43 +62,30 @@ public class ProjectTreePanel extends JPanel {
         tree.dispose();
     }
 
-    private JPanel buildEmptyState(Runnable openFolderAction) {
-        JPanel empty = new JPanel(new GridBagLayout());
-        empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-
-        JPanel column = new JPanel();
-        column.setOpaque(false);
-        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-
-        placeholder.setAlignmentX(Component.CENTER_ALIGNMENT);
-        placeholder.setForeground(mutedForeground());
-
-        JButton openButton = new JButton("Open Folder...");
-        openButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        openButton.addActionListener(e -> openFolderAction.run());
-
-        column.add(placeholder);
-        column.add(Box.createVerticalStrut(10));
-        column.add(openButton);
-
-        empty.add(column);
-        return empty;
-    }
-
     @Override
     public void updateUI() {
         super.updateUI();
-        if (placeholder != null) {
-            placeholder.setForeground(mutedForeground());
+        // Re-apply the header style after a look-and-feel/theme change (explicitly set colours
+        // and fonts do not track the theme on their own).
+        if (header != null) {
+            applyHeaderStyle();
         }
     }
 
-    private static Color mutedForeground() {
-        Color disabled = UIManager.getColor("Label.disabledForeground");
-        if (disabled != null) {
-            return disabled;
+    /**
+     * Styles the header: the menu bar's background with a bold default-label font, so it reads
+     * as part of the menu's solid style. Colour and font are copied into plain (non-UIResource)
+     * instances so the label UI does not overwrite them with defaults on a theme change.
+     */
+    private void applyHeaderStyle() {
+        Color background = UIManager.getColor("MenuBar.background");
+        if (background != null) {
+            header.setOpaque(true);
+            header.setBackground(new Color(background.getRGB()));
         }
-        Color fg = UIManager.getColor("Label.foreground");
-        return fg != null ? fg : Color.GRAY;
+        Font base = UIManager.getFont("Label.font");
+        if (base != null) {
+            header.setFont(base.deriveFont(Font.BOLD));
+        }
     }
 }

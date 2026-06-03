@@ -44,6 +44,7 @@ public class MenuBarBuilder {
         void resetZoom();
         void zoomToFit();
         void toggleFileTree();
+        boolean isFileTreeVisible();
         void toggleMap();
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
