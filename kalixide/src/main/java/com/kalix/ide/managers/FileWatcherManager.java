@@ -1,125 +1,79 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.utils.Platform;
-import com.kalix.ide.utils.PlatformUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Manages file watching functionality for automatic reloading of clean model files.
- * Watches the currently loaded file for external changes and triggers reload when appropriate.
+ * Watches the currently loaded file for external changes and triggers an auto-reload when the
+ * file is changed on disk (and auto-reload is enabled). Backed by {@link FsWatcher} (native
+ * FSEvents on macOS), so it does not suffer the multi-second latency of the JDK's polling
+ * watch service.
+ *
+ * <p>{@link FsWatcher} watches directories, so this watches the file's parent directory and
+ * filters events to the one file of interest. Reload events are delivered on the EDT.
  */
 public class FileWatcherManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(FileWatcherManager.class);
+    /**
+     * After a save we briefly ignore changes so the IDE doesn't reload the file it just wrote.
+     * A short time window absorbs the burst of events a single write can produce.
+     */
+    private static final long SELF_SAVE_IGNORE_WINDOW_MS = 2000;
 
     private final Consumer<File> fileReloadCallback;
-    private final ExecutorService watchService;
+    private final FsWatcher fsWatcher;
 
-    private WatchService watchService_;
-    private File currentWatchedFile;
-    private Path currentWatchedDirectory;
-    private boolean isWatching = false;
-    private volatile boolean shouldStop = false;
-
-    // Windows generates multiple ENTRY_MODIFY events for a single write,
-    // so we use a time-based window. Other platforms use a single-event flag.
-    private static final boolean IS_WINDOWS = PlatformUtils.getCurrentPlatform() == Platform.WINDOWS;
-    private static final long WINDOWS_IGNORE_WINDOW_MS = 3000;
+    private File watchedFile;
     private volatile long ignoreChangesUntil = 0;
-    private volatile boolean ignoreNextChange = false;
 
     /**
      * Creates a new FileWatcherManager.
      *
-     * @param fileReloadCallback Callback to trigger when a file should be reloaded
+     * @param fileReloadCallback Callback (invoked on the EDT) when a file should be reloaded
      */
     public FileWatcherManager(Consumer<File> fileReloadCallback) {
         this.fileReloadCallback = fileReloadCallback;
-        this.watchService = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "FileWatcher");
-            t.setDaemon(true);
-            return t;
-        });
-
-        try {
-            this.watchService_ = FileSystems.getDefault().newWatchService();
-        } catch (IOException e) {
-            logger.error("Failed to create file watch service", e);
-        }
+        this.fsWatcher = new FsWatcher(this::onFsEvent);
     }
 
     /**
-     * Starts watching the specified file for changes.
-     * Only watches if auto-reload preference is enabled and file is not null.
+     * Starts watching the specified file for changes. Only watches if auto-reload is enabled
+     * and the file (and its parent directory) are non-null.
      *
      * @param file The file to watch, or null to stop watching
      */
     public void watchFile(File file) {
-        // Stop any existing watch
         stopWatching();
 
-        // Don't start watching if disabled or no file
-        if (!isAutoReloadEnabled() || file == null || watchService_ == null) {
+        if (!isAutoReloadEnabled() || file == null) {
             return;
         }
-
-        try {
-            Path filePath = file.toPath();
-            Path directory = filePath.getParent();
-
-            if (directory == null) {
-                logger.warn("Cannot watch file without parent directory: {}", file);
-                return;
-            }
-
-            // Register directory for watching
-            directory.register(watchService_, StandardWatchEventKinds.ENTRY_MODIFY);
-
-            currentWatchedFile = file;
-            currentWatchedDirectory = directory;
-            isWatching = true;
-            shouldStop = false;
-
-            // Start watching in background thread
-            watchService.submit(this::watchLoop);
-
-        } catch (IOException e) {
-            logger.error("Failed to start watching file: {}", file, e);
+        File directory = file.getParentFile();
+        if (directory == null) {
+            return;
         }
+        watchedFile = file;
+        fsWatcher.watch(directory.toPath());
     }
 
     /**
      * Stops watching the current file.
      */
     public void stopWatching() {
-        shouldStop = true;
-        isWatching = false;
-        currentWatchedFile = null;
-        currentWatchedDirectory = null;
+        watchedFile = null;
+        fsWatcher.stop();
     }
 
     /**
-     * Tells the file watcher to ignore the next change event(s).
-     * Used when saving a file to prevent it from being immediately reloaded.
-     * On Windows, uses a time-based window since multiple ENTRY_MODIFY events
-     * are generated for a single write. Other platforms use a single-event flag.
+     * Tells the watcher to ignore changes for a short window. Used when saving a file to
+     * prevent the IDE from immediately reloading the file it just wrote.
      */
     public void ignoreNextChange() {
-        if (IS_WINDOWS) {
-            this.ignoreChangesUntil = System.currentTimeMillis() + WINDOWS_IGNORE_WINDOW_MS;
-        } else {
-            this.ignoreNextChange = true;
-        }
+        ignoreChangesUntil = System.currentTimeMillis() + SELF_SAVE_IGNORE_WINDOW_MS;
     }
 
     /**
@@ -141,78 +95,8 @@ public class FileWatcherManager {
 
         if (!enabled) {
             stopWatching();
-        } else if (currentWatchedFile != null) {
-            // Restart watching with current file
-            File fileToWatch = currentWatchedFile;
-            watchFile(fileToWatch);
-        }
-    }
-
-    /**
-     * Main watch loop that monitors for file changes.
-     */
-    private void watchLoop() {
-        while (!shouldStop && isWatching) {
-            try {
-                WatchKey key = watchService_.take(); // Blocks until an event occurs
-
-                if (shouldStop) {
-                    break;
-                }
-
-                for (WatchEvent<?> event : key.pollEvents()) {
-                    WatchEvent.Kind<?> kind = event.kind();
-
-                    if (kind == StandardWatchEventKinds.OVERFLOW) {
-                        continue;
-                    }
-
-                    if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
-                        Path modifiedFile = currentWatchedDirectory.resolve((Path) event.context());
-
-                        // Check if this is our watched file
-                        if (currentWatchedFile != null &&
-                            modifiedFile.equals(currentWatchedFile.toPath())) {
-
-                            // Skip reload if we should ignore this change (e.g., from our own save)
-                            if (IS_WINDOWS) {
-                                if (System.currentTimeMillis() < ignoreChangesUntil) {
-                                    continue;
-                                }
-                            } else {
-                                if (ignoreNextChange) {
-                                    ignoreNextChange = false;
-                                    continue;
-                                }
-                            }
-
-                            // Trigger reload on EDT
-                            javax.swing.SwingUtilities.invokeLater(() -> {
-                                if (currentWatchedFile != null && isWatching) {
-                                    fileReloadCallback.accept(currentWatchedFile);
-                                }
-                            });
-                        }
-                    }
-                }
-
-                // Reset the key
-                boolean valid = key.reset();
-                if (!valid) {
-                    logger.warn("Watch key no longer valid, stopping file watch");
-                    break;
-                }
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (java.nio.file.ClosedWatchServiceException e) {
-                // Expected during shutdown when watch service is closed while thread is blocked
-                break;
-            } catch (Exception e) {
-                logger.error("Error in file watch loop", e);
-                break;
-            }
+        } else if (watchedFile != null) {
+            watchFile(watchedFile);
         }
     }
 
@@ -221,15 +105,25 @@ public class FileWatcherManager {
      */
     public void shutdown() {
         stopWatching();
+    }
 
-        if (watchService_ != null) {
-            try {
-                watchService_.close();
-            } catch (IOException e) {
-                logger.error("Error closing watch service", e);
-            }
+    /**
+     * Handles a filesystem event (on the EDT): reloads if it concerns the watched file,
+     * is a content change (create/modify), and isn't within the self-save ignore window.
+     */
+    private void onFsEvent(FsWatcher.Event event) {
+        if (watchedFile == null) {
+            return;
         }
-
-        watchService.shutdown();
+        if (event.kind() != FsWatcher.Kind.MODIFY && event.kind() != FsWatcher.Kind.CREATE) {
+            return; // structural events don't change the open file's content
+        }
+        if (!event.path().toFile().equals(watchedFile)) {
+            return; // a sibling in the same directory; not our file
+        }
+        if (System.currentTimeMillis() < ignoreChangesUntil) {
+            return; // our own save
+        }
+        fileReloadCallback.accept(watchedFile);
     }
 }
