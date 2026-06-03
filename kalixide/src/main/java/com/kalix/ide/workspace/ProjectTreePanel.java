@@ -18,6 +18,9 @@ import java.util.function.Consumer;
  * {@link ProjectTree}. Both are inside this panel, so collapsing the region (via
  * {@code WorkspacePanel}) hides the header and tree together.
  *
+ * <p>The header uses the default label font in bold on the menu bar's background colour, so it
+ * reads as part of the menu's solid style rather than inventing a new visual language.
+ *
  * <p>There is no empty state: the region is kept collapsed whenever no folder is open, and
  * showing it always opens a folder first, so an empty tree is never displayed.
  */
@@ -30,8 +33,7 @@ public class ProjectTreePanel extends JPanel {
         super(new BorderLayout());
 
         header.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
-        header.setFont(header.getFont().deriveFont(Font.BOLD));
-        header.setForeground(mutedForeground());
+        applyHeaderStyle();
 
         tree = new ProjectTree(fileOpenConsumer);
         JScrollPane scroll = new JScrollPane(tree);
@@ -63,17 +65,27 @@ public class ProjectTreePanel extends JPanel {
     @Override
     public void updateUI() {
         super.updateUI();
+        // Re-apply the header style after a look-and-feel/theme change (explicitly set colours
+        // and fonts do not track the theme on their own).
         if (header != null) {
-            header.setForeground(mutedForeground());
+            applyHeaderStyle();
         }
     }
 
-    private static Color mutedForeground() {
-        Color disabled = UIManager.getColor("Label.disabledForeground");
-        if (disabled != null) {
-            return disabled;
+    /**
+     * Styles the header: the menu bar's background with a bold default-label font, so it reads
+     * as part of the menu's solid style. Colour and font are copied into plain (non-UIResource)
+     * instances so the label UI does not overwrite them with defaults on a theme change.
+     */
+    private void applyHeaderStyle() {
+        Color background = UIManager.getColor("MenuBar.background");
+        if (background != null) {
+            header.setOpaque(true);
+            header.setBackground(new Color(background.getRGB()));
         }
-        Color fg = UIManager.getColor("Label.foreground");
-        return fg != null ? fg : Color.GRAY;
+        Font base = UIManager.getFont("Label.font");
+        if (base != null) {
+            header.setFont(base.deriveFont(Font.BOLD));
+        }
     }
 }
