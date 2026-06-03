@@ -484,13 +484,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 "Compare", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        String fileText;
-        try {
-            fileText = java.nio.file.Files.readString(file.toPath());
-        } catch (java.io.IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                "Could not read \"" + file.getName() + "\": " + ex.getMessage(),
-                "Compare", JOptionPane.ERROR_MESSAGE);
+        String fileText = readTextOrWarn(file);
+        if (fileText == null) {
             return;
         }
         File activeFile = active.getFile();
@@ -501,6 +496,39 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             active.getText(), fileText,
             "Compare: " + file.getName() + " vs active editor",
             file.getName(), activeName);
+    }
+
+    /**
+     * Opens a diff comparing two files against each other, {@code left} on the left and
+     * {@code right} on the right. Invoked from the project tree's "Compare files" menu item
+     * when exactly two files are selected (the selection's row order decides left vs right).
+     */
+    private void compareFiles(File left, File right) {
+        String leftText = readTextOrWarn(left);
+        if (leftText == null) {
+            return;
+        }
+        String rightText = readTextOrWarn(right);
+        if (rightText == null) {
+            return;
+        }
+        // referenceModel = left, thisModel = right (see DiffWindow).
+        new com.kalix.ide.diff.DiffWindow(
+            rightText, leftText,
+            "Compare: " + left.getName() + " vs " + right.getName(),
+            left.getName(), right.getName());
+    }
+
+    /** Reads a file's text, or shows an error dialog and returns null if it cannot be read. */
+    private String readTextOrWarn(File file) {
+        try {
+            return java.nio.file.Files.readString(file.toPath());
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                "Could not read \"" + file.getName() + "\": " + ex.getMessage(),
+                "Compare", JOptionPane.ERROR_MESSAGE);
+            return null;
+        }
     }
 
     /**
@@ -587,6 +615,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public void compareWithActiveEditor(File file) {
                 KalixIDE.this.compareWithActiveEditor(file);
+            }
+
+            @Override
+            public void compareFiles(File left, File right) {
+                KalixIDE.this.compareFiles(left, right);
             }
         });
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);

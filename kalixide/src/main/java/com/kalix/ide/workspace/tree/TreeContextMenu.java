@@ -72,7 +72,9 @@ class TreeContextMenu {
                 item("Open", TreeContextMenu::isSingleFile,
                     sel -> host.openFile(file(sel))),
                 item("Compare with active editor", TreeContextMenu::isSingleFile,
-                    sel -> host.compareWithActiveEditor(file(sel)))
+                    sel -> host.compareWithActiveEditor(file(sel))),
+                item("Compare files", TreeContextMenu::isTwoFiles,
+                    sel -> host.compareFiles(file(sel, 0), file(sel, 1)))
             ),
             List.of(
                 item("Reveal in File Manager", TreeContextMenu::isSingle,
@@ -127,6 +129,10 @@ class TreeContextMenu {
         return sel.size() == 1 && !sel.get(0).isDirectory();
     }
 
+    private static boolean isTwoFiles(List<FileTreeNode> sel) {
+        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory);
+    }
+
     private static boolean hasDirectory(List<FileTreeNode> sel) {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
     }
@@ -135,6 +141,10 @@ class TreeContextMenu {
 
     private static File file(List<FileTreeNode> sel) {
         return sel.get(0).getFile();
+    }
+
+    private static File file(List<FileTreeNode> sel, int index) {
+        return sel.get(index).getFile();
     }
 
     private static List<File> files(List<FileTreeNode> sel) {

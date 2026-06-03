@@ -24,4 +24,7 @@ public interface TreeHost {
 
     /** Opens a diff comparing the given file with the active editor's current text. */
     void compareWithActiveEditor(File file);
+
+    /** Opens a diff comparing two files against each other ({@code left} vs {@code right}). */
+    void compareFiles(File left, File right);
 }
