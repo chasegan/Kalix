@@ -45,6 +45,11 @@ public class ProjectTree extends JTree {
 
     private static final Logger logger = LoggerFactory.getLogger(ProjectTree.class);
 
+    // Per-level indent (px = left + right). Tighter than FlatLaf's default 7+11=18 for a
+    // more compact, VSCode-like tree. Applied per-component so other JTrees are unaffected.
+    private static final int LEFT_CHILD_INDENT = 6;
+    private static final int RIGHT_CHILD_INDENT = 8;
+
     private final Consumer<File> fileOpenConsumer;
 
     private DefaultTreeModel model;
@@ -111,6 +116,16 @@ public class ProjectTree extends JTree {
             return node.getFile();
         }
         return null;
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        // The look-and-feel reinstalls default indents on UI change; re-apply our tighter ones.
+        if (getUI() instanceof javax.swing.plaf.basic.BasicTreeUI treeUi) {
+            treeUi.setLeftChildIndent(LEFT_CHILD_INDENT);
+            treeUi.setRightChildIndent(RIGHT_CHILD_INDENT);
+        }
     }
 
     // --- Hover (full-width overlay) ---
