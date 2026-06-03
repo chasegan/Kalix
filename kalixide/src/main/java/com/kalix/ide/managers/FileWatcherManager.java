@@ -8,7 +8,9 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -40,7 +42,8 @@ public class FileWatcherManager {
 
     /** Open document files — remembered regardless of the auto-reload preference. */
     private final Set<File> watchedFiles = new LinkedHashSet<>();
-    private volatile long ignoreChangesUntil = 0;
+    /** Per-file "ignore changes until" timestamps, set when we write a file ourselves. */
+    private final Map<File, Long> ignoreUntil = new ConcurrentHashMap<>();
 
     /**
      * Creates a new FileWatcherManager.
@@ -69,11 +72,16 @@ public class FileWatcherManager {
     }
 
     /**
-     * Tells the watcher to ignore changes for a short window. Used when saving a file to
-     * prevent the IDE from immediately reloading the file it just wrote.
+     * Tells the watcher to ignore changes to the given file for a short window. Used when
+     * saving a file to prevent the IDE from immediately reloading the file it just wrote —
+     * scoped per file, so saving one document does not suppress an external change to another.
+     *
+     * @param file the file about to be written
      */
-    public void ignoreNextChange() {
-        ignoreChangesUntil = System.currentTimeMillis() + SELF_SAVE_IGNORE_WINDOW_MS;
+    public void ignoreNextChange(File file) {
+        if (file != null) {
+            ignoreUntil.put(file, System.currentTimeMillis() + SELF_SAVE_IGNORE_WINDOW_MS);
+        }
     }
 
     /**
@@ -101,6 +109,7 @@ public class FileWatcherManager {
      */
     public void shutdown() {
         watchedFiles.clear();
+        ignoreUntil.clear();
         fsWatcher.stop();
     }
 
@@ -135,8 +144,12 @@ public class FileWatcherManager {
         if (!watchedFiles.contains(changed)) {
             return; // a sibling in a watched directory; not one of our files
         }
-        if (System.currentTimeMillis() < ignoreChangesUntil) {
-            return; // our own save
+        Long until = ignoreUntil.get(changed);
+        if (until != null) {
+            if (System.currentTimeMillis() < until) {
+                return; // our own save of this file
+            }
+            ignoreUntil.remove(changed); // window elapsed; drop the entry
         }
         fileReloadCallback.accept(changed);
     }

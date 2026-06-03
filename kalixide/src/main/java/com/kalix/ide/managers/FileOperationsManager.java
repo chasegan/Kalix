@@ -186,7 +186,7 @@ public class FileOperationsManager {
 
         try {
             // Prevent file watcher from reloading the file we're about to save
-            fileWatcherManager.ignoreNextChange();
+            fileWatcherManager.ignoreNextChange(currentFile);
 
             String content = document.getText();
             Files.writeString(currentFile.toPath(), content);
@@ -249,7 +249,7 @@ public class FileOperationsManager {
 
             try {
                 // Prevent file watcher from reloading the file we're about to save
-                fileWatcherManager.ignoreNextChange();
+                fileWatcherManager.ignoreNextChange(selectedFile);
 
                 String content = document.getText();
                 Files.writeString(selectedFile.toPath(), content);
