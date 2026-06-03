@@ -49,4 +49,30 @@ class FsWatcherTest {
             SwingUtilities.invokeAndWait(watcher::stop);
         }
     }
+
+    @Test
+    void watchesMultipleDirectories() throws Exception {
+        Path dirA = Files.createTempDirectory("fswatcherA");
+        Path dirB = Files.createTempDirectory("fswatcherB");
+        CountDownLatch sawBoth = new CountDownLatch(2);
+
+        FsWatcher watcher = new FsWatcher(event -> {
+            if (event.kind() == FsWatcher.Kind.CREATE) {
+                sawBoth.countDown();
+            }
+        });
+
+        try {
+            SwingUtilities.invokeAndWait(() -> watcher.watch(List.of(dirA, dirB)));
+            Thread.sleep(1000);
+
+            Files.writeString(dirA.resolve("a.ini"), "a");
+            Files.writeString(dirB.resolve("b.ini"), "b");
+
+            assertTrue(sawBoth.await(10, TimeUnit.SECONDS),
+                "Expected CREATE events from both watched directories");
+        } finally {
+            SwingUtilities.invokeAndWait(watcher::stop);
+        }
+    }
 }

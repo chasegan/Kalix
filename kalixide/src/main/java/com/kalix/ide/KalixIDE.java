@@ -286,6 +286,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         documentManager.addDocumentOpenedListener(doc -> saveSession());
         documentManager.addDocumentClosedListener(doc -> saveSession());
         documentManager.addActiveDocumentChangeListener(doc -> saveSession());
+
+        // Keep the file watcher tracking every open document's file (all tabs auto-reload).
+        documentManager.addDocumentOpenedListener(doc -> refreshWatchedFiles());
+        documentManager.addDocumentClosedListener(doc -> refreshWatchedFiles());
     }
 
     /**
@@ -443,7 +447,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         SwingUtilities.invokeLater(mapPanel::updateThemeColors);
 
         titleBarManager.updateTitle(document.isDirty(), document::getFile);
-        fileWatcherManager.watchFile(document.getFile());
         documentTabPane.refreshTab(document);
         setupNavigationStateListener();
         refreshModelStatus();
@@ -451,7 +454,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     /**
      * Invoked when the active document's backing file changes without a document switch
-     * (Save As). Refreshes the file-derived UI: title, tab, and file watcher.
+     * (Save As). Refreshes the file-derived UI: title, tab, and the set of watched files.
      */
     private void onActiveDocumentFileChanged() {
         KalixDocument document = documentManager.getActiveDocument();
@@ -459,8 +462,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             return;
         }
         titleBarManager.updateTitle(document.isDirty(), document::getFile);
-        fileWatcherManager.watchFile(document.getFile());
         documentTabPane.refreshTab(document);
+        refreshWatchedFiles();
+    }
+
+    /**
+     * Updates the file watcher with the files of all open documents, so every tab — not just
+     * the active one — is auto-reloaded on external changes.
+     */
+    private void refreshWatchedFiles() {
+        java.util.List<File> files = new java.util.ArrayList<>();
+        for (KalixDocument document : documentManager.getDocuments()) {
+            if (document.getFile() != null) {
+                files.add(document.getFile());
+            }
+        }
+        fileWatcherManager.setWatchedFiles(files);
     }
 
     /**

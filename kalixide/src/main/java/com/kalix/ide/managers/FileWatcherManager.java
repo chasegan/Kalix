@@ -5,21 +5,27 @@ import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.PreferenceManager;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * Watches the currently loaded file for external changes and triggers an auto-reload when the
+ * Watches every open document's file for external changes and triggers an auto-reload when a
  * file is changed on disk (and auto-reload is enabled). Backed by {@link FsWatcher} (native
  * FSEvents on macOS), so it does not suffer the multi-second latency of the JDK's polling
  * watch service.
  *
- * <p>The active file is always remembered (via {@link #watchFile}) independent of the
- * auto-reload preference, and the actual watch is purely a function of that file plus the
- * preference (see {@link #restartWatch()}). So toggling the preference on/off after a file is
- * open correctly starts/stops watching it.
+ * <p>All open files are watched — not just the active tab — so a change to a background tab's
+ * file is picked up too. The set of files is always remembered (via {@link #setWatchedFiles})
+ * independent of the auto-reload preference, and the actual watch is purely a function of that
+ * set plus the preference (see {@link #restartWatch()}). So toggling the preference on/off
+ * after files are open correctly starts/stops watching them.
  *
- * <p>{@link FsWatcher} watches directories, so this watches the file's parent directory and
- * filters events to the one file of interest. Reload events are delivered on the EDT.
+ * <p>{@link FsWatcher} watches directories, so this watches the deduped set of parent
+ * directories of the open files and filters events to the files of interest. Reload events are
+ * delivered on the EDT.
  */
 public class FileWatcherManager {
 
@@ -32,8 +38,8 @@ public class FileWatcherManager {
     private final Consumer<File> fileReloadCallback;
     private final FsWatcher fsWatcher;
 
-    /** The active document's file — remembered regardless of the auto-reload preference. */
-    private File currentFile;
+    /** Open document files — remembered regardless of the auto-reload preference. */
+    private final Set<File> watchedFiles = new LinkedHashSet<>();
     private volatile long ignoreChangesUntil = 0;
 
     /**
@@ -47,13 +53,18 @@ public class FileWatcherManager {
     }
 
     /**
-     * Records the file to watch (typically the active document's file) and (re)starts watching
-     * it if auto-reload is enabled. Pass {@code null} for an untitled document.
+     * Records the set of files to watch (the open documents' files) and (re)starts watching
+     * their parent directories if auto-reload is enabled. Null entries are ignored.
      *
-     * @param file The file to watch, or null
+     * @param files The files of all open documents
      */
-    public void watchFile(File file) {
-        currentFile = file;
+    public void setWatchedFiles(Collection<File> files) {
+        watchedFiles.clear();
+        for (File file : files) {
+            if (file != null) {
+                watchedFiles.add(file);
+            }
+        }
         restartWatch();
     }
 
@@ -89,41 +100,44 @@ public class FileWatcherManager {
      * Shuts down the file watcher manager and releases resources.
      */
     public void shutdown() {
-        currentFile = null;
+        watchedFiles.clear();
         fsWatcher.stop();
     }
 
     /**
-     * (Re)derives the active watch from the current file and the auto-reload preference.
+     * (Re)derives the watch from the set of open files and the auto-reload preference: watches
+     * the deduped set of their parent directories.
      */
     private void restartWatch() {
-        fsWatcher.stop();
-        if (!isAutoReloadEnabled() || currentFile == null) {
+        if (!isAutoReloadEnabled() || watchedFiles.isEmpty()) {
+            fsWatcher.stop();
             return;
         }
-        File directory = currentFile.getParentFile();
-        if (directory != null) {
-            fsWatcher.watch(directory.toPath());
+        Set<Path> directories = new LinkedHashSet<>();
+        for (File file : watchedFiles) {
+            File directory = file.getParentFile();
+            if (directory != null) {
+                directories.add(directory.toPath());
+            }
         }
+        fsWatcher.watch(directories);
     }
 
     /**
-     * Handles a filesystem event (on the EDT): reloads if it concerns the current file,
+     * Handles a filesystem event (on the EDT): reloads if it concerns one of the open files,
      * is a content change (create/modify), and isn't within the self-save ignore window.
      */
     private void onFsEvent(FsWatcher.Event event) {
-        if (currentFile == null) {
-            return;
-        }
         if (event.kind() != FsWatcher.Kind.MODIFY && event.kind() != FsWatcher.Kind.CREATE) {
-            return; // structural events don't change the open file's content
+            return; // structural events don't change an open file's content
         }
-        if (!event.path().toFile().equals(currentFile)) {
-            return; // a sibling in the same directory; not our file
+        File changed = event.path().toFile();
+        if (!watchedFiles.contains(changed)) {
+            return; // a sibling in a watched directory; not one of our files
         }
         if (System.currentTimeMillis() < ignoreChangesUntil) {
             return; // our own save
         }
-        fileReloadCallback.accept(currentFile);
+        fileReloadCallback.accept(changed);
     }
 }

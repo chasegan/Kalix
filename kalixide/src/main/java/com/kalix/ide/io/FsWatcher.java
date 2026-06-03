@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -51,16 +54,27 @@ public class FsWatcher {
     }
 
     /**
-     * Watches the given directory tree, replacing any previous watch. Returns immediately;
-     * the watcher initialises on a background thread.
+     * Watches a single directory tree. Convenience for {@link #watch(Collection)}.
      */
     public void watch(Path root) {
+        watch(List.of(root));
+    }
+
+    /**
+     * Watches the given directory trees, replacing any previous watch. Returns immediately;
+     * the watcher initialises on a background thread. An empty collection just stops watching.
+     */
+    public void watch(Collection<Path> roots) {
         stop();
+        if (roots == null || roots.isEmpty()) {
+            return;
+        }
+        final List<Path> rootList = new ArrayList<>(roots);
         final int gen = ++generation;
         Thread init = new Thread(() -> {
             try {
                 DirectoryWatcher built = DirectoryWatcher.builder()
-                    .path(root)
+                    .paths(rootList)
                     .fileHasher(FileHasher.LAST_MODIFIED_TIME)
                     .listener(this::dispatch)
                     .build();
@@ -73,7 +87,7 @@ public class FsWatcher {
                     }
                 });
             } catch (IOException ex) {
-                logger.warn("Failed to start filesystem watcher for {}: {}", root, ex.getMessage());
+                logger.warn("Failed to start filesystem watcher for {}: {}", rootList, ex.getMessage());
             }
         }, "FsWatcher-init");
         init.setDaemon(true);
