@@ -20,15 +20,19 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -51,13 +55,16 @@ public class ProjectTree extends JTree {
     private static final int RIGHT_CHILD_INDENT = 8;
 
     private final Consumer<File> fileOpenConsumer;
+    /** Supplies the active document's file (or null if untitled/none), for relative paths. */
+    private final Supplier<File> activeFileSupplier;
 
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
     private int hoveredRow = -1;
 
-    public ProjectTree(Consumer<File> fileOpenConsumer) {
+    public ProjectTree(Consumer<File> fileOpenConsumer, Supplier<File> activeFileSupplier) {
         this.fileOpenConsumer = fileOpenConsumer;
+        this.activeFileSupplier = activeFileSupplier;
 
         // Hide the root node: the open folder's name is shown in the panel header instead, so
         // the tree shows the folder's contents directly (VSCode-style). Root handles stay on so
@@ -294,6 +301,35 @@ public class ProjectTree extends JTree {
         menu.add(reveal);
         menu.addSeparator();
 
+        if (node.isDirectory()) {
+            JMenuItem expandChildren = new JMenuItem("Expand children");
+            expandChildren.addActionListener(e -> expandSubtree(node));
+            menu.add(expandChildren);
+
+            JMenuItem collapseChildren = new JMenuItem("Collapse children");
+            collapseChildren.addActionListener(e -> collapseSubtree(node));
+            menu.add(collapseChildren);
+        }
+
+        JMenuItem collapseTree = new JMenuItem("Collapse tree");
+        collapseTree.addActionListener(e -> collapseAll());
+        menu.add(collapseTree);
+        menu.addSeparator();
+
+        JMenuItem copyRelative = new JMenuItem("Copy relative path");
+        copyRelative.addActionListener(e -> copyRelativePath(file));
+        menu.add(copyRelative);
+
+        JMenuItem copyFull = new JMenuItem("Copy full path");
+        copyFull.addActionListener(e -> copyToClipboard(file.getAbsolutePath()));
+        menu.add(copyFull);
+
+        JMenuItem copyTrailhead = new JMenuItem("Copy trailhead path");
+        copyTrailhead.addActionListener(e -> copyTrailheadPath(file));
+        menu.add(copyTrailhead);
+
+        menu.addSeparator();
+
         JMenuItem newFile = new JMenuItem("New File...");
         newFile.addActionListener(e -> createChild(node, false));
         menu.add(newFile);
@@ -417,6 +453,108 @@ public class ProjectTree extends JTree {
             dir.ensureLoaded();
             resyncDirectory(dir);
         }
+    }
+
+    // --- Expand / collapse ---
+
+    /** Recursively expands this node and all descendant directories (lazily loading them). */
+    private void expandSubtree(FileTreeNode node) {
+        expandPath(new TreePath(node.getPath())); // loads children via the will-expand listener
+        for (int i = 0; i < node.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) node.getChildAt(i);
+            if (child.isDirectory()) {
+                expandSubtree(child);
+            }
+        }
+    }
+
+    /** Recursively collapses all descendant directories of this node, then the node itself. */
+    private void collapseSubtree(FileTreeNode node) {
+        for (int i = 0; i < node.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) node.getChildAt(i);
+            if (child.isDirectory()) {
+                collapseSubtree(child);
+            }
+        }
+        collapsePath(new TreePath(node.getPath()));
+    }
+
+    /** Collapses every top-level branch, leaving only the top-level rows (the root is hidden). */
+    private void collapseAll() {
+        if (model == null) {
+            return;
+        }
+        FileTreeNode root = (FileTreeNode) model.getRoot();
+        for (int i = 0; i < root.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) root.getChildAt(i);
+            if (child.isDirectory()) {
+                collapseSubtree(child);
+            }
+        }
+    }
+
+    // --- Copy path ---
+
+    private void copyRelativePath(File target) {
+        try {
+            copyToClipboard(relativePath(target));
+        } catch (IllegalStateException ex) {
+            showPathError(ex.getMessage());
+        }
+    }
+
+    private void copyTrailheadPath(File target) {
+        try {
+            copyToClipboard(toTrailhead(relativePath(target)));
+        } catch (IllegalStateException ex) {
+            showPathError(ex.getMessage());
+        }
+    }
+
+    /**
+     * Computes the forward-slash path to {@code target} relative to the active file's directory.
+     *
+     * @throws IllegalStateException if there is no saved active file, or the paths share no
+     *                               common root (so no relative path exists)
+     */
+    private String relativePath(File target) {
+        File activeFile = activeFileSupplier.get();
+        if (activeFile == null) {
+            throw new IllegalStateException(
+                "The active file hasn't been saved yet, so a relative path can't be computed.");
+        }
+        File baseDir = activeFile.getParentFile();
+        if (baseDir == null) {
+            throw new IllegalStateException("The active file has no parent directory.");
+        }
+        Path base = baseDir.toPath().toAbsolutePath().normalize();
+        Path dest = target.toPath().toAbsolutePath().normalize();
+        try {
+            return base.relativize(dest).toString().replace(File.separator, "/");
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException(
+                "Can't compute a relative path between different filesystem roots.");
+        }
+    }
+
+    /**
+     * Converts a relative path to a Kalix trailhead path: strips the leading run of "./" and
+     * "../" segments and prepends "^/" (so the result always starts with "^/").
+     */
+    static String toTrailhead(String relative) {
+        String s = relative;
+        while (s.startsWith("./") || s.startsWith("../")) {
+            s = s.startsWith("../") ? s.substring(3) : s.substring(2);
+        }
+        return "^/" + s;
+    }
+
+    private static void copyToClipboard(String text) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+    }
+
+    private void showPathError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Copy Path", JOptionPane.WARNING_MESSAGE);
     }
 
     // --- Filesystem watcher ---

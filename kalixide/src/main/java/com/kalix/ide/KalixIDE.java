@@ -538,7 +538,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * region widths and collapsed states and persists any changes.
      */
     private WorkspacePanel buildWorkspacePanel() {
-        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile);
+        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile, () -> {
+            KalixDocument active = documentManager.getActiveDocument();
+            return active != null ? active.getFile() : null;
+        });
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
