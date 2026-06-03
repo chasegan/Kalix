@@ -57,6 +57,11 @@ public class ProjectTreePanel extends JPanel {
         return tree.getRootFile();
     }
 
+    /** Reveals and selects the given file in the tree, if it lies within the open folder. */
+    public void selectFile(File file) {
+        tree.selectFile(file);
+    }
+
     /** Stops the directory watcher; call when the host window is disposed. */
     public void dispose() {
         tree.dispose();
