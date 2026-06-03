@@ -3,7 +3,7 @@ package com.kalix.ide.renderers;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.kalix.ide.models.optimisation.OptimisationResult;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;

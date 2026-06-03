@@ -11,7 +11,7 @@ import com.kalix.ide.utils.JsonUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;

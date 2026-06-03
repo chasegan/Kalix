@@ -111,6 +111,7 @@ public final class AppConstants {
     public static final int TOOLBAR_ICON_SIZE = 16;
     public static String getToolbarNewTooltip() { return "New Model (" + KeyboardShortcutManager.getInstance().getShortcutString("N") + ")"; }
     public static String getToolbarOpenTooltip() { return "Open Model (" + KeyboardShortcutManager.getInstance().getShortcutString("O") + ")"; }
+    public static String getToolbarOpenFolderTooltip() { return "Open Folder"; }
     public static String getToolbarSaveTooltip() { return "Save Model (" + KeyboardShortcutManager.getInstance().getShortcutString("S") + ")"; }
     public static String getToolbarSearchTooltip() { return "Find (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
     public static String getToolbarFindOnMapTooltip() { return "Find on Map (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }

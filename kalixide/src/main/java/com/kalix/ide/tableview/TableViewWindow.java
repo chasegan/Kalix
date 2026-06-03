@@ -2,7 +2,7 @@ package com.kalix.ide.tableview;
 
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.AbstractAction;

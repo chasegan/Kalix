@@ -1,7 +1,8 @@
 package com.kalix.ide.builders;
 
 import com.kalix.ide.constants.AppConstants;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import com.kalix.ide.icons.KalixIcon;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
@@ -71,15 +72,22 @@ public class ToolBarBuilder {
         toolBar.add(createToolBarButton(
             "New",
             AppConstants.getToolbarNewTooltip(),
-            FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
+            FontIcon.of(KalixIcon.FILE_CIRCLE_PLUS, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.newModel()
         ));
 
         toolBar.add(createToolBarButton(
             "Open",
             AppConstants.getToolbarOpenTooltip(),
-            FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
+            FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openModel()
+        ));
+
+        toolBar.add(createToolBarButton(
+            "Open Folder",
+            AppConstants.getToolbarOpenFolderTooltip(),
+            FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
+            e -> callbacks.openFolder()
         ));
 
         toolBar.add(createToolBarButton(
@@ -189,7 +197,7 @@ public class ToolBarBuilder {
      * callback after toggling rather than simply inverted.
      */
     private JToggleButton createFileTreeToggleButton() {
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.COLUMNS, AppConstants.TOOLBAR_ICON_SIZE);
+        FontIcon icon = FontIcon.of(KalixIcon.FOLDER_TREE, AppConstants.TOOLBAR_ICON_SIZE);
         icon.setIconColor(getThemeAwareIconColor());
 
         JToggleButton treeButton = new JToggleButton(icon);

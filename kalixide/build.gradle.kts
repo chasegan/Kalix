@@ -31,9 +31,9 @@ dependencies {
     implementation("com.formdev:flatlaf-intellij-themes:3.2.5")
     
     // Ikonli icons
-    implementation("org.kordamp.ikonli:ikonli-core:12.3.1")
-    implementation("org.kordamp.ikonli:ikonli-swing:12.3.1")
-    implementation("org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1")
+    implementation("org.kordamp.ikonli:ikonli-core:12.4.0")
+    implementation("org.kordamp.ikonli:ikonli-swing:12.4.0")
+    implementation("org.kordamp.ikonli:ikonli-fontawesome6-pack:12.4.0")
     
     // RSyntaxTextArea for enhanced text components
     implementation("com.fifesoft:rsyntaxtextarea:3.3.4")

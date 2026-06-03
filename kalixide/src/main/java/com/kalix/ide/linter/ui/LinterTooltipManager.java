@@ -3,7 +3,7 @@ package com.kalix.ide.linter.ui;
 import com.kalix.ide.linter.model.ValidationIssue;
 import com.kalix.ide.linter.model.ValidationRule;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
