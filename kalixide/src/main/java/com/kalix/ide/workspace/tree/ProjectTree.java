@@ -294,6 +294,21 @@ public class ProjectTree extends JTree {
         menu.add(reveal);
         menu.addSeparator();
 
+        if (node.isDirectory()) {
+            JMenuItem expandChildren = new JMenuItem("Expand children");
+            expandChildren.addActionListener(e -> expandSubtree(node));
+            menu.add(expandChildren);
+
+            JMenuItem collapseChildren = new JMenuItem("Collapse children");
+            collapseChildren.addActionListener(e -> collapseSubtree(node));
+            menu.add(collapseChildren);
+        }
+
+        JMenuItem collapseTree = new JMenuItem("Collapse tree");
+        collapseTree.addActionListener(e -> collapseAll());
+        menu.add(collapseTree);
+        menu.addSeparator();
+
         JMenuItem newFile = new JMenuItem("New File...");
         newFile.addActionListener(e -> createChild(node, false));
         menu.add(newFile);
@@ -416,6 +431,44 @@ public class ProjectTree extends JTree {
         if (dir != null) {
             dir.ensureLoaded();
             resyncDirectory(dir);
+        }
+    }
+
+    // --- Expand / collapse ---
+
+    /** Recursively expands this node and all descendant directories (lazily loading them). */
+    private void expandSubtree(FileTreeNode node) {
+        expandPath(new TreePath(node.getPath())); // loads children via the will-expand listener
+        for (int i = 0; i < node.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) node.getChildAt(i);
+            if (child.isDirectory()) {
+                expandSubtree(child);
+            }
+        }
+    }
+
+    /** Recursively collapses all descendant directories of this node, then the node itself. */
+    private void collapseSubtree(FileTreeNode node) {
+        for (int i = 0; i < node.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) node.getChildAt(i);
+            if (child.isDirectory()) {
+                collapseSubtree(child);
+            }
+        }
+        collapsePath(new TreePath(node.getPath()));
+    }
+
+    /** Collapses every top-level branch, leaving only the top-level rows (the root is hidden). */
+    private void collapseAll() {
+        if (model == null) {
+            return;
+        }
+        FileTreeNode root = (FileTreeNode) model.getRoot();
+        for (int i = 0; i < root.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) root.getChildAt(i);
+            if (child.isDirectory()) {
+                collapseSubtree(child);
+            }
         }
     }
 
