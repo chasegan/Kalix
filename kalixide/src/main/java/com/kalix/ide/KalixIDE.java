@@ -470,6 +470,39 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Opens a diff comparing {@code file} (left, on disk) against the active editor's current
+     * text (right, possibly unsaved). Invoked from the project tree's "Compare with active
+     * editor" menu item. The active editor's live buffer is used, so the diff reflects unsaved
+     * edits.
+     */
+    private void compareWithActiveEditor(File file) {
+        KalixDocument active = documentManager.getActiveDocument();
+        if (active == null) {
+            JOptionPane.showMessageDialog(this,
+                "There is no active editor to compare with.",
+                "Compare", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String fileText;
+        try {
+            fileText = java.nio.file.Files.readString(file.toPath());
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                "Could not read \"" + file.getName() + "\": " + ex.getMessage(),
+                "Compare", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        File activeFile = active.getFile();
+        String activeName = activeFile != null ? activeFile.getName() : "Active editor";
+        // referenceModel = left, thisModel = right (see DiffWindow): selected file on the left,
+        // the editor's current text on the right.
+        new com.kalix.ide.diff.DiffWindow(
+            active.getText(), fileText,
+            "Compare: " + file.getName() + " vs active editor",
+            file.getName(), activeName);
+    }
+
+    /**
      * Invoked when the active document's backing file changes without a document switch
      * (Save As). Refreshes the file-derived UI: title, tab, and the set of watched files.
      */
@@ -541,7 +574,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile, () -> {
             KalixDocument active = documentManager.getActiveDocument();
             return active != null ? active.getFile() : null;
-        });
+        }, this::compareWithActiveEditor);
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 

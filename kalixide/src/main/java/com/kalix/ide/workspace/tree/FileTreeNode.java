@@ -1,5 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.utils.NaturalSortUtils;
+
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
 import java.util.Arrays;
@@ -15,14 +17,14 @@ import java.util.Comparator;
  */
 public class FileTreeNode extends DefaultMutableTreeNode {
 
-    /** Directories first, then files, each case-insensitively by name. */
+    /** Directories first, then files, each in natural (number-aware) order by name. */
     static final Comparator<File> FILE_ORDER = (a, b) -> {
         boolean ad = a.isDirectory();
         boolean bd = b.isDirectory();
         if (ad != bd) {
             return ad ? -1 : 1;
         }
-        return a.getName().compareToIgnoreCase(b.getName());
+        return NaturalSortUtils.naturalCompare(a.getName(), b.getName());
     };
 
     private final File file;

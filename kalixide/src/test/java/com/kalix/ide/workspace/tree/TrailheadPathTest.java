@@ -12,41 +12,41 @@ class TrailheadPathTest {
 
     @Test
     void descendantGetsTrailheadPrefix() {
-        assertEquals("^/data/flow.csv", ProjectTree.toTrailhead("data/flow.csv"));
+        assertEquals("^/data/flow.csv", TreeFileOperations.toTrailhead("data/flow.csv"));
     }
 
     @Test
     void leadingDotSlashStripped() {
-        assertEquals("^/data/x", ProjectTree.toTrailhead("./data/x"));
+        assertEquals("^/data/x", TreeFileOperations.toTrailhead("./data/x"));
     }
 
     @Test
     void singleParentStripped() {
-        assertEquals("^/c/x.csv", ProjectTree.toTrailhead("../c/x.csv"));
+        assertEquals("^/c/x.csv", TreeFileOperations.toTrailhead("../c/x.csv"));
     }
 
     @Test
     void multipleParentsStripped() {
-        assertEquals("^/d/y.csv", ProjectTree.toTrailhead("../../d/y.csv"));
+        assertEquals("^/d/y.csv", TreeFileOperations.toTrailhead("../../d/y.csv"));
     }
 
     @Test
     void mixedLeadingSegmentsStripped() {
-        assertEquals("^/x", ProjectTree.toTrailhead("./../x"));
+        assertEquals("^/x", TreeFileOperations.toTrailhead("./../x"));
     }
 
     @Test
     void siblingFile() {
-        assertEquals("^/model.ini", ProjectTree.toTrailhead("model.ini"));
+        assertEquals("^/model.ini", TreeFileOperations.toTrailhead("model.ini"));
     }
 
     @Test
     void onlyParentSegments() {
-        assertEquals("^/", ProjectTree.toTrailhead("../../"));
+        assertEquals("^/", TreeFileOperations.toTrailhead("../../"));
     }
 
     @Test
     void empty() {
-        assertEquals("^/", ProjectTree.toTrailhead(""));
+        assertEquals("^/", TreeFileOperations.toTrailhead(""));
     }
 }

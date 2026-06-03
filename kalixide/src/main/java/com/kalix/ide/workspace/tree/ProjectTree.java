@@ -4,9 +4,7 @@ import com.kalix.ide.io.FsWatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
-import javax.swing.JMenuItem;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
@@ -20,20 +18,16 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 /**
  * The project file tree: a {@link JTree} over a lazily-loaded filesystem model, kept live by
@@ -57,21 +51,27 @@ public class ProjectTree extends JTree {
     private final Consumer<File> fileOpenConsumer;
     /** Supplies the active document's file (or null if untitled/none), for relative paths. */
     private final Supplier<File> activeFileSupplier;
+    /** Opens a diff of the given file against the active editor's current text. */
+    private final Consumer<File> compareWithActiveEditor;
 
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
     private int hoveredRow = -1;
+    private final TreeFileOperations fileOps;
+    private final TreeContextMenu contextMenu;
 
-    public ProjectTree(Consumer<File> fileOpenConsumer, Supplier<File> activeFileSupplier) {
+    public ProjectTree(Consumer<File> fileOpenConsumer, Supplier<File> activeFileSupplier,
+                       Consumer<File> compareWithActiveEditor) {
         this.fileOpenConsumer = fileOpenConsumer;
         this.activeFileSupplier = activeFileSupplier;
+        this.compareWithActiveEditor = compareWithActiveEditor;
 
         // Hide the root node: the open folder's name is shown in the panel header instead, so
         // the tree shows the folder's contents directly (VSCode-style). Root handles stay on so
         // top-level directories remain expandable.
         setRootVisible(false);
         setShowsRootHandles(true);
-        getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
         setCellRenderer(new FileTreeCellRenderer());
         ToolTipManager.sharedInstance().registerComponent(this);
 
@@ -91,6 +91,9 @@ public class ProjectTree extends JTree {
                 // no-op
             }
         });
+
+        this.fileOps = new TreeFileOperations(this, activeFileSupplier);
+        this.contextMenu = new TreeContextMenu(this, fileOps, fileOpenConsumer, compareWithActiveEditor);
 
         installMouseAndKeyHandlers();
     }
@@ -226,9 +229,9 @@ public class ProjectTree extends JTree {
         getActionMap().put("openSelected", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                FileTreeNode node = selectedNode();
-                if (node != null && node.getFile().isFile()) {
-                    fileOpenConsumer.accept(node.getFile());
+                List<FileTreeNode> selection = selectedNodes();
+                if (selection.size() == 1 && !selection.get(0).isDirectory()) {
+                    fileOpenConsumer.accept(selection.get(0).getFile());
                 }
             }
         });
@@ -240,7 +243,7 @@ public class ProjectTree extends JTree {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 FileTreeNode node = selectedNode();
                 if (node != null && !isRoot(node)) {
-                    rename(node.getFile());
+                    fileOps.rename(node.getFile());
                 }
             }
         });
@@ -250,9 +253,14 @@ public class ProjectTree extends JTree {
         getActionMap().put("deleteSelected", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                FileTreeNode node = selectedNode();
-                if (node != null && !isRoot(node)) {
-                    delete(node.getFile());
+                List<File> files = new ArrayList<>();
+                for (FileTreeNode node : selectedNodes()) {
+                    if (!isRoot(node)) {
+                        files.add(node.getFile());
+                    }
+                }
+                if (!files.isEmpty()) {
+                    fileOps.delete(files);
                 }
             }
         });
@@ -274,180 +282,22 @@ public class ProjectTree extends JTree {
             return;
         }
         int row = getRowForLocation(e.getX(), e.getY());
-        if (row >= 0) {
+        if (row < 0) {
+            clearSelection();
+        } else if (!isRowSelected(row)) {
+            // Right-clicking a row outside the current selection acts on that row alone;
+            // right-clicking within a multi-selection keeps it, so the menu acts on all of it.
             setSelectionRow(row);
         }
-        FileTreeNode node = selectedNode();
-        if (node != null) {
-            buildContextMenu(node).show(this, e.getX(), e.getY());
+        JPopupMenu menu = contextMenu.build(selectedNodes());
+        if (menu != null) {
+            menu.show(this, e.getX(), e.getY());
         }
     }
 
-    // --- Context menu ---
+    // --- View operations (invoked from the context menu) ---
 
-    private JPopupMenu buildContextMenu(FileTreeNode node) {
-        File file = node.getFile();
-        JPopupMenu menu = new JPopupMenu();
-
-        if (file.isFile()) {
-            JMenuItem open = new JMenuItem("Open");
-            open.addActionListener(e -> fileOpenConsumer.accept(file));
-            menu.add(open);
-            menu.addSeparator();
-        }
-
-        JMenuItem reveal = new JMenuItem("Reveal in File Manager");
-        reveal.addActionListener(e -> reveal(file));
-        menu.add(reveal);
-        menu.addSeparator();
-
-        if (node.isDirectory()) {
-            JMenuItem expandChildren = new JMenuItem("Expand children");
-            expandChildren.addActionListener(e -> expandSubtree(node));
-            menu.add(expandChildren);
-
-            JMenuItem collapseChildren = new JMenuItem("Collapse children");
-            collapseChildren.addActionListener(e -> collapseSubtree(node));
-            menu.add(collapseChildren);
-        }
-
-        JMenuItem collapseTree = new JMenuItem("Collapse tree");
-        collapseTree.addActionListener(e -> collapseAll());
-        menu.add(collapseTree);
-        menu.addSeparator();
-
-        JMenuItem copyRelative = new JMenuItem("Copy relative path");
-        copyRelative.addActionListener(e -> copyRelativePath(file));
-        menu.add(copyRelative);
-
-        JMenuItem copyFull = new JMenuItem("Copy full path");
-        copyFull.addActionListener(e -> copyToClipboard(file.getAbsolutePath()));
-        menu.add(copyFull);
-
-        JMenuItem copyTrailhead = new JMenuItem("Copy trailhead path");
-        copyTrailhead.addActionListener(e -> copyTrailheadPath(file));
-        menu.add(copyTrailhead);
-
-        menu.addSeparator();
-
-        JMenuItem newFile = new JMenuItem("New File...");
-        newFile.addActionListener(e -> createChild(node, false));
-        menu.add(newFile);
-
-        JMenuItem newFolder = new JMenuItem("New Folder...");
-        newFolder.addActionListener(e -> createChild(node, true));
-        menu.add(newFolder);
-
-        menu.addSeparator();
-
-        JMenuItem rename = new JMenuItem("Rename...");
-        rename.addActionListener(e -> rename(file));
-        menu.add(rename);
-
-        JMenuItem delete = new JMenuItem("Delete");
-        delete.addActionListener(e -> delete(file));
-        menu.add(delete);
-
-        menu.addSeparator();
-
-        JMenuItem refresh = new JMenuItem("Refresh");
-        refresh.addActionListener(e -> refresh(node));
-        menu.add(refresh);
-
-        return menu;
-    }
-
-    private void reveal(File file) {
-        try {
-            File target = file.isDirectory() ? file : file.getParentFile();
-            com.kalix.ide.utils.FileManagerLauncher.openFileManagerAt(target);
-        } catch (Exception ex) {
-            logger.warn("Failed to reveal {}: {}", file, ex.getMessage());
-        }
-    }
-
-    /** The directory to create new entries in: the node itself if a directory, else its parent. */
-    private static File targetDirectory(FileTreeNode node) {
-        File f = node.getFile();
-        return f.isDirectory() ? f : f.getParentFile();
-    }
-
-    private void createChild(FileTreeNode node, boolean directory) {
-        File dir = targetDirectory(node);
-        if (dir == null) {
-            return;
-        }
-        String name = JOptionPane.showInputDialog(this,
-            directory ? "New folder name:" : "New file name:",
-            directory ? "New Folder" : "New File",
-            JOptionPane.PLAIN_MESSAGE);
-        if (name == null || name.isBlank()) {
-            return;
-        }
-        File target = new File(dir, name.trim());
-        try {
-            boolean created = directory ? target.mkdir() : target.createNewFile();
-            if (!created) {
-                JOptionPane.showMessageDialog(this,
-                    "Could not create \"" + name + "\" (it may already exist).",
-                    "Create Failed", JOptionPane.WARNING_MESSAGE);
-            }
-            // The watcher will add the node; no manual model change required.
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                "Failed to create \"" + name + "\": " + ex.getMessage(),
-                "Create Failed", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void rename(File file) {
-        String name = (String) JOptionPane.showInputDialog(this,
-            "New name:", "Rename",
-            JOptionPane.PLAIN_MESSAGE, null, null, file.getName());
-        if (name == null || name.isBlank() || name.equals(file.getName())) {
-            return;
-        }
-        File target = new File(file.getParentFile(), name.trim());
-        if (!file.renameTo(target)) {
-            JOptionPane.showMessageDialog(this,
-                "Could not rename \"" + file.getName() + "\".",
-                "Rename Failed", JOptionPane.WARNING_MESSAGE);
-        }
-        // The watcher reports delete + create; the tree re-syncs automatically.
-    }
-
-    private void delete(File file) {
-        int choice = JOptionPane.showConfirmDialog(this,
-            "Delete \"" + file.getName() + "\"?" + (file.isDirectory() ? "\n\nThis folder and its contents will be deleted." : "")
-                + "\n\nThis cannot be undone.",
-            "Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.YES_OPTION) {
-            return;
-        }
-        try {
-            if (file.isDirectory()) {
-                // Delete depth-first (children before parents). Files.delete throws on
-                // failure, so a locked/read-only entry surfaces as an error rather than a
-                // silently half-deleted folder.
-                try (Stream<java.nio.file.Path> walk = Files.walk(file.toPath())) {
-                    java.util.List<java.nio.file.Path> paths =
-                        walk.sorted(Comparator.reverseOrder()).collect(java.util.stream.Collectors.toList());
-                    for (java.nio.file.Path path : paths) {
-                        Files.delete(path);
-                    }
-                }
-            } else {
-                Files.delete(file.toPath());
-            }
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                "Failed to delete \"" + file.getName() + "\": " + ex.getMessage(),
-                "Delete Failed", JOptionPane.ERROR_MESSAGE);
-        }
-        // The watcher reports the deletion; the tree re-syncs automatically.
-    }
-
-    private void refresh(FileTreeNode node) {
+    void refresh(FileTreeNode node) {
         FileTreeNode dir = node.getFile().isDirectory() ? node : (FileTreeNode) node.getParent();
         if (dir != null) {
             dir.ensureLoaded();
@@ -458,7 +308,7 @@ public class ProjectTree extends JTree {
     // --- Expand / collapse ---
 
     /** Recursively expands this node and all descendant directories (lazily loading them). */
-    private void expandSubtree(FileTreeNode node) {
+    void expandSubtree(FileTreeNode node) {
         expandPath(new TreePath(node.getPath())); // loads children via the will-expand listener
         for (int i = 0; i < node.getChildCount(); i++) {
             FileTreeNode child = (FileTreeNode) node.getChildAt(i);
@@ -469,7 +319,7 @@ public class ProjectTree extends JTree {
     }
 
     /** Recursively collapses all descendant directories of this node, then the node itself. */
-    private void collapseSubtree(FileTreeNode node) {
+    void collapseSubtree(FileTreeNode node) {
         for (int i = 0; i < node.getChildCount(); i++) {
             FileTreeNode child = (FileTreeNode) node.getChildAt(i);
             if (child.isDirectory()) {
@@ -480,7 +330,7 @@ public class ProjectTree extends JTree {
     }
 
     /** Collapses every top-level branch, leaving only the top-level rows (the root is hidden). */
-    private void collapseAll() {
+    void collapseAll() {
         if (model == null) {
             return;
         }
@@ -491,70 +341,6 @@ public class ProjectTree extends JTree {
                 collapseSubtree(child);
             }
         }
-    }
-
-    // --- Copy path ---
-
-    private void copyRelativePath(File target) {
-        try {
-            copyToClipboard(relativePath(target));
-        } catch (IllegalStateException ex) {
-            showPathError(ex.getMessage());
-        }
-    }
-
-    private void copyTrailheadPath(File target) {
-        try {
-            copyToClipboard(toTrailhead(relativePath(target)));
-        } catch (IllegalStateException ex) {
-            showPathError(ex.getMessage());
-        }
-    }
-
-    /**
-     * Computes the forward-slash path to {@code target} relative to the active file's directory.
-     *
-     * @throws IllegalStateException if there is no saved active file, or the paths share no
-     *                               common root (so no relative path exists)
-     */
-    private String relativePath(File target) {
-        File activeFile = activeFileSupplier.get();
-        if (activeFile == null) {
-            throw new IllegalStateException(
-                "The active file hasn't been saved yet, so a relative path can't be computed.");
-        }
-        File baseDir = activeFile.getParentFile();
-        if (baseDir == null) {
-            throw new IllegalStateException("The active file has no parent directory.");
-        }
-        Path base = baseDir.toPath().toAbsolutePath().normalize();
-        Path dest = target.toPath().toAbsolutePath().normalize();
-        try {
-            return base.relativize(dest).toString().replace(File.separator, "/");
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalStateException(
-                "Can't compute a relative path between different filesystem roots.");
-        }
-    }
-
-    /**
-     * Converts a relative path to a Kalix trailhead path: strips the leading run of "./" and
-     * "../" segments and prepends "^/" (so the result always starts with "^/").
-     */
-    static String toTrailhead(String relative) {
-        String s = relative;
-        while (s.startsWith("./") || s.startsWith("../")) {
-            s = s.startsWith("../") ? s.substring(3) : s.substring(2);
-        }
-        return "^/" + s;
-    }
-
-    private static void copyToClipboard(String text) {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-    }
-
-    private void showPathError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Copy Path", JOptionPane.WARNING_MESSAGE);
     }
 
     // --- Filesystem watcher ---
@@ -710,6 +496,23 @@ public class ProjectTree extends JTree {
     private FileTreeNode selectedNode() {
         TreePath path = getSelectionPath();
         return path != null && path.getLastPathComponent() instanceof FileTreeNode node ? node : null;
+    }
+
+    /** The selected nodes in row (top-to-bottom) order, so multi-selection actions are ordered. */
+    private List<FileTreeNode> selectedNodes() {
+        int[] rows = getSelectionRows();
+        if (rows == null || rows.length == 0) {
+            return List.of();
+        }
+        Arrays.sort(rows);
+        List<FileTreeNode> nodes = new ArrayList<>(rows.length);
+        for (int row : rows) {
+            TreePath path = getPathForRow(row);
+            if (path != null && path.getLastPathComponent() instanceof FileTreeNode node) {
+                nodes.add(node);
+            }
+        }
+        return nodes;
     }
 
     private FileTreeNode nodeAt(int x, int y) {
