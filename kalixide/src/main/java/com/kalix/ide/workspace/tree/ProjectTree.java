@@ -111,6 +111,23 @@ public class ProjectTree extends JTree {
         fsWatcher.stop();
     }
 
+    /**
+     * Selects and reveals the node for the given file if it lies within the open folder,
+     * lazily loading and expanding ancestor directories as needed. Clears the selection if the
+     * file is not under the open folder (e.g. opened from elsewhere) or no folder is open — so
+     * the tree selection never shows a file other than the active one.
+     */
+    public void selectFile(File file) {
+        FileTreeNode node = (file == null) ? null : materializeNode(file);
+        if (node == null) {
+            clearSelection();
+            return;
+        }
+        TreePath path = new TreePath(node.getPath());
+        setSelectionPath(path);
+        scrollPathToVisible(path);
+    }
+
     public File getRootFile() {
         if (model != null && model.getRoot() instanceof FileTreeNode node) {
             return node.getFile();
@@ -505,6 +522,39 @@ public class ProjectTree extends JTree {
                 return null;
             }
             current = next;
+        }
+        return current;
+    }
+
+    /**
+     * Like {@link #findNode}, but lazily loads (and notifies the model about) ancestor
+     * directories so a not-yet-expanded file can be located. Returns null if the file is not
+     * under the open folder.
+     */
+    private FileTreeNode materializeNode(File file) {
+        if (model == null) {
+            return null;
+        }
+        FileTreeNode root = (FileTreeNode) model.getRoot();
+        java.nio.file.Path rootPath = root.getFile().toPath().toAbsolutePath().normalize();
+        java.nio.file.Path target = file.toPath().toAbsolutePath().normalize();
+        if (target.equals(rootPath)) {
+            return root;
+        }
+        if (!target.startsWith(rootPath)) {
+            return null; // not under the open folder
+        }
+        FileTreeNode current = root;
+        for (java.nio.file.Path segment : rootPath.relativize(target)) {
+            boolean wasLoaded = current.isLoaded();
+            current.ensureLoaded();
+            if (!wasLoaded) {
+                model.nodeStructureChanged(current);
+            }
+            current = childFor(current, new File(current.getFile(), segment.toString()));
+            if (current == null) {
+                return null;
+            }
         }
         return current;
     }

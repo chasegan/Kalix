@@ -180,6 +180,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             File folder = new File(savedFolder);
             if (folder.isDirectory()) {
                 projectTreePanel.openFolder(folder);
+                // Reveal the active document in the just-loaded tree.
+                revealActiveFileInTree();
             }
         }
     }
@@ -451,6 +453,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         documentTabPane.refreshTab(document);
         setupNavigationStateListener();
         refreshModelStatus();
+        revealActiveFileInTree();
+    }
+
+    /**
+     * Selects the active document's file in the project tree, if it lies within the open
+     * folder. A no-op (clears the tree selection) for files opened from outside the folder or
+     * when no folder is open.
+     */
+    private void revealActiveFileInTree() {
+        if (projectTreePanel == null) {
+            return;
+        }
+        KalixDocument document = documentManager.getActiveDocument();
+        projectTreePanel.selectFile(document != null ? document.getFile() : null);
     }
 
     /**
@@ -866,6 +882,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 workspacePanel.setTreeCollapsed(false);
             }
             syncToggleButtonStates();
+            revealActiveFileInTree();
             updateStatus("Opened folder: " + folder.getName());
         }
     }
