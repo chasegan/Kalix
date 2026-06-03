@@ -26,8 +26,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * The project file tree: a {@link JTree} over a lazily-loaded filesystem model, kept live by
@@ -48,11 +46,7 @@ public class ProjectTree extends JTree {
     private static final int LEFT_CHILD_INDENT = 6;
     private static final int RIGHT_CHILD_INDENT = 8;
 
-    private final Consumer<File> fileOpenConsumer;
-    /** Supplies the active document's file (or null if untitled/none), for relative paths. */
-    private final Supplier<File> activeFileSupplier;
-    /** Opens a diff of the given file against the active editor's current text. */
-    private final Consumer<File> compareWithActiveEditor;
+    private final TreeHost host;
 
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
@@ -60,11 +54,8 @@ public class ProjectTree extends JTree {
     private final TreeFileOperations fileOps;
     private final TreeContextMenu contextMenu;
 
-    public ProjectTree(Consumer<File> fileOpenConsumer, Supplier<File> activeFileSupplier,
-                       Consumer<File> compareWithActiveEditor) {
-        this.fileOpenConsumer = fileOpenConsumer;
-        this.activeFileSupplier = activeFileSupplier;
-        this.compareWithActiveEditor = compareWithActiveEditor;
+    public ProjectTree(TreeHost host) {
+        this.host = host;
 
         // Hide the root node: the open folder's name is shown in the panel header instead, so
         // the tree shows the folder's contents directly (VSCode-style). Root handles stay on so
@@ -92,8 +83,8 @@ public class ProjectTree extends JTree {
             }
         });
 
-        this.fileOps = new TreeFileOperations(this, activeFileSupplier);
-        this.contextMenu = new TreeContextMenu(this, fileOps, fileOpenConsumer, compareWithActiveEditor);
+        this.fileOps = new TreeFileOperations(this, host::activeFile);
+        this.contextMenu = new TreeContextMenu(this, fileOps, host);
 
         installMouseAndKeyHandlers();
     }
@@ -218,7 +209,7 @@ public class ProjectTree extends JTree {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
                     FileTreeNode node = nodeAt(e.getX(), e.getY());
                     if (node != null && node.getFile().isFile()) {
-                        fileOpenConsumer.accept(node.getFile());
+                        host.openFile(node.getFile());
                     }
                 }
             }
@@ -231,7 +222,7 @@ public class ProjectTree extends JTree {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 List<FileTreeNode> selection = selectedNodes();
                 if (selection.size() == 1 && !selection.get(0).isDirectory()) {
-                    fileOpenConsumer.accept(selection.get(0).getFile());
+                    host.openFile(selection.get(0).getFile());
                 }
             }
         });

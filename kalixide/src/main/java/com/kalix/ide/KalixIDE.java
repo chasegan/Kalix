@@ -33,6 +33,7 @@ import com.kalix.ide.utils.TerminalLauncher;
 import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.workspace.ProjectTreePanel;
 import com.kalix.ide.workspace.WorkspacePanel;
+import com.kalix.ide.workspace.tree.TreeHost;
 import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
@@ -571,10 +572,23 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * region widths and collapsed states and persists any changes.
      */
     private WorkspacePanel buildWorkspacePanel() {
-        projectTreePanel = new ProjectTreePanel(fileOperations::loadModelFile, () -> {
-            KalixDocument active = documentManager.getActiveDocument();
-            return active != null ? active.getFile() : null;
-        }, this::compareWithActiveEditor);
+        projectTreePanel = new ProjectTreePanel(new TreeHost() {
+            @Override
+            public void openFile(File file) {
+                fileOperations.loadModelFile(file);
+            }
+
+            @Override
+            public File activeFile() {
+                KalixDocument active = documentManager.getActiveDocument();
+                return active != null ? active.getFile() : null;
+            }
+
+            @Override
+            public void compareWithActiveEditor(File file) {
+                KalixIDE.this.compareWithActiveEditor(file);
+            }
+        });
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 

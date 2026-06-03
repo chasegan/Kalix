@@ -25,18 +25,15 @@ class TreeContextMenu {
 
     private final ProjectTree tree;
     private final TreeFileOperations fileOps;
-    private final Consumer<File> fileOpenConsumer;
-    private final Consumer<File> compareWithActiveEditor;
+    private final TreeHost host;
 
     /** Item groups in display order; separators are drawn between non-empty groups. */
     private final List<List<Entry>> groups;
 
-    TreeContextMenu(ProjectTree tree, TreeFileOperations fileOps, Consumer<File> fileOpenConsumer,
-                    Consumer<File> compareWithActiveEditor) {
+    TreeContextMenu(ProjectTree tree, TreeFileOperations fileOps, TreeHost host) {
         this.tree = tree;
         this.fileOps = fileOps;
-        this.fileOpenConsumer = fileOpenConsumer;
-        this.compareWithActiveEditor = compareWithActiveEditor;
+        this.host = host;
         this.groups = buildEntries();
     }
 
@@ -73,9 +70,9 @@ class TreeContextMenu {
         return List.of(
             List.of(
                 item("Open", TreeContextMenu::isSingleFile,
-                    sel -> fileOpenConsumer.accept(file(sel))),
+                    sel -> host.openFile(file(sel))),
                 item("Compare with active editor", TreeContextMenu::isSingleFile,
-                    sel -> compareWithActiveEditor.accept(file(sel)))
+                    sel -> host.compareWithActiveEditor(file(sel)))
             ),
             List.of(
                 item("Reveal in File Manager", TreeContextMenu::isSingle,
