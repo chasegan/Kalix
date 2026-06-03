@@ -12,6 +12,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.io.File;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The left-hand project region: a small header showing the open folder's name above the live
@@ -29,13 +30,13 @@ public class ProjectTreePanel extends JPanel {
     private final ProjectTree tree;
     private final JLabel header = new JLabel();
 
-    public ProjectTreePanel(Consumer<File> fileOpenConsumer) {
+    public ProjectTreePanel(Consumer<File> fileOpenConsumer, Supplier<File> activeFileSupplier) {
         super(new BorderLayout());
 
         header.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         applyHeaderStyle();
 
-        tree = new ProjectTree(fileOpenConsumer);
+        tree = new ProjectTree(fileOpenConsumer, activeFileSupplier);
         JScrollPane scroll = new JScrollPane(tree);
         scroll.setBorder(null);
         scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
