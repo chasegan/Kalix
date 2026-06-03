@@ -13,6 +13,11 @@ import java.util.function.Consumer;
  * FSEvents on macOS), so it does not suffer the multi-second latency of the JDK's polling
  * watch service.
  *
+ * <p>The active file is always remembered (via {@link #watchFile}) independent of the
+ * auto-reload preference, and the actual watch is purely a function of that file plus the
+ * preference (see {@link #restartWatch()}). So toggling the preference on/off after a file is
+ * open correctly starts/stops watching it.
+ *
  * <p>{@link FsWatcher} watches directories, so this watches the file's parent directory and
  * filters events to the one file of interest. Reload events are delivered on the EDT.
  */
@@ -27,7 +32,8 @@ public class FileWatcherManager {
     private final Consumer<File> fileReloadCallback;
     private final FsWatcher fsWatcher;
 
-    private File watchedFile;
+    /** The active document's file — remembered regardless of the auto-reload preference. */
+    private File currentFile;
     private volatile long ignoreChangesUntil = 0;
 
     /**
@@ -41,31 +47,14 @@ public class FileWatcherManager {
     }
 
     /**
-     * Starts watching the specified file for changes. Only watches if auto-reload is enabled
-     * and the file (and its parent directory) are non-null.
+     * Records the file to watch (typically the active document's file) and (re)starts watching
+     * it if auto-reload is enabled. Pass {@code null} for an untitled document.
      *
-     * @param file The file to watch, or null to stop watching
+     * @param file The file to watch, or null
      */
     public void watchFile(File file) {
-        stopWatching();
-
-        if (!isAutoReloadEnabled() || file == null) {
-            return;
-        }
-        File directory = file.getParentFile();
-        if (directory == null) {
-            return;
-        }
-        watchedFile = file;
-        fsWatcher.watch(directory.toPath());
-    }
-
-    /**
-     * Stops watching the current file.
-     */
-    public void stopWatching() {
-        watchedFile = null;
-        fsWatcher.stop();
+        currentFile = file;
+        restartWatch();
     }
 
     /**
@@ -86,44 +75,55 @@ public class FileWatcherManager {
     }
 
     /**
-     * Enables or disables auto-reload preference and updates file watching accordingly.
+     * Enables or disables auto-reload and (re)starts or stops watching the current file
+     * accordingly. Works whether or not a file was already open when toggled.
      *
      * @param enabled true to enable auto-reload
      */
     public void setAutoReloadEnabled(boolean enabled) {
         PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
-
-        if (!enabled) {
-            stopWatching();
-        } else if (watchedFile != null) {
-            watchFile(watchedFile);
-        }
+        restartWatch();
     }
 
     /**
      * Shuts down the file watcher manager and releases resources.
      */
     public void shutdown() {
-        stopWatching();
+        currentFile = null;
+        fsWatcher.stop();
     }
 
     /**
-     * Handles a filesystem event (on the EDT): reloads if it concerns the watched file,
+     * (Re)derives the active watch from the current file and the auto-reload preference.
+     */
+    private void restartWatch() {
+        fsWatcher.stop();
+        if (!isAutoReloadEnabled() || currentFile == null) {
+            return;
+        }
+        File directory = currentFile.getParentFile();
+        if (directory != null) {
+            fsWatcher.watch(directory.toPath());
+        }
+    }
+
+    /**
+     * Handles a filesystem event (on the EDT): reloads if it concerns the current file,
      * is a content change (create/modify), and isn't within the self-save ignore window.
      */
     private void onFsEvent(FsWatcher.Event event) {
-        if (watchedFile == null) {
+        if (currentFile == null) {
             return;
         }
         if (event.kind() != FsWatcher.Kind.MODIFY && event.kind() != FsWatcher.Kind.CREATE) {
             return; // structural events don't change the open file's content
         }
-        if (!event.path().toFile().equals(watchedFile)) {
+        if (!event.path().toFile().equals(currentFile)) {
             return; // a sibling in the same directory; not our file
         }
         if (System.currentTimeMillis() < ignoreChangesUntil) {
             return; // our own save
         }
-        fileReloadCallback.accept(watchedFile);
+        fileReloadCallback.accept(currentFile);
     }
 }
