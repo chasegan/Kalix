@@ -2,6 +2,7 @@ package com.kalix.ide.workspace.tree;
 
 import io.methvin.watcher.DirectoryChangeEvent;
 import io.methvin.watcher.DirectoryWatcher;
+import io.methvin.watcher.hashing.FileHasher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +50,9 @@ public class ProjectTree extends JTree {
     private final Consumer<File> fileOpenConsumer;
 
     private DefaultTreeModel model;
-    private DirectoryWatcher watcher;
+    private volatile DirectoryWatcher watcher;
+    /** Incremented on each start/stop so a slow off-EDT watcher init can tell it was superseded. */
+    private int watcherGeneration = 0;
     private int hoveredRow = -1;
 
     public ProjectTree(Consumer<File> fileOpenConsumer) {
@@ -386,27 +389,57 @@ public class ProjectTree extends JTree {
 
     // --- Filesystem watcher ---
 
+    /**
+     * Builds and starts the directory watcher off the EDT so opening a folder never blocks
+     * the UI. On macOS, methvin's {@code watchAsync()} performs its initial scan synchronously
+     * and can take many seconds on a large tree — and the default content hasher would read
+     * every file (gigabytes). We use {@link FileHasher#LAST_MODIFIED_TIME} (a cheap stat, no
+     * content reads) and run the whole thing on a background thread.
+     *
+     * <p>A generation token discards the result if another {@code openFolder}/{@code stopWatcher}
+     * has superseded this init by the time it finishes (rapid folder switching).
+     */
     private void startWatcher(File root) {
-        try {
-            watcher = DirectoryWatcher.builder()
-                .path(root.toPath())
-                .listener(this::onFsEvent)
-                .build();
-            watcher.watchAsync();
-        } catch (IOException ex) {
-            logger.warn("Failed to start directory watcher for {}: {}", root, ex.getMessage());
+        final int generation = ++watcherGeneration;
+        Thread initThread = new Thread(() -> {
+            try {
+                DirectoryWatcher built = DirectoryWatcher.builder()
+                    .path(root.toPath())
+                    .listener(this::onFsEvent)
+                    .fileHasher(FileHasher.LAST_MODIFIED_TIME)
+                    .build();
+                // watchAsync() performs the initial scan synchronously before returning, so
+                // keep it on this background thread; the watch loop then runs on methvin's
+                // own executor.
+                built.watchAsync();
+                SwingUtilities.invokeLater(() -> {
+                    if (generation != watcherGeneration) {
+                        closeQuietly(built); // superseded by a newer folder; discard
+                    } else {
+                        watcher = built;
+                    }
+                });
+            } catch (IOException ex) {
+                logger.warn("Failed to start directory watcher for {}: {}", root, ex.getMessage());
+            }
+        }, "ProjectTree-watcher-init");
+        initThread.setDaemon(true);
+        initThread.start();
+    }
+
+    private void stopWatcher() {
+        watcherGeneration++; // invalidate any in-flight watcher initialisation
+        if (watcher != null) {
+            closeQuietly(watcher);
             watcher = null;
         }
     }
 
-    private void stopWatcher() {
-        if (watcher != null) {
-            try {
-                watcher.close();
-            } catch (IOException ex) {
-                logger.debug("Error closing directory watcher: {}", ex.getMessage());
-            }
-            watcher = null;
+    private static void closeQuietly(DirectoryWatcher w) {
+        try {
+            w.close();
+        } catch (IOException ignored) {
+            // best-effort
         }
     }
 
