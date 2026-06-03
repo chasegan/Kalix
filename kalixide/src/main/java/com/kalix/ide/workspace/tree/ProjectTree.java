@@ -4,6 +4,7 @@ import com.kalix.ide.io.FsWatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.DropMode;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -85,6 +86,12 @@ public class ProjectTree extends JTree {
 
         this.fileOps = new TreeFileOperations(this, host::activeFile);
         this.contextMenu = new TreeContextMenu(this, fileOps, host);
+
+        // Drag selected entries out; accept drops onto a folder node (move, or copy with a
+        // modifier held). The DnD subsystem renders the move/copy/no-drop cursor itself.
+        setDragEnabled(true);
+        setDropMode(DropMode.ON);
+        setTransferHandler(new TreeTransferHandler(this, fileOps));
 
         installMouseAndKeyHandlers();
     }
@@ -504,6 +511,11 @@ public class ProjectTree extends JTree {
             }
         }
         return nodes;
+    }
+
+    /** The selected files/folders in row (top-to-bottom) order — the drag payload. */
+    List<File> selectedFiles() {
+        return selectedNodes().stream().map(FileTreeNode::getFile).toList();
     }
 
     private FileTreeNode nodeAt(int x, int y) {

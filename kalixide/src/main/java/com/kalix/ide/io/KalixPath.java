@@ -64,6 +64,20 @@ public final class KalixPath {
         return new KalixPath(raw, PathKind.RELATIVE, null);
     }
 
+    /**
+     * Computes the path of {@code target} relative to {@code baseDir}, using forward slashes (the
+     * separator Kalix model files use on every platform). This is the inverse of resolving a
+     * {@link PathKind#RELATIVE} path against {@code baseDir}.
+     *
+     * @throws IllegalArgumentException if the paths share no common root (e.g. different Windows
+     *                                  drives), so no relative path exists
+     */
+    public static String relativize(Path baseDir, Path target) {
+        Path base = baseDir.toAbsolutePath().normalize();
+        Path dest = target.toAbsolutePath().normalize();
+        return base.relativize(dest).toString().replace(java.io.File.separator, "/");
+    }
+
     /** Returns the original path string exactly as authored. */
     public String raw() { return raw; }
 

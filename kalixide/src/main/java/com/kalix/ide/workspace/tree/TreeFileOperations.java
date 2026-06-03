@@ -187,6 +187,83 @@ class TreeFileOperations {
         return result;
     }
 
+    // --- Move / copy into a folder (drag-and-drop) ---
+
+    /**
+     * Moves (or, if {@code copy}, copies) the given entries into {@code targetDir}. A move asks
+     * for confirmation first; a copy is non-destructive, so it proceeds without one. Entries
+     * already in the target directory, and descendants of another moved entry, are skipped; name
+     * collisions in the target are reported and skipped. The filesystem watcher reflects the
+     * result back into the tree.
+     *
+     * @return true if the operation went ahead (regardless of per-entry success), false if
+     *         cancelled or there was nothing to do
+     */
+    boolean moveInto(List<File> files, File targetDir, boolean copy) {
+        List<File> sources = withoutDescendants(files).stream()
+            .filter(f -> !targetDir.equals(f.getParentFile()))
+            .collect(Collectors.toList());
+        if (sources.isEmpty()) {
+            return false;
+        }
+        if (!copy && !confirmMove(sources, targetDir)) {
+            return false;
+        }
+        List<String> failures = new ArrayList<>();
+        for (File source : sources) {
+            File dest = new File(targetDir, source.getName());
+            if (dest.exists()) {
+                failures.add(source.getName() + " (already exists in the target folder)");
+                continue;
+            }
+            try {
+                if (copy) {
+                    copyRecursively(source.toPath(), dest.toPath());
+                } else {
+                    Files.move(source.toPath(), dest.toPath());
+                }
+            } catch (IOException ex) {
+                failures.add(source.getName() + " (" + ex.getMessage() + ")");
+            }
+        }
+        if (!failures.isEmpty()) {
+            JOptionPane.showMessageDialog(parent,
+                (copy ? "Some items could not be copied:\n\n" : "Some items could not be moved:\n\n")
+                    + String.join("\n", failures),
+                copy ? "Copy" : "Move", JOptionPane.WARNING_MESSAGE);
+        }
+        return true;
+    }
+
+    private boolean confirmMove(List<File> sources, File targetDir) {
+        String what = sources.size() == 1
+            ? "\"" + sources.get(0).getName() + "\""
+            : sources.size() + " items";
+        int choice = JOptionPane.showConfirmDialog(parent,
+            "Move " + what + " into \"" + targetDir.getName() + "\"?",
+            "Move", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        return choice == JOptionPane.YES_OPTION;
+    }
+
+    /** Recursively copies {@code source} to {@code dest} (file or directory tree). */
+    private static void copyRecursively(Path source, Path dest) throws IOException {
+        List<Path> paths;
+        try (Stream<Path> walk = Files.walk(source)) {
+            paths = walk.collect(Collectors.toList());
+        }
+        // Files.walk yields parents before children, so directories are created before their
+        // contents are copied into them.
+        for (Path p : paths) {
+            Path target = dest.resolve(source.relativize(p));
+            if (Files.isDirectory(p)) {
+                Files.createDirectories(target);
+            } else {
+                Files.createDirectories(target.getParent());
+                Files.copy(p, target);
+            }
+        }
+    }
+
     // --- Copy path ---
 
     /** Copies the absolute paths, one per line. */
@@ -234,10 +311,8 @@ class TreeFileOperations {
         if (baseDir == null) {
             throw new IllegalStateException("The active file has no parent directory.");
         }
-        Path base = baseDir.toPath().toAbsolutePath().normalize();
-        Path dest = target.toPath().toAbsolutePath().normalize();
         try {
-            return base.relativize(dest).toString().replace(File.separator, "/");
+            return com.kalix.ide.io.KalixPath.relativize(baseDir.toPath(), target.toPath());
         } catch (IllegalArgumentException ex) {
             throw new IllegalStateException(
                 "Can't compute a relative path between different filesystem roots.");

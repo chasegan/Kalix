@@ -53,6 +53,7 @@ public class EnhancedTextEditor extends JPanel {
     private boolean isDirty = false;
     private DirtyStateListener dirtyStateListener;
     private FileDropManager.FileDropHandler fileDropHandler;
+    private java.util.function.Supplier<java.io.File> modelFileSupplier; // this document's file, for relative drop paths
     private boolean programmaticUpdate = false; // Flag to prevent dirty marking during programmatic text changes
     
     // External document listeners
@@ -133,6 +134,8 @@ public class EnhancedTextEditor extends JPanel {
                 fileDropHandler.onFileDropped(file);
             }
         });
+        // A drag from the project tree inserts the dropped files' relative paths at the drop point.
+        dropManager.setPathDropHandler(this::insertDroppedPaths);
         setupNavigationMouseListener();
     }
 
@@ -376,6 +379,7 @@ public class EnhancedTextEditor extends JPanel {
         // Store for programmatic access (e.g., rename from map context menu)
         this.commandParentFrame = parentFrame;
         this.commandModelSupplier = modelSupplier;
+        this.modelFileSupplier = modelFileSupplier;
 
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
             textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
@@ -801,6 +805,48 @@ public class EnhancedTextEditor extends JPanel {
     private void setupDragAndDrop() {
         // Use the FileDropManager to handle drag and drop for both components
         dropManager.setupDragAndDrop(this, textArea);
+    }
+
+    /**
+     * Inserts the relative paths of files dragged from the project tree at the drop point, one per
+     * line. Paths are relative to this document's directory; if that is unavailable (untitled
+     * document) or on a different filesystem root, the absolute path is used instead.
+     */
+    private void insertDroppedPaths(java.util.List<java.io.File> files, java.awt.Component target,
+                                    java.awt.Point location) {
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+        java.io.File baseFile = (modelFileSupplier != null) ? modelFileSupplier.get() : null;
+        java.io.File baseDir = (baseFile != null) ? baseFile.getParentFile() : null;
+        String text = files.stream()
+            .map(f -> droppedPathFor(baseDir, f))
+            .collect(java.util.stream.Collectors.joining("\n"));
+
+        // Insert at the caret position nearest the drop point (translated into the text area).
+        java.awt.Point p = javax.swing.SwingUtilities.convertPoint(target, location, textArea);
+        int offset = textArea.viewToModel2D(p);
+        if (offset < 0) {
+            offset = textArea.getCaretPosition();
+        }
+        try {
+            textArea.getDocument().insertString(offset, text, null);
+            textArea.setCaretPosition(offset + text.length());
+            textArea.requestFocusInWindow();
+        } catch (javax.swing.text.BadLocationException ex) {
+            // Offset became invalid between hit-testing and insertion; nothing to insert.
+        }
+    }
+
+    private static String droppedPathFor(java.io.File baseDir, java.io.File target) {
+        if (baseDir != null) {
+            try {
+                return com.kalix.ide.io.KalixPath.relativize(baseDir.toPath(), target.toPath());
+            } catch (IllegalArgumentException ex) {
+                // Different filesystem roots — fall back to the absolute path below.
+            }
+        }
+        return target.getAbsolutePath().replace(java.io.File.separator, "/");
     }
     
     // Core functionality methods
