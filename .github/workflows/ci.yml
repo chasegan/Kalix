@@ -18,6 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
         include:
           - os: ubuntu-latest
             platform: Linux
@@ -25,7 +26,6 @@ jobs:
             platform: macOS
           - os: windows-latest
             platform: Windows
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
