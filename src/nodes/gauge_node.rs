@@ -28,6 +28,7 @@ pub struct GaugeNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_reference_flow: Option<usize>,
 }
 
 impl GaugeNode {
@@ -65,6 +66,9 @@ impl Node for GaugeNode {
         );
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
+        );
+        self.recorder_idx_reference_flow = data_cache.get_series_idx(
+            make_result_name(&self.name, "reference_flow").as_str(), false
         );
 
         // Return
@@ -107,14 +111,20 @@ impl Node for GaugeNode {
         }
 
         // Record results
-        if let Some(idx) = self.recorder_idx_delta {
-            let mut reference_flow_value = f64::NAN;
+        let needs_reference_flow = self.recorder_idx_delta.is_some() || self.recorder_idx_reference_flow.is_some();
+        let reference_flow_value = if needs_reference_flow {
             match self.reference_flow_input {
-                DynamicInput::None { .. } => {},
-                _ => { reference_flow_value = self.reference_flow_input.get_value(data_cache); }
+                DynamicInput::None { .. } => f64::NAN,
+                _ => self.reference_flow_input.get_value(data_cache),
             }
-            let delta = self.usflow - reference_flow_value;
-            data_cache.add_value_at_index(idx, delta);
+        } else {
+            f64::NAN
+        };
+        if let Some(idx) = self.recorder_idx_delta {
+            data_cache.add_value_at_index(idx, self.usflow - reference_flow_value);
+        }
+        if let Some(idx) = self.recorder_idx_reference_flow {
+            data_cache.add_value_at_index(idx, reference_flow_value);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
@@ -122,9 +132,6 @@ impl Node for GaugeNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
