@@ -4,11 +4,26 @@ Python interface for [Kalix](https://chasegan.notion.site/Kalix-User-Guide-76268
 
 Current functionality:
 - run simulations from INI model files (in-process, no separate CLI binary)
+- run parameter optimisations from config files (in-process)
 - read and write Pixie files (`.pxt`, `.pxb`)
 
 Planned:
-- programmatic model manipulation and building (`Model` class)
-- optimisation
+- programmatic model manipulation and building (a stateful `Model` class)
+- richer optimisation control (progress callbacks, in-memory configs)
+
+## Design
+
+The package binds the Rust engine directly via [PyO3](https://pyo3.rs/) rather
+than driving the engine's stdio session protocol (which exists to serve
+KalixIDE). This keeps the Python surface free to grow in whatever direction
+suits Python workflows, independent of the GUI's needs.
+
+The current functions are deliberately **stateless** and mirror the two main
+CLI subcommands — `simulate` and `optimise` — so that moving from the command
+line to Python feels the same: point at files, get results back. A stateful
+`Model` object (load → mutate → run → inspect, all in memory) is the natural
+next layer and is planned, but the file-to-result convenience functions are
+expected to remain useful indefinitely.
 
 ## Install
 
@@ -41,6 +56,46 @@ kalix.simulate("model.ini", output_file="results.pxb", mass_balance="mb.txt")
 # Mass-balance only
 kalix.simulate("model.ini", mass_balance="mb.txt")
 ```
+
+### Run an optimisation
+
+```python
+import kalix
+
+result = kalix.optimise("calibration.ini")
+print(result["best_objective"])   # lower is better
+print(result["parameters"])       # {"node.my_sac.uzfwm": 42.7, ...}
+```
+
+The Python equivalent of `kalix optimise calibration.ini`, but in-process. The
+config `.ini` defines the algorithm, calibration terms, objective expression,
+parameter bounds, and termination criteria. Unlike `simulate`, `optimise`
+returns its results (the answer is the point of optimising) as a dict:
+
+| key | meaning |
+|---|---|
+| `best_objective` | best objective value found (lower is better) |
+| `n_evaluations` | number of function evaluations performed |
+| `success` | whether the optimiser terminated successfully |
+| `message` | the optimiser's termination message |
+| `parameters` | optimised parameters as `{target: physical_value}` |
+| `optimised_model_ini` | the optimised model serialised back to an INI string |
+
+`optimised_model_ini` lets you recover the tuned model without touching disk.
+Two keyword-only options mirror the CLI's flags:
+
+```python
+# Override the config's model_file (CLI: positional [model_file])
+kalix.optimise("calibration.ini", model_file="other_model.ini")
+
+# Also write the optimised model to disk (CLI: -s/--save-model)
+kalix.optimise("calibration.ini", save_model="tuned.ini")
+```
+
+Paths inside the config (`model_file`, each term's `observed_file`) are
+resolved relative to the current working directory, exactly as the CLI does.
+If the config specifies an `output_file`, a results summary is written there
+too.
 
 ### Read / write Pixie files
 

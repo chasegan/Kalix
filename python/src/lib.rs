@@ -170,10 +170,48 @@ fn _simulate_from_file(
     })
 }
 
+/// Run a parameter optimisation from an INI config file and return the outcome.
+///
+/// The in-process equivalent of `kalix optimise <config> [model] [-s save]`.
+/// Paths inside the config are resolved relative to the current working
+/// directory, exactly as the CLI does. The GIL is released during the run so
+/// other Python threads make progress (optimisation is long and multi-threaded).
+///
+/// Returns a dict with: `best_objective`, `n_evaluations`, `success`,
+/// `message`, `parameters` ({target: physical_value}), and
+/// `optimised_model_ini` (the optimised model serialised back to an INI string).
+#[pyfunction]
+#[pyo3(signature = (config_path, model_path=None, save_model_path=None))]
+fn _optimise_from_file<'py>(
+    py: Python<'py>,
+    config_path: &str,
+    model_path: Option<&str>,
+    save_model_path: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let outcome = py
+        .allow_threads(|| run::optimise_from_file(config_path, model_path, save_model_path))
+        .map_err(PyRuntimeError::new_err)?;
+
+    let params = PyDict::new_bound(py);
+    for (target, value) in &outcome.parameters {
+        params.set_item(target, value)?;
+    }
+
+    let result = PyDict::new_bound(py);
+    result.set_item("best_objective", outcome.best_objective)?;
+    result.set_item("n_evaluations", outcome.n_evaluations)?;
+    result.set_item("success", outcome.success)?;
+    result.set_item("message", outcome.message)?;
+    result.set_item("parameters", params)?;
+    result.set_item("optimised_model_ini", outcome.optimised_model_ini)?;
+    Ok(result)
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
+    m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
     Ok(())
 }
