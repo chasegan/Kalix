@@ -564,7 +564,7 @@ impl Node for StorageNode {
             make_result_name(&self.name, "ds_1").as_str(), false
         );
         self.recorder_idx_ds_1_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_outlet").as_str(), false
+            make_result_name(&self.name, "ds_1_release").as_str(), false
         );
         self.recorder_idx_ds_1_spill = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_spill").as_str(), false
@@ -573,7 +573,7 @@ impl Node for StorageNode {
             make_result_name(&self.name, "ds_2").as_str(), false
         );
         self.recorder_idx_ds_2_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_outlet").as_str(), false
+            make_result_name(&self.name, "ds_2_release").as_str(), false
         );
         self.recorder_idx_ds_2_spill = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_2_spill").as_str(), false
@@ -585,13 +585,13 @@ impl Node for StorageNode {
             make_result_name(&self.name, "ds_3_spill").as_str(), false
         );
         self.recorder_idx_ds_3_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_outlet").as_str(), false
+            make_result_name(&self.name, "ds_3_release").as_str(), false
         );
         self.recorder_idx_ds_4 = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4").as_str(), false
         );
         self.recorder_idx_ds_4_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_outlet").as_str(), false
+            make_result_name(&self.name, "ds_4_release").as_str(), false
         );
         self.recorder_idx_ds_4_spill = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4_spill").as_str(), false
