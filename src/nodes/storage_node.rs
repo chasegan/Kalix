@@ -83,6 +83,7 @@ pub struct StorageNode {
     recorder_idx_seep_mm: Option<usize>,
     recorder_idx_evap_mm: Option<usize>,
     recorder_idx_rain_mm: Option<usize>,
+    recorder_idx_pond_demand: Option<usize>,
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
@@ -553,6 +554,9 @@ impl Node for StorageNode {
         self.recorder_idx_pond_diversion = data_cache.get_series_idx(
             make_result_name(&self.name, "pond_diversion").as_str(), false
         );
+        self.recorder_idx_pond_demand = data_cache.get_series_idx(
+            make_result_name(&self.name, "pond_demand").as_str(), false
+        );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
         );
@@ -775,6 +779,9 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_pond_diversion {
             data_cache.add_value_at_index(idx, self.pond_diversion);
+        }
+        if let Some(idx) = self.recorder_idx_pond_demand {
+            data_cache.add_value_at_index(idx, pond_demand);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
