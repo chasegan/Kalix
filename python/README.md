@@ -81,14 +81,46 @@ Requires Rust (1.70+) and [maturin](https://www.maturin.rs/).
 # Editable install for development
 cd python
 maturin develop --release
+# uv run maturin develop --release --uv
 
 # Build a wheel
 maturin build --release
+# uv run maturin build --release -- uv
 ```
 
 ## Tests
 
+### Running tests directly
+
 ```bash
 maturin develop
 pytest python/tests
+```
+
+Alternatively with uv:
+
+```bash
+uv run maturin develop --uv
+uv run pytest
+```
+
+### Running tests with tox
+
+Tox is configured to test against multiple Python versions (3.9-3.14):
+
+```bash
+# Run tests in development environment (fast, uses current Python)
+uv run tox -e dev
+
+# Run tests against all configured Python versions
+uv run tox
+
+# Run tests for specific Python version
+uv run tox -e py312
+
+# List all available test environments
+uv run tox list
+
+# Run tests in parallel
+uv run tox -p auto
 ```

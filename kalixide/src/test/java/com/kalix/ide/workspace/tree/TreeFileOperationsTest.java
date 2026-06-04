@@ -3,6 +3,7 @@ package com.kalix.ide.workspace.tree;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,49 +16,55 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class TreeFileOperationsTest {
 
     private static List<String> names(List<File> files) {
-        return files.stream().map(File::getPath).toList();
+        return files.stream()
+                .map(f -> f.toPath().normalize().toString().replace('\\', '/'))
+                .toList();
+    }
+
+    private static File file(String... parts) {
+        return Path.of("", parts).toFile();
     }
 
     @Test
     void unrelatedEntriesAllKept() {
-        List<File> in = List.of(new File("/a/x"), new File("/b/y"));
-        assertEquals(List.of("/a/x", "/b/y"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("a", "x"), file("b", "y"));
+        assertEquals(List.of("a/x", "b/y"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void childDroppedWhenParentPresent() {
-        List<File> in = List.of(new File("/x"), new File("/x/y"));
-        assertEquals(List.of("/x"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("x"), file("x", "y"));
+        assertEquals(List.of("x"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void deepDescendantDroppedWhenAncestorPresent() {
-        List<File> in = List.of(new File("/x"), new File("/x/y/z"));
-        assertEquals(List.of("/x"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("x"), file("x", "y", "z"));
+        assertEquals(List.of("x"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void orderIndependentParentBeforeOrAfterChild() {
-        List<File> in = List.of(new File("/x/y"), new File("/x"));
-        assertEquals(List.of("/x"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("x", "y"), file("x"));
+        assertEquals(List.of("x"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void siblingsBothKept() {
-        List<File> in = List.of(new File("/x/a"), new File("/x/b"));
-        assertEquals(List.of("/x/a", "/x/b"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("x", "a"), file("x", "b"));
+        assertEquals(List.of("x/a", "x/b"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void inputOrderPreservedAmongSurvivors() {
-        List<File> in = List.of(new File("/x"), new File("/x/y"), new File("/z"));
-        assertEquals(List.of("/x", "/z"), names(TreeFileOperations.withoutDescendants(in)));
+        List<File> in = List.of(file("x"), file("x", "y"), file("z"));
+        assertEquals(List.of("x", "z"), names(TreeFileOperations.withoutDescendants(in)));
     }
 
     @Test
     void siblingPrefixNameNotTreatedAsDescendant() {
-        // "/x-data" must not be considered a descendant of "/x" (element-wise comparison).
-        List<File> in = List.of(new File("/x"), new File("/x-data"));
-        assertEquals(List.of("/x", "/x-data"), names(TreeFileOperations.withoutDescendants(in)));
+        // "x-data" must not be considered a descendant of "x" (element-wise comparison).
+        List<File> in = List.of(file("x"), file("x-data"));
+        assertEquals(List.of("x", "x-data"), names(TreeFileOperations.withoutDescendants(in)));
     }
 }
