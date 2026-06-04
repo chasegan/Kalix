@@ -28,6 +28,7 @@ pub struct GaugeNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_force_flow: Option<usize>,
     recorder_idx_reference_flow: Option<usize>,
 }
 
@@ -67,6 +68,9 @@ impl Node for GaugeNode {
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
         );
+        self.recorder_idx_force_flow = data_cache.get_series_idx(
+            make_result_name(&self.name, "force_flow").as_str(), false
+        );
         self.recorder_idx_reference_flow = data_cache.get_series_idx(
             make_result_name(&self.name, "reference_flow").as_str(), false
         );
@@ -95,22 +99,21 @@ impl Node for GaugeNode {
         }
 
         // Force flows if required, otherwise pass upstream value
-        match self.force_flow_input {
-            DynamicInput::None { .. } => {
-                self.dsflow_primary = self.usflow;
-            },
-            _ => {
-                let force_flow_value = self.force_flow_input.get_value(data_cache);
-                if force_flow_value.is_nan() {
-                    self.dsflow_primary = self.usflow;
-                } else {
-                    self.dsflow_primary = force_flow_value;
-                    self.mbal += self.dsflow_primary - self.usflow;
-                }
-            }
+        let force_flow_value = match self.force_flow_input {
+            DynamicInput::None { .. } => f64::NAN,
+            _ => self.force_flow_input.get_value(data_cache),
+        };
+        if force_flow_value.is_nan() {
+            self.dsflow_primary = self.usflow;
+        } else {
+            self.dsflow_primary = force_flow_value;
+            self.mbal += self.dsflow_primary - self.usflow;
         }
 
         // Record results
+        if let Some(idx) = self.recorder_idx_force_flow {
+            data_cache.add_value_at_index(idx, force_flow_value);
+        }
         let needs_reference_flow = self.recorder_idx_delta.is_some() || self.recorder_idx_reference_flow.is_some();
         let reference_flow_value = if needs_reference_flow {
             match self.reference_flow_input {
