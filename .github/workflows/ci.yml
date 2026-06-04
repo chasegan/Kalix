@@ -25,6 +25,7 @@ jobs:
             platform: macOS
           - os: windows-latest
             platform: Windows
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -34,6 +35,9 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JDK_VERSION }}
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Rust tests
         run: cargo test
@@ -42,3 +46,10 @@ jobs:
         working-directory: kalixide
         shell: bash
         run: ./gradlew test --no-daemon
+
+      - name: Python tests
+        working-directory: python
+        shell: bash
+        run: |
+          pip install tox>=4.0
+          tox -e py$(echo "${{ matrix.python-version }}" | tr -d '.')
