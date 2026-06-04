@@ -77,7 +77,7 @@ impl Node for RegulatedUserNode {
             make_result_name(&self.name, "usflow").as_str(), false
         );
         self.recorder_idx_pump_capacity = data_cache.get_series_idx(
-            make_result_name(&self.name, "pump_capacity").as_str(), false
+            make_result_name(&self.name, "pump").as_str(), false
         );
         self.recorder_idx_order = data_cache.get_series_idx(
             make_result_name(&self.name, "order").as_str(), false

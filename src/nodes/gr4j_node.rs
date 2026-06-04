@@ -39,6 +39,8 @@ pub struct Gr4jNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_evap_mm: Option<usize>,
+    recorder_idx_rain_mm: Option<usize>,
 }
 
 impl Gr4jNode {
@@ -96,6 +98,12 @@ impl Node for Gr4jNode {
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
         );
+        self.recorder_idx_rain_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "rain").as_str(), false
+        );
+        self.recorder_idx_evap_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "evap").as_str(), false
+        );
 
         // Return
         Ok(())
@@ -144,6 +152,12 @@ impl Node for Gr4jNode {
         }
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_rain_mm {
+            data_cache.add_value_at_index(idx, self.rain);
+        }
+        if let Some(idx) = self.recorder_idx_evap_mm {
+            data_cache.add_value_at_index(idx, self.pet);
         }
         // if let Some(idx) = self.recorder_idx_ds_1_order {
         //     data_cache.add_value_at_index(idx, self.dsorders[0]);

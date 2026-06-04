@@ -77,9 +77,13 @@ pub struct StorageNode {
     recorder_idx_level: Option<usize>,
     recorder_idx_target_level: Option<usize>,
     recorder_idx_area: Option<usize>,
-    recorder_idx_seep: Option<usize>,
-    recorder_idx_evap: Option<usize>,
-    recorder_idx_rain: Option<usize>,
+    recorder_idx_seep_megs: Option<usize>,
+    recorder_idx_evap_megs: Option<usize>,
+    recorder_idx_rain_megs: Option<usize>,
+    recorder_idx_seep_mm: Option<usize>,
+    recorder_idx_evap_mm: Option<usize>,
+    recorder_idx_rain_mm: Option<usize>,
+    recorder_idx_pond_demand: Option<usize>,
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
@@ -529,17 +533,29 @@ impl Node for StorageNode {
         self.recorder_idx_area = data_cache.get_series_idx(
             make_result_name(&self.name, "area").as_str(), false
         );
-        self.recorder_idx_seep = data_cache.get_series_idx(
-            make_result_name(&self.name, "seep").as_str(), false
+        self.recorder_idx_seep_megs = data_cache.get_series_idx(
+            make_result_name(&self.name, "seep_vol").as_str(), false
         );
-        self.recorder_idx_rain = data_cache.get_series_idx(
+        self.recorder_idx_rain_megs = data_cache.get_series_idx(
+            make_result_name(&self.name, "rain_vol").as_str(), false
+        );
+        self.recorder_idx_evap_megs = data_cache.get_series_idx(
+            make_result_name(&self.name, "evap_vol").as_str(), false
+        );
+        self.recorder_idx_rain_mm = data_cache.get_series_idx(
             make_result_name(&self.name, "rain").as_str(), false
         );
-        self.recorder_idx_evap = data_cache.get_series_idx(
+        self.recorder_idx_evap_mm = data_cache.get_series_idx(
             make_result_name(&self.name, "evap").as_str(), false
+        );
+        self.recorder_idx_seep_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "seep").as_str(), false
         );
         self.recorder_idx_pond_diversion = data_cache.get_series_idx(
             make_result_name(&self.name, "pond_diversion").as_str(), false
+        );
+        self.recorder_idx_pond_demand = data_cache.get_series_idx(
+            make_result_name(&self.name, "pond_demand").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -743,17 +759,29 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_area {
             data_cache.add_value_at_index(idx, area_km2);
         }
-        if let Some(idx) = self.recorder_idx_seep {
+        if let Some(idx) = self.recorder_idx_seep_megs {
             data_cache.add_value_at_index(idx, self.seep_vol);
         }
-        if let Some(idx) = self.recorder_idx_rain {
+        if let Some(idx) = self.recorder_idx_rain_megs {
             data_cache.add_value_at_index(idx, self.rain_vol);
         }
-        if let Some(idx) = self.recorder_idx_evap {
+        if let Some(idx) = self.recorder_idx_evap_megs {
             data_cache.add_value_at_index(idx, self.evap_vol);
+        }
+        if let Some(idx) = self.recorder_idx_seep_mm {
+            data_cache.add_value_at_index(idx, seep_mm);
+        }
+        if let Some(idx) = self.recorder_idx_rain_mm {
+            data_cache.add_value_at_index(idx, rain_mm);
+        }
+        if let Some(idx) = self.recorder_idx_evap_mm {
+            data_cache.add_value_at_index(idx, evap_mm);
         }
         if let Some(idx) = self.recorder_idx_pond_diversion {
             data_cache.add_value_at_index(idx, self.pond_diversion);
+        }
+        if let Some(idx) = self.recorder_idx_pond_demand {
+            data_cache.add_value_at_index(idx, pond_demand);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);

@@ -41,6 +41,7 @@ pub struct ConfluenceNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_harmony_fraction: Option<usize>,
 }
 
 impl ConfluenceNode {
@@ -85,6 +86,9 @@ impl Node for ConfluenceNode {
         self.recorder_idx_ds_1_order = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_1_order").as_str(), false
         );
+        self.recorder_idx_harmony_fraction = data_cache.get_series_idx(
+            make_result_name(&self.name, "harmony_fraction").as_str(), false
+        );
 
         // Return
         Ok(())
@@ -97,6 +101,9 @@ impl Node for ConfluenceNode {
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
+        }
+        if let Some(idx) = self.recorder_idx_harmony_fraction {
+            data_cache.add_value_at_index(idx, self.harmony_fraction_value);
         }
     }
 
