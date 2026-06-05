@@ -62,15 +62,17 @@ kalix.simulate("model.ini", mass_balance="mb.txt")
 ```python
 import kalix
 
-result = kalix.optimise("calibration.ini")
-print(result["best_objective"])   # lower is better
-print(result["parameters"])       # {"node.my_sac.uzfwm": 42.7, ...}
+result = kalix.optimise("calibration.ini", model_file="initial_model.ini", save_model="final_model.ini")
+
+print(result["best_objective"])      # lower is better
+print(result["parameters"])          # {"node.my_sac.uzfwm": 42.7, ...}
+print(result["optimised_model_ini"]) # string copy of the final model ini
 ```
 
 The Python equivalent of `kalix optimise calibration.ini`, but in-process. The
 config `.ini` defines the algorithm, calibration terms, objective expression,
 parameter bounds, and termination criteria. Unlike `simulate`, `optimise`
-returns its results (the answer is the point of optimising) as a dict:
+returns a result dictionary:
 
 | key | meaning |
 |---|---|
@@ -81,7 +83,6 @@ returns its results (the answer is the point of optimising) as a dict:
 | `parameters` | optimised parameters as `{target: physical_value}` |
 | `optimised_model_ini` | the optimised model serialised back to an INI string |
 
-`optimised_model_ini` lets you recover the tuned model without touching disk.
 Two keyword-only options mirror the CLI's flags:
 
 ```python
