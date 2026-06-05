@@ -147,7 +147,7 @@
 
     "unregulated_user": {
       "description": "Unregulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "flow_threshold", "pump_capacity", "demand_carryover"],
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "flow_threshold", "pump", "demand_carryover"],
       "required_params": ["type", "loc"],
       "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover"],
       "dsnode_params": ["ds_1"],
@@ -188,7 +188,7 @@
 
     "regulated_user": {
       "description": "Regulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "pump_capacity"],
+      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "pump"],
       "required_params": ["type", "loc"],
       "optional_params": ["order", "pump"],
       "dsnode_params": ["ds_1"],
@@ -215,7 +215,7 @@
 
     "storage": {
       "description": "Storage node for water storage modeling",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "ds_1_spill", "ds_2_spill", "ds_3_spill", "ds_4_spill", "evap", "rain", "seep", "level", "area", "pond_diversion", "target_level"],
+      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "ds_1_spill", "ds_2_spill", "ds_3_spill", "ds_4_spill", "evap", "rain", "seep", "level", "area", "pond_diversion", "target_level", "rain_vol", "seep_vol", "evap_vol", "pond_demand"],
       "required_params": ["type", "loc"],
       "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand", "initial_volume", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "target_level", "order_through"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
@@ -354,7 +354,7 @@
 
     "confluence": {
       "description": "Confluence node that merges multiple flow streams",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "harmony_fraction"],
       "required_params": ["type", "loc"],
       "optional_params": ["harmony_fraction"],
       "dsnode_params": ["ds_1"],
@@ -423,7 +423,7 @@
 
     "gauge": {
       "description": "Gauge node for monitoring and measuring flow",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "delta"],
+      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "delta", "force_flow", "reference_flow"],
       "required_params": ["type", "loc"],
       "optional_params": ["force_flow", "reference_flow"],
       "dsnode_params": ["ds_1"],
