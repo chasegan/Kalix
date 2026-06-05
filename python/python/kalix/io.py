@@ -35,7 +35,10 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
         names with float64 values.
     """
     timestamps_sec, series_dict = _read_pixie_raw(str(path))
-    index = pd.to_datetime(timestamps_sec, unit="s", utc=True)
+    # Keep seconds resolution so read-back mirrors write_pixie (which stores at
+    # second resolution): pd.to_datetime defaults to nanoseconds, so pin the
+    # unit to make the round-trip dtype-lossless.
+    index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
     index.name = "time"
     return pd.DataFrame(series_dict, index=index)
 

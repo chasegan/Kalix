@@ -7,11 +7,19 @@ fixtures are generated inline and the test runs in well under a second.
 """
 from __future__ import annotations
 
+import re
 import textwrap
 
 import pytest
 
 import kalix
+
+
+def _constant(ini: str, name: str) -> float:
+    """Pull the numeric value of a `[constants]` entry from a model INI string."""
+    m = re.search(rf"^{re.escape(name)}\s*=\s*([-\d.eE+]+)", ini, re.MULTILINE)
+    assert m is not None, f"{name} not found in optimised model INI"
+    return float(m.group(1))
 
 # The Beale function as a kalix inflow expression over constants c.x, c.y.
 _BEALE_MODEL = textwrap.dedent("""\
@@ -55,6 +63,7 @@ def _write_fixtures(tmp_path, *, model_file_in_config=True):
         complexes = 4
         termination_evaluations = 2000
         n_threads = 1
+        random_seed = 12345
 
         [term.term1]
         simulated = node.my_node.ds_1
@@ -94,9 +103,10 @@ def test_optimise_returns_optimised_model_ini(tmp_path):
 
     ini = res["optimised_model_ini"]
     assert isinstance(ini, str) and "[constants]" in ini
-    # The tuned constants should be serialised back into the model string.
-    assert "c.x = 3" in ini
-    assert "c.y = 0.5" in ini
+    # The tuned constants are serialised back into the model string and match
+    # the returned physical parameters (value-formatting-agnostic).
+    assert _constant(ini, "c.x") == pytest.approx(res["parameters"]["c.x"])
+    assert _constant(ini, "c.y") == pytest.approx(res["parameters"]["c.y"])
 
 
 def test_optimise_save_model_writes_file(tmp_path):
