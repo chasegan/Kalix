@@ -418,6 +418,12 @@ public class RunManager extends JFrame {
         // tab is added so the new PlotPanel picks it up.
         tabManager.setLabelResolver(labelResolver);
 
+        // Seed each plot tab's "Save Data" dialog with the model directory so it opens
+        // in the same folder as the run tree's "Save results (csv)". Must happen *before*
+        // the default plot tab is added so the first PlotPanel picks it up.
+        tabManager.setBaseDirectorySupplier(
+            () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null);
+
         // Sync tree selection when user switches tabs
         tabManager.setOnTabChangedCallback(this::onTabChanged);
 

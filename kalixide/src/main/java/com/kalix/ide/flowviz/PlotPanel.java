@@ -596,6 +596,17 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Sets the base directory supplier used to seed the "Save Data" file dialog's
+     * starting folder. Returns the model's directory (or {@code null} if no file is
+     * loaded). This only affects where the save dialog opens, not plotting.
+     */
+    public void setBaseDirectorySupplier(Supplier<java.io.File> baseDirectorySupplier) {
+        if (plotInteractionManager != null) {
+            plotInteractionManager.setBaseDirectorySupplier(baseDirectorySupplier);
+        }
+    }
+
+    /**
      * Sets the render mode for a specific series (LINE, POINTS, or LINE_AND_POINTS).
      */
     public void setSeriesRenderMode(SeriesRef ref, com.kalix.ide.flowviz.rendering.SeriesRenderMode renderMode) {

@@ -87,6 +87,7 @@ public class VisualizationTabManager {
     private final DataSet sharedDataSet;           // Single source of truth for all tabs
     private final SeriesStyleResolver styleResolver;  // Shared resolver — consistent styling across all tabs
     private LabelResolver labelResolver;  // injected by owner; passed down to PlotPanels
+    private java.util.function.Supplier<File> baseDirectorySupplier;  // seeds plot Save dialog's start folder
     private final List<TabInfo> tabs;
 
     // Tab change tracking
@@ -287,6 +288,21 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Sets the base directory supplier used to seed each plot tab's "Save Data" file
+     * dialog start folder (the model's directory, or {@code null} if no file is loaded).
+     * Applied to existing plot tabs and to any created afterwards. Call before the first
+     * tab is added so the default plot tab picks it up.
+     */
+    public void setBaseDirectorySupplier(java.util.function.Supplier<File> supplier) {
+        this.baseDirectorySupplier = supplier;
+        for (TabInfo tab : tabs) {
+            if (tab.plotPanel != null) {
+                tab.plotPanel.setBaseDirectorySupplier(supplier);
+            }
+        }
+    }
+
+    /**
      * Adds a new plot tab with default settings from preferences.
      *
      * @return The created PlotPanel
@@ -309,6 +325,9 @@ public class VisualizationTabManager {
         plotPanel.setStyleResolver(styleResolver);
         if (labelResolver != null) {
             plotPanel.setLabelResolver(labelResolver);
+        }
+        if (baseDirectorySupplier != null) {
+            plotPanel.setBaseDirectorySupplier(baseDirectorySupplier);
         }
 
         // Use series from settings if provided, otherwise inherit from active tab
