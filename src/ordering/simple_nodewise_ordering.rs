@@ -163,11 +163,6 @@ impl SimpleNodewiseOrderingSystem {
                             node.order_buffer = FifoBuffer::new(int_lag);
                         }
                     }
-                    // NodeEnum::InflowNode(node) => {
-                    //     //node.is_regulated = true;
-                    //     node.order_travel_time = new_link_item.lag.round() as usize;
-                    //     node.order_travel_time_gt_0 = node.order_travel_time > 0;
-                    // }
                     NodeEnum::OrderConstraintNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
                         node.sent_order_buffer = FifoBuffer::new(int_lag);
@@ -219,18 +214,6 @@ impl SimpleNodewiseOrderingSystem {
                 needed[li.from_node] = true;
             }
         }
-
-        // Phase 2b: Reset is_regulated on pruned InflowNodes.
-        // Phase 1 marks inflow nodes as is_regulated=true when they're on regulated links.
-        // If pruning excludes them from ordering visits, order_phase_inflow_value is never set,
-        // but the flow phase would still use it (stale) if is_regulated remains true.
-        // for (i, node) in nodes.iter_mut().enumerate() {
-        //     if let NodeEnum::InflowNode(inflow_node) = node {
-        //         if inflow_node.is_regulated && !needed[i] {
-        //             inflow_node.is_regulated = false;
-        //         }
-        //     }
-        // }
 
         // Phase 3: Build CSR-style regulated node list and flat incoming links vec.
         // Only include nodes that are both regulated and needed.

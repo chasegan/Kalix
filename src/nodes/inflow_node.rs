@@ -22,11 +22,6 @@ pub struct InflowNode {
     storage: f64,
 
     // Properties and internal state - regulated demands and ordering
-    //pub is_regulated: bool,
-    // pub order_travel_time: usize,
-    // pub order_travel_time_gt_0: bool,
-    //pub order_phase_inflow_value: f64,
-    //pub recession_factor: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,
 
@@ -104,10 +99,6 @@ impl Node for InflowNode {
         }
 
         // Calculate upstream order
-        //let inflow_value = self.inflow_input.get_value(data_cache);
-        //self.order_phase_inflow_value = inflow_value;
-        // let anticipated_inflow_on_delivery_timestep = inflow_value *
-        //     if self.order_travel_time_gt_0 { self.recession_factor } else { 1.0 };
         self.usorders = (self.dsorders[0] - expected_inflow_value_on_delivery_timestep).max(0f64);
     }
 
@@ -120,13 +111,6 @@ impl Node for InflowNode {
 
         // Get lateral inflow
         self.inflow_value = self.inflow_input.get_value(data_cache);
-        // self.lateral_inflow = if self.is_regulated {
-        //     // We calculated the inflow early to account for it during ordering
-        //     self.order_phase_inflow_value
-        // } else {
-        //     // Evaluate now
-        //     self.inflow_input.get_value(data_cache)
-        // };
 
         // Compute outflow based on inflow
         self.dsflow_primary = self.usflow + self.inflow_value;
