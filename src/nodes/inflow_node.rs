@@ -13,25 +13,27 @@ pub struct InflowNode {
     pub location: Location,
     pub mbal: f64,
     pub inflow_input: DynamicInput,
+    pub expected_inflow_input: DynamicInput,
 
     // Internal state only
     usflow: f64,
-    lateral_inflow: f64,
+    inflow_value: f64,
     dsflow_primary: f64,
     storage: f64,
 
     // Properties and internal state - regulated demands and ordering
-    pub is_regulated: bool,
-    pub order_travel_time: usize,
-    pub order_travel_time_gt_0: bool,
-    pub order_phase_inflow_value: f64,
-    pub recession_factor: f64,
+    //pub is_regulated: bool,
+    // pub order_travel_time: usize,
+    // pub order_travel_time_gt_0: bool,
+    //pub order_phase_inflow_value: f64,
+    //pub recession_factor: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_inflow: Option<usize>,
+    recorder_idx_expected_inflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
@@ -43,7 +45,7 @@ impl InflowNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            recession_factor: 0.0,
+            //recession_factor: 0.0,
             ..Default::default()
         }
     }
@@ -54,7 +56,7 @@ impl Node for InflowNode {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
-        self.lateral_inflow = 0.0;
+        self.inflow_value = 0.0;
         self.dsflow_primary = 0.0;
         self.storage = 0.0;
 
@@ -66,6 +68,9 @@ impl Node for InflowNode {
         );
         self.recorder_idx_inflow = data_cache.get_series_idx(
             make_result_name(&self.name, "inflow").as_str(), false
+        );
+        self.recorder_idx_expected_inflow = data_cache.get_series_idx(
+            make_result_name(&self.name, "expected_inflow").as_str(), false
         );
         self.recorder_idx_dsflow = data_cache.get_series_idx(
             make_result_name(&self.name, "dsflow").as_str(), false
@@ -92,12 +97,18 @@ impl Node for InflowNode {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
 
-        // Calcualte upstream order
-        let inflow_value = self.inflow_input.get_value(data_cache);
-        self.order_phase_inflow_value = inflow_value;
-        let anticipated_inflow_on_delivery_timestep = inflow_value *
-            if self.order_travel_time_gt_0 { self.recession_factor } else { 1.0 };
-        self.usorders = (self.dsorders[0] - anticipated_inflow_on_delivery_timestep).max(0f64);
+        // Evaluate expected inflow
+        let expected_inflow_value_on_delivery_timestep = self.expected_inflow_input.get_value(data_cache);
+        if let Some(idx) = self.recorder_idx_expected_inflow {
+            data_cache.add_value_at_index(idx, expected_inflow_value_on_delivery_timestep);
+        }
+
+        // Calculate upstream order
+        //let inflow_value = self.inflow_input.get_value(data_cache);
+        //self.order_phase_inflow_value = inflow_value;
+        // let anticipated_inflow_on_delivery_timestep = inflow_value *
+        //     if self.order_travel_time_gt_0 { self.recession_factor } else { 1.0 };
+        self.usorders = (self.dsorders[0] - expected_inflow_value_on_delivery_timestep).max(0f64);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
@@ -108,23 +119,24 @@ impl Node for InflowNode {
         }
 
         // Get lateral inflow
-        self.lateral_inflow = if self.is_regulated {
-            // We calculated the inflow early to account for it during ordering
-            self.order_phase_inflow_value
-        } else {
-            // Evaluate now
-            self.inflow_input.get_value(data_cache)
-        };
+        self.inflow_value = self.inflow_input.get_value(data_cache);
+        // self.lateral_inflow = if self.is_regulated {
+        //     // We calculated the inflow early to account for it during ordering
+        //     self.order_phase_inflow_value
+        // } else {
+        //     // Evaluate now
+        //     self.inflow_input.get_value(data_cache)
+        // };
 
         // Compute outflow based on inflow
-        self.dsflow_primary = self.usflow + self.lateral_inflow;
+        self.dsflow_primary = self.usflow + self.inflow_value;
 
         // Update mass balance
-        self.mbal += self.lateral_inflow;
+        self.mbal += self.inflow_value;
         
         // Record results
         if let Some(idx) = self.recorder_idx_inflow {
-            data_cache.add_value_at_index(idx, self.lateral_inflow);
+            data_cache.add_value_at_index(idx, self.inflow_value);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);

@@ -256,10 +256,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "inflow" {
                             n.inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                        } else if name_lower == "recession_factor" {
-                            n.recession_factor = v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?;
+                        } else if name_lower == "expected_inflow" {
+                            n.expected_inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        // } else if name_lower == "recession_factor" {
+                        //     n.recession_factor = v.parse::<f64>()
+                        //         .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                        //                              ini_property.line_number, name, node_name))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name));
@@ -711,7 +714,8 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "inflow");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "inflow", &n.inflow_input.to_string());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "recession_factor", &n.recession_factor.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "expected_inflow", &n.expected_inflow_input.to_string());
+                //set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "recession_factor", &n.recession_factor.to_string());
             }
             NodeEnum::LossNode(n) => {
                 let section_name = format!("node.{}", n.name);
