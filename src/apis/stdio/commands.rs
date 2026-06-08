@@ -1014,27 +1014,17 @@ impl Command for SaveResultsCommand {
             format!("simulation_results_{}.{}", timestamp, ext)
         };
 
-        // Collect timeseries references for output series
-        let mut timeseries_refs = Vec::new();
-        let mut series_count = 0;
-        let mut total_timesteps = 0;
-
-        for output_name in &model.outputs {
-            if let Some(series_idx) = model.data_cache.get_existing_series_idx(output_name) {
-                let timeseries = &model.data_cache.series[series_idx];
-                timeseries_refs.push(timeseries);
-                series_count += 1;
-
-                // Track the number of timesteps (should be the same for all series)
-                if total_timesteps == 0 {
-                    total_timesteps = timeseries.values.len();
-                }
-            }
-        }
+        // Collect the output series that are valid to export. Outputs that no component
+        // populated (e.g. an invalid recorder) have a mismatched length and are omitted
+        // rather than failing the whole export — see Model::collect_output_series.
+        let timeseries_refs = model.collect_output_series();
 
         if timeseries_refs.is_empty() {
             return Err(CommandError::ExecutionError("No timeseries data found for output series".to_string()));
         }
+
+        let series_count = timeseries_refs.len();
+        let total_timesteps = timeseries_refs.first().map_or(0, |ts| ts.values.len());
 
         // Write the file in the requested format. The path reported back is the file
         // actually written — for pixie that is the .pxt metadata file (a .pxb sibling is

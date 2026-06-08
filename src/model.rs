@@ -634,13 +634,28 @@ impl Model {
     }
 
 
-    pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
-
+    /// Collects the output series that are valid to export — those whose length matches the
+    /// simulation horizon (`sim_nsteps`). An output declared in `[outputs]` but never
+    /// populated by any component (e.g. an invalid recorder) is left empty in the data cache;
+    /// such series are silently omitted so that one bad recorder does not fail the whole
+    /// export. Returned in the order the outputs are declared.
+    pub(crate) fn collect_output_series(&self) -> Vec<&Timeseries> {
+        let expected_len = self.configuration.sim_nsteps as usize;
         let mut vec_ts: Vec<&Timeseries> = Vec::new();
         for output_name in &self.outputs {
-            let idx = self.data_cache.get_existing_series_idx(output_name).unwrap();
-            vec_ts.push(&self.data_cache.series[idx]);
+            if let Some(idx) = self.data_cache.get_existing_series_idx(output_name) {
+                let ts = &self.data_cache.series[idx];
+                if ts.timestamps.len() == expected_len {
+                    vec_ts.push(ts);
+                }
+            }
         }
+        vec_ts
+    }
+
+    pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
+
+        let vec_ts = self.collect_output_series();
 
         // Dispatch by extension: .pxb or .pxt → paired Pixie format,
         // anything else → CSV.
