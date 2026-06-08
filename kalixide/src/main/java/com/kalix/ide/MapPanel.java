@@ -43,6 +43,11 @@ public class MapPanel extends JPanel implements KeyListener {
     // Panning variables
     private double panX = 0.0;
     private double panY = 0.0;
+
+    // True when a zoom-to-fit was requested before the panel had a real size
+    // (e.g. an inactive tab restored at startup). The fit is completed the first
+    // time the panel is laid out with non-zero dimensions; see componentResized below.
+    private boolean pendingZoomToFit = false;
     private Point lastPanPoint = null;
     private boolean isPanning = false;
     
@@ -91,6 +96,21 @@ public class MapPanel extends JPanel implements KeyListener {
         addKeyListener(this);
 
         setupMouseListeners();
+    }
+
+    /**
+     * Completes a deferred zoom-to-fit the moment the layout manager gives this panel a
+     * real size. Doing it here (synchronously during validation) rather than via a
+     * {@code componentResized} listener means the fit is applied before the panel's first
+     * paint in that cycle, avoiding a visible "draw then re-zoom" flicker for tabs whose
+     * map was never sized when their model loaded (e.g. inactive tabs restored at startup).
+     */
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
+        super.setBounds(x, y, width, height);
+        if (pendingZoomToFit && width > 0 && height > 0) {
+            zoomToFit();
+        }
     }
 
     /**
@@ -500,6 +520,14 @@ public class MapPanel extends JPanel implements KeyListener {
             return; // No nodes to fit
         }
 
+        // The fit depends on the panel's pixel size. If we have no size yet (panel not
+        // laid out, e.g. an inactive tab), defer the fit until componentResized fires
+        // with a real size rather than computing a degenerate zoom of 0.
+        if (getWidth() <= 0 || getHeight() <= 0) {
+            pendingZoomToFit = true;
+            return;
+        }
+
         // Calculate bounding box of all nodes
         double minX = Double.POSITIVE_INFINITY;
         double minY = Double.POSITIVE_INFINITY;
@@ -543,6 +571,10 @@ public class MapPanel extends JPanel implements KeyListener {
         zoomLevel = newZoom;
         panX = newPanX;
         panY = newPanY;
+
+        // Fit completed against a real size; no longer pending. This also prevents the
+        // componentResized hook from clobbering a user's manual zoom/pan on later resizes.
+        pendingZoomToFit = false;
 
         repaint();
     }
