@@ -138,7 +138,7 @@ public class RunContextMenuManager {
 
         contextMenu.addSeparator();
 
-        JMenuItem saveResultsItem = new JMenuItem("Save results (csv)");
+        JMenuItem saveResultsItem = new JMenuItem("Save Results");
         saveResultsItem.addActionListener(e -> saveResults());
         contextMenu.add(saveResultsItem);
 
@@ -514,15 +514,22 @@ public class RunContextMenuManager {
             return;
         }
 
-        // Generate default filename: {run_name}_{uid}.csv
+        // Generate default filename: {run_name}_{uid}.csv (CSV is the default format)
         String safeRunName = runInfo.getRunName().replaceAll("[^a-zA-Z0-9_-]", "_");
-        String defaultFilename = safeRunName + "_" + (kalixcliUid != null ? kalixcliUid : "unknown") + ".csv";
+        String baseFilename = safeRunName + "_" + (kalixcliUid != null ? kalixcliUid : "unknown");
 
-        // Show save dialog
+        // Show save dialog with all engine-supported formats. Matches the plot tab's
+        // "Save Data" dialog: CSV (default) and Pixie (.pxt + .pxb sibling).
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Results");
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
-        fileChooser.setSelectedFile(new File(defaultFilename));
+        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
+        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
+        fileChooser.addChoosableFileFilter(csvFilter);
+        fileChooser.addChoosableFileFilter(pixieFilter);
+        fileChooser.setFileFilter(csvFilter); // Default to CSV
+        // Suggest a base name with no extension; the extension follows the chosen filter
+        // and is appended on approve, so there is no stale extension to collide with.
+        fileChooser.setSelectedFile(new File(baseFilename));
 
         // Set initial directory to model directory if available
         if (baseDirectorySupplier != null) {
@@ -535,17 +542,26 @@ public class RunContextMenuManager {
         int result = fileChooser.showSaveDialog(parentFrame);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
+            String lowerName = selectedFile.getName().toLowerCase();
 
-            // Add .csv extension if not present
-            String fileName = selectedFile.getName();
-            if (!fileName.toLowerCase().endsWith(".csv")) {
-                selectedFile = new File(selectedFile.getParent(), fileName + ".csv");
+            // Format follows the chosen filter. A typed extension overrides it, so a user
+            // who explicitly names "foo.csv" while the Pixie filter is active still gets CSV.
+            boolean pixie = lowerName.endsWith(".pxt")
+                || (fileChooser.getFileFilter() == pixieFilter && !lowerName.endsWith(".csv"));
+            String format = pixie ? "pixie" : "csv";
+            String ext = pixie ? ".pxt" : ".csv";
+
+            // Append the format's extension unless the user already typed it.
+            if (!lowerName.endsWith(ext)) {
+                selectedFile = new File(selectedFile.getParent(), selectedFile.getName() + ext);
             }
 
-            // Send save_results command to kalixcli
+            // Send save_results command to kalixcli with the chosen format. For pixie the
+            // engine strips the .pxt and writes the .pxt/.pxb pair from that base path.
             String command = String.format(
-                "{\"m\":\"cmd\",\"c\":\"save_results\",\"p\":{\"path\":\"%s\",\"format\":\"csv\"}}",
-                selectedFile.getAbsolutePath().replace("\\", "\\\\").replace("\"", "\\\"")
+                "{\"m\":\"cmd\",\"c\":\"save_results\",\"p\":{\"path\":\"%s\",\"format\":\"%s\"}}",
+                selectedFile.getAbsolutePath().replace("\\", "\\\\").replace("\"", "\\\""),
+                format
             );
 
             try {

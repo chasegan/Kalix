@@ -753,7 +753,9 @@ public class PlotInteractionManager {
         fileChooser.addChoosableFileFilter(pixieFilter);
         fileChooser.setFileFilter(csvFilter); // Default to CSV
 
-        fileChooser.setSelectedFile(new File("timeseries_data.csv"));
+        // Suggest a base name with no extension; the extension follows the chosen filter,
+        // so there is no stale extension to collide with (avoids "foo.csv.pxt").
+        fileChooser.setSelectedFile(new File("timeseries_data"));
 
         // Set initial directory to model directory if available
         if (baseDirectorySupplier != null) {
@@ -768,14 +770,15 @@ public class PlotInteractionManager {
             File file = fileChooser.getSelectedFile();
             String fileName = file.getName().toLowerCase();
 
-            // Determine format based on selected filter or file extension
-            FileNameExtensionFilter selectedFilter = (FileNameExtensionFilter) fileChooser.getFileFilter();
+            // Format follows the chosen filter. A typed extension overrides it, so a user
+            // who explicitly names "foo.csv" while the Pixie filter is active still gets CSV.
+            // saveAsCsvFormat / saveAsPixieFormat each apply the correct extension.
+            boolean pixie = fileName.endsWith(".pxt")
+                || (fileChooser.getFileFilter() == pixieFilter && !fileName.endsWith(".csv"));
 
-            if (selectedFilter == pixieFilter || fileName.endsWith(".pxt")) {
-                // Save as Pixie format
+            if (pixie) {
                 saveAsPixieFormat(file);
             } else {
-                // Save as CSV format (default)
                 saveAsCsvFormat(file);
             }
         }

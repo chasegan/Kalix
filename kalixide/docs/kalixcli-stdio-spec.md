@@ -241,12 +241,15 @@ End the session and exit.
 - Description: Retrieve timeseries result data
 - Parameters: `series_name` (string, required), `format` (string, default "pixie")
 - Supported formats:
-  - `"pixie"` (recommended): Gorilla-compressed bitstream (codec `gorilla_double`), base64-encoded into `r.data`. Bitstream carries timestep, count, and per-point timestamps; no separate metadata is needed to decode.
+  - `"pixie"` (recommended): a compressed bitstream, base64-encoded into `r.data`. The bitstream carries timestep, count, and per-point timestamps, so no separate metadata is needed to decode. The codec is a custom delta/XOR scheme *inspired by* Facebook's Gorilla algorithm — it is not a literal Gorilla implementation. The wire `codec` identifier is `gorilla_double` for historical reasons.
   - `"csv"`: Comma-separated `start_timestamp,timestep_seconds,value1,value2,…` ASCII string in `r.data`. Retained for human inspection / external consumers.
 
 **save_results**
-- Description: Save timeseries result data to file
+- Description: Save all of the run's output timeseries to file
 - Parameters: `path` (string, optional), `format` (string, optional, default "csv")
+- Supported formats:
+  - `"csv"` (default): single wide CSV with a `Datetime` column and one column per output series.
+  - `"pixie"`: writes a `.pxt` (metadata) / `.pxb` (compressed binary) pair. The `path` is treated as a base path; a trailing `.pxt`/`.pxb` is stripped before writing, and `r.path` reports the `.pxt` file.
 
 **get_version**
 - Description: Get kalixcli version information

@@ -4,6 +4,7 @@ use crate::apis::stdio::messages::{CommandSpec, ParameterSpec, ProgressInfo};
 use crate::apis::stdio::session::Session;
 use crate::io::ini_model_io::IniModelIO;
 use crate::io::csv_io;
+use crate::io::pixie_io;
 use chrono;
 use crate::tid;
 use crate::numerical::opt::Optimisable;
@@ -989,8 +990,9 @@ impl Command for SaveResultsCommand {
             .and_then(|v| v.as_str())
             .unwrap_or("csv");
 
-        if format != "csv" {
-            return Err(CommandError::InvalidParameters("Only csv format is currently supported".to_string()));
+        if format != "csv" && format != "pixie" {
+            return Err(CommandError::InvalidParameters(
+                format!("Unsupported format '{}'; expected 'csv' or 'pixie'", format)));
         }
 
         // Get model and check if it exists
@@ -1008,7 +1010,8 @@ impl Command for SaveResultsCommand {
         } else {
             // Generate default filename based on current timestamp
             let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-            format!("simulation_results_{}.csv", timestamp)
+            let ext = if format == "pixie" { "pxt" } else { "csv" };
+            format!("simulation_results_{}.{}", timestamp, ext)
         };
 
         // Collect timeseries references for output series
@@ -1033,15 +1036,35 @@ impl Command for SaveResultsCommand {
             return Err(CommandError::ExecutionError("No timeseries data found for output series".to_string()));
         }
 
-        // Use the standard csv_io write_ts function
-        csv_io::write_ts(&file_path, timeseries_refs)
-            .map_err(|e| CommandError::IoError(format!("Failed to write CSV file: {}", String::from(e))))?;
+        // Write the file in the requested format. The path reported back is the file
+        // actually written — for pixie that is the .pxt metadata file (a .pxb sibling is
+        // written alongside it).
+        let written_path = match format {
+            "csv" => {
+                csv_io::write_ts(&file_path, timeseries_refs)
+                    .map_err(|e| CommandError::IoError(format!("Failed to write CSV file: {}", String::from(e))))?;
+                file_path.clone()
+            }
+            "pixie" => {
+                // pixie_io::write_series appends .pxt/.pxb, so strip a provided extension
+                // to recover the base path and avoid writing e.g. "foo.pxt.pxt".
+                let base_path = file_path
+                    .strip_suffix(".pxt")
+                    .or_else(|| file_path.strip_suffix(".pxb"))
+                    .unwrap_or(&file_path)
+                    .to_string();
+                pixie_io::write_series(&base_path, &timeseries_refs)
+                    .map_err(|e| CommandError::IoError(format!("Failed to write Pixie file: {}", String::from(e))))?;
+                format!("{}.pxt", base_path)
+            }
+            _ => unreachable!("format already validated to be csv or pixie"),
+        };
 
         // Get the absolute path for the response
-        let absolute_path = Path::new(&file_path)
+        let absolute_path = Path::new(&written_path)
             .canonicalize()
             .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or(file_path.clone());
+            .unwrap_or(written_path.clone());
 
         // Build response
         Ok(serde_json::json!({
