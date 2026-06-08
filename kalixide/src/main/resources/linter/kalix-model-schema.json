@@ -24,9 +24,9 @@
   "node_types": {
     "inflow": {
       "description": "Inflow node with external data source",
-      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1", "ds_1_order"],
+      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1", "ds_1_order", "expected_inflow"],
       "required_params": ["type", "loc"],
-      "optional_params": ["inflow", "recession_factor"],
+      "optional_params": ["inflow", "expected_inflow"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
       "parameters": {
         "type": {
@@ -42,9 +42,9 @@
           "type": "function_expression",
           "description": "Inflow input (data reference, constant, or expression)"
         },
-        "recession_factor": {
-          "type": "number",
-          "description": "Recession factor for inflow"
+        "expected_inflow": {
+          "type": "function_expression",
+          "description": "Expected inflow (data reference, constant, or expression)"
         }
       }
     },
