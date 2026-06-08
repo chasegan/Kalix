@@ -35,7 +35,6 @@ _BEALE_MODEL = textwrap.dedent("""\
     loc = 0,0
     type = inflow
     inflow = (1.5 - c.x + c.x*c.y)^2 + (2.25 - c.x + c.x * c.y^2)^2 + (2.625 - c.x + c.x * c.y^3)^2
-    recession_factor = 0
 
     [outputs]
     node.my_node.ds_1
