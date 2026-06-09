@@ -4,10 +4,13 @@ Automatically finds and verifies all Kalix model INI files against their mass ba
 """
 
 import os
-import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
+import shutil
+
+import kalix
 
 
 def find_model_files(root_dir):
@@ -20,9 +23,25 @@ def find_model_files(root_dir):
     return sorted(ini_files)
 
 
+def compare_mass_balance_files(file1, file2):
+    """
+    Compare two mass balance files for equality.
+
+    Args:
+        file1: Path to first mass balance file
+        file2: Path to second mass balance file
+
+    Returns:
+        bool: True if files are identical, False otherwise
+    """
+    with open(file1, 'r') as f1, open(file2, 'r') as f2:
+        content1 = f1.read()
+        content2 = f2.read()
+        return content1 == content2
+
 def verify_model(model_path, mbal_filename='mbal.txt'):
     """
-    Verify a model against its mass balance report.
+    Verify a model against its mass balance report using kalix.sim.simulate().
 
     Args:
         model_path: Path to the .ini model file
@@ -32,34 +51,35 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
         tuple: (success: bool, message: str)
     """
     model_dir = os.path.dirname(model_path)
-    model_file = os.path.basename(model_path)
     mbal_path = os.path.join(model_dir, mbal_filename)
 
-    # Check if mass balance file exists
+    # Check if reference mass balance file exists
     if not os.path.exists(mbal_path):
         return False, f"Mass balance file not found: {mbal_path}"
 
     try:
-        # Run kalix with verification
-        result = subprocess.run(
-            ['kalix', 'simulate', model_file, '-v', mbal_filename],
-            cwd=model_dir,
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
+        # Create a temporary file for the new mass balance
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_mbal:
+            tmp_mbal_path = tmp_mbal.name
 
-        if result.returncode == 0:
-            if 'VERIFIED!' in result.stdout:
+        try:
+            # Run simulation to generate new mass balance
+            kalix.simulate(
+                model_path,
+                mass_balance=tmp_mbal_path
+            )
+
+            # Compare the generated mass balance with the reference
+            if compare_mass_balance_files(tmp_mbal_path, mbal_path):
                 return True, "VERIFIED!"
             else:
-                return False, f"Verification unclear: {result.stdout}"
-        else:
-            error_msg = result.stderr if result.stderr else result.stdout
-            return False, f"Failed: {error_msg}"
-
-    except subprocess.TimeoutExpired:
-        return False, "Timeout: Model took too long to run"
+                # Copy the generated file for inspection
+                log_file = shutil.copy(tmp_mbal_path, mbal_path + '.log')  
+                return False, f"Mass balance mismatch: generated output differs from reference - saved to {Path(log_file).relative_to(Path.cwd()).as_posix()}"
+        finally:
+            # Clean up temporary file
+            if os.path.exists(tmp_mbal_path):
+                os.unlink(tmp_mbal_path)
     except Exception as e:
         return False, f"Error: {str(e)}"
 
@@ -109,9 +129,9 @@ def main():
         results.append((rel_path, success, message))
 
         if success:
-            log(f"  ✓ {message}")
+            log(f"  [PASS] {message}")
         else:
-            log(f"  ✗ {message}")
+            log(f"  [FAIL] {message}")
         log()
 
     # Summary
@@ -134,7 +154,7 @@ def main():
                 log(f"  - {rel_path}")
                 log(f"    {message}")
     else:
-        log("\n✓ All models verified successfully!")
+        log("\n[PASS] All models verified successfully!")
 
     # Write log file at the end (only if we got this far)
     with open(log_file, 'w') as f:
