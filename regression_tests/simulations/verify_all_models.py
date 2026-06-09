@@ -27,12 +27,8 @@ def find_model_files(root_dir):
 
 
 def get_numerical_content(line: str):
-    parts = line.split("=, ")
-    for part in parts:
-        stripped = part.strip()
-        if stripped.replace('.', '', 1).isdigit():
-            return float(stripped)
-    return None
+    match = re.search(r'[=,]\s*(-?\d+\.?\d*)\s*$', line)
+    return float(match.group(1)) if match else None
 
 
 def compare_mass_balance_files(file1, file2):
@@ -161,6 +157,7 @@ def _run_tests():
 
     assert get_numerical_content("flow, 1.23") == 1.23
     assert get_numerical_content("count = 42") == 42.0
+    assert get_numerical_content("deficit = -3.14") == -3.14
     assert get_numerical_content("Node count: 14") is None
     assert get_numerical_content("heading") is None
     assert get_numerical_content("") is None
