@@ -134,7 +134,48 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
         return False, f"Error: {str(e)}"
 
 
+def _run_tests():
+
+    def _tmp(s):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        f.write(s)
+        f.close()
+        return f.name
+
+    def cmp(a, b):
+        fa, fb = _tmp(a), _tmp(b)
+        try:
+            return compare_mass_balance_files(fa, fb)
+        finally:
+            os.unlink(fa)
+            os.unlink(fb)
+
+    assert get_numerical_content("flow, 1.23") == 1.23
+    assert get_numerical_content("count = 42") == 42.0
+    assert get_numerical_content("Node count: 14") is None
+    assert get_numerical_content("heading") is None
+    assert get_numerical_content("") is None
+
+    assert cmp("line A\n", "line A\n") == (True, '')
+    m, d = cmp("line A\n", "line B\n")
+    assert not m and 'line 1' in d and 'line A' in d
+    assert cmp("INLET NODES\nflow =, 1.0000010\n\n", "INLET NODES\nflow =, 1.0000020\n\n") == (True, '')
+    m, d = cmp("INLET NODES\nflow =, 1.0\n\n", "INLET NODES\nflow =, 2.0\n\n")
+    assert not m and '1.0' in d and '2.0' in d
+    m, d = cmp("INLET NODES\nnot a number\n\n", "INLET NODES\nnot a number\n\n")
+    assert not m and 'numerical' in d
+    m, d = cmp("line A\n", "line A\nline B\n")
+    assert not m and 'lengths' in d
+    assert cmp("", "") == (True, '')
+
+    print("All tests passed.")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == '--test':
+        _run_tests()
+        sys.exit(0)
+
     # Get the script's directory as the root search directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     log_file = os.path.join(script_dir, 'verify_all_models_log.txt')
