@@ -180,16 +180,45 @@ fn _simulate_from_file(
 /// Returns a dict with: `best_objective`, `n_evaluations`, `success`,
 /// `message`, `parameters` ({target: physical_value}), and
 /// `optimised_model_ini` (the optimised model serialised back to an INI string).
+///
+/// `progress`, if given, must be a Python callable. It is invoked once per
+/// generation with a dict of `{n_evaluations, best_objective, elapsed_seconds}`.
+/// The callback runs on the optimiser's thread with the GIL re-acquired; any
+/// exception it raises is swallowed so a faulty reporter can't abort the run.
 #[pyfunction]
-#[pyo3(signature = (config_path, model_path=None, save_model_path=None))]
+#[pyo3(signature = (config_path, model_path=None, save_model_path=None, progress=None))]
 fn _optimise_from_file<'py>(
     py: Python<'py>,
     config_path: &str,
     model_path: Option<&str>,
     save_model_path: Option<&str>,
+    progress: Option<PyObject>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    use kalix::numerical::opt::OptimizationProgress;
+
+    // Adapt the optional Python callable into a Rust progress callback. The
+    // optimiser calls this once per generation from a single thread while the
+    // GIL is released, so we re-acquire the GIL to call into Python.
+    let progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>> =
+        progress.map(|callable| {
+            let cb: Box<dyn Fn(&OptimizationProgress) + Send + Sync> =
+                Box::new(move |p: &OptimizationProgress| {
+                    Python::with_gil(|py| {
+                        let d = PyDict::new_bound(py);
+                        let _ = d.set_item("n_evaluations", p.n_evaluations);
+                        let _ = d.set_item("best_objective", p.best_objective);
+                        let _ = d.set_item("elapsed_seconds", p.elapsed.as_secs_f64());
+                        // Ignore any exception raised by the user's callback.
+                        let _ = callable.call1(py, (d,));
+                    });
+                });
+            cb
+        });
+
     let outcome = py
-        .allow_threads(|| run::optimise_from_file(config_path, model_path, save_model_path))
+        .allow_threads(|| {
+            run::optimise_from_file(config_path, model_path, save_model_path, progress_callback)
+        })
         .map_err(PyRuntimeError::new_err)?;
 
     let params = PyDict::new_bound(py);

@@ -1,5 +1,5 @@
 """Type stubs for the native (PyO3) module."""
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -21,4 +21,5 @@ def _optimise_from_file(
     config_path: str,
     model_path: Optional[str] = None,
     save_model_path: Optional[str] = None,
+    progress: Optional[Callable[[Dict[str, Any]], Any]] = None,
 ) -> Dict[str, Any]: ...

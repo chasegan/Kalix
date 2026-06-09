@@ -7,12 +7,15 @@ fixtures are generated inline and the test runs in well under a second.
 """
 from __future__ import annotations
 
+import io
 import re
+import sys
 import textwrap
 
 import pytest
 
 import kalix
+import kalix.opt as opt
 
 
 def _constant(ini: str, name: str) -> float:
@@ -142,3 +145,78 @@ def test_optimise_requires_keyword_model_file(tmp_path):
     cfg, model = _write_fixtures(tmp_path, model_file_in_config=False)
     with pytest.raises(TypeError):
         kalix.optimise(cfg, model)  # type: ignore[misc]
+
+
+# --- progress reporting -----------------------------------------------------
+
+def test_optimise_progress_callback_receives_dicts(tmp_path):
+    """A callable is invoked during the run with well-formed progress dicts."""
+    cfg, _ = _write_fixtures(tmp_path)
+    seen: list[dict] = []
+    res = kalix.optimise(cfg, progress=seen.append)
+
+    assert res["success"] is True
+    assert len(seen) >= 1
+    for p in seen:
+        assert set(p) == {"n_evaluations", "best_objective", "elapsed_seconds"}
+        assert isinstance(p["n_evaluations"], int)
+        assert isinstance(p["best_objective"], float)
+        assert isinstance(p["elapsed_seconds"], float)
+
+
+def test_optimise_progress_false_runs_silent(tmp_path, capsys):
+    """progress=False produces no output."""
+    cfg, _ = _write_fixtures(tmp_path)
+    res = kalix.optimise(cfg, progress=False)
+
+    assert res["success"] is True
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+def test_optimise_progress_callback_exception_swallowed(tmp_path):
+    """A callback that raises must not abort the optimisation."""
+    cfg, _ = _write_fixtures(tmp_path)
+
+    def boom(_p):
+        raise RuntimeError("boom")
+
+    res = kalix.optimise(cfg, progress=boom)
+    assert res["success"] is True
+    assert res["best_objective"] == pytest.approx(0.0, abs=1e-3)
+
+
+def test_throttle_fires_once_within_interval():
+    fired: list[int] = []
+    throttled = opt._throttle(lambda p: fired.append(p["n_evaluations"]), min_interval=10.0)
+    for n in (1, 2, 3):
+        throttled({"n_evaluations": n, "best_objective": 0.0, "elapsed_seconds": 0.0})
+    assert fired == [1]
+
+
+def test_default_reporter_silent_when_non_interactive(monkeypatch):
+    """No notebook and no TTY → no reporter (run stays silent)."""
+    monkeypatch.setattr(opt, "_in_notebook", lambda: False)
+
+    class NonTTY(io.StringIO):
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(sys, "stderr", NonTTY())
+    assert opt._default_reporter() is None
+
+
+def test_default_reporter_writes_line_to_tty(monkeypatch):
+    """In an interactive terminal the reporter rewrites a status line on stderr."""
+    monkeypatch.setattr(opt, "_in_notebook", lambda: False)
+
+    class TTY(io.StringIO):
+        def isatty(self):
+            return True
+
+    fake = TTY()
+    monkeypatch.setattr(sys, "stderr", fake)
+    report = opt._default_reporter()
+    assert report is not None
+    report({"n_evaluations": 10, "best_objective": 1.5, "elapsed_seconds": 0.1})
+    assert "Optimising" in fake.getvalue()

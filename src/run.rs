@@ -56,8 +56,7 @@ pub fn simulate_from_file(
 /// The non-interactive core of the `kalix optimise` CLI subcommand: the same
 /// load → build problem → optimise → apply-best path, minus the terminal plot
 /// and profiling. Used by the Python bindings (and available to any in-process
-/// caller). Progress reporting is intentionally omitted here — callers that
-/// need it should drive the optimiser directly.
+/// caller).
 ///
 /// Paths inside the config (`model_file`, each term's `observed_file`) are
 /// resolved relative to the current working directory, exactly as the CLI does.
@@ -68,6 +67,8 @@ pub fn simulate_from_file(
 ///   config when given (mirrors the CLI's positional `[model_file]`).
 /// * `save_model_path` - Optional path to write the optimised model `.ini`
 ///   (mirrors the CLI's `-s/--save-model`).
+/// * `progress_callback` - Optional callback invoked once per generation with
+///   the current [`OptimizationProgress`]. Pass `None` for a silent run.
 ///
 /// If the config specifies an `output_file`, a results summary is written there
 /// too — same as the CLI.
@@ -75,8 +76,9 @@ pub fn optimise_from_file(
     config_path: &str,
     model_path: Option<&str>,
     save_model_path: Option<&str>,
+    progress_callback: Option<Box<dyn Fn(&crate::numerical::opt::optimizer_trait::OptimizationProgress) + Send + Sync>>,
 ) -> Result<OptimisationOutcome, String> {
-    use crate::numerical::opt::{OptimisationConfig, OptimisationProblem, Optimisable, create_optimizer};
+    use crate::numerical::opt::{OptimisationConfig, OptimisationProblem, Optimisable, create_optimizer_with_callback};
     use crate::numerical::opt::optimisation::ComparisonPair;
     use crate::io::optimisation_config_io::load_observed_for_term;
     use crate::functions::parse_function;
@@ -120,8 +122,9 @@ pub fn optimise_from_file(
         expression,
     );
 
-    // Run the optimisation (no progress callback in this non-interactive path).
-    let optimiser = create_optimizer(&config).map_err(|e| e.to_string())?;
+    // Run the optimisation, wiring up the caller's progress callback (if any).
+    let optimiser = create_optimizer_with_callback(&config, progress_callback)
+        .map_err(|e| e.to_string())?;
     let result = optimiser.optimize(&mut problem, None);
 
     // Physical parameter values for the best genes.
