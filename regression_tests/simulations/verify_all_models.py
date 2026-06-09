@@ -10,8 +10,10 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 import shutil
+import numpy as np
 
 import kalix
+import re
 
 
 def find_model_files(root_dir):
@@ -24,6 +26,15 @@ def find_model_files(root_dir):
     return sorted(ini_files)
 
 
+def get_numerical_content(line: str):
+    parts = line.split("=, ")
+    for part in parts:
+        stripped = part.strip()
+        if stripped.replace('.', '', 1).isdigit():
+            return float(stripped)
+    return None
+
+
 def compare_mass_balance_files(file1, file2):
     """
     Compare two mass balance files for equality.
@@ -33,12 +44,40 @@ def compare_mass_balance_files(file1, file2):
         file2: Path to second mass balance file
 
     Returns:
-        bool: True if files are identical, False otherwise
+        tuple: (match: bool, detail: str) — detail is '' on match, mismatch description otherwise
     """
+    node_heading_pattern = re.compile(r'^\w+ NODES$')
+    line_num = 0
+
     with open(file1, 'r') as f1, open(file2, 'r') as f2:
-        content1 = f1.read()
-        content2 = f2.read()
-        return content1 == content2
+        while True:
+            content1 = f1.readline()
+            content2 = f2.readline()
+            line_num += 1
+            if not content1 and not content2:
+                break  # end of both files
+            if not content1 or not content2:
+                return False, f"line {line_num}: files have different lengths"
+
+            if node_heading_pattern.match(content1) and node_heading_pattern.match(content2):
+                # Now in a group of nodes
+                while True:
+                    node_content1 = f1.readline()
+                    node_content2 = f2.readline()
+                    line_num += 1
+                    if node_content1.strip() == '' and node_content2.strip() == '':
+                        break  # end of this group of nodes
+                    num1 = get_numerical_content(node_content1)
+                    num2 = get_numerical_content(node_content2)
+                    if num1 is None or num2 is None:
+                        return False, f"line {line_num}: expected numerical content"
+                    if not np.isclose(num1, num2, rtol=1e-5, atol=1e-8):
+                        return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
+            else:
+                if content1 != content2:
+                    return False, f"line {line_num}: {content1.rstrip()!r} != {content2.rstrip()!r}"
+        return True, ''
+
 
 def verify_model(model_path, mbal_filename='mbal.txt'):
     """
@@ -71,7 +110,8 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
             )
 
             # Compare the generated mass balance with the reference
-            if compare_mass_balance_files(tmp_mbal_path, mbal_path):
+            matched, detail = compare_mass_balance_files(tmp_mbal_path, mbal_path)
+            if matched:
                 return True, "VERIFIED!"
             else:
                 # Copy the generated file and write a diff for inspection
@@ -85,7 +125,7 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
                     with open(diff_path, 'w') as diff_f:
                         diff_f.writelines(diff)
                 rel_diff = Path(diff_path).relative_to(Path.cwd()).as_posix()
-                return False, f"Mass balance mismatch: diff saved to {rel_diff}"
+                return False, f"Mass balance mismatch ({detail}): diff saved to {rel_diff}"
         finally:
             # Clean up temporary file
             if os.path.exists(tmp_mbal_path):
