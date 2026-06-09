@@ -72,11 +72,15 @@ def _throttle(callback: ProgressCallback, min_interval: float = 0.2) -> Progress
     optimiser reports (it calls back once per generation, which can be many
     times a second on a fast model).
     """
-    state = {"last": 0.0}
+    state: Dict[str, Optional[float]] = {"last": None}
 
     def throttled(p: Progress) -> None:
         now = time.monotonic()
-        if now - state["last"] >= min_interval:
+        last = state["last"]
+        # The first call always fires; subsequent ones are rate-limited. (Don't
+        # seed `last` with 0.0 — time.monotonic()'s reference is often boot time,
+        # so on a freshly-booted machine the first call would be suppressed.)
+        if last is None or now - last >= min_interval:
             state["last"] = now
             callback(p)
 
