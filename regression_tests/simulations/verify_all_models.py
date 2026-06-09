@@ -5,15 +5,15 @@ Automatically finds and verifies all Kalix model INI files against their mass ba
 
 import difflib
 import os
+import re
+import shutil
 import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-import shutil
-import numpy as np
 
 import kalix
-import re
+import numpy as np
 
 
 def find_model_files(root_dir):
