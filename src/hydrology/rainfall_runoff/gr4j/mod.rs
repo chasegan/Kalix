@@ -18,8 +18,9 @@ pub struct Gr4j {
     uh2: Vec<f64>,
 
     //Store values
-    production_store: f64,
-    routing_store: f64,
+    // Public so that gr4j nodes may read them
+    pub production_store: f64,
+    pub routing_store: f64,
 }
 
 impl Gr4j {

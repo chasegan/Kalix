@@ -41,6 +41,8 @@ pub struct Gr4jNode {
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_evap_mm: Option<usize>,
     recorder_idx_rain_mm: Option<usize>,
+    recorder_idx_production_store_mm: Option<usize>,
+    recorder_idx_routing_store_mm: Option<usize>,
 }
 
 impl Gr4jNode {
@@ -104,6 +106,12 @@ impl Node for Gr4jNode {
         self.recorder_idx_evap_mm = data_cache.get_series_idx(
             make_result_name(&self.name, "evap").as_str(), false
         );
+        self.recorder_idx_production_store_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "production_store").as_str(), false
+        );
+        self.recorder_idx_routing_store_mm = data_cache.get_series_idx(
+            make_result_name(&self.name, "routing_store").as_str(), false
+        );
 
         // Return
         Ok(())
@@ -137,6 +145,9 @@ impl Node for Gr4jNode {
         self.runoff_volume_megs = self.runoff_depth_mm * self.area_km2;
         self.dsflow_primary = self.usflow + self.runoff_volume_megs;
 
+        let production_store_mm = self.gr4j_model.production_store;
+        let routing_store_mm = self.gr4j_model.routing_store;
+
         // Update mass balance
         self.mbal += self.runoff_volume_megs;
 
@@ -158,6 +169,12 @@ impl Node for Gr4jNode {
         }
         if let Some(idx) = self.recorder_idx_evap_mm {
             data_cache.add_value_at_index(idx, self.pet);
+        }
+        if let Some(idx) = self.recorder_idx_production_store_mm {
+            data_cache.add_value_at_index(idx, production_store_mm);
+        }
+        if let Some(idx) = self.recorder_idx_routing_store_mm {
+            data_cache.add_value_at_index(idx, routing_store_mm);
         }
         // if let Some(idx) = self.recorder_idx_ds_1_order {
         //     data_cache.add_value_at_index(idx, self.dsorders[0]);
