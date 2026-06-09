@@ -42,6 +42,8 @@ def compare_mass_balance_files(file1, file2):
     Args:
         file1: Path to first mass balance file
         file2: Path to second mass balance file
+        rtol: Relative tolerance (float comparison)
+        atol: Absolute tolerance (float comparison)
 
     Returns:
         tuple: (match: bool, detail: str) — detail is '' on match, mismatch description otherwise
@@ -73,6 +75,13 @@ def compare_mass_balance_files(file1, file2):
                         return False, f"line {line_num}: expected numerical content"
                     if not np.isclose(num1, num2, rtol=1e-5, atol=1e-8):
                         return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
+            elif content1.startswith("TOTAL ="):
+                num1 = get_numerical_content(content1)
+                num2 = get_numerical_content(content2)
+                if num1 is None or num2 is None:
+                    return False, f"line {line_num}: expected numerical content"
+                if not np.isclose(num1, num2, rtol=1e-5, atol=1e-13):
+                    return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
             else:
                 if content1 != content2:
                     return False, f"line {line_num}: {content1.rstrip()!r} != {content2.rstrip()!r}"
