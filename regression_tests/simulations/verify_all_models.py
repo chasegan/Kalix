@@ -3,6 +3,7 @@
 Automatically finds and verifies all Kalix model INI files against their mass balance reports.
 """
 
+import difflib
 import os
 import sys
 import tempfile
@@ -73,9 +74,18 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
             if compare_mass_balance_files(tmp_mbal_path, mbal_path):
                 return True, "VERIFIED!"
             else:
-                # Copy the generated file for inspection
-                log_file = shutil.copy(tmp_mbal_path, mbal_path + '.log')  
-                return False, f"Mass balance mismatch: generated output differs from reference - saved to {Path(log_file).relative_to(Path.cwd()).as_posix()}"
+                # Copy the generated file and write a diff for inspection
+                shutil.copy(tmp_mbal_path, mbal_path + '.log')
+                diff_path = mbal_path + '.diff'
+                with open(mbal_path, 'r') as ref_f, open(tmp_mbal_path, 'r') as gen_f:
+                    diff = difflib.unified_diff(
+                        ref_f.readlines(), gen_f.readlines(),
+                        fromfile='reference', tofile='generated',
+                    )
+                    with open(diff_path, 'w') as diff_f:
+                        diff_f.writelines(diff)
+                rel_diff = Path(diff_path).relative_to(Path.cwd()).as_posix()
+                return False, f"Mass balance mismatch: diff saved to {rel_diff}"
         finally:
             # Clean up temporary file
             if os.path.exists(tmp_mbal_path):
