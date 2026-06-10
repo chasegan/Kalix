@@ -143,7 +143,7 @@ wheels = [
 
 [[package]]
 name = "kalix"
-version = "0.1.0"
+version = "0.2.8"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -170,7 +170,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=1.22" },
-    { name = "pandas", specifier = ">=1.5" },
+    { name = "pandas", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7" },
 ]
 provides-extras = ["test"]

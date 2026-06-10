@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 concurrency:
@@ -102,3 +101,45 @@ jobs:
         run: |
           pip install tox>=4.0
           tox -e py$(echo "${{ matrix.python-version }}" | tr -d '.')
+
+  regression-test:
+    name: Regression tests (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+          - os: macos-latest
+            platform: macOS
+          - os: windows-latest
+            platform: Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Build and install kalix
+        working-directory: python
+        shell: bash
+        run: |
+          pip install maturin
+          maturin build --release --out dist
+          pip install dist/*.whl
+      - name: Install test dependencies
+        run: pip install numpy
+      - name: Regression tests
+        run: python regression_tests/simulations/verify_all_models.py
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-failure-logs-${{ matrix.platform }}
+          path: |
+            regression_tests/**/*.log
+            regression_tests/**/*.diff
+            regression_tests/simulations/verify_all_models_log.txt
+          if-no-files-found: ignore

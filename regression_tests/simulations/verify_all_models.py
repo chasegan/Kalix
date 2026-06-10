@@ -3,11 +3,17 @@
 Automatically finds and verifies all Kalix model INI files against their mass balance reports.
 """
 
+import difflib
 import os
-import subprocess
+import re
+import shutil
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
+
+import kalix
+import numpy as np
 
 
 def find_model_files(root_dir):
@@ -20,9 +26,67 @@ def find_model_files(root_dir):
     return sorted(ini_files)
 
 
+def get_numerical_content(line: str):
+    match = re.search(r'[=,]\s*(-?\d+\.?\d*)\s*$', line)
+    return float(match.group(1)) if match else None
+
+
+def compare_mass_balance_files(file1, file2):
+    """
+    Compare two mass balance files for equality.
+
+    Args:
+        file1: Path to first mass balance file
+        file2: Path to second mass balance file
+        rtol: Relative tolerance (float comparison)
+        atol: Absolute tolerance (float comparison)
+
+    Returns:
+        tuple: (match: bool, detail: str) — detail is '' on match, mismatch description otherwise
+    """
+    node_heading_pattern = re.compile(r'^\w+ NODES$')
+    line_num = 0
+
+    with open(file1, 'r') as f1, open(file2, 'r') as f2:
+        while True:
+            content1 = f1.readline()
+            content2 = f2.readline()
+            line_num += 1
+            if not content1 and not content2:
+                break  # end of both files
+            if not content1 or not content2:
+                return False, f"line {line_num}: files have different lengths"
+
+            if node_heading_pattern.match(content1) and node_heading_pattern.match(content2):
+                # Now in a group of nodes
+                while True:
+                    node_content1 = f1.readline()
+                    node_content2 = f2.readline()
+                    line_num += 1
+                    if node_content1.strip() == '' and node_content2.strip() == '':
+                        break  # end of this group of nodes
+                    num1 = get_numerical_content(node_content1)
+                    num2 = get_numerical_content(node_content2)
+                    if num1 is None or num2 is None:
+                        return False, f"line {line_num}: expected numerical content"
+                    if not np.isclose(num1, num2, rtol=1e-5, atol=1e-8):
+                        return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
+            elif content1.startswith("TOTAL ="):
+                num1 = get_numerical_content(content1)
+                num2 = get_numerical_content(content2)
+                if num1 is None or num2 is None:
+                    return False, f"line {line_num}: expected numerical content"
+                if not np.isclose(num1, num2, rtol=1e-5, atol=1e-13):
+                    return False, f"line {line_num}: numerical mismatch {num1} vs {num2}"
+            else:
+                if content1 != content2:
+                    return False, f"line {line_num}: {content1.rstrip()!r} != {content2.rstrip()!r}"
+        return True, ''
+
+
 def verify_model(model_path, mbal_filename='mbal.txt'):
     """
-    Verify a model against its mass balance report.
+    Verify a model against its mass balance report using kalix.sim.simulate().
 
     Args:
         model_path: Path to the .ini model file
@@ -32,39 +96,92 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
         tuple: (success: bool, message: str)
     """
     model_dir = os.path.dirname(model_path)
-    model_file = os.path.basename(model_path)
     mbal_path = os.path.join(model_dir, mbal_filename)
 
-    # Check if mass balance file exists
+    # Check if reference mass balance file exists
     if not os.path.exists(mbal_path):
         return False, f"Mass balance file not found: {mbal_path}"
 
     try:
-        # Run kalix with verification
-        result = subprocess.run(
-            ['kalix', 'simulate', model_file, '-v', mbal_filename],
-            cwd=model_dir,
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
+        # Create a temporary file for the new mass balance
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_mbal:
+            tmp_mbal_path = tmp_mbal.name
 
-        if result.returncode == 0:
-            if 'VERIFIED!' in result.stdout:
+        try:
+            # Run simulation to generate new mass balance
+            kalix.simulate(
+                model_path,
+                mass_balance=tmp_mbal_path
+            )
+
+            # Compare the generated mass balance with the reference
+            matched, detail = compare_mass_balance_files(tmp_mbal_path, mbal_path)
+            if matched:
                 return True, "VERIFIED!"
             else:
-                return False, f"Verification unclear: {result.stdout}"
-        else:
-            error_msg = result.stderr if result.stderr else result.stdout
-            return False, f"Failed: {error_msg}"
-
-    except subprocess.TimeoutExpired:
-        return False, "Timeout: Model took too long to run"
+                # Copy the generated file and write a diff for inspection
+                shutil.copy(tmp_mbal_path, mbal_path + '.log')
+                diff_path = mbal_path + '.diff'
+                with open(mbal_path, 'r') as ref_f, open(tmp_mbal_path, 'r') as gen_f:
+                    diff = difflib.unified_diff(
+                        ref_f.readlines(), gen_f.readlines(),
+                        fromfile='reference', tofile='generated',
+                    )
+                    with open(diff_path, 'w') as diff_f:
+                        diff_f.writelines(diff)
+                rel_diff = Path(diff_path).relative_to(Path.cwd()).as_posix()
+                return False, f"Mass balance mismatch ({detail}): diff saved to {rel_diff}"
+        finally:
+            # Clean up temporary file
+            if os.path.exists(tmp_mbal_path):
+                os.unlink(tmp_mbal_path)
     except Exception as e:
         return False, f"Error: {str(e)}"
 
 
+def _run_tests():
+
+    def _tmp(s):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        f.write(s)
+        f.close()
+        return f.name
+
+    def cmp(a, b):
+        fa, fb = _tmp(a), _tmp(b)
+        try:
+            return compare_mass_balance_files(fa, fb)
+        finally:
+            os.unlink(fa)
+            os.unlink(fb)
+
+    assert get_numerical_content("flow, 1.23") == 1.23
+    assert get_numerical_content("count = 42") == 42.0
+    assert get_numerical_content("deficit = -3.14") == -3.14
+    assert get_numerical_content("Node count: 14") is None
+    assert get_numerical_content("heading") is None
+    assert get_numerical_content("") is None
+
+    assert cmp("line A\n", "line A\n") == (True, '')
+    m, d = cmp("line A\n", "line B\n")
+    assert not m and 'line 1' in d and 'line A' in d
+    assert cmp("INLET NODES\nflow =, 1.0000010\n\n", "INLET NODES\nflow =, 1.0000020\n\n") == (True, '')
+    m, d = cmp("INLET NODES\nflow =, 1.0\n\n", "INLET NODES\nflow =, 2.0\n\n")
+    assert not m and '1.0' in d and '2.0' in d
+    m, d = cmp("INLET NODES\nnot a number\n\n", "INLET NODES\nnot a number\n\n")
+    assert not m and 'numerical' in d
+    m, d = cmp("line A\n", "line A\nline B\n")
+    assert not m and 'lengths' in d
+    assert cmp("", "") == (True, '')
+
+    print("All tests passed.")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == '--test':
+        _run_tests()
+        sys.exit(0)
+
     # Get the script's directory as the root search directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     log_file = os.path.join(script_dir, 'verify_all_models_log.txt')
@@ -109,9 +226,9 @@ def main():
         results.append((rel_path, success, message))
 
         if success:
-            log(f"  ✓ {message}")
+            log(f"  [PASS] {message}")
         else:
-            log(f"  ✗ {message}")
+            log(f"  [FAIL] {message}")
         log()
 
     # Summary
@@ -134,7 +251,7 @@ def main():
                 log(f"  - {rel_path}")
                 log(f"    {message}")
     else:
-        log("\n✓ All models verified successfully!")
+        log("\n[PASS] All models verified successfully!")
 
     # Write log file at the end (only if we got this far)
     with open(log_file, 'w') as f:
