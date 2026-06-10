@@ -181,8 +181,8 @@ public class MenuBarBuilder {
     private JMenu createFileMenu() {
         fileMenu = new JMenu("File");
 
-        fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
-        fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
+        fileMenu.add(createMenuItem("New", KeyEvent.VK_N, e -> callbacks.newModel()));
+        fileMenu.add(createMenuItem("Open", KeyEvent.VK_O, e -> callbacks.openModel()));
         fileMenu.add(createMenuItem("Open Folder...", e -> callbacks.openFolder()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
