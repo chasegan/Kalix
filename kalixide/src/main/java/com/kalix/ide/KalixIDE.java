@@ -863,6 +863,25 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 runModelFromMemory();
             }
         });
+
+        // Global Ctrl+W/Cmd+W/Ctrl+F4/Cmd+F4 to close current tab
+        KeyStroke ctrlW = KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdW = KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.META_DOWN_MASK);
+        KeyStroke ctrlF4 = KeyStroke.getKeyStroke(KeyEvent.VK_F4, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdF4 = KeyStroke.getKeyStroke(KeyEvent.VK_F4, InputEvent.CTRL_DOWN_MASK);
+        inputMap.put(ctrlW, "global-close-current-tab");
+        inputMap.put(cmdW, "global-close-current-tab");
+        inputMap.put(ctrlF4, "global-close-current-tab");
+        inputMap.put(cmdF4, "global-close-current-tab");
+        actionMap.put("global-close-current-tab", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                KalixDocument activeDocument = documentManager.getActiveDocument();
+                if (activeDocument != null) {
+                    requestCloseDocument(activeDocument);
+                }
+            }
+        });
     }
     
     /**
