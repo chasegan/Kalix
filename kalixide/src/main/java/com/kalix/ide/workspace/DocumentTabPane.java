@@ -5,8 +5,9 @@ import com.kalix.ide.document.KalixDocument;
 
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
-import java.awt.BorderLayout;
-import java.awt.Component;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -46,6 +47,44 @@ public class DocumentTabPane extends JPanel {
         add(tabbedPane, BorderLayout.CENTER);
 
         tabbedPane.addChangeListener(e -> onTabSelected());
+
+        // Add middle-click support for closing tabs
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON2) {
+                    handleMiddleClick(e);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON2) {
+                    handleMiddleClick(e);
+                }
+            }
+
+            private void handleMiddleClick(MouseEvent e) {
+                int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+
+                // Check if click is actually on the tab header area, not just in content area
+                Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
+                boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
+
+                if (clickOnTabHeader) {
+                    // Consume event early to prevent paste
+                    e.consume();
+
+                    // Only close on release, not press (standard button behavior)
+                    if (e.getID() == MouseEvent.MOUSE_RELEASED) {
+                        KalixDocument document = documentAt(tabIndex);
+                        if (document != null) {
+                            onTabCloseRequested(tabIndex);
+                        }
+                    }
+                }
+            }
+        });
 
         documentManager.addDocumentOpenedListener(this::onDocumentOpened);
         documentManager.addDocumentClosedListener(this::onDocumentClosed);
