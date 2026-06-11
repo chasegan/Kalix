@@ -184,7 +184,8 @@ public class MenuBarBuilder {
 
         fileMenu.add(createMenuItem("New", KeyEvent.VK_N, e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open", KeyEvent.VK_O, e -> callbacks.openModel()));
-        fileMenu.add(createMenuItem("Open Folder...", e -> callbacks.openFolder()));
+        fileMenu.add(createMenuItem("Open Folder...", KeyEvent.VK_O, InputEvent.SHIFT_DOWN_MASK,
+                e -> callbacks.openFolder()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", KeyEvent.VK_S, InputEvent.SHIFT_DOWN_MASK,
