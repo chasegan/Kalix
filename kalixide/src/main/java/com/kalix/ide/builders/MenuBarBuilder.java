@@ -191,7 +191,8 @@ public class MenuBarBuilder {
         fileMenu.add(createMenuItem("Save As...", KeyEvent.VK_S, InputEvent.SHIFT_DOWN_MASK,
                 e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
+        fileMenu.add(createMenuItem("Preferences", KeyEvent.VK_COMMA,
+                e -> callbacks.showPreferences()));
 
         // Mark where the recent files section starts (after Preferences)
         recentFilesSectionStart = fileMenu.getMenuComponentCount();
