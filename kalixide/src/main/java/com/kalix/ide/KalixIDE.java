@@ -839,28 +839,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         });
 
-        // Global Ctrl+S/Cmd+S for save
-        KeyStroke ctrlS = KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke cmdS = KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.META_DOWN_MASK);
-        inputMap.put(ctrlS, "global-save");
-        inputMap.put(cmdS, "global-save");
-        actionMap.put("global-save", new AbstractAction() {
+        // Global Ctrl+W/Cmd+W/Ctrl+F4/Cmd+F4 to close current tab
+        KeyStroke ctrlW = KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdW = KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.META_DOWN_MASK);
+        KeyStroke ctrlF4 = KeyStroke.getKeyStroke(KeyEvent.VK_F4, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke cmdF4 = KeyStroke.getKeyStroke(KeyEvent.VK_F4, InputEvent.CTRL_DOWN_MASK);
+        inputMap.put(ctrlW, "global-close-current-tab");
+        inputMap.put(cmdW, "global-close-current-tab");
+        inputMap.put(ctrlF4, "global-close-current-tab");
+        inputMap.put(cmdF4, "global-close-current-tab");
+        actionMap.put("global-close-current-tab", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                saveModel();
-                updateStatus("Model saved");
-            }
-        });
-
-        // Global Ctrl+R/Cmd+R for run model
-        KeyStroke ctrlR = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke cmdR = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.META_DOWN_MASK);
-        inputMap.put(ctrlR, "global-run");
-        inputMap.put(cmdR, "global-run");
-        actionMap.put("global-run", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                runModelFromMemory();
+                KalixDocument activeDocument = documentManager.getActiveDocument();
+                if (activeDocument != null) {
+                    requestCloseDocument(activeDocument);
+                }
             }
         });
     }

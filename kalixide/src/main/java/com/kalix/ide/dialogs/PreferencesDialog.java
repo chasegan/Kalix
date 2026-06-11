@@ -127,6 +127,17 @@ public class PreferencesDialog extends JDialog {
         setLocationRelativeTo(parent);
         setResizable(true);
 
+        // Add Escape key binding to close dialog
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+            .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), "closeDialog");
+        getRootPane().getActionMap().put("closeDialog", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                savePendingChanges();
+                dispose();
+            }
+        });
+
         // Select first item by default
         preferencesTree.setSelectionRow(1); // Select "Theme" initially
     }

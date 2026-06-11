@@ -11,6 +11,7 @@ import javax.swing.KeyStroke;
 import javax.swing.text.DefaultEditorKit;
 import java.awt.Toolkit;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
@@ -181,14 +182,17 @@ public class MenuBarBuilder {
     private JMenu createFileMenu() {
         fileMenu = new JMenu("File");
 
-        fileMenu.add(createMenuItem("New", e -> callbacks.newModel()));
-        fileMenu.add(createMenuItem("Open", e -> callbacks.openModel()));
-        fileMenu.add(createMenuItem("Open Folder...", e -> callbacks.openFolder()));
+        fileMenu.add(createMenuItem("New", KeyEvent.VK_N, e -> callbacks.newModel()));
+        fileMenu.add(createMenuItem("Open", KeyEvent.VK_O, e -> callbacks.openModel()));
+        fileMenu.add(createMenuItem("Open Folder...", KeyEvent.VK_O, InputEvent.SHIFT_DOWN_MASK,
+                e -> callbacks.openFolder()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
-        fileMenu.add(createMenuItem("Save As...", e -> callbacks.saveAsModel()));
+        fileMenu.add(createMenuItem("Save As...", KeyEvent.VK_S, InputEvent.SHIFT_DOWN_MASK,
+                e -> callbacks.saveAsModel()));
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Preferences", e -> callbacks.showPreferences()));
+        fileMenu.add(createMenuItem("Preferences", KeyEvent.VK_COMMA,
+                e -> callbacks.showPreferences()));
 
         // Mark where the recent files section starts (after Preferences)
         recentFilesSectionStart = fileMenu.getMenuComponentCount();
@@ -338,6 +342,29 @@ public class MenuBarBuilder {
         item.addActionListener(listener);
         return item;
     }
+
+    /**
+     * Creates a menu item with custom modifiers in addition to the platform menu
+     * shortcut key (Cmd on macOS, Ctrl elsewhere). The accelerator is rendered by
+     * the look-and-feel as a native accelerator hint.
+     *
+     * @param text The menu item text
+     * @param keyCode The key code (e.g., KeyEvent.VK_S)
+     * @param additionalModifiers Additional modifiers to combine with the platform
+     *                            modifier (e.g., InputEvent.ALT_DOWN_MASK)
+     * @param listener The action listener
+     * @return The configured JMenuItem
+     */
+    private JMenuItem createMenuItem(String text, int keyCode,
+                                     int additionalModifiers,
+                                     ActionListener listener) {
+        JMenuItem item = new JMenuItem(text);
+        int modifiers = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | additionalModifiers;
+        item.setAccelerator(KeyStroke.getKeyStroke(keyCode, modifiers));
+        item.addActionListener(listener);
+        return item;
+    }
+
 
     /**
      * Creates an Edit-menu item backed by a standard text-editing action
