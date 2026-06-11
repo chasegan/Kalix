@@ -61,6 +61,7 @@ public class DarkThemeDefinitions {
 
             // Menu bar and menus - dark with pink highlights
             .setColor("MenuBar.background", "#2a2a2e")
+            .setColor("MenuBar.foreground", "#e8e8e8")
             .setColor("Menu.background", "#2a2a2e")
             .setColor("Menu.foreground", "#e8e8e8")
             .setColor("MenuItem.foreground", "#e8e8e8")
@@ -212,6 +213,7 @@ public class DarkThemeDefinitions {
 
             // Menu bar and menus - very dark
             .setColor("MenuBar.background", "#161b22")
+            .setColor("MenuBar.foreground", "#e6e6e6")
             .setColor("Menu.background", "#161b22")
             .setColor("Menu.foreground", "#e6e6e6")
             .setColor("MenuItem.foreground", "#e6e6e6")
@@ -339,8 +341,9 @@ public class DarkThemeDefinitions {
             .setColor("RadioButton.background", "#414450").setColor("RadioButton.icon.centerColor", "#bd93f9")
             .setColor("RadioButton.icon.centerDiameter", "5")
 
-            .setColor("MenuBar.background", "#414450").setColor("Menu.background", "#414450")
-            .setColor("Menu.foreground", "#bbbbbb").setColor("MenuItem.foreground", "#bbbbbb")
+            .setColor("MenuBar.background", "#414450").setColor("MenuBar.foreground", "#bbbbbb")
+            .setColor("Menu.background", "#414450").setColor("Menu.foreground", "#bbbbbb")
+            .setColor("MenuItem.foreground", "#bbbbbb")
             .setColor("MenuItem.hoverBackground", "#474a58").setColor("MenuItem.selectionBackground", "#6272a4")
 
             .setColor("ToolBar.background", "#414450").setColor("ToolBar.borderColor", "#6272a4")
@@ -413,8 +416,9 @@ public class DarkThemeDefinitions {
             .setColor("RadioButton.background", "#21252b").setColor("RadioButton.icon.centerColor", "#568af2")
             .setColor("RadioButton.icon.centerDiameter", "5")
 
-            .setColor("MenuBar.background", "#21252b").setColor("Menu.background", "#21252b")
-            .setColor("Menu.foreground", "#abb2bf").setColor("MenuItem.foreground", "#abb2bf")
+            .setColor("MenuBar.background", "#21252b").setColor("MenuBar.foreground", "#abb2bf")
+            .setColor("Menu.background", "#21252b").setColor("Menu.foreground", "#abb2bf")
+            .setColor("MenuItem.foreground", "#abb2bf")
             .setColor("MenuItem.hoverBackground", "#24282f").setColor("MenuItem.selectionBackground", "#4d78cc")
 
             .setColor("ToolBar.background", "#21252b").setColor("ToolBar.borderColor", "#333841")
@@ -487,8 +491,9 @@ public class DarkThemeDefinitions {
             .setColor("RadioButton.background", "#f5f8f3").setColor("RadioButton.icon.centerColor", "#7fb069")
             .setColor("RadioButton.icon.centerDiameter", "5")
 
-            .setColor("MenuBar.background", "#e8f2e0").setColor("Menu.background", "#e8f2e0")
-            .setColor("Menu.foreground", "#2d4a2d").setColor("MenuItem.foreground", "#2d4a2d")
+            .setColor("MenuBar.background", "#e8f2e0").setColor("MenuBar.foreground", "#2d4a2d")
+            .setColor("Menu.background", "#e8f2e0").setColor("Menu.foreground", "#2d4a2d")
+            .setColor("MenuItem.foreground", "#2d4a2d")
             .setColor("MenuItem.hoverBackground", "#d8ead0").setColor("MenuItem.selectionBackground", "#c8e0b8")
 
             .setColor("ToolBar.background", "#e8f2e0").setColor("ToolBar.borderColor", "#c8e0b8")
