@@ -27,4 +27,14 @@ public interface TreeHost {
 
     /** Opens a diff comparing two files against each other ({@code left} vs {@code right}). */
     void compareFiles(File left, File right);
+
+    /**
+     * Shows or hides hidden (dot-prefixed) entries across the application, persisting the choice.
+     * Routed through the host so the tree's context-menu toggle and the View-menu toggle share one
+     * source of truth.
+     */
+    void setShowHiddenFiles(boolean show);
+
+    /** @return whether hidden (dot-prefixed) entries are currently shown. */
+    boolean isShowHiddenFiles();
 }

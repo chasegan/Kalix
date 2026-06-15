@@ -621,7 +621,19 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             public void compareFiles(File left, File right) {
                 KalixIDE.this.compareFiles(left, right);
             }
+
+            @Override
+            public void setShowHiddenFiles(boolean show) {
+                KalixIDE.this.toggleShowHiddenFiles(show);
+            }
+
+            @Override
+            public boolean isShowHiddenFiles() {
+                return KalixIDE.this.isShowHiddenFiles();
+            }
         });
+        // Apply the persisted "show hidden files" choice before any folder is restored into the tree.
+        projectTreePanel.setShowHidden(isShowHiddenFiles());
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
@@ -1515,6 +1527,21 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, showGridlines);
     }
     
+    @Override
+    public void toggleShowHiddenFiles(boolean show) {
+        // Single source of truth: persist to the shareable file-based prefs, then apply to the tree.
+        // Both the View-menu checkbox and the tree's right-click checkbox route here.
+        PreferenceManager.setFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, show);
+        if (projectTreePanel != null) {
+            projectTreePanel.setShowHidden(show);
+        }
+    }
+
+    @Override
+    public boolean isShowHiddenFiles() {
+        return PreferenceManager.getFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, true);
+    }
+
     @Override
     public boolean isGridlinesVisible() {
         // Falls back to the saved preference before any document/map exists (toolbar build).

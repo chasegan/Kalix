@@ -62,6 +62,16 @@ public class ProjectTreePanel extends JPanel {
         tree.selectFile(file);
     }
 
+    /** Shows or hides hidden (dot-prefixed) entries, re-syncing the loaded tree in place. */
+    public void setShowHidden(boolean show) {
+        tree.setShowHidden(show);
+    }
+
+    /** @return whether hidden (dot-prefixed) entries are shown. */
+    public boolean isShowHidden() {
+        return tree.isShowHidden();
+    }
+
     /** Stops the directory watcher; call when the host window is disposed. */
     public void dispose() {
         tree.dispose();

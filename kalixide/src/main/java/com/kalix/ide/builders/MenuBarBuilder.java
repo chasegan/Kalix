@@ -4,10 +4,13 @@ import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 
 import javax.swing.Action;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.KeyStroke;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
 import java.awt.Toolkit;
 import java.awt.event.ActionListener;
@@ -46,6 +49,8 @@ public class MenuBarBuilder {
         void zoomToFit();
         void toggleFileTree();
         boolean isFileTreeVisible();
+        void toggleShowHiddenFiles(boolean show);
+        boolean isShowHiddenFiles();
         void toggleMap();
         void setNodeTheme(NodeTheme.Theme theme);
         void flowViz();
@@ -237,6 +242,26 @@ public class MenuBarBuilder {
         // Panel visibility toggles at the top
         viewMenu.add(createMenuItem("Toggle File Tree", KeyEvent.VK_B, e -> callbacks.toggleFileTree()));
         viewMenu.add(createMenuItem("Toggle Map", e -> callbacks.toggleMap()));
+
+        // Tree content toggle: reflect the live state each time the menu opens, since it can also be
+        // changed from the tree's right-click menu.
+        JCheckBoxMenuItem showHiddenItem = new JCheckBoxMenuItem("Show Hidden Files");
+        showHiddenItem.addActionListener(e -> callbacks.toggleShowHiddenFiles(showHiddenItem.isSelected()));
+        viewMenu.add(showHiddenItem);
+        viewMenu.addMenuListener(new MenuListener() {
+            @Override
+            public void menuSelected(MenuEvent e) {
+                showHiddenItem.setSelected(callbacks.isShowHiddenFiles());
+            }
+
+            @Override
+            public void menuDeselected(MenuEvent e) {
+            }
+
+            @Override
+            public void menuCanceled(MenuEvent e) {
+            }
+        });
         viewMenu.addSeparator();
 
         // Zoom to Fit

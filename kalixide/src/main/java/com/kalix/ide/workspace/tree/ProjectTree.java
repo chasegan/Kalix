@@ -52,6 +52,9 @@ public class ProjectTree extends JTree {
     private DefaultTreeModel model;
     private final FsWatcher fsWatcher = new FsWatcher(this::applyFsEvent);
     private int hoveredRow = -1;
+    // Whether dotfiles/folders are shown. Read live by every FileTreeNode at (re)load time via the
+    // supplier handed to it, so toggling re-filters on the next directory sync (see setShowHidden).
+    private boolean showHidden = true;
     private final TreeFileOperations fileOps;
     private final TreeContextMenu contextMenu;
 
@@ -102,7 +105,7 @@ public class ProjectTree extends JTree {
     public void openFolder(File root) {
         fsWatcher.stop();
 
-        FileTreeNode rootNode = new FileTreeNode(root);
+        FileTreeNode rootNode = new FileTreeNode(root, this::isShowHidden);
         rootNode.ensureLoaded();
         model = new DefaultTreeModel(rootNode);
         setModel(model);
@@ -117,6 +120,40 @@ public class ProjectTree extends JTree {
      */
     public void dispose() {
         fsWatcher.stop();
+    }
+
+    /** @return whether hidden (dot-prefixed) entries are shown in the tree. */
+    public boolean isShowHidden() {
+        return showHidden;
+    }
+
+    /**
+     * Shows or hides hidden (dot-prefixed) entries. Re-syncs every already-loaded directory with
+     * disk so hidden entries appear/disappear in place, preserving existing nodes and their
+     * expansion state. A no-op if the value is unchanged.
+     */
+    public void setShowHidden(boolean show) {
+        if (show == showHidden) {
+            return;
+        }
+        showHidden = show;
+        if (model != null) {
+            resyncLoadedSubtree((FileTreeNode) model.getRoot());
+        }
+    }
+
+    /** Re-syncs this directory and, recursively, every loaded descendant directory with disk. */
+    private void resyncLoadedSubtree(FileTreeNode node) {
+        if (node == null || !node.isLoaded()) {
+            return;
+        }
+        resyncDirectory(node);
+        for (int i = 0; i < node.getChildCount(); i++) {
+            FileTreeNode child = (FileTreeNode) node.getChildAt(i);
+            if (child.isDirectory()) {
+                resyncLoadedSubtree(child);
+            }
+        }
     }
 
     /**
@@ -385,7 +422,7 @@ public class ProjectTree extends JTree {
         Set<File> onDisk = new HashSet<>();
         if (entries != null) {
             for (File f : entries) {
-                if (!FileTreeNode.isHidden(f)) {
+                if (showHidden || !FileTreeNode.isHidden(f)) {
                     onDisk.add(f);
                 }
             }
@@ -402,7 +439,7 @@ public class ProjectTree extends JTree {
         // Insert nodes for new files at their sorted position.
         for (File f : onDisk) {
             if (childFor(dirNode, f) == null) {
-                model.insertNodeInto(new FileTreeNode(f), dirNode, sortedIndex(dirNode, f));
+                model.insertNodeInto(new FileTreeNode(f, this::isShowHidden), dirNode, sortedIndex(dirNode, f));
             }
         }
     }

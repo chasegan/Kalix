@@ -6,6 +6,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.function.BooleanSupplier;
 
 /**
  * A tree node backed by a {@link File}. Directory children are loaded lazily from disk on
@@ -13,7 +14,9 @@ import java.util.Comparator;
  * eagerly walk the whole tree.
  *
  * <p>Ordering: directories first, then files, each alphabetically (case-insensitive).
- * Hidden entries (names starting with ".") are omitted.
+ * Hidden entries (names starting with ".") are omitted unless {@code showHidden} returns true;
+ * the supplier is read at load time so the tree's "show hidden files" toggle takes effect on the
+ * next (re)load of a directory without reconstructing nodes.
  */
 public class FileTreeNode extends DefaultMutableTreeNode {
 
@@ -31,12 +34,15 @@ public class FileTreeNode extends DefaultMutableTreeNode {
     /** Cached once at construction: a node's file identity never changes, and isLeaf()/
      *  getAllowsChildren() are queried by JTree per cell per repaint — avoid a disk stat each time. */
     private final boolean directory;
+    /** Live "show hidden files" state, read each time a directory loads; shared with all nodes. */
+    private final BooleanSupplier showHidden;
     private boolean loaded;
 
-    public FileTreeNode(File file) {
+    public FileTreeNode(File file, BooleanSupplier showHidden) {
         super(file);
         this.file = file;
         this.directory = file.isDirectory();
+        this.showHidden = showHidden;
     }
 
     public File getFile() {
@@ -79,9 +85,10 @@ public class FileTreeNode extends DefaultMutableTreeNode {
             return;
         }
         Arrays.sort(entries, FILE_ORDER);
+        boolean includeHidden = showHidden.getAsBoolean();
         for (File child : entries) {
-            if (!isHidden(child)) {
-                add(new FileTreeNode(child));
+            if (includeHidden || !isHidden(child)) {
+                add(new FileTreeNode(child, showHidden));
             }
         }
     }

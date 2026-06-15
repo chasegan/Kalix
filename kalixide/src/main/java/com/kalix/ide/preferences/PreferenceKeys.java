@@ -85,6 +85,9 @@ public class PreferenceKeys {
     /** Map gridlines visibility toggle (boolean, default: true) */
     public static final String MAP_SHOW_GRIDLINES = "map.showGridlines";
 
+    /** Whether the project tree shows hidden (dot-prefixed) files/folders (boolean, default: true) */
+    public static final String TREE_SHOW_HIDDEN_FILES = "tree.showHiddenFiles";
+
     /** KalixCLI binary path (string, default: "") */
     public static final String CLI_BINARY_PATH = "cli.binaryPath";
 

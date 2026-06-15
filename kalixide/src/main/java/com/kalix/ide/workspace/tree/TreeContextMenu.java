@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace.tree;
 
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import java.io.File;
@@ -56,7 +57,14 @@ class TreeContextMenu {
             }
             firstGroup = false;
             for (Entry entry : visible) {
-                JMenuItem item = new JMenuItem(entry.label.apply(selection));
+                JMenuItem item;
+                if (entry.checked != null) {
+                    JCheckBoxMenuItem checkItem = new JCheckBoxMenuItem(entry.label.apply(selection));
+                    checkItem.setSelected(entry.checked.test(selection));
+                    item = checkItem;
+                } else {
+                    item = new JMenuItem(entry.label.apply(selection));
+                }
                 item.addActionListener(e -> entry.action.accept(selection));
                 menu.add(item);
             }
@@ -109,6 +117,9 @@ class TreeContextMenu {
                     sel -> fileOps.delete(files(sel)))
             ),
             List.of(
+                checkbox("Show Hidden Files", TreeContextMenu::any,
+                    sel -> host.isShowHiddenFiles(),
+                    sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())),
                 item("Refresh", TreeContextMenu::any,
                     sel -> sel.forEach(tree::refresh))
             )
@@ -157,12 +168,23 @@ class TreeContextMenu {
 
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
                               Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, action);
+        return new Entry(sel -> label, visible, null, action);
     }
 
-    /** A single menu item: its label (selection-dependent), applicability, and handler. */
+    /** A checkbox menu item: {@code checked} supplies its tick state when the menu is built. */
+    private static Entry checkbox(String label, Predicate<List<FileTreeNode>> visible,
+                                  Predicate<List<FileTreeNode>> checked,
+                                  Consumer<List<FileTreeNode>> action) {
+        return new Entry(sel -> label, visible, checked, action);
+    }
+
+    /**
+     * A single menu item: its label (selection-dependent), applicability, optional checkbox state
+     * ({@code checked}, null for a plain item), and handler.
+     */
     private record Entry(Function<List<FileTreeNode>, String> label,
                          Predicate<List<FileTreeNode>> visible,
+                         Predicate<List<FileTreeNode>> checked,
                          Consumer<List<FileTreeNode>> action) {
     }
 }
