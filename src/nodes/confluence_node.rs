@@ -6,7 +6,7 @@ use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
-const MAX_US_LINKS: usize = 2; //TODO: not sure how to police this
+const MAX_US_LINKS: usize = 2;
 const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
@@ -156,6 +156,14 @@ impl Node for ConfluenceNode {
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
+    }
+
+    fn get_max_ds_links(&self) -> usize {
+        MAX_DS_LINKS
+    }
+
+    fn get_max_us_links(&self) -> usize {
+        MAX_US_LINKS
     }
 }
 

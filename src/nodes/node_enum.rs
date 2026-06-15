@@ -183,5 +183,41 @@ impl Node for NodeEnum {
             NodeEnum::OrderConstraintNode(node) => node.dsorders_mut(),
         }
     }
+
+    fn get_max_us_links(&self) -> usize {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.get_max_us_links(),
+            NodeEnum::ConfluenceNode(node) => node.get_max_us_links(),
+            NodeEnum::GaugeNode(node) => node.get_max_us_links(),
+            NodeEnum::LossNode(node) => node.get_max_us_links(),
+            NodeEnum::SplitterNode(node) => node.get_max_us_links(),
+            NodeEnum::UnregulatedUserNode(node) => node.get_max_us_links(),
+            NodeEnum::RegulatedUserNode(node) => node.get_max_us_links(),
+            NodeEnum::Gr4jNode(node) => node.get_max_us_links(),
+            NodeEnum::InflowNode(node) => node.get_max_us_links(),
+            NodeEnum::RoutingNode(node) => node.get_max_us_links(),
+            NodeEnum::SacramentoNode(node) => node.get_max_us_links(),
+            NodeEnum::StorageNode(node) => node.get_max_us_links(),
+            NodeEnum::OrderConstraintNode(node) => node.get_max_us_links(),
+        }
+    }
+
+    fn get_max_ds_links(&self) -> usize {
+        match self {
+            NodeEnum::BlackholeNode(node) => node.get_max_ds_links(),
+            NodeEnum::ConfluenceNode(node) => node.get_max_ds_links(),
+            NodeEnum::GaugeNode(node) => node.get_max_ds_links(),
+            NodeEnum::LossNode(node) => node.get_max_ds_links(),
+            NodeEnum::SplitterNode(node) => node.get_max_ds_links(),
+            NodeEnum::UnregulatedUserNode(node) => node.get_max_ds_links(),
+            NodeEnum::RegulatedUserNode(node) => node.get_max_ds_links(),
+            NodeEnum::Gr4jNode(node) => node.get_max_ds_links(),
+            NodeEnum::InflowNode(node) => node.get_max_ds_links(),
+            NodeEnum::RoutingNode(node) => node.get_max_ds_links(),
+            NodeEnum::SacramentoNode(node) => node.get_max_ds_links(),
+            NodeEnum::StorageNode(node) => node.get_max_ds_links(),
+            NodeEnum::OrderConstraintNode(node) => node.get_max_ds_links(),
+        }
+    }
 }
 

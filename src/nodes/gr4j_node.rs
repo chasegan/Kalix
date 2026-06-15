@@ -206,6 +206,14 @@ impl Node for Gr4jNode {
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.dsorders
     }
+
+    fn get_max_ds_links(&self) -> usize {
+        MAX_DS_LINKS
+    }
+
+    fn get_max_us_links(&self) -> usize {
+        usize::MAX
+    }
 }
 
 // ============================================================================
