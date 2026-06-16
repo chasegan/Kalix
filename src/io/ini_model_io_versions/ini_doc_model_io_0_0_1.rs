@@ -612,7 +612,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
-    // Create all the links
+    // Create all the links, respecting constraints
     // -------------------------------------------------------------------------------------
     for link_helper in vec_link_defs {
         let from_node_idx = model.get_node_idx(&link_helper.from_node_name)
@@ -621,6 +621,32 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             .ok_or(format!("Node '{}' not found", link_helper.to_node_name))?;
         model.add_link(from_node_idx, to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
     }
+
+    // Enforce maximum upstream and downstream node counts
+    let check_links = |links: &Vec<Vec<_>>, get_max: fn(&_) -> usize, direction: &str| {
+        links
+            .iter()
+            .enumerate()
+            .try_for_each(|(index, value)| {
+                model
+                    .nodes
+                    .get(index)
+                    .ok_or_else(|| format!("Error (bug): Attempted to validate {} links at position {} but no node was found", direction, index))
+                    .and_then(|node| {
+                        let count = value.len();
+                        let max = get_max(node);
+                        if count > max {
+                            Err(format!("Error: node {} has {} {} links but may at most have {}",
+                                node.get_name(), count, direction, max))
+                        } else {
+                            Ok(())
+                        }
+                    })
+            })
+    };
+
+    check_links(&model.outgoing_links, Node::get_max_ds_links, "ds")?;
+    check_links(&model.incoming_links, Node::get_max_us_links, "us")?;
 
     // -------------------------------------------------------------------------------------
     // Return the model
