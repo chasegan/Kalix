@@ -86,6 +86,8 @@ public class ContextCommandManager {
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
 
+        registry.register(new RenameInputFileCommand(modelSupplier, parentFrame));
+
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));
         // registry.register(new DuplicateNodeCommand(...));

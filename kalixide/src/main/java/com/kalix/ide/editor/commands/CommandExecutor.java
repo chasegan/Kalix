@@ -93,6 +93,70 @@ public class CommandExecutor {
     }
 
     /**
+     * Renames an input file path throughout the document.
+     * Finds all legitimate references and renames them atomically (single undo).
+     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * in property values and output references.
+     *
+     * @param oldPath     The current input file path
+     * @param newPath     The new input file path
+     * @param parsedModel The parsed model for finding references
+     * @return true if rename was successful, false if cancelled or failed
+     */
+    public boolean renameInputFile(String oldPath, String newPath, INIModelParser.ParsedModel parsedModel) {
+        try {
+            // Validate new path
+            if (newPath == null || newPath.trim().isEmpty()) {
+                showError("New path cannot be empty");
+                return false;
+            }
+
+            newPath = newPath.trim();
+
+            // Check if new path already exists
+            if (parsedModel.getInputFileLineNumbers().containsKey(newPath)) {
+                showError("Input file '" + newPath + "' already exists");
+                return false;
+            }
+
+            // Get current text
+            String currentText = editor.getText();
+
+            // Find all references and build replacement list
+            List<TextReplacement> replacements = findInputFileReferences(oldPath, newPath, parsedModel);
+
+            if (replacements.isEmpty()) {
+                showError("No references found for input file '" + oldPath + "'");
+                return false;
+            }
+
+            // Convert TextReplacement to LineReplacement and apply atomically
+            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
+            for (TextReplacement replacement : replacements) {
+                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
+                    replacement.getLineNumber(),
+                    replacement.getOldText(),
+                    replacement.getNewText()
+                ));
+            }
+
+            // Apply all replacements as a single atomic undo operation
+            replacementApplier.accept(lineReplacements);
+
+            String oldAlias = sanitiseFileName(oldPath);
+            String newAlias = sanitiseFileName(newPath);
+            logger.info("Renamed input file '{}' to '{}' (alias: {} -> {}, {} references updated)",
+                oldPath, newPath, oldAlias, newAlias, replacements.size());
+            return true;
+
+        } catch (Exception e) {
+            logger.error("Error renaming input file", e);
+            showError("Failed to rename input file: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Finds all legitimate references to a node.
      *
      * @param oldName     The node to find references for
@@ -164,6 +228,70 @@ public class CommandExecutor {
                         prop.getLineNumber(),
                         "node." + oldName + ".",
                         "node." + newName + "."
+                    ));
+                }
+            }
+        }
+
+        return replacements;
+    }
+
+    /**
+     * Finds all legitimate references to an input file.
+     *
+     * @param oldPath     The old file path
+     * @param newPath     The new file path
+     * @param parsedModel The parsed model
+     * @return List of text replacements to perform
+     */
+    private List<TextReplacement> findInputFileReferences(String oldPath, String newPath,
+                                                          INIModelParser.ParsedModel parsedModel) {
+        List<TextReplacement> replacements = new ArrayList<>();
+
+        // Convert file paths to aliases for data references
+        String oldAlias = sanitiseFileName(oldPath);
+        String newAlias = sanitiseFileName(newPath);
+
+        // 1. Replace the input file path in [inputs] section
+        Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
+        if (inputLineNumber != null) {
+            replacements.add(new TextReplacement(
+                inputLineNumber,
+                oldPath,
+                newPath
+            ));
+        } else {
+            logger.warn("Input file path '{}' not found in parsed model", oldPath);
+        }
+
+        // 2. Find all data.{alias}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
+        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldAlias) + "\\.");
+        for (INIModelParser.Section section : parsedModel.getSections().values()) {
+            if (!section.getName().startsWith("node.")) continue;
+
+            for (INIModelParser.Property prop : section.getProperties().values()) {
+                String value = prop.getValue();
+                // Check if this property value contains a reference to the old alias
+                if (dataRefPattern.matcher(value).find()) {
+                    replacements.add(new TextReplacement(
+                        prop.getLineNumber(),
+                        "data." + oldAlias + ".",
+                        "data." + newAlias + "."
+                    ));
+                }
+            }
+        }
+
+        // 3. Find output references: data.{alias}.*
+        for (String outputRef : parsedModel.getOutputReferences()) {
+            // Match: data.old_alias.anything
+            if (outputRef.contains("data." + oldAlias + ".")) {
+                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
+                if (lineNumber != null) {
+                    replacements.add(new TextReplacement(
+                        lineNumber,
+                        "data." + oldAlias + ".",
+                        "data." + newAlias + "."
                     ));
                 }
             }
@@ -272,6 +400,23 @@ public class CommandExecutor {
                 JOptionPane.ERROR_MESSAGE
             );
         });
+    }
+
+    /**
+     * Converts a file path to an alias used in data references.
+     * Mirrors the Rust sanitize_name() logic in misc_functions.rs.
+     * <p>
+     * Example: /data/patterns.csv -> patterns_csv
+     * Example: ^/inputs/my.data.csv -> my_data_csv
+     *
+     * @param filePath The file path (can be absolute, relative, or trailhead path)
+     * @return The sanitized alias name
+     */
+    private static String sanitiseFileName(String filePath) {
+        // Extract filename from path
+        java.nio.file.Path path = java.nio.file.Paths.get(filePath);
+        String filename = path.getFileName().toString();
+        return filename.replaceAll("[^a-z0-9_]", "_");
     }
 
     /**
