@@ -183,3 +183,51 @@ fn test_multiple_invalid_references_caught() {
         error_message
     );
 }
+
+
+/// Test that linking three gauge nodes to a confluence is rejected,
+/// since ConfluenceNode::MAX_US_LINKS == 2.
+#[test]
+fn test_confluence_three_us_links_rejected() {
+    let io = crate::io::ini_model_io::IniModelIO::new();
+
+    let ini = "
+[kalix]
+
+[node.gauge1]
+type = gauge
+ds_1 = confluence
+
+[node.gauge2]
+type = gauge
+ds_1 = confluence
+
+[node.gauge3]
+type = gauge
+ds_1 = confluence
+
+[node.confluence]
+type = confluence
+ds_1 = blackhole
+
+[node.blackhole]
+type = blackhole
+";
+
+    let result = io.read_model_string(ini);
+    // Note: Model does not derive Debug so manual panic is necessary
+    let msg = match result {
+        Ok(_) => panic!("Expected an error when three gauges link to a confluence"),
+        Err(e) => e,
+    };
+    assert!(
+        msg.to_lowercase().contains("us"),
+        "Error message should mention upstream links. Got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("confluence"),
+        "Error message should name the offending node. Got: {}",
+        msg
+    );
+}
