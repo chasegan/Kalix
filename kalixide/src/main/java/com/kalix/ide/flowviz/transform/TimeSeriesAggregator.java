@@ -4,7 +4,14 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.UnaryOperator;
 
 /**
  * Aggregates time series data to coarser temporal resolutions.
@@ -40,6 +47,37 @@ public class TimeSeriesAggregator {
     }
 
     /**
+     * Builds the aggregated series from the per-period values, emitting a point for <em>every</em>
+     * period from the first to the last present one — fully-missing interior periods become
+     * {@link Double#NaN} rather than being dropped. This keeps the aggregated series' grid
+     * complete so a missing period reads as a gap (via the renderer's NaN break) instead of a
+     * straight bridge, and makes the daily output contiguous (one entry per calendar day).
+     *
+     * @param periodValues present periods (period-start → aggregated value), sorted ascending
+     * @param nextPeriod   steps a period start to the next (plusDays/plusMonths/plusYears)
+     */
+    private static TimeSeriesData buildFillingGaps(
+        TreeMap<LocalDateTime, Double> periodValues,
+        UnaryOperator<LocalDateTime> nextPeriod
+    ) {
+        List<LocalDateTime> dates = new ArrayList<>();
+        List<Double> values = new ArrayList<>();
+
+        if (!periodValues.isEmpty()) {
+            LocalDateTime last = periodValues.lastKey();
+            for (LocalDateTime p = periodValues.firstKey(); !p.isAfter(last); p = nextPeriod.apply(p)) {
+                dates.add(p);
+                Double v = periodValues.get(p);
+                values.add(v != null ? v : Double.NaN);  // fully-missing interior period
+            }
+        }
+
+        LocalDateTime[] dateArray = dates.toArray(new LocalDateTime[0]);
+        double[] valueArray = values.stream().mapToDouble(Double::doubleValue).toArray();
+        return new TimeSeriesData(dateArray, valueArray);
+    }
+
+    /**
      * Aggregates data to daily resolution. Intended for sub-daily series (e.g. hourly).
      * On daily-or-coarser series each bucket holds one value, so the aggregation
      * methods become no-ops.
@@ -61,7 +99,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by calendar day
         Map<YearMonthDay, List<Double>> dailyBuckets = new TreeMap<>();
-        Set<YearMonthDay> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<YearMonthDay> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
@@ -80,9 +118,8 @@ public class TimeSeriesAggregator {
             dailyBuckets.computeIfAbsent(ymd, k -> new ArrayList<>()).add(values[i]);
         }
 
-        // Aggregate each day
-        List<LocalDateTime> aggregatedDates = new ArrayList<>();
-        List<Double> aggregatedValues = new ArrayList<>();
+        // Aggregate each day with valid data
+        TreeMap<LocalDateTime, Double> periodValues = new TreeMap<>();
 
         for (Map.Entry<YearMonthDay, List<Double>> entry : dailyBuckets.entrySet()) {
             YearMonthDay ymd = entry.getKey();
@@ -99,14 +136,10 @@ public class TimeSeriesAggregator {
                 ? Double.NaN
                 : method.aggregate(dayValues);
 
-            aggregatedDates.add(periodStart);
-            aggregatedValues.add(aggregatedValue);
+            periodValues.put(periodStart, aggregatedValue);
         }
 
-        LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
-        double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
-
-        return new TimeSeriesData(dateArray, valueArray);
+        return buildFillingGaps(periodValues, p -> p.plusDays(1));
     }
 
     /**
@@ -129,7 +162,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by year-month
         Map<YearMonth, List<Double>> monthlyBuckets = new TreeMap<>();
-        Set<YearMonth> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<YearMonth> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
@@ -148,9 +181,8 @@ public class TimeSeriesAggregator {
             monthlyBuckets.computeIfAbsent(yearMonth, k -> new ArrayList<>()).add(values[i]);
         }
 
-        // Aggregate each month
-        List<LocalDateTime> aggregatedDates = new ArrayList<>();
-        List<Double> aggregatedValues = new ArrayList<>();
+        // Aggregate each month with valid data
+        TreeMap<LocalDateTime, Double> periodValues = new TreeMap<>();
 
         for (Map.Entry<YearMonth, List<Double>> entry : monthlyBuckets.entrySet()) {
             YearMonth ym = entry.getKey();
@@ -168,15 +200,10 @@ public class TimeSeriesAggregator {
                 ? Double.NaN
                 : method.aggregate(monthValues);
 
-            aggregatedDates.add(periodStart);
-            aggregatedValues.add(aggregatedValue);
+            periodValues.put(periodStart, aggregatedValue);
         }
 
-        // Convert to arrays
-        LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
-        double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
-
-        return new TimeSeriesData(dateArray, valueArray);
+        return buildFillingGaps(periodValues, p -> p.plusMonths(1));
     }
 
     /**
@@ -205,7 +232,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by water year
         Map<Integer, List<Double>> annualBuckets = new TreeMap<>();
-        Set<Integer> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<Integer> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
@@ -225,9 +252,8 @@ public class TimeSeriesAggregator {
             annualBuckets.computeIfAbsent(waterYear, k -> new ArrayList<>()).add(values[i]);
         }
 
-        // Aggregate each year
-        List<LocalDateTime> aggregatedDates = new ArrayList<>();
-        List<Double> aggregatedValues = new ArrayList<>();
+        // Aggregate each year with valid data
+        TreeMap<LocalDateTime, Double> periodValues = new TreeMap<>();
 
         for (Map.Entry<Integer, List<Double>> entry : annualBuckets.entrySet()) {
             int waterYear = entry.getKey();
@@ -246,15 +272,10 @@ public class TimeSeriesAggregator {
                 ? Double.NaN
                 : method.aggregate(yearValues);
 
-            aggregatedDates.add(periodStart);
-            aggregatedValues.add(aggregatedValue);
+            periodValues.put(periodStart, aggregatedValue);
         }
 
-        // Convert to arrays
-        LocalDateTime[] dateArray = aggregatedDates.toArray(new LocalDateTime[0]);
-        double[] valueArray = aggregatedValues.stream().mapToDouble(Double::doubleValue).toArray();
-
-        return new TimeSeriesData(dateArray, valueArray);
+        return buildFillingGaps(periodValues, p -> p.plusYears(1));
     }
 
     /**

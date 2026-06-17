@@ -395,7 +395,11 @@ public class TimeSeriesRequestManager {
             dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
             values[i] = p.value;
         }
-        return new TimeSeriesData(dateTimes, values);
+        // If the stream omits missing timesteps, the decoded points have gaps. Materialise the
+        // full grid (NaN at missing slots) so run series share one representation and keep the
+        // O(1) index path. Cadence is inferred from the decoded points; no-op when the stream
+        // already carried every timestep (the common case) or the series is irregular.
+        return new TimeSeriesData(dateTimes, values).densified();
     }
 
     /**

@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.style.LineStyle;
+import com.kalix.ide.flowviz.style.SeriesMarker;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.style.StrokeStyle;
 import com.kalix.ide.preferences.PreferenceManager;
@@ -40,7 +41,7 @@ public class PlotLegendManager {
     private static final int PADDING = 8;
     private static final int CORNER_RADIUS = 8;
     private static final int LINE_SAMPLE_WIDTH = 20;
-    private static final int DOT_DIAMETER = 4;
+    private static final int DOT_DIAMETER = SeriesMarker.DIAMETER;
     /** Total width of a line sample (line + end dot); for components that mirror the Key. */
     static final int SAMPLE_WIDTH = LINE_SAMPLE_WIDTH + DOT_DIAMETER;
     private static final int MIN_WIDTH = 120;
@@ -467,8 +468,7 @@ public class PlotLegendManager {
         g.setStroke(style.stroke().toBasicStroke());
         g.drawLine(startX, lineY, startX + LINE_SAMPLE_WIDTH, lineY);
 
-        int dotX = startX + LINE_SAMPLE_WIDTH - DOT_DIAMETER / 2;
-        g.fillOval(dotX, lineY - DOT_DIAMETER / 2, DOT_DIAMETER, DOT_DIAMETER);
+        SeriesMarker.paint(g, style, startX + LINE_SAMPLE_WIDTH, lineY);
     }
 
     private String truncateText(Graphics2D g, String text, int maxWidth) {

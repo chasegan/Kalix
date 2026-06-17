@@ -17,11 +17,13 @@ public class CountStatistic implements Statistic {
 
     @Override
     public String calculate(StatSample series, StatSample reference) {
-        return String.valueOf(series.rawCount());
+        // Valid (non-missing) points, not the raw array length: under the materialised-grid
+        // representation the array includes NaN slots for missing data, which are not observations.
+        return String.valueOf(series.validCount());
     }
 
     @Override
     public String getTooltip() {
-        return "Number of data points in the series";
+        return "Number of valid (non-missing) data points in the series";
     }
 }

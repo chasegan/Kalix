@@ -12,6 +12,8 @@ import java.util.Base64;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Round-trip tests for the Pixie wire format used by get_result responses.
@@ -112,6 +114,39 @@ class TimeSeriesRequestManagerPixieTest {
             assertEquals(vals[i], decoded.getValues()[i], 0.0,
                 "value mismatch at index " + i);
         }
+    }
+
+    @Test
+    void decode_densifiesAStreamThatOmitsMissingTimesteps() throws Exception {
+        // A stream that skips two hourly steps: present at step indices 0,1,2 then 5,6.
+        int[] presentSteps = {0, 1, 2, 5, 6};
+        double[] presentVals = {10, 11, 12, 15, 16};
+        String b64 = encodeAtSteps(presentSteps, presentVals);
+
+        TimeSeriesData decoded = TimeSeriesRequestManager.decodePixiePayload("gappy.series", b64);
+
+        // The gap (steps 3,4) is materialised as NaN, restoring a contiguous hourly grid.
+        assertTrue(decoded.isContiguous(), "decoded gappy stream should be densified to a full grid");
+        assertEquals(7, decoded.getPointCount(), "full hourly grid spanning steps 0..6");
+        assertEquals(5, decoded.getValidPointCount().intValue(), "only the 5 transmitted points are valid");
+
+        double[] v = decoded.getValues();
+        assertEquals(12, v[2], 0.0);
+        assertFalse(decoded.getValidPoints()[3], "omitted step 3 is a NaN slot");
+        assertFalse(decoded.getValidPoints()[4], "omitted step 4 is a NaN slot");
+        assertEquals(15, v[5], 0.0, "post-gap value lands on its correct grid slot");
+    }
+
+    /** Encode values at explicit (non-contiguous) step indices, mimicking a CLI stream that omits
+     *  missing timesteps. */
+    private static String encodeAtSteps(int[] stepIndices, double[] values) throws Exception {
+        List<TimeValueDouble> series = new ArrayList<>(stepIndices.length);
+        for (int i = 0; i < stepIndices.length; i++) {
+            long signed = START_EPOCH_SEC + stepIndices[i] * TIMESTEP_SECONDS;
+            series.add(new TimeValueDouble(signed ^ Long.MIN_VALUE, values[i]));
+        }
+        GorillaCompressor codec = new GorillaCompressor(TIMESTEP_SECONDS);
+        return Base64.getEncoder().encodeToString(codec.compressDouble(series));
     }
 
     /** Encode the given values via Gorilla + base64, mimicking what the CLI sends.

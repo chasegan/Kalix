@@ -15,9 +15,17 @@ public class TimeSeriesData {
     private Double maxValue;
     private Integer validPointCount;
     
-    // Regular interval optimization
-    private final boolean hasRegularInterval;
-    private final long intervalMillis;
+    // Cadence model. The nominal grid interval (the cadence the series is *defined* on) is kept
+    // separate from whether the backing array is actually a gap-free grid (contiguity). They
+    // diverge for a regular series with missing values dropped: it still has a cadence, but its
+    // array is no longer contiguous.
+    //   - nominalIntervalMillis: the regular grid step; 0 if the series is genuinely irregular
+    //     (ad-hoc timestamps). Retained even when the array has gaps — this is what a gap-aware
+    //     renderer uses to decide whether a time jump represents missing data.
+    //   - contiguous: true only when every interval equals the nominal step (a full grid, no
+    //     gaps). This alone gates the O(1) index fast path in getIndexRange().
+    private final long nominalIntervalMillis;
+    private final boolean contiguous;
     private final long firstTimestamp;
     
     /**
@@ -52,10 +60,10 @@ public class TimeSeriesData {
         // Sort by timestamp if needed
         sortIfNeeded();
 
-        // Detect regular intervals
-        RegularIntervalInfo intervalInfo = detectRegularInterval();
-        this.hasRegularInterval = intervalInfo.isRegular;
-        this.intervalMillis = intervalInfo.intervalMillis;
+        // Detect cadence (nominal grid interval) and contiguity (gap-free grid)
+        CadenceInfo cadence = detectCadence();
+        this.nominalIntervalMillis = cadence.nominalIntervalMillis;
+        this.contiguous = cadence.contiguous;
         this.firstTimestamp = timestamps.length > 0 ? this.timestamps[0] : 0;
 
         // Pre-compute statistics
@@ -107,37 +115,130 @@ public class TimeSeriesData {
         }
     }
     
-    private static class RegularIntervalInfo {
-        final boolean isRegular;
-        final long intervalMillis;
+    /** Result of cadence detection: the nominal grid step and whether the array is gap-free. */
+    private static final class CadenceInfo {
+        final long nominalIntervalMillis;  // 0 if genuinely irregular
+        final boolean contiguous;          // true iff every interval == nominal (full grid)
 
-        RegularIntervalInfo(boolean isRegular, long intervalMillis) {
-            this.isRegular = isRegular;
-            this.intervalMillis = intervalMillis;
+        CadenceInfo(long nominalIntervalMillis, boolean contiguous) {
+            this.nominalIntervalMillis = nominalIntervalMillis;
+            this.contiguous = contiguous;
         }
     }
-    
-    private RegularIntervalInfo detectRegularInterval() {
+
+    // Intervals are accepted as "equal" / "integer multiples" within this relative tolerance,
+    // absorbing minor timestamp jitter in imported data. Model output is exact, so this only
+    // matters at the margins.
+    private static final double INTERVAL_TOLERANCE = 0.01;
+
+    // A non-contiguous series is treated as a regular grid with gaps only if the base interval
+    // accounts for at least this fraction of all intervals. This is the discriminator against
+    // genuinely ad-hoc data that merely happens to share a common divisor: in real gappy regular
+    // data the base spacing dominates, whereas ad-hoc spacings rarely repeat.
+    private static final double BASE_DOMINANCE_FRACTION = 0.5;
+
+    /**
+     * Classifies the series' cadence, deriving two distinct properties (see field docs): the
+     * <b>nominal interval</b> (the grid step the series is defined on, retained even when values
+     * are missing) and <b>contiguity</b> (whether the backing array is a gap-free grid, which
+     * alone governs the O(1) index fast path).
+     *
+     * <ul>
+     *   <li>All intervals equal → contiguous regular grid (nominal = that interval).</li>
+     *   <li>Every interval a near-integer multiple of a dominant base interval → regular grid
+     *       with gaps (nominal = base, not contiguous). This is a regular series with
+     *       dropped/missing points.</li>
+     *   <li>Otherwise → genuinely irregular/ad-hoc (nominal = 0, not contiguous). Calendar
+     *       aggregations (monthly/annual) fall here by design — their spacing varies, so they
+     *       should not be treated as a fixed cadence.</li>
+     * </ul>
+     */
+    private CadenceInfo detectCadence() {
         if (pointCount < 3) {
-            return new RegularIntervalInfo(false, 0);
+            return new CadenceInfo(0, false);
         }
-        
+
         long firstInterval = timestamps[1] - timestamps[0];
         if (firstInterval <= 0) {
-            return new RegularIntervalInfo(false, 0);
+            return new CadenceInfo(0, false);  // non-ascending / duplicate timestamps: no clean grid
         }
-        
-        // Check if all intervals match (within 1% tolerance)
-        double tolerance = firstInterval * 0.01;
-        
-        for (int i = 2; i < Math.min(pointCount, 100); i++) { // Check first 100 points for efficiency
-            long interval = timestamps[i] - timestamps[i-1];
-            if (Math.abs(interval - firstInterval) > tolerance) {
-                return new RegularIntervalInfo(false, 0);
+
+        // Contiguity: every interval equal within tolerance. This is the precondition for
+        // getIndexRange()'s arithmetic fast path — index = (t - first) / interval only holds when
+        // the array is a full grid with no gaps. We must scan all intervals, not a leading
+        // sample: a series regular for its first N points but with a later gap would otherwise be
+        // misclassified, and the fast path would drift by the number of dropped points, silently
+        // skipping the leading visible points after the gap. The extra O(n) scan is negligible
+        // beside the array clones and stats pass already done in the constructor.
+        double tolerance = firstInterval * INTERVAL_TOLERANCE;
+        boolean allEqual = true;
+        for (int i = 2; i < pointCount; i++) {
+            if (Math.abs((timestamps[i] - timestamps[i - 1]) - firstInterval) > tolerance) {
+                allEqual = false;
+                break;
             }
         }
-        
-        return new RegularIntervalInfo(true, firstInterval);
+        if (allEqual) {
+            return new CadenceInfo(firstInterval, true);
+        }
+
+        // Not contiguous: is this a regular grid with gaps, or genuinely irregular?
+        return detectGappyCadence();
+    }
+
+    /**
+     * Determines whether a non-contiguous series is nonetheless a regular grid with gaps: every
+     * interval must be a near-integer multiple (≥1×) of a dominant base interval. Returns the base
+     * as the nominal interval if so, else {@code 0} (irregular). Always non-contiguous — the
+     * caller has already ruled contiguity out.
+     */
+    private CadenceInfo detectGappyCadence() {
+        int m = pointCount - 1;
+
+        long[] diffs = new long[m];
+        for (int i = 0; i < m; i++) {
+            long d = timestamps[i + 1] - timestamps[i];
+            if (d <= 0) {
+                return new CadenceInfo(0, false);
+            }
+            diffs[i] = d;
+        }
+
+        // Base candidate = the most common interval (mode). In a gappy regular series the 1× grid
+        // spacing recurs most; ad-hoc spacings rarely repeat. Found via a sorted copy so the scan
+        // stays primitive (no boxing) even for large series; ties resolve to the smallest value.
+        long[] sorted = diffs.clone();
+        Arrays.sort(sorted);
+        long base = sorted[0];
+        int bestRun = 1, run = 1;
+        for (int i = 1; i < m; i++) {
+            run = (sorted[i] == sorted[i - 1]) ? run + 1 : 1;
+            if (run > bestRun) {
+                bestRun = run;
+                base = sorted[i];
+            }
+        }
+        if (base <= 0) {
+            return new CadenceInfo(0, false);
+        }
+
+        // Every interval must be a near-integer multiple (≥1×) of the base, and the base itself
+        // must dominate — otherwise this is ad-hoc data that merely shares a divisor.
+        double tol = base * INTERVAL_TOLERANCE;
+        int baseCount = 0;
+        for (long d : diffs) {
+            long k = Math.round((double) d / base);
+            if (k < 1 || Math.abs(d - k * base) > tol) {
+                return new CadenceInfo(0, false);
+            }
+            if (k == 1) {
+                baseCount++;
+            }
+        }
+        if (baseCount < m * BASE_DOMINANCE_FRACTION) {
+            return new CadenceInfo(0, false);
+        }
+        return new CadenceInfo(base, false);
     }
     
     private void computeStatistics() {
@@ -172,10 +273,10 @@ public class TimeSeriesData {
         
         int startIndex, endIndex;
         
-        if (hasRegularInterval) {
-            // Fast calculation using regular intervals
-            startIndex = (int) Math.max(0, (startTimeMs - firstTimestamp) / intervalMillis);
-            endIndex = (int) Math.min(pointCount, (endTimeMs - firstTimestamp) / intervalMillis + 1);
+        if (contiguous) {
+            // Fast calculation: on a gap-free grid the array index is exactly (t - first) / step
+            startIndex = (int) Math.max(0, (startTimeMs - firstTimestamp) / nominalIntervalMillis);
+            endIndex = (int) Math.min(pointCount, (endTimeMs - firstTimestamp) / nominalIntervalMillis + 1);
             
             // Clamp to actual bounds
             startIndex = Math.max(0, Math.min(startIndex, pointCount - 1));
@@ -217,6 +318,63 @@ public class TimeSeriesData {
         return Math.max(0, Math.min(result, pointCount));
     }
 
+    /**
+     * Default ceiling on the number of points a densified grid may hold. A regular series with a
+     * large contiguous hole could otherwise materialise an enormous mostly-NaN array (e.g. a gauge
+     * offline for decades on an hourly grid); beyond this the series is left gap-bearing and still
+     * renders correctly via the gap-aware line break — it just keeps binary-search indexing rather
+     * than the O(1) fast path. 5M comfortably covers realistic dense hydrological series (e.g.
+     * 6-minute data over decades) while bounding the pathological case.
+     */
+    public static final int MAX_DENSIFY_GRID_POINTS = 5_000_000;
+
+    /** Densifies using {@link #MAX_DENSIFY_GRID_POINTS}. */
+    public TimeSeriesData densified() {
+        return densified(MAX_DENSIFY_GRID_POINTS);
+    }
+
+    /**
+     * Returns this series materialised onto its full regular grid, with {@link Double#NaN} at every
+     * missing slot — restoring the contiguous invariant (and the O(1) index fast path) for a
+     * regular series whose missing points were dropped.
+     *
+     * <p>Returns {@code this} unchanged when there is nothing to do: already contiguous, no detected
+     * cadence (irregular/ad-hoc), empty, or the resulting grid would exceed {@code maxGridPoints}
+     * (left gap-bearing — still correct via the gap-aware line break, just without O(1) indexing).</p>
+     */
+    public TimeSeriesData densified(int maxGridPoints) {
+        if (contiguous || nominalIntervalMillis <= 0 || pointCount == 0) {
+            return this;
+        }
+
+        long span = timestamps[pointCount - 1] - firstTimestamp;
+        long gridCount = span / nominalIntervalMillis + 1;
+        if (gridCount > maxGridPoints) {
+            return this;  // too large to materialise; stays gap-bearing
+        }
+
+        int n = (int) gridCount;
+        long[] gridTimestamps = new long[n];
+        double[] gridValues = new double[n];
+        for (int i = 0; i < n; i++) {
+            gridTimestamps[i] = firstTimestamp + (long) i * nominalIntervalMillis;
+            gridValues[i] = Double.NaN;
+        }
+
+        // Snap each existing valid point onto its grid slot (rounding absorbs minor jitter).
+        for (int i = 0; i < pointCount; i++) {
+            if (!validPoints[i]) {
+                continue;
+            }
+            long k = Math.round((double) (timestamps[i] - firstTimestamp) / nominalIntervalMillis);
+            if (k >= 0 && k < n) {
+                gridValues[(int) k] = values[i];
+            }
+        }
+
+        return new TimeSeriesData(gridTimestamps, gridValues);
+    }
+
     // Getters
     public int getPointCount() { return pointCount; }
     public long[] getTimestamps() { return timestamps; }
@@ -226,8 +384,24 @@ public class TimeSeriesData {
     public long getFirstTimestamp() { return firstTimestamp; }
     public long getLastTimestamp() { return pointCount > 0 ? timestamps[pointCount - 1] : 0; }
     
-    public boolean hasRegularInterval() { return hasRegularInterval; }
-    public long getIntervalMillis() { return intervalMillis; }
+    /** The regular grid step the series is defined on, in ms; {@code 0} if genuinely irregular.
+     *  Retained even when the array has gaps — a gap-aware renderer uses it to decide whether a
+     *  time jump represents missing data. */
+    public long getNominalIntervalMillis() { return nominalIntervalMillis; }
+
+    /** Whether the backing array is a gap-free regular grid. This alone gates the O(1) index
+     *  fast path; a regular series with dropped points has a nominal interval but is not
+     *  contiguous. */
+    public boolean isContiguous() { return contiguous; }
+
+    /** Legacy alias for {@link #isContiguous()}: historically the only "regular" notion this
+     *  class exposed was a gap-free grid. Retained for existing callers. */
+    public boolean hasRegularInterval() { return contiguous; }
+
+    /** Legacy alias for {@link #getNominalIntervalMillis()}: returns the grid step when
+     *  contiguous and {@code 0} otherwise, matching the historical contract where callers guard
+     *  with {@link #hasRegularInterval()}. Retained for existing callers. */
+    public long getIntervalMillis() { return contiguous ? nominalIntervalMillis : 0; }
     
     // Statistics getters
     public Double getMinValue() { return minValue; }
