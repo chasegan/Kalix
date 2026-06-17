@@ -14,8 +14,10 @@ class TimeSeriesDataTest {
         return dt.toInstant(ZoneOffset.UTC).toEpochMilli();
     }
 
+    private static final long DAY_MS = 24L * 60 * 60 * 1000;
+
     @Test
-    void contiguousDailySeriesIsDetectedRegular() {
+    void contiguousDailySeriesIsContiguousWithDailyCadence() {
         LocalDateTime start = LocalDateTime.of(2020, 1, 1, 0, 0);
         int n = 200;
         LocalDateTime[] dates = new LocalDateTime[n];
@@ -26,19 +28,20 @@ class TimeSeriesDataTest {
         }
         TimeSeriesData series = new TimeSeriesData(dates, values);
 
-        assertTrue(series.hasRegularInterval(), "Gap-free daily series should use the regular fast path");
+        assertTrue(series.isContiguous(), "Gap-free daily series should be contiguous (O(1) fast path)");
+        assertEquals(DAY_MS, series.getNominalIntervalMillis(), "Nominal cadence should be one day");
+        assertTrue(series.hasRegularInterval(), "Legacy alias should still report contiguity");
     }
 
     /**
-     * Regression test for the index-drift bug: a series that is regular for its first 100+ points
-     * but has a gap later (missing rows dropped) was misclassified as regular because only the
-     * first 100 intervals were sampled. getIndexRange()'s arithmetic fast path then returned
-     * indices offset by the number of dropped points, skipping the leading visible points of any
-     * viewport after the gap. The series must be classified irregular and indexed via binary
-     * search so the bounds stay correct.
+     * The cadence/contiguity split: a regular daily series with a gap (dropped rows) past the
+     * first 100 points must NOT be contiguous — getIndexRange()'s arithmetic fast path is only
+     * valid on a gap-free grid, and treating this as contiguous drifts the index by the number of
+     * dropped points, skipping the leading visible points after the gap. But its nominal cadence
+     * (one day) must be RETAINED, since a gap-aware renderer needs it to recognise the gap.
      */
     @Test
-    void seriesWithGapPastFirst100PointsIsDetectedIrregular() {
+    void dailySeriesWithGapIsNotContiguousButRetainsDailyCadence() {
         LocalDateTime start = LocalDateTime.of(2020, 1, 1, 0, 0);
 
         // 150 contiguous daily points, then drop 10 days (a gap), then 150 more daily points.
@@ -63,8 +66,10 @@ class TimeSeriesDataTest {
         }
         TimeSeriesData series = new TimeSeriesData(dates, values);
 
-        assertFalse(series.hasRegularInterval(),
+        assertFalse(series.isContiguous(),
             "A series with a gap (even past the first 100 points) must not use the regular fast path");
+        assertEquals(DAY_MS, series.getNominalIntervalMillis(),
+            "Daily cadence must be retained despite the gap, so gap-aware rendering can use it");
     }
 
     /**
@@ -123,5 +128,49 @@ class TimeSeriesDataTest {
                         + range.startIndex + ", " + range.endIndex + ")");
             }
         }
+    }
+
+    /**
+     * Genuinely ad-hoc timestamps (not a regular grid, even with gaps) must report no cadence,
+     * so a gap-aware renderer never breaks their line on spacing. The intervals here share no
+     * dominant base, distinguishing them from a regular-with-gaps series.
+     */
+    @Test
+    void adHocSeriesHasNoNominalCadence() {
+        LocalDateTime start = LocalDateTime.of(2020, 1, 1, 0, 0);
+        // Irregular spacings with no dominant repeating base interval.
+        long[] offsetsHours = {0, 1, 7, 50, 51, 200, 333, 334};
+        LocalDateTime[] dates = new LocalDateTime[offsetsHours.length];
+        double[] values = new double[offsetsHours.length];
+        for (int i = 0; i < offsetsHours.length; i++) {
+            dates[i] = start.plusHours(offsetsHours[i]);
+            values[i] = i;
+        }
+        TimeSeriesData series = new TimeSeriesData(dates, values);
+
+        assertFalse(series.isContiguous(), "Ad-hoc series is not a gap-free grid");
+        assertEquals(0, series.getNominalIntervalMillis(), "Ad-hoc series must report no cadence");
+    }
+
+    /**
+     * Monthly data has intrinsically varying intervals (28–31 days), so it must classify as
+     * irregular (no fixed cadence) — we do not want spacing-based gap detection on calendar
+     * aggregations.
+     */
+    @Test
+    void monthlySeriesHasNoNominalCadence() {
+        LocalDateTime start = LocalDateTime.of(2020, 1, 1, 0, 0);
+        int n = 24;
+        LocalDateTime[] dates = new LocalDateTime[n];
+        double[] values = new double[n];
+        for (int i = 0; i < n; i++) {
+            dates[i] = start.plusMonths(i);
+            values[i] = i;
+        }
+        TimeSeriesData series = new TimeSeriesData(dates, values);
+
+        assertFalse(series.isContiguous(), "Monthly spacing varies, so not a contiguous fixed grid");
+        assertEquals(0, series.getNominalIntervalMillis(),
+            "Monthly data must report no fixed cadence (intervals vary 28–31 days)");
     }
 }
