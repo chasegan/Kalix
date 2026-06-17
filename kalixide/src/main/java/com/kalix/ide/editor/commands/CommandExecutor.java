@@ -416,7 +416,7 @@ public class CommandExecutor {
         // Extract filename from path
         java.nio.file.Path path = java.nio.file.Paths.get(filePath);
         String filename = path.getFileName().toString();
-        return filename.replaceAll("[^a-z0-9_]", "_");
+        return filename.replaceAll("[^a-z0-9_]", "_").toLowerCase();
     }
 
     /**
