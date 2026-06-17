@@ -46,8 +46,12 @@ class TreeFileOperations {
 
     void reveal(File file) {
         try {
-            File target = file.isDirectory() ? file : file.getParentFile();
-            com.kalix.ide.utils.FileManagerLauncher.openFileManagerAt(target);
+            if (file.isDirectory()) {
+                com.kalix.ide.utils.FileManagerLauncher.openFileManagerAt(file);
+            } else {
+                // Select the file in its folder, rather than just opening the folder.
+                com.kalix.ide.utils.FileManagerLauncher.revealFile(file);
+            }
         } catch (Exception ex) {
             logger.warn("Failed to reveal {}: {}", file, ex.getMessage());
         }

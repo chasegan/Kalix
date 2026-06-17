@@ -59,6 +59,84 @@ public class FileManagerLauncher {
     }
 
     /**
+     * Opens the file manager with the given file selected ("reveal"), rather than merely opening
+     * its containing folder. Mirrors the behaviour of VS Code's "Reveal in Finder/Explorer".
+     *
+     * <p>Uses the proven platform reveal commands first — {@code open -R} (macOS),
+     * {@code explorer /select,} (Windows), and the freedesktop {@code FileManager1.ShowItems}
+     * D-Bus call (Linux) — then the cross-platform {@link Desktop#browseFileDirectory(File)} where
+     * available, and finally falls back to opening the containing folder if selection isn't
+     * possible.</p>
+     *
+     * @param file the file to reveal and select
+     * @throws IOException if neither selection nor the folder fallback can be launched
+     */
+    public static void revealFile(File file) throws IOException {
+        if (file == null || !file.exists()) {
+            // Nothing to select; open the closest existing folder instead.
+            openFileManagerAt(file == null ? null : file.getParentFile());
+            return;
+        }
+
+        String osName = System.getProperty("os.name").toLowerCase();
+        try {
+            if (osName.contains("mac")) {
+                new ProcessBuilder("open", "-R", file.getAbsolutePath()).start();
+                return;
+            }
+            if (osName.contains("win")) {
+                // explorer exits non-zero even on success; we only need to launch it.
+                new ProcessBuilder("explorer", "/select," + file.getAbsolutePath()).start();
+                return;
+            }
+            if (revealLinux(file)) {
+                return;
+            }
+        } catch (IOException e) {
+            logger.warn("Reveal command failed; trying Desktop API / folder fallback", e);
+        }
+
+        // Cross-platform fallback: select via the Desktop API if the platform supports it.
+        if (Desktop.isDesktopSupported()) {
+            Desktop desktop = Desktop.getDesktop();
+            if (desktop.isSupported(Desktop.Action.BROWSE_FILE_DIR)) {
+                try {
+                    desktop.browseFileDirectory(file);
+                    return;
+                } catch (UnsupportedOperationException | IllegalArgumentException e) {
+                    logger.warn("Desktop.browseFileDirectory() failed, opening containing folder", e);
+                }
+            }
+        }
+
+        // Last resort: open the containing folder so the user at least gets close.
+        openFileManagerAt(file.getParentFile());
+    }
+
+    /**
+     * Attempts to select {@code file} in the user's Linux file manager via the freedesktop
+     * {@code org.freedesktop.FileManager1.ShowItems} D-Bus method (honoured by Nautilus, Dolphin,
+     * Nemo, Caja, and others). Returns {@code false} if the call could not be launched, so the
+     * caller can fall back to opening the containing folder.
+     */
+    private static boolean revealLinux(File file) {
+        try {
+            new ProcessBuilder(
+                "dbus-send", "--session", "--print-reply",
+                "--dest=org.freedesktop.FileManager1",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1.ShowItems",
+                "array:string:" + file.toURI().toString(),
+                "string:"
+            ).start();
+            return true;
+        } catch (IOException e) {
+            logger.warn("Linux D-Bus reveal failed", e);
+            return false;
+        }
+    }
+
+    /**
      * Validates and returns a directory that exists.
      * Falls back to user home if the provided directory is invalid.
      *

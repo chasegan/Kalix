@@ -34,7 +34,7 @@ public class RevealInputFileCommand implements EditorCommand {
     public CommandMetadata getMetadata() {
         return new CommandMetadata.Builder()
             .id("reveal_input_file")
-            .displayName("Show in File Manager")
+            .displayName("Reveal in File Manager")
             .description("Reveal input file in the system file manager")
             .category("")
             .build();
@@ -80,14 +80,9 @@ public class RevealInputFileCommand implements EditorCommand {
                 return;
             }
 
-            // Open the file's parent directory in the system file manager
-            File containingFolder = inputFile.getParentFile();
-            if (containingFolder == null) {
-                showError("Cannot determine containing folder for: " + inputFile.getAbsolutePath());
-                return;
-            }
+            // Reveal (select) the file in the system file manager.
             logger.info("Revealing input file in file manager: {}", inputFile.getAbsolutePath());
-            FileManagerLauncher.openFileManagerAt(containingFolder);
+            FileManagerLauncher.revealFile(inputFile);
 
         } catch (Exception e) {
             logger.error("Error revealing input file", e);
