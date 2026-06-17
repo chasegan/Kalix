@@ -105,6 +105,74 @@ class TreeFileOperations {
         // The watcher reports delete + create; the tree re-syncs automatically.
     }
 
+    // --- Duplicate ---
+
+    /**
+     * Duplicates the given file or folder in its parent directory. Prompts for the name with a
+     * default of "name (1).ext" (or "name (2).ext" if that exists, and so on). For directories,
+     * the entire tree is copied recursively. The watcher adds the resulting node.
+     */
+    void duplicate(File file) {
+        String defaultName = generateDuplicateName(file);
+        String name = (String) JOptionPane.showInputDialog(parent,
+            "Duplicate as:", "Duplicate",
+            JOptionPane.PLAIN_MESSAGE, null, null, defaultName);
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        File target = new File(file.getParentFile(), name.trim());
+        if (target.exists()) {
+            JOptionPane.showMessageDialog(parent,
+                "A file or folder named \"" + name.trim() + "\" already exists.",
+                "Duplicate Failed", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            if (file.isDirectory()) {
+                copyRecursively(file.toPath(), target.toPath());
+            } else {
+                Files.copy(file.toPath(), target.toPath());
+            }
+            // The watcher will add the node; no manual model change required.
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(parent,
+                "Failed to duplicate \"" + file.getName() + "\": " + ex.getMessage(),
+                "Duplicate Failed", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Generates a default duplicate name using the pattern "name (1).ext". If that name already
+     * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name.
+     */
+    private String generateDuplicateName(File file) {
+        String fileName = file.getName();
+        File parentDir = file.getParentFile();
+
+        // Split filename into base and extension
+        int dotIndex = fileName.lastIndexOf('.');
+        String baseName;
+        String extension;
+
+        if (dotIndex > 0 && !file.isDirectory()) {
+            baseName = fileName.substring(0, dotIndex);
+            extension = fileName.substring(dotIndex); // includes the dot
+        } else {
+            baseName = fileName;
+            extension = "";
+        }
+
+        // Try "name (1).ext", "name (2).ext", etc.
+        int counter = 1;
+        String candidateName;
+        do {
+            candidateName = baseName + " (" + counter + ")" + extension;
+            counter++;
+        } while (new File(parentDir, candidateName).exists());
+
+        return candidateName;
+    }
+
     // --- Delete ---
 
     /**

@@ -113,6 +113,8 @@ class TreeContextMenu {
             List.of(
                 item("Rename...", TreeContextMenu::isSingle,
                     sel -> fileOps.rename(file(sel))),
+                item("Duplicate...", TreeContextMenu::isSingle,
+                    sel -> fileOps.duplicate(file(sel))),
                 item("Delete", TreeContextMenu::any,
                     sel -> fileOps.delete(files(sel)))
             ),
