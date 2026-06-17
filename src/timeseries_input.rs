@@ -7,10 +7,13 @@ use std::path::Path;
 pub struct TimeseriesInput {
     pub source_path: String,        //Probably a file path, e.g. "./0_data/flow_data.csv"
     pub source_name: String,        //Unique name for the source. Safe name can be based on the file name, e.g. "flow_data"
+    pub alias: Option<String>,      //Optional user-provided alias for this source, e.g. "climate"
     pub col_index: usize,           //The index of the series in the data source (most have that concept)
     pub col_name: String,           //The name identifying the series within the source. "#1" or "GS123456_flow". Convert to safe names when matching cols.
     pub full_colindex_path: String, //This is the full name of the series within the model, using the index, e.g. "data.flow_data.#1"
     pub full_colname_path: String,  //This is the full name of the series within the model, using the column name, e.g. "data.flow_data.GS123456_flow"
+    pub alias_colindex_path: Option<String>, //Alias-based reference using index, e.g. "data.climate.by_index.1"
+    pub alias_colname_path: Option<String>,  //Alias-based reference using column name, e.g. "data.climate.by_name.rainfall"
     pub timeseries: Timeseries,     //The data
     pub reload_on_run: bool,        //Whether we want to reload the data for this series into the data_cache between runs
 }
@@ -24,7 +27,11 @@ impl TimeseriesInput {
 
     /// Loads the timeseries data file. A successful result contains a vector
     /// of TimeseriesInput structs (not just Timeseries).
-    pub fn load(file_path: &str) -> Result<Vec<TimeseriesInput>, String> {
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the CSV file to load
+    /// * `alias` - Optional user-provided alias for this file (e.g., "climate" instead of "climate_data_2020_csv")
+    pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, String> {
         match crate::io::csv_io::read_ts(file_path) {
             Ok(vts) => {
                 let mut vinputts: Vec<TimeseriesInput> = vec![];
@@ -47,8 +54,17 @@ impl TimeseriesInput {
                     inputts.source_name = source_name.clone();
                     inputts.col_index = col_index;
                     inputts.col_name = col_name.clone();
+
                     inputts.full_colname_path = format!("data.{}.by_name.{}", source_name, col_name_sanitized);
                     inputts.full_colindex_path = format!("data.{}.by_index.{}", source_name, col_index);
+
+                    if let Some(alias_str) = alias {
+                        let alias_sanitized = sanitize_name(alias_str);
+                        inputts.alias = Some(alias_sanitized.clone());
+                        inputts.alias_colname_path = Some(format!("data.{}.by_name.{}", alias_sanitized, col_name_sanitized));
+                        inputts.alias_colindex_path = Some(format!("data.{}.by_index.{}", alias_sanitized, col_index));
+                    }
+
                     inputts.timeseries = vts[i].clone();
                     inputts.reload_on_run = false;
                     vinputts.push(inputts);

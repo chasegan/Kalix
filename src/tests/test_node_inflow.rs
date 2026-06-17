@@ -11,7 +11,7 @@ fn test_inflow_node_with_timeseries() {
 
     //Creat a new model. Add some data.
     let mut m = Model::new();
-    m.load_input_data("./src/tests/example_data/test.csv").expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/test.csv", None).expect("TODO: panic message");
 
     //Create an inflow node and add it to the model
     let mut n = InflowNode::new();

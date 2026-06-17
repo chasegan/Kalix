@@ -10,6 +10,14 @@ To import timeseries data into your Kalix model, list your CSV files in the `[in
 ./data/streamflow.csv
 ```
 
+You may optionally give data files aliases:
+
+```ini
+[inputs]
+climate = ./data/climate.csv
+streamflow = ./data/streamflow.csv
+```
+
 Each CSV file should have a date/timestamp column as the first column, followed by one or more data columns:
 
 ```csv
@@ -35,9 +43,13 @@ data.<filename>.by_index.<column_number>
 Column indices start at 1 (the first data column after the date column).
 
 **Example:** For `climate.csv` with columns `Date, Rainfall, Evaporation`:
-- `data.climate_csv.by_name.rainfall` - references the Rainfall column
-- `data.climate_csv.by_index.1` - also references the Rainfall column
-- `data.climate_csv.by_index.2` - references the Evaporation column
+- Using the data file name:
+    - `data.climate_csv.by_name.rainfall` - references the Rainfall column
+    - `data.climate_csv.by_index.1` - also references the Rainfall column
+    - `data.climate_csv.by_index.2` - references the Evaporation column
+- Using the alias:
+    - `data.climate.by_name.rainfall` - references the Rainfall column, as above
+    - `data.climate.by_index.1` - also references the Rainfall column
 
 ## Name Sanitisation
 

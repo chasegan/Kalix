@@ -68,9 +68,18 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Parsing inputs
             // -------------------------------------------------------------------------------------
             for (name, ini_property) in ini_section.properties {
-                // Each property is a path to an input file
-                let _ = model.load_input_data(name.as_str())
-                    .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                // Input files can be specified in two formats:
+                // 1. Direct file path: ./path/to/file.csv (value is empty, key is the path)
+                // 2. Aliased file path: alias = ./path/to/file.csv (value is the path, key is the alias)
+                if ini_property.value.is_empty() {
+                    // Direct file path (no alias)
+                    model.load_input_data(name.as_str(), None)
+                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                } else {
+                    // Aliased file path: name is the alias, value is the file path
+                    model.load_input_data(ini_property.value.as_str(), Some(name.as_str()))
+                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                }
             }
         } else if section_name == "constants" {
             // -------------------------------------------------------------------------------------

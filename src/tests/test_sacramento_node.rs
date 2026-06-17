@@ -12,8 +12,8 @@ fn test_sacramento_node_with_timeseries() {
 
     //Creat a new model. Add some data.
     let mut m = Model::new();
-    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv").expect("TODO: panic message");
-    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv").expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv", None).expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv", None).expect("TODO: panic message");
 
     //Create a node and add it to the model
     let mut n = SacramentoNode::new();
@@ -55,8 +55,8 @@ fn test_sacramento_node_with_timeseries_by_index() {
 
     //Creat a new model. Add some data.
     let mut m = Model::new();
-    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv").expect("TODO: panic message");
-    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv").expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv", None).expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv", None).expect("TODO: panic message");
 
     //Create a node and add it to the model
     let mut n = SacramentoNode::new();

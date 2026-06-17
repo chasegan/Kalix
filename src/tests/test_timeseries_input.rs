@@ -1,7 +1,7 @@
 #[test]
 fn test_load() {
     use crate::timeseries_input::TimeseriesInput;
-    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_mpot.csv") {
+    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_mpot.csv", None) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
     };
@@ -19,7 +19,7 @@ fn test_load() {
 #[test]
 fn test_load_2() {
     use crate::timeseries_input::TimeseriesInput;
-    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv") {
+    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv", None) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
     };
@@ -39,7 +39,7 @@ fn test_name_sanitization() {
     use crate::timeseries_input::TimeseriesInput;
 
     // Load a CSV file
-    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv") {
+    let vts = match TimeseriesInput::load("./src/tests/example_models/1/rex_rain.csv", None) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
     };
@@ -61,4 +61,74 @@ fn test_name_sanitization() {
     println!("source_name: {}", vts[0].source_name);
     println!("full_colname_path: {}", vts[0].full_colname_path);
     println!("full_colindex_path: {}", vts[0].full_colindex_path);
+}
+
+#[test]
+fn test_timeseries_input_with_alias() {
+    use crate::timeseries_input::TimeseriesInput;
+
+    // Load a file with an alias
+    let inputs = TimeseriesInput::load("./src/tests/example_data/test.csv", Some("mydata"))
+        .expect("Failed to load with alias");
+
+    assert_eq!(inputs.len(), 1);
+    let input = &inputs[0];
+
+    // Check that alias is set
+    assert_eq!(input.alias, Some("mydata".to_string()));
+
+    // Check auto-generated paths still exist
+    assert_eq!(input.full_colname_path, "data.test_csv.by_name.value");
+    assert_eq!(input.full_colindex_path, "data.test_csv.by_index.1");
+
+    // Check alias paths are generated
+    assert_eq!(
+        input.alias_colname_path,
+        Some("data.mydata.by_name.value".to_string())
+    );
+    assert_eq!(
+        input.alias_colindex_path,
+        Some("data.mydata.by_index.1".to_string())
+    );
+}
+
+/// Create a model and load data with an alias
+#[test]
+fn test_model_with_aliased_data() {
+    use crate::model::Model;
+    use crate::model_inputs::DynamicInput;
+    use crate::nodes::inflow_node::InflowNode;
+    use crate::nodes::NodeEnum;
+    
+    let mut m = Model::new();
+    m.load_input_data("./src/tests/example_data/test.csv", Some("flow_data"))
+        .expect("Failed to load input data with alias");
+
+    // Create an inflow node using the aliased reference
+    let mut n = InflowNode::new();
+    n.name = "my_inflow".to_string();
+    n.inflow_input = DynamicInput::from_string(
+        "data.flow_data.by_name.value",
+        &mut m.data_cache,
+        true,
+        None,
+    )
+    .expect("Failed to parse aliased reference");
+    m.add_node(NodeEnum::InflowNode(n));
+
+    // Specify outputs
+    m.outputs.push("node.my_inflow.dsflow".to_string());
+
+    // Configure and run
+    m.configure().expect("Configuration error");
+    m.run().expect("Simulation error");
+
+    // Check results
+    let ds_idx = m
+        .data_cache
+        .get_series_idx("node.my_inflow.dsflow", false)
+        .unwrap();
+    let ans = m.data_cache.series[ds_idx].clone();
+    assert_eq!(ans.len(), 6);
+    assert_eq!(ans.sum(), 38.1);
 }

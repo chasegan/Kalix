@@ -14,11 +14,11 @@ fn test_model_with_function() {
     let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
 
     //Add rainfall, evap, and flow data (matching INI file)
-    let _ = model.load_input_data("./src/tests/example_models/1/flows.csv");
-    let _ = model.load_input_data("./src/tests/example_models/4/rex_mpot.csv");
-    let _ = model.load_input_data("./src/tests/example_models/4/rex_rain.csv");
-    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
-    let _ = model.load_input_data("./src/tests/example_models/1/constants_1_2_3_4_5_6.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/flows.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_mpot.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_rain.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/1/constants_1_2_3_4_5_6.csv", None);
 
     //Add node6_gr4j
     let _node6_idx: usize;
@@ -76,7 +76,7 @@ fn test_model_with_changing_constant() {
     let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
 
     //Add file data
-    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv", None);
 
     //Add data_cache constants
     model.data_cache.constants.set_value("c.pi", 3.14);

@@ -146,9 +146,18 @@ impl Model {
 
             //Fill any data that might be using the column name as a reference
             //Fill any data that might be using the column number as a reference
-            for full_path in [
+            //Also fill alias paths if they exist
+            let mut paths_to_fill = vec![
                 self.inputs[i].full_colname_path.clone(),
-                self.inputs[i].full_colindex_path.clone()] {
+                self.inputs[i].full_colindex_path.clone(),
+            ];
+            if let Some(alias_colname) = &self.inputs[i].alias_colname_path {
+                paths_to_fill.push(alias_colname.clone());
+            }
+            if let Some(alias_colindex) = &self.inputs[i].alias_colindex_path {
+                paths_to_fill.push(alias_colindex.clone());
+            }
+            for full_path in paths_to_fill {
                 if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
                     self.data_cache.series[idx].values.clear();
                     self.data_cache.series[idx].timestamps.clear();
@@ -200,6 +209,19 @@ impl Model {
                     if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
                         found = true;
                         break;
+                    }
+                    // Also check alias paths if they exist
+                    if let Some(alias_colname) = &ts.alias_colname_path {
+                        if name_lower == *alias_colname {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if let Some(alias_colindex) = &ts.alias_colindex_path {
+                        if name_lower == *alias_colindex {
+                            found = true;
+                            break;
+                        }
                     }
                 }
                 if !found {
@@ -324,7 +346,12 @@ impl Model {
             // Searching for timeseries that matches ci
             let mut found : bool = false;
             for ts in self.inputs.iter() {
-                if (ci_lower == ts.full_colindex_path) || (ci_lower == ts.full_colname_path) {
+                let matches = (ci_lower == ts.full_colindex_path)
+                    || (ci_lower == ts.full_colname_path)
+                    || (ts.alias_colindex_path.as_ref().map_or(false, |p| ci_lower == *p))
+                    || (ts.alias_colname_path.as_ref().map_or(false, |p| ci_lower == *p));
+
+                if matches {
                     found = true;
 
                     // This timeseries appears to be the one we're looking for!
@@ -482,7 +509,7 @@ impl Model {
         Ok(kp.resolved)
     }
 
-    pub fn load_input_data(&mut self, file_path: &str) -> Result<usize, String> {
+    pub fn load_input_data(&mut self, file_path: &str, alias: Option<&str>) -> Result<usize, String> {
         // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
 
@@ -492,7 +519,7 @@ impl Model {
         // Load all the data using the resolved path
         let resolved_path_str = resolved_path.to_str()
             .ok_or_else(|| format!("Invalid path: {}", file_path))?;
-        let mut x = TimeseriesInput::load(resolved_path_str)?;
+        let mut x = TimeseriesInput::load(resolved_path_str, alias)?;
         let len = x.len();
         self.inputs.append(&mut x);
         Ok(len)
@@ -629,6 +656,12 @@ impl Model {
         let mut i = 0;
         for input in &self.inputs {
             println!("Input: {} {} {}", i, input.full_colname_path, input.full_colindex_path);
+            if let Some(alias) = &input.alias {
+                println!("  Alias: {} (also accessible as {} and {})",
+                    alias,
+                    input.alias_colname_path.as_ref().unwrap_or(&String::new()),
+                    input.alias_colindex_path.as_ref().unwrap_or(&String::new()));
+            }
             i += 1;
         }
     }

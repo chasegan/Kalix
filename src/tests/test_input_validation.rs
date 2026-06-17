@@ -56,7 +56,7 @@ fn test_working_model_file_runs_successfully() {
 fn test_invalid_data_reference_caught_at_configure() {
     // Create a model and load some real data
     let mut model = Model::new();
-    model.load_input_data("./src/tests/example_data/test.csv")
+    model.load_input_data("./src/tests/example_data/test.csv", None)
         .expect("Failed to load test data");
 
     // Create an inflow node with a TYPO in the data reference
@@ -100,7 +100,7 @@ fn test_invalid_data_reference_caught_at_configure() {
 #[test]
 fn test_valid_data_reference_works() {
     let mut model = Model::new();
-    model.load_input_data("./src/tests/example_data/test.csv")
+    model.load_input_data("./src/tests/example_data/test.csv", None)
         .expect("Failed to load test data");
 
     // Create an inflow node with a CORRECT data reference
@@ -137,7 +137,7 @@ fn test_valid_data_reference_works() {
 #[test]
 fn test_multiple_invalid_references_caught() {
     let mut model = Model::new();
-    model.load_input_data("./src/tests/example_data/test.csv")
+    model.load_input_data("./src/tests/example_data/test.csv", None)
         .expect("Failed to load test data");
 
     // Create an inflow node with an invalid reference

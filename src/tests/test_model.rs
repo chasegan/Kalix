@@ -33,10 +33,10 @@ fn test_model_with_all_node_types() {
     let mut regression_results: HashMap<String, (usize, f64, f64)> = HashMap::new();
 
     //Add rainfall, evap, and flow data (matching INI file)
-    let _ = model.load_input_data("./src/tests/example_models/1/flows.csv");
-    let _ = model.load_input_data("./src/tests/example_models/4/rex_mpot.csv");
-    let _ = model.load_input_data("./src/tests/example_models/4/rex_rain.csv");
-    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv");
+    let _ = model.load_input_data("./src/tests/example_models/1/flows.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_mpot.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/4/rex_rain.csv", None);
+    let _ = model.load_input_data("./src/tests/example_models/1/constants.csv", None);
 
     //Add node1_inflow
     let node1_idx: usize;
@@ -500,7 +500,7 @@ fn test_clone_model() {
 
     //Creat a new model. Add some data.
     let mut m = Model::new();
-    m.load_input_data("./src/tests/example_data/test.csv").expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/test.csv", None).expect("TODO: panic message");
 
     //Create an inflow node and add it to the model
     let mut n = InflowNode::new();

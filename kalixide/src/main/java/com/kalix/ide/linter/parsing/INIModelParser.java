@@ -25,6 +25,8 @@ public class INIModelParser {
         private final List<String> outputReferences = new ArrayList<>();
         private final Map<String, Integer> outputReferenceLineNumbers = new LinkedHashMap<>(); // Track line numbers for output refs
         private final Map<String, Integer> inputFileLineNumbers = new LinkedHashMap<>(); // Track line numbers for input files
+        private final Map<String, String> inputFileAliases = new LinkedHashMap<>();
+        private final Map<String, Integer> inputFileAliasLineNumbers = new LinkedHashMap<>();  // Track line numbers for aliases
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
 
@@ -33,6 +35,8 @@ public class INIModelParser {
         public List<String> getOutputReferences() { return outputReferences; }
         public Map<String, Integer> getOutputReferenceLineNumbers() { return outputReferenceLineNumbers; }
         public Map<String, Integer> getInputFileLineNumbers() { return inputFileLineNumbers; }
+        public Map<String, String> getInputFileAliases() { return inputFileAliases; }
+        public Map<String, Integer> getInputFileAliasLineNumbers() { return inputFileAliasLineNumbers; }
         public Map<String, NodeSection> getNodes() { return nodes; }
         public List<NodeSection> getAllNodeSections() { return allNodeSections; }
     }
@@ -149,13 +153,36 @@ public class INIModelParser {
                 // Handle special sections without key-value pairs
                 if (currentSection != null) {
                     if ("inputs".equals(currentSection.getName())) {
-                        // Input files are listed directly - handle continuation here too (comments will be removed in collectContinuationLines)
+                        // Input files can be:
+                        // 1. Key-value pairs: alias = ./path/to/file.csv
+                        // 2. Direct file paths: ./path/to/file.csv
+                        // Handle continuation here too (comments will be removed in collectContinuationLines)
                         LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
                         String fullLine = continuationResult.combinedValue;
                         i = continuationResult.lastLineIndex;
 
-                        model.getInputFiles().add(fullLine);
-                        model.getInputFileLineNumbers().put(fullLine, lineNumber);
+                        // Check if it's a key-value pair (alias = file_path)
+                        Matcher kvMatcherAlias = KEY_VALUE_PATTERN.matcher(fullLine);
+                        if (kvMatcherAlias.matches()) {
+                            String alias = kvMatcherAlias.group(1).trim();
+                            String filePath = kvMatcherAlias.group(2).trim();
+
+                            // Check for duplicate aliases
+                            if (model.getInputFileAliases().containsKey(alias)) {
+                                logger.warn("Duplicate alias '{}' at line {}. Previous definition at line {}.",
+                                    alias, lineNumber, model.getInputFileAliasLineNumbers().get(alias));
+                            }
+
+                            model.getInputFileAliases().put(alias, filePath);
+                            model.getInputFileAliasLineNumbers().put(alias, lineNumber);
+                            model.getInputFiles().add(filePath);
+                            model.getInputFileLineNumbers().put(filePath, lineNumber);
+                        } else {
+                            // Direct file path (no alias)
+                            model.getInputFiles().add(fullLine);
+                            model.getInputFileLineNumbers().put(fullLine, lineNumber);
+                        }
+
                         currentSection.updateEndLine(i + 1);
                     } else if ("outputs".equals(currentSection.getName())) {
                         // Output references are listed directly - handle continuation here too (comments will be removed in collectContinuationLines)

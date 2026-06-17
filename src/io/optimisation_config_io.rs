@@ -408,7 +408,7 @@ impl OptimisationConfig {
 /// # Returns
 /// The requested TimeseriesInput containing the observed data
 pub fn load_observed_for_term(file: &str, series: &SeriesSpec) -> Result<TimeseriesInput, String> {
-    let all_timeseries = TimeseriesInput::load(file)
+    let all_timeseries = TimeseriesInput::load(file, None)
         .map_err(|e| format!("Error loading observed data file '{}': {}", file, e))?;
 
     if all_timeseries.is_empty() {
