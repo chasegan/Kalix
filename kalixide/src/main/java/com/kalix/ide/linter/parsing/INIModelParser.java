@@ -130,7 +130,9 @@ public class INIModelParser {
 
                 // Check for key-value pair
                 Matcher kvMatcher = KEY_VALUE_PATTERN.matcher(line);
-                if (kvMatcher.matches() && currentSection != null) {
+                // inputs section handled separately
+                if (kvMatcher.matches() && currentSection != null
+                        && !("inputs".equals(currentSection.getName()))) {
                     String key = kvMatcher.group(1).trim();
                     String value = kvMatcher.group(2).trim();
 
