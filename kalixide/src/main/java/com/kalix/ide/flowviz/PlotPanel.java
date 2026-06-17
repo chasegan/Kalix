@@ -627,6 +627,45 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Whether the line is drawn continuously across missing data instead of breaking at gaps.
+     * Off by default, so gaps in regular series read as holes. A pure render toggle (not part of
+     * undo/redo plot state), so it does not invalidate any cache — a repaint suffices.
+     */
+    public void setConnectAcrossGaps(boolean connect) {
+        if (renderer != null) {
+            renderer.setConnectAcrossGaps(connect);
+            // Mutually exclusive with orphan markers: a continuous line leaves no gaps to mark.
+            if (connect) {
+                renderer.setShowOrphanMarkers(false);
+            }
+            repaint();
+        }
+    }
+
+    public boolean isConnectAcrossGaps() {
+        return renderer != null && renderer.isConnectAcrossGaps();
+    }
+
+    /**
+     * Whether isolated valid points (surrounded by missing data) are marked with a dot so they
+     * are not invisible in line mode. Off by default. Mutually exclusive with connect-across-gaps.
+     */
+    public void setShowOrphanMarkers(boolean show) {
+        if (renderer != null) {
+            renderer.setShowOrphanMarkers(show);
+            // Mutually exclusive with connect-across-gaps (which would suppress the markers).
+            if (show) {
+                renderer.setConnectAcrossGaps(false);
+            }
+            repaint();
+        }
+    }
+
+    public boolean isShowOrphanMarkers() {
+        return renderer != null && renderer.isShowOrphanMarkers();
+    }
+
+    /**
      * Sets the X-axis type override (COUNT, TIME, or PERCENTILE).
      * Set to null to use automatic detection based on plot type.
      */
@@ -698,13 +737,6 @@ public class PlotPanel extends JPanel {
      */
     public PlotLegendManager getLegendManager() {
         return legendManager;
-    }
-
-    /**
-     * Sets callbacks for "New Plot Tab" / "New Stats Tab" in the right-click context menu.
-     */
-    public void setNewTabActions(Runnable newPlotTab, Runnable newStatsTab) {
-        plotInteractionManager.setNewTabActions(newPlotTab, newStatsTab);
     }
 
     /**

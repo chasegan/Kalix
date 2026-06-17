@@ -363,28 +363,6 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
-        // Wire "New Plot Tab" / "New Stats Tab" on right-click context menu
-        plotPanel.setNewTabActions(
-            () -> {
-                for (TabInfo tab : tabs) {
-                    if (tab.plotPanel == plotPanel) {
-                        addPlotTabFromSettings(TabSettings.fromPlotTab(tab));
-                        return;
-                    }
-                }
-                addPlotTab();
-            },
-            () -> {
-                for (TabInfo tab : tabs) {
-                    if (tab.plotPanel == plotPanel) {
-                        addStatsTabFromSettings(TabSettings.fromPlotTab(tab));
-                        return;
-                    }
-                }
-                addStatsTab();
-            }
-        );
-
         // Add tab with inherited series selection
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
@@ -1342,7 +1320,6 @@ public class VisualizationTabManager {
         TabInfo tab = tabs.get(index);
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
             tab.plotPanel.setOnHistoryChanged(null);
-            tab.plotPanel.setNewTabActions(null, null);
             tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
         }
 

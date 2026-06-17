@@ -62,6 +62,8 @@ public class PlotInteractionManager {
     private boolean autoYMode = false;
     private JPopupMenu contextMenu;
     private JCheckBoxMenuItem autoYMenuItem;
+    private JCheckBoxMenuItem connectGapsMenuItem;
+    private JCheckBoxMenuItem orphanMarkersMenuItem;
     private JMenu yAxisScaleMenu;
 
     // Zoom rectangle selection state
@@ -80,9 +82,6 @@ public class PlotInteractionManager {
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
 
-    // Tab creation callbacks (set by VisualizationTabManager after construction)
-    private Runnable newPlotTabAction;
-    private Runnable newStatsTabAction;
 
     /**
      * Creates a new plot interaction manager for handling all user interactions with the plot.
@@ -167,14 +166,6 @@ public class PlotInteractionManager {
      */
     public void setLabelResolverSupplier(Supplier<com.kalix.ide.flowviz.data.LabelResolver> supplier) {
         this.labelResolverSupplier = supplier;
-    }
-
-    /**
-     * Sets callbacks for creating new tabs from the plot context menu.
-     */
-    public void setNewTabActions(Runnable newPlotTab, Runnable newStatsTab) {
-        this.newPlotTabAction = newPlotTab;
-        this.newStatsTabAction = newStatsTab;
     }
 
     /**
@@ -691,13 +682,29 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        JMenuItem newPlotItem = new JMenuItem("New Plot Tab");
-        newPlotItem.addActionListener(e -> { if (newPlotTabAction != null) newPlotTabAction.run(); });
-        contextMenu.add(newPlotItem);
+        // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
+        // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
+        // but either may be off. They are checkboxes (mutual exclusion enforced in PlotPanel)
+        // rather than a radio group, which could not express the "neither selected" state.
+        JMenu missingDataMenu = new JMenu("Missing Data");
 
-        JMenuItem newStatsItem = new JMenuItem("New Stats Tab");
-        newStatsItem.addActionListener(e -> { if (newStatsTabAction != null) newStatsTabAction.run(); });
-        contextMenu.add(newStatsItem);
+        connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
+        connectGapsMenuItem.addActionListener(e -> {
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
+            }
+        });
+        missingDataMenu.add(connectGapsMenuItem);
+
+        orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
+        orphanMarkersMenuItem.addActionListener(e -> {
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
+            }
+        });
+        missingDataMenu.add(orphanMarkersMenuItem);
+
+        contextMenu.add(missingDataMenu);
 
         contextMenu.addSeparator();
 
@@ -713,6 +720,10 @@ public class PlotInteractionManager {
                 if (parentComponent instanceof PlotPanel plotPanel) {
                     // Get the current auto-Y state from the PlotPanel
                     autoYMenuItem.setSelected(plotPanel.isAutoYMode());
+
+                    // Sync gap-handling toggles
+                    connectGapsMenuItem.setSelected(plotPanel.isConnectAcrossGaps());
+                    orphanMarkersMenuItem.setSelected(plotPanel.isShowOrphanMarkers());
 
                     // Get the current Y-axis scale and select the corresponding radio button
                     YAxisScale currentScale = plotPanel.getYAxisScale();

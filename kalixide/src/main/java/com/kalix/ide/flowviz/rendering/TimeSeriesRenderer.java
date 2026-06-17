@@ -106,23 +106,25 @@ public class TimeSeriesRenderer {
         g2d.setStroke(style.stroke().toBasicStroke());
 
         if (strategy.useFullResolution) {
-            renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode, gapThreshold);
+            renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode, gapThreshold,
+                connectAcrossGaps);
 
             // Orphan markers: only needed in pure line mode, where an isolated valid point (broken
             // on both sides) would otherwise be invisible. When points are already drawn it shows
-            // anyway. Separate guarded pass over the visible range — nothing runs when the toggle
-            // is off, and the visible count is bounded (full-res only runs below the LOD density).
+            // anyway, and when connecting across gaps there are no orphans. Separate guarded pass
+            // over the visible range — nothing runs when off, and the visible count is bounded
+            // (full-res only runs below the LOD density).
             boolean pointsDrawn = renderMode == SeriesRenderMode.POINTS
                 || renderMode == SeriesRenderMode.LINE_AND_POINTS || showDataPoints;
-            if (showOrphanMarkers && !pointsDrawn) {
+            if (showOrphanMarkers && !connectAcrossGaps && !pointsDrawn) {
                 drawLineOrphans(g2d, series, viewport, strategy.indexRange, gapThreshold, style);
             }
         } else {
-            renderLOD(g2d, series, viewport, strategy.lodData, style);
+            renderLOD(g2d, series, viewport, strategy.lodData, style, connectAcrossGaps);
 
             // Band mode: an isolated live pixel column (dead on both sides) draws nothing, so the
             // orphan marker is the only way to surface it. LOD never draws per-point markers.
-            if (showOrphanMarkers) {
+            if (showOrphanMarkers && !connectAcrossGaps) {
                 drawLODOrphans(g2d, viewport, strategy.lodData, style);
             }
         }
@@ -168,7 +170,7 @@ public class TimeSeriesRenderer {
 
     private void renderFullResolution(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
                                     TimeSeriesData.IndexRange indexRange, SeriesRenderMode renderMode,
-                                    long gapThreshold) {
+                                    long gapThreshold, boolean connectAcrossGaps) {
         if (indexRange.isEmpty()) return;
 
         long[] timestamps = series.getTimestamps();
@@ -199,8 +201,11 @@ public class TimeSeriesRenderer {
 
         for (int i = extendedStartIndex; i < extendedEndIndex; i++) {
             if (!validPoints[i]) {
-                // Missing value - break the path
-                pathStarted = false;
+                // Missing value - break the path, unless we're bridging across all gaps (then we
+                // simply skip the point and let the next valid point continue the line).
+                if (!connectAcrossGaps) {
+                    pathStarted = false;
+                }
                 continue;
             }
 
@@ -345,7 +350,7 @@ public class TimeSeriesRenderer {
     }
     
     private void renderLOD(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
-                          LODManager.LODData lodData, LineStyle style) {
+                          LODManager.LODData lodData, LineStyle style, boolean connectAcrossGaps) {
         double[][] minMaxBands = lodData.minMaxBands;
         boolean[] hasValidData = lodData.hasValidData;
 
@@ -370,9 +375,12 @@ public class TimeSeriesRenderer {
         // Build continuous envelope paths with clipping
         for (int pixelX = 0; pixelX < lodData.pixelWidth; pixelX++) {
             if (!hasValidData[pixelX]) {
-                // Gap in data - break the paths
-                upperPathStarted = false;
-                lowerPathStarted = false;
+                // Gap in data - break the paths, unless we're bridging across all gaps (then the
+                // envelope continues straight to the next live column).
+                if (!connectAcrossGaps) {
+                    upperPathStarted = false;
+                    lowerPathStarted = false;
+                }
                 continue;
             }
 
