@@ -92,11 +92,14 @@ public class OptimisationSessionManager {
             return;
         }
 
-        // Find kalix using the same method as simulations
-        Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
-            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences();
+        // Get current working directory if available
+        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
+        String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
-        if (!cliLocationOpt.isPresent()) {
+        Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
+            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences(currentFolder);
+
+        if (cliLocationOpt.isEmpty()) {
             handleError("kalix not found. Please configure the path in Preferences.");
             return;
         }
@@ -110,8 +113,6 @@ public class OptimisationSessionManager {
             // Configure session - use "new-session" subcommand for JSON communication
             SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
 
-            // Set working directory if available
-            File workingDir = workingDirectorySupplier.get();
             if (workingDir != null) {
                 config.workingDirectory(workingDir.toPath());
             }

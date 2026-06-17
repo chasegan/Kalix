@@ -44,6 +44,11 @@ public class KalixCliLocator {
     /**
      * Attempts to locate kalix using a simplified strategy.
      *
+     * Search order:
+     * 1. Current folder (if provided and applicable)
+     * 2. User-configured paths (if provided)
+     * 3. System PATH (if no user-configured path)
+     *
      * If userConfiguredPath is provided:
      *   - Splits the path by ';' delimiter (supports multiple directories)
      *   - Searches each directory sequentially for kalix executable
@@ -54,9 +59,18 @@ public class KalixCliLocator {
      *   - Uses unqualified "kalix" command (relies on system PATH)
      *
      * @param userConfiguredPath Optional user-configured path (supports ';' delimiter for multiple paths)
+     * @param currentFolder Optional currently open folder to check first
      * @return Optional containing CliLocation if found, empty otherwise
      */
-    public static Optional<CliLocation> findKalixCli(String userConfiguredPath) {
+    public static Optional<CliLocation> findKalixCli(String userConfiguredPath, String currentFolder) {
+        // First, check the currently open folder if provided
+        if (currentFolder != null && !currentFolder.trim().isEmpty()) {
+            Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
         // If user specified a path, ONLY use those paths (no fallback)
         if (userConfiguredPath != null && !userConfiguredPath.trim().isEmpty()) {
             // Split by ';' to support multiple paths
@@ -81,6 +95,17 @@ public class KalixCliLocator {
 
         // No user path configured - use unqualified "kalix" from system PATH
         return findInPath();
+    }
+
+    /**
+     * Attempts to locate kalix using a simplified strategy.
+     * This is a convenience overload that doesn't check the current folder.
+     *
+     * @param userConfiguredPath Optional user-configured path (supports ';' delimiter for multiple paths)
+     * @return Optional containing CliLocation if found, empty otherwise
+     */
+    public static Optional<CliLocation> findKalixCli(String userConfiguredPath) {
+        return findKalixCli(userConfiguredPath, null);
     }
 
     /**
@@ -109,23 +134,34 @@ public class KalixCliLocator {
 
         return Optional.empty();
     }
-    
+
     /**
      * Finds kalix using application preferences.
      * This method checks user settings and falls back to auto-discovery.
      *
+     * @param currentFolder Optional currently open folder to check first
      * @return Optional containing CliLocation if found, empty otherwise
      */
-    public static Optional<CliLocation> findKalixCliWithPreferences() {
+    public static Optional<CliLocation> findKalixCliWithPreferences(String currentFolder) {
         try {
             // Use the file-based preference system instead of OS preferences
             String configuredPath = com.kalix.ide.preferences.PreferenceManager.getFileString(
                 com.kalix.ide.preferences.PreferenceKeys.CLI_BINARY_PATH, "");
-            return findKalixCli(configuredPath);
+            return findKalixCli(configuredPath, currentFolder);
         } catch (Exception e) {
             // Fall back to standard discovery if preferences fail
-            return findKalixCli(null);
+            return findKalixCli(null, currentFolder);
         }
+    }
+
+    /**
+     * Finds kalix using application preferences.
+     * This is a convenience overload that doesn't check the current folder.
+     *
+     * @return Optional containing CliLocation if found, empty otherwise
+     */
+    public static Optional<CliLocation> findKalixCliWithPreferences() {
+        return findKalixCliWithPreferences(null);
     }
     
     /**

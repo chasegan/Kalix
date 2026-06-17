@@ -82,8 +82,12 @@ public class StdioTaskManager {
         // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Locate kalix using preferences
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences();
+                // Get current working directory if available
+                File workingDir = workingDirectorySupplier.get();
+                String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
+
+                // Locate kalix using preferences, checking current folder first
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder);
                 if (cliLocation.isEmpty()) {
                     handleCliNotFound();
                     throw new RuntimeException("kalix not found");
@@ -93,7 +97,6 @@ public class StdioTaskManager {
                 SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
 
                 // Set working directory to current file's directory if available
-                File workingDir = workingDirectorySupplier.get();
                 if (workingDir != null) {
                     config.workingDirectory(workingDir.toPath());
                 }
