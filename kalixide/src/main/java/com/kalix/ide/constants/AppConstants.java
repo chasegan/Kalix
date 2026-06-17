@@ -80,8 +80,7 @@ public final class AppConstants {
     public static final String STATUS_ZOOMED_OUT = "Zoomed out";
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
-    public static final String STATUS_INVALID_DROP_FILES = "Dropped files do not contain valid Kalix model files (.ini)";
-    
+
     // Error messages
     public static final String ERROR_FILE_OPEN = "File Open Error";
     public static final String ERROR_FILE_NOT_FOUND_TITLE = "File Not Found";

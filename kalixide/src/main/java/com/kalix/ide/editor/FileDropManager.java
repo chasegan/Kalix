@@ -124,23 +124,20 @@ public class FileDropManager {
             if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
                 @SuppressWarnings("unchecked")
                 List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
-                
-                if (!files.isEmpty()) {
-                    File file = files.get(0); // Take the first file
-                    String fileName = file.getName().toLowerCase();
-                    
-                    // Only accept .ini files
-                    if (isAcceptedFileType(fileName)) {
-                        if (fileDropHandler != null) {
+
+                // Open every dropped file in its own tab (any text-based file, not just .ini),
+                // mirroring the file tree and the main-window drop. Directories aren't openable
+                // as documents, so skip them.
+                int opened = 0;
+                if (fileDropHandler != null) {
+                    for (File file : files) {
+                        if (file.isFile()) {
                             fileDropHandler.onFileDropped(file);
+                            opened++;
                         }
-                        dtde.dropComplete(true);
-                    } else {
-                        dtde.dropComplete(false);
                     }
-                } else {
-                    dtde.dropComplete(false);
                 }
+                dtde.dropComplete(opened > 0);
             } else {
                 dtde.dropComplete(false);
             }
@@ -148,15 +145,5 @@ public class FileDropManager {
             logger.error("Error handling file drop: {}", e.getMessage());
             dtde.dropComplete(false);
         }
-    }
-    
-    /**
-     * Checks if the file type is accepted for dropping.
-     * 
-     * @param fileName the file name (should be lowercase)
-     * @return true if the file type is accepted
-     */
-    private boolean isAcceptedFileType(String fileName) {
-        return fileName.endsWith(".ini");
     }
 }

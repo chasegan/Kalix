@@ -13,13 +13,13 @@ import java.util.function.Consumer;
 
 /**
  * Handles drag and drop operations for files in the application.
- * Provides functionality to drop Kalix model files onto the application window.
+ * Dropping files onto the application window opens each in a new tab, mirroring how files open
+ * from the embedded file tree (any text-based file, not just Kalix {@code .ini} models).
  */
 public class FileDropHandler {
 
     private final FileOperationsManager fileOperations;
     private final Consumer<String> statusUpdateCallback;
-    private java.util.function.Supplier<Boolean> beforeLoadCallback;
 
     /**
      * Creates a new FileDropHandler instance.
@@ -32,17 +32,6 @@ public class FileDropHandler {
         this.statusUpdateCallback = statusUpdateCallback;
     }
 
-    /**
-     * Sets a callback that will be invoked before loading a dropped file.
-     * The callback should return true to allow the load, or false to cancel.
-     * Typically used to check for unsaved changes.
-     *
-     * @param callback Supplier that returns true to proceed with load, false to cancel
-     */
-    public void setBeforeLoadCallback(java.util.function.Supplier<Boolean> callback) {
-        this.beforeLoadCallback = callback;
-    }
-    
     /**
      * Sets up drag and drop functionality for the specified component.
      * 
@@ -115,27 +104,17 @@ public class FileDropHandler {
                     @SuppressWarnings("unchecked")
                     List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
                     
-                    if (!files.isEmpty()) {
-                        // Process the first valid model file
-                        for (File file : files) {
-                            if (fileOperations.isKalixModelFile(file)) {
-                                // Check if load should proceed (e.g., check for unsaved changes)
-                                if (beforeLoadCallback != null && !beforeLoadCallback.get()) {
-                                    // User cancelled the load operation
-                                    dtde.dropComplete(false);
-                                    return;
-                                }
-                                fileOperations.loadModelFile(file);
-                                dtde.dropComplete(true);
-                                return;
-                            }
+                    // Open every dropped file in its own tab, mirroring the file tree.
+                    // loadModelFile reads any text-based file and focuses an existing tab if the
+                    // file is already open; directories aren't openable as documents, so skip them.
+                    int opened = 0;
+                    for (File file : files) {
+                        if (file.isFile()) {
+                            fileOperations.loadModelFile(file);
+                            opened++;
                         }
-                        // No valid model files found
-                        statusUpdateCallback.accept(AppConstants.STATUS_INVALID_DROP_FILES);
-                        dtde.dropComplete(false);
-                    } else {
-                        dtde.dropComplete(false);
                     }
+                    dtde.dropComplete(opened > 0);
                 } else {
                     dtde.rejectDrop();
                 }
