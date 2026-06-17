@@ -143,10 +143,10 @@ public class CommandExecutor {
             // Apply all replacements as a single atomic undo operation
             replacementApplier.accept(lineReplacements);
 
-            String oldAlias = sanitiseFileName(oldPath);
-            String newAlias = sanitiseFileName(newPath);
+            String oldFileSanitised = sanitiseFileName(oldPath);
+            String newFileSanitised = sanitiseFileName(newPath);
             logger.info("Renamed input file '{}' to '{}' (alias: {} -> {}, {} references updated)",
-                oldPath, newPath, oldAlias, newAlias, replacements.size());
+                oldPath, newPath, oldFileSanitised, newFileSanitised, replacements.size());
             return true;
 
         } catch (Exception e) {
