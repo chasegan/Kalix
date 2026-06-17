@@ -93,4 +93,31 @@ class TimeSeriesAggregatorTest {
             assertEquals(values[i], reaggregated.getValues()[i], 1e-9);
         }
     }
+
+    @Test
+    void dailyAggregationEmitsNaNForFullyMissingInteriorDay() {
+        // Hourly data for day 1 and day 3; day 2 is entirely absent from the input.
+        LocalDateTime day1 = LocalDateTime.of(2020, 1, 1, 0, 0);
+        int n = 48;
+        LocalDateTime[] dates = new LocalDateTime[n];
+        double[] values = new double[n];
+        for (int h = 0; h < 24; h++) {
+            dates[h] = day1.plusHours(h);
+            values[h] = 1.0;
+        }
+        for (int h = 0; h < 24; h++) {
+            dates[24 + h] = day1.plusDays(2).plusHours(h);
+            values[24 + h] = 2.0;
+        }
+        TimeSeriesData hourly = new TimeSeriesData(dates, values);
+
+        TimeSeriesData daily = TimeSeriesAggregator.aggregate(
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+
+        assertEquals(3, daily.getPointCount(), "missing day 2 is emitted as a gap, not dropped");
+        assertTrue(daily.isContiguous(), "the filled daily grid is contiguous");
+        assertEquals(24.0, daily.getValues()[0], 1e-9, "day 1 sum");
+        assertFalse(daily.getValidPoints()[1], "fully-missing day 2 is a NaN slot");
+        assertEquals(48.0, daily.getValues()[2], 1e-9, "day 3 sum");
+    }
 }
