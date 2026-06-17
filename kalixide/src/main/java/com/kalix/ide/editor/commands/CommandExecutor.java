@@ -157,6 +157,67 @@ public class CommandExecutor {
     }
 
     /**
+     * Renames an input file alias throughout the document.
+     * Finds all legitimate references and renames them atomically (single undo).
+     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * in property values and output references.
+     *
+     * @param oldAlias    The current input file alias
+     * @param newAlias    The new input file alias
+     * @param parsedModel The parsed model for finding references
+     * @return true if rename was successful, false if cancelled or failed
+     */
+    public boolean renameInputFileAlias(String oldAlias, String newAlias, INIModelParser.ParsedModel parsedModel) {
+        try {
+            // Validate new path
+            if (newAlias == null || newAlias.trim().isEmpty()) {
+                showError("New alias cannot be empty");
+                return false;
+            }
+
+            newAlias = newAlias.trim();
+
+            // Check if new path already exists
+            if (parsedModel.getInputFileAliases().containsKey(newAlias)) {
+                showError("Input file alias '" + newAlias + "' already exists");
+                return false;
+            }
+
+            // Find all references and build replacement list
+            List<TextReplacement> replacements = findInputFileAliasReferences(oldAlias, newAlias, parsedModel);
+
+            if (replacements.isEmpty()) {
+                showError("No references found for input file '" + oldAlias + "'");
+                return false;
+            }
+
+            // Convert TextReplacement to LineReplacement and apply atomically
+            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
+            for (TextReplacement replacement : replacements) {
+                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
+                        replacement.getLineNumber(),
+                        replacement.getOldText(),
+                        replacement.getNewText()
+                ));
+            }
+
+            // Apply all replacements as a single atomic undo operation
+            replacementApplier.accept(lineReplacements);
+
+            String oldAliasSanitised = sanitiseFileName(oldAlias);
+            String newAliasSanitised = sanitiseFileName(newAlias);
+            logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
+                    oldAlias, newAlias, oldAliasSanitised, newAliasSanitised, replacements.size());
+            return true;
+
+        } catch (Exception e) {
+            logger.error("Error renaming input file", e);
+            showError("Failed to rename input file: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Finds all legitimate references to a node.
      *
      * @param oldName     The node to find references for
@@ -299,6 +360,68 @@ public class CommandExecutor {
         return replacements;
     }
 
+    /**
+     * Finds all legitimate references to an input file alias.
+     *
+     * @param oldAlias    The old file alias
+     * @param newAlias    The new file alias
+     * @param parsedModel The parsed model
+     * @return List of text replacements to perform
+     */
+    private List<TextReplacement> findInputFileAliasReferences(String oldAlias, String newAlias,
+                                                          INIModelParser.ParsedModel parsedModel) {
+        List<TextReplacement> replacements = new ArrayList<>();
+        String oldAliasSanitised = sanitiseFileName(oldAlias);
+        String newAliasSanitised = sanitiseFileName(newAlias);
+
+        // 1. Replace the input file path in [inputs] section
+        Integer inputLineNumber = parsedModel.getInputFileAliasLineNumbers().get(oldAlias);
+        if (inputLineNumber != null) {
+            replacements.add(new TextReplacement(
+                    inputLineNumber,
+                    oldAlias,
+                    newAlias
+            ));
+        } else {
+            logger.warn("Input file alias '{}' not found in parsed model", oldAlias);
+        }
+
+        // 2. Find all data.{name}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
+        // Do not rename input file aliases
+        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldAliasSanitised) + "\\.");
+        for (INIModelParser.Section section : parsedModel.getSections().values()) {
+            if (!section.getName().startsWith("node.")) continue;
+
+            for (INIModelParser.Property prop : section.getProperties().values()) {
+                String value = prop.getValue();
+                // Check if this property value contains a reference to the old alias
+                if (dataRefPattern.matcher(value).find()) {
+                    replacements.add(new TextReplacement(
+                            prop.getLineNumber(),
+                            "data." + oldAliasSanitised + ".",
+                            "data." + newAliasSanitised + "."
+                    ));
+                }
+            }
+        }
+
+        // 3. Find output references: data.{alias}.*
+        for (String outputRef : parsedModel.getOutputReferences()) {
+            // Match: data.old_alias.anything
+            if (outputRef.contains("data." + oldAliasSanitised + ".")) {
+                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
+                if (lineNumber != null) {
+                    replacements.add(new TextReplacement(
+                            lineNumber,
+                            "data." + oldAliasSanitised + ".",
+                            "data." + newAliasSanitised + "."
+                    ));
+                }
+            }
+        }
+
+        return replacements;
+    }
 
     /**
      * Inserts text at the current cursor position.
