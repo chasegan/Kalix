@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.LineStyle;
+import com.kalix.ide.flowviz.style.SeriesMarker;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 
 import java.awt.*;
@@ -26,6 +27,17 @@ public class TimeSeriesRenderer {
     private boolean showDataPoints = false;
     private boolean showGrid = true;
     private boolean antiAliasing = true;
+
+    // Gap handling: when connectAcrossGaps is false (default) the line breaks where consecutive
+    // valid points are farther apart than the series' cadence allows, so missing data reads as a
+    // hole rather than a straight bridge. Irregular series (no cadence) never break on spacing.
+    // Orphan markers (off by default) mark isolated valid points that would otherwise be invisible
+    // in line mode (no segment on either side).
+    private boolean connectAcrossGaps = false;
+    private boolean showOrphanMarkers = false;
+
+    // A time gap wider than nominalInterval * GAP_FACTOR is treated as missing data, not a sample.
+    private static final double GAP_FACTOR = 1.5;
 
     public TimeSeriesRenderer(List<SeriesRef> visibleSeries) {
         this.lodManager = new LODManager();
@@ -85,20 +97,78 @@ public class TimeSeriesRenderer {
         // Get render mode for this series (default to LINE)
         SeriesRenderMode renderMode = seriesRenderModes.getOrDefault(ref, SeriesRenderMode.LINE);
 
+        // Largest time gap that still counts as a continuous line for this series.
+        long gapThreshold = gapThresholdFor(series, connectAcrossGaps);
+
         // Colour carries opacity in its alpha channel; the stroke carries thickness
         // and dash. The LOD path inherits this colour but keeps its own fixed strokes.
         g2d.setColor(style.color());
         g2d.setStroke(style.stroke().toBasicStroke());
 
         if (strategy.useFullResolution) {
-            renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode);
+            renderFullResolution(g2d, series, viewport, strategy.indexRange, renderMode, gapThreshold);
+
+            // Orphan markers: only needed in pure line mode, where an isolated valid point (broken
+            // on both sides) would otherwise be invisible. When points are already drawn it shows
+            // anyway. Separate guarded pass over the visible range — nothing runs when the toggle
+            // is off, and the visible count is bounded (full-res only runs below the LOD density).
+            boolean pointsDrawn = renderMode == SeriesRenderMode.POINTS
+                || renderMode == SeriesRenderMode.LINE_AND_POINTS || showDataPoints;
+            if (showOrphanMarkers && !pointsDrawn) {
+                drawLineOrphans(g2d, series, viewport, strategy.indexRange, gapThreshold, style);
+            }
         } else {
             renderLOD(g2d, series, viewport, strategy.lodData, style);
+
+            // Band mode: an isolated live pixel column (dead on both sides) draws nothing, so the
+            // orphan marker is the only way to surface it. LOD never draws per-point markers.
+            if (showOrphanMarkers) {
+                drawLODOrphans(g2d, viewport, strategy.lodData, style);
+            }
         }
     }
-    
+
+    /**
+     * The largest time gap (ms) between consecutive valid points that is still drawn as a
+     * continuous line. Beyond it the line breaks, surfacing missing data. Returns
+     * {@link Long#MAX_VALUE} (never break on spacing) when the caller asked to connect across
+     * gaps, or when the series is irregular and so has no cadence to judge a gap against.
+     */
+    static long gapThresholdFor(TimeSeriesData series, boolean connectAcrossGaps) {
+        if (connectAcrossGaps) {
+            return Long.MAX_VALUE;
+        }
+        long nominal = series.getNominalIntervalMillis();
+        return nominal > 0 ? (long) (nominal * GAP_FACTOR) : Long.MAX_VALUE;
+    }
+
+    /** Whether no line segment should connect points {@code a} and {@code b}: either endpoint
+     *  missing, or the time gap exceeds {@code gapThreshold}. Shared by the render loop and the
+     *  orphan pass so they agree on exactly what a "break" is. */
+    static boolean segmentBreaks(TimeSeriesData series, int a, int b, long gapThreshold) {
+        boolean[] valid = series.getValidPoints();
+        if (!valid[a] || !valid[b]) {
+            return true;
+        }
+        long[] ts = series.getTimestamps();
+        return (ts[b] - ts[a]) > gapThreshold;
+    }
+
+    /** A valid point with a break on both sides (or at the data boundary) — invisible in pure
+     *  line mode, hence eligible for an orphan marker. */
+    static boolean isOrphan(TimeSeriesData series, int i, long gapThreshold) {
+        if (!series.getValidPoints()[i]) {
+            return false;
+        }
+        int n = series.getPointCount();
+        boolean leftBreak = (i == 0) || segmentBreaks(series, i - 1, i, gapThreshold);
+        boolean rightBreak = (i == n - 1) || segmentBreaks(series, i, i + 1, gapThreshold);
+        return leftBreak && rightBreak;
+    }
+
     private void renderFullResolution(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
-                                    TimeSeriesData.IndexRange indexRange, SeriesRenderMode renderMode) {
+                                    TimeSeriesData.IndexRange indexRange, SeriesRenderMode renderMode,
+                                    long gapThreshold) {
         if (indexRange.isEmpty()) return;
 
         long[] timestamps = series.getTimestamps();
@@ -125,6 +195,7 @@ public class TimeSeriesRenderer {
         }
         boolean pathStarted = false;
         int prevScreenX = 0, prevScreenY = 0;
+        long prevTimestamp = 0;
 
         for (int i = extendedStartIndex; i < extendedEndIndex; i++) {
             if (!validPoints[i]) {
@@ -140,7 +211,11 @@ public class TimeSeriesRenderer {
             int screenY = viewport.valueToScreenY(value);
 
             if (drawLines) {
-                if (!pathStarted) {
+                // Break the line where the gap to the previous valid point exceeds the cadence:
+                // that span is missing data and should read as a hole, not a straight bridge.
+                // (Missing/NaN points already broke the path via the validPoints check above.)
+                boolean gapBreak = pathStarted && (timestamp - prevTimestamp) > gapThreshold;
+                if (!pathStarted || gapBreak) {
                     // Start new path segment
                     // Always start the path, even if the point is outside bounds
                     // The clipping will handle drawing only the visible portion
@@ -155,12 +230,16 @@ public class TimeSeriesRenderer {
 
             prevScreenX = screenX;
             prevScreenY = screenY;
+            prevTimestamp = timestamp;
 
             // Draw data points if enabled and point is visible (only for original range)
             if (drawPoints &&
                 i >= indexRange.startIndex && i < indexRange.endIndex &&
                 isPointInBounds(screenX, screenY, clipLeft, clipRight, clipTop, clipBottom)) {
-                g2d.fillOval(screenX - 2, screenY - 2, 4, 4);
+                // Same dot diameter as SeriesMarker; colour is already set for this series, so we
+                // don't re-set it per point (this is the hot loop).
+                int d = SeriesMarker.DIAMETER;
+                g2d.fillOval(screenX - d / 2, screenY - d / 2, d, d);
             }
         }
 
@@ -367,6 +446,57 @@ public class TimeSeriesRenderer {
         }
     }
 
+    /** Draws a marker on each visible orphan point (line mode). Guarded, bounded pass: only
+     *  invoked when the toggle is on, and full-resolution rendering runs only below the LOD
+     *  density, so the visible point count is bounded. */
+    private void drawLineOrphans(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
+                                 TimeSeriesData.IndexRange indexRange, long gapThreshold, LineStyle style) {
+        long[] timestamps = series.getTimestamps();
+        double[] values = series.getValues();
+
+        int clipLeft = viewport.getPlotX();
+        int clipRight = clipLeft + viewport.getPlotWidth();
+        int clipTop = viewport.getPlotY();
+        int clipBottom = clipTop + viewport.getPlotHeight();
+
+        for (int i = indexRange.startIndex; i < indexRange.endIndex; i++) {
+            if (!isOrphan(series, i, gapThreshold)) {
+                continue;
+            }
+            int screenX = viewport.timeToScreenX(timestamps[i]);
+            int screenY = viewport.valueToScreenY(values[i]);
+            if (isPointInBounds(screenX, screenY, clipLeft, clipRight, clipTop, clipBottom)) {
+                SeriesMarker.paint(g2d, style, screenX, screenY);
+            }
+        }
+    }
+
+    /** Draws a marker on each isolated live pixel column (band/LOD mode) — one with no live
+     *  neighbour on either side, which the envelope paths render as nothing. */
+    private void drawLODOrphans(Graphics2D g2d, ViewPort viewport, LODManager.LODData lodData, LineStyle style) {
+        boolean[] hasValidData = lodData.hasValidData;
+        double[][] bands = lodData.minMaxBands;
+        int width = lodData.pixelWidth;
+
+        int clipTop = viewport.getPlotY();
+        int clipBottom = clipTop + viewport.getPlotHeight();
+
+        for (int x = 0; x < width; x++) {
+            if (!hasValidData[x]) {
+                continue;
+            }
+            boolean leftDead = (x == 0) || !hasValidData[x - 1];
+            boolean rightDead = (x == width - 1) || !hasValidData[x + 1];
+            if (!(leftDead && rightDead)) {
+                continue;
+            }
+            int screenX = viewport.getPlotX() + x;
+            double mid = (bands[x][0] + bands[x][1]) / 2.0;
+            int screenY = Math.max(clipTop, Math.min(clipBottom, viewport.valueToScreenY(mid)));
+            SeriesMarker.paint(g2d, style, screenX, screenY);
+        }
+    }
+
     private void drawPlotBorder(Graphics2D g2d, ViewPort viewport) {
         g2d.setColor(Color.BLACK);
         g2d.setStroke(new BasicStroke(1.0f));
@@ -406,6 +536,12 @@ public class TimeSeriesRenderer {
     public boolean isShowDataPoints() { return showDataPoints; }
     public boolean isShowGrid() { return showGrid; }
     public boolean isAntiAliasing() { return antiAliasing; }
+
+    // Gap handling
+    public void setConnectAcrossGaps(boolean connect) { this.connectAcrossGaps = connect; }
+    public boolean isConnectAcrossGaps() { return connectAcrossGaps; }
+    public void setShowOrphanMarkers(boolean show) { this.showOrphanMarkers = show; }
+    public boolean isShowOrphanMarkers() { return showOrphanMarkers; }
 
     // Series render mode management
     public void setSeriesRenderMode(SeriesRef seriesRef, SeriesRenderMode renderMode) {
