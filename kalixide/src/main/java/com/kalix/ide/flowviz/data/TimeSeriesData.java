@@ -127,10 +127,22 @@ public class TimeSeriesData {
             return new RegularIntervalInfo(false, 0);
         }
         
-        // Check if all intervals match (within 1% tolerance)
+        // Check if all intervals match (within 1% tolerance).
+        //
+        // We MUST scan every interval, not a leading sample: getIndexRange()'s regular fast
+        // path maps a timestamp to an array index by arithmetic ((t - first) / interval),
+        // which equals the array index only if the series has no gaps. A series that is
+        // regular for its first N points but has a gap later (e.g. missing values dropped by
+        // masking/aggregation, or omitted from a Pixie stream) would otherwise be misclassified
+        // as regular, and the fast path would return indices drifting by the number of dropped
+        // points — silently skipping the leading visible points after the gap. Any gap makes
+        // one interval roughly a multiple of the nominal, exceeding tolerance here, so the
+        // series is correctly classified irregular and getIndexRange() falls back to binary
+        // search over the real array. The extra O(n) scan is negligible beside the array
+        // clones and stats pass already done in the constructor.
         double tolerance = firstInterval * 0.01;
-        
-        for (int i = 2; i < Math.min(pointCount, 100); i++) { // Check first 100 points for efficiency
+
+        for (int i = 2; i < pointCount; i++) {
             long interval = timestamps[i] - timestamps[i-1];
             if (Math.abs(interval - firstInterval) > tolerance) {
                 return new RegularIntervalInfo(false, 0);
