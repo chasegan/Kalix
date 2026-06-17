@@ -85,8 +85,7 @@ public class FileManagerLauncher {
                 return;
             }
             if (osName.contains("win")) {
-                // explorer exits non-zero even on success; we only need to launch it.
-                new ProcessBuilder("explorer", "/select," + file.getAbsolutePath()).start();
+                revealWindows(file.getAbsolutePath());
                 return;
             }
             if (revealLinux(file)) {
@@ -111,6 +110,25 @@ public class FileManagerLauncher {
 
         // Last resort: open the containing folder so the user at least gets close.
         openFileManagerAt(file.getParentFile());
+    }
+
+    /**
+     * Reveals a file in Windows Explorer, selecting it when possible.
+     *
+     * <p>{@code explorer /select,<path>} selects the file, but Java's per-argument quoting wraps
+     * {@code /select,<path>} in double quotes whenever the path contains a space, producing
+     * {@code explorer.exe "/select,C:\...\My Folder\f.csv"}. Explorer's non-standard parser sees the
+     * leading quote, fails to recognise the {@code /select} switch, and falls back to a default
+     * folder (the OneDrive-Documents behaviour reported for spaced paths). There is no flash-free
+     * way to pass the correctly-quoted form from Java, so for spaced paths we simply open the
+     * containing folder rather than selecting; space-free paths still select the file.</p>
+     */
+    private static void revealWindows(String path) throws IOException {
+        if (path.indexOf(' ') >= 0 || path.indexOf('\t') >= 0) {
+            openFileManagerAt(new File(path).getParentFile());
+            return;
+        }
+        new ProcessBuilder("explorer.exe", "/select," + path).start();
     }
 
     /**
