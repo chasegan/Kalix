@@ -173,4 +173,47 @@ class TimeSeriesDataTest {
         assertEquals(0, series.getNominalIntervalMillis(),
             "Monthly data must report no fixed cadence (intervals vary 28–31 days)");
     }
+
+    // ---- Densification (representation B) ----
+
+    @Test
+    void densifyFillsDroppedGapsWithNaNAndRestoresContiguity() {
+        // Daily points at days 0,1,2 then 5,6 — days 3 and 4 were dropped.
+        TimeSeriesData gappy = new TimeSeriesData(
+            new long[]{0, DAY_MS, 2 * DAY_MS, 5 * DAY_MS, 6 * DAY_MS},
+            new double[]{10, 11, 12, 15, 16});
+        assertFalse(gappy.isContiguous(), "precondition: series has a gap");
+
+        TimeSeriesData dense = gappy.densified();
+
+        assertTrue(dense.isContiguous(), "densified grid is gap-free, so contiguous");
+        assertEquals(7, dense.getPointCount(), "full daily grid days 0..6");
+        assertEquals(5, dense.getValidPointCount(), "the 5 original values remain valid");
+
+        double[] v = dense.getValues();
+        boolean[] valid = dense.getValidPoints();
+        assertEquals(10, v[0], 1e-9);
+        assertEquals(12, v[2], 1e-9);
+        assertFalse(valid[3], "dropped day 3 is now a NaN slot");
+        assertFalse(valid[4], "dropped day 4 is now a NaN slot");
+        assertEquals(15, v[5], 1e-9, "value lands on its correct grid slot after the gap");
+        assertEquals(16, v[6], 1e-9);
+    }
+
+    @Test
+    void densifyIsNoOpForContiguousIrregularAndOverCapSeries() {
+        TimeSeriesData contiguous = new TimeSeriesData(
+            new long[]{0, DAY_MS, 2 * DAY_MS}, new double[]{1, 2, 3});
+        assertSame(contiguous, contiguous.densified(), "already contiguous → unchanged instance");
+
+        long h = 60L * 60 * 1000;
+        TimeSeriesData adHoc = new TimeSeriesData(
+            new long[]{0, h, 7 * h, 50 * h, 200 * h, 333 * h}, new double[6]);
+        assertSame(adHoc, adHoc.densified(), "no cadence → nothing to densify");
+
+        // Daily grid with a huge gap; cap of 10 forbids materialising the ~1000-slot grid.
+        TimeSeriesData bigGap = new TimeSeriesData(
+            new long[]{0, DAY_MS, 2 * DAY_MS, 1000 * DAY_MS}, new double[]{1, 2, 3, 4});
+        assertSame(bigGap, bigGap.densified(10), "over-cap → left gap-bearing");
+    }
 }

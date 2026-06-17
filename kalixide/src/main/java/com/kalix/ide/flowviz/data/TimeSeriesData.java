@@ -318,6 +318,63 @@ public class TimeSeriesData {
         return Math.max(0, Math.min(result, pointCount));
     }
 
+    /**
+     * Default ceiling on the number of points a densified grid may hold. A regular series with a
+     * large contiguous hole could otherwise materialise an enormous mostly-NaN array (e.g. a gauge
+     * offline for decades on an hourly grid); beyond this the series is left gap-bearing and still
+     * renders correctly via the gap-aware line break — it just keeps binary-search indexing rather
+     * than the O(1) fast path. 5M comfortably covers realistic dense hydrological series (e.g.
+     * 6-minute data over decades) while bounding the pathological case.
+     */
+    public static final int MAX_DENSIFY_GRID_POINTS = 5_000_000;
+
+    /** Densifies using {@link #MAX_DENSIFY_GRID_POINTS}. */
+    public TimeSeriesData densified() {
+        return densified(MAX_DENSIFY_GRID_POINTS);
+    }
+
+    /**
+     * Returns this series materialised onto its full regular grid, with {@link Double#NaN} at every
+     * missing slot — restoring the contiguous invariant (and the O(1) index fast path) for a
+     * regular series whose missing points were dropped.
+     *
+     * <p>Returns {@code this} unchanged when there is nothing to do: already contiguous, no detected
+     * cadence (irregular/ad-hoc), empty, or the resulting grid would exceed {@code maxGridPoints}
+     * (left gap-bearing — still correct via the gap-aware line break, just without O(1) indexing).</p>
+     */
+    public TimeSeriesData densified(int maxGridPoints) {
+        if (contiguous || nominalIntervalMillis <= 0 || pointCount == 0) {
+            return this;
+        }
+
+        long span = timestamps[pointCount - 1] - firstTimestamp;
+        long gridCount = span / nominalIntervalMillis + 1;
+        if (gridCount > maxGridPoints) {
+            return this;  // too large to materialise; stays gap-bearing
+        }
+
+        int n = (int) gridCount;
+        long[] gridTimestamps = new long[n];
+        double[] gridValues = new double[n];
+        for (int i = 0; i < n; i++) {
+            gridTimestamps[i] = firstTimestamp + (long) i * nominalIntervalMillis;
+            gridValues[i] = Double.NaN;
+        }
+
+        // Snap each existing valid point onto its grid slot (rounding absorbs minor jitter).
+        for (int i = 0; i < pointCount; i++) {
+            if (!validPoints[i]) {
+                continue;
+            }
+            long k = Math.round((double) (timestamps[i] - firstTimestamp) / nominalIntervalMillis);
+            if (k >= 0 && k < n) {
+                gridValues[(int) k] = values[i];
+            }
+        }
+
+        return new TimeSeriesData(gridTimestamps, gridValues);
+    }
+
     // Getters
     public int getPointCount() { return pointCount; }
     public long[] getTimestamps() { return timestamps; }
