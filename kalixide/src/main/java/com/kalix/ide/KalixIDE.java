@@ -996,15 +996,69 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Checks for unsaved changes in a specific document and prompts the user to save if
-     * necessary. The document is made active so the user sees what they are being asked
-     * about, and Save/Save As act on it.
+     * Shows a confirm dialog with custom key bindings (Y/N/Esc/C).
      *
-     * @param document the document to check
-     * @param messageFormat message format string (formatted with the file name)
-     * @return true if the operation should proceed (no changes, saved, or chose not to
-     *         save), false if the user cancelled
+     * @param message the message to display
+     * @param title the dialog title
+     * @return JOptionPane.YES_OPTION, JOptionPane.NO_OPTION, or JOptionPane.CANCEL_OPTION
      */
+    private int showUnsavedChangesDialog(String message, String title) {
+        JOptionPane pane = new JOptionPane(
+            message,
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.YES_NO_CANCEL_OPTION
+        );
+
+        JDialog dialog = pane.createDialog(this, title);
+
+        // Add key bindings for Y, N, Esc, and C
+        JRootPane rootPane = dialog.getRootPane();
+        InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = rootPane.getActionMap();
+
+        // Y for Yes
+        inputMap.put(KeyStroke.getKeyStroke('y'), "yes");
+        inputMap.put(KeyStroke.getKeyStroke('Y'), "yes");
+        actionMap.put("yes", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                pane.setValue(JOptionPane.YES_OPTION);
+                dialog.dispose();
+            }
+        });
+
+        // N for No
+        inputMap.put(KeyStroke.getKeyStroke('n'), "no");
+        inputMap.put(KeyStroke.getKeyStroke('N'), "no");
+        actionMap.put("no", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                pane.setValue(JOptionPane.NO_OPTION);
+                dialog.dispose();
+            }
+        });
+
+        // Esc and C for Cancel
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cancel");
+        inputMap.put(KeyStroke.getKeyStroke('c'), "cancel");
+        inputMap.put(KeyStroke.getKeyStroke('C'), "cancel");
+        actionMap.put("cancel", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                pane.setValue(JOptionPane.CANCEL_OPTION);
+                dialog.dispose();
+            }
+        });
+
+        dialog.setVisible(true);
+
+        Object value = pane.getValue();
+        if (value == null || !(value instanceof Integer)) {
+            return JOptionPane.CLOSED_OPTION;
+        }
+        return (Integer) value;
+    }
+
     private boolean checkUnsavedChanges(KalixDocument document, String messageFormat) {
         boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
 
@@ -1017,12 +1071,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         String fileName = document.getFile() != null ? document.getFile().getName() : "Untitled";
 
-        int choice = JOptionPane.showConfirmDialog(
-            this,
+        int choice = showUnsavedChangesDialog(
             String.format(messageFormat, fileName),
-            "Unsaved Changes",
-            JOptionPane.YES_NO_CANCEL_OPTION,
-            JOptionPane.WARNING_MESSAGE
+            "Unsaved Changes"
         );
 
         switch (choice) {

@@ -101,6 +101,23 @@ public class DocumentManager {
         return null;
     }
 
+    /**
+     * Moves a document from one position to another in the document list.
+     * This affects the tab order but does not change the active document.
+     *
+     * @param fromIndex the current index of the document
+     * @param toIndex the target index for the document
+     */
+    public void moveDocument(int fromIndex, int toIndex) {
+        if (fromIndex < 0 || fromIndex >= documents.size() ||
+            toIndex < 0 || toIndex >= documents.size() ||
+            fromIndex == toIndex) {
+            return;
+        }
+        KalixDocument document = documents.remove(fromIndex);
+        documents.add(toIndex, document);
+    }
+
     // --- Listeners ---
 
     /** Registers a listener invoked when a document is added to the set. */

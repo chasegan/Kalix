@@ -8,6 +8,7 @@ import javax.swing.JTabbedPane;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -32,6 +33,10 @@ public class DocumentTabPane extends JPanel {
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
+
+    /** Tab drag-and-drop state */
+    private int draggedTabIndex = -1;
+    private Point dragStartPoint = null;
 
     public DocumentTabPane(DocumentManager documentManager, Consumer<KalixDocument> closeRequestHandler) {
         super(new BorderLayout());
@@ -86,9 +91,108 @@ public class DocumentTabPane extends JPanel {
             }
         });
 
+        // Add tab drag-and-drop support
+        addTabDragAndDrop();
+
         documentManager.addDocumentOpenedListener(this::onDocumentOpened);
         documentManager.addDocumentClosedListener(this::onDocumentClosed);
         documentManager.addActiveDocumentChangeListener(this::onActiveDocumentChanged);
+    }
+
+    /**
+     * Adds drag-and-drop support for reordering tabs.
+     */
+    private void addTabDragAndDrop() {
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                // Only start drag on left-click
+                if (e.getButton() != MouseEvent.BUTTON1) {
+                    return;
+                }
+
+                int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                if (tabIndex >= 0) {
+                    Rectangle tabBounds = tabbedPane.getBoundsAt(tabIndex);
+                    if (tabBounds != null && tabBounds.contains(e.getX(), e.getY())) {
+                        draggedTabIndex = tabIndex;
+                        dragStartPoint = e.getPoint();
+                    }
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (draggedTabIndex >= 0) {
+                    int targetIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                    if (targetIndex >= 0 && targetIndex != draggedTabIndex) {
+                        moveTab(draggedTabIndex, targetIndex);
+                    }
+                    draggedTabIndex = -1;
+                    dragStartPoint = null;
+                }
+            }
+        });
+
+        tabbedPane.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (draggedTabIndex >= 0 && dragStartPoint != null) {
+                    // Check if we've moved beyond a small threshold to start the drag
+                    // This prevents accidental drags when just clicking
+                    int dx = e.getX() - dragStartPoint.x;
+                    int dy = e.getY() - dragStartPoint.y;
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                        tabbedPane.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    }
+                }
+            }
+        });
+
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseExited(MouseEvent e) {
+                tabbedPane.setCursor(Cursor.getDefaultCursor());
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (draggedTabIndex < 0) {
+                    tabbedPane.setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        });
+    }
+
+    /**
+     * Moves a tab from one position to another and updates the document order.
+     */
+    private void moveTab(int fromIndex, int toIndex) {
+        if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 ||
+            fromIndex >= tabbedPane.getTabCount() || toIndex >= tabbedPane.getTabCount()) {
+            return;
+        }
+
+        syncing = true;
+        try {
+            // Get tab info before removing
+            String title = tabbedPane.getTitleAt(fromIndex);
+            Component component = tabbedPane.getComponentAt(fromIndex);
+            String tooltip = tabbedPane.getToolTipTextAt(fromIndex);
+
+            // Remove and re-insert the tab
+            tabbedPane.removeTabAt(fromIndex);
+            tabbedPane.insertTab(title, null, component, tooltip, toIndex);
+
+            // Select the moved tab
+            tabbedPane.setSelectedIndex(toIndex);
+
+            // Update the document order in DocumentManager
+            documentManager.moveDocument(fromIndex, toIndex);
+        } finally {
+            syncing = false;
+            tabbedPane.setCursor(Cursor.getDefaultCursor());
+        }
     }
 
     /**
