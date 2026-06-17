@@ -11,14 +11,15 @@ import java.util.Optional;
 public class EditorContext {
 
     public enum ContextType {
-        NODE_SECTION,      // Inside [node.xyz] section
-        NODE_HEADER,       // On the [node.xyz] line itself
-        PROPERTY,          // On a property line (key = value)
-        TABLE_VALUE,       // Inside a multi-line table
-        OUTPUT_REFERENCE,  // In [outputs] section
-        INPUT_FILE,        // In [inputs] section on a file path line
-        SECTION_HEADER,    // On a section header line
-        CONSTANTS,         // In [constants] section
+        NODE_SECTION,          // Inside [node.xyz] section
+        NODE_HEADER,           // On the [node.xyz] line itself
+        PROPERTY,              // On a property line (key = value)
+        TABLE_VALUE,           // Inside a multi-line table
+        OUTPUT_REFERENCE,      // In [outputs] section
+        INPUT_FILE,            // In [inputs] section on a file path line with no alias
+        INPUT_FILE_WITH_ALIAS, // In [inputs] section on a file path line with an alias
+        SECTION_HEADER,        // On a section header line
+        CONSTANTS,             // In [constants] section
         UNKNOWN
     }
 
@@ -72,6 +73,10 @@ public class EditorContext {
 
     public Optional<String> getInputFilePath() {
         return Optional.ofNullable((String) metadata.get("inputFilePath"));
+    }
+
+    public Optional<String> getInputFileAlias() {
+        return Optional.ofNullable((String) metadata.get("inputFileAlias"));
     }
 
     public Object getMetadata(String key) {
@@ -134,6 +139,11 @@ public class EditorContext {
 
         public Builder inputFilePath(String filePath) {
             this.metadata.put("inputFilePath", filePath);
+            return this;
+        }
+
+        public Builder inputFileAlias(String fileAlias) {
+            this.metadata.put("inputFileAlias", fileAlias);
             return this;
         }
 

@@ -38,8 +38,9 @@ public class RenameInputFileCommand implements EditorCommand {
 
     @Override
     public boolean isApplicable(EditorContext context) {
-        // Only applicable when cursor is on a node header line
-        return context.getType() == EditorContext.ContextType.INPUT_FILE
+        EditorContext.ContextType contextType = context.getType();
+        return (contextType == EditorContext.ContextType.INPUT_FILE
+                || contextType == EditorContext.ContextType.INPUT_FILE_WITH_ALIAS)
                 && context.getInputFilePath().isPresent();
     }
 

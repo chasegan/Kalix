@@ -5,6 +5,9 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Maps an {@link EditorPosition} to an {@link EditorContext} - i.e. classifies
  * the caret's structural location into the domain enum used by the right-click
@@ -20,6 +23,9 @@ public class ContextDetector {
     private static final Logger logger = LoggerFactory.getLogger(ContextDetector.class);
     private static final String NODE_SECTION_PREFIX = "node.";
 
+    // Copied from INIModelParser
+    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([^=]+?)\\s*=\\s*(.*)\\s*$");
+
     /**
      * Detects the editing context at the given cursor position.
      *
@@ -31,6 +37,7 @@ public class ContextDetector {
      */
     public EditorContext detectContext(int caretPos, String text, String selection,
                                        INIModelParser.ParsedModel parsedModel) {
+
         EditorPosition position = EditorPosition.analyze(text, caretPos, parsedModel);
         EditorContext.Builder builder = new EditorContext.Builder()
                 .caretPosition(caretPos)
@@ -116,11 +123,18 @@ public class ContextDetector {
                     // Parser stores input-file line numbers 1-based.
                     String filePath = findInputFileAtLine(parsedModel, position.getLineNumber() + 1);
                     if (filePath != null) {
-                        return builder.type(EditorContext.ContextType.INPUT_FILE)
-                                .inputFilePath(filePath)
-                                .build();
+                            builder.type(EditorContext.ContextType.INPUT_FILE)
+                                    .inputFilePath(filePath);
                     }
-                }
+                    // Detect input file aliases
+                    Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
+                    if (matcher.matches()) {
+                        String alias = matcher.group(1);
+                        builder.type(EditorContext.ContextType.INPUT_FILE_WITH_ALIAS) // overwrite type
+                                .inputFileAlias(alias);
+                    }
+                    return builder.build();
+                    }
                 return null;
             default:
                 return null;
