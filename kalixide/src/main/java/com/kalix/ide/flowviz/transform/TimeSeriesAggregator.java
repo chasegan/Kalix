@@ -4,7 +4,13 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 
 /**
@@ -93,7 +99,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by calendar day
         Map<YearMonthDay, List<Double>> dailyBuckets = new TreeMap<>();
-        Set<YearMonthDay> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<YearMonthDay> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
@@ -156,7 +162,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by year-month
         Map<YearMonth, List<Double>> monthlyBuckets = new TreeMap<>();
-        Set<YearMonth> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<YearMonth> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
@@ -226,7 +232,7 @@ public class TimeSeriesAggregator {
 
         // Group data points by water year
         Map<Integer, List<Double>> annualBuckets = new TreeMap<>();
-        Set<Integer> bucketsWithMissingData = new java.util.HashSet<>();
+        Set<Integer> bucketsWithMissingData = new HashSet<>();
 
         for (int i = 0; i < timestamps.length; i++) {
             LocalDateTime dateTime = LocalDateTime.ofInstant(
