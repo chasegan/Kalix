@@ -247,10 +247,8 @@ public class CommandExecutor {
     private List<TextReplacement> findInputFileReferences(String oldPath, String newPath,
                                                           INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
-
-        // Convert file paths to aliases for data references
-        String oldAlias = sanitiseFileName(oldPath);
-        String newAlias = sanitiseFileName(newPath);
+        String oldPathSanitised = sanitiseFileName(oldPath);
+        String newPathSanitised = sanitiseFileName(newPath);
 
         // 1. Replace the input file path in [inputs] section
         Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
@@ -264,8 +262,9 @@ public class CommandExecutor {
             logger.warn("Input file path '{}' not found in parsed model", oldPath);
         }
 
-        // 2. Find all data.{alias}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
-        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldAlias) + "\\.");
+        // 2. Find all data.{name}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
+        // Do not rename input file aliases
+        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldPathSanitised) + "\\.");
         for (INIModelParser.Section section : parsedModel.getSections().values()) {
             if (!section.getName().startsWith("node.")) continue;
 
@@ -275,8 +274,8 @@ public class CommandExecutor {
                 if (dataRefPattern.matcher(value).find()) {
                     replacements.add(new TextReplacement(
                         prop.getLineNumber(),
-                        "data." + oldAlias + ".",
-                        "data." + newAlias + "."
+                        "data." + oldPathSanitised + ".",
+                        "data." + newPathSanitised + "."
                     ));
                 }
             }
@@ -285,13 +284,13 @@ public class CommandExecutor {
         // 3. Find output references: data.{alias}.*
         for (String outputRef : parsedModel.getOutputReferences()) {
             // Match: data.old_alias.anything
-            if (outputRef.contains("data." + oldAlias + ".")) {
+            if (outputRef.contains("data." + oldPathSanitised + ".")) {
                 Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
                 if (lineNumber != null) {
                     replacements.add(new TextReplacement(
                         lineNumber,
-                        "data." + oldAlias + ".",
-                        "data." + newAlias + "."
+                        "data." + oldPathSanitised + ".",
+                        "data." + newPathSanitised + "."
                     ));
                 }
             }
