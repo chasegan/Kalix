@@ -65,6 +65,7 @@ public class EnhancedTextEditor extends JPanel {
     private FileDropManager dropManager;
     private LinterManager linterManager;
     private AutoCompleteManager autoCompleteManager;
+    private com.kalix.ide.linter.ui.PropertyHoverTooltipManager propertyHoverTooltipManager;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
     private NavigationHistory navigationHistory;
 
@@ -205,6 +206,25 @@ public class EnhancedTextEditor extends JPanel {
         }
         autoCompleteManager = new AutoCompleteManager(textArea, schemaManager, modelSupplier, baseDirectorySupplier);
         autoCompleteManager.install();
+    }
+
+    /**
+     * Initialize the property hover tooltip system.
+     * Shows helpful tooltips when hovering over property keys.
+     *
+     * @param schemaManager Schema manager for parameter definitions
+     * @param modelSupplier Supplier for the current parsed model
+     */
+    public void initializePropertyTooltips(SchemaManager schemaManager,
+                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+        if (propertyHoverTooltipManager != null) {
+            propertyHoverTooltipManager.dispose();
+        }
+        if (linterManager != null) {
+            propertyHoverTooltipManager = new com.kalix.ide.linter.ui.PropertyHoverTooltipManager(
+                textArea, schemaManager.getCurrentSchema(), modelSupplier,
+                line -> linterManager.getIssueForLine(line) != null);
+        }
     }
 
     /**
@@ -1220,6 +1240,10 @@ public class EnhancedTextEditor extends JPanel {
         if (linterManager != null) {
             linterManager.dispose();
             linterManager = null;
+        }
+        if (propertyHoverTooltipManager != null) {
+            propertyHoverTooltipManager.dispose();
+            propertyHoverTooltipManager = null;
         }
     }
 

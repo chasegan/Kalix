@@ -411,6 +411,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         editor.initializeLinter(schemaManager);
         editor.initializeContextCommands(this, document.getModelSupplier(), document::getFile);
         editor.initializeAutoComplete(schemaManager, document.getModelSupplier(), document::getWorkingDirectory);
+        editor.initializePropertyTooltips(schemaManager, document.getModelSupplier());
         editor.setLinterBaseDirectorySupplier(document::getWorkingDirectory);
 
         // Status bar reflects model changes — but only for the active document (the
