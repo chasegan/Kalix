@@ -55,6 +55,9 @@ dependencies {
 
 application {
     mainClass.set("com.kalix.ide.KalixIDE")
+    // Grant native access for the Foreign Function & Memory API (Windows "Reveal in File Manager"
+    // calls the Shell API directly), so the JVM doesn't print a restricted-method warning.
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 java {

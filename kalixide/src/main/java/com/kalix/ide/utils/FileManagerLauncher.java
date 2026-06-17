@@ -113,22 +113,19 @@ public class FileManagerLauncher {
     }
 
     /**
-     * Reveals a file in Windows Explorer, selecting it when possible.
+     * Reveals a file in Windows Explorer, selecting it.
      *
-     * <p>{@code explorer /select,<path>} selects the file, but Java's per-argument quoting wraps
-     * {@code /select,<path>} in double quotes whenever the path contains a space, producing
-     * {@code explorer.exe "/select,C:\...\My Folder\f.csv"}. Explorer's non-standard parser sees the
-     * leading quote, fails to recognise the {@code /select} switch, and falls back to a default
-     * folder (the OneDrive-Documents behaviour reported for spaced paths). There is no flash-free
-     * way to pass the correctly-quoted form from Java, so for spaced paths we simply open the
-     * containing folder rather than selecting; space-free paths still select the file.</p>
+     * <p>Uses the Shell API via {@link WindowsShellReveal} (the mechanism Explorer itself uses),
+     * which handles spaces and Unicode with no console window. If that's unavailable or fails, falls
+     * back to opening the containing folder — notably this avoids the {@code explorer /select}
+     * command-line approach, whose argument quoting mis-parses spaced paths (sending the user to a
+     * default folder instead of the file).</p>
      */
     private static void revealWindows(String path) throws IOException {
-        if (path.indexOf(' ') >= 0 || path.indexOf('\t') >= 0) {
-            openFileManagerAt(new File(path).getParentFile());
+        if (WindowsShellReveal.selectInExplorer(path)) {
             return;
         }
-        new ProcessBuilder("explorer.exe", "/select," + path).start();
+        openFileManagerAt(new File(path).getParentFile());
     }
 
     /**
