@@ -42,8 +42,10 @@ public class RevealInputFileCommand implements EditorCommand {
 
     @Override
     public boolean isApplicable(EditorContext context) {
-        return context.getType() == EditorContext.ContextType.INPUT_FILE
-            && context.getInputFilePath().isPresent();
+        EditorContext.ContextType contextType = context.getType();
+        return (contextType == EditorContext.ContextType.INPUT_FILE
+                || contextType == EditorContext.ContextType.INPUT_FILE_WITH_ALIAS)
+                && context.getInputFilePath().isPresent();
     }
 
     @Override

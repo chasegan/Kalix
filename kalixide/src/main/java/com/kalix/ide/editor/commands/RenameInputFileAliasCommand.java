@@ -8,25 +8,25 @@ import javax.swing.*;
 import java.util.function.Supplier;
 
 /**
- * Command to rename an input file path throughout the document.
- * Updates the file path in [inputs] section and all data.{alias}.* references
- * in property values and output references.
+ * Command to rename an input file alias throughout the document.
+ * Updates the node section header, all downstream references, output references,
+ * and node references within function expressions.
  */
-public class RenameInputFileCommand implements EditorCommand {
+public class RenameInputFileAliasCommand implements EditorCommand {
 
-    private static final Logger logger = LoggerFactory.getLogger(RenameInputFileCommand.class);
+    private static final Logger logger = LoggerFactory.getLogger(RenameInputFileAliasCommand.class);
 
     private final CommandMetadata metadata;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final JFrame parentFrame;
 
-    public RenameInputFileCommand(Supplier<INIModelParser.ParsedModel> modelSupplier, JFrame parentFrame) {
+    public RenameInputFileAliasCommand(Supplier<INIModelParser.ParsedModel> modelSupplier, JFrame parentFrame) {
         this.modelSupplier = modelSupplier;
         this.parentFrame = parentFrame;
         this.metadata = new CommandMetadata.Builder()
-            .id("rename_input_file")
-            .displayName("Rename file")
-            .description("Rename this input file path and all its data references")
+            .id("rename_input_file_alias")
+            .displayName("Rename file alias")
+            .description("Rename this alias and all its references")
             .category("")
             .build();
     }
@@ -39,22 +39,21 @@ public class RenameInputFileCommand implements EditorCommand {
     @Override
     public boolean isApplicable(EditorContext context) {
         EditorContext.ContextType contextType = context.getType();
-        return (contextType == EditorContext.ContextType.INPUT_FILE
-                || contextType == EditorContext.ContextType.INPUT_FILE_WITH_ALIAS)
-                && context.getInputFilePath().isPresent();
+        return contextType == EditorContext.ContextType.INPUT_FILE_WITH_ALIAS
+                && context.getInputFileAlias().isPresent();
     }
 
     @Override
     public void execute(EditorContext context, CommandExecutor executor) {
-        String oldPath = context.getInputFilePath().orElse(null);
-        if (oldPath == null) {
-            logger.warn("No input file path found in context");
+        String oldName = context.getInputFileAlias().orElse(null);
+        if (oldName == null) {
+            logger.warn("No file name found in context");
             return;
         }
 
-        // Prompt user for new path
-        String newPath = promptForNewName(oldPath);
-        if (newPath == null) {
+        // Prompt user for new name
+        String newName = promptForNewName(oldName);
+        if (newName == null) {
             // User cancelled
             return;
         }
@@ -73,39 +72,39 @@ public class RenameInputFileCommand implements EditorCommand {
         }
 
         // Execute the rename
-        boolean success = executor.renameInputFile(oldPath, newPath, parsedModel);
+        boolean success = executor.renameInputFileAlias(oldName, newName, parsedModel);
 
         if (success) {
-            showSuccess(oldPath, newPath);
+            showSuccess(oldName, newName);
         }
     }
 
     /**
-     * Prompts the user to enter a new input file path.
+     * Prompts the user to enter a new node name.
      *
-     * @param currentPath The current input file path
-     * @return The new path, or null if cancelled
+     * @param currentName The current node name
+     * @return The new name, or null if cancelled
      */
-    private String promptForNewName(String currentPath) {
+    private String promptForNewName(String currentName) {
         return (String) JOptionPane.showInputDialog(
             parentFrame,
-            "Enter new path for input file '" + currentPath + "':",
-            "Rename Input File",
+            "Enter new name for node '" + currentName + "':",
+            "Rename Node",
             JOptionPane.PLAIN_MESSAGE,
             null,
             null,
-            currentPath
+            currentName
         );
     }
 
     /**
      * Shows a success message after renaming.
      */
-    private void showSuccess(String oldPath, String newPath) {
+    private void showSuccess(String oldName, String newName) {
         SwingUtilities.invokeLater(() -> {
             JOptionPane.showMessageDialog(
                 parentFrame,
-                "Renamed input file '" + oldPath + "' to '" + newPath + "'",
+                "Renamed '" + oldName + "' to '" + newName + "'",
                 "Done",
                 JOptionPane.INFORMATION_MESSAGE
             );

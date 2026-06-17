@@ -82,11 +82,11 @@ public class ContextCommandManager {
 
         // Register rename command - pass supplier, not the model itself
         registry.register(new RenameNodeCommand(modelSupplier, parentFrame));
-
+        registry.register(new RenameInputFileCommand(modelSupplier, parentFrame));
+        registry.register(new RenameInputFileAliasCommand(modelSupplier, parentFrame));
+        
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
-
-        registry.register(new RenameInputFileCommand(modelSupplier, parentFrame));
 
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));
