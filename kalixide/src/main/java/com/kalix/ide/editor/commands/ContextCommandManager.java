@@ -84,7 +84,8 @@ public class ContextCommandManager {
         registry.register(new RenameNodeCommand(modelSupplier, parentFrame));
         registry.register(new RenameInputFileCommand(modelSupplier, parentFrame));
         registry.register(new RenameInputFileAliasCommand(modelSupplier, parentFrame));
-        
+        registry.register(new AddInputFileAliasCommand(modelSupplier, parentFrame));
+
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
 
