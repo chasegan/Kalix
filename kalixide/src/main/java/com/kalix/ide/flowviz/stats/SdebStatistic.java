@@ -83,6 +83,12 @@ public class SdebStatistic implements Statistic {
         // time order.
         double sd = 0.0;
         for (int i = 0; i < observed.length; i++) {
+            // Defends the masked, NaN-free precondition: a stray non-finite pair must not poison
+            // the whole objective to NaN. With proper masking (the only path that reaches here)
+            // this never triggers. (sortedValidValues below is finite by construction.)
+            if (!Double.isFinite(observed[i]) || !Double.isFinite(simulated[i])) {
+                continue;
+            }
             double diff = Math.sqrt(observed[i]) - Math.sqrt(simulated[i]);
             sd += diff * diff;
         }
