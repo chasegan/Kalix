@@ -174,6 +174,10 @@ public class FileOperationsManager {
      */
     public void saveModel() {
         KalixDocument document = document();
+        saveKalixDocument(document);
+    }
+
+    private void saveKalixDocument(KalixDocument document) {
         if (document == null) {
             return;
         }
