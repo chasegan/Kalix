@@ -1,6 +1,8 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.io.TimeSeriesCsvImporter;
+import com.kalix.ide.io.SourceResCsvFormat;
+import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.flowviz.data.DataSet;
@@ -96,9 +98,22 @@ public class FlowVizDataManager {
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
         FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
+        // A dedicated *.res.csv filter needs a custom FileFilter: Swing's FileNameExtensionFilter
+        // only matches the text after the final dot ("csv"), so it can't single out ".res.csv".
+        javax.swing.filechooser.FileFilter resCsvFilter = new javax.swing.filechooser.FileFilter() {
+            @Override
+            public boolean accept(File f) {
+                return f.isDirectory() || SourceResCsvFormat.isResCsv(f.getName());
+            }
+            @Override
+            public String getDescription() {
+                return "Source Result CSV (*.res.csv)";
+            }
+        };
         FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.pxt)", "csv", "pxt");
 
         fileChooser.addChoosableFileFilter(csvFilter);
+        fileChooser.addChoosableFileFilter(resCsvFilter);
         fileChooser.addChoosableFileFilter(pixieFilter);
         fileChooser.addChoosableFileFilter(allFilter);
         fileChooser.setFileFilter(allFilter); // Default to all supported
@@ -137,13 +152,16 @@ public class FlowVizDataManager {
      */
     public void loadFile(File file) {
         String fileName = file.getName().toLowerCase();
-        if (fileName.endsWith(".csv")) {
+        // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
+        if (SourceResCsvFormat.isResCsv(fileName)) {
+            loadResCsvFile(file);
+        } else if (fileName.endsWith(".csv")) {
             loadCsvFile(file);
         } else if (fileName.endsWith(".pxt")) {
             loadPixieFile(file);
         } else {
             JOptionPane.showMessageDialog(parentFrame,
-                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .pxt",
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .res.csv, .pxt",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
         }
@@ -283,6 +301,107 @@ public class FlowVizDataManager {
 
         importTask.execute();
         progressDialog.setVisible(true);
+    }
+
+    /**
+     * Loads a single Source result CSV ({@code .res.csv}) file with progress dialog.
+     *
+     * @param resCsvFile The .res.csv file to load
+     */
+    public void loadResCsvFile(File resCsvFile) {
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Parsing res.csv...");
+
+        JDialog progressDialog = new JDialog(parentFrame, "Loading Data", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.add(new JLabel("Loading: " + resCsvFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(parentFrame);
+
+        SourceResCsvImporter.ResCsvImportTask importTask = new SourceResCsvImporter.ResCsvImportTask(resCsvFile) {
+            @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int progress = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(progress);
+                    progressBar.setString(String.format("Importing res.csv... %d%%", progress));
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                try {
+                    handleResCsvImportResult(resCsvFile, get());
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(parentFrame,
+                        "Error loading res.csv file:\n" + e.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            importTask.cancel(true);
+            progressDialog.dispose();
+        });
+
+        importTask.execute();
+        progressDialog.setVisible(true);
+    }
+
+    /**
+     * Processes the result of a res.csv import operation.
+     *
+     * @param resCsvFile The source .res.csv file
+     * @param importResult The import result with data and warnings
+     */
+    private void handleResCsvImportResult(File resCsvFile,
+                                          SourceResCsvImporter.ResCsvImportResult importResult) {
+        if (importResult.hasErrors()) {
+            StringBuilder errorMessage = new StringBuilder("Failed to load res.csv file:\n\n");
+            for (String error : importResult.getErrors()) {
+                errorMessage.append("• ").append(error).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
+                "res.csv Load Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        String fileName = resCsvFile.getName();
+
+        for (NamedSeries ns : importResult.getSeries()) {
+            // Display label: "filename.res.csv: SeriesName"; identity is a DatasetSeries ref.
+            String displayName = fileName + ": " + ns.name();
+            SeriesRef ref = uniqueRefFor(resCsvFile, displayName);
+            dataSet.addSeries(ref, ns.data());
+        }
+
+        currentFileUpdater.accept(resCsvFile);
+        titleUpdater.run();
+
+        if (importResult.hasWarnings()) {
+            StringBuilder warningMessage = new StringBuilder("res.csv loaded successfully with warnings:\n\n");
+            for (String warning : importResult.getWarnings()) {
+                warningMessage.append("• ").append(warning).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(parentFrame, warningMessage.toString(),
+                "Load Warnings", JOptionPane.WARNING_MESSAGE);
+        }
+
+        if (zoomToFitAction != null) {
+            zoomToFitAction.run();
+        }
     }
 
     /**

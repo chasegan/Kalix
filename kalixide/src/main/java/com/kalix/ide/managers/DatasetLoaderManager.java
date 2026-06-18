@@ -3,6 +3,8 @@ package com.kalix.ide.managers;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
+import com.kalix.ide.io.SourceResCsvFormat;
+import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -202,7 +204,10 @@ public class DatasetLoaderManager {
 
         String fileName = file.getName().toLowerCase();
 
-        if (fileName.endsWith(".csv")) {
+        // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
+        if (SourceResCsvFormat.isResCsv(fileName)) {
+            loadResCsvDataset(file);
+        } else if (fileName.endsWith(".csv")) {
             loadCsvDataset(file);
         } else if (fileName.endsWith(".pxt") || fileName.endsWith(".pxb")) {
             loadPixieDataset(file);
@@ -364,6 +369,126 @@ public class DatasetLoaderManager {
         }
 
         // Notify callback
+        if (onDatasetLoadedCallback != null) {
+            onDatasetLoadedCallback.run();
+        }
+    }
+
+    /**
+     * Loads a Source result CSV ({@code .res.csv}) dataset with progress dialog.
+     *
+     * @param resCsvFile The .res.csv file to load
+     */
+    private void loadResCsvDataset(File resCsvFile) {
+        if (statusUpdater != null) {
+            statusUpdater.accept("Loading res.csv dataset...");
+        }
+
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Parsing res.csv...");
+
+        JDialog progressDialog = new JDialog(parentFrame, "Loading Data", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.add(new JLabel("Loading: " + resCsvFile.getName(), SwingConstants.CENTER), BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancel");
+        progressDialog.add(cancelButton, BorderLayout.SOUTH);
+
+        progressDialog.setSize(400, 120);
+        progressDialog.setLocationRelativeTo(parentFrame);
+
+        SourceResCsvImporter.ResCsvImportTask importTask = new SourceResCsvImporter.ResCsvImportTask(resCsvFile) {
+            @Override
+            protected void process(List<Integer> chunks) {
+                if (!chunks.isEmpty()) {
+                    int progress = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(progress);
+                    progressBar.setString(String.format("Importing res.csv... %d%%", progress));
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                try {
+                    handleResCsvImportResult(resCsvFile, get());
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(parentFrame,
+                        "Error loading res.csv file:\n" + e.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE);
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Error loading res.csv file");
+                    }
+                    logger.error("Error loading res.csv file: " + resCsvFile.getName(), e);
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> {
+            importTask.cancel(true);
+            progressDialog.dispose();
+            if (statusUpdater != null) {
+                statusUpdater.accept("res.csv import cancelled");
+            }
+        });
+
+        importTask.execute();
+        progressDialog.setVisible(true);
+    }
+
+    /**
+     * Handles the result of a res.csv import operation.
+     *
+     * @param resCsvFile The .res.csv file that was imported
+     * @param importResult The import result containing data and warnings
+     */
+    private void handleResCsvImportResult(File resCsvFile,
+                                          SourceResCsvImporter.ResCsvImportResult importResult) {
+        if (importResult.hasErrors()) {
+            StringBuilder errorMessage = new StringBuilder("Failed to load res.csv file:\n\n");
+            for (String error : importResult.getErrors()) {
+                errorMessage.append("• ").append(error).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
+                "res.csv Load Error", JOptionPane.ERROR_MESSAGE);
+            if (statusUpdater != null) {
+                statusUpdater.accept("Failed to load res.csv file");
+            }
+            return;
+        }
+
+        String fileName = resCsvFile.getName();
+        int seriesAdded = 0;
+
+        for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
+            String seriesName = createDatasetSeriesName(resCsvFile, ns.name());
+            DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
+            datasetSeriesCache.put(ref, ns.data());
+            seriesAdded++;
+        }
+
+        addLoadedDatasetToTree(resCsvFile);
+
+        if (importResult.hasWarnings()) {
+            StringBuilder warningMessage = new StringBuilder("res.csv loaded successfully with warnings:\n\n");
+            for (String warning : importResult.getWarnings()) {
+                warningMessage.append("• ").append(warning).append("\n");
+            }
+
+            JOptionPane.showMessageDialog(parentFrame, warningMessage.toString(),
+                "Load Warnings", JOptionPane.WARNING_MESSAGE);
+        }
+
+        if (statusUpdater != null) {
+            statusUpdater.accept(String.format("Loaded %s: %d series, %,d total points",
+                fileName, seriesAdded, importResult.getTotalPointCount()));
+        }
+
         if (onDatasetLoadedCallback != null) {
             onDatasetLoadedCallback.run();
         }
