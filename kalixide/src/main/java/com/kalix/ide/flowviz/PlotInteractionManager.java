@@ -4,6 +4,8 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
+import com.kalix.ide.io.SourceResCsvExporter;
+import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.PixieWriter;
 
 import javax.swing.ButtonGroup;
@@ -759,8 +761,21 @@ public class PlotInteractionManager {
         // Add file filters for different formats
         FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
         FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
+        // *.res.csv needs a custom filter — FileNameExtensionFilter only matches the text
+        // after the final dot ("csv"), so it can't single out the double extension.
+        javax.swing.filechooser.FileFilter resCsvFilter = new javax.swing.filechooser.FileFilter() {
+            @Override
+            public boolean accept(java.io.File f) {
+                return f.isDirectory() || SourceResCsvFormat.isResCsv(f.getName());
+            }
+            @Override
+            public String getDescription() {
+                return "Source Result CSV (*.res.csv)";
+            }
+        };
 
         fileChooser.addChoosableFileFilter(csvFilter);
+        fileChooser.addChoosableFileFilter(resCsvFilter);
         fileChooser.addChoosableFileFilter(pixieFilter);
         fileChooser.setFileFilter(csvFilter); // Default to CSV
 
@@ -783,11 +798,17 @@ public class PlotInteractionManager {
 
             // Format follows the chosen filter. A typed extension overrides it, so a user
             // who explicitly names "foo.csv" while the Pixie filter is active still gets CSV.
-            // saveAsCsvFormat / saveAsPixieFormat each apply the correct extension.
-            boolean pixie = fileName.endsWith(".pxt")
-                || (fileChooser.getFileFilter() == pixieFilter && !fileName.endsWith(".csv"));
+            // saveAs*Format each apply the correct extension. ".res.csv" is tested before
+            // ".csv" / ".pxt" since the typed name takes precedence over the active filter.
+            boolean resCsv = SourceResCsvFormat.isResCsv(fileName)
+                || (fileChooser.getFileFilter() == resCsvFilter
+                    && !fileName.endsWith(".csv") && !fileName.endsWith(".pxt"));
+            boolean pixie = !resCsv && (fileName.endsWith(".pxt")
+                || (fileChooser.getFileFilter() == pixieFilter && !fileName.endsWith(".csv")));
 
-            if (pixie) {
+            if (resCsv) {
+                saveAsResCsvFormat(file);
+            } else if (pixie) {
                 saveAsPixieFormat(file);
             } else {
                 saveAsCsvFormat(file);
@@ -811,6 +832,37 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             TimeSeriesCsvExporter.export(dataSet, file, plotType, labelResolver);
+            JOptionPane.showMessageDialog(parentComponent,
+                "Data saved successfully to " + file.getName(),
+                "Save Data",
+                JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(parentComponent,
+                "Error saving data: " + e.getMessage(),
+                "Save Error",
+                JOptionPane.ERROR_MESSAGE);
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(parentComponent,
+                "Invalid data: " + e.getMessage(),
+                "Save Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Saves data in Source result CSV ({@code .res.csv}) format.
+     */
+    private void saveAsResCsvFormat(File file) {
+        // Ensure .res.csv extension
+        if (!SourceResCsvFormat.isResCsv(file.getName())) {
+            file = new File(file.getAbsolutePath() + SourceResCsvFormat.EXTENSION);
+        }
+
+        try {
+            DataSet dataSet = dataSetSupplier.get();
+            com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+                (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
+            SourceResCsvExporter.export(dataSet, file, labelResolver);
             JOptionPane.showMessageDialog(parentComponent,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
