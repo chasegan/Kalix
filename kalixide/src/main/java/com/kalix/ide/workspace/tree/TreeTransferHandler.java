@@ -50,11 +50,18 @@ class TreeTransferHandler extends TransferHandler {
 
     // --- Target ---
 
+    /**
+     * Determine if drop into folder is allowed.
+     *
+     * <p>Move into same folder is disallowed but copy into same folder is allowed and is
+     * considered a duplicate action.
+     */
     @Override
     public boolean canImport(TransferSupport support) {
         if (!support.isDrop() || !support.isDataFlavorSupported(TreeFileTransferable.FLAVOR)) {
             return false;
         }
+        boolean copy = (support.getDropAction() & COPY) == COPY;
         File targetDir = targetDir(support);
         List<File> dragged = draggedFiles(support);
         if (targetDir == null || dragged == null || dragged.isEmpty()) {
@@ -66,8 +73,9 @@ class TreeTransferHandler extends TransferHandler {
             Path p = f.toPath().toAbsolutePath().normalize();
             if (target.startsWith(p)) {
                 return false; // dropping a folder into itself or one of its descendants
-            }
-            if (!target.equals(p.getParent())) {
+            } else if (target.equals(p.getParent()) && copy) {
+                anyValid = true; // duplicate in same folder
+            } else if (!target.equals(p.getParent())) {
                 anyValid = true; // at least one entry would actually move (not a same-folder no-op)
             }
         }

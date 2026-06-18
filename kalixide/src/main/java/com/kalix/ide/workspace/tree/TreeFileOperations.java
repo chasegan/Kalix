@@ -151,6 +151,7 @@ class TreeFileOperations {
      */
     private String generateDuplicateName(File file) {
         String fileName = file.getName();
+        if (!file.exists()) { return fileName; }
         File parentDir = file.getParentFile();
 
         // Split filename into base and extension
@@ -240,7 +241,7 @@ class TreeFileOperations {
     static List<File> withoutDescendants(List<File> files) {
         List<Path> paths = files.stream()
             .map(f -> f.toPath().toAbsolutePath().normalize())
-            .collect(Collectors.toList());
+            .toList();
         List<File> result = new ArrayList<>();
         for (int i = 0; i < files.size(); i++) {
             Path candidate = paths.get(i);
@@ -263,17 +264,18 @@ class TreeFileOperations {
 
     /**
      * Moves (or, if {@code copy}, copies) the given entries into {@code targetDir}. A move asks
-     * for confirmation first; a copy is non-destructive, so it proceeds without one. Entries
-     * already in the target directory, and descendants of another moved entry, are skipped; name
-     * collisions in the target are reported and skipped. The filesystem watcher reflects the
-     * result back into the tree.
+     * for confirmation first; a copy is non-destructive, so it proceeds without one. For move
+     * operations, entries already in the target directory are skipped; for copy operations, they
+     * are duplicated with auto-generated names. Descendants of another moved entry are skipped.
+     * Name collisions in the target are reported and skipped (move) or auto-renamed (copy). The
+     * filesystem watcher reflects the result back into the tree.
      *
      * @return true if the operation went ahead (regardless of per-entry success), false if
      *         cancelled or there was nothing to do
      */
     boolean moveInto(List<File> files, File targetDir, boolean copy) {
         List<File> sources = withoutDescendants(files).stream()
-            .filter(f -> !targetDir.equals(f.getParentFile()))
+            .filter(f -> copy || !targetDir.equals(f.getParentFile()))
             .collect(Collectors.toList());
         if (sources.isEmpty()) {
             return false;
@@ -284,13 +286,19 @@ class TreeFileOperations {
         List<String> failures = new ArrayList<>();
         for (File source : sources) {
             File dest = new File(targetDir, source.getName());
-            if (dest.exists()) {
+            if (!copy && dest.exists()) {
                 failures.add(source.getName() + " (already exists in the target folder)");
                 continue;
             }
             try {
                 if (copy) {
-                    copyRecursively(source.toPath(), dest.toPath());
+                    if (dest.exists()) {
+                        String targetName = generateDuplicateName(dest);
+                        File duplicateDestination = new File(dest.getParentFile(), targetName.trim());
+                        copyRecursively(source.toPath(), duplicateDestination.toPath());
+                    } else {
+                        copyRecursively(source.toPath(), dest.toPath());
+                    }
                 } else {
                     Files.move(source.toPath(), dest.toPath());
                 }
