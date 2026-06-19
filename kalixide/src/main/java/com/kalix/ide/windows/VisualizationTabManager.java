@@ -1,5 +1,6 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
@@ -31,7 +32,6 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
-import javax.swing.SwingUtilities;
 import javax.swing.Icon;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -40,8 +40,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Point;
-import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -94,11 +92,9 @@ public class VisualizationTabManager {
     private int lastActivePlotTabIndex = 0;
     private Runnable onTabChangedCallback;
 
-    // Drag and drop state
-    private static final int DRAG_THRESHOLD = 5;
-    private JPanel draggingTab = null;
-    private int dragStartIndex = -1;
-    private int pressX, pressY;
+    // Ghost-style drag-to-reorder, shared across all tabs (custom tab components, so it attaches
+    // to each tab's handle rather than the strip). Initialized once tabbedPane exists.
+    private final TabDragReorderer tabReorderer;
 
     /**
      * UI constants for consistent styling and sizing.
@@ -108,7 +104,6 @@ public class VisualizationTabManager {
         static final int BUTTON_ICON_SIZE = 14;
         static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
         static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
-        static final Color DRAG_HIGHLIGHT_COLOR = new Color(200, 200, 255, 100);
         static final int HORIZONTAL_SPACING = 5;
         static final int TAB_PANEL_PADDING = 2;
     }
@@ -249,6 +244,7 @@ public class VisualizationTabManager {
         this.tabbedPane = new JTabbedPane();
         this.tabbedPane.setTabPlacement(JTabbedPane.TOP);
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        this.tabReorderer = new TabDragReorderer(tabbedPane, this::reorderTab);
 
         // Track tab changes for tree synchronization
         this.tabbedPane.addChangeListener(e -> {
@@ -1101,82 +1097,20 @@ public class VisualizationTabManager {
         tabbedPane.setTabComponentAt(index, tabPanel);
 
         // Add drag-and-drop support for tab reordering
-        setupTabDragAndDrop(tabPanel, label);
+        setupTabDragAndDrop(label);
 
         // Add context menu support
         setupTabContextMenu(tabPanel, label, tabType);
     }
 
     /**
-     * Sets up drag-and-drop handlers for tab reordering.
+     * Enables ghost-style drag-to-reorder for this tab. The label is the drag handle (custom tab
+     * components swallow the strip's mouse events); the shared reorderer paints the dragged-tab
+     * ghost and the theme-coloured insertion line, commits the move on drop via {@link #reorderTab},
+     * and selects the tab on a plain click.
      */
-    private void setupTabDragAndDrop(JPanel tabPanel, JLabel label) {
-        MouseAdapter dragHandler = new MouseAdapter() {
-            private boolean hasDragged = false;
-
-            @Override
-            public void mousePressed(MouseEvent e) {
-                pressX = e.getX();
-                pressY = e.getY();
-                dragStartIndex = tabbedPane.indexOfTabComponent(tabPanel);
-                hasDragged = false;
-            }
-
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                if (dragStartIndex == -1) return;
-
-                // Check if we've moved beyond the drag threshold
-                int deltaX = Math.abs(e.getX() - pressX);
-                int deltaY = Math.abs(e.getY() - pressY);
-
-                if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-                    hasDragged = true;
-                    if (draggingTab == null) {
-                        draggingTab = tabPanel;
-                        tabPanel.setOpaque(true);
-                        tabPanel.setBackground(UIConstants.DRAG_HIGHLIGHT_COLOR);
-                    }
-
-                    // Determine which tab we're hovering over
-                    Point screenPoint = e.getLocationOnScreen();
-                    SwingUtilities.convertPointFromScreen(screenPoint, tabbedPane);
-
-                    for (int i = 0; i < tabbedPane.getTabCount(); i++) {
-                        Rectangle tabBounds = tabbedPane.getBoundsAt(i);
-                        if (tabBounds != null && tabBounds.contains(screenPoint)) {
-                            if (i != dragStartIndex) {
-                                // Reorder the tab
-                                reorderTab(dragStartIndex, i);
-                                dragStartIndex = i;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (draggingTab != null) {
-                    draggingTab.setOpaque(false);
-                    draggingTab.setBackground(null);
-                    draggingTab = null;
-                } else if (!hasDragged) {
-                    // This was a click, not a drag - select the tab
-                    int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-                    if (tabIndex != -1) {
-                        tabbedPane.setSelectedIndex(tabIndex);
-                    }
-                }
-                dragStartIndex = -1;
-                hasDragged = false;
-            }
-        };
-
-        // Add listeners to the label (main drag area) but not the close button
-        label.addMouseListener(dragHandler);
-        label.addMouseMotionListener(dragHandler);
+    private void setupTabDragAndDrop(JLabel label) {
+        tabReorderer.attachToHandle(label);
     }
 
     /**
