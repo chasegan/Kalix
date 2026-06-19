@@ -30,6 +30,7 @@ public class StdioTaskManager {
     private final JFrame parentFrame;
     private final SessionManager sessionManager;
     private final Supplier<File> workingDirectorySupplier;
+    private final Supplier<File> projectDirectorySupplier;
 
     /**
      * Creates a new StdioTaskManager.
@@ -41,14 +42,16 @@ public class StdioTaskManager {
      * @param workingDirectorySupplier supplier for getting the current working directory
      */
     public StdioTaskManager(ProcessExecutor processExecutor,
-                         Consumer<String> statusUpdater,
-                         StatusProgressBar progressBar,
-                         JFrame parentFrame,
-                         Supplier<File> workingDirectorySupplier) {
+                            Consumer<String> statusUpdater,
+                            StatusProgressBar progressBar,
+                            JFrame parentFrame,
+                            Supplier<File> workingDirectorySupplier,
+                            Supplier<File> projectDirectorySupplier) {
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.parentFrame = parentFrame;
         this.workingDirectorySupplier = workingDirectorySupplier;
+        this.projectDirectorySupplier = projectDirectorySupplier;
 
 
         // Initialize session manager
@@ -86,8 +89,11 @@ public class StdioTaskManager {
                 File workingDir = workingDirectorySupplier.get();
                 String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
+                File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
+                String projectFolder = projectDir != null ? projectDir.getAbsolutePath() : null;
+
                 // Locate kalix using preferences, checking current folder first
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder, null);
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder, projectFolder);
                 if (cliLocation.isEmpty()) {
                     handleCliNotFound();
                     throw new RuntimeException("kalix not found");
