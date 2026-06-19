@@ -2,6 +2,7 @@ package com.kalix.ide.io;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,5 +33,27 @@ public record NamedSeries(String name, List<String> path, TimeSeriesData data) {
      */
     public NamedSeries(String name, TimeSeriesData data) {
         this(name, List.of(name), data);
+    }
+
+    /**
+     * Factory for flat formats whose series names follow Kalix's dotted hierarchy convention
+     * (e.g. a CSV/Pixie column {@code node.x.dsflow} saved from a run). The {@code name} is
+     * split on {@code .} into path segments so the series nests in the Run Manager tree exactly
+     * as the in-memory run does; the {@code name} itself is kept whole for the legend label.
+     *
+     * <p>Blank segments are dropped; a name with no usable segment falls back to a single
+     * {@code [name]} path.</p>
+     */
+    public static NamedSeries dotted(String name, TimeSeriesData data) {
+        List<String> path = new ArrayList<>();
+        for (String segment : name.split("\\.")) {
+            if (!segment.isBlank()) {
+                path.add(segment.trim());
+            }
+        }
+        if (path.isEmpty()) {
+            path.add(name);
+        }
+        return new NamedSeries(name, path, data);
     }
 }

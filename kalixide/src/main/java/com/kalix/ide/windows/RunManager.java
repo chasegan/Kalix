@@ -143,11 +143,10 @@ public class RunManager extends JFrame {
     private DataSet plotDataSet;
 
     // Cache for loaded dataset series.
-    // Key: DatasetSeries ref qualifying by absolute path + base name. The path qualifier
-    // matters because the legacy base name embeds only the sanitized filename (replaceAll
-    // "[^a-zA-Z0-9]" → "_"), so two distinct files whose names sanitize to the same
-    // identifier would collide on the bare base name. Keying by ref preserves their
-    // separate identity.
+    // Key: DatasetSeries ref qualifying by absolute path + base name. The base name is the
+    // series' own hierarchy only (no filename prefix), so it can collate with runs and other
+    // files by name; the absolute-path qualifier is therefore essential to keep identically
+    // named series from different files distinct. Keying by ref preserves that separation.
     // Value: TimeSeriesData
     // Mirrors how runs store data in TimeSeriesRequestManager's cache.
     private final Map<com.kalix.ide.flowviz.data.DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();

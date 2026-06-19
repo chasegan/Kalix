@@ -48,7 +48,9 @@ public class PixieReader {
         try (RandomAccessFile binaryFile = new RandomAccessFile(binaryPath, "r")) {
             for (SeriesMetadata meta : metadataList) {
                 TimeSeriesData series = readSeriesFromBinary(binaryFile, meta);
-                result.add(new NamedSeries(meta.seriesName, series));
+                // Split dotted series names (e.g. "node.x.dsflow" from a saved run) into
+                // hierarchy segments so reloaded Pixie results nest like the run, matching CSV.
+                result.add(NamedSeries.dotted(meta.seriesName, series));
             }
         }
 

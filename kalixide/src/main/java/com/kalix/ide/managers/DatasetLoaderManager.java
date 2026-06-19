@@ -630,29 +630,41 @@ public class DatasetLoaderManager {
     }
 
     /**
-     * Composes a hierarchical, dot-delimited series name from a file and the series' raw
-     * hierarchy segments. Each segment is sanitised individually and the segments are joined
-     * with {@code .} so the Run Manager tree ({@link OutputsTreeBuilder}) nests them as levels.
+     * Composes a hierarchical, dot-delimited series name from the series' raw hierarchy
+     * segments. Each segment is sanitised individually and the segments are joined with
+     * {@code .} so the Run Manager tree ({@link OutputsTreeBuilder}) nests them as levels.
      *
-     * <p>Format: {@code file.{sanitized_filename}.{sanitized_seg1}.{sanitized_seg2}…}. A
-     * single-segment path (the default for flat formats like CSV/Pixie) therefore reproduces
-     * the historical {@code file.<filename>.<column>} two-level name exactly.</p>
+     * <p>The name deliberately carries <em>no</em> file/filename prefix: it is exactly the
+     * series' own hierarchy (e.g. {@code node.x.dsflow}). This is what lets a loaded result
+     * file collate with runs — and with other loaded files — the same way runs collate with
+     * each other: identical series names across sources merge under one tree parent, with the
+     * file contributing a source-labelled child (its short filename), just as a run contributes
+     * a run-labelled child. The owning file stays distinct via the {@link
+     * com.kalix.ide.flowviz.data.DatasetSeries} {@code datasetId} (absolute path), not via the
+     * name. A single-segment path (the default for flat formats) yields a single-level name.</p>
      *
      * <p>This is the one generic place where structure is assembled: the segmentation (how
      * many levels and what they are) is the importer's format-specific responsibility, carried
      * on {@link com.kalix.ide.io.NamedSeries#path()}; sanitisation and joining are uniform.</p>
      *
-     * @param file The data file
+     * @param file The data file (used only as an identifiable fallback when no segment survives)
      * @param segments The series' raw hierarchy segments (each trimmed and sanitised here)
      * @return The dot-delimited tree key
      */
     private String composeDatasetSeriesName(File file, List<String> segments) {
-        StringBuilder sb = new StringBuilder("file.").append(sanitizeToIdentifier(file.getName()));
+        StringBuilder sb = new StringBuilder();
         for (String segment : segments) {
             String sanitized = sanitizeToIdentifier(segment.trim());
             if (!sanitized.isEmpty()) {
-                sb.append('.').append(sanitized);
+                if (sb.length() > 0) {
+                    sb.append('.');
+                }
+                sb.append(sanitized);
             }
+        }
+        if (sb.length() == 0) {
+            // No usable segment — fall back to the sanitised filename so the series stays identifiable.
+            sb.append(sanitizeToIdentifier(file.getName()));
         }
         return sb.toString();
     }

@@ -395,7 +395,9 @@ public class TimeSeriesCsvImporter {
                             .toArray();
 
                         TimeSeriesData data = new TimeSeriesData(dateTimeArray, valueArray);
-                        series.add(new NamedSeries(seriesName, data));
+                        // Split dotted column headers (e.g. "node.x.dsflow" from a saved run)
+                        // into hierarchy segments so reloaded result CSVs nest like the run.
+                        series.add(NamedSeries.dotted(seriesName, data));
 
                         // Validate series
                         if (data.getValidPointCount() == null || data.getValidPointCount() == 0) {

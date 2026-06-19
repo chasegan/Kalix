@@ -38,6 +38,21 @@ Custom binary format using Gorilla compression:
 
 Key files: `PixieWriter.java`, `PixieReader.java`, `GorillaCompressor.java`
 
+### Source Result CSV Format (.res.csv)
+eWater Source result export: an extended header before a normal date-indexed CSV body, split by marker lines `EOM` / `EOC` (then series count + one attribute row per series) / `EOH` (data follows).
+- **Marker-driven** (preamble varies by version); per-file `Missing data value` → NaN; header buffered, data streamed.
+- **Double-extension trap**: test `.res.csv` *before* `.csv` everywhere (dispatch, file filters, `InputDataRegistry` reader order).
+- **Write** is wired into the plot "Save Data" only; the Run Manager "Save Results" delegates to the kalixcli engine, so it can't emit `.res.csv`.
+
+Key files: `SourceResCsvImporter/Exporter/Header`, `SourceResCsvHeaderReader`, `ResCsvSegmenter`, `SourceResCsvFormat`.
+
+### Dataset Series Naming & Tree Hierarchy
+`OutputsTreeBuilder` splits series names on `.` into tree levels. Two separated responsibilities:
+- **Segmentation (per-format)**: importers emit raw hierarchy segments on `NamedSeries.path()` — flat formats use `NamedSeries.dotted()` (split on `.`); res.csv uses `ResCsvSegmenter` (`dedupeConsecutive([WaterFeatureType, Site] + Structure.split("@"))`).
+- **Sanitise + join (generic)**: `DatasetLoaderManager.composeDatasetSeriesName` sanitises each segment (`[^a-zA-Z0-9]→_`) and joins with `.`; segments are opaque (no re-split).
+
+Loaded names carry no `file.<filename>` prefix, so they collate with runs by name; the file stays distinct via `DatasetSeries.datasetId` (absolute path). Note: run output names are *not* sanitised (engine keys off them) but dataset names are — so collation matches for identifier-style names, not for node names with spaces/punctuation.
+
 ### Manager Pattern Architecture
 Comprehensive refactoring using manager pattern:
 
