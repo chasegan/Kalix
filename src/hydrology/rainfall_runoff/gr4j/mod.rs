@@ -1,3 +1,37 @@
+/// Selects the model formulation. The two variants are structurally identical
+/// (same stores, splits, exchange and routing); they differ only in two
+/// constants that were recalibrated for sub-daily timesteps. See airGR
+/// (`frun_GR4J.f90`/`frun_GR4H.f90`, `utils_D.f90`/`utils_H.f90`).
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
+pub enum Gr4Variant {
+    /// Classic daily formulation.
+    #[default]
+    Gr4j,
+    /// Sub-daily formulation (airGR's "hourly" model; also used for other
+    /// short timesteps such as 30-minute). Despite the "h", the constants are
+    /// timestep-agnostic — x4 is expressed in timestep units.
+    Gr4h,
+}
+
+impl Gr4Variant {
+    /// Percolation reservoir factor: percolation acts as if draining a store of
+    /// capacity `factor * x1`. GR4J = 9/4, GR4H = 21/4.
+    fn perc_factor(self) -> f64 {
+        match self {
+            Gr4Variant::Gr4j => 2.25, // 9/4
+            Gr4Variant::Gr4h => 5.25, // 21/4
+        }
+    }
+
+    /// Unit-hydrograph S-curve exponent. GR4J = 2.5, GR4H = 1.25.
+    fn uh_exponent(self) -> f64 {
+        match self {
+            Gr4Variant::Gr4j => 2.5,
+            Gr4Variant::Gr4h => 1.25,
+        }
+    }
+}
+
 #[derive(Default)]
 #[derive(Clone)]
 pub struct Gr4j {
@@ -6,6 +40,9 @@ pub struct Gr4j {
     pub x2: f64, //0 [-5, 3]
     pub x3: f64, //90 [20, 300]
     pub x4: f64, //1.7 [1.1, 2.9]
+
+    //Model formulation (daily GR4J vs sub-daily GR4H)
+    pub variant: Gr4Variant,
 
     //UH kernel
     uh1_len: usize,
@@ -16,6 +53,11 @@ pub struct Gr4j {
     //UH storages
     uh1: Vec<f64>,
     uh2: Vec<f64>,
+
+    // Precomputed 1.0 / (perc_factor * x1), derived from variant + x1 in
+    // initialize(). Keeps the percolation step in run_step() a single multiply
+    // with no per-timestep branch on the variant.
+    inv_perc_x1: f64,
 
     //Store values
     // Public so that gr4j nodes may read them
@@ -50,7 +92,8 @@ impl Gr4j {
      *
      */
     pub fn initialize(&mut self) {
-        //Set up the unit hydrograph kernels and stores (OBS! THESE DEPEND ON x4)
+        //Set up the unit hydrograph kernels and stores (OBS! THESE DEPEND ON x4 AND THE VARIANT)
+        let uh_exponent = self.variant.uh_exponent();
         self.uh1_len = self.x4.ceil() as usize;
         self.uh2_len = (2.0 * self.x4).ceil() as usize;
         self.uh1_ordinates = vec![0.0; self.uh1_len];
@@ -58,15 +101,25 @@ impl Gr4j {
         self.uh1 = vec![0.0; self.uh1_len];
         self.uh2 = vec![0.0; self.uh2_len];
         for t in 0..(self.uh1_len as usize) {
-            self.uh1_ordinates[t] = s_curves1(t + 1, self.x4) - s_curves1(t, self.x4);
+            self.uh1_ordinates[t] = s_curves1(t + 1, self.x4, uh_exponent) - s_curves1(t, self.x4, uh_exponent);
         }
         for t in 0..(self.uh2_len as usize) {
-            self.uh2_ordinates[t] = s_curves2(t + 1, self.x4) - s_curves2(t, self.x4);
+            self.uh2_ordinates[t] = s_curves2(t + 1, self.x4, uh_exponent) - s_curves2(t, self.x4, uh_exponent);
         }
+
+        //Precompute the percolation divisor (run-invariant: depends only on variant and x1)
+        self.inv_perc_x1 = 1.0 / (self.variant.perc_factor() * self.x1);
 
         //Set up the production and routing stores
         self.production_store = 0.0;
         self.routing_store = 0.0;
+    }
+
+    /// Switch the model formulation. Re-initialises the UH kernels and the
+    /// percolation divisor, both of which depend on the variant.
+    pub fn set_variant(&mut self, variant: Gr4Variant) {
+        self.variant = variant;
+        self.initialize();
     }
 
 
@@ -97,8 +150,8 @@ impl Gr4j {
         //Production store
         self.production_store = self.production_store - es + ps;
 
-        //Percolation
-        let perc = self.production_store * (1.0 - (1.0 + (self.production_store / 2.25 / self.x1).powi(4)).powf(-0.25));
+        //Percolation (inv_perc_x1 = 1/(perc_factor*x1); perc_factor is 2.25 for GR4J, 5.25 for GR4H)
+        let perc = self.production_store * (1.0 - (1.0 + (self.production_store * self.inv_perc_x1).powi(4)).powf(-0.25));
         self.production_store -= perc;
         let pr = perc + pn - ps;
 
@@ -132,13 +185,14 @@ impl Gr4j {
 
 /**
  * Unit hydrograph ordinates for UH1 derived from S-curves.
+ * `exp` is the variant-specific shape exponent (2.5 for GR4J, 1.25 for GR4H).
  */
-fn s_curves1(t: usize, x4: f64) -> f64 {
+fn s_curves1(t: usize, x4: f64, exp: f64) -> f64 {
     let t_f64 = t as f64;
     if t <= 0 {
         0.0
     } else if t_f64 < x4 {
-        (t_f64 / x4).powf(2.5)
+        (t_f64 / x4).powf(exp)
     } else {
         1.0
     }
@@ -146,16 +200,17 @@ fn s_curves1(t: usize, x4: f64) -> f64 {
 
 /**
  * Unit hydrograph ordinates for UH2 derived from S-curves.
+ * `exp` is the variant-specific shape exponent (2.5 for GR4J, 1.25 for GR4H).
  */
-fn s_curves2(t: usize, x4: f64) -> f64 {
+fn s_curves2(t: usize, x4: f64, exp: f64) -> f64 {
     let t_f64 = t as f64;
     if t <= 0 {
         0.0
     } else if t_f64 < x4 {
-        0.5 * (t_f64 / x4).powf(2.5)
+        0.5 * (t_f64 / x4).powf(exp)
     } else if t_f64 < 2.0 * x4 {
-        1.0 - 0.5 * (2.0 - t_f64 / x4).powf(2.5)
+        1.0 - 0.5 * (2.0 - t_f64 / x4).powf(exp)
     } else {
-        1.0 // t >= x4
+        1.0 // t >= 2*x4
     }
 }

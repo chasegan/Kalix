@@ -11,6 +11,12 @@ mod test_timeseries;
 mod test_gr4j_model;
 
 #[cfg(test)]
+mod test_gr4h_variant;
+
+#[cfg(test)]
+mod test_gr4h_validation;
+
+#[cfg(test)]
 mod test_node_inflow;
 
 #[cfg(test)]

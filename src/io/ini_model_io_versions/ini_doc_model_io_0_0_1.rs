@@ -9,6 +9,7 @@ use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
+use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::nodes::storage_node::OutletDefinition;
 use crate::nodes::storage_node::OutletDefinition::{OutletWithMOLAndCapacity, OutletWithMOL};
 
@@ -231,6 +232,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.area_km2 = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name))?;
+                        } else if name_lower == "variant" {
+                            // Model formulation. Absent/"gr4j" => classic daily; "gr4h" => sub-daily.
+                            // Set the field directly; gr4j_model.initialize() (called during model
+                            // init) derives the variant-specific constants from it.
+                            n.gr4j_model.variant = match v.to_lowercase().as_str() {
+                                "gr4j" => Gr4Variant::Gr4j,
+                                "gr4h" => Gr4Variant::Gr4h,
+                                _ => return Err(format!("Error on line {}: Unknown gr4j variant '{}' for node '{}' (expected 'gr4j' or 'gr4h')",
+                                                        ini_property.line_number, v, node_name)),
+                            };
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -708,6 +719,10 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "gr4j");
+                // Only emit the variant line when non-default, to keep classic GR4J models diff-clean.
+                if let Gr4Variant::Gr4h = n.gr4j_model.variant {
+                    ini_doc.set_property(section_name.as_str(), "variant", "gr4h");
+                }
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
