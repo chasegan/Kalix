@@ -650,11 +650,11 @@ public class PlotInteractionManager {
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
-        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
+        JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
         contextMenu.add(zoomToFitItem);
 
-        autoYMenuItem = new JCheckBoxMenuItem("Auto-Y");
+        autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
             autoYMode = autoYMenuItem.isSelected();
             // Update the parent PlotPanel's auto-Y mode if it has the method
@@ -666,8 +666,8 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        // Y-Axis Scale submenu
-        yAxisScaleMenu = new JMenu("Y-Axis Scale");
+        // Y-axis scale submenu
+        yAxisScaleMenu = new JMenu("Y-axis scale");
         ButtonGroup yAxisScaleGroup = new ButtonGroup();
 
         for (YAxisScale scale : YAxisScale.values()) {
@@ -688,7 +688,7 @@ public class PlotInteractionManager {
         // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
         // but either may be off. They are checkboxes (mutual exclusion enforced in PlotPanel)
         // rather than a radio group, which could not express the "neither selected" state.
-        JMenu missingDataMenu = new JMenu("Missing Data");
+        JMenu missingDataMenu = new JMenu("Missing data");
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
@@ -710,7 +710,7 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        JMenuItem saveDataItem = new JMenuItem("Save Data...");
+        JMenuItem saveDataItem = new JMenuItem("Save data…");
         saveDataItem.addActionListener(e -> saveData());
         contextMenu.add(saveDataItem);
 

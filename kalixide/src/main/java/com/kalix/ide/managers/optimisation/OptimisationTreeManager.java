@@ -231,32 +231,12 @@ public class OptimisationTreeManager {
      * Sets up the context menu for the tree.
      */
     public void setupContextMenu() {
+        // Skeleton order (docs/context-menu-style.md §1): view actions first, then export,
+        // the run control, navigation, and finally modify + the destructive "Remove".
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // Rename
-        JMenuItem renameItem = new JMenuItem("Rename");
-        renameItem.addActionListener(e -> {
-            OptimisationInfo info = getSelectedOptimisation();
-            if (info != null && renameAction != null) {
-                renameAction.accept(info);
-            }
-        });
-        contextMenu.add(renameItem);
-
-        // Remove
-        JMenuItem removeItem = new JMenuItem("Remove");
-        removeItem.addActionListener(e -> {
-            OptimisationInfo info = getSelectedOptimisation();
-            if (info != null && removeAction != null) {
-                removeAction.accept(info);
-            }
-        });
-        contextMenu.add(removeItem);
-
-        contextMenu.addSeparator();
-
-        // Show Model
-        JMenuItem showModelItem = new JMenuItem("Show Model");
+        // Show model
+        JMenuItem showModelItem = new JMenuItem("Show model");
         showModelItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
             if (info != null && showModelAction != null) {
@@ -265,8 +245,8 @@ public class OptimisationTreeManager {
         });
         contextMenu.add(showModelItem);
 
-        // Show Optimised Model (only for completed)
-        JMenuItem showOptimisedItem = new JMenuItem("Show Optimised Model");
+        // Show optimised model (only for completed)
+        JMenuItem showOptimisedItem = new JMenuItem("Show optimised model");
         showOptimisedItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
             if (info != null && showOptimisedModelAction != null) {
@@ -275,8 +255,8 @@ public class OptimisationTreeManager {
         });
         contextMenu.add(showOptimisedItem);
 
-        // Compare Models (only for completed)
-        JMenuItem compareItem = new JMenuItem("Compare Models");
+        // Compare models (only for completed)
+        JMenuItem compareItem = new JMenuItem("Compare models");
         compareItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
             if (info != null && compareModelAction != null) {
@@ -287,8 +267,8 @@ public class OptimisationTreeManager {
 
         contextMenu.addSeparator();
 
-        // Save Results (only for completed)
-        JMenuItem saveResultsItem = new JMenuItem("Save Results");
+        // Save results (only for completed)
+        JMenuItem saveResultsItem = new JMenuItem("Save results");
         saveResultsItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
             if (info != null && saveResultsAction != null) {
@@ -299,8 +279,8 @@ public class OptimisationTreeManager {
 
         contextMenu.addSeparator();
 
-        // Stop Optimisation (only for running)
-        JMenuItem stopItem = new JMenuItem("Stop Optimisation");
+        // Stop optimisation (only for running)
+        JMenuItem stopItem = new JMenuItem("Stop optimisation");
         stopItem.addActionListener(e -> {
             OptimisationInfo info = getSelectedOptimisation();
             if (info != null && stopOptimisationAction != null) {
@@ -320,6 +300,28 @@ public class OptimisationTreeManager {
             }
         });
         contextMenu.add(sessionManagerItem);
+
+        contextMenu.addSeparator();
+
+        // Rename
+        JMenuItem renameItem = new JMenuItem("Rename");
+        renameItem.addActionListener(e -> {
+            OptimisationInfo info = getSelectedOptimisation();
+            if (info != null && renameAction != null) {
+                renameAction.accept(info);
+            }
+        });
+        contextMenu.add(renameItem);
+
+        // Remove (unlists the optimisation — not "Delete", so no trash icon, §2.5)
+        JMenuItem removeItem = new JMenuItem("Remove");
+        removeItem.addActionListener(e -> {
+            OptimisationInfo info = getSelectedOptimisation();
+            if (info != null && removeAction != null) {
+                removeAction.accept(info);
+            }
+        });
+        contextMenu.add(removeItem);
 
         // Add mouse listener for right-click
         tree.addMouseListener(new MouseAdapter() {

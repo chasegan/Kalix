@@ -135,7 +135,30 @@ public class RunContextMenuManager {
      * Sets up the context menu for the run tree.
      */
     public void setupRunTreeContextMenu() {
+        // Skeleton order (docs/context-menu-style.md §1): view actions first, navigation next,
+        // modify + the destructive "Remove" last. "Remove" unlists the run (it is not "Delete"),
+        // so it takes no trash icon (§2.5).
         JPopupMenu contextMenu = new JPopupMenu();
+
+        JMenuItem showModelItem = new JMenuItem("Show model");
+        showModelItem.addActionListener(e -> showModel());
+        contextMenu.add(showModelItem);
+
+        JMenuItem diffItem = new JMenuItem("Show model changes");
+        diffItem.addActionListener(e -> diffModel());
+        contextMenu.add(diffItem);
+
+        JMenuItem saveResultsItem = new JMenuItem("Save results");
+        saveResultsItem.addActionListener(e -> saveResults());
+        contextMenu.add(saveResultsItem);
+
+        contextMenu.addSeparator();
+
+        JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
+        sessionManagerItem.addActionListener(e -> showInSessionManager());
+        contextMenu.add(sessionManagerItem);
+
+        contextMenu.addSeparator();
 
         JMenuItem renameItem = new JMenuItem("Rename");
         renameItem.addActionListener(e -> renameRun());
@@ -144,24 +167,6 @@ public class RunContextMenuManager {
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> removeRun());
         contextMenu.add(removeItem);
-
-        contextMenu.addSeparator();
-
-        JMenuItem saveResultsItem = new JMenuItem("Save Results");
-        saveResultsItem.addActionListener(e -> saveResults());
-        contextMenu.add(saveResultsItem);
-
-        JMenuItem showModelItem = new JMenuItem("Show Model");
-        showModelItem.addActionListener(e -> showModel());
-        contextMenu.add(showModelItem);
-
-        JMenuItem diffItem = new JMenuItem("Show Model Changes");
-        diffItem.addActionListener(e -> diffModel());
-        contextMenu.add(diffItem);
-
-        JMenuItem sessionManagerItem = new JMenuItem("View in KalixCLI Session Manager");
-        sessionManagerItem.addActionListener(e -> showInSessionManager());
-        contextMenu.add(sessionManagerItem);
 
         // A separate, smaller menu shown when a loaded-dataset node is right-clicked.
         JPopupMenu datasetMenu = new JPopupMenu();
@@ -251,11 +256,11 @@ public class RunContextMenuManager {
     public void setupOutputsTreeContextMenu(Runnable expandAllCallback, Runnable collapseAllCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        JMenuItem expandAllItem = new JMenuItem("Expand All");
+        JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllCallback.run());
         contextMenu.add(expandAllItem);
 
-        JMenuItem collapseAllItem = new JMenuItem("Collapse All");
+        JMenuItem collapseAllItem = new JMenuItem("Collapse all");
         collapseAllItem.addActionListener(e -> collapseAllCallback.run());
         contextMenu.add(collapseAllItem);
 

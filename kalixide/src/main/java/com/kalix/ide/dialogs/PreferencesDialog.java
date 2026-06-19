@@ -266,11 +266,11 @@ public class PreferencesDialog extends JDialog {
     private void createTreeContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        JMenuItem expandAllItem = new JMenuItem("Expand All");
+        JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllNodes());
         contextMenu.add(expandAllItem);
 
-        JMenuItem collapseAllItem = new JMenuItem("Collapse All");
+        JMenuItem collapseAllItem = new JMenuItem("Collapse all");
         collapseAllItem.addActionListener(e -> collapseAllNodes());
         contextMenu.add(collapseAllItem);
 

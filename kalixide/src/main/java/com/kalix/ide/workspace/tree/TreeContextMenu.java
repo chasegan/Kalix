@@ -1,5 +1,9 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.icons.MenuIcons;
+import com.kalix.ide.utils.PlatformUtils;
+
+import javax.swing.Icon;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -8,6 +12,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -65,6 +70,9 @@ class TreeContextMenu {
                 } else {
                     item = new JMenuItem(entry.label.apply(selection));
                 }
+                if (entry.icon != null) {
+                    item.setIcon(entry.icon.get());
+                }
                 item.addActionListener(e -> entry.action.accept(selection));
                 menu.add(item);
             }
@@ -75,28 +83,25 @@ class TreeContextMenu {
     // --- Entry definitions ---
 
     private List<List<Entry>> buildEntries() {
+        // Groups follow the context-menu skeleton (docs/context-menu-style.md §1):
+        // primary -> context-specific -> external handoff -> clipboard -> create ->
+        // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(
             List.of(
                 item("Open", TreeContextMenu::isSingleFile,
-                    sel -> host.openFile(file(sel))),
+                    sel -> host.openFile(file(sel)))
+            ),
+            List.of(
                 item("Compare with active editor", TreeContextMenu::isSingleFile,
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1)))
             ),
             List.of(
-                item("Reveal in File Manager", TreeContextMenu::isSingle,
+                item(revealLabel(), TreeContextMenu::isSingle,
                     sel -> fileOps.reveal(file(sel))),
-                item("Terminal", TreeContextMenu::isSingle,
+                item("Launch Terminal", TreeContextMenu::isSingle,
                     sel -> fileOps.openTerminal(file(sel)))
-            ),
-            List.of(
-                item("Expand children", TreeContextMenu::hasDirectory,
-                    sel -> directories(sel).forEach(tree::expandSubtree)),
-                item("Collapse children", TreeContextMenu::hasDirectory,
-                    sel -> directories(sel).forEach(tree::collapseSubtree)),
-                item("Collapse tree", TreeContextMenu::any,
-                    sel -> tree.collapseAll())
             ),
             List.of(
                 item("Copy relative path", TreeContextMenu::any,
@@ -107,27 +112,48 @@ class TreeContextMenu {
                     sel -> fileOps.copyTrailheadPaths(files(sel)))
             ),
             List.of(
-                item("New File...", TreeContextMenu::isSingle,
+                item("New file…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), false)),
-                item("New Folder...", TreeContextMenu::isSingle,
+                item("New folder…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), true))
             ),
             List.of(
-                item("Rename...", TreeContextMenu::isSingle,
+                item("Rename…", TreeContextMenu::isSingle,
                     sel -> fileOps.rename(file(sel))),
-                item("Duplicate...", TreeContextMenu::isSingle,
-                    sel -> fileOps.duplicate(file(sel))),
-                item("Delete", TreeContextMenu::any,
-                    sel -> fileOps.delete(files(sel)))
+                item("Duplicate…", TreeContextMenu::isSingle,
+                    sel -> fileOps.duplicate(file(sel)))
             ),
             List.of(
-                checkbox("Show Hidden Files", TreeContextMenu::any,
+                item("Delete", TreeContextMenu::any,
+                    sel -> fileOps.delete(files(sel)), MenuIcons::delete)
+            ),
+            List.of(
+                item("Expand children", TreeContextMenu::hasDirectory,
+                    sel -> directories(sel).forEach(tree::expandSubtree)),
+                item("Collapse children", TreeContextMenu::hasDirectory,
+                    sel -> directories(sel).forEach(tree::collapseSubtree)),
+                item("Collapse tree", TreeContextMenu::any,
+                    sel -> tree.collapseAll()),
+                checkbox("Show hidden files", TreeContextMenu::any,
                     sel -> host.isShowHiddenFiles(),
                     sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())),
                 item("Refresh", TreeContextMenu::any,
                     sel -> sel.forEach(tree::refresh))
             )
         );
+    }
+
+    /**
+     * The "reveal this file in the OS file manager" label, in each platform's own idiom
+     * (manifesto §2.6): native feel outranks cross-platform verb parallelism here.
+     */
+    private static String revealLabel() {
+        return switch (PlatformUtils.getCurrentPlatform()) {
+            case MACOS -> "Reveal in Finder";
+            case WINDOWS -> "Show in Explorer";
+            case LINUX -> "Show in File Manager";
+            default -> "Reveal in File Manager";
+        };
     }
 
     // --- Selection predicates ---
@@ -172,23 +198,31 @@ class TreeContextMenu {
 
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
                               Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, null, action);
+        return new Entry(sel -> label, visible, null, action, null);
+    }
+
+    /** A plain item carrying a sparse landmark icon (manifesto §3); {@code icon} is lazy so it
+     * picks up the current theme each time the menu is built. */
+    private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
+                              Consumer<List<FileTreeNode>> action, Supplier<Icon> icon) {
+        return new Entry(sel -> label, visible, null, action, icon);
     }
 
     /** A checkbox menu item: {@code checked} supplies its tick state when the menu is built. */
     private static Entry checkbox(String label, Predicate<List<FileTreeNode>> visible,
                                   Predicate<List<FileTreeNode>> checked,
                                   Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, checked, action);
+        return new Entry(sel -> label, visible, checked, action, null);
     }
 
     /**
      * A single menu item: its label (selection-dependent), applicability, optional checkbox state
-     * ({@code checked}, null for a plain item), and handler.
+     * ({@code checked}, null for a plain item), handler, and optional landmark icon supplier.
      */
     private record Entry(Function<List<FileTreeNode>, String> label,
                          Predicate<List<FileTreeNode>> visible,
                          Predicate<List<FileTreeNode>> checked,
-                         Consumer<List<FileTreeNode>> action) {
+                         Consumer<List<FileTreeNode>> action,
+                         Supplier<Icon> icon) {
     }
 }

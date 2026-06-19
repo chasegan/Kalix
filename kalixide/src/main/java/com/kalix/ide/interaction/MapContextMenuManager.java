@@ -4,6 +4,7 @@ import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.icons.MenuIcons;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -106,6 +107,7 @@ public class MapContextMenuManager {
 
         // Cut
         JMenuItem cutItem = new JMenuItem("Cut");
+        cutItem.setIcon(MenuIcons.cut());
         cutItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, shortcutMask));
         cutItem.setEnabled(hasNodeSelection && clipboardManager != null);
         cutItem.addActionListener(e -> {
@@ -118,6 +120,7 @@ public class MapContextMenuManager {
 
         // Copy
         JMenuItem copyItem = new JMenuItem("Copy");
+        copyItem.setIcon(MenuIcons.copy());
         copyItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, shortcutMask));
         copyItem.setEnabled(hasNodeSelection && clipboardManager != null);
         copyItem.addActionListener(e -> {
@@ -129,6 +132,7 @@ public class MapContextMenuManager {
 
         // Paste
         JMenuItem pasteItem = new JMenuItem("Paste");
+        pasteItem.setIcon(MenuIcons.paste());
         pasteItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V, shortcutMask));
         pasteItem.setEnabled(hasClipboard);
         pasteItem.addActionListener(e -> {
@@ -144,8 +148,25 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Delete Selection
-        JMenuItem deleteItem = new JMenuItem("Delete Selection");
+        // Rename - only enabled when exactly one node is selected
+        boolean singleNodeSelected = model.getSelectedNodeCount() == 1;
+        String selectedNodeName = singleNodeSelected ?
+            model.getSelectedNodes().iterator().next() : null;
+
+        JMenuItem renameItem = new JMenuItem(singleNodeSelected ?
+            "Rename \"" + selectedNodeName + "\"" : "Rename");
+        renameItem.setEnabled(singleNodeSelected && textEditor != null);
+        renameItem.addActionListener(e -> {
+            if (textEditor != null && selectedNodeName != null) {
+                textEditor.renameNode(selectedNodeName);
+                mapPanel.repaint();
+            }
+        });
+        menu.add(renameItem);
+
+        // Delete (destructive — sits at the foot of the modify block)
+        JMenuItem deleteItem = new JMenuItem("Delete");
+        deleteItem.setIcon(MenuIcons.delete());
         deleteItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0));
         deleteItem.setEnabled(hasSelection);
         deleteItem.addActionListener(e -> {
@@ -156,26 +177,10 @@ public class MapContextMenuManager {
         });
         menu.add(deleteItem);
 
-        // Rename - only enabled when exactly one node is selected
-        boolean singleNodeSelected = model.getSelectedNodeCount() == 1;
-        String selectedNodeName = singleNodeSelected ?
-            model.getSelectedNodes().iterator().next() : null;
-
-        JMenuItem renameItem = new JMenuItem(singleNodeSelected ?
-            "Rename " + selectedNodeName : "Rename");
-        renameItem.setEnabled(singleNodeSelected && textEditor != null);
-        renameItem.addActionListener(e -> {
-            if (textEditor != null && selectedNodeName != null) {
-                textEditor.renameNode(selectedNodeName);
-                mapPanel.repaint();
-            }
-        });
-        menu.add(renameItem);
-
         menu.addSeparator();
 
-        // Copy Location - copies map coordinates of right-click location to clipboard
-        JMenuItem copyLocationItem = new JMenuItem("Copy Location");
+        // Copy location - copies map coordinates of right-click location to clipboard
+        JMenuItem copyLocationItem = new JMenuItem("Copy location");
         copyLocationItem.addActionListener(e -> {
             if (lastContextMenuLocation != null) {
                 double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
@@ -188,8 +193,8 @@ public class MapContextMenuManager {
         });
         menu.add(copyLocationItem);
 
-        // Find Node
-        JMenuItem findNodeItem = new JMenuItem("Find on Map...");
+        // Find - the map is the menu's own context, so no "on Map" needed (manifesto §2.3)
+        JMenuItem findNodeItem = new JMenuItem("Find…");
         findNodeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, shortcutMask));
         findNodeItem.setEnabled(mapSearchManager != null);
         findNodeItem.addActionListener(e -> {
@@ -199,8 +204,8 @@ public class MapContextMenuManager {
         });
         menu.add(findNodeItem);
 
-        // Zoom to Fit
-        JMenuItem zoomToFitItem = new JMenuItem("Zoom to Fit");
+        // Zoom to fit
+        JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
     }

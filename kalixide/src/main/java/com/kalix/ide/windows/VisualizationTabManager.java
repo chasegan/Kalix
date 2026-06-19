@@ -1119,8 +1119,8 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, JLabel label, TabInfo.TabType tabType) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // "New Plot Tab" menu item - always shown
-        JMenuItem addPlotItem = new JMenuItem("New Plot Tab");
+        // "New plot tab" menu item - always shown
+        JMenuItem addPlotItem = new JMenuItem("New plot tab");
         addPlotItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -1146,8 +1146,8 @@ public class VisualizationTabManager {
         });
         contextMenu.add(addPlotItem);
 
-        // "New Stats Tab" menu item - always shown
-        JMenuItem addStatsItem = new JMenuItem("New Stats Tab");
+        // "New stats tab" menu item - always shown
+        JMenuItem addStatsItem = new JMenuItem("New stats tab");
         addStatsItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -1173,7 +1173,12 @@ public class VisualizationTabManager {
         });
         contextMenu.add(addStatsItem);
 
-        // "Remove" menu item - only shown if there is more than one tab
+        // "Remove" menu item - only shown if there is more than one tab. The destructive action
+        // is isolated in its own block (manifesto §1); the separator is toggled with the item so
+        // it never dangles when "Remove" is hidden.
+        JPopupMenu.Separator removeSeparator = new JPopupMenu.Separator();
+        contextMenu.add(removeSeparator);
+
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> {
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -1203,8 +1208,10 @@ public class VisualizationTabManager {
                 // Count total tabs
                 int totalCount = tabs.size();
 
-                // Only show remove if there is more than one tab
-                removeItem.setVisible(totalCount > 1);
+                // Only show remove (and its separator) if there is more than one tab
+                boolean canRemove = totalCount > 1;
+                removeSeparator.setVisible(canRemove);
+                removeItem.setVisible(canRemove);
 
                 contextMenu.show(e.getComponent(), e.getX(), e.getY());
             }

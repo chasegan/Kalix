@@ -2,6 +2,7 @@ package com.kalix.ide.tableview;
 
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.icons.MenuIcons;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -169,14 +170,16 @@ public class TableViewWindow extends JDialog {
         JPopupMenu popupMenu = new JPopupMenu();
 
         JMenuItem copyItem = new JMenuItem("Copy");
+        copyItem.setIcon(MenuIcons.copy());
         copyItem.addActionListener(e -> copySelectedCells());
         popupMenu.add(copyItem);
 
-        JMenuItem copyAllItem = new JMenuItem("Copy Entire Table");
+        JMenuItem copyAllItem = new JMenuItem("Copy entire table");
         copyAllItem.addActionListener(e -> copyEntireTable());
         popupMenu.add(copyAllItem);
 
         JMenuItem pasteItem = new JMenuItem("Paste");
+        pasteItem.setIcon(MenuIcons.paste());
         pasteItem.addActionListener(e -> pasteFromClipboard());
         popupMenu.add(pasteItem);
 
@@ -184,7 +187,7 @@ public class TableViewWindow extends JDialog {
         if (!definition.isFixedRowCount()) {
             popupMenu.addSeparator();
 
-            JMenuItem insertAboveItem = new JMenuItem("Insert Above");
+            JMenuItem insertAboveItem = new JMenuItem("Insert above");
             insertAboveItem.addActionListener(e -> {
                 int selectedRow = table.getSelectedRow();
                 if (selectedRow >= 0) {
@@ -195,7 +198,7 @@ public class TableViewWindow extends JDialog {
             });
             popupMenu.add(insertAboveItem);
 
-            JMenuItem insertBelowItem = new JMenuItem("Insert Below");
+            JMenuItem insertBelowItem = new JMenuItem("Insert below");
             insertBelowItem.addActionListener(e -> {
                 int selectedRow = table.getSelectedRow();
                 if (selectedRow >= 0) {
@@ -206,7 +209,11 @@ public class TableViewWindow extends JDialog {
             });
             popupMenu.add(insertBelowItem);
 
-            JMenuItem deleteRowsItem = new JMenuItem("Delete Selected Row(s)");
+            // Destructive — isolated in its own block (manifesto §1)
+            popupMenu.addSeparator();
+
+            JMenuItem deleteRowsItem = new JMenuItem("Delete selected rows");
+            deleteRowsItem.setIcon(MenuIcons.delete());
             deleteRowsItem.addActionListener(e -> {
                 int[] selectedRows = table.getSelectedRows();
                 if (selectedRows.length == 0) {

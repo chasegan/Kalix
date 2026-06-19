@@ -3,9 +3,12 @@ package com.kalix.ide.editor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.kalix.ide.icons.MenuIcons;
+
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ActionMap;
+import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -479,12 +482,12 @@ public class EnhancedTextEditor extends JPanel {
                 menu.add(createMenuItem("Undo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.UNDO_ACTION)));
                 menu.add(createMenuItem("Redo", textArea.getAction(org.fife.ui.rtextarea.RTextArea.REDO_ACTION)));
                 menu.addSeparator();
-                menu.add(createMenuItem("Cut", textArea.getAction(org.fife.ui.rtextarea.RTextArea.CUT_ACTION)));
-                menu.add(createMenuItem("Copy", textArea.getAction(org.fife.ui.rtextarea.RTextArea.COPY_ACTION)));
-                menu.add(createMenuItem("Paste", textArea.getAction(org.fife.ui.rtextarea.RTextArea.PASTE_ACTION)));
-                menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION)));
+                menu.add(createMenuItem("Cut", textArea.getAction(org.fife.ui.rtextarea.RTextArea.CUT_ACTION), MenuIcons.cut()));
+                menu.add(createMenuItem("Copy", textArea.getAction(org.fife.ui.rtextarea.RTextArea.COPY_ACTION), MenuIcons.copy()));
+                menu.add(createMenuItem("Paste", textArea.getAction(org.fife.ui.rtextarea.RTextArea.PASTE_ACTION), MenuIcons.paste()));
+                menu.add(createMenuItem("Delete", textArea.getAction(org.fife.ui.rtextarea.RTextArea.DELETE_ACTION), MenuIcons.delete()));
                 menu.addSeparator();
-                menu.add(createMenuItem("Select All", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
+                menu.add(createMenuItem("Select all", textArea.getAction(org.fife.ui.rtextarea.RTextArea.SELECT_ALL_ACTION)));
 
                 // Show Suggestions (auto-complete)
                 // Tried event-based trigger, but couldn't get stable behaviour.
@@ -492,7 +495,10 @@ public class EnhancedTextEditor extends JPanel {
                 // before launching autocomplete.
                 if (autoCompleteManager != null) {
                     menu.addSeparator();
-                    JMenuItem suggestionsItem = new JMenuItem("Show Suggestions (Ctrl+Space)");
+                    JMenuItem suggestionsItem = new JMenuItem("Show suggestions");
+                    // Shortcut hint belongs in the accelerator slot, not the label (manifesto §2.7).
+                    // Ctrl+Space on all platforms (Cmd+Space is Spotlight on macOS).
+                    suggestionsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK));
                     suggestionsItem.addActionListener(ae -> {
                         javax.swing.Timer timer = new javax.swing.Timer(150, evt -> {
                             textArea.requestFocusInWindow();
@@ -520,7 +526,7 @@ public class EnhancedTextEditor extends JPanel {
                         if (propKey.matches("ds_\\d+") && !propValue.isEmpty()) {
                             menu.addSeparator();
                             addedSeparator = true;
-                            JMenuItem goToNodeItem = new JMenuItem("Go to Node Definition");
+                            JMenuItem goToNodeItem = new JMenuItem("Go to node definition");
                             goToNodeItem.addActionListener(ae -> scrollToNode(propValue));
                             menu.add(goToNodeItem);
                         }
@@ -532,7 +538,7 @@ public class EnhancedTextEditor extends JPanel {
                         if (!addedSeparator) {
                             menu.addSeparator();
                         }
-                        JMenuItem showOnMapItem = new JMenuItem("Show on Map");
+                        JMenuItem showOnMapItem = new JMenuItem("Show on map");
                         showOnMapItem.addActionListener(ae -> mapPanel.selectNodeFromEditor(nodeName));
                         menu.add(showOnMapItem);
                     }
@@ -579,7 +585,7 @@ public class EnhancedTextEditor extends JPanel {
                                     if ("rename_node".equals(command.getMetadata().getId())) {
                                         com.kalix.ide.editor.commands.EditorContext context = contextCommandManager.getCurrentContext();
                                         if (context.getNodeName().isPresent()) {
-                                            displayName = "Rename " + context.getNodeName().get();
+                                            displayName = "Rename \"" + context.getNodeName().get() + "\"";
                                         }
                                     }
 
@@ -604,6 +610,13 @@ public class EnhancedTextEditor extends JPanel {
                     item.addActionListener(action);
                     item.setEnabled(action.isEnabled());
                 }
+                return item;
+            }
+
+            /** As {@link #createMenuItem(String, Action)} but with a sparse landmark icon (manifesto §3). */
+            private JMenuItem createMenuItem(String name, Action action, Icon icon) {
+                JMenuItem item = createMenuItem(name, action);
+                item.setIcon(icon);
                 return item;
             }
         });
