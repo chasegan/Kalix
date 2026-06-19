@@ -86,7 +86,9 @@ class TreeContextMenu {
             ),
             List.of(
                 item("Reveal in File Manager", TreeContextMenu::isSingle,
-                    sel -> fileOps.reveal(file(sel)))
+                    sel -> fileOps.reveal(file(sel))),
+                item("Terminal", TreeContextMenu::isSingle,
+                    sel -> fileOps.openTerminal(file(sel)))
             ),
             List.of(
                 item("Expand children", TreeContextMenu::hasDirectory,

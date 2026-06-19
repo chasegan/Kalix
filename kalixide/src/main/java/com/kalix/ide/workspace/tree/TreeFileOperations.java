@@ -57,6 +57,17 @@ class TreeFileOperations {
         }
     }
 
+    // --- Terminal ---
+
+    /**
+     * Opens a terminal at the node's location: in the folder itself when {@code file} is a
+     * directory, otherwise in its parent folder. Path resolution and the off-EDT launch
+     * (with its own error dialog) are handled by {@link com.kalix.ide.utils.TerminalActions}.
+     */
+    void openTerminal(File file) {
+        com.kalix.ide.utils.TerminalActions.launchAsync(parent, file, null);
+    }
+
     // --- Create ---
 
     /**
