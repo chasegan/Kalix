@@ -22,10 +22,13 @@ public final class SourceResCsvHeader {
 
     private final double missingValue;
     private final List<String> seriesNames;
+    private final List<List<String>> seriesPaths;
 
-    private SourceResCsvHeader(double missingValue, List<String> seriesNames) {
+    private SourceResCsvHeader(double missingValue, List<String> seriesNames,
+                              List<List<String>> seriesPaths) {
         this.missingValue = missingValue;
         this.seriesNames = seriesNames;
+        this.seriesPaths = seriesPaths;
     }
 
     /**
@@ -44,6 +47,15 @@ public final class SourceResCsvHeader {
      */
     public List<String> getSeriesNames() {
         return seriesNames;
+    }
+
+    /**
+     * Hierarchy paths in data-column order — the raw (un-sanitised) tree segments for each
+     * series, derived from its attribute row by {@link ResCsvSegmenter}. Parallel to
+     * {@link #getSeriesNames()}.
+     */
+    public List<List<String>> getSeriesPaths() {
+        return seriesPaths;
     }
 
     /** @return the number of data (value) columns. */
@@ -86,6 +98,9 @@ public final class SourceResCsvHeader {
         }
         int fieldCol = indexOfColumn(attrHeader, SourceResCsvFormat.ATTR_FIELD, 0);
         int nameCol = indexOfColumn(attrHeader, SourceResCsvFormat.ATTR_NAME, -1);
+        int wftCol = indexOfColumn(attrHeader, SourceResCsvFormat.ATTR_WATER_FEATURE_TYPE, -1);
+        int siteCol = indexOfColumn(attrHeader, SourceResCsvFormat.ATTR_SITE, -1);
+        int structureCol = indexOfColumn(attrHeader, SourceResCsvFormat.ATTR_STRUCTURE, -1);
 
         // --- Series count (EOC+1). ---
         String countLine = reader.readLine();
@@ -101,8 +116,8 @@ public final class SourceResCsvHeader {
                 + SourceResCsvFormat.MARKER_EOC + "' but found: " + countLine);
         }
 
-        // --- N series-attribute rows → map of Field index → Name. ---
-        Map<Integer, String> fieldToName = new HashMap<>();
+        // --- N series-attribute rows → map of Field index → (name, hierarchy path). ---
+        Map<Integer, Attrs> fieldToAttrs = new HashMap<>();
         for (int i = 0; i < seriesCount; i++) {
             String row = reader.readLine();
             if (row == null) {
@@ -111,9 +126,10 @@ public final class SourceResCsvHeader {
             }
             List<String> cells = SourceResCsvFormat.splitCsvLine(row);
             int field = parseFieldIndex(cells, fieldCol, i + 1);
-            if (nameCol >= 0 && nameCol < cells.size()) {
-                fieldToName.put(field, cells.get(nameCol).trim());
-            }
+            String name = cell(cells, nameCol);
+            List<String> path = ResCsvSegmenter.segment(
+                name, cell(cells, wftCol), cell(cells, siteCol), cell(cells, structureCol));
+            fieldToAttrs.put(field, new Attrs(name, path));
         }
 
         // --- Lines between the attribute rows and EOH. The last non-blank one is the
@@ -139,9 +155,21 @@ public final class SourceResCsvHeader {
 
         List<String> columnHeader = SourceResCsvFormat.splitCsvLine(
             headerCandidates.get(headerCandidates.size() - 1));
-        List<String> seriesNames = resolveSeriesNames(columnHeader, fieldToName);
 
-        return new SourceResCsvHeader(missingValue, seriesNames);
+        List<String> seriesNames = new ArrayList<>();
+        List<List<String>> seriesPaths = new ArrayList<>();
+        resolveColumns(columnHeader, fieldToAttrs, seriesNames, seriesPaths);
+
+        return new SourceResCsvHeader(missingValue, seriesNames, seriesPaths);
+    }
+
+    /** Attribute fields of one series needed downstream: its name and its hierarchy path. */
+    private record Attrs(String name, List<String> path) {
+    }
+
+    /** A trimmed cell value, or empty string when the column is absent/out of range. */
+    private static String cell(List<String> cells, int col) {
+        return (col >= 0 && col < cells.size()) ? cells.get(col).trim() : "";
     }
 
     /** Scans the config block for the {@code Missing data value} key; NaN if absent. */
@@ -193,29 +221,35 @@ public final class SourceResCsvHeader {
     }
 
     /**
-     * Maps each data column (header tokens after the first "Date" token) to a series name.
-     * Each token looks like {@code <index>>Site>Element}; the leading integer links it to a
-     * {@code Field} in the attribute table. The attribute {@code Name} is preferred; the raw
-     * token is the fallback.
+     * Resolves each data column (header tokens after the first "Date" token) to its series
+     * name and hierarchy path. Each token looks like {@code <index>>Site>Element}; the leading
+     * integer links it to a {@code Field} in the attribute table. The attribute {@code Name}
+     * and computed path are preferred; the raw token is the fallback for both.
+     *
+     * @param outNames filled with one name per data column (parallel to {@code outPaths})
+     * @param outPaths filled with one path per data column
      */
-    private static List<String> resolveSeriesNames(List<String> columnHeader,
-                                                   Map<Integer, String> fieldToName) {
-        List<String> names = new ArrayList<>();
+    private static void resolveColumns(List<String> columnHeader, Map<Integer, Attrs> fieldToAttrs,
+                                       List<String> outNames, List<List<String>> outPaths) {
         for (int col = 1; col < columnHeader.size(); col++) {
             String token = columnHeader.get(col).trim();
-            String resolved = null;
+            Attrs attrs = null;
 
             int gt = token.indexOf('>');
             String indexPart = (gt >= 0) ? token.substring(0, gt).trim() : token;
             try {
-                int field = Integer.parseInt(indexPart);
-                resolved = fieldToName.get(field);
+                attrs = fieldToAttrs.get(Integer.parseInt(indexPart));
             } catch (NumberFormatException ignored) {
                 // not an indexed token — fall back to the raw token below
             }
 
-            names.add((resolved != null && !resolved.isEmpty()) ? resolved : token);
+            if (attrs != null && attrs.name() != null && !attrs.name().isEmpty()) {
+                outNames.add(attrs.name());
+                outPaths.add(attrs.path());
+            } else {
+                outNames.add(token);
+                outPaths.add(List.of(token));
+            }
         }
-        return names;
     }
 }

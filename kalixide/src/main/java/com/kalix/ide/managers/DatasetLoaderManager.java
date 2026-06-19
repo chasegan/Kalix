@@ -333,11 +333,10 @@ public class DatasetLoaderManager {
         int seriesAdded = 0;
 
         for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
-            // Create hierarchical series name: file.sanitized_filename.sanitized_column
-            String columnName = ns.name();
-            String seriesName = createDatasetSeriesName(csvFile, columnName);
+            // Create hierarchical series name from the series' path segments
+            String seriesName = composeDatasetSeriesName(csvFile, ns.path());
 
-            logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", columnName, seriesName);
+            logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", ns.name(), seriesName);
 
             // The importer already returns nameless data — store it directly. Identity is
             // the DatasetSeries ref; the absolute path qualifies the entry so two files
@@ -466,7 +465,7 @@ public class DatasetLoaderManager {
         int seriesAdded = 0;
 
         for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
-            String seriesName = createDatasetSeriesName(resCsvFile, ns.name());
+            String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
             datasetSeriesCache.put(ref, ns.data());
             seriesAdded++;
@@ -567,11 +566,10 @@ public class DatasetLoaderManager {
 
                     // Add all series to cache using hierarchical naming scheme
                     for (com.kalix.ide.io.NamedSeries ns : seriesList) {
-                        // Create hierarchical series name: file.sanitized_filename.sanitized_series
-                        String originalSeriesName = ns.name();
-                        String seriesName = createDatasetSeriesName(pxtFile, originalSeriesName);
+                        // Create hierarchical series name from the series' path segments
+                        String seriesName = composeDatasetSeriesName(pxtFile, ns.path());
 
-                        logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", originalSeriesName, seriesName);
+                        logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", ns.name(), seriesName);
 
                         // The importer already returns nameless data — store it directly.
                         // Key by DatasetSeries ref so the absolute path qualifies the entry.
@@ -632,17 +630,31 @@ public class DatasetLoaderManager {
     }
 
     /**
-     * Creates a hierarchical series name from a file and column name.
-     * Format: file.{sanitized_filename}.{sanitized_column}
+     * Composes a hierarchical, dot-delimited series name from a file and the series' raw
+     * hierarchy segments. Each segment is sanitised individually and the segments are joined
+     * with {@code .} so the Run Manager tree ({@link OutputsTreeBuilder}) nests them as levels.
+     *
+     * <p>Format: {@code file.{sanitized_filename}.{sanitized_seg1}.{sanitized_seg2}…}. A
+     * single-segment path (the default for flat formats like CSV/Pixie) therefore reproduces
+     * the historical {@code file.<filename>.<column>} two-level name exactly.</p>
+     *
+     * <p>This is the one generic place where structure is assembled: the segmentation (how
+     * many levels and what they are) is the importer's format-specific responsibility, carried
+     * on {@link com.kalix.ide.io.NamedSeries#path()}; sanitisation and joining are uniform.</p>
      *
      * @param file The data file
-     * @param columnName The column name (will be trimmed and sanitized)
-     * @return Hierarchical series name in format: file.filename_csv.column_name
+     * @param segments The series' raw hierarchy segments (each trimmed and sanitised here)
+     * @return The dot-delimited tree key
      */
-    private String createDatasetSeriesName(File file, String columnName) {
-        String sanitizedFilename = sanitizeToIdentifier(file.getName());
-        String sanitizedColumn = sanitizeToIdentifier(columnName.trim());
-        return "file." + sanitizedFilename + "." + sanitizedColumn;
+    private String composeDatasetSeriesName(File file, List<String> segments) {
+        StringBuilder sb = new StringBuilder("file.").append(sanitizeToIdentifier(file.getName()));
+        for (String segment : segments) {
+            String sanitized = sanitizeToIdentifier(segment.trim());
+            if (!sanitized.isEmpty()) {
+                sb.append('.').append(sanitized);
+            }
+        }
+        return sb.toString();
     }
 
     /**

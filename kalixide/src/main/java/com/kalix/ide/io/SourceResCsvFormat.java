@@ -51,6 +51,12 @@ public final class SourceResCsvFormat {
     public static final String ATTR_FIELD = "Field";
     /** Series-attribute column holding the descriptive series name used as the plot label. */
     public static final String ATTR_NAME = "Name";
+    /** Series-attribute column naming the water-feature type (e.g. {@code Gauge}, {@code Storage}). */
+    public static final String ATTR_WATER_FEATURE_TYPE = "WaterFeatureType";
+    /** Series-attribute column naming the site/element the series belongs to. */
+    public static final String ATTR_SITE = "Site";
+    /** Series-attribute column holding the {@code @}-delimited structural path within the element. */
+    public static final String ATTR_STRUCTURE = "Structure";
 
     /** Sentinel the writer declares (and never emits — NaN is written as an empty cell). */
     public static final double DEFAULT_MISSING_VALUE = -9999.0;

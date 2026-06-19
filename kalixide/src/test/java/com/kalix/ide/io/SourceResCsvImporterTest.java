@@ -131,6 +131,44 @@ class SourceResCsvImporterTest {
     }
 
     @Test
+    void importerProducesHierarchyPaths() throws IOException {
+        // Realistic attribute table with WaterFeatureType / Site / ElementName / Structure,
+        // exercising both segmentation branches end-to-end.
+        String hier =
+            "File version,3\n" +
+            "Missing data value,-9999\n" +
+            "EOM\n" +
+            "Field,Units,RunName,ScenarioName,ScenarioInputSetName,Name,Site,ElementName,"
+                + "WaterFeatureType,ElementType,Structure,Custom\n" +
+            "EOC\n" +
+            "2\n" +
+            "7,ML.day^-1,Run,Scen,Set,Gauge: 1002 PI Pimpama Creek EOS: Downstream Flow,"
+                + "1002 PI Pimpama Creek EOS,Downstream Flow,Gauge,Node,Downstream Flow,guid,\n" +
+            "4,mm.day^-1,Run,Scen,Set,Functions@Functions@Storages@$f_040196_mlake_plus_seep,"
+                + "Functions,Functions,Functions,Miscellaneous,"
+                + "Functions@Storages@$f_040196_mlake_plus_seep,guid,\n" +
+            "Date,7>1002 PI Pimpama Creek EOS>Downstream Flow,4>Functions>x\n" +
+            "EOH\n" +
+            "2020-01-01,1.0,2.0\n" +
+            "2020-01-02,3.0,4.0\n";
+
+        SourceResCsvImporter.ResCsvImportResult result =
+            SourceResCsvImporter.parse(write("hier.res.csv", hier));
+        assertFalse(result.hasErrors(), () -> "errors: " + result.getErrors());
+
+        List<NamedSeries> series = result.getSeries();
+        assertEquals(2, series.size());
+
+        // Column order follows the column-header row: field 7 then field 4.
+        assertEquals(List.of("Gauge", "1002 PI Pimpama Creek EOS", "Downstream Flow"),
+            series.get(0).path());
+        assertEquals(List.of("Functions", "Storages", "$f_040196_mlake_plus_seep"),
+            series.get(1).path());
+        // Names remain the full descriptive Name (legend label), independent of the path.
+        assertEquals("Gauge: 1002 PI Pimpama Creek EOS: Downstream Flow", series.get(0).name());
+    }
+
+    @Test
     void headerReaderReturnsSeriesNames() throws IOException {
         File f = write("sample.res.csv", SAMPLE);
         SourceResCsvHeaderReader reader = new SourceResCsvHeaderReader();

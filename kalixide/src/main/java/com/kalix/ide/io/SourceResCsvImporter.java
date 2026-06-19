@@ -180,7 +180,8 @@ public final class SourceResCsvImporter {
                 return new ResCsvImportResult(new ArrayList<>(), warnings, errors);
             }
 
-            List<NamedSeries> series = buildSeries(header.getSeriesNames(), timestamps, rows, warnings);
+            List<NamedSeries> series = buildSeries(
+                header.getSeriesNames(), header.getSeriesPaths(), timestamps, rows, warnings);
             if (progress != null) {
                 progress.accept(100);
             }
@@ -191,8 +192,9 @@ public final class SourceResCsvImporter {
     /**
      * Transposes the accumulated row-major data into one {@link TimeSeriesData} per series.
      */
-    private static List<NamedSeries> buildSeries(List<String> names, List<Long> timestamps,
-                                                 List<double[]> rows, List<String> warnings) {
+    private static List<NamedSeries> buildSeries(List<String> names, List<List<String>> paths,
+                                                 List<Long> timestamps, List<double[]> rows,
+                                                 List<String> warnings) {
         int rowCount = rows.size();
         int seriesCount = names.size();
 
@@ -208,11 +210,15 @@ public final class SourceResCsvImporter {
                 column[r] = rows.get(r)[c];
             }
             String name = names.get(c);
+            List<String> path = paths.get(c);
             if (name == null || name.isEmpty()) {
                 name = "Series " + (c + 1);
             }
+            if (path == null || path.isEmpty()) {
+                path = List.of(name);
+            }
             TimeSeriesData data = new TimeSeriesData(ts, column);
-            series.add(new NamedSeries(name, data));
+            series.add(new NamedSeries(name, path, data));
 
             if (data.getValidPointCount() == null || data.getValidPointCount() == 0) {
                 warnings.add("Series '" + name + "' contains no valid data points");
