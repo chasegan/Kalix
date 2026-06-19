@@ -65,6 +65,7 @@ public class OptimisationWindow extends JFrame {
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
     private final Supplier<File> workingDirectorySupplier;
+    private final Supplier<File> projectDirectorySupplier;
     private final Supplier<String> modelTextSupplier;
     private KalixIDE parentIDE;  // Reference to parent IDE window
 
@@ -120,11 +121,13 @@ public class OptimisationWindow extends JFrame {
                                Consumer<String> statusUpdater,
                                StatusProgressBar progressBar,
                                Supplier<File> workingDirectorySupplier,
+                               Supplier<File> projectDirectorySupplier,
                                Supplier<String> modelTextSupplier) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.workingDirectorySupplier = workingDirectorySupplier;
+        this.projectDirectorySupplier = projectDirectorySupplier;
         this.modelTextSupplier = modelTextSupplier;
 
         // Store reference to parent IDE (cast JFrame to KalixIDE)
@@ -151,6 +154,7 @@ public class OptimisationWindow extends JFrame {
         this.sessionManager = new OptimisationSessionManager(
             stdioTaskManager,
             workingDirectorySupplier,
+            projectDirectorySupplier,
             modelTextSupplier
         );
 
@@ -291,10 +295,12 @@ public class OptimisationWindow extends JFrame {
                                               Consumer<String> statusUpdater,
                                               StatusProgressBar progressBar,
                                               Supplier<File> workingDirectorySupplier,
+                                              Supplier<File> projectDirectorySupplier,
                                               Supplier<String> modelTextSupplier) {
         if (instance == null) {
             instance = new OptimisationWindow(parentFrame, stdioTaskManager,
-                statusUpdater, progressBar, workingDirectorySupplier, modelTextSupplier);
+                    statusUpdater, progressBar, workingDirectorySupplier, projectDirectorySupplier,
+                    modelTextSupplier);
         }
 
         // Update simulated series options from current model

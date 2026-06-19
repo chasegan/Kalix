@@ -31,6 +31,7 @@ public class OptimisationSessionManager {
     // Core dependencies
     private final StdioTaskManager stdioTaskManager;
     private final Supplier<File> workingDirectorySupplier;
+    private final Supplier<File> projectDirectorySupplier;
     private final Supplier<String> modelTextSupplier;
 
     // Session tracking
@@ -60,15 +61,18 @@ public class OptimisationSessionManager {
     /**
      * Creates a new OptimisationSessionManager.
      *
-     * @param stdioTaskManager The STDIO task manager
+     * @param stdioTaskManager         The STDIO task manager
      * @param workingDirectorySupplier Supplier for the working directory
-     * @param modelTextSupplier Supplier for the model text
+     * @param projectDirectorySupplier Supplier for the project directory
+     * @param modelTextSupplier        Supplier for the model text
      */
     public OptimisationSessionManager(StdioTaskManager stdioTaskManager,
-                                     Supplier<File> workingDirectorySupplier,
-                                     Supplier<String> modelTextSupplier) {
+                                      Supplier<File> workingDirectorySupplier,
+                                      Supplier<File> projectDirectorySupplier,
+                                      Supplier<String> modelTextSupplier) {
         this.stdioTaskManager = stdioTaskManager;
         this.workingDirectorySupplier = workingDirectorySupplier;
+        this.projectDirectorySupplier = projectDirectorySupplier;
         this.modelTextSupplier = modelTextSupplier;
     }
 
@@ -96,8 +100,11 @@ public class OptimisationSessionManager {
         File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
         String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
+        File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
+        String projectFolder = projectDir != null ? projectDir.getAbsolutePath() : null;
+
         Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
-            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences(currentFolder, null);
+            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences(currentFolder, projectFolder);
 
         if (cliLocationOpt.isEmpty()) {
             handleError("kalix not found. Please configure the path in Preferences.");

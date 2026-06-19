@@ -1540,11 +1540,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showOptimisation() {
         OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
             progressBar,
-            () -> {
-                // Working directory supplier
-                File currentFile = fileOperations.getCurrentFile();
-                return currentFile != null ? currentFile.getParentFile() : null;
-            },
+            fileOperations::getCurrentWorkingDirectory,
+            fileOperations::getCurrentProjectDirectory,
             () -> {
                 // Model text supplier
                 return textEditor.getText();
