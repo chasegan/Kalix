@@ -42,6 +42,8 @@ public class MenuBarBuilder {
         void exitApplication();
         void undoAction();
         void redoAction();
+        boolean canUndo();
+        boolean canRedo();
         void toggleCommentAction();
         void normalizeLineEndings();
         void zoomIn();
@@ -216,9 +218,26 @@ public class MenuBarBuilder {
      */
     private JMenu createEditMenu() {
         JMenu editMenu = new JMenu("Edit");
-        
-        editMenu.add(createMenuItem("Undo", KeyEvent.VK_Z, e -> callbacks.undoAction()));
-        editMenu.add(createMenuItem("Redo", KeyEvent.VK_Y, e -> callbacks.redoAction()));
+
+        JMenuItem undoItem = createMenuItem("Undo", KeyEvent.VK_Z, e -> callbacks.undoAction());
+        JMenuItem redoItem = createMenuItem("Redo", KeyEvent.VK_Y, e -> callbacks.redoAction());
+        editMenu.add(undoItem);
+        editMenu.add(redoItem);
+        // Grey out Undo/Redo when there's nothing to undo/redo. Refreshed each time the
+        // menu opens, since the active document (and thus its undo stack) can change.
+        editMenu.addMenuListener(new MenuListener() {
+            @Override
+            public void menuSelected(MenuEvent e) {
+                undoItem.setEnabled(callbacks.canUndo());
+                redoItem.setEnabled(callbacks.canRedo());
+            }
+
+            @Override
+            public void menuDeselected(MenuEvent e) { }
+
+            @Override
+            public void menuCanceled(MenuEvent e) { }
+        });
         editMenu.addSeparator();
         editMenu.add(createTextActionItem("Cut", new DefaultEditorKit.CutAction(), KeyEvent.VK_X));
         editMenu.add(createTextActionItem("Copy", new DefaultEditorKit.CopyAction(), KeyEvent.VK_C));

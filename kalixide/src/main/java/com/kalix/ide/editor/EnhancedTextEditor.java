@@ -51,6 +51,10 @@ public class EnhancedTextEditor extends JPanel {
 
     // State tracking
     private boolean isDirty = false;
+    // Snapshot of the content last considered "clean" (loaded or saved). Edits —
+    // including undo/redo back to this exact content — are compared against it so the
+    // dirty flag clears when the buffer matches what's on disk.
+    private String cleanText = "";
     private DirtyStateListener dirtyStateListener;
     private FileDropManager.FileDropHandler fileDropHandler;
     private java.util.function.Supplier<java.io.File> modelFileSupplier; // this document's file, for relative drop paths
@@ -703,6 +707,8 @@ public class EnhancedTextEditor extends JPanel {
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undo");
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.META_DOWN_MASK), "redo");
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), "redo");
+        // macOS convention: Cmd+Shift+Z also redoes.
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.META_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), "redo");
         
         actionMap.put("undo", new AbstractAction() {
             @Override
@@ -796,23 +802,23 @@ public class EnhancedTextEditor extends JPanel {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
-                    setDirty(true);
+                    updateDirtyFromContent();
                     notifyExternalListeners((listener, event) -> listener.insertUpdate(event), e);
                 }
             }
-            
+
             @Override
             public void removeUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
-                    setDirty(true);
+                    updateDirtyFromContent();
                     notifyExternalListeners((listener, event) -> listener.removeUpdate(event), e);
                 }
             }
-            
+
             @Override
             public void changedUpdate(DocumentEvent e) {
                 if (!programmaticUpdate) {
-                    setDirty(true);
+                    updateDirtyFromContent();
                     notifyExternalListeners((listener, event) -> listener.changedUpdate(event), e);
                 }
             }
@@ -928,6 +934,10 @@ public class EnhancedTextEditor extends JPanel {
             int newSelectionEnd = selectionEnd;
             int offsetDelta = 0;
 
+            // Group all line edits into a single undo step so one Cmd/Ctrl+Z
+            // (un)comments the whole selection rather than one line at a time.
+            textArea.beginAtomicEdit();
+            try {
             for (int line = startLine; line <= endLine; line++) {
                 int lineStart = textArea.getLineStartOffset(line);
                 int lineEnd = textArea.getLineEndOffset(line);
@@ -983,6 +993,9 @@ public class EnhancedTextEditor extends JPanel {
                 }
 
                 offsetDelta += lineDelta;
+            }
+            } finally {
+                textArea.endAtomicEdit();
             }
 
             // Restore selection
@@ -1124,12 +1137,28 @@ public class EnhancedTextEditor extends JPanel {
     }
     
     public void setDirty(boolean dirty) {
+        if (!dirty) {
+            // Becoming clean (file load or save): snapshot the current content as the
+            // baseline so subsequent edits — and undo/redo back to here — can detect
+            // when the buffer once again matches what's on disk.
+            cleanText = textArea.getText();
+        }
         if (this.isDirty != dirty) {
             this.isDirty = dirty;
             if (dirtyStateListener != null) {
                 dirtyStateListener.onDirtyStateChanged(dirty);
             }
         }
+    }
+
+    /**
+     * Recomputes the dirty flag by comparing the current content against the clean
+     * baseline. This clears the dirty flag when the user edits (or undoes) the buffer
+     * back to its last-saved content. {@code String.equals} short-circuits on length,
+     * so this is cheap unless the lengths happen to match.
+     */
+    private void updateDirtyFromContent() {
+        setDirty(!textArea.getText().equals(cleanText));
     }
     
     public void setDirtyStateListener(DirtyStateListener listener) {

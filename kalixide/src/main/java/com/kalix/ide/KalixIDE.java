@@ -1216,6 +1216,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public boolean canUndo() {
+        return textEditor != null && textEditor.canUndo();
+    }
+
+    @Override
+    public boolean canRedo() {
+        return textEditor != null && textEditor.canRedo();
+    }
+
+    @Override
     public void toggleCommentAction() {
         textEditor.toggleComment();
     }
