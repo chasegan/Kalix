@@ -87,7 +87,7 @@ public class StdioTaskManager {
                 String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
                 // Locate kalix using preferences, checking current folder first
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder);
+                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder, null);
                 if (cliLocation.isEmpty()) {
                     handleCliNotFound();
                     throw new RuntimeException("kalix not found");

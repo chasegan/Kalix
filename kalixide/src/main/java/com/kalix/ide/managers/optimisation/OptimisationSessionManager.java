@@ -97,7 +97,7 @@ public class OptimisationSessionManager {
         String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
         Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> cliLocationOpt =
-            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences(currentFolder);
+            com.kalix.ide.cli.KalixCliLocator.findKalixCliWithPreferences(currentFolder, null);
 
         if (cliLocationOpt.isEmpty()) {
             handleError("kalix not found. Please configure the path in Preferences.");
