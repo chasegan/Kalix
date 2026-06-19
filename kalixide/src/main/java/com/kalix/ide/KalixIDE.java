@@ -29,7 +29,7 @@ import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
-import com.kalix.ide.utils.TerminalLauncher;
+import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.workspace.ProjectTreePanel;
 import com.kalix.ide.workspace.WorkspacePanel;
@@ -1656,65 +1656,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void openTerminalHere() {
-        File targetDirectory = null;
-
-        // Get the directory of the currently loaded file
+        // Open a terminal at the current model file's folder (or the user's home if no
+        // file is open). TerminalLauncher resolves the file → its folder, and
+        // TerminalActions handles running off the EDT plus status/error reporting.
         File currentFile = fileOperations.getCurrentFile();
-        if (currentFile != null) {
-            targetDirectory = currentFile.getParentFile();
-        }
-
-        // Determine actual target directory
-        String dirPath = targetDirectory != null ? targetDirectory.getAbsolutePath() : System.getProperty("user.home");
-
-        try {
-            // Check if we're on Windows and have a custom Python terminal command
-            String osName = System.getProperty("os.name").toLowerCase();
-            String defaultCommand = osName.contains("win") ? PreferenceKeys.DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS : "";
-            String pythonTerminalCommand = PreferenceManager.getFileString(PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, defaultCommand);
-
-            if (osName.contains("win") && !pythonTerminalCommand.isEmpty()) {
-                // Use custom Python terminal command on Windows
-                // Extract the activation script path after "/K"
-                String activationScript = "";
-                if (pythonTerminalCommand.contains("\"/K\"")) {
-                    int kIndex = pythonTerminalCommand.indexOf("\"/K\"");
-                    activationScript = pythonTerminalCommand.substring(kIndex + 4).trim();
-                }
-
-                // Expand environment variables manually
-                activationScript = activationScript.replace("%USERPROFILE%", System.getProperty("user.home"));
-                activationScript = activationScript.replace("%windir%", System.getenv("windir"));
-
-                // Build the command to execute: cd to directory, then run activation script
-                String commandToExecute = "cd /d \"" + dirPath + "\" && " + activationScript;
-
-
-                // Use 'start' to open a new visible window
-                // cmd.exe /c start "Terminal" cmd.exe /K "command"
-                ProcessBuilder pb = new ProcessBuilder("cmd.exe", "/c", "start", "Kalix Terminal", "cmd.exe", "/K", commandToExecute);
-                pb.start();
-
-                updateStatus("Terminal opened at: " + dirPath);
-            } else {
-                // Use standard terminal launcher for Mac/Linux or Windows without custom command
-                TerminalLauncher.openTerminalAt(targetDirectory);
-                updateStatus("Terminal opened at: " + dirPath);
-            }
-
-        } catch (Exception e) {
-            String message = "Failed to open terminal: " + e.getMessage();
-            updateStatus(message);
-            logger.error("Error opening terminal", e);
-
-            // Show error dialog
-            JOptionPane.showMessageDialog(
-                this,
-                message,
-                "Terminal Error",
-                JOptionPane.ERROR_MESSAGE
-            );
-        }
+        TerminalActions.launchAsync(this, currentFile, this::updateStatus);
     }
 
     @Override

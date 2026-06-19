@@ -29,6 +29,16 @@ Hybrid preference system with portable configuration:
 
 Key files: `PreferenceManager.java`, `PreferenceKeys.java`
 
+### Terminal Launcher (System → Terminal)
+Cross-platform "open a terminal at this folder" feature, designed to be call-site agnostic so it can be driven from the System menu (current model's folder) or the file-tree context menu (any clicked path).
+- **`TerminalLauncher`**: Swing-free, no app state — a pure function of its `File` argument. `openTerminalAt(File)` resolves the path via `resolveFolder` (file→parent, null→home) and dispatches on the `Platform` enum, returning the folder actually opened.
+- **`TerminalActions.launchAsync(parent, pathOrFolder, status)`**: the reusable UI wrapper — runs the launcher off the EDT (`SwingWorker`), then reports status / shows an error dialog. Every call site uses this.
+- **Availability**: `isOnPath` scans `$PATH` directly (no `which`/`where`/`--help` subprocess) — eliminates pipe-buffer deadlock and accidental GUI launches by construction.
+- **macOS**: `osascript` with `on run argv` + `quoted form of` — the path/activation are passed as argv items, never interpolated into the script, so apostrophes/spaces are safe. Honors `FILE_MACOS_TERMINAL_APP` (Terminal/iTerm scripted; others via `open -a`).
+- **Activation command**: per-platform `FILE_TERMINAL_ACTIVATION_{WINDOWS,MACOS,LINUX}` keys (e.g. `conda activate env`), resolved by `getActivationCommand()`. Windows falls back to the legacy `FILE_PYTHON_TERMINAL_COMMAND` (`extractLegacyActivation`) when unset. Linux `exec "${SHELL:-bash}"` respects the user's shell.
+
+Key files: `TerminalLauncher.java`, `TerminalActions.java`; tests in `TerminalLauncherTest.java`
+
 ### Pixie Format (.pxt/.pxb)
 Custom binary format using Gorilla compression:
 - **Binary format (.pxb)**: Gorilla-compressed time series data

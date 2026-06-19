@@ -7,6 +7,9 @@ import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.Platform;
+import com.kalix.ide.utils.PlatformUtils;
+import com.kalix.ide.utils.TerminalLauncher;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -469,7 +472,8 @@ public class PreferencesDialog extends JDialog {
      */
     private class FilePreferencePanel extends PreferencePanel {
         private JTextField externalEditorField;
-        private JTextField pythonTerminalField;
+        private JTextField activationField;
+        private JTextField macosTerminalAppField;
 
         public FilePreferencePanel() {
             super("Integrations");
@@ -498,21 +502,41 @@ public class PreferencesDialog extends JDialog {
             });
             formPanel.add(externalEditorField, gbc);
 
-            // Python terminal command
+            // Terminal activation command (per-platform). Shows the effective value, which on
+            // Windows includes the migrated legacy command; saving writes the new per-platform key.
             gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("Terminal Command:"), gbc);
+            formPanel.add(new JLabel("Terminal Activation Command:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            pythonTerminalField = new JTextField(PreferenceManager.getFileString(
-                PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, getDefaultPythonTerminalCommand()));
-            pythonTerminalField.setToolTipText("Command to launch a Python-enabled terminal (e.g., Anaconda). Leave empty to use regular terminal.");
-            pythonTerminalField.addActionListener(e -> savePythonTerminalCommand());
-            pythonTerminalField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                public void insertUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
-                public void removeUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
-                public void changedUpdate(javax.swing.event.DocumentEvent e) { savePythonTerminalCommand(); }
+            activationField = new JTextField(TerminalLauncher.getActivationCommand());
+            activationField.setToolTipText("Shell command(s) run after entering the working directory, e.g. to "
+                + "activate a Python/conda environment (\"conda activate myenv\"). Leave blank for a plain terminal.");
+            activationField.addActionListener(e -> saveActivationCommand());
+            activationField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
             });
-            formPanel.add(pythonTerminalField, gbc);
+            formPanel.add(activationField, gbc);
+
+            // macOS terminal application (only relevant on macOS).
+            if (PlatformUtils.getCurrentPlatform() == Platform.MACOS) {
+                gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+                formPanel.add(new JLabel("macOS Terminal App:"), gbc);
+
+                gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+                macosTerminalAppField = new JTextField(PreferenceManager.getFileString(
+                    PreferenceKeys.FILE_MACOS_TERMINAL_APP, PreferenceKeys.DEFAULT_MACOS_TERMINAL_APP));
+                macosTerminalAppField.setToolTipText("Terminal application to launch on macOS. "
+                    + "\"Terminal\" and \"iTerm\" support activation; others (Warp, Ghostty, …) open at the folder only.");
+                macosTerminalAppField.addActionListener(e -> saveMacosTerminalApp());
+                macosTerminalAppField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                    public void insertUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
+                    public void removeUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
+                    public void changedUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
+                });
+                formPanel.add(macosTerminalAppField, gbc);
+            }
 
             add(formPanel, BorderLayout.NORTH);
         }
@@ -522,17 +546,14 @@ public class PreferencesDialog extends JDialog {
             PreferenceManager.setFileString(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, command);
         }
 
-        private void savePythonTerminalCommand() {
-            String command = pythonTerminalField.getText().trim();
-            PreferenceManager.setFileString(PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND, command);
+        private void saveActivationCommand() {
+            String command = activationField.getText().trim();
+            PreferenceManager.setFileString(TerminalLauncher.activationPreferenceKey(), command);
         }
 
-        private String getDefaultPythonTerminalCommand() {
-            String osName = System.getProperty("os.name").toLowerCase();
-            if (osName.contains("win")) {
-                return PreferenceKeys.DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS;
-            }
-            return "";
+        private void saveMacosTerminalApp() {
+            String app = macosTerminalAppField.getText().trim();
+            PreferenceManager.setFileString(PreferenceKeys.FILE_MACOS_TERMINAL_APP, app);
         }
     }
 

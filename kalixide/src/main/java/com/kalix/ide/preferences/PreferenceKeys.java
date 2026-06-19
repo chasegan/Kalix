@@ -100,8 +100,23 @@ public class PreferenceKeys {
     /** External editor command template (string, default: "code <folder_path> <file_path>") */
     public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
 
-    /** Python terminal command template (string, default: platform-specific) */
+    /**
+     * Legacy combined terminal command (string, Windows default: cmd.exe "/K" &lt;activation&gt;).
+     * Superseded by the per-platform {@code FILE_TERMINAL_ACTIVATION_*} keys; retained as a
+     * migration fallback for the Windows activation command. See {@code TerminalLauncher}.
+     */
     public static final String FILE_PYTHON_TERMINAL_COMMAND = "file.pythonTerminalCommand";
+
+    /**
+     * Terminal activation command run after entering the working directory, per platform
+     * (string, default: ""). Typically activates a Python/conda environment; blank = plain shell.
+     */
+    public static final String FILE_TERMINAL_ACTIVATION_WINDOWS = "file.terminalActivation.windows";
+    public static final String FILE_TERMINAL_ACTIVATION_MACOS = "file.terminalActivation.macos";
+    public static final String FILE_TERMINAL_ACTIVATION_LINUX = "file.terminalActivation.linux";
+
+    /** macOS terminal application to launch (string, default: "Terminal"; e.g. "iTerm", "Warp", "Ghostty") */
+    public static final String FILE_MACOS_TERMINAL_APP = "file.macosTerminalApp";
 
     /** Enable model linting (boolean, default: true) */
     public static final String LINTER_ENABLED = "linter.enabled";
@@ -122,6 +137,9 @@ public class PreferenceKeys {
 
     /** Default Python terminal command for Windows */
     public static final String DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS = "%windir%\\System32\\cmd.exe \"/K\" %USERPROFILE%\\anaconda3\\Scripts\\activate.bat";
+
+    /** Default macOS terminal application (the built-in Terminal.app) */
+    public static final String DEFAULT_MACOS_TERMINAL_APP = "Terminal";
 
     // Private constructor to prevent instantiation
     private PreferenceKeys() {
