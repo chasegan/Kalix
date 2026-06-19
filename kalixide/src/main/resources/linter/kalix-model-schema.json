@@ -53,12 +53,16 @@
       "description": "GR4J rainfall-runoff model",
       "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order"],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
-      "optional_params": [],
+      "optional_params": ["variant"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3"],
       "parameters": {
         "type": {
           "type": "literal",
           "value": "gr4j"
+        },
+        "variant": {
+          "type": "string",
+          "description": "Model formulation: 'gr4j' (daily, default) or 'gr4h' (sub-daily). No validation on value."
         },
         "loc": {
           "type": "coordinates",
