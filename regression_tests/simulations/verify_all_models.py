@@ -7,13 +7,16 @@ import difflib
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
-import kalix
 import numpy as np
+
+# NOTE: `kalix` (the Python package) is imported lazily inside the package
+# backend only, so the CLI backend works without the wheel installed.
 
 
 def find_model_files(root_dir):
@@ -84,12 +87,79 @@ def compare_mass_balance_files(file1, file2):
         return True, ''
 
 
-def verify_model(model_path, mbal_filename='mbal.txt'):
+def find_repo_root(start):
+    """Walk up from `start` to find the repository root (Cargo.toml / .git)."""
+    p = Path(start).resolve()
+    for parent in [p, *p.parents]:
+        if (parent / 'Cargo.toml').exists() or (parent / '.git').exists():
+            return parent
+    return None
+
+
+def find_cli_binary():
+    """Return the path to a locally-built kalix CLI binary, or None.
+
+    Presence of this binary is what distinguishes a developer machine (where
+    `cargo build --release` produces it) from CI (which only builds the Python
+    wheel via maturin and never produces the root `kalix` bin target).
     """
-    Verify a model against its mass balance report using kalix.sim.simulate().
+    repo_root = find_repo_root(__file__)
+    if repo_root is None:
+        return None
+    exe = 'kalix.exe' if os.name == 'nt' else 'kalix'
+    candidate = repo_root / 'target' / 'release' / exe
+    return candidate if candidate.exists() else None
+
+
+def resolve_backend(explicit=None):
+    """Decide which simulation backend to use.
+
+    Returns (backend, cli_bin) where backend is 'cli' or 'package'. `cli_bin`
+    is the Path to the CLI binary for the 'cli' backend, else None.
+
+    With no explicit choice, auto-detect: prefer a locally-built CLI (the
+    artifact a developer just compiled), falling back to the installed Python
+    package (CI, where only the wheel exists).
+    """
+    cli_bin = find_cli_binary()
+    if explicit == 'cli':
+        if cli_bin is None:
+            raise SystemExit(
+                "--backend cli requested but no binary was found at "
+                "target/release/kalix; build it with `cargo build --release`"
+            )
+        return 'cli', cli_bin
+    if explicit == 'package':
+        return 'package', None
+    # auto
+    if cli_bin is not None:
+        return 'cli', cli_bin
+    return 'package', None
+
+
+def _simulate(backend, cli_bin, model_path, mass_balance_path):
+    """Run a simulation via the chosen backend, writing the mass balance file."""
+    if backend == 'cli':
+        result = subprocess.run(
+            [str(cli_bin), 'simulate', model_path, '-m', mass_balance_path],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip()
+            raise RuntimeError(detail or f"kalix exited with code {result.returncode}")
+    else:
+        import kalix
+        kalix.simulate(model_path, mass_balance=mass_balance_path)
+
+
+def verify_model(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
+    """
+    Verify a model against its mass balance report via the selected backend.
 
     Args:
         model_path: Path to the .ini model file
+        backend: 'cli' or 'package' (see resolve_backend)
+        cli_bin: Path to the CLI binary when backend == 'cli', else None
         mbal_filename: Name of the mass balance file to verify against
 
     Returns:
@@ -109,10 +179,7 @@ def verify_model(model_path, mbal_filename='mbal.txt'):
 
         try:
             # Run simulation to generate new mass balance
-            kalix.simulate(
-                model_path,
-                mass_balance=tmp_mbal_path
-            )
+            _simulate(backend, cli_bin, model_path, tmp_mbal_path)
 
             # Compare the generated mass balance with the reference
             matched, detail = compare_mass_balance_files(tmp_mbal_path, mbal_path)
@@ -178,9 +245,26 @@ def _run_tests():
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == '--test':
+    argv = sys.argv[1:]
+
+    if '--test' in argv:
         _run_tests()
         sys.exit(0)
+
+    # Optional --backend cli|package|auto override (default: auto-detect).
+    backend_choice = None
+    if '--backend' in argv:
+        i = argv.index('--backend')
+        try:
+            value = argv[i + 1]
+        except IndexError:
+            sys.exit("--backend requires a value: cli, package, or auto")
+        if value not in ('cli', 'package', 'auto'):
+            sys.exit(f"Invalid --backend '{value}': choose cli, package, or auto")
+        backend_choice = None if value == 'auto' else value
+        del argv[i:i + 2]
+
+    backend, cli_bin = resolve_backend(backend_choice)
 
     # Get the script's directory as the root search directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -199,11 +283,15 @@ def main():
         output_lines.append(message)
 
     # Allow optional command line argument for different root directory
-    if len(sys.argv) > 1:
-        root_dir = sys.argv[1]
+    if argv:
+        root_dir = argv[0]
     else:
         root_dir = script_dir
 
+    if backend == 'cli':
+        log(f"Backend: CLI ({cli_bin})")
+    else:
+        log("Backend: Python package (kalix)")
     log(f"Searching for model files in: {root_dir}")
     log("=" * 80)
 
@@ -222,7 +310,7 @@ def main():
         rel_path = os.path.relpath(model_path, root_dir)
         log(f"Verifying: {rel_path}")
 
-        success, message = verify_model(model_path)
+        success, message = verify_model(model_path, backend, cli_bin)
         results.append((rel_path, success, message))
 
         if success:

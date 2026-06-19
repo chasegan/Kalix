@@ -1,6 +1,7 @@
+Backend: CLI (/Users/chas/github/Kalix/target/release/kalix)
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 24 model file(s)
+Found 25 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   [PASS] VERIFIED!
@@ -50,6 +51,9 @@ Verifying: 23_order_lag/model.ini
 Verifying: 24_nlm_routing/model.ini
   [PASS] VERIFIED!
 
+Verifying: 25_picnic_gr4h/kalix.ini
+  [PASS] VERIFIED!
+
 Verifying: 2_pioneer_val/model.ini
   [PASS] VERIFIED!
 
@@ -77,9 +81,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-06-18T02:02:25.035083
-Total: 24
-Passed: 24
+Timestamp: 2026-06-19T15:52:20.294737
+Total: 25
+Passed: 25
 Failed: 0
 
 [PASS] All models verified successfully!
