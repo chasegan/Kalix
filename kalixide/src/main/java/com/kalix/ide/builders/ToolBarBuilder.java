@@ -229,6 +229,10 @@ public class ToolBarBuilder {
         JButton brandingButton = new JButton(logoIcon);
         brandingButton.setToolTipText(AppConstants.APP_WEBSITE_URL);
         brandingButton.setFocusPainted(false);
+        // The logo artwork runs to the edges of its SVG viewBox, so add a little
+        // breathing room around it - weighted to the left, where it sits against
+        // the window edge (top, left, bottom, right).
+        brandingButton.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 6));
         brandingButton.addActionListener(e -> callbacks.openWebsite());
 
         // Set accessible name for screen readers
