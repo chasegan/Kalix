@@ -17,7 +17,12 @@ import javax.swing.tree.TreePath;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -57,6 +62,10 @@ public class RunContextMenuManager {
     // Removes a loaded dataset and cleans up the shared pool, slot assignment, and
     // every plot/stats tab that referenced its series.
     private final Consumer<DatasetLoaderManager.LoadedDatasetInfo> removeDatasetDelegate;
+
+    // Top-level category nodes that support "Remove all" on right-click (e.g. "Current runs",
+    // "Run library", "Loaded datasets"). Set by the owner via setRemovableCategories.
+    private final Set<DefaultMutableTreeNode> removableCategories = new HashSet<>();
 
     /**
      * Represents run status for context menu decisions.
@@ -160,6 +169,13 @@ public class RunContextMenuManager {
         removeDatasetItem.addActionListener(e -> removeDataset());
         datasetMenu.add(removeDatasetItem);
 
+        // Menu shown when a top-level category node (e.g. "Current runs") is right-clicked,
+        // for removing every child in one action. The item is disabled when the category is empty.
+        JPopupMenu categoryMenu = new JPopupMenu();
+        JMenuItem removeAllItem = new JMenuItem("Remove all");
+        removeAllItem.addActionListener(e -> removeAllInSelectedCategory());
+        categoryMenu.add(removeAllItem);
+
         // Add mouse listener for right-click
         runTree.addMouseListener(new MouseAdapter() {
             @Override
@@ -193,9 +209,39 @@ public class RunContextMenuManager {
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
+                } else if (removableCategories.contains(node)) {
+                    removeAllItem.setEnabled(countRemovableChildren(node) > 0);
+                    categoryMenu.show(runTree, e.getX(), e.getY());
                 }
             }
         });
+    }
+
+    /**
+     * Registers the top-level category nodes whose right-click menu offers "Remove all"
+     * (e.g. "Current runs", "Run library", "Loaded datasets", "Last run"). For "Last run" the
+     * single child is an alias to the most-recent run's session, so "Remove all" removes that
+     * one run — identical to its existing single "Remove".
+     */
+    public void setRemovableCategories(DefaultMutableTreeNode... categories) {
+        removableCategories.clear();
+        for (DefaultMutableTreeNode category : categories) {
+            if (category != null) {
+                removableCategories.add(category);
+            }
+        }
+    }
+
+    /** Counts a category's children that this manager knows how to remove. */
+    private int countRemovableChildren(DefaultMutableTreeNode category) {
+        int count = 0;
+        for (int i = 0; i < category.getChildCount(); i++) {
+            Object child = ((DefaultMutableTreeNode) category.getChildAt(i)).getUserObject();
+            if (child instanceof RunInfo || child instanceof DatasetLoaderManager.LoadedDatasetInfo) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -416,58 +462,98 @@ public class RunContextMenuManager {
             : "Are you sure you want to remove " + runInfo.getRunName() + " from the list?";
 
         if (DialogUtils.showConfirmation(parentFrame, message, "Remove Run")) {
-            if (isActive) {
-                // First terminate the session, then remove it
-                stdioTaskManager.terminateSession(sessionKey)
-                    .thenCompose(v -> {
-                        // After termination, remove from list
-                        return stdioTaskManager.removeSession(sessionKey);
-                    })
-                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                        if (statusUpdater != null) {
-                            statusUpdater.accept("Stopped and removed run: " + runInfo.getRunName());
-                        }
-                        sessionToRunName.remove(sessionKey);
-                        if (refreshRunsCallback != null) {
-                            refreshRunsCallback.run();
-                        }
-                    }))
-                    .exceptionally(throwable -> {
-                        SwingUtilities.invokeLater(() -> {
-                            if (statusUpdater != null) {
-                                statusUpdater.accept("Failed to stop/remove run: " + throwable.getMessage());
-                            }
-                            DialogUtils.showError(parentFrame,
-                                "Failed to stop/remove run: " + throwable.getMessage(),
-                                "Remove Run Error");
-                        });
-                        return null;
-                    });
-            } else {
-                // Just remove from list (session already terminated)
-                stdioTaskManager.removeSession(sessionKey)
-                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
-                        if (statusUpdater != null) {
-                            statusUpdater.accept("Removed run: " + runInfo.getRunName());
-                        }
-                        sessionToRunName.remove(sessionKey);
-                        if (refreshRunsCallback != null) {
-                            refreshRunsCallback.run();
-                        }
-                    }))
-                    .exceptionally(throwable -> {
-                        SwingUtilities.invokeLater(() -> {
-                            if (statusUpdater != null) {
-                                statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
-                            }
-                            DialogUtils.showError(parentFrame,
-                                "Failed to remove run: " + throwable.getMessage(),
-                                "Remove Run Error");
-                        });
-                        return null;
-                    });
+            removeRunInfoAsync(runInfo).thenRun(() -> SwingUtilities.invokeLater(() -> {
+                if (refreshRunsCallback != null) {
+                    refreshRunsCallback.run();
+                }
+            }));
+        }
+    }
+
+    /**
+     * Removes a single run without confirmation — terminating its session first if active —
+     * and returns a future that completes once the removal finishes. The owning tree is not
+     * refreshed here; the caller refreshes (once) after the returned future(s) complete. Shared
+     * by single-run removal and the category "Remove all".
+     */
+    private CompletableFuture<Void> removeRunInfoAsync(RunInfo runInfo) {
+        String sessionKey = runInfo.getSession().getSessionKey();
+        boolean isActive = runInfo.getSession().isActive();
+
+        CompletableFuture<?> removal = isActive
+            ? stdioTaskManager.terminateSession(sessionKey)
+                .thenCompose(v -> stdioTaskManager.removeSession(sessionKey))
+            : stdioTaskManager.removeSession(sessionKey);
+
+        return removal.thenRun(() -> SwingUtilities.invokeLater(() -> {
+            if (statusUpdater != null) {
+                statusUpdater.accept((isActive ? "Stopped and removed run: " : "Removed run: ")
+                    + runInfo.getRunName());
+            }
+            sessionToRunName.remove(sessionKey);
+        })).exceptionally(throwable -> {
+            SwingUtilities.invokeLater(() -> {
+                if (statusUpdater != null) {
+                    statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
+                }
+                DialogUtils.showError(parentFrame,
+                    "Failed to remove run: " + throwable.getMessage(),
+                    "Remove Run Error");
+            });
+            return null;
+        });
+    }
+
+    /**
+     * Removes every removable child of the right-clicked top-level category, after a single
+     * confirmation. Runs and loaded datasets are handled by their respective paths; the tree
+     * is refreshed once the run removals complete.
+     */
+    public void removeAllInSelectedCategory() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode category = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!removableCategories.contains(category)) return;
+
+        List<RunInfo> runs = new ArrayList<>();
+        List<DatasetLoaderManager.LoadedDatasetInfo> datasets = new ArrayList<>();
+        for (int i = 0; i < category.getChildCount(); i++) {
+            Object child = ((DefaultMutableTreeNode) category.getChildAt(i)).getUserObject();
+            if (child instanceof RunInfo runInfo) {
+                runs.add(runInfo);
+            } else if (child instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
+                datasets.add(datasetInfo);
             }
         }
+
+        int total = runs.size() + datasets.size();
+        if (total == 0) return;
+
+        String label = String.valueOf(category.getUserObject());
+        String message = "Remove all " + total + (total == 1 ? " item" : " items")
+            + " under \"" + label + "\"?";
+        if (!DialogUtils.showConfirmation(parentFrame, message, "Remove All")) return;
+
+        // Datasets remove synchronously (delegate handles pool/cache/tab + tree cleanup).
+        for (DatasetLoaderManager.LoadedDatasetInfo datasetInfo : datasets) {
+            if (removeDatasetDelegate != null) {
+                removeDatasetDelegate.accept(datasetInfo);
+            }
+        }
+
+        // Runs remove asynchronously; refresh the tree once after all have completed.
+        if (runs.isEmpty()) return;
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (RunInfo runInfo : runs) {
+            futures.add(removeRunInfoAsync(runInfo));
+        }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                if (refreshRunsCallback != null) {
+                    refreshRunsCallback.run();
+                }
+            }));
     }
 
     /**

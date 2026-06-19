@@ -509,6 +509,10 @@ public class RunManager extends JFrame {
 
         // Set up context menus
         runContextMenuManager.setupRunTreeContextMenu();
+        // Top-level categories that support "Remove all". Last run holds a single alias to the
+        // most-recent run's session, so removing it removes that one run (same as its "Remove").
+        runContextMenuManager.setRemovableCategories(
+            lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
         runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected, this::collapseAllFromSelected);
     }
 
