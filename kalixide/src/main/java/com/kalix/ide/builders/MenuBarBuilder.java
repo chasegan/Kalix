@@ -38,6 +38,7 @@ public class MenuBarBuilder {
         void openFolder();
         void saveModel();
         void saveAsModel();
+        void saveAllModels();
         void exitApplication();
         void undoAction();
         void redoAction();
@@ -195,6 +196,7 @@ public class MenuBarBuilder {
         fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
         fileMenu.add(createMenuItem("Save As...", KeyEvent.VK_S, InputEvent.SHIFT_DOWN_MASK,
                 e -> callbacks.saveAsModel()));
+        fileMenu.add(createMenuItem("Save All", e -> callbacks.saveAllModels()));
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Preferences", KeyEvent.VK_COMMA,
                 e -> callbacks.showPreferences()));

@@ -174,6 +174,10 @@ public class FileOperationsManager {
      */
     public void saveModel() {
         KalixDocument document = document();
+        saveKalixDocument(document);
+    }
+
+    private void saveKalixDocument(KalixDocument document) {
         if (document == null) {
             return;
         }
@@ -204,12 +208,23 @@ public class FileOperationsManager {
             showFileSaveError(currentFile, e);
         }
     }
-    
+
     /**
      * Shows a save dialog and saves the model to the selected location.
      */
     public void saveAsModel() {
-        KalixDocument document = document();
+        saveAsModel(null);
+    }
+
+    /**
+     * Shows a save dialog and saves the model to the selected location.
+     */
+    public void saveAsModel(KalixDocument document) {
+        // Handle default arg
+        if (document == null) {
+            document = document();
+        }
+        // If null here, then no document is available
         if (document == null) {
             return;
         }
@@ -275,7 +290,19 @@ public class FileOperationsManager {
             }
         }
     }
-    
+
+    /**
+     * Saves all models to the previously opened file(s). 
+     * 
+     * Implemented as a w
+     * If no file is currently open, delegates to saveAsModel().
+     */
+    public void saveAllModels() {
+        for (KalixDocument document : documentManager.getDocuments()) {
+            saveKalixDocument(document);
+        }
+    }
+
     /**
      * Checks if a file is a valid Kalix model file.
      * 

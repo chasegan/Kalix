@@ -996,6 +996,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Saves all open models to their existing file locations.
+     * For unsaved models, prompts for a save location.
+     */
+    @Override
+    public void saveAllModels() {
+        fileOperations.saveAllModels();
+    }
+
+    /**
      * Shows a confirm dialog with custom key bindings (Y/N/Esc/C).
      *
      * @param message the message to display
