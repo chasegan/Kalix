@@ -122,7 +122,11 @@ public final class AppConstants {
     public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
     
     // Branding
+    // Vector logos render crisply at any display scale (HiDPI/Retina) via FlatSVGIcon.
+    public static final String KALIX_LOGO_SVG_PATH = "/images/kalix_banner_light.svg";
+    public static final String KALIX_LOGO_DARK_SVG_PATH = "/images/kalix_banner_dark.svg";
+    // Raster fallbacks, used only if the SVG sources cannot be loaded.
     public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";
     public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_banner_dark-124-24.png";
-    public static final int TOOLBAR_LOGO_HEIGHT = 24; // Scaled height for toolbar
+    public static final int TOOLBAR_LOGO_HEIGHT = 24; // Logical height for toolbar
 }
