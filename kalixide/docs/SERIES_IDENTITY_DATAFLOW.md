@@ -4,6 +4,11 @@ A primer for understanding how series identity, data, and labels flow through th
 
 ## The core idea
 
+> The general principle behind this subsystem — *identity is separate from label* —
+> is codified as project doctrine in [`manifestos/identity-and-labels.md`](../../manifestos/identity-and-labels.md).
+> This document is the descriptive companion: how that principle is wired into the
+> Run Manager and flowviz. The manifesto is the rule; this is the implementation.
+
 **Identity is separate from label.** Internally every series is identified by a `SeriesRef` (a sealed type — `RunSeries(runId, baseName)`, `LastSeries(baseName)`, `DatasetSeries(datasetId, baseName)`). The user-visible string ("`node.x.ds_1 [Run_3]`", "`flow [mydata.csv]`") is a *projection* of the ref produced on demand by `LabelResolver`. Renaming a run does not change any ref; it changes how the resolver renders it.
 
 This replaces the previous design in which the string `"node.x.ds_1 [Run_3]"` was the key in every map, set, and undo state. That design coupled identity to label and required propagating renames into ~7 different stores in lockstep.

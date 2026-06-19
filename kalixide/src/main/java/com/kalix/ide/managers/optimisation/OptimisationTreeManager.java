@@ -231,7 +231,7 @@ public class OptimisationTreeManager {
      * Sets up the context menu for the tree.
      */
     public void setupContextMenu() {
-        // Skeleton order (docs/context-menu-style.md §1): view actions first, then export,
+        // Skeleton order (manifestos/context-menu-style.md §1): view actions first, then export,
         // the run control, navigation, and finally modify + the destructive "Remove".
         JPopupMenu contextMenu = new JPopupMenu();
 

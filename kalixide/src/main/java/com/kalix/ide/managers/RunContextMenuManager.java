@@ -135,7 +135,7 @@ public class RunContextMenuManager {
      * Sets up the context menu for the run tree.
      */
     public void setupRunTreeContextMenu() {
-        // Skeleton order (docs/context-menu-style.md §1): view actions first, navigation next,
+        // Skeleton order (manifestos/context-menu-style.md §1): view actions first, navigation next,
         // modify + the destructive "Remove" last. "Remove" unlists the run (it is not "Delete"),
         // so it takes no trash icon (§2.5).
         JPopupMenu contextMenu = new JPopupMenu();

@@ -83,7 +83,7 @@ class TreeContextMenu {
     // --- Entry definitions ---
 
     private List<List<Entry>> buildEntries() {
-        // Groups follow the context-menu skeleton (docs/context-menu-style.md §1):
+        // Groups follow the context-menu skeleton (manifestos/context-menu-style.md §1):
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(

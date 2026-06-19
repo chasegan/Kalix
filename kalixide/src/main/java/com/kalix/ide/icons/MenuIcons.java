@@ -11,7 +11,7 @@ import java.awt.Color;
 /**
  * Theme-aware icons for context-menu items.
  *
- * <p>Per the context-menu style manifesto ({@code docs/context-menu-style.md}, §3),
+ * <p>Per the context-menu style manifesto ({@code manifestos/context-menu-style.md}, §3),
  * icons are reserved for the universally-recognised clipboard and destructive
  * actions — Cut, Copy, Paste and Delete — and nowhere else. Funnelling every menu
  * icon through this one helper is what enforces "sparse icons only": there is no
