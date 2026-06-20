@@ -1,5 +1,6 @@
 package com.kalix.ide.cli;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -48,7 +49,8 @@ public class KalixCliLocator {
      * 1. User-configured paths (if provided)
      * 2. Current folder (if provided and applicable)
      * 3. Project folder
-     * 4. System PATH (if no user-configured path)
+     * 4. KalixIDE location
+     * 5. System PATH (if no user-configured path)
      * <p>
      * If userConfiguredPath is provided:
      * - Splits the path by ';' delimiter (supports multiple directories)
@@ -86,7 +88,8 @@ public class KalixCliLocator {
             // No valid kalix found in any of the specified paths
             return Optional.empty();
         }
-        // First, check the currently open folder if provided
+
+        // 2. Check the currently open folder if provided
         if (currentFolder != null && !currentFolder.trim().isEmpty()) {
             Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
             if (found.isPresent()) {
@@ -94,7 +97,7 @@ public class KalixCliLocator {
             }
         }
 
-        // Second, check the project folder if provided
+        // 3. Check the project folder if provided
         if (projectFolder != null && !projectFolder.trim().isEmpty()) {
             Optional<CliLocation> found = findKalixInDirectory(projectFolder.trim());
             if (found.isPresent()) {
@@ -102,7 +105,17 @@ public class KalixCliLocator {
             }
         }
 
-        // No user path configured - use unqualified "kalix" from system PATH
+        // 4. Check where KalixIDE executable is located
+        Optional<File> ideExeLoc = getExecutableLocation();
+        if (ideExeLoc.isPresent()){
+            File exe = ideExeLoc.get();
+            Optional<CliLocation> found = findKalixInDirectory(exe.getParent().trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
+        // 5. Use unqualified "kalix" from system PATH
         return findInPath();
     }
 
@@ -296,5 +309,22 @@ public class KalixCliLocator {
         findInPath().ifPresent(installations::add);
 
         return installations;
+    }
+
+    /**
+     * Returns the location of the native launcher executable created by jpackage.
+     * Falls back to the current working directory if not running from a jpackage image
+     * (e.g. when running directly from IntelliJ/Gradle during development).
+     */
+    public static Optional<File> getExecutableLocation() {
+        String appPath = System.getProperty("jpackage.app-path");
+        if (appPath == null || appPath.isBlank()) {
+            return Optional.empty();
+        }
+        File exeFile = new File(appPath);
+        if (!exeFile.exists()) {
+            return Optional.empty();
+        }
+        return Optional.of(exeFile);
     }
 }

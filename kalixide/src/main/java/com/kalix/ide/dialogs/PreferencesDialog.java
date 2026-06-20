@@ -1,5 +1,6 @@
 package com.kalix.ide.dialogs;
 
+import com.kalix.ide.cli.KalixCliLocator;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.LinterPreferencesPanel;
@@ -638,9 +639,11 @@ public class PreferencesDialog extends JDialog {
             infoArea.setWrapStyleWord(true);
             infoArea.setLineWrap(true);
             infoArea.setFocusable(false);
-            infoArea.setText("Specify directories to search for the Kalix CLI binary. Multiple directories can be " +
-                "specified using ';' as a delimiter (e.g., /usr/local/bin;/opt/kalix/bin). If left empty, the system will " +
-                "search for 'kalix' in the system PATH.");
+            infoArea.setText(
+                    "Specify directories to search for the Kalix CLI binary. " +
+                    "Multiple directories can be specified using ';' as a delimiter " +
+                    "(e.g., /usr/local/bin;/opt/kalix/bin). " +
+                    "If left empty, the system will search for 'kalix' in the system PATH.");
             formPanel.add(infoArea, gbc);
 
             // Binary path
@@ -679,8 +682,25 @@ public class PreferencesDialog extends JDialog {
             pathLabel.setForeground(Color.GRAY);
             pathLabel.setFocusable(false);  // Prevent cursor from appearing
             formPanel.add(pathLabel, gbc);
-
             add(formPanel, BorderLayout.CENTER);
+
+            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 0;
+            JTextArea exeLocInfoArea = new JTextArea();
+            exeLocInfoArea.setEditable(false);
+            exeLocInfoArea.setOpaque(false);
+            exeLocInfoArea.setWrapStyleWord(true);
+            exeLocInfoArea.setLineWrap(true);
+            exeLocInfoArea.setFocusable(false);
+            StringBuilder exeLocInfoAreaTextBuilder = new StringBuilder();
+            Optional<File> exeLoc = KalixCliLocator.getExecutableLocation();
+            if (exeLoc.isPresent()) {
+                exeLocInfoAreaTextBuilder.append("\n");
+                exeLocInfoAreaTextBuilder.append("KalixIDE executable located at: ");
+                exeLocInfoAreaTextBuilder.append(exeLoc.get());
+            }
+            String infoAreaText = exeLocInfoAreaTextBuilder.toString();
+            exeLocInfoArea.setText(infoAreaText);
+            formPanel.add(exeLocInfoArea, gbc);
         }
 
         private void browseBinary(ActionEvent e) {
