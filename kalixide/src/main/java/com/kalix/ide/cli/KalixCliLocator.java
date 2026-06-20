@@ -45,9 +45,9 @@ public class KalixCliLocator {
      * Attempts to locate kalix using a simplified strategy.
      * <p>
      * Search order:
-     * 1. Current folder (if provided and applicable)
-     * 2. Project folder
-     * 3. User-configured paths (if provided)
+     * 1. User-configured paths (if provided)
+     * 2. Current folder (if provided and applicable)
+     * 3. Project folder
      * 4. System PATH (if no user-configured path)
      * <p>
      * If userConfiguredPath is provided:
@@ -65,22 +65,6 @@ public class KalixCliLocator {
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCli(String userConfiguredPath, String currentFolder, String projectFolder) {
-        // First, check the currently open folder if provided
-        if (currentFolder != null && !currentFolder.trim().isEmpty()) {
-            Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
-            if (found.isPresent()) {
-                return found;
-            }
-        }
-
-        // Second, check the project folder if provided
-        if (projectFolder != null && !projectFolder.trim().isEmpty()) {
-            Optional<CliLocation> found = findKalixInDirectory(projectFolder.trim());
-            if (found.isPresent()) {
-                return found;
-            }
-        }
-
         // If user specified a path, ONLY use those paths (no fallback)
         if (userConfiguredPath != null && !userConfiguredPath.trim().isEmpty()) {
             // Split by ';' to support multiple paths
@@ -101,6 +85,21 @@ public class KalixCliLocator {
 
             // No valid kalix found in any of the specified paths
             return Optional.empty();
+        }
+        // First, check the currently open folder if provided
+        if (currentFolder != null && !currentFolder.trim().isEmpty()) {
+            Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
+        // Second, check the project folder if provided
+        if (projectFolder != null && !projectFolder.trim().isEmpty()) {
+            Optional<CliLocation> found = findKalixInDirectory(projectFolder.trim());
+            if (found.isPresent()) {
+                return found;
+            }
         }
 
         // No user path configured - use unqualified "kalix" from system PATH
