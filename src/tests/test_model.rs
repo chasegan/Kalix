@@ -134,7 +134,7 @@ fn test_model_with_all_node_types() {
     {
         let mut n = StorageNode::new();
         n.name = "node4_storage".to_string();
-        n.d = Table::from_csv_string(
+        n.dimensions = Table::from_csv_string(
             "90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8",
             4, false).expect("Failed to create table");
         node4_idx = model.add_node(NodeEnum::StorageNode(n));
@@ -396,13 +396,13 @@ fn test_model_with_all_node_types() {
 fn test_create_and_run_model_with_storage_node() {
 
     let mut st1 = StorageNode::new();
-    st1.d = Table::from_csv_file("./src/tests/example_tables/test_4_dim_table.csv");
+    st1.dimensions = Table::from_csv_file("./src/tests/example_tables/test_4_dim_table.csv");
     let mut data_cache = DataCache::new();
     let mut account_manager= AccountManager::new();
 
     st1.initialise(&mut data_cache, &mut account_manager).expect("Initialisation error");
-    println!("Initial vol = {}", st1.v_initial);
-    println!("Area 0 = {}", st1.d.get_value(0, VOLU));
+    println!("Initial vol = {}", st1.vol_initial);
+    println!("Area 0 = {}", st1.dimensions.get_value(0, VOLU));
 
     let _spill = Timeseries::new_daily();
     let _volume = Timeseries::new_daily();
