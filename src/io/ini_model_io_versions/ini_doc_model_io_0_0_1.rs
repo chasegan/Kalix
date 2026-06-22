@@ -7,7 +7,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_redundant_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -709,11 +709,11 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
             NodeEnum::OrderConstraintNode(n) => {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
-                ini_doc.set_property(section_name.as_str(), "type", "gauge");
+                ini_doc.set_property(section_name.as_str(), "type", "order_constraint");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "min_order", &n.min_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "max_order", &n.max_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "set_order", &n.set_order_input.to_string());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "delay_order_steps", &n.delay_order_steps.to_string());
+                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "delay_order_steps", &n.delay_order_steps.to_string(), "0");
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);
@@ -752,17 +752,21 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 if n.get_divs() != 1 { ini_doc.set_property(section_name.as_str(), "n_divs", n.get_divs().to_string().as_str()); }
                 if n.get_x() != 0.0 { ini_doc.set_property(section_name.as_str(), "x", n.get_x().to_string().as_str()); }
                 if n.get_lag() != 0 { ini_doc.set_property(section_name.as_str(), "lag", n.get_lag().to_string().as_str()); }
-                if n.get_k() != 0.0 {
+                // NLM and PWL are mutually exclusive (see RoutingNode::initialise,
+                // which errors if both are set). Emit whichever this node uses, keyed
+                // off the same discriminator the node uses, so we never write both.
+                if n.uses_nlm() {
                     let m = n.get_m();
                     let k = n.get_k();
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "nlm", format!("{}, {}", k, m).as_str());
+                } else {
+                    let pwl_values = n.get_routing_table_as_vec();
+                    if pwl_values.len() > 0 {
+                        let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
+                        ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
+                    }
                 }
-                let pwl_values = n.get_routing_table_as_vec();
-                if pwl_values.len() > 0 {
-                    let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
-                    ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
-                }
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string());
+                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
             }
             NodeEnum::SacramentoNode(n) => {
                 let section_name = format!("node.{}", n.name);
@@ -792,7 +796,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string());
+                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string(), "0");
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());

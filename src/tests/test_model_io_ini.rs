@@ -206,3 +206,30 @@ fn test_model_with_every_node_type_save() {
 
     println!("Model saved to: {}", output_filename);
 }
+
+#[test]
+fn test_routing_nlm_does_not_emit_pwl() {
+    // A routing node defined with NLM (k, m) must serialise back with `nlm` only —
+    // never a stray `pwl` line, since the two are mutually exclusive.
+    let ini = "[kalix]\n\
+               \n\
+               [node.r]\n\
+               type = routing\n\
+               loc = 29, 765\n\
+               lag = 1\n\
+               nlm = 2.0, 0.8\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    let ini_io = IniModelIO::new();
+    let model = ini_io.read_model_string(ini).expect("model should parse");
+    let out = ini_io.model_to_string(&model);
+
+    assert!(out.contains("nlm = 2, 0.8"), "expected nlm line, got:\n{}", out);
+    assert!(!out.contains("pwl"), "must not emit a pwl line for an NLM node, got:\n{}", out);
+    // loc emits with a space after the comma.
+    assert!(out.contains("loc = 29, 765"), "expected spaced loc, got:\n{}", out);
+}

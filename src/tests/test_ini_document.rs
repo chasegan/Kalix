@@ -305,3 +305,28 @@ node.simple_node.dsflow
     // Clean up
     std::fs::remove_file(test_file_path).ok();
 }
+
+#[test]
+fn test_exact_round_trip_every_node_type_model() {
+    // The regression model that exercises every node type, plus the awkward
+    // formatting cases this DOM must survive untouched: whole-line and inline
+    // comments (both `#` and `;`), blank lines, aligned multi-line
+    // continuations with trailing commas, bare-line [inputs]/[outputs]
+    // sections, and trailing blank lines at end of file.
+    //
+    // Parsing then serialising with NO mutation must reproduce the file
+    // byte-for-byte: unchanged properties round-trip from their `raw_lines`,
+    // and comments/blank lines are preserved verbatim. include_str! pins the
+    // exact original bytes at compile time (no working-directory dependence).
+    let original = include_str!(
+        "../../regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini"
+    );
+
+    let doc = IniDocument::parse(original).expect("model should parse");
+    let round_tripped = doc.to_string();
+
+    assert_eq!(
+        original, round_tripped,
+        "re-serialised model must match the original byte-for-byte"
+    );
+}

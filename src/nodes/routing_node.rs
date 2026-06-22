@@ -5,8 +5,10 @@ use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
+use crate::numerical::opt::OptimisableComponent;
 
 const MAX_DS_LINKS: usize = 1;
+const PWL_TT_PREFIX: &str = "pwl_tt_";
 
 #[derive(Default, Clone)]
 pub enum StorageRoutingMethod {
@@ -102,6 +104,13 @@ impl RoutingNode {
         self.nlm_k = value;
     }
     pub fn get_k(&self) -> f64 { self.nlm_k }
+
+    /// Whether this node uses the nonlinear Muskingum (NLM) routing method.
+    /// This is the single source of truth for the NLM-vs-PWL discriminator: a
+    /// positive `nlm_k` means NLM, otherwise PWL (or lag-only). Used both when
+    /// resolving the routing method in `initialise` and when serialising back
+    /// to INI, so the reader and writer always agree.
+    pub fn uses_nlm(&self) -> bool { self.nlm_k > 0.0 }
 
     pub fn set_m(&mut self, value: f64) {
         self.nlm_m = value;
@@ -248,7 +257,7 @@ impl Node for RoutingNode {
         }
 
         // Detect and check StorageRoutingMethod
-        let nlm_is_defined = self.nlm_k > 0f64;      //assume k > 0 means NLM
+        let nlm_is_defined = self.uses_nlm();        //k > 0 means NLM
         let pwl_is_defined = self.pwl_segs > 0usize; //assume pwl_segs means PWL
         if nlm_is_defined && pwl_is_defined {
             // Error we cant have both pwl and nlm in one node.
@@ -548,3 +557,99 @@ impl Node for RoutingNode {
         &mut self.dsorders
     }
 }
+
+// ============================================================================
+// OptimisableComponent Implementation
+// ============================================================================
+
+// impl OptimisableComponent for RoutingNode {
+//     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+//
+//         // Nonlinear Muskingum parameters
+//         if name == "nlm_k" {
+//             self.nlm_k = value;
+//             return Ok(());
+//         } else if name == "nlm_m" {
+//             self.nlm_m = value;
+//             return Ok(());
+//         }
+//
+//         let idx_str = &param_name[crate::nodes::rainfall_weights::PWL_TT_PREFIX.len()..];
+//
+//         // Check bounds - idx should be 0 to n-2 for n stations
+//         let n_stations = data_indices.len();
+//         if n_stations <= 1 {
+//             return Err(format!("Node '{}': No distribution parameters for single station", self.name));
+//         }
+//
+//         if idx >= n_stations - 1 {
+//             return Err(format!(
+//                 "Node '{}': Rainfall distribution index {} out of range (max: {})",
+//                 node_name, idx, n_stations - 2
+//             ));
+//         }
+//
+//
+//         // PWL travel times
+//         // TODO: The substring after "pwl_tt_" should be a 0-based integer indicating the table
+//         //  pwl_tt value that needs to be changed
+//         if name.starts_with(PWL_TT_PREFIX) {
+//             let idx_str = &name[PWL_TT_PREFIX.len()..];
+//             let idx = idx_str.parse::<usize>()
+//                 .map_err(|_| format!("Node '{}': Invalid pwl_tt_ index: {}", self.name, idx_str))?;
+//
+//
+//             //
+//
+//             self.pwl_tt
+//         }
+//
+//         // The param name was not handled
+//         Err(format!("Unknown routing parameter: {}", name))
+//     }
+//
+//     fn get_param(&self, name: &str) -> Result<f64, String> {
+//         // Try to handle as rainfall weight parameter first
+//         if let Some(value) = RainfallWeightHandler::try_get_param(&self.rain_mm_input, name, &self.name)? {
+//             return Ok(value);
+//         }
+//
+//         // Standard Sacramento parameters
+//         match name {
+//             "adimp" => Ok(self.sacramento_model.adimp),
+//             "lzfpm" => Ok(self.sacramento_model.lzfpm),
+//             "lzfsm" => Ok(self.sacramento_model.lzfsm),
+//             "lzpk" => Ok(self.sacramento_model.lzpk),
+//             "lzsk" => Ok(self.sacramento_model.lzsk),
+//             "lztwm" => Ok(self.sacramento_model.lztwm),
+//             "pctim" => Ok(self.sacramento_model.pctim),
+//             "pfree" => Ok(self.sacramento_model.pfree),
+//             "rexp" => Ok(self.sacramento_model.rexp),
+//             "sarva" => Ok(self.sacramento_model.sarva),
+//             "side" => Ok(self.sacramento_model.side),
+//             "ssout" => Ok(self.sacramento_model.ssout),
+//             "uzfwm" => Ok(self.sacramento_model.uzfwm),
+//             "uzk" => Ok(self.sacramento_model.uzk),
+//             "uztwm" => Ok(self.sacramento_model.uztwm),
+//             "zperc" => Ok(self.sacramento_model.zperc),
+//             "laguh" => Ok(self.sacramento_model.get_laguh()),
+//             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
+//         }
+//     }
+//
+//     fn list_params(&self) -> Vec<String> {
+//         let mut params = vec![
+//             "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
+//             "pctim", "pfree", "rexp", "sarva", "side",
+//             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
+//         ]
+//             .iter()
+//             .map(|s| s.to_string())
+//             .collect::<Vec<_>>();
+//
+//         // Add rainfall parameters if using linear combination
+//         params.extend(RainfallWeightHandler::list_params(&self.rain_mm_input));
+//
+//         params
+//     }
+// }

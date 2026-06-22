@@ -177,6 +177,21 @@ pub fn set_property_if_not_empty(ini_doc: &mut crate::io::custom_ini_parser::Ini
 }
 
 
+/// Set a property, but suppress it when the value equals `default` AND the
+/// property wasn't already present in the document. Keeps default-valued
+/// optional numerics (e.g. `initial_volume = 0`) out of the file unless the
+/// source explicitly included them.
+pub fn set_property_unless_redundant_default(ini_doc: &mut crate::io::custom_ini_parser::IniDocument,
+                                             section: &str,
+                                             property: &str,
+                                             value: &str,
+                                             default: &str) {
+    if value != default || ini_doc.get_property(section, property).is_some() {
+        ini_doc.set_property(section, property, value);
+    }
+}
+
+
 /// Format a vector of f64 values as a multi-line table for INI files
 ///
 /// # Arguments

@@ -26,6 +26,6 @@ impl Location {
     }
     
     pub fn to_string(&self) -> String {
-        format!("{},{}", self.x, self.y)
+        format!("{}, {}", self.x, self.y)
     }
 }
