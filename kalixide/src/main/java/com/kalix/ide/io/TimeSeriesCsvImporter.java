@@ -73,23 +73,28 @@ public class TimeSeriesCsvImporter {
     /**
      * Common date/time patterns supported by the importer.
      * Patterns are tried in order until one succeeds.
-     * Non-standard month-first formats (MM/dd/yyyy) are demoted to the end.
+     * Non-standard month-first formats (M/d/yyyy) are demoted to the end.
+     *
+     * <p>Day/month fields use single-letter tokens ({@code d}, {@code M}) rather
+     * than {@code dd}/{@code MM} so that both zero-padded ("01/06/2007") and
+     * unpadded ("1/06/2007") values parse — Java's parser treats {@code dd} as
+     * requiring exactly two digits, which rejects single-digit days.</p>
      */
     private static final DateTimeFormatter[] DATE_FORMATTERS = {
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy-MM-dd"),
-        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy/MM/dd"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy"),
+        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy-M-d"),
+        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy/M/d"),
+        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm"),
+        DateTimeFormatter.ofPattern("d/M/yyyy"),
         DateTimeFormatter.ISO_LOCAL_DATE_TIME,
         DateTimeFormatter.ISO_LOCAL_DATE,
-        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy")
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm"),
+        DateTimeFormatter.ofPattern("M/d/yyyy")
     };
 
     /**
