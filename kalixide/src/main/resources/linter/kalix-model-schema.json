@@ -221,7 +221,7 @@
       "description": "Storage node for water storage modeling",
       "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "ds_1_spill", "ds_2_spill", "ds_3_spill", "ds_4_spill", "evap", "rain", "seep", "level", "area", "pond_diversion", "target_level", "rain_vol", "seep_vol", "evap_vol", "pond_demand"],
       "required_params": ["type", "loc"],
-      "optional_params": ["dimensions", "dimensions_file", "rain", "evap", "seep", "pond_demand", "initial_volume", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "target_level", "order_through"],
+      "optional_params": ["dimensions", "rain", "evap", "seep", "pond_demand", "initial_volume", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "target_level", "order_through"],
       "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
       "parameters": {
         "type": {
@@ -236,10 +236,6 @@
         "dimensions": {
           "type": "string",
           "description": "Storage dimensions (no validation on value)"
-        },
-        "dimensions_file": {
-          "type": "string",
-          "description": "File containing storage dimensions"
         },
         "rain": {
           "type": "function_expression",
