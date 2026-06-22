@@ -396,8 +396,8 @@
           "description": "X,Y coordinates"
         },
         "table": {
-          "type": "number_sequence",
-          "description": "Comma-separated numerical values"
+          "type": "string",
+          "description": "Table value (optional header row plus numeric rows); not validated"
         }
       }
     },
@@ -419,8 +419,8 @@
           "description": "X,Y coordinates"
         },
         "table": {
-          "type": "number_sequence",
-          "description": "Comma-separated numerical values"
+          "type": "string",
+          "description": "Table value (optional header row plus numeric rows); not validated"
         }
       }
     },
