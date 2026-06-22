@@ -502,8 +502,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.dimensions = Table::from_csv_string(v, 4, false)
                                 .map_err(|e| format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
                                                      ini_property.line_number, node_name, e))?;
-                        } else if name_lower == "dimensions_file" {
-                            n.dimensions = Table::from_csv_file(v);
                         } else if name_lower == "initial_volume" {
                             n.vol_initial = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
