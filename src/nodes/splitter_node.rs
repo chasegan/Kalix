@@ -50,6 +50,30 @@ impl Node for SplitterNode {
         self.ds_1_flow = 0.0;
         self.ds_2_flow = 0.0;
 
+        // Check the splitter table is well-behaved (mirrors the loss node, see the
+        // matching Table assertions):
+        //  - it must be monotonically increasing (inflow ascending, effluent non-decreasing)
+        //  - it must start at zero inflow
+        //  - it must not have negative values
+        //  - it must not specify effluent greater than the inflow
+        //  - its slope must not exceed 1:1, i.e. the ds_1 continuation flow must
+        //    not decrease as inflow rises
+        if let Err(e) = self.splitter_table.assert_monotonically_increasing(0, 1) {
+            return Err(format!("Node '{}' splitter table. {}", self.name, e));
+        }
+        if let Err(e) = self.splitter_table.assert_starts_at_zero(0) {
+            return Err(format!("Node '{}' splitter table. {}", self.name, e));
+        }
+        if let Err(e) = self.splitter_table.assert_non_negative() {
+            return Err(format!("Node '{}' splitter table. {}", self.name, e));
+        }
+        if let Err(e) = self.splitter_table.assert_col_not_exceeding(1, 0) {
+            return Err(format!("Node '{}' splitter table has effluent exceeding inflow. {}", self.name, e));
+        }
+        if let Err(e) = self.splitter_table.assert_slope_not_exceeding_one(0, 1) {
+            return Err(format!("Node '{}' splitter table slope exceeds 1:1 (ds_1 flow would decrease). {}", self.name, e));
+        }
+
         // Initialize result recorders
         self.recorder_idx_usflow = data_cache.get_series_idx(
             make_result_name(&self.name, "usflow").as_str(), false
@@ -96,8 +120,11 @@ impl Node for SplitterNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Determine effluent flow
-        self.ds_2_flow = self.splitter_table.interpolate(0, 1, self.usflow).min(self.usflow);
+        // Determine effluent flow. Use interpolate_or_extrapolate so that inflows
+        // beyond the table domain extend the last segment rather than returning NaN
+        // (NaN would slip through .min, sending the entire flow down ds_2). The
+        // .max(0) guards the lower bound and the .min(usflow) guards over-extraction.
+        self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(0f64).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
             panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);

@@ -1,7 +1,7 @@
 Backend: CLI (/Users/chas/github/Kalix/target/release/kalix)
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 25 model file(s)
+Found 27 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   [PASS] VERIFIED!
@@ -54,6 +54,12 @@ Verifying: 24_nlm_routing/model.ini
 Verifying: 25_picnic_gr4h/kalix.ini
   [PASS] VERIFIED!
 
+Verifying: 26_splitters_noextrap/split_nlm_model_noextrap.ini
+  [PASS] VERIFIED!
+
+Verifying: 27_splitters_extrap/split_nlm_model.ini
+  [PASS] VERIFIED!
+
 Verifying: 2_pioneer_val/model.ini
   [PASS] VERIFIED!
 
@@ -81,9 +87,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-06-20T00:09:07.319422
-Total: 25
-Passed: 25
+Timestamp: 2026-06-22T19:10:09.352720
+Total: 27
+Passed: 27
 Failed: 0
 
 [PASS] All models verified successfully!

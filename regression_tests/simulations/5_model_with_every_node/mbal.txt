@@ -1,7 +1,7 @@
 ==================================
 MASS BALANCE REPORT
 ==================================
-  Node count: 14
+  Node count: 15
   Timesteps: 3652
   Stepsize (s): 86400
   Period: 1990-01-01T00:00:00.000Z, 1999-12-31T00:00:00.000Z
@@ -14,6 +14,7 @@ SACRAMENTO NODES
   Node2_sacramento, 287.45307448574795
 
 GR4J NODES
+  node14_gr4h, 260.4394315142618
   node6_gr4j, 260.4394315142618
 
 REGULATED_USER NODES
@@ -41,9 +42,9 @@ GAUGE NODES
   node10_gauge, 0
 
 BLACKHOLE NODES
-  node12_blackhole, -272.4978970823141
+  node12_blackhole, -532.937328596578
   node9_blackhole, -359.7412693411166
 
 ----------------------------------
-TOTAL = -0.0000000000005115907697472721
+TOTAL = -0.0000000000025579538487363607
 ----------------------------------

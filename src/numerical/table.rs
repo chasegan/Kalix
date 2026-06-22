@@ -314,6 +314,67 @@ impl Table {
     }
 
 
+    /// Asserts that the table's first row holds zero in the given column. Flow
+    /// tables (loss, splitter) require the independent variable (inflow) to start
+    /// at zero so that any non-negative input stays within the table domain and
+    /// never triggers below-range extrapolation. Also rejects an empty table.
+    pub fn assert_starts_at_zero(&self, col: usize) -> Result<(), String> {
+        if self.nrows() == 0 {
+            return Err("Table is empty".to_string());
+        }
+        let first = self.get_value(0, col);
+        if first != 0.0 {
+            return Err(format!("Table must start at zero but starts at {}", first));
+        }
+        Ok(())
+    }
+
+
+    /// Asserts that every value in the table is non-negative.
+    pub fn assert_non_negative(&self) -> Result<(), String> {
+        for row in 0..self.nrows() {
+            for col in 0..self.ncols() {
+                if self.get_value(row, col) < 0.0 {
+                    return Err(format!("Table contains a negative value at row {}", row + 1));
+                }
+            }
+        }
+        Ok(())
+    }
+
+
+    /// Asserts that the value in `small_col` never exceeds the value in `large_col`
+    /// on any row.
+    pub fn assert_col_not_exceeding(&self, small_col: usize, large_col: usize) -> Result<(), String> {
+        for row in 0..self.nrows() {
+            if self.get_value(row, small_col) > self.get_value(row, large_col) {
+                return Err(format!("Table column {} exceeds column {} at row {}", small_col, large_col, row + 1));
+            }
+        }
+        Ok(())
+    }
+
+
+    /// Asserts that y grows no faster than x, i.e. the difference (x - y) is
+    /// non-decreasing from row to row (equivalently, the implied slope dy/dx never
+    /// exceeds 1:1). Seeds from the first row, so it imposes no constraint on the
+    /// sign of the first row's difference.
+    pub fn assert_slope_not_exceeding_one(&self, x_col: usize, y_col: usize) -> Result<(), String> {
+        let nrows = self.nrows();
+        if nrows > 1 {
+            let mut prev_diff = self.get_value(0, x_col) - self.get_value(0, y_col);
+            for row in 1..nrows {
+                let diff = self.get_value(row, x_col) - self.get_value(row, y_col);
+                if diff < prev_diff {
+                    return Err(format!("Table slope between column {} and column {} exceeds 1:1 at row {}", x_col, y_col, row + 1));
+                }
+                prev_diff = diff;
+            }
+        }
+        Ok(())
+    }
+
+
 
 
     /// This is just supposed to print out the table for debugging.

@@ -75,27 +75,32 @@ impl Node for LossNode {
             _ => { }
         }
 
-        // Check the loss table is well-behaved:
+        // Check the loss table is well-behaved (see the matching Table assertions):
         //  - it must be monotonically increasing
+        //  - it must start at zero inflow
         //  - it must not have negative values
         //  - it must not have loss > inflow
-        //  - it must now have decreasing outflows
-        let monotonic_result = self.loss_table.assert_monotonically_increasing(0, 1);
-        if monotonic_result.is_err() {
-            return Err(format!("Node '{}' loss table. {}", self.name, monotonic_result.err().unwrap()));
+        //  - its slope must not exceed 1:1, i.e. outflow must not decrease
+        if let Err(e) = self.loss_table.assert_monotonically_increasing(0, 1) {
+            return Err(format!("Node '{}' loss table. {}", self.name, e));
         }
-        let mut max_outflow = 0.0;
-        for row in 0..self.loss_table.nrows() {
-            let inflow = self.loss_table.get_value(row, 0);
-            let loss = self.loss_table.get_value(row, 1);
-            if inflow < 0f64 || loss < 0f64 { return Err(format!("Node '{}' loss table contains negative value at row {}", self.name, row + 1)); }
-            if loss > inflow  { return Err(format!("Node '{}' loss table has loss > inflow at row {}", self.name, row + 1)); }
-            if inflow - loss < max_outflow {
-                return Err(format!("Node '{}' loss table gradient > 1 causes outflow to decrease at row {}", self.name, row + 1));
-            } else {
-                max_outflow = inflow - loss;
-            }
+        if let Err(e) = self.loss_table.assert_starts_at_zero(0) {
+            return Err(format!("Node '{}' loss table. {}", self.name, e));
         }
+        if let Err(e) = self.loss_table.assert_non_negative() {
+            return Err(format!("Node '{}' loss table. {}", self.name, e));
+        }
+        if let Err(e) = self.loss_table.assert_col_not_exceeding(1, 0) {
+            return Err(format!("Node '{}' loss table has loss exceeding inflow. {}", self.name, e));
+        }
+        if let Err(e) = self.loss_table.assert_slope_not_exceeding_one(0, 1) {
+            return Err(format!("Node '{}' loss table slope exceeds 1:1 (outflow would decrease). {}", self.name, e));
+        }
+
+        // The maximum outflow is the last row's (inflow - loss); the slope check
+        // guarantees (inflow - loss) is non-decreasing, so the last row is the max.
+        let last_row = self.loss_table.nrows() - 1;
+        let max_outflow = self.loss_table.get_value(last_row, 0) - self.loss_table.get_value(last_row, 1);
 
         // Build order_translation_table from loss_table (for lookups during ordering)
         // I require that the loss function does not cause the outflow to decrease. However,
