@@ -43,6 +43,7 @@ public final class AppConstants {
     // Recent files (Note: MAX_RECENT_FILES also defined in PreferenceKeys - should be unified)
     public static final int MAX_RECENT_FILES = 10; // Unified with PreferenceKeys value
     public static final String RECENT_FILE_PREF_PREFIX = "recentFile";
+    public static final String RECENT_FOLDER_PREF_PREFIX = "recentFolder";
     
     // File types
     public static final String INI_EXTENSION = ".ini";
@@ -80,6 +81,7 @@ public final class AppConstants {
     public static final String STATUS_ZOOMED_OUT = "Zoomed out";
     public static final String STATUS_ZOOM_RESET = "Zoom reset";
     public static final String STATUS_RECENT_FILES_CLEARED = "Recent files cleared";
+    public static final String STATUS_RECENT_FOLDERS_CLEARED = "Recent folders cleared";
 
     // Error messages
     public static final String ERROR_FILE_OPEN = "File Open Error";
@@ -92,6 +94,7 @@ public final class AppConstants {
 
     // Menu text
     public static final String MENU_NO_RECENT_FILES = "No recent files";
+    public static final String MENU_NO_RECENT_FOLDERS = "No recent folders";
 
     // Default text content
     public static final String DEFAULT_MODEL_TEXT = "# Welcome, friend ...\n";

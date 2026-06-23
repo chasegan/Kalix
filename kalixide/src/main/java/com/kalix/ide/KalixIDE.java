@@ -28,7 +28,6 @@ import com.kalix.ide.model.ModelChangeEvent;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.NodeTheme;
-import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.workspace.ProjectTreePanel;
@@ -105,6 +104,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Manager classes for specialized functionality
     private ThemeManager themeManager;
     private RecentFilesManager recentFilesManager;
+    private RecentFilesManager recentFoldersManager;
     private FileOperationsManager fileOperations;
     private FileDropHandler fileDropHandler;
     private VersionChecker versionChecker;
@@ -229,7 +229,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         recentFilesManager = new RecentFilesManager(
             prefs,
             this::loadModelFile,
-            () -> updateStatus(AppConstants.STATUS_RECENT_FILES_CLEARED)
+            () -> updateStatus(AppConstants.STATUS_RECENT_FILES_CLEARED),
+            AppConstants.RECENT_FILE_PREF_PREFIX
+        );
+        recentFoldersManager = new RecentFilesManager(
+            prefs,
+            this::loadModelFolder,
+            () -> updateStatus(AppConstants.STATUS_RECENT_FOLDERS_CLEARED),
+            AppConstants.RECENT_FOLDER_PREF_PREFIX
         );
     }
 
@@ -708,7 +715,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setJMenuBar(menuBar);
 
         // Connect recent files manager to menu builder
-        recentFilesManager.setMenuBarBuilder(menuBuilder);
+        recentFilesManager.setMenuBarUpdateCallback(menuBuilder::rebuildRecentFiles);
+        recentFoldersManager.setMenuBarUpdateCallback(menuBuilder::rebuildRecentFolders);
     }
 
     /**
@@ -936,6 +944,24 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         fileOperations.loadModelFile(filePath);
     }
 
+    /**
+     * Loads a model folder.
+     * Used by the recent folders manager callback.
+     *
+     * @param folderPath The absolute path to the folder to load
+     */
+    private void loadModelFolder(String folderPath) {
+        projectTreePanel.openFolder(folderPath);
+        PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folderPath);
+        // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
+        if (workspacePanel != null) {
+            workspacePanel.setTreeCollapsed(false);
+        }
+        syncToggleButtonStates();
+        revealActiveFileInTree();
+        File folder = new File(folderPath);
+        updateStatus("Opened folder: " + folder.getName());
+    }
 
 
     //
@@ -975,6 +1001,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             File folder = chooser.getSelectedFile();
             projectTreePanel.openFolder(folder);
             PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folder.getAbsolutePath());
+            recentFoldersManager.addRecentFile(folder.getAbsolutePath());
             // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
             if (workspacePanel != null) {
                 workspacePanel.setTreeCollapsed(false);
@@ -1485,12 +1512,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             try {
                 // Clear all preferences
                 prefs.clear();
-                
-                // Clear recent files
+
+                // Clear recent files and folders
                 if (recentFilesManager != null) {
                     recentFilesManager.clearRecentFiles();
                 }
-                
+                if (recentFoldersManager != null) {
+                    recentFoldersManager.clearRecentFiles();
+                }
+
                 updateStatus("App data cleared. Application will restart...");
                 
                 // Schedule restart after a brief delay to show the status message
