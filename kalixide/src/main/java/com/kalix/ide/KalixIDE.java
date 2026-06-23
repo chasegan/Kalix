@@ -157,6 +157,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupDragAndDrop();
         setupWindowListeners();
         setupGlobalKeyBindings();
+
+        finaliseComponents();
         
         // Note: Split pane divider position loading removed - using simple grid layout now
 
@@ -262,6 +264,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             this::onActiveDocumentFileChanged,
             fileWatcherManager
         );
+        // NOTE: projectDirectorySupplier is registered in the finaliseComponents step
 
         fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
         versionChecker = new VersionChecker(this::updateStatus);
@@ -272,7 +275,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             this::updateStatus,
             progressBar,
             this,
-            fileOperations::getCurrentWorkingDirectory
+            fileOperations::getCurrentWorkingDirectory,
+            fileOperations::getCurrentProjectDirectory
         );
 
         // Suppliers for auxiliary windows always reflect the active document.
@@ -294,6 +298,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Keep the file watcher tracking every open document's file (all tabs auto-reload).
         documentManager.addDocumentOpenedListener(doc -> refreshWatchedFiles());
         documentManager.addDocumentClosedListener(doc -> refreshWatchedFiles());
+    }
+
+    private void finaliseComponents() {
+        fileOperations.registerProjectDirectorySupplier(projectTreePanel::getRootFile);
     }
 
     /**
@@ -1542,11 +1550,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showOptimisation() {
         OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
             progressBar,
-            () -> {
-                // Working directory supplier
-                File currentFile = fileOperations.getCurrentFile();
-                return currentFile != null ? currentFile.getParentFile() : null;
-            },
+            fileOperations::getCurrentWorkingDirectory,
+            fileOperations::getCurrentProjectDirectory,
             () -> {
                 // Model text supplier
                 return textEditor.getText();

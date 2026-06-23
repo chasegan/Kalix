@@ -32,26 +32,27 @@ public class FileOperationsManager {
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
     private final FileWatcherManager fileWatcherManager;
+    private Supplier<File> projectDirectorySupplier;
 
     /**
      * Creates a new FileOperationsManager instance.
      *
-     * @param parentComponent The parent component for dialogs
-     * @param documentManager The document set / active-document owner
-     * @param documentFactory Creates and registers a fresh (configured) document
-     * @param statusUpdateCallback Callback for status updates
-     * @param addRecentFileCallback Callback for adding recent files
-     * @param fileChangedCallback Callback when the active document's file identity changes
-     *                            without an active-document switch (e.g. Save As, reload)
-     * @param fileWatcherManager The file watcher manager for coordinating auto-reload
+     * @param parentComponent          The parent component for dialogs
+     * @param documentManager          The document set / active-document owner
+     * @param documentFactory          Creates and registers a fresh (configured) document
+     * @param statusUpdateCallback     Callback for status updates
+     * @param addRecentFileCallback    Callback for adding recent files
+     * @param fileChangedCallback      Callback when the active document's file identity changes
+     *                                 without an active-document switch (e.g. Save As, reload)
+     * @param fileWatcherManager       The file watcher manager for coordinating auto-reload
      */
     public FileOperationsManager(Component parentComponent,
-                               DocumentManager documentManager,
-                               Supplier<KalixDocument> documentFactory,
-                               Consumer<String> statusUpdateCallback,
-                               Consumer<String> addRecentFileCallback,
-                               Runnable fileChangedCallback,
-                               FileWatcherManager fileWatcherManager) {
+                                 DocumentManager documentManager,
+                                 Supplier<KalixDocument> documentFactory,
+                                 Consumer<String> statusUpdateCallback,
+                                 Consumer<String> addRecentFileCallback,
+                                 Runnable fileChangedCallback,
+                                 FileWatcherManager fileWatcherManager) {
         this.parentComponent = parentComponent;
         this.documentManager = documentManager;
         this.documentFactory = documentFactory;
@@ -59,6 +60,7 @@ public class FileOperationsManager {
         this.addRecentFileCallback = addRecentFileCallback;
         this.fileChangedCallback = fileChangedCallback;
         this.fileWatcherManager = fileWatcherManager;
+        this.projectDirectorySupplier = null;
     }
 
     /**
@@ -417,5 +419,20 @@ public class FileOperationsManager {
     public File getCurrentWorkingDirectory() {
         KalixDocument document = document();
         return document != null ? document.getWorkingDirectory() : null;
+    }
+
+    public void registerProjectDirectorySupplier(Supplier<File> supplier) {
+        this.projectDirectorySupplier = supplier;
+    }
+
+    /**
+     * Gets the directory of the current project directory.
+     * This is used as an option to discover KalixCLI executable.
+     */
+    public File getCurrentProjectDirectory() {
+        if (projectDirectorySupplier == null) {
+            return null;
+        }
+        return projectDirectorySupplier.get();
     }
 }

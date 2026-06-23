@@ -1,5 +1,6 @@
 package com.kalix.ide.cli;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -43,34 +44,29 @@ public class KalixCliLocator {
     
     /**
      * Attempts to locate kalix using a simplified strategy.
-     *
+     * <p>
      * Search order:
-     * 1. Current folder (if provided and applicable)
-     * 2. User-configured paths (if provided)
-     * 3. System PATH (if no user-configured path)
-     *
+     * 1. User-configured paths (if provided)
+     * 2. Current folder (if provided and applicable)
+     * 3. Project folder
+     * 4. KalixIDE location
+     * 5. System PATH (if no user-configured path)
+     * <p>
      * If userConfiguredPath is provided:
-     *   - Splits the path by ';' delimiter (supports multiple directories)
-     *   - Searches each directory sequentially for kalix executable
-     *   - Returns the first valid kalix found
-     *   - Returns empty if none found (no fallback to system PATH)
-     *
+     * - Splits the path by ';' delimiter (supports multiple directories)
+     * - Searches each directory sequentially for kalix executable
+     * - Returns the first valid kalix found
+     * - Returns empty if none found (no fallback to system PATH)
+     * <p>
      * If no userConfiguredPath:
-     *   - Uses unqualified "kalix" command (relies on system PATH)
+     * - Uses unqualified "kalix" command (relies on system PATH)
      *
      * @param userConfiguredPath Optional user-configured path (supports ';' delimiter for multiple paths)
-     * @param currentFolder Optional currently open folder to check first
+     * @param currentFolder      Optional currently open file directory to check first
+     * @param projectFolder      Optional currently open folder in IDE to check second
      * @return Optional containing CliLocation if found, empty otherwise
      */
-    public static Optional<CliLocation> findKalixCli(String userConfiguredPath, String currentFolder) {
-        // First, check the currently open folder if provided
-        if (currentFolder != null && !currentFolder.trim().isEmpty()) {
-            Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
-            if (found.isPresent()) {
-                return found;
-            }
-        }
-
+    public static Optional<CliLocation> findKalixCli(String userConfiguredPath, String currentFolder, String projectFolder) {
         // If user specified a path, ONLY use those paths (no fallback)
         if (userConfiguredPath != null && !userConfiguredPath.trim().isEmpty()) {
             // Split by ';' to support multiple paths
@@ -93,7 +89,33 @@ public class KalixCliLocator {
             return Optional.empty();
         }
 
-        // No user path configured - use unqualified "kalix" from system PATH
+        // 2. Check the currently open folder if provided
+        if (currentFolder != null && !currentFolder.trim().isEmpty()) {
+            Optional<CliLocation> found = findKalixInDirectory(currentFolder.trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
+        // 3. Check the project folder if provided
+        if (projectFolder != null && !projectFolder.trim().isEmpty()) {
+            Optional<CliLocation> found = findKalixInDirectory(projectFolder.trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
+        // 4. Check where KalixIDE executable is located
+        Optional<File> ideExeLoc = getExecutableLocation();
+        if (ideExeLoc.isPresent()){
+            File exe = ideExeLoc.get();
+            Optional<CliLocation> found = findKalixInDirectory(exe.getParent().trim());
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+
+        // 5. Use unqualified "kalix" from system PATH
         return findInPath();
     }
 
@@ -105,7 +127,7 @@ public class KalixCliLocator {
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCli(String userConfiguredPath) {
-        return findKalixCli(userConfiguredPath, null);
+        return findKalixCli(userConfiguredPath, null, null);
     }
 
     /**
@@ -140,17 +162,18 @@ public class KalixCliLocator {
      * This method checks user settings and falls back to auto-discovery.
      *
      * @param currentFolder Optional currently open folder to check first
+     * @param projectFolder Optional currently open project folder to check second
      * @return Optional containing CliLocation if found, empty otherwise
      */
-    public static Optional<CliLocation> findKalixCliWithPreferences(String currentFolder) {
+    public static Optional<CliLocation> findKalixCliWithPreferences(String currentFolder, String projectFolder) {
         try {
             // Use the file-based preference system instead of OS preferences
             String configuredPath = com.kalix.ide.preferences.PreferenceManager.getFileString(
                 com.kalix.ide.preferences.PreferenceKeys.CLI_BINARY_PATH, "");
-            return findKalixCli(configuredPath, currentFolder);
+            return findKalixCli(configuredPath, currentFolder, projectFolder);
         } catch (Exception e) {
             // Fall back to standard discovery if preferences fail
-            return findKalixCli(null, currentFolder);
+            return findKalixCli(null, currentFolder, projectFolder);
         }
     }
 
@@ -161,7 +184,7 @@ public class KalixCliLocator {
      * @return Optional containing CliLocation if found, empty otherwise
      */
     public static Optional<CliLocation> findKalixCliWithPreferences() {
-        return findKalixCliWithPreferences(null);
+        return findKalixCliWithPreferences(null, null);
     }
     
     /**
@@ -286,5 +309,22 @@ public class KalixCliLocator {
         findInPath().ifPresent(installations::add);
 
         return installations;
+    }
+
+    /**
+     * Returns the location of the native launcher executable created by jpackage.
+     * Falls back to the current working directory if not running from a jpackage image
+     * (e.g. when running directly from IntelliJ/Gradle during development).
+     */
+    public static Optional<File> getExecutableLocation() {
+        String appPath = System.getProperty("jpackage.app-path");
+        if (appPath == null || appPath.isBlank()) {
+            return Optional.empty();
+        }
+        File exeFile = new File(appPath);
+        if (!exeFile.exists()) {
+            return Optional.empty();
+        }
+        return Optional.of(exeFile);
     }
 }
