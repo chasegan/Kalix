@@ -27,7 +27,7 @@ public class MenuBarBuilder {
     
     private final MenuBarCallbacks callbacks;
     private JMenu fileMenu;
-    private int recentFilesSectionStart;  // Index where recent files section begins
+    @Deprecated private int recentFilesSectionStart;  // Index where recent files section begins
     
     /**
      * Interface defining all callback methods needed for menu and toolbar actions.
@@ -152,7 +152,8 @@ public class MenuBarBuilder {
      * @param recentFiles List of recent file paths to display
      * @param fileOpenCallback Callback when a recent file is clicked
      */
-    public void rebuildRecentFilesSection(List<String> recentFiles, java.util.function.Consumer<String> fileOpenCallback) {
+    @Deprecated
+    public void rebuildRecentFilesSection(List<String> recentFiles, Consumer<String> fileOpenCallback) {
         if (fileMenu == null) return;
 
         // Remove everything from recentFilesSectionStart to end
@@ -183,7 +184,7 @@ public class MenuBarBuilder {
         // Add Exit at the end
         fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
     }
-    
+
     /**
      * Creates the File menu.
      */
