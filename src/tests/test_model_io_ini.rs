@@ -361,3 +361,77 @@ fn test_save_preserves_untouched_dimensions_file() {
     assert!(!saved.contains("dimensions ="),
             "untouched storage must not be rewritten to an inline dimensions table, got:\n{}", saved);
 }
+
+#[test]
+fn test_changed_storage_keeps_target_level_and_order_through() {
+    // target_level and order_through must be emitted by the writer. Previously they
+    // were dropped, so a *changed* storage node (which re-renders canonically)
+    // would silently lose them. We change initial_volume to force re-rendering.
+    let ini = "[kalix]\n\
+               \n\
+               [node.s]\n\
+               type = storage\n\
+               loc = 5, 6\n\
+               target_level = 5\n\
+               order_through = true\n\
+               initial_volume = 100\n\
+               dimensions = 0, 0, 0, 0,\n\
+               \x20            1, 1000, 3, 0\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    let ini_io = IniModelIO::new();
+    let mut model = ini_io.read_model_string(ini).expect("model should parse");
+
+    // Force the storage section to re-render canonically.
+    for node in &mut model.nodes {
+        if let crate::nodes::NodeEnum::StorageNode(n) = node {
+            n.v_initial = 200.0;
+        }
+    }
+
+    let saved = ini_io.model_to_string(&model);
+
+    assert!(saved.contains("initial_volume = 200"), "expected changed initial_volume, got:\n{}", saved);
+    assert!(saved.contains("target_level"), "changed storage must keep target_level, got:\n{}", saved);
+    assert!(saved.contains("order_through = true"), "changed storage must keep order_through, got:\n{}", saved);
+}
+
+#[test]
+fn test_changed_unregulated_user_keeps_account() {
+    // The account definition must be re-emitted (reconstructed from the account
+    // manager via the node's registered index). A changed user node previously
+    // dropped it. We add annual_cap to force the section to re-render.
+    let ini = "[kalix]\n\
+               \n\
+               [node.u]\n\
+               type = unregulated_user\n\
+               loc = 5, 6\n\
+               demand = 10\n\
+               account = myacc, general, 1000, 7\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    let ini_io = IniModelIO::new();
+    let mut model = ini_io.read_model_string(ini).expect("model should parse");
+
+    // Force the user section to re-render canonically.
+    for node in &mut model.nodes {
+        if let crate::nodes::NodeEnum::UnregulatedUserNode(n) = node {
+            n.annual_cap = Some(500.0);
+            n.annual_cap_reset_month = 6;
+        }
+    }
+
+    let saved = ini_io.model_to_string(&model);
+
+    assert!(saved.contains("annual_cap"), "expected changed section, got:\n{}", saved);
+    assert!(saved.contains("account = myacc, general, 1000, 7"),
+            "changed unregulated_user must keep its account, got:\n{}", saved);
+}

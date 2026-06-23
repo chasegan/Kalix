@@ -161,6 +161,11 @@ impl AccountManager {
         self.accounts[account_id].balance
     }
 
+    /// Get a reference to an account by index, if it exists.
+    pub fn get_account(&self, account_id: usize) -> Option<&Account> {
+        self.accounts.get(account_id)
+    }
+
     /// Debit account
     pub fn debit_account(&mut self, account_id: usize, amount: f64) {
         self.accounts[account_id].debit_account_fast(amount);

@@ -792,7 +792,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string(), "0");
+                // order_through defaults to false; emit only when enabled.
+                if n.order_through {
+                    ini_doc.set_property(section_name.as_str(), "order_through", "true");
+                }
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
@@ -813,6 +818,14 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "demand", &n.demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "flow_threshold", &n.flow_threshold.to_string());
+                // Re-emit the account definition (name, type, size, wy_month) by
+                // looking it up in the account manager via the node's registered index.
+                if let Some(account_idx) = n.account_idx {
+                    if let Some(acc) = model.account_manager.get_account(account_idx) {
+                        let value = format!("{}, {}, {}, {}", acc.name, acc.account_type, acc.size, acc.wy_month);
+                        ini_doc.set_property(section_name.as_str(), "account", value.as_str());
+                    }
+                }
                 match n.annual_cap {
                     Some(cap) => {
                         let value_str = format!("{},{}", cap, n.annual_cap_reset_month);
