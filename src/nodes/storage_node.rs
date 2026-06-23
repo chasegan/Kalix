@@ -29,9 +29,9 @@ pub struct StorageNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
-    pub d: Table,       // Level m, Volume ML, Area km2, Spill ML
-    pub v: f64,
-    pub v_initial: f64,
+    pub dimensions: Table,       // Level m, Volume ML, Area km2, Spill ML
+    pub volume: f64,
+    pub vol_initial: f64,
     pub order_through: bool,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
@@ -114,7 +114,7 @@ impl StorageNode {
     pub fn new() -> Self {
         Self {
             name: "".to_string(),
-            d: Table::new(4),
+            dimensions: Table::new(4),
             order_through: false,
             usflow: 0.0,
             ..Default::default()
@@ -140,7 +140,7 @@ impl StorageNode {
         for i in 0..MAX_DS_LINKS {
             if self.ds_orders_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
                 active |= 1 << i;
-            }
+            }             
         }
         active
     }
@@ -170,7 +170,7 @@ impl StorageNode {
         v_initial: f64,
         net_rain_mm: f64,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
-        let nrows = self.d.nrows();
+        let nrows = self.dimensions.nrows();
         let ds_1_order_due = self.ds_orders_due[0];
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
@@ -191,7 +191,7 @@ impl StorageNode {
         };
 
         // Compute area once (used by both allocation logic and caller)
-        let area = self.d.interpolate_row(row, VOLU, AREA, v_final);
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_final);
 
         // Allocate outflows to each downstream link.
         // When unconstrained, use orders directly to avoid floating point noise from mass balance.
@@ -291,7 +291,7 @@ impl StorageNode {
 
             if new_active == active {
                 // Converged - use row from bisection for spill lookup
-                let spill = self.d.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
+                let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
                 return (v_candidate, spill, active, row, true);
             }
 
@@ -302,9 +302,9 @@ impl StorageNode {
                 if let Some(threshold_vol) =
                     self.find_crossed_threshold(v_candidate, active, new_active)
                 {
-                    if let Some(thr_row) = self.d.find_row_for_interpolation(VOLU, threshold_vol) {
-                        let area = self.d.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
-                        let spill = self.d.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
+                    if let Some(thr_row) = self.dimensions.find_row_for_interpolation(VOLU, threshold_vol) {
+                        let area = self.dimensions.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
+                        let spill = self.dimensions.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
                         let outflow_needed = v_initial + net_rain_mm * area - threshold_vol;
                         let ds1_flow = spill.max(effective_ds1);
                         let total_outflow = ds1_flow + ds234_orders_due;
@@ -327,8 +327,8 @@ impl StorageNode {
         }
 
         // Fallback (rare path) - do one find_row for v_working
-        if let Some(fb_row) = self.d.find_row_for_interpolation(VOLU, v_initial) {
-            let spill = self.d.interpolate_row(fb_row, VOLU, SPIL, v_initial).max(0.0);
+        if let Some(fb_row) = self.dimensions.find_row_for_interpolation(VOLU, v_initial) {
+            let spill = self.dimensions.interpolate_row(fb_row, VOLU, SPIL, v_initial).max(0.0);
             (v_initial, spill, active, fb_row, false)
         } else {
             (v_initial, 0.0, active, 0, false)
@@ -350,9 +350,9 @@ impl StorageNode {
     ) -> (f64, usize) {
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
-            let table_vol = self.d.get_value(row, VOLU);
-            let area = self.d.get_value(row, AREA);
-            let spill = self.d.get_value(row, SPIL).max(0.0);
+            let table_vol = self.dimensions.get_value(row, VOLU);
+            let area = self.dimensions.get_value(row, AREA);
+            let spill = self.dimensions.get_value(row, SPIL).max(0.0);
 
             let ds1_flow = spill.max(ds1_required_flow);
             let total_outflow = ds1_flow + ds234_orders;
@@ -413,7 +413,7 @@ impl StorageNode {
 
         // Handle floor case (solution at or below row 0)
         if istop == 0 {
-            return (self.d.get_value(0, VOLU), 0);
+            return (self.dimensions.get_value(0, VOLU), 0);
         }
         // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
@@ -424,8 +424,8 @@ impl StorageNode {
         let row = istop - 1;
         let error_prev = if row == lo { error_lo } else { compute_error(row) };
         let x = error_prev / (error_prev - error_hi);
-        let v_lo = self.d.get_value(row, VOLU);
-        let v_hi = self.d.get_value(istop, VOLU);
+        let v_lo = self.dimensions.get_value(row, VOLU);
+        let v_hi = self.dimensions.get_value(istop, VOLU);
 
         (v_lo + (v_hi - v_lo) * x, row)
     }
@@ -467,7 +467,7 @@ impl Node for StorageNode {
         self.usflow = 0.0;
         self.dsflow = 0.0;
         self.ds_flows = [0.0; MAX_DS_LINKS];
-        self.v = self.v_initial;
+        self.volume = self.vol_initial;
         self.level = 0.0;
         self.rain_vol = 0.0;
         self.evap_vol = 0.0;
@@ -477,22 +477,22 @@ impl Node for StorageNode {
         self.previous_istop = 0;
 
         // Checks
-        if self.d.nrows() < 2 {
+        if self.dimensions.nrows() < 2 {
             let message = format!("Error in node '{}'. Storage dimension table must have at least 2 rows.", self.name);
             return Err(message);
         }
-        if self.d.get_value(0, VOLU) != 0_f64 {
+        if self.dimensions.get_value(0, VOLU) != 0_f64 {
             let message = format!("Error in node '{}'. Storage dimension table must begin with volume=0.", self.name);
             return Err(message);
         }
-        if self.d.get_value(0, AREA) != 0_f64 {
+        if self.dimensions.get_value(0, AREA) != 0_f64 {
             let message = format!("Error in node '{}'. Storage dimension table must begin with area=0.", self.name);
             return Err(message);
         }
 
         // Validate that volumes are strictly increasing (required for solver interpolation)
-        for i in 1..self.d.nrows() {
-            if self.d.get_value(i, VOLU) <= self.d.get_value(i - 1, VOLU) {
+        for i in 1..self.dimensions.nrows() {
+            if self.dimensions.get_value(i, VOLU) <= self.dimensions.get_value(i - 1, VOLU) {
                 let message = format!(
                     "Error in node '{}'. Storage dimension table volumes must be strictly increasing (violation at row {}).",
                     self.name, i + 1
@@ -506,10 +506,10 @@ impl Node for StorageNode {
             self.min_operating_volume[i] = match self.outlet_definition[i] {
                 OutletDefinition::None => 0.0,
                 OutletDefinition::OutletWithMOL(level) => {
-                    self.d.interpolate(LEVL, VOLU, level)
+                    self.dimensions.interpolate(LEVL, VOLU, level)
                 }
                 OutletDefinition::OutletWithMOLAndCapacity(level, _capacity) => {
-                    self.d.interpolate(LEVL, VOLU, level)
+                    self.dimensions.interpolate(LEVL, VOLU, level)
                 }
             };
         }
@@ -689,13 +689,13 @@ impl Node for StorageNode {
             }
             // The level is below the target level. We need convert this to a volume and
             // compare it with our forecast volume.
-            let target_volume = self.d.interpolate_or_extrapolate(LEVL, VOLU, target_level);
+            let target_volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, target_level);
             //TODO: it could be possible to keep a running forecast inflow here, add new orders
             // to it and subtract orders as they pop out of the buffer (rather than summing the
             // order buffer every time). It may be noticeable for long travel times.
             let inflows = self.target_level_order_buffer.sum();
             let known_usage: f64 = self.ds_orders_due.iter().sum();
-            let forecast_volume = self.v + inflows - known_usage;
+            let forecast_volume = self.volume + inflows - known_usage;
             self.us_orders = (target_volume - forecast_volume).max(0.0);
             self.target_level_order_buffer.push(self.us_orders);
         } else {
@@ -718,25 +718,25 @@ impl Node for StorageNode {
         let pond_demand = self.pond_demand_input.get_value(data_cache);
 
         // Add upstream inflows
-        self.v += self.usflow;
+        self.volume += self.usflow;
 
         // Handle pond diversion first (highest priority)
         // If we empty the storage, there is no rainfall accessible this timestep since AREA=0.
-        self.pond_diversion = pond_demand.min(self.v);
-        self.v -= self.pond_diversion;
+        self.pond_diversion = pond_demand.min(self.volume);
+        self.volume -= self.pond_diversion;
 
         // Net rainfall rate
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
 
         // Solve backward Euler
-        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.v, net_rain_mm);
+        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.volume, net_rain_mm);
 
         // Update warm-start cache for next timestep (expects upper bracket)
         self.previous_istop = row + 1;
 
         // Update state from solution (area already computed by solver)
-        self.v = v_final;
-        self.level = self.d.interpolate_row(row, VOLU, LEVL, v_final);
+        self.volume = v_final;
+        self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
         self.spill = spill;
         self.ds_flows = ds_flows;
         self.dsflow = self.ds_flows.iter().sum();
@@ -751,7 +751,7 @@ impl Node for StorageNode {
 
         // Record results
         if let Some(idx) = self.recorder_idx_volume {
-            data_cache.add_value_at_index(idx, self.v);
+            data_cache.add_value_at_index(idx, self.volume);
         }
         if let Some(idx) = self.recorder_idx_level {
             data_cache.add_value_at_index(idx, self.level);

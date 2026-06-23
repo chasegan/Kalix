@@ -481,13 +481,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.target_level = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "dimensions" {
-                            n.d = Table::from_csv_string(v, 4, false)
+                            n.dimensions = Table::from_csv_string(v, 4, false)
                                 .map_err(|e| format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
                                                      ini_property.line_number, node_name, e))?;
-                        } else if name_lower == "dimensions_file" {
-                            n.d = Table::from_csv_file(v);
                         } else if name_lower == "initial_volume" {
-                            n.v_initial = v.parse::<f64>()
+                            n.vol_initial = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name))?;
                         } else if name_lower == "order_through" {
@@ -793,13 +791,13 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
-                set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string(), "0");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.vol_initial.to_string(), "0");
                 // order_through defaults to false; emit only when enabled.
                 if n.order_through {
                     ini_doc.set_property(section_name.as_str(), "order_through", "true");
                 }
-                let dimensions_values = n.d.get_values_as_vec();
-                let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
+                let dimensions_values = n.dimensions.get_values_as_vec();
+                let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.dimensions.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
                 for (i, outlet_def) in n.outlet_definition.iter().enumerate() {
                     let property_name = format!("ds_{}_outlet", i + 1);
@@ -885,9 +883,9 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
 /// `ini_document` (raw lines, comments and spacing intact); a section that
 /// changed (or is new) is emitted canonically; a section that vanished is
 /// dropped. Comparison is section-level on purpose: it sidesteps representation
-/// mismatches (e.g. a storage table written as `dimensions_file` but
-/// canonicalised to an inline `dimensions` table), since unchanged sections are
-/// never key-matched — they are kept as-is.
+/// mismatches (e.g. an input written as an alias `name = path` but canonicalised
+/// to its bare path, or a key in non-canonical casing), since unchanged sections
+/// are never key-matched — they are kept as-is.
 ///
 /// Falls back to a full canonical render when there is no baseline or original
 /// document to preserve (e.g. a model built programmatically).

@@ -326,43 +326,6 @@ fn test_save_localises_single_param_change() {
 }
 
 #[test]
-fn test_save_preserves_untouched_dimensions_file() {
-    // A storage node defined with `dimensions_file` canonicalises to an inline
-    // `dimensions` table (different key for the same data). When the node is
-    // untouched, the source `dimensions_file` line must be preserved verbatim —
-    // not rewritten to an inline `dimensions` table.
-    let csv_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/tests/_dims_preserve_test.csv");
-    std::fs::write(csv_path, "Level,Volume,Area,Spill\n0,0,0,0\n1,1000,3,0\n")
-        .expect("write temp dims csv");
-
-    let ini = format!(
-        "[kalix]\n\
-         \n\
-         [node.s]\n\
-         type = storage\n\
-         loc = 5, 6\n\
-         dimensions_file = {}\n\
-         ds_1 = bh\n\
-         \n\
-         [node.bh]\n\
-         type = blackhole\n\
-         loc = 1, 2\n",
-        csv_path);
-
-    let ini_io = IniModelIO::new();
-    let model = ini_io.read_model_string(&ini).expect("model should parse");
-    let saved = ini_io.model_to_string(&model);
-
-    // Clean up before asserting so a failure doesn't leave the file behind.
-    std::fs::remove_file(csv_path).ok();
-
-    assert!(saved.contains(&format!("dimensions_file = {}", csv_path)),
-            "dimensions_file should be preserved verbatim, got:\n{}", saved);
-    assert!(!saved.contains("dimensions ="),
-            "untouched storage must not be rewritten to an inline dimensions table, got:\n{}", saved);
-}
-
-#[test]
 fn test_changed_storage_keeps_target_level_and_order_through() {
     // target_level and order_through must be emitted by the writer. Previously they
     // were dropped, so a *changed* storage node (which re-renders canonically)
@@ -389,7 +352,7 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
     // Force the storage section to re-render canonically.
     for node in &mut model.nodes {
         if let crate::nodes::NodeEnum::StorageNode(n) = node {
-            n.v_initial = 200.0;
+            n.vol_initial = 200.0;
         }
     }
 

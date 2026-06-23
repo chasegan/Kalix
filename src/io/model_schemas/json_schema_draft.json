@@ -217,10 +217,6 @@
           "type": "string",
           "description": "Pond demand data reference name"
         },
-        "dimensions_file": {
-          "type": "string",
-          "description": "Path to storage dimensions CSV file"
-        }
       },
       "additionalProperties": false
     }
