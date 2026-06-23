@@ -163,7 +163,7 @@ impl SimpleNodewiseOrderingSystem {
                             node.order_buffer = FifoBuffer::new(int_lag);
                         }
                     }
-                    NodeEnum::OrderConstraintNode(node) => {
+                    NodeEnum::OrderControlNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
                         node.sent_order_buffer = FifoBuffer::new(int_lag);
                     }
@@ -196,14 +196,14 @@ impl SimpleNodewiseOrderingSystem {
         // Phase 2: Determine which regulated nodes actually need to be visited.
         // A node only needs ordering if it (or a downstream node reachable through
         // regulated links) is an order-generating type: storage, regulated_user, or
-        // order_constraint. Nodes below the last order-generating node on any branch
+        // order_control. Nodes below the last order-generating node on any branch
         // will only ever see zero dsorders, so visiting them is wasted work.
         let mut needed = vec![false; nodes.len()];
         for (i, node) in nodes.iter().enumerate() {
             match node {
                 NodeEnum::StorageNode(_) |
                 NodeEnum::RegulatedUserNode(_) |
-                NodeEnum::OrderConstraintNode(_) => needed[i] = true,
+                NodeEnum::OrderControlNode(_) => needed[i] = true,
                 _ => {}
             }
         }
@@ -345,7 +345,7 @@ impl SimpleNodewiseOrderingSystem {
                         n_orders += 1;
                     }
                 },
-                NodeEnum::OrderConstraintNode(node) => {
+                NodeEnum::OrderControlNode(node) => {
                     node.run_order_phase(data_cache);
                     // Propagate orders upstream
                     for il in incoming {

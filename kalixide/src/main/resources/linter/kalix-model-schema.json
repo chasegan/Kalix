@@ -448,7 +448,7 @@
       }
     },
 
-    "order_constraint": {
+    "order_control": {
       "description": "Order constraint node for limiting or setting orders",
       "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "min_order", "max_order", "set_order", "order", "order_due"],
       "required_params": ["type", "loc"],
@@ -457,7 +457,7 @@
       "parameters": {
         "type": {
           "type": "literal",
-          "value": "order_constraint"
+          "value": "order_control"
         },
         "loc": {
           "type": "coordinates",

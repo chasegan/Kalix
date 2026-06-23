@@ -18,7 +18,7 @@ Verifying: 13_reg_user_with_routing/model_with_ordering.ini
 Verifying: 14_reg_users_with_inflows/ordering_with_inflows.ini
   [PASS] VERIFIED!
 
-Verifying: 15_order_constraints/model.ini
+Verifying: 15_order_controls/model.ini
   [PASS] VERIFIED!
 
 Verifying: 16_alternating_water_source/model.ini
