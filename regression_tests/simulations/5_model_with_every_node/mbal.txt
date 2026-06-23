@@ -14,7 +14,7 @@ SACRAMENTO NODES
   Node2_sacramento, 287.45307448574795
 
 GR4J NODES
-  node14_gr4h, 260.4394315142618
+  node14_gr4h, 251.73828643016267
   node6_gr4j, 260.4394315142618
 
 REGULATED_USER NODES
@@ -42,9 +42,9 @@ GAUGE NODES
   node10_gauge, 0
 
 BLACKHOLE NODES
-  node12_blackhole, -532.937328596578
+  node12_blackhole, -524.2361835124748
   node9_blackhole, -359.7412693411166
 
 ----------------------------------
-TOTAL = -0.0000000000025579538487363607
+TOTAL = 0.0000000000015347723092418164
 ----------------------------------
