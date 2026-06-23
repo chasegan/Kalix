@@ -53,6 +53,13 @@ pub struct Model {
 
     // INI document for round-trip serialization
     pub ini_document: Option<IniDocument>,
+
+    /// Canonical render of the model exactly as loaded, captured before any
+    /// programmatic change. Comparing this against a canonical render at save
+    /// time identifies which sections actually changed, so a formatting-
+    /// preserving save can re-emit only those (state-diff). `None` for models
+    /// built programmatically, where there is nothing to preserve.
+    pub baseline_canonical: Option<IniDocument>,
 }
 
 

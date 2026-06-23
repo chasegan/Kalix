@@ -157,20 +157,6 @@
         "x": {
           "type": "number",
           "description": "X parameter"
-        },
-        "index_flows": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "description": "Routing table flow indices"
-        },
-        "index_times": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "description": "Routing table time indices"
         }
       },
       "additionalProperties": false

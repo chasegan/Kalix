@@ -177,16 +177,17 @@ pub fn set_property_if_not_empty(ini_doc: &mut crate::io::custom_ini_parser::Ini
 }
 
 
-/// Set a property, but suppress it when the value equals `default` AND the
-/// property wasn't already present in the document. Keeps default-valued
-/// optional numerics (e.g. `initial_volume = 0`) out of the file unless the
-/// source explicitly included them.
-pub fn set_property_unless_redundant_default(ini_doc: &mut crate::io::custom_ini_parser::IniDocument,
-                                             section: &str,
-                                             property: &str,
-                                             value: &str,
-                                             default: &str) {
-    if value != default || ini_doc.get_property(section, property).is_some() {
+/// Set a property unless its value equals `default`. Keeps default-valued
+/// optional numerics (e.g. `initial_volume = 0`) out of a canonical render.
+/// An explicit default in the source is still preserved on save: the
+/// formatting-preserving merge keeps unchanged sections verbatim, so this only
+/// suppresses the default in sections that are re-rendered (changed or new).
+pub fn set_property_unless_default(ini_doc: &mut crate::io::custom_ini_parser::IniDocument,
+                                   section: &str,
+                                   property: &str,
+                                   value: &str,
+                                   default: &str) {
+    if value != default {
         ini_doc.set_property(section, property, value);
     }
 }

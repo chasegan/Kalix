@@ -209,8 +209,10 @@ fn test_model_with_every_node_type_save() {
 
 #[test]
 fn test_routing_nlm_does_not_emit_pwl() {
-    // A routing node defined with NLM (k, m) must serialise back with `nlm` only —
-    // never a stray `pwl` line, since the two are mutually exclusive.
+    // A routing node defined with NLM (k, m) must serialise to `nlm` only — never
+    // a stray `pwl`, since the two are mutually exclusive. We mutate the node so
+    // its section re-canonicalises through the public save path (an unchanged node
+    // would just be preserved verbatim).
     let ini = "[kalix]\n\
                \n\
                [node.r]\n\
@@ -225,11 +227,137 @@ fn test_routing_nlm_does_not_emit_pwl() {
                loc = 1, 2\n";
 
     let ini_io = IniModelIO::new();
-    let model = ini_io.read_model_string(ini).expect("model should parse");
-    let out = ini_io.model_to_string(&model);
+    let mut model = ini_io.read_model_string(ini).expect("model should parse");
 
-    assert!(out.contains("nlm = 2, 0.8"), "expected nlm line, got:\n{}", out);
+    // Force the routing section to re-render canonically.
+    for node in &mut model.nodes {
+        if let crate::nodes::NodeEnum::RoutingNode(n) = node {
+            n.set_lag(2);
+        }
+    }
+
+    let out = ini_io.model_to_string(&model);
+    assert!(out.contains("nlm = 2, 0.8"), "expected canonical nlm line, got:\n{}", out);
     assert!(!out.contains("pwl"), "must not emit a pwl line for an NLM node, got:\n{}", out);
-    // loc emits with a space after the comma.
-    assert!(out.contains("loc = 29, 765"), "expected spaced loc, got:\n{}", out);
+}
+
+#[test]
+fn test_baseline_canonical_captured_at_load() {
+    // Phase 1 of the formatting-preserving saver: loading a model must capture a
+    // canonical render of the model as-loaded, holding canonical (writer-formatted)
+    // values rather than the raw source text. e.g. "30.000" -> "30".
+    let ini = "[kalix]\n\
+               \n\
+               [node.g]\n\
+               type = gr4j\n\
+               loc = 10, 20\n\
+               area = 30.000\n\
+               params = 350.0, 0.0, 90.0, 1.7\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    let ini_io = IniModelIO::new();
+    let model = ini_io.read_model_string(ini).expect("model should parse");
+
+    let baseline = model.baseline_canonical.as_ref()
+        .expect("baseline canonical should be captured at load");
+    assert_eq!(baseline.get_property("node.g", "area"), Some("30"));
+    assert_eq!(baseline.get_property("node.g", "params"), Some("350, 0, 90, 1.7"));
+    assert_eq!(baseline.get_property("node.g", "loc"), Some("10, 20"));
+}
+
+#[test]
+fn test_save_noop_is_byte_identical() {
+    // Phase 2: loading then saving with NO change must reproduce the source
+    // byte-for-byte, including original number formatting, spacing, comments,
+    // continuations and the awkward node types.
+    let original = include_str!(
+        "../../regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini"
+    );
+    // Load via read_model_file so the working directory is the model's folder and
+    // the relative input CSVs resolve (they sit alongside the model).
+    let path = concat!(env!("CARGO_MANIFEST_DIR"),
+        "/regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini");
+    let ini_io = IniModelIO::new();
+    let model = ini_io.read_model_file(path).expect("model should parse");
+
+    let saved = ini_io.model_to_string(&model);
+
+    assert_eq!(original, saved, "a no-op save must be byte-identical to the source");
+}
+
+#[test]
+fn test_save_localises_single_param_change() {
+    // Changing one node's params should re-render only that node's section; every
+    // other section stays byte-identical to the source.
+    let original = "[kalix]\n\
+                    \n\
+                    [node.g]\n\
+                    type = gr4j\n\
+                    loc = 10.00, 20.00\n\
+                    area = 30.000\n\
+                    params = 350.0, 0.0, 90.0, 1.7\n\
+                    ds_1 = bh\n\
+                    \n\
+                    [node.bh]\n\
+                    type = blackhole\n\
+                    loc = 1.00, 2.00\n";
+
+    let ini_io = IniModelIO::new();
+    let mut model = ini_io.read_model_string(original).expect("model should parse");
+
+    // Mutate one GR4J parameter directly on the node (as the optimiser would).
+    for node in &mut model.nodes {
+        if let crate::nodes::NodeEnum::Gr4jNode(n) = node {
+            n.gr4j_model.x1 = 400.0;
+        }
+    }
+
+    let saved = ini_io.model_to_string(&model);
+
+    // The changed node re-renders canonically (new value, canonical formatting)...
+    assert!(saved.contains("params = 400, 0, 90, 1.7"), "changed params, got:\n{}", saved);
+    // ...but the untouched blackhole section is preserved verbatim, including its
+    // original "1.00, 2.00" formatting (would be "1, 2" if re-canonicalised).
+    assert!(saved.contains("loc = 1.00, 2.00"), "untouched node preserved, got:\n{}", saved);
+}
+
+#[test]
+fn test_save_preserves_untouched_dimensions_file() {
+    // A storage node defined with `dimensions_file` canonicalises to an inline
+    // `dimensions` table (different key for the same data). When the node is
+    // untouched, the source `dimensions_file` line must be preserved verbatim —
+    // not rewritten to an inline `dimensions` table.
+    let csv_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/tests/_dims_preserve_test.csv");
+    std::fs::write(csv_path, "Level,Volume,Area,Spill\n0,0,0,0\n1,1000,3,0\n")
+        .expect("write temp dims csv");
+
+    let ini = format!(
+        "[kalix]\n\
+         \n\
+         [node.s]\n\
+         type = storage\n\
+         loc = 5, 6\n\
+         dimensions_file = {}\n\
+         ds_1 = bh\n\
+         \n\
+         [node.bh]\n\
+         type = blackhole\n\
+         loc = 1, 2\n",
+        csv_path);
+
+    let ini_io = IniModelIO::new();
+    let model = ini_io.read_model_string(&ini).expect("model should parse");
+    let saved = ini_io.model_to_string(&model);
+
+    // Clean up before asserting so a failure doesn't leave the file behind.
+    std::fs::remove_file(csv_path).ok();
+
+    assert!(saved.contains(&format!("dimensions_file = {}", csv_path)),
+            "dimensions_file should be preserved verbatim, got:\n{}", saved);
+    assert!(!saved.contains("dimensions ="),
+            "untouched storage must not be rewritten to an inline dimensions table, got:\n{}", saved);
 }

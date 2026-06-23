@@ -1,13 +1,13 @@
 use crate::hydrology::accounts::account::Account;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
-use crate::io::custom_ini_parser::IniDocument;
+use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_redundant_default, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -313,8 +313,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "routing" => {
                     let mut n = RoutingNode::new();
                     n.name = node_name.to_string();
-                    let mut r_flows: Option<Vec<f64>> = None;
-                    let mut r_times: Option<Vec<f64>> = None;
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
                         let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
@@ -362,22 +360,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             }
                             let (index_flows, index_times) = split_interleaved(&all_values);
                             n.set_routing_table(index_flows, index_times);
-                        } else if name_lower == "index_flows" {
-                            let index_flows = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                            if let Some(index_times) = &r_times {
-                                n.set_routing_table(index_flows, index_times.clone());
-                            } else {
-                                r_flows = Some(index_flows);
-                            }
-                        } else if name_lower == "index_times" {
-                            let index_times = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                            if let Some(index_flows) = &r_flows {
-                                n.set_routing_table(index_flows.clone(), index_times);
-                            } else {
-                                r_times = Some(index_times);
-                            }
                         } else if name_lower == "typical_regulated_flow" {
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
@@ -643,6 +625,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
+    // Capture the canonical baseline of the model exactly as loaded
+    // -------------------------------------------------------------------------------------
+    // Render the pristine model canonically and stash it. At save time we render
+    // the (possibly mutated) model again and diff against this baseline to find
+    // which sections actually changed — see the formatting-preserving saver.
+    model.baseline_canonical = Some(render_canonical_0_0_1(&model));
+
+    // -------------------------------------------------------------------------------------
     // Return the model
     // -------------------------------------------------------------------------------------
     Ok(model)
@@ -650,7 +640,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
 
 
 
-pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
+/// Render a model to an INI document canonically — every property formatted
+/// from the model's typed fields. Starts from the model's `ini_document` (when
+/// present) so leading comments, blank lines and section order survive, but all
+/// values are re-emitted in canonical form. This is the single canonicalizer
+/// used both to capture the load-time baseline and to compute the current state
+/// at save time.
+pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
 
     // Start by cloning the model's ini_doc if it has one. Otherwise we make a new one.
     let mut ini_doc = match &model.ini_document {
@@ -713,7 +709,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "min_order", &n.min_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "max_order", &n.max_order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "set_order", &n.set_order_input.to_string());
-                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "delay_order_steps", &n.delay_order_steps.to_string(), "0");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "delay_order_steps", &n.delay_order_steps.to_string(), "0");
             }
             NodeEnum::Gr4jNode(n) => {
                 let section_name = format!("node.{}", n.name);
@@ -766,7 +762,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                         ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
                     }
                 }
-                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
             }
             NodeEnum::SacramentoNode(n) => {
                 let section_name = format!("node.{}", n.name);
@@ -796,7 +792,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
-                set_property_unless_redundant_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string(), "0");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.v_initial.to_string(), "0");
                 let dimensions_values = n.d.get_values_as_vec();
                 let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.d.ncols(), 4);
                 ini_doc.set_property(section_name.as_str(), "dimensions", dimensions_str.as_str());
@@ -864,4 +860,74 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 
     // Return
     ini_doc
+}
+
+
+/// Serialise a model back to an INI document, preserving the original formatting
+/// of everything that didn't change (the formatting-preserving "state-diff" saver).
+///
+/// Render the model canonically now (`current`) and compare it, section by
+/// section, against the canonical baseline captured at load. A section whose
+/// canonical form is unchanged is emitted verbatim from the original
+/// `ini_document` (raw lines, comments and spacing intact); a section that
+/// changed (or is new) is emitted canonically; a section that vanished is
+/// dropped. Comparison is section-level on purpose: it sidesteps representation
+/// mismatches (e.g. a storage table written as `dimensions_file` but
+/// canonicalised to an inline `dimensions` table), since unchanged sections are
+/// never key-matched — they are kept as-is.
+///
+/// Falls back to a full canonical render when there is no baseline or original
+/// document to preserve (e.g. a model built programmatically).
+pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
+    let current = render_canonical_0_0_1(model);
+
+    let (baseline, original) = match (&model.baseline_canonical, &model.ini_document) {
+        (Some(baseline), Some(original)) => (baseline, original),
+        _ => return current, // nothing to preserve
+    };
+
+    // Rebuild the original (formatting-preserving) document by mark-and-sweep:
+    // validate the sections we keep verbatim, set the ones that changed, and let
+    // the sweep drop everything left invalid (deleted sections/properties).
+    let mut out = original.clone();
+    out.invalidate_all();
+
+    for (section_name, current_section) in &current.sections {
+        let unchanged = baseline.sections.get(section_name)
+            .map_or(false, |base| sections_canonically_equal(base, current_section));
+
+        if unchanged && out.sections.contains_key(section_name) {
+            // Keep the original section verbatim (preserves raw_lines and comments).
+            out.validate_section(section_name);
+            let keys: Vec<String> = out.sections[section_name].properties.keys().cloned().collect();
+            for key in keys {
+                out.validate_property(section_name, &key);
+            }
+        } else {
+            // Changed, new, or not present in the original: emit canonically.
+            for (key, prop) in &current_section.properties {
+                out.set_property(section_name, key, &prop.value);
+            }
+        }
+    }
+
+    out.remove_invalid_sections_and_properties();
+    out
+}
+
+
+/// Two sections are canonically equal when they hold the same property keys with
+/// the same (canonical) values. Comments, ordering and raw formatting are
+/// intentionally ignored — only the model-meaningful content is compared.
+fn sections_canonically_equal(a: &IniSection, b: &IniSection) -> bool {
+    if a.properties.len() != b.properties.len() {
+        return false;
+    }
+    for (key, a_prop) in &a.properties {
+        match b.properties.get(key) {
+            Some(b_prop) if b_prop.value == a_prop.value => {}
+            _ => return false,
+        }
+    }
+    true
 }
