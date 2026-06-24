@@ -93,21 +93,25 @@ pub struct StorageNode {
     recorder_idx_ds_1_order_due: Option<usize>,
     recorder_idx_ds_1_outlet: Option<usize>,
     recorder_idx_ds_1_spill: Option<usize>,
+    recorder_idx_ds_1_force_release: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
     recorder_idx_ds_2_order: Option<usize>,
     recorder_idx_ds_2_order_due: Option<usize>,
     recorder_idx_ds_2_outlet: Option<usize>,
     recorder_idx_ds_2_spill: Option<usize>,
+    recorder_idx_ds_2_force_release: Option<usize>,
     recorder_idx_ds_3: Option<usize>,
     recorder_idx_ds_3_order: Option<usize>,
     recorder_idx_ds_3_order_due: Option<usize>,
     recorder_idx_ds_3_outlet: Option<usize>,
     recorder_idx_ds_3_spill: Option<usize>,
+    recorder_idx_ds_3_force_release: Option<usize>,
     recorder_idx_ds_4: Option<usize>,
     recorder_idx_ds_4_order: Option<usize>,
     recorder_idx_ds_4_order_due: Option<usize>,
     recorder_idx_ds_4_outlet: Option<usize>,
     recorder_idx_ds_4_spill: Option<usize>,
+    recorder_idx_ds_4_force_release: Option<usize>,
 }
 
 impl StorageNode {
@@ -648,6 +652,18 @@ impl Node for StorageNode {
         self.recorder_idx_ds_4_order_due = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4_order_due").as_str(), false
         );
+        self.recorder_idx_ds_1_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_2_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_3_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_4_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_force_release").as_str(), false
+        );
 
         Ok(())
     }
@@ -850,6 +866,18 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_ds_4_spill {
             data_cache.add_value_at_index(idx, 0.0);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1_force_release {
+            data_cache.add_value_at_index(idx, self.ds_release_due[0]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_force_release {
+            data_cache.add_value_at_index(idx, self.ds_release_due[1]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_3_force_release {
+            data_cache.add_value_at_index(idx, self.ds_release_due[2]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_force_release {
+            data_cache.add_value_at_index(idx, self.ds_release_due[3]);
         }
 
         // Reset upstream inflow for next timestep
