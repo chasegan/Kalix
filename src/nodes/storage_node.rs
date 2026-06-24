@@ -44,6 +44,7 @@ pub struct StorageNode {
     usflow: f64,
     dsflow: f64,
     ds_flows: [f64; MAX_DS_LINKS],
+    ds_release_due: [f64; MAX_DS_LINKS],
     level: f64,
     rain_vol: f64,
     evap_vol: f64,
@@ -152,10 +153,10 @@ impl StorageNode {
     /// An outlet is active if volume >= its minimum operating volume and there is demand
     /// (either from orders or forced releases).
     /// Returns a bitmask: bit i is set if outlet i is active.
-    fn active_outlets_at_volume(&self, volume: f64, ds_releases_due: &[f64; MAX_DS_LINKS]) -> u8 {
+    fn active_outlets_at_volume(&self, volume: f64) -> u8 {
         let mut active = 0u8;
         for i in 0..MAX_DS_LINKS {
-            if ds_releases_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
+            if self.ds_release_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
                 active |= 1 << i;
             }
         }
@@ -164,11 +165,11 @@ impl StorageNode {
 
     /// Sums the release demands (orders or forced releases) for outlets specified by the mask.
     /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
-    fn sum_ds_orders_due(&self, outlet_mask: u8, ds_releases_due: &[f64; MAX_DS_LINKS]) -> f64 {
+    fn sum_ds_orders_due(&self, outlet_mask: u8) -> f64 {
         let mut total = 0.0;
         for i in 0..MAX_DS_LINKS {
             if outlet_mask & (1 << i) != 0 {
-                total += ds_releases_due[i];
+                total += self.ds_release_due[i];
             }
         }
         total
@@ -183,7 +184,7 @@ impl StorageNode {
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
     fn solve_backward_euler(
-        &self,
+        &mut self,
         v_initial: f64,
         net_rain_mm: f64,
         data_cache: &DataCache,
@@ -191,9 +192,8 @@ impl StorageNode {
         let nrows = self.dimensions.nrows();
 
         // Compute all release demands once (orders or forced releases)
-        let mut ds_releases_due = [0.0; MAX_DS_LINKS];
         for i in 0..MAX_DS_LINKS {
-            ds_releases_due[i] = Self::check_forced_release(
+            self.ds_release_due[i] = Self::check_forced_release(
                 data_cache,
                 self.ds_force_release_input[i].clone(),
                 self.ds_orders_due[i]
@@ -202,10 +202,10 @@ impl StorageNode {
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
         let (v_spill_only, spill, active_pass1, row_pass1, _unc_pass1) =
-            self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop, &ds_releases_due);
+            self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop);
 
         // Select which pass result to use
-        let (v_final, final_spill, active, row, unconstrained) = if spill >= ds_releases_due[0] {
+        let (v_final, final_spill, active, row, unconstrained) = if spill >= self.ds_release_due[0] {
             // Spill satisfies ds_1 order - no controlled release needed.
             // Always use mass balance here (unconstrained=false): the interpolated spill
             // can have large FP error when the volume is near a steep spill curve, whereas
@@ -214,7 +214,7 @@ impl StorageNode {
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
             // Warm start from pass 1 row since solutions are nearby
-            self.solve_order_limited_case(v_initial, net_rain_mm, ds_releases_due[0], nrows, row_pass1 + 1, &ds_releases_due)
+            self.solve_order_limited_case(v_initial, net_rain_mm, self.ds_release_due[0], nrows, row_pass1 + 1)
         };
 
         // Compute area once (used by both allocation logic and caller)
@@ -234,7 +234,7 @@ impl StorageNode {
         // ds_1: spill is uncontrollable, controlled release supplements up to order
         let ds_1_active = (active & 1) != 0;
         let ds1_flow = if ds_1_active {
-            ds_releases_due[0].max(final_spill).min(remaining)
+            self.ds_release_due[0].max(final_spill).min(remaining)
         } else {
             final_spill.min(remaining)
         };
@@ -244,7 +244,7 @@ impl StorageNode {
         // ds_2, ds_3, ds_4: each gets min(release_due, remaining budget)
         for i in 1..MAX_DS_LINKS {
             if active & (1 << i) != 0 && remaining > EPSILON {
-                let flow = ds_releases_due[i].min(remaining);
+                let flow = self.ds_release_due[i].min(remaining);
                 ds_flows[i] = flow;
                 remaining -= flow;
             }
@@ -262,9 +262,8 @@ impl StorageNode {
         net_rain_mm: f64,
         nrows: usize,
         start_row: usize,
-        releases_due: &[f64; MAX_DS_LINKS],
     ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows, start_row, releases_due)
+        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows, start_row)
     }
 
     /// Solves the order-limited case: ds_1 must flow at least the order amount.
@@ -277,9 +276,8 @@ impl StorageNode {
         ds_1_release_due: f64,
         nrows: usize,
         start_row: usize,
-        releases_due: &[f64; MAX_DS_LINKS],
     ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_release_due, nrows, start_row, releases_due)
+        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_release_due, nrows, start_row)
     }
 
     /// Solves for equilibrium volume with a required minimum ds_1 flow.
@@ -296,17 +294,16 @@ impl StorageNode {
         ds1_required_flow: f64,
         nrows: usize,
         start_row: usize,
-        releases_due: &[f64; MAX_DS_LINKS],
     ) -> (f64, f64, u8, usize, bool) {
         // Start with outlets active based on current volume
-        let mut active = self.active_outlets_at_volume(v_initial, releases_due);
+        let mut active = self.active_outlets_at_volume(v_initial);
         let mut hint = start_row;
 
         const MAX_ITERATIONS: usize = 8;
 
         for _iter in 0..MAX_ITERATIONS {
             // Sum orders for ds_2, ds_3, ds_4 based on active set
-            let ds234_orders_due = self.sum_ds_orders_due(active & 0b1110, releases_due);
+            let ds234_orders_due = self.sum_ds_orders_due(active & 0b1110);
 
             // ds_1 required flow is zero when ds_1 is below its MOL
             let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
@@ -317,7 +314,7 @@ impl StorageNode {
             );
 
             // Check which outlets should be active at the candidate volume
-            let new_active = self.active_outlets_at_volume(v_candidate, releases_due);
+            let new_active = self.active_outlets_at_volume(v_candidate);
 
             if new_active == active {
                 // Converged - use row from bisection for spill lookup
