@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io::IniModelIO;
+use crate::tests::test_helpers::print_text_diff;
 
 #[test]
 fn test_line_continuation_integration() {
@@ -324,6 +325,8 @@ fn test_exact_round_trip_every_node_type_model() {
 
     let doc = IniDocument::parse(original).expect("model should parse");
     let round_tripped = doc.to_string();
+
+    print_text_diff(original, &round_tripped);
 
     assert_eq!(
         original, round_tripped,

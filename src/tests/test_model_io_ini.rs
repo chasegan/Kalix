@@ -1,6 +1,7 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 use crate::nodes::Node;
+use crate::tests::test_helpers::print_text_diff;
 
 #[test]
 fn test_model_1_io_ini_read() {
@@ -285,6 +286,8 @@ fn test_save_noop_is_byte_identical() {
     let model = ini_io.read_model_file(path).expect("model should parse");
 
     let saved = ini_io.model_to_string(&model);
+
+    print_text_diff(original, &saved);
 
     assert_eq!(original, saved, "a no-op save must be byte-identical to the source");
 }
