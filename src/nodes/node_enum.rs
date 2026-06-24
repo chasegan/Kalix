@@ -1,6 +1,6 @@
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
-use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_constraint_node::OrderConstraintNode};
+use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode};
 
 #[derive(Clone)]
 pub enum NodeEnum {
@@ -16,7 +16,7 @@ pub enum NodeEnum {
     RoutingNode(RoutingNode),
     SacramentoNode(SacramentoNode),
     StorageNode(StorageNode),
-    OrderConstraintNode(OrderConstraintNode),
+    OrderControlNode(OrderControlNode),
 }
 
 impl NodeEnum {
@@ -34,7 +34,7 @@ impl NodeEnum {
             NodeEnum::RoutingNode(_) => "routing".to_string(),
             NodeEnum::SacramentoNode(_) => "sacramento".to_string(),
             NodeEnum::StorageNode(_) => "storage".to_string(),
-            NodeEnum::OrderConstraintNode(_) => "order_constraint".to_string(),
+            NodeEnum::OrderControlNode(_) => "order_control".to_string(),
         }
     }
 }
@@ -54,7 +54,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.initialise(data_cache, account_manager),
             NodeEnum::SacramentoNode(node) => node.initialise(data_cache, account_manager),
             NodeEnum::StorageNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::OrderConstraintNode(node) => node.initialise(data_cache, account_manager),
+            NodeEnum::OrderControlNode(node) => node.initialise(data_cache, account_manager),
         }
     }
 
@@ -72,7 +72,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.get_name(),
             NodeEnum::SacramentoNode(node) => node.get_name(),
             NodeEnum::StorageNode(node) => node.get_name(),
-            NodeEnum::OrderConstraintNode(node) => node.get_name(),
+            NodeEnum::OrderControlNode(node) => node.get_name(),
         }
     }
 
@@ -90,7 +90,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.run_order_phase(data_cache),
             NodeEnum::SacramentoNode(node) => node.run_order_phase(data_cache),
             NodeEnum::StorageNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::OrderConstraintNode(node) => node.run_order_phase(data_cache),
+            NodeEnum::OrderControlNode(node) => node.run_order_phase(data_cache),
         }
     }
 
@@ -108,7 +108,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.run_flow_phase(data_cache, account_manager),
             NodeEnum::SacramentoNode(node) => node.run_flow_phase(data_cache, account_manager),
             NodeEnum::StorageNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::OrderConstraintNode(node) => node.run_flow_phase(data_cache, account_manager),
+            NodeEnum::OrderControlNode(node) => node.run_flow_phase(data_cache, account_manager),
         }
     }
 
@@ -126,7 +126,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.add_usflow(flow, inlet),
             NodeEnum::SacramentoNode(node) => node.add_usflow(flow, inlet),
             NodeEnum::StorageNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::OrderConstraintNode(node) => node.add_usflow(flow, inlet),
+            NodeEnum::OrderControlNode(node) => node.add_usflow(flow, inlet),
         }
     }
 
@@ -144,7 +144,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.remove_dsflow(outlet),
             NodeEnum::SacramentoNode(node) => node.remove_dsflow(outlet),
             NodeEnum::StorageNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::OrderConstraintNode(node) => node.remove_dsflow(outlet),
+            NodeEnum::OrderControlNode(node) => node.remove_dsflow(outlet),
         }
     }
 
@@ -162,7 +162,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.get_mass_balance(),
             NodeEnum::SacramentoNode(node) => node.get_mass_balance(),
             NodeEnum::StorageNode(node) => node.get_mass_balance(),
-            NodeEnum::OrderConstraintNode(node) => node.get_mass_balance(),
+            NodeEnum::OrderControlNode(node) => node.get_mass_balance(),
         }
     }
 
@@ -180,7 +180,7 @@ impl Node for NodeEnum {
             NodeEnum::RoutingNode(node) => node.dsorders_mut(),
             NodeEnum::SacramentoNode(node) => node.dsorders_mut(),
             NodeEnum::StorageNode(node) => node.dsorders_mut(),
-            NodeEnum::OrderConstraintNode(node) => node.dsorders_mut(),
+            NodeEnum::OrderControlNode(node) => node.dsorders_mut(),
         }
     }
 }

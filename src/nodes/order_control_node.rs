@@ -9,7 +9,7 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 const MAX_DS_LINKS: usize = 1;
 
 #[derive(Default, Clone)]
-pub struct OrderConstraintNode {
+pub struct OrderControlNode {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
@@ -50,7 +50,7 @@ pub struct OrderConstraintNode {
     recorder_idx_order_due: Option<usize>,
 }
 
-impl OrderConstraintNode {
+impl OrderControlNode {
 
     /// Base constructor
     pub fn new() -> Self {
@@ -61,7 +61,7 @@ impl OrderConstraintNode {
     }
 }
 
-impl Node for OrderConstraintNode {
+impl Node for OrderControlNode {
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
