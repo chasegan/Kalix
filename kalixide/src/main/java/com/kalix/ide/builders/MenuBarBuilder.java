@@ -24,7 +24,6 @@ public class MenuBarBuilder {
     
     private final MenuBarCallbacks callbacks;
     private JMenu fileMenu;
-    @Deprecated private int recentFilesSectionStart;  // Index where recent files section begins
     private JMenu recentFilesSubmenu;
     private JMenu recentFoldersSubMenu;
     
@@ -201,46 +200,6 @@ public class MenuBarBuilder {
     }
 
     /**
-     * Rebuilds the recent files section of the File menu.
-     * Clears existing recent files and Exit, then rebuilds cleanly.
-     *
-     * @param recentFiles List of recent file paths to display
-     * @param fileOpenCallback Callback when a recent file is clicked
-     */
-    @Deprecated
-    public void rebuildRecentFilesSection(List<String> recentFiles, Consumer<String> fileOpenCallback) {
-        if (fileMenu == null) return;
-
-        // Remove everything from recentFilesSectionStart to end
-        while (fileMenu.getMenuComponentCount() > recentFilesSectionStart) {
-            fileMenu.remove(recentFilesSectionStart);
-        }
-
-        // Add separator before recent files
-        fileMenu.addSeparator();
-
-        // Add recent file items
-        for (int i = 0; i < recentFiles.size(); i++) {
-            String filePath = recentFiles.get(i);
-            String fileName = new File(filePath).getName();
-            String displayText = String.format("%d. %s", i + 1, fileName);
-
-            JMenuItem item = new JMenuItem(displayText);
-            item.setToolTipText(filePath);
-            item.addActionListener(e -> fileOpenCallback.accept(filePath));
-            fileMenu.add(item);
-        }
-
-        // Add separator before Exit (only if we have recent files)
-        if (!recentFiles.isEmpty()) {
-            fileMenu.addSeparator();
-        }
-
-        // Add Exit at the end
-        fileMenu.add(createMenuItem("Exit", e -> callbacks.exitApplication()));
-    }
-
-    /**
      * Creates the File menu.
      */
     private JMenu createFileMenu() {
@@ -265,9 +224,6 @@ public class MenuBarBuilder {
         fileMenu.addSeparator();
         fileMenu.add(createMenuItem("Preferences", KeyEvent.VK_COMMA,
                 e -> callbacks.showPreferences()));
-
-        // Mark where the recent files section starts (after Preferences)
-        recentFilesSectionStart = fileMenu.getMenuComponentCount();
 
         // Add initial separator and Exit - will be rebuilt when recent files are loaded
         fileMenu.addSeparator();
