@@ -63,6 +63,9 @@ dependencies {
     // Directory watching with native FSEvents on macOS (project tree live updates)
     implementation("io.methvin:directory-watcher:0.18.0")
 
+    // Source: https://mvnrepository.com/artifact/net.lingala.zip4j/zip4j
+    implementation("net.lingala.zip4j:zip4j:2.11.6")
+
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
