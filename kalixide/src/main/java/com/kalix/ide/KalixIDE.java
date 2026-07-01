@@ -183,6 +183,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             File folder = new File(savedFolder);
             if (folder.isDirectory()) {
                 projectTreePanel.openFolder(folder);
+                recentFoldersManager.addRecentFile(folder.getAbsolutePath());
                 // Reveal the active document in the just-loaded tree.
                 revealActiveFileInTree();
             }
@@ -230,13 +231,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             prefs,
             this::loadModelFile,
             () -> updateStatus(AppConstants.STATUS_RECENT_FILES_CLEARED),
-            AppConstants.RECENT_FILE_PREF_PREFIX
+            AppConstants.RECENT_FILE_PREF_PREFIX,
+            "File"
         );
         recentFoldersManager = new RecentFilesManager(
             prefs,
             this::loadModelFolder,
             () -> updateStatus(AppConstants.STATUS_RECENT_FOLDERS_CLEARED),
-            AppConstants.RECENT_FOLDER_PREF_PREFIX
+            AppConstants.RECENT_FOLDER_PREF_PREFIX,
+            "Folder"
         );
     }
 
@@ -945,8 +948,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Loads a model folder.
-     * Used by the recent folders manager callback.
+     * Loads a model folder into the project tree and syncs the surrounding UI state.
+     * Shared by the "Open Folder..." action and the recent folders manager callback.
      *
      * @param folderPath The absolute path to the folder to load
      */
@@ -999,16 +1002,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File folder = chooser.getSelectedFile();
-            projectTreePanel.openFolder(folder);
-            PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folder.getAbsolutePath());
+            loadModelFolder(folder.getAbsolutePath());
             recentFoldersManager.addRecentFile(folder.getAbsolutePath());
-            // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
-            if (workspacePanel != null) {
-                workspacePanel.setTreeCollapsed(false);
-            }
-            syncToggleButtonStates();
-            revealActiveFileInTree();
-            updateStatus("Opened folder: " + folder.getName());
         }
     }
 

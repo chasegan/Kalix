@@ -22,6 +22,7 @@ public class RecentFilesManager {
     private final Consumer<String> fileOpenCallback;
     private final Runnable statusUpdateCallback;
     private final String prefPrefix;
+    private final String itemTypeLabel;
     private BiConsumer<List<String>, Consumer<String>> menuBarUpdateCallback;
 
     /**
@@ -31,14 +32,16 @@ public class RecentFilesManager {
      * @param fileOpenCallback Callback function to open a file
      * @param statusUpdateCallback Callback to update status when files are cleared
      * @param prefPrefix The preference key prefix to use for storing items (e.g., "recentFile" or "recentFolder")
+     * @param itemTypeLabel The capitalised noun for the tracked item ("File" or "Folder"), used in dialog wording
      */
     public RecentFilesManager(Preferences prefs, Consumer<String> fileOpenCallback, Runnable statusUpdateCallback,
-                              String prefPrefix) {
+                              String prefPrefix, String itemTypeLabel) {
         this.prefs = prefs;
         this.recentFiles = new ArrayList<>();
         this.fileOpenCallback = fileOpenCallback;
         this.statusUpdateCallback = statusUpdateCallback;
         this.prefPrefix = prefPrefix;
+        this.itemTypeLabel = itemTypeLabel;
         loadRecentFiles();
     }
     
@@ -144,8 +147,8 @@ public class RecentFilesManager {
             // Show error dialog
             JOptionPane.showMessageDialog(
                 null,
-                AppConstants.ERROR_FILE_NOT_EXISTS + filePath,
-                AppConstants.ERROR_FILE_NOT_FOUND_TITLE,
+                itemTypeLabel + " no longer exists:\n" + filePath,
+                itemTypeLabel + " Not Found",
                 JOptionPane.WARNING_MESSAGE
             );
         }

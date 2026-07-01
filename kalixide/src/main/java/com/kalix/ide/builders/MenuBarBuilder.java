@@ -4,7 +4,12 @@ import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 
-import javax.swing.*;
+import javax.swing.Action;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.KeyStroke;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
@@ -153,7 +158,7 @@ public class MenuBarBuilder {
      */
     private void rebuildRecentFilesHelper(List<String> recentFiles, Consumer<String> fileOpenCallback, JMenu submenu,
                                           String emptyMessage){
-        if (fileMenu == null) return;
+        if (submenu == null) return;
 
         // Remove all existing menu items
         submenu.removeAll();

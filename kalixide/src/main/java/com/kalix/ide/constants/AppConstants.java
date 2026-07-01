@@ -85,11 +85,9 @@ public final class AppConstants {
 
     // Error messages
     public static final String ERROR_FILE_OPEN = "File Open Error";
-    public static final String ERROR_FILE_NOT_FOUND_TITLE = "File Not Found";
     public static final String ERROR_PROCESSING_DROPPED_FILE = "Error processing dropped file: ";
     public static final String ERROR_OPENING_FILE = "Error opening file: ";
     public static final String ERROR_FAILED_TO_OPEN = "Failed to open file: ";
-    public static final String ERROR_FILE_NOT_EXISTS = "File no longer exists:\n";
     public static final String ERROR_FAILED_LOOK_AND_FEEL = "Failed to set look and feel: ";
 
     // Menu text
