@@ -38,11 +38,13 @@ pub struct StorageNode {
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
+    pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
 
     // Internal state only
     usflow: f64,
     dsflow: f64,
     ds_flows: [f64; MAX_DS_LINKS],
+    ds_release_due: [f64; MAX_DS_LINKS],
     level: f64,
     rain_vol: f64,
     evap_vol: f64,
@@ -91,21 +93,25 @@ pub struct StorageNode {
     recorder_idx_ds_1_order_due: Option<usize>,
     recorder_idx_ds_1_outlet: Option<usize>,
     recorder_idx_ds_1_spill: Option<usize>,
+    recorder_idx_ds_1_force_release: Option<usize>,
     recorder_idx_ds_2: Option<usize>,
     recorder_idx_ds_2_order: Option<usize>,
     recorder_idx_ds_2_order_due: Option<usize>,
     recorder_idx_ds_2_outlet: Option<usize>,
     recorder_idx_ds_2_spill: Option<usize>,
+    recorder_idx_ds_2_force_release: Option<usize>,
     recorder_idx_ds_3: Option<usize>,
     recorder_idx_ds_3_order: Option<usize>,
     recorder_idx_ds_3_order_due: Option<usize>,
     recorder_idx_ds_3_outlet: Option<usize>,
     recorder_idx_ds_3_spill: Option<usize>,
+    recorder_idx_ds_3_force_release: Option<usize>,
     recorder_idx_ds_4: Option<usize>,
     recorder_idx_ds_4_order: Option<usize>,
     recorder_idx_ds_4_order_due: Option<usize>,
     recorder_idx_ds_4_outlet: Option<usize>,
     recorder_idx_ds_4_spill: Option<usize>,
+    recorder_idx_ds_4_force_release: Option<usize>,
 }
 
 impl StorageNode {
@@ -127,37 +133,63 @@ impl StorageNode {
     //
     // Terminology for ds_1 flows:
     // - "ds_1_spill": uncontrolled overflow via the spillway, counts towards ds_1 orders
-    // - "ds_1_outlet": controlled outlet flow, supplements spill to meet ds_1 orders
+    // - "ds_1_outlet": controlled outlet flow, supplements spill to meet ds_1
+    //                  orders, or optionally forced by user input
     // - "ds_1" (total): ds_1_spill + ds_1_outlet
+    // Note that the "order" is overridden by the "force_release" if defined.
     //
     // For ds_2, ds_3, ds_4: flow = outlet flow only (no spill component)
 
+    /// Determine whether the release at the outlet should be the forced release optionally
+    /// supplied by the user or the order determined by the model.
+    fn check_forced_release(
+        data_cache: &DataCache,
+        forced_release_input: &DynamicInput,
+        order_due: f64
+    ) -> f64 {
+        match forced_release_input {
+            DynamicInput::None { .. } => order_due,
+            _ => forced_release_input.get_value(data_cache),
+        }
+    }
+
+    /// Value recorded for the `ds_N_force_release` series of outlet `i`: the applied forced
+    /// release when an input is configured, or NaN when the release is order-driven (so the
+    /// series never masquerades as the plain order, which `ds_N_order_due` already records).
+    fn force_release_output(&self, i: usize) -> f64 {
+        match &self.ds_force_release_input[i] {
+            DynamicInput::None { .. } => f64::NAN,
+            _ => self.ds_release_due[i],
+        }
+    }
+
     /// Determines which outlets are active (able to release) at a given volume.
-    /// An outlet is active if volume >= its minimum operating volume.
+    /// An outlet is active if volume >= its minimum operating volume and there is demand
+    /// (either from orders or forced releases).
     /// Returns a bitmask: bit i is set if outlet i is active.
     fn active_outlets_at_volume(&self, volume: f64) -> u8 {
         let mut active = 0u8;
         for i in 0..MAX_DS_LINKS {
-            if self.ds_orders_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
+            if self.ds_release_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
                 active |= 1 << i;
-            }             
+            }
         }
         active
     }
 
-    /// Sums the orders_due for outlets specified by the mask.
+    /// Sums the release demands (orders or forced releases) for outlets specified by the mask.
     /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
     fn sum_ds_orders_due(&self, outlet_mask: u8) -> f64 {
         let mut total = 0.0;
         for i in 0..MAX_DS_LINKS {
             if outlet_mask & (1 << i) != 0 {
-                total += self.ds_orders_due[i];
+                total += self.ds_release_due[i];
             }
         }
         total
     }
 
-    /// Solves the backward Euler equation for equilibrium volume.
+    /// Solves the backward Euler equation for equilibrium volume in flow phase.
     ///
     /// Uses a two-pass approach for ds_1:
     /// - Pass 1: Solve spill-limited case (ds_1_outlet = 0, spill alone may meet order)
@@ -166,19 +198,28 @@ impl StorageNode {
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
     fn solve_backward_euler(
-        &self,
+        &mut self,
         v_initial: f64,
         net_rain_mm: f64,
+        data_cache: &DataCache,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
         let nrows = self.dimensions.nrows();
-        let ds_1_order_due = self.ds_orders_due[0];
+
+        // Compute all release demands once (orders or forced releases)
+        for i in 0..MAX_DS_LINKS {
+            self.ds_release_due[i] = Self::check_forced_release(
+                data_cache,
+                &self.ds_force_release_input[i],
+                self.ds_orders_due[i]
+            );
+        }
 
         // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
         let (v_spill_only, spill, active_pass1, row_pass1, _unc_pass1) =
             self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop);
 
         // Select which pass result to use
-        let (v_final, final_spill, active, row, unconstrained) = if spill >= ds_1_order_due {
+        let (v_final, final_spill, active, row, unconstrained) = if spill >= self.ds_release_due[0] {
             // Spill satisfies ds_1 order - no controlled release needed.
             // Always use mass balance here (unconstrained=false): the interpolated spill
             // can have large FP error when the volume is near a steep spill curve, whereas
@@ -187,7 +228,7 @@ impl StorageNode {
         } else {
             // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
             // Warm start from pass 1 row since solutions are nearby
-            self.solve_order_limited_case(v_initial, net_rain_mm, ds_1_order_due, nrows, row_pass1 + 1)
+            self.solve_order_limited_case(v_initial, net_rain_mm, self.ds_release_due[0], nrows, row_pass1 + 1)
         };
 
         // Compute area once (used by both allocation logic and caller)
@@ -207,17 +248,17 @@ impl StorageNode {
         // ds_1: spill is uncontrollable, controlled release supplements up to order
         let ds_1_active = (active & 1) != 0;
         let ds1_flow = if ds_1_active {
-            ds_1_order_due.max(final_spill).min(remaining)
+            self.ds_release_due[0].max(final_spill).min(remaining)
         } else {
             final_spill.min(remaining)
         };
         ds_flows[0] = ds1_flow;
         remaining -= ds1_flow;
 
-        // ds_2, ds_3, ds_4: each gets min(order_due, remaining budget)
+        // ds_2, ds_3, ds_4: each gets min(release_due, remaining budget)
         for i in 1..MAX_DS_LINKS {
             if active & (1 << i) != 0 && remaining > EPSILON {
-                let flow = self.ds_orders_due[i].min(remaining);
+                let flow = self.ds_release_due[i].min(remaining);
                 ds_flows[i] = flow;
                 remaining -= flow;
             }
@@ -246,11 +287,11 @@ impl StorageNode {
         &self,
         v_initial: f64,
         net_rain_mm: f64,
-        ds_1_order_due: f64,
+        ds_1_release_due: f64,
         nrows: usize,
         start_row: usize,
     ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_order_due, nrows, start_row)
+        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_release_due, nrows, start_row)
     }
 
     /// Solves for equilibrium volume with a required minimum ds_1 flow.
@@ -620,6 +661,18 @@ impl Node for StorageNode {
         self.recorder_idx_ds_4_order_due = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4_order_due").as_str(), false
         );
+        self.recorder_idx_ds_1_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_1_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_2_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_2_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_3_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_3_force_release").as_str(), false
+        );
+        self.recorder_idx_ds_4_force_release = data_cache.get_series_idx(
+            make_result_name(&self.name, "ds_4_force_release").as_str(), false
+        );
 
         Ok(())
     }
@@ -729,7 +782,7 @@ impl Node for StorageNode {
         let net_rain_mm = rain_mm - evap_mm - seep_mm;
 
         // Solve backward Euler
-        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.volume, net_rain_mm);
+        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
 
         // Update warm-start cache for next timestep (expects upper bracket)
         self.previous_istop = row + 1;
@@ -822,6 +875,18 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_ds_4_spill {
             data_cache.add_value_at_index(idx, 0.0);
+        }
+        if let Some(idx) = self.recorder_idx_ds_1_force_release {
+            data_cache.add_value_at_index(idx, self.force_release_output(0));
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_force_release {
+            data_cache.add_value_at_index(idx, self.force_release_output(1));
+        }
+        if let Some(idx) = self.recorder_idx_ds_3_force_release {
+            data_cache.add_value_at_index(idx, self.force_release_output(2));
+        }
+        if let Some(idx) = self.recorder_idx_ds_4_force_release {
+            data_cache.add_value_at_index(idx, self.force_release_output(3));
         }
 
         // Reset upstream inflow for next timestep
