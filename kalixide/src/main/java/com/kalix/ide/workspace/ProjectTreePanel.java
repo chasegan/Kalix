@@ -45,6 +45,11 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** Opens the given folder: loads the tree and sets the header to the folder name. */
+    public void openFolder(String root) {
+        openFolder(new File(root));
+    }
+
+    /** Opens the given folder: loads the tree and sets the header to the folder name. */
     public void openFolder(File root) {
         tree.openFolder(root);
         String name = root.getName();

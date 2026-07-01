@@ -1,6 +1,5 @@
 package com.kalix.ide.managers;
 
-import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.constants.AppConstants;
 
 import javax.swing.JOptionPane;
@@ -8,6 +7,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.prefs.Preferences;
 import java.util.function.Consumer;
 
@@ -21,7 +21,8 @@ public class RecentFilesManager {
     private final List<String> recentFiles;
     private final Consumer<String> fileOpenCallback;
     private final Runnable statusUpdateCallback;
-    private MenuBarBuilder menuBarBuilder;
+    private final String prefPrefix;
+    private BiConsumer<List<String>, Consumer<String>> menuBarUpdateCallback;
 
     /**
      * Creates a new RecentFilesManager instance.
@@ -29,12 +30,15 @@ public class RecentFilesManager {
      * @param prefs The preferences object for storing recent files
      * @param fileOpenCallback Callback function to open a file
      * @param statusUpdateCallback Callback to update status when files are cleared
+     * @param prefPrefix The preference key prefix to use for storing items (e.g., "recentFile" or "recentFolder")
      */
-    public RecentFilesManager(Preferences prefs, Consumer<String> fileOpenCallback, Runnable statusUpdateCallback) {
+    public RecentFilesManager(Preferences prefs, Consumer<String> fileOpenCallback, Runnable statusUpdateCallback,
+                              String prefPrefix) {
         this.prefs = prefs;
         this.recentFiles = new ArrayList<>();
         this.fileOpenCallback = fileOpenCallback;
         this.statusUpdateCallback = statusUpdateCallback;
+        this.prefPrefix = prefPrefix;
         loadRecentFiles();
     }
     
@@ -44,7 +48,7 @@ public class RecentFilesManager {
     private void loadRecentFiles() {
         recentFiles.clear();
         for (int i = 0; i < AppConstants.MAX_RECENT_FILES; i++) {
-            String filePath = prefs.get(AppConstants.RECENT_FILE_PREF_PREFIX + i, null);
+            String filePath = prefs.get(prefPrefix + i, null);
             if (filePath != null && !filePath.isEmpty()) {
                 recentFiles.add(filePath);
             }
@@ -57,12 +61,12 @@ public class RecentFilesManager {
     private void saveRecentFiles() {
         // Clear all existing recent file preferences
         for (int i = 0; i < AppConstants.MAX_RECENT_FILES; i++) {
-            prefs.remove(AppConstants.RECENT_FILE_PREF_PREFIX + i);
+            prefs.remove(prefPrefix + i);
         }
-        
+
         // Save current recent files
         for (int i = 0; i < recentFiles.size(); i++) {
-            prefs.put(AppConstants.RECENT_FILE_PREF_PREFIX + i, recentFiles.get(i));
+            prefs.put(prefPrefix + i, recentFiles.get(i));
         }
     }
     
@@ -104,8 +108,8 @@ public class RecentFilesManager {
      *
      * @param menuBarBuilder The menu bar builder to use for updates
      */
-    public void setMenuBarBuilder(MenuBarBuilder menuBarBuilder) {
-        this.menuBarBuilder = menuBarBuilder;
+    public void setMenuBarUpdateCallback(BiConsumer<List<String>, Consumer<String>> menuBarBuilder) {
+        this.menuBarUpdateCallback = menuBarBuilder;
         rebuildMenu();
     }
 
@@ -113,10 +117,10 @@ public class RecentFilesManager {
      * Rebuilds the recent files section in the File menu.
      */
     private void rebuildMenu() {
-        if (menuBarBuilder == null) {
+        if (menuBarUpdateCallback == null) {
             return;
         }
-        menuBarBuilder.rebuildRecentFilesSection(
+        menuBarUpdateCallback.accept(
             Collections.unmodifiableList(recentFiles),
             this::openRecentFile
         );
