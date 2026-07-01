@@ -319,17 +319,22 @@ fn test_exact_round_trip_every_node_type_model() {
     // byte-for-byte: unchanged properties round-trip from their `raw_lines`,
     // and comments/blank lines are preserved verbatim. include_str! pins the
     // exact original bytes at compile time (no working-directory dependence).
+    // `include_str!` captures the file with whatever line endings the checkout
+    // produced — CRLF on Windows (core.autocrlf), LF elsewhere. The parser
+    // normalises to LF by design (`str::lines()` strips the `\r`), so compare on
+    // normalised endings: this test is about content/formatting fidelity, not the
+    // checkout's EOL style.
     let original = include_str!(
         "../../regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini"
-    );
+    ).replace("\r\n", "\n");
 
-    let doc = IniDocument::parse(original).expect("model should parse");
+    let doc = IniDocument::parse(&original).expect("model should parse");
     let round_tripped = doc.to_string();
 
-    print_text_diff(original, &round_tripped);
+    print_text_diff(&original, &round_tripped);
 
     assert_eq!(
         original, round_tripped,
-        "re-serialised model must match the original byte-for-byte"
+        "re-serialised model must match the original byte-for-byte (line endings normalised)"
     );
 }

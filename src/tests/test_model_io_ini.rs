@@ -275,9 +275,13 @@ fn test_save_noop_is_byte_identical() {
     // Phase 2: loading then saving with NO change must reproduce the source
     // byte-for-byte, including original number formatting, spacing, comments,
     // continuations and the awkward node types.
+    // `include_str!` captures the file with the checkout's line endings (CRLF on
+    // Windows via core.autocrlf, LF elsewhere). The serializer emits LF by design
+    // (the parser strips `\r` via `str::lines()`), so normalise the expected side
+    // to compare content/formatting rather than checkout EOL style.
     let original = include_str!(
         "../../regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini"
-    );
+    ).replace("\r\n", "\n");
     // Load via read_model_file so the working directory is the model's folder and
     // the relative input CSVs resolve (they sit alongside the model).
     let path = concat!(env!("CARGO_MANIFEST_DIR"),
@@ -287,9 +291,9 @@ fn test_save_noop_is_byte_identical() {
 
     let saved = ini_io.model_to_string(&model);
 
-    print_text_diff(original, &saved);
+    print_text_diff(&original, &saved);
 
-    assert_eq!(original, saved, "a no-op save must be byte-identical to the source");
+    assert_eq!(original, saved, "a no-op save must be byte-identical to the source (line endings normalised)");
 }
 
 #[test]
