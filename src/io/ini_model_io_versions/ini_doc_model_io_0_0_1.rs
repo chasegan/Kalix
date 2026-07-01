@@ -467,8 +467,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             }
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_force_release"))
-                            .and_then(|s| s.parse::<i32>().ok()) {
-                            let i_outlet = (ds_num - 1) as usize;
+                            .and_then(|s| s.parse::<usize>().ok()) {
+                            if ds_num < 1 || ds_num > n.ds_force_release_input.len() {
+                                return Err(format!(
+                                    "Error on line {}: outlet index in '{}' must be between 1 and {}",
+                                    ini_property.line_number, name, n.ds_force_release_input.len()
+                                ));
+                            }
+                            let i_outlet = ds_num - 1;
                             n.ds_force_release_input[i_outlet] = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "evap" {

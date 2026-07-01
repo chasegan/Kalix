@@ -38,7 +38,7 @@ pub struct StorageNode {
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
-    pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS], 
+    pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
 
     // Internal state only
     usflow: f64,
@@ -144,12 +144,22 @@ impl StorageNode {
     /// supplied by the user or the order determined by the model.
     fn check_forced_release(
         data_cache: &DataCache,
-        forced_release_input: DynamicInput, 
+        forced_release_input: &DynamicInput,
         order_due: f64
     ) -> f64 {
         match forced_release_input {
             DynamicInput::None { .. } => order_due,
             _ => forced_release_input.get_value(data_cache),
+        }
+    }
+
+    /// Value recorded for the `ds_N_force_release` series of outlet `i`: the applied forced
+    /// release when an input is configured, or NaN when the release is order-driven (so the
+    /// series never masquerades as the plain order, which `ds_N_order_due` already records).
+    fn force_release_output(&self, i: usize) -> f64 {
+        match &self.ds_force_release_input[i] {
+            DynamicInput::None { .. } => f64::NAN,
+            _ => self.ds_release_due[i],
         }
     }
 
@@ -199,7 +209,7 @@ impl StorageNode {
         for i in 0..MAX_DS_LINKS {
             self.ds_release_due[i] = Self::check_forced_release(
                 data_cache,
-                self.ds_force_release_input[i].clone(),
+                &self.ds_force_release_input[i],
                 self.ds_orders_due[i]
             );
         }
@@ -488,7 +498,6 @@ impl StorageNode {
 
         best
     }
-
 }
 
 impl Node for StorageNode {
@@ -868,16 +877,16 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, 0.0);
         }
         if let Some(idx) = self.recorder_idx_ds_1_force_release {
-            data_cache.add_value_at_index(idx, self.ds_release_due[0]);
+            data_cache.add_value_at_index(idx, self.force_release_output(0));
         }
         if let Some(idx) = self.recorder_idx_ds_2_force_release {
-            data_cache.add_value_at_index(idx, self.ds_release_due[1]);
+            data_cache.add_value_at_index(idx, self.force_release_output(1));
         }
         if let Some(idx) = self.recorder_idx_ds_3_force_release {
-            data_cache.add_value_at_index(idx, self.ds_release_due[2]);
+            data_cache.add_value_at_index(idx, self.force_release_output(2));
         }
         if let Some(idx) = self.recorder_idx_ds_4_force_release {
-            data_cache.add_value_at_index(idx, self.ds_release_due[3]);
+            data_cache.add_value_at_index(idx, self.force_release_output(3));
         }
 
         // Reset upstream inflow for next timestep
@@ -912,5 +921,4 @@ impl Node for StorageNode {
     fn dsorders_mut(&mut self) -> &mut [f64] {
         &mut self.ds_orders
     }
-
 }
