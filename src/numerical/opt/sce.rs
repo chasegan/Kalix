@@ -143,7 +143,7 @@ impl Sce {
         };
 
         // Sort population by objective (best first)
-        population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
+        population.sort_by(|a, b| a.objective.total_cmp(&b.objective));
 
         // Track best solution
         let mut best_params = population[0].params.clone();
@@ -221,7 +221,7 @@ impl Sce {
 
             // Step 5: Combine and sort all individuals
             population = self.combine_complexes(&complexes);
-            population.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
+            population.sort_by(|a, b| a.objective.total_cmp(&b.objective));
 
             // Update best solution
             if population[0].objective < best_objective {
@@ -460,7 +460,7 @@ impl Sce {
                 .collect();
 
             // Sort simplex by objective (best first)
-            simplex_with_indices.sort_by(|a, b| a.0.objective.partial_cmp(&b.0.objective).unwrap());
+            simplex_with_indices.sort_by(|a, b| a.0.objective.total_cmp(&b.0.objective));
 
             // Extract just the individuals for algorithm logic
             let simplex: Vec<Individual> = simplex_with_indices.iter().map(|(ind, _)| ind.clone()).collect();
@@ -529,7 +529,7 @@ impl Sce {
 
             // Re-sort complex after replacement to maintain sorted order for next iteration
             // This is critical because weighted selection assumes sorted order
-            complex.members.sort_by(|a, b| a.objective.partial_cmp(&b.objective).unwrap());
+            complex.members.sort_by(|a, b| a.objective.total_cmp(&b.objective));
         }
 
         evaluations
@@ -733,14 +733,36 @@ struct EvolutionResult {
     evaluations: usize,
 }
 
+// Implement Clone for SceConfig to support callback injection in the trait
+// wrapper (mirrors DEConfig: the callback itself can't be cloned).
+impl Clone for SceConfig {
+    fn clone(&self) -> Self {
+        Self {
+            complexes: self.complexes,
+            termination_evaluations: self.termination_evaluations,
+            seed: self.seed,
+            n_threads: self.n_threads,
+            progress_callback: None, // Callbacks can't be cloned
+            interrupt_flag: self.interrupt_flag.clone(),
+        }
+    }
+}
+
 impl Optimizer for Sce {
     fn optimize(
         &self,
         problem: &mut dyn Optimisable,
-        _progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
+        progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
     ) -> OptimizationResult {
-        // Note: progress_callback is ignored because it's already in self.config
-        self.optimize_detailed(problem)
+        if let Some(callback) = progress_callback {
+            // A callback passed via the trait parameter overrides any in the config.
+            let mut config = self.config.clone();
+            config.progress_callback = Some(callback);
+            Sce::new(config).optimize_detailed(problem)
+        } else {
+            // Use the callback from the config (if any).
+            self.optimize_detailed(problem)
+        }
     }
 
     fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {

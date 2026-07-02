@@ -126,8 +126,9 @@ impl Command for GetVersionCommand {
         _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         Ok(serde_json::json!({
-            "version": "0.1.0",
-            "build_date": "2025-09-08",
+            // KALIX_VERSION comes from the VERSION file via build.rs — the same
+            // source the CLI's --version banner uses.
+            "version": env!("KALIX_VERSION"),
             "features": ["stdio", "modeling", "optimisation"]
         }))
     }
@@ -802,7 +803,7 @@ impl Command for RunOptimisationCommand {
                 // Find index of best objective to exclude it from sampling
                 let best_idx = pop_objectives.iter()
                     .enumerate()
-                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .min_by(|(_, a), (_, b)| a.total_cmp(b))
                     .map(|(idx, _)| idx);
 
                 // Create indices excluding the best
@@ -819,7 +820,7 @@ impl Command for RunOptimisationCommand {
                     .take(sample_size)
                     .map(|&i| pop_objectives[i])
                     .collect();
-                sampled.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                sampled.sort_by(|a, b| a.total_cmp(b));
 
                 data_values.extend(sampled);
             }
@@ -1102,6 +1103,6 @@ mod tests {
             Box::new(|_| {}),
         ).unwrap();
         
-        assert_eq!(result["version"], "0.1.0");
+        assert_eq!(result["version"], env!("KALIX_VERSION"));
     }
 }

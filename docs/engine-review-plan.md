@@ -15,7 +15,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 1 | Gorilla codec fixes (Rust + Java, in lockstep) | **Done** (fix/gorilla-codec) |
 | 2 | Sacramento `evapuzfw` fix + revalidation | **Done** (fix/sacramento-evapuzfw) |
 | 3 | STDIO interrupt: run commands on a worker thread | **Done** (fix/stdio-interrupt) |
-| 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | Pending |
+| 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | **Done** (fix/optimiser-robustness) |
 | 5 | Criterion benchmark harness + `[profile.release]` tuning | Pending — pick 2–3 representative models |
 | 6 | DataCache: preallocate recorder series; name→idx hashmap | Pending |
 | 7 | Remove timestamps from cache-resident series | Pending — decide irregular-series future first |
@@ -116,6 +116,33 @@ no Java changes were needed.
 Note for later: model files that pin `version = 0.0.1` are rejected by
 kalix 0.3.3 ("Wrong version!") — the regression *optimisation* configs hit
 this over STDIO. Worth deciding a version-compat policy in step 14.
+
+## Step 4 record — optimiser robustness (done 2026-07-03)
+
+Five independent correctness fixes:
+
+1. **Candidate validation against the assessment window** (`objectives.rs`).
+   The window (validity mask) is seeded once from the first evaluation
+   (observed AND first candidate finite) — this is intentional design: all
+   candidates are scored over the same fixed window and the window is never
+   re-derived. What was missing was validation: later candidates producing
+   non-finite values *inside* the window passed NaN straight into the sums
+   (NaN objective → sort panic). Now such candidates are rejected with a
+   clear "treated as infeasible" error, which the optimisers map to an
+   infinite objective. The eight per-objective `apply_mask` copies collapsed
+   into two shared helpers while touching them.
+2. **`total_cmp` everywhere** objectives are sorted/compared (4 sites in
+   sce.rs, 2 in commands.rs) — NaN can no longer panic the optimiser.
+3. **KGE guards**: zero observed mean (beta undefined) now errors clearly,
+   alongside the existing zero-variance guard.
+4. **SCE honours the trait-level `progress_callback` parameter** (was
+   silently ignored; SceConfig gained a manual Clone mirroring DEConfig).
+5. **`get_version` over STDIO** reports the real version from the VERSION
+   file (was hardcoded "0.1.0"); stale `build_date` field dropped.
+
+Verification: 310 unit tests (7 new — window seeding/validation across all
+8 objectives, KGE zero-mean, SCE callback), 28/28 regression models, and a
+live STDIO optimisation run.
 
 ## Review findings not yet scheduled (context for steps)
 

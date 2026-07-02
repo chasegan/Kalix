@@ -167,3 +167,46 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
     assert_relative_eq!(objective, 143928.3770721163, max_relative = 1e-15);
     println!("objective: {}", objective);
 }
+
+
+/// The trait-level optimize() must honour a progress callback passed as a
+/// parameter (it used to silently ignore it; only the config-supplied
+/// callback worked, unlike DE).
+#[test]
+fn test_sce_trait_optimize_honours_callback_param() {
+    use crate::numerical::opt::sce::SceConfig;
+    use crate::numerical::opt::optimizer_trait::{Optimizer, OptimizationProgress};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Sphere;
+    impl Optimisable for Sphere {
+        fn n_params(&self) -> usize { 2 }
+        fn set_params(&mut self, _p: &[f64]) -> Result<(), String> { Ok(()) }
+        fn get_params(&self) -> Vec<f64> { vec![0.5; 2] }
+        fn evaluate(&mut self) -> Result<f64, String> { Ok(1.0) }
+        fn clone_for_parallel(&self) -> Box<dyn Optimisable> { Box::new(Sphere) }
+    }
+
+    let config = SceConfig {
+        complexes: 2,
+        termination_evaluations: 200,
+        seed: Some(1),
+        n_threads: 1,
+        progress_callback: None, // nothing in the config...
+        interrupt_flag: None,
+    };
+    let sce = Sce::new(config);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_in_cb = Arc::clone(&calls);
+    let callback: Box<dyn Fn(&OptimizationProgress) + Send + Sync> =
+        Box::new(move |_p| { calls_in_cb.fetch_add(1, Ordering::Relaxed); });
+
+    // ...so any callback invocations must come from the trait parameter.
+    let mut problem = Sphere;
+    let _result = sce.optimize(&mut problem, Some(callback));
+
+    assert!(calls.load(Ordering::Relaxed) > 0,
+        "progress callback passed via the Optimizer trait was never invoked");
+}
