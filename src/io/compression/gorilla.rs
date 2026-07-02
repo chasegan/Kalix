@@ -1,5 +1,13 @@
 /// Custom Gorilla compression implementation matching the Java GorillaCompressor
-/// This implements the exact same bit-level encoding as the Java version for compatibility
+/// (kalixide .../io/compression/gorilla/GorillaCompressor.java). This implements the
+/// exact same bit-level encoding as the Java version for compatibility — any change
+/// to the encoding here must be mirrored there in the same commit.
+///
+/// Value encoding (per changed value): 1 control bit, then either
+///   0 + 5-bit leading-zero count (clamped to 31) + 6-bit meaningful-bit count
+///     + the meaningful XOR bits, or
+///   1 + the raw 64 (or 32) value bits,
+/// choosing whichever is smaller. Repeated values cost a single 0 bit.
 
 use std::io;
 
@@ -226,18 +234,21 @@ impl GorillaCompressor {
         } else {
             writer.write_bit(true);
             let xor = value_bits ^ prev_value_bits;
-            let leading_zeros = xor.leading_zeros() as usize;
+            // The leading-zeros count must fit the 5-bit field (max 31). A nonzero
+            // 64-bit XOR can have up to 63 leading zeros, so clamp and widen the
+            // meaningful window accordingly (extra leading bits of the window are
+            // zeros of the XOR, so the reconstruction is unchanged).
+            let leading_zeros = (xor.leading_zeros() as usize).min(31);
             let trailing_zeros = xor.trailing_zeros() as usize;
             let meaningful_bits = 64 - leading_zeros - trailing_zeros;
 
-            if leading_zeros >= 5 && meaningful_bits <= 6 {
-                // Use control bit pattern for common case
+            // Compact form costs 5 + 6 + meaningful_bits; the raw fallback costs 64.
+            // Use compact whenever it is no larger (meaningful_bits <= 53).
+            if meaningful_bits <= 53 {
                 writer.write_bit(false);
                 writer.write_bits(leading_zeros as u64, 5);
                 writer.write_bits(meaningful_bits as u64, 6);
-                if meaningful_bits > 0 {
-                    writer.write_bits(xor >> trailing_zeros, meaningful_bits);
-                }
+                writer.write_bits(xor >> trailing_zeros, meaningful_bits);
             } else {
                 // Fallback: store all 64 bits
                 writer.write_bit(true);
@@ -255,18 +266,19 @@ impl GorillaCompressor {
         } else {
             writer.write_bit(true);
             let xor = value_bits ^ prev_value_bits;
+            // A nonzero 32-bit XOR has at most 31 leading zeros, so the 5-bit
+            // field always fits — no clamp needed here.
             let leading_zeros = xor.leading_zeros() as usize;
             let trailing_zeros = xor.trailing_zeros() as usize;
             let meaningful_bits = 32 - leading_zeros - trailing_zeros;
 
-            if leading_zeros >= 5 && meaningful_bits <= 6 {
-                // Use control bit pattern for common case
+            // Compact form costs 5 + 6 + meaningful_bits; the raw fallback costs 32.
+            // Use compact whenever it is no larger (meaningful_bits <= 21).
+            if meaningful_bits <= 21 {
                 writer.write_bit(false);
                 writer.write_bits(leading_zeros as u64, 5);
                 writer.write_bits(meaningful_bits as u64, 6);
-                if meaningful_bits > 0 {
-                    writer.write_bits((xor >> trailing_zeros) as u64, meaningful_bits);
-                }
+                writer.write_bits((xor >> trailing_zeros) as u64, meaningful_bits);
             } else {
                 // Fallback: store all 32 bits
                 writer.write_bit(true);
@@ -473,9 +485,10 @@ impl GorillaCompressor {
                 Ok((value as i64) - 2047)
             }
             3 => {
-                // 32-bit encoding
+                // 32-bit encoding. The encoder wrote the low 32 bits of a signed
+                // delta-of-deltas (two's complement), so sign-extend on the way back.
                 let value = reader.read_bits(32).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid delta encoding"))?;
-                Ok(value as i64)
+                Ok(value as u32 as i32 as i64)
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid encoding type")),
         }
@@ -566,5 +579,125 @@ mod tests {
         let decompressed = compressor.decompress_double(&compressed).unwrap();
 
         assert_eq!(series.len(), decompressed.len());
+    }
+
+    /// Assert a double series round-trips bit-exactly and return the compressed
+    /// size in bits per value.
+    fn assert_roundtrip_double(series: &[TimeValueDouble]) -> f64 {
+        let compressor = GorillaCompressor::new(86400);
+        let compressed = compressor.compress_double(series).unwrap();
+        let decompressed = compressor.decompress_double(&compressed).unwrap();
+
+        assert_eq!(series.len(), decompressed.len());
+        for (original, decompressed) in series.iter().zip(decompressed.iter()) {
+            assert_eq!(original.timestamp, decompressed.timestamp);
+            assert_eq!(
+                original.value.to_bits(),
+                decompressed.value.to_bits(),
+                "value mismatch at t={}: {} != {}",
+                original.timestamp, original.value, decompressed.value
+            );
+        }
+        (compressed.len() * 8) as f64 / series.len() as f64
+    }
+
+    fn regular_series(values: &[f64]) -> Vec<TimeValueDouble> {
+        values.iter().enumerate()
+            .map(|(i, &v)| TimeValueDouble::new(86400 * i as u64, v))
+            .collect()
+    }
+
+    /// Adjacent values differing only in low mantissa bits have >31 leading zeros
+    /// in their XOR. The unclamped encoder truncated the count into the 5-bit
+    /// field and corrupted the value on decode.
+    #[test]
+    fn test_high_leading_zero_xor_roundtrip() {
+        let one_ulp_up = f64::from_bits(1.0f64.to_bits() + 1);
+        let low_bits_flipped = f64::from_bits(123.456f64.to_bits() ^ 0b111111);
+        assert_roundtrip_double(&regular_series(&[1.0, one_ulp_up]));
+        assert_roundtrip_double(&regular_series(&[123.456, low_bits_flipped]));
+    }
+
+    /// Round operational numbers (1000, 240, 86.4, ...) have sparse mantissas, so
+    /// their XORs have few meaningful bits despite the values being far apart.
+    /// These must both round-trip and actually compress (the old
+    /// `meaningful_bits <= 6` gate pushed them all to the raw 64-bit fallback).
+    #[test]
+    fn test_round_number_steps_compress() {
+        let pattern = [1000.0, 240.0, 86.4, 500.0, 750.0, 120.0, 1000.0, 60.0, 480.0, 240.0];
+        let values: Vec<f64> = pattern.iter().cycle().take(2000).cloned().collect();
+        let bits_per_value = assert_roundtrip_double(&regular_series(&values));
+        assert!(
+            bits_per_value < 40.0,
+            "round-number steps should compress well below raw 64 bits/value, got {:.1}",
+            bits_per_value
+        );
+    }
+
+    /// Deterministic pseudo-random walk: full-precision doubles exercising every
+    /// XOR shape (splitmix64 PRNG, no external dependency).
+    #[test]
+    fn test_random_walk_roundtrip() {
+        let mut state = 0x9E3779B97F4A7C15u64;
+        let mut next = move || {
+            state = state.wrapping_add(0x9E3779B97F4A7C15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+            z ^ (z >> 31)
+        };
+        let mut value = 100.0f64;
+        let mut values = Vec::with_capacity(5000);
+        for _ in 0..5000 {
+            // Uniform in [-0.5, 0.5), scaled — makes smooth-ish but full-precision data
+            let step = (next() >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+            value = (value + step).max(0.0);
+            values.push(value);
+        }
+        assert_roundtrip_double(&regular_series(&values));
+    }
+
+    /// NaN, infinities and signed zero must survive bit-exactly.
+    #[test]
+    fn test_special_values_roundtrip() {
+        assert_roundtrip_double(&regular_series(&[
+            0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.0, 1.0e300, 5.0e-324,
+        ]));
+    }
+
+    /// Irregular timestamps whose delta-of-deltas goes negative beyond the 12-bit
+    /// range exercise the 32-bit fallback, which the decoder must sign-extend.
+    #[test]
+    fn test_large_negative_delta_of_deltas() {
+        let series = vec![
+            TimeValueDouble::new(0, 1.0),
+            TimeValueDouble::new(1_000_000, 2.0),   // dod = +913_600 -> 32-bit branch
+            TimeValueDouble::new(1_086_400, 3.0),   // dod = -913_600 -> 32-bit branch, negative
+            TimeValueDouble::new(1_172_800, 4.0),   // regular step resumes
+        ];
+        let compressor = GorillaCompressor::new(86400);
+        let compressed = compressor.compress_double(&series).unwrap();
+        let decompressed = compressor.decompress_double(&compressed).unwrap();
+        assert_eq!(series.len(), decompressed.len());
+        for (original, decompressed) in series.iter().zip(decompressed.iter()) {
+            assert_eq!(original.timestamp, decompressed.timestamp);
+            assert_eq!(original.value.to_bits(), decompressed.value.to_bits());
+        }
+    }
+
+    /// Float variant: same round-trip guarantees.
+    #[test]
+    fn test_float_varying_roundtrip() {
+        let compressor = GorillaCompressor::new(3600);
+        let series: Vec<TimeValueFloat> = (0..2000)
+            .map(|i| TimeValueFloat::new(3600 * i as u64, 50.0 + 30.0 * ((i as f32) * 0.1).sin()))
+            .collect();
+        let compressed = compressor.compress_float(&series).unwrap();
+        let decompressed = compressor.decompress_float(&compressed).unwrap();
+        assert_eq!(series.len(), decompressed.len());
+        for (original, decompressed) in series.iter().zip(decompressed.iter()) {
+            assert_eq!(original.timestamp, decompressed.timestamp);
+            assert_eq!(original.value.to_bits(), decompressed.value.to_bits());
+        }
     }
 }
