@@ -51,7 +51,8 @@ pub struct StorageNode {
     seep_vol: f64,
     pond_diversion: f64, //pond diversion
     spill: f64,
-    exists_bool: bool, 
+    exists_bool: bool,
+    exists_configured: bool,
 
     // Cached state for search optimization
     previous_istop: usize,  // Remember previous solution row for warm start
@@ -540,6 +541,9 @@ impl Node for StorageNode {
         // Check if the storage is targeting a level
         self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
 
+        // Check once whether an "exists" input was configured (default: storage always exists)
+        self.exists_configured = !matches!(&self.exists, DynamicInput::None { .. });
+
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
         self.recorder_idx_volume = recorder(data_cache, &self.name, "volume");
@@ -586,9 +590,8 @@ impl Node for StorageNode {
         }
 
         // Default behaviour: storage exists
-        let exists_configured = !matches!(self.exists, DynamicInput::None { .. });
-        let exists = if exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
-        self.exists_bool = !exists_configured || !(exists.is_nan() || exists == 0.0);
+        let exists = if self.exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
+        self.exists_bool = !self.exists_configured || !(exists.is_nan() || exists == 0.0);
         if let Some(idx) = self.recorder_idx_exists {
             data_cache.add_value_at_index(idx, exists);
         }
