@@ -3,8 +3,75 @@
 /// All objective functions return values in `[0, ∞)` where **LOWER IS BETTER** (0 = perfect).
 /// Goodness-of-fit metrics whose natural form is "higher better" (NSE, KGE, Pearson r) are
 /// re-expressed as `1 - x` so that every statistic obeys the same convention with no sign flips.
+///
+/// # Missing-data handling (intentional design)
+///
+/// Each objective caches observed-side statistics on first evaluation (thread-safe via
+/// `Arc<OnceLock>`, shared across parallel clones). The validity mask — the fixed
+/// assessment window — is seeded once from the FIRST evaluation: a timestep is in the
+/// window when both the observed value and the first candidate's simulated value are
+/// finite. This lets structurally-missing simulated values (e.g. from gaps in
+/// non-critical input data, identical for every candidate) define the window alongside
+/// observed gaps, and avoids re-deriving the window on every evaluation.
+///
+/// Every subsequent candidate is scored over that same window and is VALIDATED against
+/// it: a candidate that produces a non-finite value inside the window is rejected with
+/// an error, which the optimisers treat as an infeasible candidate (objective = ∞).
+/// All feasible candidates are therefore always compared over identical data.
 
 use std::sync::{Arc, OnceLock};
+
+/// Build the fixed assessment window from the observed series and the FIRST
+/// candidate's simulated series: true where both are finite. Called once per
+/// optimisation run (cache seeding); see the module docs for the rationale.
+fn seed_validity_mask(observed: &[f64], simulated: &[f64]) -> Vec<bool> {
+    observed.iter()
+        .zip(simulated)
+        .map(|(o, s)| o.is_finite() && s.is_finite())
+        .collect()
+}
+
+/// Extract observed values at masked-in positions (cache initialisation only).
+fn masked_observed(observed: &[f64], mask: &[bool]) -> Vec<f64> {
+    observed.iter()
+        .zip(mask)
+        .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
+        .collect()
+}
+
+/// Extract simulated values at masked-in positions, rejecting infeasible candidates.
+///
+/// Called on every evaluation. Errs if the simulated series length does not match the
+/// cached mask, or if any kept value is non-finite (see module docs).
+fn masked_simulated(simulated: &[f64], mask: &[bool]) -> Result<Vec<f64>, String> {
+    if simulated.len() != mask.len() {
+        return Err(format!(
+            "Simulated series length ({}) does not match the cached mask length ({})",
+            simulated.len(), mask.len()
+        ));
+    }
+
+    let mut out = Vec::with_capacity(mask.len());
+    let mut n_bad = 0usize;
+    for (val, &keep) in simulated.iter().zip(mask) {
+        if keep {
+            if !val.is_finite() { n_bad += 1; }
+            out.push(*val);
+        }
+    }
+
+    if n_bad > 0 {
+        return Err(format!(
+            "Simulated series contains {} non-finite value(s) inside the assessment \
+             window; candidate treated as infeasible",
+            n_bad
+        ));
+    }
+    if out.is_empty() {
+        return Err("No valid data points after masking".to_string());
+    }
+    Ok(out)
+}
 
 /// Objective function types — all return values in `[0, ∞)`, lower is better
 #[derive(Clone, Debug)]
@@ -52,14 +119,8 @@ pub struct SdebObjective {
 
 #[derive(Debug)]
 struct SdebCache {
-    /// Mask indicating which timesteps have valid data in both series
+    /// Mask indicating which timesteps have valid observed data
     mask: Vec<bool>,
-
-    /// Masked observed values (QO) - only valid timesteps
-    masked_observed: Vec<f64>,
-
-    /// Sorted masked observed values (RO) - for distributional comparison
-    sorted_masked_observed: Vec<f64>,
 
     /// Square root of masked observed (for SD term)
     sqrt_masked_observed: Vec<f64>,
@@ -78,92 +139,61 @@ impl SdebObjective {
             cache: Arc::new(OnceLock::new()),
         }
     }
-}
 
-impl SdebObjective {
     /// Calculate SDEB objective
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         // Get or initialize cache (happens once, thread-safe)
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         // Apply mask to simulated data (happens every evaluation)
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         // Sort masked simulated (QM -> RM)
-        let mut sorted_masked_simulated = masked_simulated.clone();
-        sorted_masked_simulated.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut sorted_masked_sim = masked_sim.clone();
+        sorted_masked_sim.sort_by(|a, b| a.total_cmp(b));
 
         // Square root transform simulated data
-        let sqrt_masked_simulated: Vec<f64> = masked_simulated.iter().map(|x| x.sqrt()).collect();
-        let sqrt_sorted_masked_simulated: Vec<f64> = sorted_masked_simulated.iter().map(|x| x.sqrt()).collect();
+        let sqrt_masked_sim: Vec<f64> = masked_sim.iter().map(|x| x.sqrt()).collect();
+        let sqrt_sorted_masked_sim: Vec<f64> = sorted_masked_sim.iter().map(|x| x.sqrt()).collect();
 
         // Calculate SD: sum((sqrt(QO[i]) - sqrt(QM[i]))^2)
         let sd: f64 = cache.sqrt_masked_observed.iter()
-            .zip(&sqrt_masked_simulated)
+            .zip(&sqrt_masked_sim)
             .map(|(o, s)| (o - s).powi(2))
             .sum();
 
         // Calculate SE: sum((sqrt(RO[i]) - sqrt(RM[i]))^2)
         let se: f64 = cache.sqrt_sorted_masked_observed.iter()
-            .zip(&sqrt_sorted_masked_simulated)
+            .zip(&sqrt_sorted_masked_sim)
             .map(|(o, s)| (o - s).powi(2))
             .sum();
 
         // Calculate bias penalty: B = (1 + abs(sum(QO) - sum(QM)) / sum(QO))
-        let sum_simulated: f64 = masked_simulated.iter().sum();
-        let bias_numerator = (cache.sum_observed - sum_simulated).abs();
-        let b = if cache.sum_observed == 0.0 {
+        if cache.sum_observed == 0.0 {
             return Err("Sum of observed flows is zero, cannot calculate SDEB".to_string());
-        } else {
-            1.0 + (bias_numerator / cache.sum_observed)
-        };
+        }
+        let sum_simulated: f64 = masked_sim.iter().sum();
+        let b = 1.0 + ((cache.sum_observed - sum_simulated).abs() / cache.sum_observed);
 
         // Final SDEB = (0.1*SD + 0.9*SE) * B
-        let sdeb = (0.1 * sd + 0.9 * se) * b;
-
-        Ok(sdeb)
+        Ok((0.1 * sd + 0.9 * se) * b)
     }
 
     /// Initialize cache on first evaluation
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> SdebCache {
-        // Create mask: true where both series have valid (non-NaN) values
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
-
-        // Apply mask to observed data (QO)
-        let masked_observed = Self::apply_mask(observed, &mask);
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
         // Create sorted version (RO)
-        let mut sorted_masked_observed = masked_observed.clone();
-        sorted_masked_observed.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Pre-compute square roots
-        let sqrt_masked_observed: Vec<f64> = masked_observed.iter().map(|x| x.sqrt()).collect();
-        let sqrt_sorted_masked_observed: Vec<f64> = sorted_masked_observed.iter().map(|x| x.sqrt()).collect();
-
-        // Pre-compute sum of observed
-        let sum_observed: f64 = masked_observed.iter().sum();
+        let mut sorted_masked_obs = masked_obs.clone();
+        sorted_masked_obs.sort_by(|a, b| a.total_cmp(b));
 
         SdebCache {
             mask,
-            masked_observed,
-            sorted_masked_observed,
-            sqrt_masked_observed,
-            sqrt_sorted_masked_observed,
-            sum_observed,
+            sqrt_masked_observed: masked_obs.iter().map(|x| x.sqrt()).collect(),
+            sqrt_sorted_masked_observed: sorted_masked_obs.iter().map(|x| x.sqrt()).collect(),
+            sum_observed: masked_obs.iter().sum(),
         }
-    }
-
-    /// Apply mask to data, keeping only valid timesteps
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -181,15 +211,9 @@ pub struct PearsObjective {
 
 #[derive(Debug)]
 struct PearsCache {
-    /// Mask indicating which timesteps have valid data in both series
     mask: Vec<bool>,
-
-    /// Masked observed values (QO)
     masked_observed: Vec<f64>,
-
-    /// Mean of observed values
     mean_observed: f64,
-
     /// Sum of squared deviations from mean: sum((QO[i] - MEAN_QO)^2)
     ss_observed: f64,
 }
@@ -201,38 +225,24 @@ impl PearsObjective {
             cache: Arc::new(OnceLock::new()),
         }
     }
-}
 
-impl PearsObjective {
-    /// Calculate Pearson's R objective (negated for minimization)
+    /// Calculate Pearson's R objective (loss form 1 - r for minimization)
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        // Get or initialize cache (happens once, thread-safe)
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        // Apply mask to simulated data (happens every evaluation)
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         // Calculate mean of simulated
-        let mean_simulated: f64 = masked_simulated.iter().sum::<f64>() / masked_simulated.len() as f64;
+        let mean_simulated: f64 = masked_sim.iter().sum::<f64>() / masked_sim.len() as f64;
 
         // Calculate sum of squared deviations for simulated: sum((QM[i] - MEAN_QM)^2)
-        let ss_simulated: f64 = masked_simulated.iter()
+        let ss_simulated: f64 = masked_sim.iter()
             .map(|&qm| (qm - mean_simulated).powi(2))
             .sum();
 
         // Calculate covariance: sum((QO[i] - MEAN_QO) * (QM[i] - MEAN_QM))
         let covariance: f64 = cache.masked_observed.iter()
-            .zip(&masked_simulated)
+            .zip(&masked_sim)
             .map(|(&qo, &qm)| (qo - cache.mean_observed) * (qm - mean_simulated))
             .sum();
 
@@ -251,41 +261,25 @@ impl PearsObjective {
 
     /// Initialize cache on first evaluation
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PearsCache {
-        // Create mask: true where both series have valid (non-NaN) values
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
-        // Apply mask to observed data (QO)
-        let masked_observed = Self::apply_mask(observed, &mask);
-
-        // Calculate mean of observed
-        let mean_observed: f64 = if masked_observed.is_empty() {
+        let mean_observed: f64 = if masked_obs.is_empty() {
             0.0
         } else {
-            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
         };
 
-        // Calculate sum of squared deviations: sum((QO[i] - MEAN_QO)^2)
-        let ss_observed: f64 = masked_observed.iter()
+        let ss_observed: f64 = masked_obs.iter()
             .map(|&qo| (qo - mean_observed).powi(2))
             .sum();
 
         PearsCache {
             mask,
-            masked_observed,
+            masked_observed: masked_obs,
             mean_observed,
             ss_observed,
         }
-    }
-
-    /// Apply mask to data, keeping only valid timesteps
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -299,7 +293,6 @@ pub struct NseObjective {
 struct NseCache {
     mask: Vec<bool>,
     masked_observed: Vec<f64>,
-    mean_observed: f64,
     ss_tot: f64,  // sum((obs[i] - mean_obs)^2)
 }
 
@@ -311,23 +304,13 @@ impl NseObjective {
     }
 
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         // Calculate sum of squared residuals
         let ss_res: f64 = cache.masked_observed.iter()
-            .zip(&masked_simulated)
+            .zip(&masked_sim)
             .map(|(o, s)| (o - s).powi(2))
             .sum();
 
@@ -338,36 +321,24 @@ impl NseObjective {
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> NseCache {
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
-        let masked_observed = Self::apply_mask(observed, &mask);
-
-        let mean_observed: f64 = if masked_observed.is_empty() {
+        let mean_observed: f64 = if masked_obs.is_empty() {
             0.0
         } else {
-            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
         };
 
-        let ss_tot: f64 = masked_observed.iter()
+        let ss_tot: f64 = masked_obs.iter()
             .map(|o| (o - mean_observed).powi(2))
             .sum();
 
         NseCache {
             mask,
-            masked_observed,
-            mean_observed,
+            masked_observed: masked_obs,
             ss_tot,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -381,7 +352,6 @@ pub struct LnseObjective {
 struct LnseCache {
     mask: Vec<bool>,
     log_masked_observed: Vec<f64>,
-    mean_log_observed: f64,
     ss_tot_log: f64,
 }
 
@@ -395,28 +365,18 @@ impl LnseObjective {
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         const EPSILON: f64 = 0.01;
 
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.log_masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         // Log transform simulated
-        let log_masked_simulated: Vec<f64> = masked_simulated.iter()
+        let log_masked_sim: Vec<f64> = masked_sim.iter()
             .map(|x| (x + EPSILON).ln())
             .collect();
 
         // Calculate sum of squared residuals
         let ss_res: f64 = cache.log_masked_observed.iter()
-            .zip(&log_masked_simulated)
+            .zip(&log_masked_sim)
             .map(|(o, s)| (o - s).powi(2))
             .sum();
 
@@ -429,15 +389,11 @@ impl LnseObjective {
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> LnseCache {
         const EPSILON: f64 = 0.01;
 
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
-
-        let masked_observed = Self::apply_mask(observed, &mask);
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
         // Log transform observed
-        let log_masked_observed: Vec<f64> = masked_observed.iter()
+        let log_masked_observed: Vec<f64> = masked_obs.iter()
             .map(|x| (x + EPSILON).ln())
             .collect();
 
@@ -454,16 +410,8 @@ impl LnseObjective {
         LnseCache {
             mask,
             log_masked_observed,
-            mean_log_observed,
             ss_tot_log,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -487,22 +435,12 @@ impl RmseObjective {
     }
 
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         let mse: f64 = cache.masked_observed.iter()
-            .zip(&masked_simulated)
+            .zip(&masked_sim)
             .map(|(o, s)| (o - s).powi(2))
             .sum::<f64>()
             / cache.masked_observed.len() as f64;
@@ -511,24 +449,13 @@ impl RmseObjective {
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> RmseCache {
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
-
-        let masked_observed = Self::apply_mask(observed, &mask);
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
         RmseCache {
             mask,
-            masked_observed,
+            masked_observed: masked_obs,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -552,22 +479,12 @@ impl MaeObjective {
     }
 
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         let mae: f64 = cache.masked_observed.iter()
-            .zip(&masked_simulated)
+            .zip(&masked_sim)
             .map(|(o, s)| (o - s).abs())
             .sum::<f64>()
             / cache.masked_observed.len() as f64;
@@ -576,24 +493,13 @@ impl MaeObjective {
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> MaeCache {
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
-
-        let masked_observed = Self::apply_mask(observed, &mask);
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
         MaeCache {
             mask,
-            masked_observed,
+            masked_observed: masked_obs,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -619,39 +525,34 @@ impl KgeObjective {
     }
 
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
+        // KGE's alpha and beta terms are undefined for degenerate observed data;
+        // check up front so the error names the real problem.
+        if cache.std_observed == 0.0 {
+            return Err("Observed data has zero variance; KGE alpha term is undefined".to_string());
+        }
+        if cache.mean_observed == 0.0 {
+            return Err("Observed data has zero mean; KGE beta term is undefined".to_string());
         }
 
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         // Calculate simulated statistics
-        let mean_simulated: f64 = masked_simulated.iter().sum::<f64>() / masked_simulated.len() as f64;
+        let mean_simulated: f64 = masked_sim.iter().sum::<f64>() / masked_sim.len() as f64;
         let std_simulated: f64 = {
-            let variance: f64 = masked_simulated.iter()
+            let variance: f64 = masked_sim.iter()
                 .map(|x| (x - mean_simulated).powi(2))
-                .sum::<f64>() / masked_simulated.len() as f64;
+                .sum::<f64>() / masked_sim.len() as f64;
             variance.sqrt()
         };
-
-        if cache.std_observed == 0.0 {
-            return Err("Observed data has zero variance".to_string());
-        }
 
         // Calculate correlation
         let r = if std_simulated == 0.0 {
             0.0
         } else {
             let cov: f64 = cache.masked_observed.iter()
-                .zip(&masked_simulated)
+                .zip(&masked_sim)
                 .map(|(o, s)| (o - cache.mean_observed) * (s - mean_simulated))
                 .sum::<f64>()
                 / cache.masked_observed.len() as f64;
@@ -668,41 +569,30 @@ impl KgeObjective {
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> KgeCache {
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
 
-        let masked_observed = Self::apply_mask(observed, &mask);
-
-        let mean_observed: f64 = if masked_observed.is_empty() {
+        let mean_observed: f64 = if masked_obs.is_empty() {
             0.0
         } else {
-            masked_observed.iter().sum::<f64>() / masked_observed.len() as f64
+            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
         };
 
-        let std_observed: f64 = if masked_observed.is_empty() {
+        let std_observed: f64 = if masked_obs.is_empty() {
             0.0
         } else {
-            let variance: f64 = masked_observed.iter()
+            let variance: f64 = masked_obs.iter()
                 .map(|x| (x - mean_observed).powi(2))
-                .sum::<f64>() / masked_observed.len() as f64;
+                .sum::<f64>() / masked_obs.len() as f64;
             variance.sqrt()
         };
 
         KgeCache {
             mask,
-            masked_observed,
+            masked_observed: masked_obs,
             mean_observed,
             std_observed,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -727,25 +617,15 @@ impl PbiasObjective {
     }
 
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| {
-            Self::initialize_cache(observed, simulated)
-        });
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
-        let masked_simulated = Self::apply_mask(simulated, &cache.mask);
-
-        if masked_simulated.len() != cache.masked_observed.len() {
-            return Err("Masked data length mismatch".to_string());
-        }
-
-        if masked_simulated.is_empty() {
-            return Err("No valid data points after masking".to_string());
-        }
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
 
         if cache.sum_observed == 0.0 {
             return Ok(0.0);
         }
 
-        let sum_diff: f64 = masked_simulated.iter()
+        let sum_diff: f64 = masked_sim.iter()
             .zip(&cache.masked_observed)
             .map(|(s, o)| s - o)
             .sum();
@@ -757,26 +637,15 @@ impl PbiasObjective {
     }
 
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PbiasCache {
-        let mask: Vec<bool> = observed.iter()
-            .zip(simulated)
-            .map(|(o, s)| o.is_finite() && s.is_finite())
-            .collect();
-
-        let masked_observed = Self::apply_mask(observed, &mask);
-        let sum_observed: f64 = masked_observed.iter().sum();
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
+        let sum_observed: f64 = masked_obs.iter().sum();
 
         PbiasCache {
             mask,
-            masked_observed,
+            masked_observed: masked_obs,
             sum_observed,
         }
-    }
-
-    fn apply_mask(data: &[f64], mask: &[bool]) -> Vec<f64> {
-        data.iter()
-            .zip(mask)
-            .filter_map(|(val, &keep)| if keep { Some(*val) } else { None })
-            .collect()
     }
 }
 
@@ -907,6 +776,18 @@ mod tests {
         assert!(obj.abs() < 1e-10, "Perfect fit should give 1-KGE=0, got {}", obj);
     }
 
+    /// KGE's beta term divides by the observed mean; zero-mean observed data
+    /// must produce a clear error rather than an infinite/NaN objective.
+    #[test]
+    fn test_kge_zero_mean_observed_errors() {
+        let obs = vec![-1.0, 0.0, 1.0]; // nonzero variance, zero mean
+        let sim = vec![-0.9, 0.1, 1.1];
+
+        let result = ObjectiveFunction::OneMinusKge(KgeObjective::new()).calculate(&obs, &sim);
+        assert!(result.is_err(), "zero-mean observed should error, got {:?}", result);
+        assert!(result.unwrap_err().contains("zero mean"));
+    }
+
     #[test]
     fn test_sdeb_perfect() {
         let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
@@ -948,5 +829,93 @@ mod tests {
 
         assert!((result1 - 0.0).abs() < 1e-10, "Perfect fit should give SDEB=0");
         assert!(result2 > 0.0, "Imperfect fit should give SDEB > 0");
+    }
+
+    /// The assessment window is frozen from the first evaluation (intentional
+    /// design). Before the 2026-07 fix, later candidates were never validated
+    /// against it: a candidate producing NaN at an in-window position passed
+    /// that NaN straight into the sums, yielding a NaN objective (which then
+    /// panicked the optimiser's sort). Such a candidate must instead be
+    /// rejected as infeasible.
+    #[test]
+    fn test_later_candidate_with_nan_is_rejected_not_poisoned() {
+        let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let sim_clean = vec![1.1, 2.1, 3.1, 4.1, 5.1];
+        let sim_blown_up = vec![1.0, 2.0, f64::NAN, 4.0, 5.0];
+
+        for objective in [
+            ObjectiveFunction::OneMinusNse(NseObjective::new()),
+            ObjectiveFunction::OneMinusLnse(LnseObjective::new()),
+            ObjectiveFunction::RMSE(RmseObjective::new()),
+            ObjectiveFunction::MAE(MaeObjective::new()),
+            ObjectiveFunction::OneMinusKge(KgeObjective::new()),
+            ObjectiveFunction::AbsPbias(PbiasObjective::new()),
+            ObjectiveFunction::SDEB(SdebObjective::new()),
+            ObjectiveFunction::OneMinusPearsR(PearsObjective::new()),
+        ] {
+            // First candidate is clean: initializes the cache.
+            let first = objective.calculate(&obs, &sim_clean);
+            assert!(first.is_ok(), "{}: clean candidate should evaluate", objective.name());
+            assert!(first.unwrap().is_finite(),
+                "{}: clean candidate must give a finite objective", objective.name());
+
+            // Second candidate blows up mid-series: must be rejected, and must
+            // never return NaN.
+            let second = objective.calculate(&obs, &sim_blown_up);
+            match second {
+                Err(e) => assert!(e.contains("infeasible"),
+                    "{}: expected infeasible-candidate error, got '{}'", objective.name(), e),
+                Ok(v) => panic!("{}: NaN candidate returned Ok({}) instead of an error", objective.name(), v),
+            }
+        }
+    }
+
+    /// Infinity inside the window is just as infeasible as NaN. (In the first
+    /// candidate it would instead seed the window, so seed with a clean
+    /// candidate first.)
+    #[test]
+    fn test_infinite_simulated_is_rejected() {
+        let obs = vec![1.0, 2.0, 3.0];
+        let objective = ObjectiveFunction::OneMinusNse(NseObjective::new());
+        objective.calculate(&obs, &[1.0, 2.0, 3.0]).unwrap(); // seed full window
+
+        let result = objective.calculate(&obs, &[1.0, f64::INFINITY, 3.0]);
+        assert!(result.is_err());
+    }
+
+    /// Simulated NaN at observed-gap positions is outside the window and fine
+    /// (the common case: sim covers the whole period, observed has holes).
+    #[test]
+    fn test_simulated_nan_at_observed_gap_is_fine() {
+        let obs = vec![1.0, f64::NAN, 3.0, 4.0];
+        let sim = vec![1.0, f64::NAN, 3.0, 4.0]; // NaN only where observed is NaN
+
+        let result = ObjectiveFunction::OneMinusNse(NseObjective::new()).calculate(&obs, &sim);
+        assert!(result.is_ok(), "NaN at observed-gap positions must be ignored: {:?}", result);
+        assert!(result.unwrap().abs() < 1e-10, "fit is perfect on the valid window");
+    }
+
+    /// Structurally-missing simulated values (same positions for every
+    /// candidate, e.g. from gaps in non-critical input data) legitimately
+    /// shape the window via the first evaluation; later candidates with NaN at
+    /// those SAME positions are fine, while NaN at any NEW in-window position
+    /// is infeasible.
+    #[test]
+    fn test_first_candidate_seeds_window_and_later_candidates_validate_against_it() {
+        let obs = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let sim_seed = vec![1.0, f64::NAN, 3.0, 4.0, 5.0]; // index 1 excluded from window
+
+        let objective = ObjectiveFunction::OneMinusNse(NseObjective::new());
+        assert!(objective.calculate(&obs, &sim_seed).is_ok());
+
+        // Same structural gap: in-window values all finite -> feasible.
+        let sim_same_gap = vec![1.1, f64::NAN, 3.1, 4.1, 5.1];
+        assert!(objective.calculate(&obs, &sim_same_gap).is_ok());
+
+        // New NaN inside the window -> infeasible.
+        let sim_new_gap = vec![1.1, f64::NAN, f64::NAN, 4.1, 5.1];
+        let result = objective.calculate(&obs, &sim_new_gap);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("infeasible"));
     }
 }
