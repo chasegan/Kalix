@@ -114,6 +114,7 @@ pub struct StorageNode {
     recorder_idx_ds_4_outlet: Option<usize>,
     recorder_idx_ds_4_spill: Option<usize>,
     recorder_idx_ds_4_force_release: Option<usize>,
+    recorder_idx_exists: Option<usize>,
 }
 
 impl StorageNode {
@@ -675,6 +676,9 @@ impl Node for StorageNode {
         self.recorder_idx_ds_4_force_release = data_cache.get_series_idx(
             make_result_name(&self.name, "ds_4_force_release").as_str(), false
         );
+        self.recorder_idx_exists = data_cache.get_series_idx(
+            make_result_name(&self.name, "exists").as_str(), false
+        );
 
         Ok(())
     }
@@ -700,6 +704,9 @@ impl Node for StorageNode {
         let exists_configured = !matches!(self.exists, DynamicInput::None { .. });
         let exists = if exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
         self.exists_bool = !exists_configured || !(exists.is_nan() || exists == 0.0);
+        if let Some(idx) = self.recorder_idx_exists {
+            data_cache.add_value_at_index(idx, exists);
+        }
 
         // Update orders due
         self.ds_orders_due[0] = self.ds_1_order_buffer.push(self.ds_orders[0]);
