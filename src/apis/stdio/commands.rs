@@ -836,9 +836,12 @@ impl Command for RunOptimisationCommand {
             });
         });
 
-        // Create optimizer with progress callback configured
-        let optimiser: Box<dyn Optimizer> = create_optimizer_with_callback(&config, Some(progress_callback))
+        // Create optimizer with progress callback configured, and wire in the
+        // session's interrupt flag so a stop request aborts the run between
+        // generations (returning the best solution found so far).
+        let mut optimiser: Box<dyn Optimizer> = create_optimizer_with_callback(&config, Some(progress_callback))
             .map_err(|e| CommandError::ExecutionError(e.to_string()))?;
+        optimiser.set_interrupt_flag(std::sync::Arc::clone(&session.interrupt_flag));
 
         // Run optimisation (callback already configured in optimizer)
         let result = optimiser.optimize(&mut problem, None);

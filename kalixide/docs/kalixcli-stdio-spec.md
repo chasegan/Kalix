@@ -121,6 +121,9 @@ Requests interruption of the current operation.
 **Fields:**
 - `reason` (string, optional): Reason for stopping
 
+A stop message sent while no command is running (session is ready) is answered
+with an error message ("No task is running"); the session stays ready.
+
 ### 4.5 Progress Message (kalixcli → frontend)
 Progress updates during long-running operations.
 
@@ -284,7 +287,11 @@ End the session and exit.
 - Frontend can send stop message during command execution
 - Only interruptible commands respond to stop messages
 - Stopped commands send stopped message with partial execution time
-- System returns to ready state after interruption
+  (a stopped command sends `stp` only — never `res` or `err` as well)
+- System returns to ready state after interruption (`rdy` with `rc: 2`)
+- Interruption is cooperative: simulations stop at the next timestep,
+  optimisations at the next generation/shuffle (returning the best
+  solution found so far)
 
 ## 7. Implementation Notes
 

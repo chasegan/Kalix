@@ -14,7 +14,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 |---|------|--------|
 | 1 | Gorilla codec fixes (Rust + Java, in lockstep) | **Done** (fix/gorilla-codec) |
 | 2 | Sacramento `evapuzfw` fix + revalidation | **Done** (fix/sacramento-evapuzfw) |
-| 3 | STDIO interrupt: run commands on a worker thread | Pending |
+| 3 | STDIO interrupt: run commands on a worker thread | **Done** (fix/stdio-interrupt) |
 | 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | Pending |
 | 5 | Criterion benchmark harness + `[profile.release]` tuning | Pending — pick 2–3 representative models |
 | 6 | DataCache: preallocate recorder series; name→idx hashmap | Pending |
@@ -81,6 +81,41 @@ Verification: two new unit tests drive the branch directly via test-only state
 accessors — one pins E2 semantics with hand-derived values, one asserts the
 result is independent of the previous step's evapuzfw. Mutation-checked: both
 fail on the pre-fix line, pass on the fix.
+
+## Step 3 record — STDIO interrupt (done 2026-07-03)
+
+Commands used to execute synchronously on the session-loop thread, so `stp`
+messages were only read after the command finished: the entire interrupt
+apparatus was dead, and long simulations/optimisations could not be cancelled
+from the IDE (demonstrated live during the review).
+
+Changes:
+- `Command::execute` now runs on a worker thread that takes ownership of the
+  `Session` (model included) and returns it with the result via a channel.
+  The session loop keeps reading stdin while busy (20 ms poll), so `stp`,
+  `query`, and `term` are serviced mid-command. New `SessionControl` handle
+  carries the shared state/interrupt Arcs.
+- Worker wraps execute in `catch_unwind`: a panicking command reports an
+  error instead of killing the session.
+- New `Optimizer::set_interrupt_flag` (default no-op); DE polls per
+  generation, SCE per shuffle, both returning best-so-far with
+  `success=false`. `run_optimisation` wires in the session's flag.
+- Protocol semantics pinned (spec updated): interrupted command sends `stp`
+  only (previously `err`+`stp` overlapped), then `rdy rc=2`; `stp` while
+  ready gets a meaningful error instead of "Unknown message type"; stdin
+  closing mid-command interrupts and exits instead of computing for nobody.
+
+Verification: unit tests for SessionControl (interrupt across a moved
+session, invalid-interrupt rejection) and DE early-stop; live end-to-end
+tests — `test_progress` stopped 22 ms after the stop request, and a real
+Sacramento DE optimisation (50 pop, 8 threads, 40k-eval budget) stopped
+0.65 s after the request (one generation, as designed) with `rdy rc=2`.
+The IDE already has a full `stp`/STOPPED pipeline (JsonStdioTypes.java), so
+no Java changes were needed.
+
+Note for later: model files that pin `version = 0.0.1` are rejected by
+kalix 0.3.3 ("Wrong version!") — the regression *optimisation* configs hit
+this over STDIO. Worth deciding a version-compat policy in step 14.
 
 ## Review findings not yet scheduled (context for steps)
 
