@@ -11,7 +11,8 @@ use super::optimizer_trait::OptimizationProgress;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::distributions::Uniform;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
@@ -65,6 +66,10 @@ pub struct DEConfig {
 
     /// Optional callback for progress reporting
     pub progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
+
+    /// Optional cooperative-cancellation flag, polled once per generation.
+    /// When set, the run returns early with the best solution so far.
+    pub interrupt_flag: Option<Arc<AtomicBool>>,
 }
 
 impl Default for DEConfig {
@@ -77,6 +82,7 @@ impl Default for DEConfig {
             seed: None,
             n_threads: 1,
             progress_callback: None,
+            interrupt_flag: None,
         }
     }
 }
@@ -183,7 +189,16 @@ impl DifferentialEvolution {
 
         // Main DE loop - terminate based on evaluations
         let mut generation = 0;
+        let mut interrupted = false;
         while n_evaluations < self.config.termination_evaluations {
+
+            // Cooperative cancellation: stop between generations when requested.
+            if let Some(ref flag) = self.config.interrupt_flag {
+                if flag.load(Ordering::Relaxed) {
+                    interrupted = true;
+                    break;
+                }
+            }
 
             // Progress callback
             if let Some(ref callback) = self.config.progress_callback {
@@ -263,8 +278,12 @@ impl DifferentialEvolution {
             generations: generation,
             n_evaluations,
             objective_history,
-            success: true,
-            message: "Optimisation completed successfully".to_string(),
+            success: !interrupted,
+            message: if interrupted {
+                "Optimisation interrupted; returning best solution found so far".to_string()
+            } else {
+                "Optimisation completed successfully".to_string()
+            },
             elapsed: start_time.elapsed(),
         }
     }
@@ -405,6 +424,10 @@ impl super::optimizer_trait::Optimizer for DifferentialEvolution {
         }
     }
 
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.config.interrupt_flag = Some(flag);
+    }
+
     fn name(&self) -> &str {
         "DE"
     }
@@ -421,6 +444,7 @@ impl Clone for DEConfig {
             seed: self.seed,
             n_threads: self.n_threads,
             progress_callback: None, // Callbacks can't be cloned
+            interrupt_flag: self.interrupt_flag.clone(),
         }
     }
 }
@@ -473,6 +497,7 @@ mod tests {
             seed: Some(42),
             n_threads: 1,
             progress_callback: None,
+            interrupt_flag: None,
         };
 
         let de = DifferentialEvolution::new(config);
@@ -503,5 +528,30 @@ mod tests {
         assert!(r1 < 10);
         assert!(r2 < 10);
         assert!(r3 < 10);
+    }
+
+    /// A pre-set interrupt flag must stop the run after the initial population
+    /// evaluation, well short of the termination budget, with success = false.
+    #[test]
+    fn test_interrupt_flag_stops_early() {
+        use super::super::optimizer_trait::Optimizer;
+
+        let flag = Arc::new(AtomicBool::new(true));
+        let config = DEConfig {
+            population_size: 10,
+            termination_evaluations: 10_000,
+            seed: Some(42),
+            interrupt_flag: Some(Arc::clone(&flag)),
+            ..Default::default()
+        };
+        let de = DifferentialEvolution::new(config);
+        let mut problem = SimpleProblem { n_params: 3 };
+
+        let result = de.optimise(&mut problem);
+
+        assert!(!result.success, "interrupted run must not report success");
+        assert!(result.message.to_lowercase().contains("interrupt"));
+        assert!(result.n_evaluations <= 10,
+            "should stop after the initial population, got {} evaluations", result.n_evaluations);
     }
 }

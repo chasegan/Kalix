@@ -73,6 +73,7 @@ pub fn create_optimizer_with_callback(
                 seed: config.random_seed,
                 n_threads: config.n_threads,
                 progress_callback,
+                interrupt_flag: None,
             };
             Ok(Box::new(DifferentialEvolution::new(de_config)))
         }
@@ -164,6 +165,7 @@ pub fn create_de_optimizer_with_callback(
         seed,
         n_threads,
         progress_callback,
+        interrupt_flag: None,
     };
 
     DifferentialEvolution::new(de_config)
@@ -224,6 +226,7 @@ pub fn create_sce_optimizer_with_callback(
         seed,
         n_threads,
         progress_callback,
+        interrupt_flag: None,
     };
 
     Sce::new(config)

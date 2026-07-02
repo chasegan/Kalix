@@ -48,6 +48,7 @@ fn test_model_constant_optimisation() {
         seed: Some(42),
         n_threads: 1,
         progress_callback: None,
+        interrupt_flag: None,
     };
     let optimiser = DifferentialEvolution::new(de_config);
 

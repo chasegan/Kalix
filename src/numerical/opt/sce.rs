@@ -22,6 +22,8 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 /// Experimental flag: Use parameter recombination instead of random fallback
@@ -44,6 +46,10 @@ pub struct SceConfig {
 
     /// Progress callback (receives OptimizationProgress)
     pub progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
+
+    /// Optional cooperative-cancellation flag, polled once per shuffle.
+    /// When set, the run returns early with the best solution so far.
+    pub interrupt_flag: Option<Arc<AtomicBool>>,
 }
 
 /// Individual in the population
@@ -174,7 +180,17 @@ impl Sce {
 
         // Main optimization loop
         let mut shuffle_count = 0;
+        let mut interrupted = false;
         while n_evaluations < self.config.termination_evaluations {
+
+            // Cooperative cancellation: stop between shuffles when requested.
+            if let Some(ref flag) = self.config.interrupt_flag {
+                if flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    interrupted = true;
+                    break;
+                }
+            }
+
             shuffle_count += 1;
 
             // Step 4: Evolve each complex (in parallel if configured)
@@ -244,8 +260,12 @@ impl Sce {
             best_params,
             best_objective,
             n_evaluations,
-            success: true,
-            message: "Optimization completed successfully".to_string(),
+            success: !interrupted,
+            message: if interrupted {
+                "Optimization interrupted; returning best solution found so far".to_string()
+            } else {
+                "Optimization completed successfully".to_string()
+            },
             elapsed: start_time.elapsed(),
             algorithm_data,
         }
@@ -721,6 +741,10 @@ impl Optimizer for Sce {
     ) -> OptimizationResult {
         // Note: progress_callback is ignored because it's already in self.config
         self.optimize_detailed(problem)
+    }
+
+    fn set_interrupt_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.config.interrupt_flag = Some(flag);
     }
 
     fn name(&self) -> &str {

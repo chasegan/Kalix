@@ -4,6 +4,8 @@
 /// (DE, CMA-ES, SCE-UA, etc.) with common progress reporting and result types.
 
 use super::optimisable::Optimisable;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use std::collections::HashMap;
 
@@ -124,6 +126,14 @@ pub trait Optimizer: Send + Sync {
         problem: &mut dyn Optimisable,
         progress_callback: Option<Box<dyn Fn(&OptimizationProgress) + Send + Sync>>,
     ) -> OptimizationResult;
+
+    /// Install a cooperative-cancellation flag (e.g. a session's interrupt flag).
+    ///
+    /// Implementations should poll the flag between generations/shuffles and,
+    /// once it is set, return early with the best solution found so far and
+    /// `success = false`. The default implementation ignores the flag — such
+    /// optimizers always run to their normal termination criterion.
+    fn set_interrupt_flag(&mut self, _flag: Arc<AtomicBool>) {}
 
     /// Get the name of this optimizer (e.g., "DE", "CMA-ES", "SCE-UA")
     fn name(&self) -> &str;

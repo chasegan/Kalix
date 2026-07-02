@@ -25,6 +25,39 @@ pub struct Session {
     pub results: HashMap<String, serde_json::Value>,
 }
 
+/// Cheap, clonable handle onto a session's shared control state (id, state
+/// machine, interrupt flag). The session loop keeps one of these while the
+/// `Session` itself — model included — is owned by a worker thread executing
+/// a command, so interrupts and state queries keep working mid-command.
+#[derive(Clone)]
+pub struct SessionControl {
+    pub id: String,
+    state: Arc<Mutex<SessionState>>,
+    interrupt_flag: Arc<AtomicBool>,
+}
+
+impl SessionControl {
+    pub fn check_interrupt(&self) -> bool {
+        self.interrupt_flag.load(Ordering::Relaxed)
+    }
+
+    pub fn request_interrupt(&self) -> Result<(), SessionError> {
+        let state = self.state.lock().unwrap();
+        match &*state {
+            SessionState::Busy { interruptible: true, .. } => {
+                self.interrupt_flag.store(true, Ordering::Relaxed);
+                Ok(())
+            }
+            SessionState::Busy { interruptible: false, .. } => {
+                Err(SessionError::NonInterruptibleTask)
+            }
+            SessionState::Ready => {
+                Err(SessionError::InvalidStateTransition("No task running".to_string()))
+            }
+        }
+    }
+}
+
 impl Session {
     pub fn new() -> Self {
         Self {
@@ -89,24 +122,21 @@ impl Session {
         }
     }
 
+    /// Create a control handle sharing this session's state and interrupt flag.
+    pub fn control(&self) -> SessionControl {
+        SessionControl {
+            id: self.id.clone(),
+            state: Arc::clone(&self.state),
+            interrupt_flag: Arc::clone(&self.interrupt_flag),
+        }
+    }
+
     pub fn check_interrupt(&self) -> bool {
         self.interrupt_flag.load(Ordering::Relaxed)
     }
 
     pub fn request_interrupt(&self) -> Result<(), SessionError> {
-        let state = self.state.lock().unwrap();
-        match &*state {
-            SessionState::Busy { interruptible: true, .. } => {
-                self.interrupt_flag.store(true, Ordering::Relaxed);
-                Ok(())
-            }
-            SessionState::Busy { interruptible: false, .. } => {
-                Err(SessionError::NonInterruptibleTask)
-            }
-            SessionState::Ready => {
-                Err(SessionError::InvalidStateTransition("No task running".to_string()))
-            }
-        }
+        self.control().request_interrupt()
     }
 
     pub fn get_state_info(&self) -> StateInfo {
@@ -200,16 +230,58 @@ mod tests {
     #[test]
     fn test_interrupt_handling() {
         let session = Session::new();
-        
+
         // Set busy with interruptible task
         session.set_busy("long_task".to_string(), true).unwrap();
-        
+
         // Request interrupt
         session.request_interrupt().unwrap();
         assert!(session.check_interrupt());
-        
+
         // Return to ready state clears interrupt
         session.set_ready().unwrap();
         assert!(!session.check_interrupt());
+    }
+
+    /// A SessionControl handle must keep working after the Session has moved
+    /// elsewhere (e.g. onto a command worker thread) — this is the mechanism
+    /// that lets the session loop interrupt a running command.
+    #[test]
+    fn test_control_handle_interrupts_moved_session() {
+        let session = Session::new();
+        let control = session.control();
+
+        session.set_busy("long_task".to_string(), true).unwrap();
+
+        // Simulate the session moving to a worker thread.
+        let worker = std::thread::spawn(move || {
+            // Worker sees the interrupt requested through the control handle.
+            for _ in 0..500 {
+                if session.check_interrupt() {
+                    return true;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            false
+        });
+
+        control.request_interrupt().unwrap();
+        assert!(control.check_interrupt());
+        assert!(worker.join().unwrap(), "worker never observed the interrupt");
+    }
+
+    /// Interrupting a non-interruptible or idle session must be rejected
+    /// through the control handle, same as through the session itself.
+    #[test]
+    fn test_control_handle_rejects_invalid_interrupts() {
+        let session = Session::new();
+        let control = session.control();
+
+        // Ready: nothing to interrupt.
+        assert!(control.request_interrupt().is_err());
+
+        // Busy but not interruptible.
+        session.set_busy("blocking_task".to_string(), false).unwrap();
+        assert!(matches!(control.request_interrupt(), Err(SessionError::NonInterruptibleTask)));
     }
 }

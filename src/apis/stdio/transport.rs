@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Write, BufWriter};
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use crate::apis::stdio::messages::Message;
 
 pub struct Transport {
@@ -63,6 +64,21 @@ impl Transport {
             }
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Disconnected) => Err(TransportError::StdinClosed),
+        }
+    }
+
+    /// Wait up to `timeout` for the next message. Returns Ok(None) on timeout.
+    /// Used by the session loop while a command runs on a worker thread, so it
+    /// can poll for completion between short waits on stdin.
+    pub fn receive_message_timeout(&self, timeout: Duration) -> Result<Option<Message>, TransportError> {
+        match self.stdin_rx.recv_timeout(timeout) {
+            Ok(line) => {
+                let msg = serde_json::from_str(&line)
+                    .map_err(|e| TransportError::DeserializationError(e.to_string()))?;
+                Ok(Some(msg))
+            }
+            Err(RecvTimeoutError::Timeout) => Ok(None),
+            Err(RecvTimeoutError::Disconnected) => Err(TransportError::StdinClosed),
         }
     }
 
