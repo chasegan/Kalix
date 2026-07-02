@@ -362,12 +362,28 @@ impl Table {
     pub fn assert_slope_not_exceeding_one(&self, x_col: usize, y_col: usize) -> Result<(), String> {
         let nrows = self.nrows();
         if nrows > 1 {
-            let mut prev_diff = self.get_value(0, x_col) - self.get_value(0, y_col);
+            let mut prev_x = self.get_value(0, x_col);
+            let mut prev_y = self.get_value(0, y_col);
+            let mut prev_diff = prev_x - prev_y;
             for row in 1..nrows {
-                let diff = self.get_value(row, x_col) - self.get_value(row, y_col);
-                if diff < prev_diff {
+                let x = self.get_value(row, x_col);
+                let y = self.get_value(row, y_col);
+                let diff = x - y;
+                // Tolerate floating-point rounding. On an exactly-1:1 segment the
+                // difference (x - y) is constant in real arithmetic, but neither the
+                // stored breakpoints nor the subtraction are exact in binary, so the
+                // computed difference can drift by a few ULPs and appear to shrink
+                // (e.g. loss 0.7 -> 3.7 over inflow 1 -> 4 yields 0.3000...004 then
+                // 0.2999...998). A strict `<` would then reject a legal table. Scale
+                // the tolerance to the operand magnitudes so it works for both small
+                // and large breakpoints.
+                let tol = 8.0 * f64::EPSILON
+                    * x.abs().max(y.abs()).max(prev_x.abs()).max(prev_y.abs());
+                if diff < prev_diff - tol {
                     return Err(format!("Table slope between column {} and column {} exceeds 1:1 at row {}", x_col, y_col, row + 1));
                 }
+                prev_x = x;
+                prev_y = y;
                 prev_diff = diff;
             }
         }

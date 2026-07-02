@@ -64,3 +64,37 @@ fn test_table_is_monotonic() {
         assert_eq!(false, tab.assert_monotonically_increasing(volume_col, area_col).is_err())
     }
 }
+
+
+/// The slope check must tolerate floating-point rounding on a segment whose
+/// slope is exactly 1:1. Here inflow 1 -> 4 with loss 0.7 -> 3.7 keeps the
+/// outflow (inflow - loss) flat at 0.3, but in binary the two differences round
+/// to 0.3000...004 and 0.2999...998; a naive strict comparison would wrongly
+/// report the outflow decreasing. Taken from a real loss-node model that failed.
+#[test]
+fn test_slope_not_exceeding_one_fp_rounding() {
+    let rows = [
+        (0.0, 0.0),
+        (1.0, 0.7),
+        (4.0, 3.7),
+        (20.0, 15.0),
+        (40.0, 30.0),
+        (80.0, 40.0),
+        (100.0, 40.0),
+    ];
+    let mut tab = Table::new(2);
+    for (i, (inflow, loss)) in rows.iter().enumerate() {
+        tab.set_value(i, 0, *inflow);
+        tab.set_value(i, 1, *loss);
+    }
+    // Exactly-1:1 segment: legal, must pass despite floating-point noise.
+    assert_eq!(false, tab.assert_slope_not_exceeding_one(0, 1).is_err());
+
+    // A genuine slope > 1:1 (outflow actually decreases) must still be rejected:
+    // inflow 4 -> 5 but loss 3.7 -> 5.0, so outflow drops 0.3 -> 0.0.
+    let mut bad = Table::new(2);
+    bad.set_value(0, 0, 0.0);  bad.set_value(0, 1, 0.0);
+    bad.set_value(1, 0, 4.0);  bad.set_value(1, 1, 3.7);
+    bad.set_value(2, 0, 5.0);  bad.set_value(2, 1, 5.0);
+    assert_eq!(true, bad.assert_slope_not_exceeding_one(0, 1).is_err());
+}
