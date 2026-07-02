@@ -1,0 +1,28 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 6
+  Timesteps: 29
+  Stepsize (s): 86400
+  Period: 2000-01-02T00:00:00.000Z, 2000-01-30T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  inflow, 387.9310344827586
+
+REGULATED_USER NODES
+  user, 0
+
+STORAGE NODES
+  storage_ephemeral, -17.24137931034483
+  storage_permanent, -387.9310344827586
+
+GAUGE NODES
+  gauge, 0
+
+BLACKHOLE NODES
+  blackhole, 0
+
+----------------------------------
+TOTAL = -17.241379310344826
+----------------------------------
