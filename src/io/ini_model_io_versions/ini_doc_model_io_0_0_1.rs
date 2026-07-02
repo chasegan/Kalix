@@ -503,6 +503,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "order_through" {
                             (n.order_through, _) = parse_csv_to_bool_option_u8(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "exists" {
+                            n.exists = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         }
                         else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -803,6 +806,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "exists", &n.exists.to_string());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.vol_initial.to_string(), "0");
                 // order_through defaults to false; emit only when enabled.
                 if n.order_through {
