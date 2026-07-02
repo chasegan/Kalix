@@ -38,6 +38,7 @@ pub struct StorageNode {
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
+    pub exists: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
 
     // Internal state only
@@ -51,6 +52,7 @@ pub struct StorageNode {
     seep_vol: f64,
     pond_diversion: f64, //pond diversion
     spill: f64,
+    exists_bool: bool, 
 
     // Cached state for search optimization
     previous_istop: usize,  // Remember previous solution row for warm start
@@ -694,6 +696,10 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_ds_4_order {
             data_cache.add_value_at_index(idx, self.ds_orders[3]);
         }
+        // Default behaviour: storage exists
+        let exists_configured = !matches!(self.exists, DynamicInput::None { .. });
+        let exists = if exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
+        self.exists_bool = !exists_configured || !(exists.is_nan() || exists == 0.0);
 
         // Update orders due
         self.ds_orders_due[0] = self.ds_1_order_buffer.push(self.ds_orders[0]);
@@ -716,10 +722,12 @@ impl Node for StorageNode {
         }
 
         // Calculate orders
-        if self.order_through {
+        if self.order_through || !self.exists_bool {
             //
             // 'Order through' means (1) the ordering system does not consider this storage
             // to be a supply, (2) total orders are propagated upstream without adjustment.
+            // 
+            // If the storage doesn't exist then it is treated as ordered through. 
             self.us_orders = self.ds_orders.iter().sum();
             //
         } else if self.has_target_level {
@@ -770,34 +778,53 @@ impl Node for StorageNode {
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
 
-        // Add upstream inflows
-        self.volume += self.usflow;
+        let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
-        // Handle pond diversion first (highest priority)
-        // If we empty the storage, there is no rainfall accessible this timestep since AREA=0.
-        self.pond_diversion = pond_demand.min(self.volume);
-        self.volume -= self.pond_diversion;
+        if !self.exists_bool {
+            // Storage does not exist this timestep - skip calculations and empty storage,
+            // draining everything through ds_1. Reset all other derived state so it doesn't
+            // carry over stale values from the last timestep the storage existed.
+            self.ds_flows = [0.0; MAX_DS_LINKS];
+            self.ds_flows[0] = self.volume + self.usflow;
+            self.volume = 0.0;
+            self.level = self.dimensions.get_value(0, LEVL);
+            self.spill = 0.0;
+            self.pond_diversion = 0.0;
+            self.rain_vol = 0.0;
+            self.evap_vol = 0.0;
+            self.seep_vol = 0.0;
+            self.dsflow = self.ds_flows.iter().sum();
+        } else {
+            // Add upstream inflows
+            self.volume += self.usflow;
 
-        // Net rainfall rate
-        let net_rain_mm = rain_mm - evap_mm - seep_mm;
-
-        // Solve backward Euler
-        let (v_final, ds_flows, spill, row, area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
-
-        // Update warm-start cache for next timestep (expects upper bracket)
-        self.previous_istop = row + 1;
-
-        // Update state from solution (area already computed by solver)
-        self.volume = v_final;
-        self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
-        self.spill = spill;
-        self.ds_flows = ds_flows;
-        self.dsflow = self.ds_flows.iter().sum();
-
-        // Compute climate volumes using solved area
-        self.rain_vol = rain_mm * area_km2;
-        self.evap_vol = evap_mm * area_km2;
-        self.seep_vol = seep_mm * area_km2;
+            // Handle pond diversion first (highest priority)
+            // If we empty the storage, there is no rainfall accessible this timestep since AREA=0.
+            self.pond_diversion = pond_demand.min(self.volume);
+            self.volume -= self.pond_diversion;
+            
+            // Net rainfall rate
+            let net_rain_mm = rain_mm - evap_mm - seep_mm;
+            
+            // Solve backward Euler
+            let (v_final, ds_flows, spill, row, solver_area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
+            area_km2 = solver_area_km2;
+            
+            // Update warm-start cache for next timestep (expects upper bracket)
+            self.previous_istop = row + 1;
+            
+            // Update state from solution (area already computed by solver)
+            self.volume = v_final;
+            self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
+            self.spill = spill;
+            self.ds_flows = ds_flows;
+            self.dsflow = self.ds_flows.iter().sum();
+            
+            // Compute climate volumes using solved area
+            self.rain_vol = rain_mm * area_km2;
+            self.evap_vol = evap_mm * area_km2;
+            self.seep_vol = seep_mm * area_km2;
+        }
 
         // Update mass balance
         self.mbal += self.dsflow - self.usflow;
