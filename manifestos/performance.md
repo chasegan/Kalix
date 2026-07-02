@@ -66,8 +66,39 @@ not justify unreadable cold code, and it does not override the IDE's commitment 
 clean, maintainable design (`/CLAUDE.md`, Ethos). Speed leads in the inner loop;
 clarity leads almost everywhere else. The skill is knowing which you're in.
 
+## 6. What speed yields to
+
+When two implementations are both correct, take the faster one — even when the
+difference is small, even when it is hard to measure. "The gain is negligible" is
+not an argument for the slower version; leaving time on the table has no
+compensating virtue, and small losses compound across 10^11 operations and across
+years of contributions. Do not turn §4's measurement discipline around: measurement
+exists to verify speed claims and compare real alternatives, never to argue that a
+free speedup is too small to bother taking.
+
+Speed yields to exactly three things:
+
+1. **Numerical correctness, always.** Numerics and mass balance are never traded
+   for speed, at any magnitude. A fast wrong answer is worthless.
+2. **Error semantics, enough to let the modeller find the issue.** The behaviour on
+   failure — what gets detected, what gets rejected, what the modeller is told —
+   may be lean, but never so lean that a problem becomes untraceable. A fast
+   silence where a signal was needed costs more modeller-hours than it saves
+   machine-seconds.
+3. **Clarity, on the cold path only (§5)** — and the trade must name what it buys
+   ("this is clearer because…"), not merely observe that the cost is small.
+
+*Worked example: objective-function masking (2026-07). Candidate validation during
+the masking pass versus checking the final objective value for NaN. The end-check
+was rejected on grounds 1 and 2: `min()`, `if()`, and comparisons launder NaN into
+finite values, so a blown-up parameter set could score a plausible objective (a
+wrong number) with no trace of why (no signal). The benchmark — which showed the
+checked loop no slower — answered a speed question; it was never the reason to
+accept a slower option.*
+
 ---
 
 *Enforcement: `benchmarks/` for verification, plus review. The hot/cold distinction
 (§2) is the load-bearing judgement — most rules here are facts about the machine,
-not preferences.*
+not preferences. §6 is Advisory: held by review and by citing it when a trade is
+proposed.*
