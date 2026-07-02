@@ -505,12 +505,16 @@ impl StorageNode {
         best
     }
 
-    /// Checks if the storage node 
-    fn check_if_exists(&mut self, data_cache: &DataCache) -> f64 { 
+    /// Checks if the storage node exists - sets the `self.exists_bool` flag for the timestep.
+    /// Note this will run at most once per time step - either order phase or flow phase 
+    /// (guarded by `self.storage_existence_calced_in_order_phase`)
+    fn check_if_exists(&mut self, data_cache: &mut DataCache) { 
         // Default behaviour: storage exists
         let exists_val = if self.exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
         self.exists_bool = !self.exists_configured || !(exists_val.is_nan() || exists_val == 0.0);
-        exists_val
+        if let Some(idx) = self.recorder_idx_exists {
+            data_cache.add_value_at_index(idx, exists_val);
+        }
     }
 }
 
@@ -715,11 +719,8 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.ds_orders[3]);
         }
         // Default behaviour: storage exists
-        let exists_value = self.check_if_exists(data_cache);
+        self.check_if_exists(data_cache);
         self.storage_existence_calced_in_order_phase = true;
-        if let Some(idx) = self.recorder_idx_exists {
-            data_cache.add_value_at_index(idx, exists_value);
-        }
 
         // Update orders due
         self.ds_orders_due[0] = self.ds_1_order_buffer.push(self.ds_orders[0]);
@@ -805,7 +806,6 @@ impl Node for StorageNode {
             // Reset for next timestep
             self.storage_existence_calced_in_order_phase = false;
         } else {
-            // Sets self.exists_bool
             self.check_if_exists(data_cache);
         }
         if !self.exists_bool {
