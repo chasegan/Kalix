@@ -206,6 +206,23 @@ impl Sacramento {
     }
 
 
+    /// Test-only access to internal upper-zone state, letting tests drive the
+    /// evaporation branches directly without contriving a spin-up sequence.
+    /// Keeps `adimc` consistent with its invariant (adimc = uztwc + lztwc).
+    #[cfg(test)]
+    pub(crate) fn set_uz_state_for_test(&mut self, uztwc: f64, uzfwc: f64, evapuzfw: f64) {
+        self.uztwc = uztwc;
+        self.uzfwc = uzfwc;
+        self.evapuzfw = evapuzfw;
+        self.adimc = self.uztwc + self.lztwc;
+    }
+
+    /// Test-only counterpart of `set_uz_state_for_test`: (uztwc, uzfwc, evapuzfw).
+    #[cfg(test)]
+    pub(crate) fn get_uz_state_for_test(&self) -> (f64, f64, f64) {
+        (self.uztwc, self.uzfwc, self.evapuzfw)
+    }
+
     /*
     Reset the model to empty, and update other internal states accordingly.
     This is the only function you need to call if you want to reset the model.
@@ -264,11 +281,13 @@ impl Sacramento {
             evapuztw = evapt * self.uztwc / self.uztwm;
         }
 
-        // Evaporation from upper zone free water
+        // Evaporation from upper zone free water: free water supplies whatever
+        // evaporative demand is left after tension water has contributed
+        // (E2 = min(UZFWC, demand - E1), matching Fors Sacramento.cs).
         if self.uztwc < evapuztw {
             evapuztw = self.uztwc;
             self.uztwc = 0f64;
-            self.evapuzfw = (evapt - self.evapuzfw).min(self.uzfwc);
+            self.evapuzfw = (evapt - evapuztw).min(self.uzfwc);
             self.uzfwc -= self.evapuzfw;
         } else {
             self.uztwc -= evapuztw;

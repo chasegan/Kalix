@@ -13,7 +13,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | # | Step | Status |
 |---|------|--------|
 | 1 | Gorilla codec fixes (Rust + Java, in lockstep) | **Done** (fix/gorilla-codec) |
-| 2 | Sacramento `evapuzfw` fix + revalidation | Pending — check Fors `Sacramento.cs` for same bug |
+| 2 | Sacramento `evapuzfw` fix + revalidation | **Done** (fix/sacramento-evapuzfw) |
 | 3 | STDIO interrupt: run commands on a worker thread | Pending |
 | 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | Pending |
 | 5 | Criterion benchmark harness + `[profile.release]` tuning | Pending — pick 2–3 representative models |
@@ -60,6 +60,27 @@ Notes for later steps:
   window (≤ 21 meaningful bits) rarely helps full-precision f32 data, which caps
   the file-size win on smooth series; round-number/operational series benefit
   most. A future option is making output precision configurable per run.
+
+## Step 2 record — Sacramento evapuzfw (done 2026-07-03)
+
+`sacramento/mod.rs` run_step read the *previous* timestep's free-water
+evaporation (stale, already area-scaled) as this step's residual demand:
+`evapuzfw = (evapt - self.evapuzfw).min(uzfwc)`. Correct form, matching the
+Fors reference (`Sacramento.cs:458`): `evapuzfw = (evapt - evapuztw).min(uzfwc)`
+— free water supplies demand left after tension water (E2 = min(UZFWC, EDMND − E1)).
+The Fors reference does NOT have the bug; it was introduced in the C#→Rust port.
+
+Blast radius: the branch only executes when evapt > uztwm (tension store
+exhausted by one day's PET). None of the 28 regression models nor the Fors
+validation dataset (uztwm 12.7–47 vs max PET 9.7) ever fires it, so all
+regression baselines are unchanged and pass as-is. Real impact is limited to
+catchments calibrated with small uztwm — including optimiser candidate
+evaluations, which explore small uztwm freely.
+
+Verification: two new unit tests drive the branch directly via test-only state
+accessors — one pins E2 semantics with hand-derived values, one asserts the
+result is independent of the previous step's evapuzfw. Mutation-checked: both
+fail on the pre-fix line, pass on the fix.
 
 ## Review findings not yet scheduled (context for steps)
 
