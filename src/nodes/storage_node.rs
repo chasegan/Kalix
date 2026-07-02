@@ -93,6 +93,7 @@ pub struct StorageNode {
     recorder_idx_ds_outlet: [Option<usize>; MAX_DS_LINKS],
     recorder_idx_ds_spill: [Option<usize>; MAX_DS_LINKS],
     recorder_idx_ds_force_release: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_exists: Option<usize>,
 }
 
 impl StorageNode {
@@ -564,6 +565,7 @@ impl Node for StorageNode {
             self.recorder_idx_ds_force_release[i] = recorder(data_cache, &self.name, &format!("ds_{n}_force_release"));
         }
 
+        self.recorder_idx_exists = recorder(data_cache, &self.name, "exists");
         Ok(())
     }
 
@@ -587,6 +589,9 @@ impl Node for StorageNode {
         let exists_configured = !matches!(self.exists, DynamicInput::None { .. });
         let exists = if exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
         self.exists_bool = !exists_configured || !(exists.is_nan() || exists == 0.0);
+        if let Some(idx) = self.recorder_idx_exists {
+            data_cache.add_value_at_index(idx, exists);
+        }
 
         // Calculate orders
         if self.order_through || !self.exists_bool {
