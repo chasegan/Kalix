@@ -274,18 +274,21 @@ public class GorillaCompressor {
         } else {
             writer.writeBit(true);
             long xor = valueBits ^ prevValueBits;
-            int leadingZeros = Long.numberOfLeadingZeros(xor);
+            // The leading-zeros count must fit the 5-bit field (max 31). A nonzero
+            // 64-bit XOR can have up to 63 leading zeros, so clamp and widen the
+            // meaningful window accordingly (extra leading bits of the window are
+            // zeros of the XOR, so the reconstruction is unchanged).
+            int leadingZeros = Math.min(Long.numberOfLeadingZeros(xor), 31);
             int trailingZeros = Long.numberOfTrailingZeros(xor);
             int meaningfulBits = 64 - leadingZeros - trailingZeros;
 
-            if (leadingZeros >= 5 && meaningfulBits <= 6) {
-                // Use control bit pattern for common case
+            // Compact form costs 5 + 6 + meaningfulBits; the raw fallback costs 64.
+            // Use compact whenever it is no larger (meaningfulBits <= 53).
+            if (meaningfulBits <= 53) {
                 writer.writeBit(false);
                 writer.writeBits(leadingZeros, 5);
                 writer.writeBits(meaningfulBits, 6);
-                if (meaningfulBits > 0) {
-                    writer.writeBits(xor >>> trailingZeros, meaningfulBits);
-                }
+                writer.writeBits(xor >>> trailingZeros, meaningfulBits);
             } else {
                 // Fallback: store all 64 bits
                 writer.writeBit(true);
@@ -303,18 +306,19 @@ public class GorillaCompressor {
         } else {
             writer.writeBit(true);
             int xor = valueBits ^ prevValueBits;
+            // A nonzero 32-bit XOR has at most 31 leading zeros, so the 5-bit
+            // field always fits — no clamp needed here.
             int leadingZeros = Integer.numberOfLeadingZeros(xor);
             int trailingZeros = Integer.numberOfTrailingZeros(xor);
             int meaningfulBits = 32 - leadingZeros - trailingZeros;
 
-            if (leadingZeros >= 5 && meaningfulBits <= 6) {
-                // Use control bit pattern for common case
+            // Compact form costs 5 + 6 + meaningfulBits; the raw fallback costs 32.
+            // Use compact whenever it is no larger (meaningfulBits <= 21).
+            if (meaningfulBits <= 21) {
                 writer.writeBit(false);
                 writer.writeBits(leadingZeros, 5);
                 writer.writeBits(meaningfulBits, 6);
-                if (meaningfulBits > 0) {
-                    writer.writeBits((xor >>> trailingZeros) & 0xFFFFFFFFL, meaningfulBits);
-                }
+                writer.writeBits((xor >>> trailingZeros) & 0xFFFFFFFFL, meaningfulBits);
             } else {
                 // Fallback: store all 32 bits
                 writer.writeBit(true);
@@ -567,12 +571,13 @@ public class GorillaCompressor {
                 return value - 2047;
             }
             case 3: {
-                // 32-bit encoding
+                // 32-bit encoding. The encoder wrote the low 32 bits of a signed
+                // delta-of-deltas (two's complement), so sign-extend on the way back.
                 Long value = reader.readBits(32);
                 if (value == null) {
                     throw new IOException("Invalid delta encoding");
                 }
-                return value;
+                return value.intValue(); // int cast truncates to 32 bits; widening back sign-extends
             }
             default:
                 throw new IOException("Invalid encoding type");
