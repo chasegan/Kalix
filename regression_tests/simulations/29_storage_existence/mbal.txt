@@ -11,18 +11,18 @@ INFLOW NODES
   inflow, 387.9310344827586
 
 REGULATED_USER NODES
-  user, 0
+  user, -87.61755485893414
 
 STORAGE NODES
-  storage_ephemeral, -17.24137931034483
-  storage_permanent, -387.9310344827586
+  storage_ephemeral, -0.00000000000021953320387622407
+  storage_permanent, -52.07184322108604
 
 GAUGE NODES
   gauge, 0
 
 BLACKHOLE NODES
-  blackhole, 0
+  blackhole, -248.24163640273827
 
 ----------------------------------
-TOTAL = -17.241379310344826
+TOTAL = -0.00000000000007105427357601002
 ----------------------------------
