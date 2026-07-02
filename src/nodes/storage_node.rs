@@ -52,8 +52,10 @@ pub struct StorageNode {
     seep_vol: f64,
     pond_diversion: f64, //pond diversion
     spill: f64,
-    exists_bool: bool,
     exists_configured: bool,
+    /// Timestep-specific flag that indicates whether `exists_bool` has been calculated this step.
+    storage_existence_calced_in_order_phase: bool,
+    exists_bool: bool,
 
     // Cached state for search optimization
     previous_istop: usize,  // Remember previous solution row for warm start
@@ -502,6 +504,14 @@ impl StorageNode {
 
         best
     }
+
+    /// Checks if the storage node 
+    fn check_if_exists(&mut self, data_cache: &DataCache) -> f64 { 
+        // Default behaviour: storage exists
+        let exists_val = if self.exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
+        self.exists_bool = !self.exists_configured || !(exists_val.is_nan() || exists_val == 0.0);
+        exists_val
+    }
 }
 
 impl Node for StorageNode {
@@ -705,10 +715,10 @@ impl Node for StorageNode {
             data_cache.add_value_at_index(idx, self.ds_orders[3]);
         }
         // Default behaviour: storage exists
-        let exists = if self.exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
-        self.exists_bool = !self.exists_configured || !(exists.is_nan() || exists == 0.0);
+        let exists_value = self.check_if_exists(data_cache);
+        self.storage_existence_calced_in_order_phase = true;
         if let Some(idx) = self.recorder_idx_exists {
-            data_cache.add_value_at_index(idx, exists);
+            data_cache.add_value_at_index(idx, exists_value);
         }
 
         // Update orders due
@@ -790,6 +800,14 @@ impl Node for StorageNode {
 
         let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
+        // No guarantee that order phase is run before flow phase, e.g. non-regulated reach.
+        if self.storage_existence_calced_in_order_phase {
+            // Reset for next timestep
+            self.storage_existence_calced_in_order_phase = false;
+        } else {
+            // Sets self.exists_bool
+            self.check_if_exists(data_cache);
+        }
         if !self.exists_bool {
             // Storage does not exist this timestep - skip calculations and empty storage,
             // draining everything through ds_1. Reset all other derived state so it doesn't
