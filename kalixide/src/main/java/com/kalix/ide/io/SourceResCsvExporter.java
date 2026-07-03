@@ -7,14 +7,13 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Exports a {@link DataSet} to a Source result CSV ({@code .res.csv}) file.
@@ -27,6 +26,10 @@ import java.util.TreeSet;
  *
  * <p>Missing values (NaN) are always written as empty cells; the declared
  * {@code Missing data value} sentinel is present for format conformance only.</p>
+ *
+ * <p>Data rows are produced by the shared k-way merge over the series' sorted timestamp
+ * arrays ({@link CsvExportUtil#forEachMergedRow}) — O(total points), no boxed-timestamp
+ * union set, no per-cell search. Output is UTF-8.</p>
  *
  * @see SourceResCsvImporter
  */
@@ -80,17 +83,16 @@ public final class SourceResCsvExporter {
 
         List<String> names = new ArrayList<>(labeled.keySet());
         List<TimeSeriesData> allSeries = new ArrayList<>(labeled.values());
-        Set<Long> allTimestamps = collectAllTimestamps(allSeries);
-        long stepSeconds = inferStepSeconds(allSeries);
+        long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
 
-        try (FileWriter writer = new FileWriter(outputFile)) {
-            writeHeader(writer, names, allTimestamps, stepSeconds);
-            writeDataRows(writer, names, allSeries, allTimestamps, stepSeconds);
+        try (Writer writer = Files.newBufferedWriter(outputFile.toPath(), StandardCharsets.UTF_8)) {
+            writeHeader(writer, names, allSeries, stepSeconds);
+            writeDataRows(writer, allSeries, stepSeconds);
         }
     }
 
-    private static void writeHeader(FileWriter writer, List<String> names,
-                                    Set<Long> allTimestamps, long stepSeconds) throws IOException {
+    private static void writeHeader(Writer writer, List<String> names,
+                                    List<TimeSeriesData> allSeries, long stepSeconds) throws IOException {
         int seriesCount = names.size();
 
         // File-metadata block.
@@ -103,7 +105,7 @@ public final class SourceResCsvExporter {
         writer.write("Project name," + PLACEHOLDER + "\n");
         writer.write("Source version,Kalix\n");
         writer.write("Latest result run time," + nowStamp() + "\n");
-        writer.write("Simulation time," + simulationRange(allTimestamps, stepSeconds) + "\n");
+        writer.write("Simulation time," + simulationRange(allSeries, stepSeconds) + "\n");
         writer.write(ATTR_SCHEMA + "\n");
         writer.write(SourceResCsvFormat.MARKER_EOC + "\n");
 
@@ -111,14 +113,14 @@ public final class SourceResCsvExporter {
         writer.write(seriesCount + "\n");
         for (int i = 0; i < seriesCount; i++) {
             StringBuilder row = new StringBuilder();
-            row.append(i + 1).append(',')                  // Field
-               .append(PLACEHOLDER).append(',')            // Units
-               .append(PLACEHOLDER).append(',')            // RunName
-               .append(PLACEHOLDER).append(',')            // ScenarioName
-               .append(PLACEHOLDER).append(',')            // ScenarioInputSetName
-               .append(escapeCsvField(names.get(i)));      // Name
+            row.append(i + 1).append(',')                             // Field
+               .append(PLACEHOLDER).append(',')                       // Units
+               .append(PLACEHOLDER).append(',')                       // RunName
+               .append(PLACEHOLDER).append(',')                       // ScenarioName
+               .append(PLACEHOLDER).append(',')                       // ScenarioInputSetName
+               .append(CsvExportUtil.escapeCsvField(names.get(i)));   // Name
             for (int p = 0; p < ATTR_TRAILING_PLACEHOLDERS; p++) {
-                row.append(',').append(PLACEHOLDER);       // Site … Custom
+                row.append(',').append(PLACEHOLDER);                  // Site … Custom
             }
             writer.write(row.append('\n').toString());
         }
@@ -126,80 +128,49 @@ public final class SourceResCsvExporter {
         // Ordinary CSV column header: Date + one "<index>><Name>" token per series.
         StringBuilder header = new StringBuilder("Date");
         for (int i = 0; i < seriesCount; i++) {
-            header.append(',').append(escapeCsvField((i + 1) + ">" + names.get(i)));
+            header.append(',').append(CsvExportUtil.escapeCsvField((i + 1) + ">" + names.get(i)));
         }
         writer.write(header.append('\n').toString());
         writer.write(SourceResCsvFormat.MARKER_EOH + "\n");
     }
 
-    private static void writeDataRows(FileWriter writer, List<String> names,
-                                      List<TimeSeriesData> allSeries, Set<Long> allTimestamps,
+    private static void writeDataRows(Writer writer, List<TimeSeriesData> allSeries,
                                       long stepSeconds) throws IOException {
-        for (Long timestamp : allTimestamps) {
-            StringBuilder row = new StringBuilder();
+        StringBuilder row = new StringBuilder(64);
+        CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> {
+            row.setLength(0);
             row.append(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
-            for (TimeSeriesData series : allSeries) {
+            for (double value : values) {
                 row.append(',');
-                Double value = valueAt(series, timestamp);
-                if (value != null && !Double.isNaN(value)) {
+                if (!Double.isNaN(value)) {
                     row.append(value);
                 }
                 // NaN / missing → empty cell
             }
             writer.write(row.append('\n').toString());
-        }
+        });
     }
 
-    /** Sorted union of every series' timestamps. */
-    private static Set<Long> collectAllTimestamps(List<TimeSeriesData> allSeries) {
-        Set<Long> all = new TreeSet<>();
+    /** The overall time range spanned by the series, formatted for the header. */
+    private static String simulationRange(List<TimeSeriesData> allSeries, long stepSeconds) {
+        long first = Long.MAX_VALUE;
+        long last = Long.MIN_VALUE;
         for (TimeSeriesData series : allSeries) {
-            for (long ts : series.getTimestamps()) {
-                all.add(ts);
+            if (series.getPointCount() == 0) {
+                continue;
             }
+            first = Math.min(first, series.getFirstTimestamp());
+            last = Math.max(last, series.getLastTimestamp());
         }
-        return all;
-    }
-
-    /** The step (seconds) of the first regular series, or 0 if none — drives date formatting. */
-    private static long inferStepSeconds(List<TimeSeriesData> allSeries) {
-        for (TimeSeriesData series : allSeries) {
-            if (series.hasRegularInterval()) {
-                return series.getIntervalMillis() / 1000;
-            }
-        }
-        return 0;
-    }
-
-    /** The value of {@code series} at {@code timestamp} via binary search, or null if absent/invalid. */
-    private static Double valueAt(TimeSeriesData series, long timestamp) {
-        long[] timestamps = series.getTimestamps();
-        int idx = Arrays.binarySearch(timestamps, timestamp);
-        if (idx >= 0 && series.getValidPoints()[idx]) {
-            return series.getValues()[idx];
-        }
-        return null;
-    }
-
-    private static String simulationRange(Set<Long> allTimestamps, long stepSeconds) {
-        if (allTimestamps.isEmpty()) {
+        if (first > last) {
             return PLACEHOLDER;
         }
-        TreeSet<Long> sorted = (TreeSet<Long>) allTimestamps;
-        return TimeFormatUtil.formatForStepSize(sorted.first(), stepSeconds)
-            + " - " + TimeFormatUtil.formatForStepSize(sorted.last(), stepSeconds);
+        return TimeFormatUtil.formatForStepSize(first, stepSeconds)
+            + " - " + TimeFormatUtil.formatForStepSize(last, stepSeconds);
     }
 
     private static String nowStamp() {
         return java.time.LocalDateTime.now()
             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-    }
-
-    /** Quotes a field containing a comma, quote, or newline (Source's CSV dialect). */
-    private static String escapeCsvField(String field) {
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
-            return "\"" + field.replace("\"", "\"\"") + "\"";
-        }
-        return field;
     }
 }

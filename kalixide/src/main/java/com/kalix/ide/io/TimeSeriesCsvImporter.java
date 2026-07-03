@@ -3,12 +3,22 @@ package com.kalix.ide.io;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import javax.swing.SwingWorker;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 import java.util.regex.Pattern;
 
 /**
@@ -40,6 +50,12 @@ import java.util.regex.Pattern;
  *   <li>And many other common variations</li>
  * </ul>
  *
+ * <p><strong>Performance:</strong> the file is streamed line-by-line (never held in
+ * memory whole) with byte-based progress from a {@link CountingInputStream}; values
+ * accumulate into growable primitive {@code double[]} columns (no boxing, no per-row
+ * lists); and the date format — including whether it is date-only or date-time — is
+ * detected once up front so steady-state row parsing throws no exceptions.</p>
+ *
  * <p><strong>Usage Example:</strong></p>
  * <pre>
  * CsvImportTask task = new CsvImportTask(csvFile, new CsvImportOptions()) {
@@ -58,6 +74,10 @@ import java.util.regex.Pattern;
  * };
  * task.execute();
  * </pre>
+ *
+ * <p>For headless/direct use (tests, batch tools), call
+ * {@link #parse(File, CsvImportOptions, IntConsumer, BooleanSupplier)} — the SwingWorker
+ * task is a thin wrapper around it.</p>
  *
  * <p><strong>Thread Safety:</strong> This class is stateless and thread-safe.
  * Multiple import operations can run concurrently.</p>
@@ -106,12 +126,17 @@ public class TimeSeriesCsvImporter {
     );
 
     /**
-     * Regular expression for detecting numeric values.
-     * Supports integers, decimals, and scientific notation.
+     * Commas are accepted in numbers only as complete thousands groupings
+     * ("1,234,567.89"). See {@link #parseNumericValue}.
      */
-    private static final Pattern NUMERIC_PATTERN = Pattern.compile(
-        "^[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?$"
-    );
+    private static final Pattern THOUSANDS_GROUPED_PATTERN =
+        Pattern.compile("[+-]?\\d{1,3}(,\\d{3})+(\\.\\d+)?([eE][+-]?\\d+)?");
+
+    /** Number of leading lines sampled for delimiter and date-format detection. */
+    private static final int SAMPLE_LINES = 10;
+
+    /** Sentinel for "could not parse timestamp" from {@link #parseTimestampMillis}. */
+    private static final long INVALID_TS = Long.MIN_VALUE;
 
     /**
      * Private constructor to prevent instantiation of this utility class.
@@ -242,11 +267,13 @@ public class TimeSeriesCsvImporter {
      * SwingWorker task for importing CSV data with progress reporting.
      *
      * <p>This abstract class provides the framework for background CSV import
-     * operations. Subclasses must implement the SwingWorker lifecycle methods
-     * to handle progress updates and completion.</p>
+     * operations — a thin wrapper around
+     * {@link #parse(File, CsvImportOptions, IntConsumer, BooleanSupplier)}. Subclasses
+     * implement the SwingWorker lifecycle methods to handle progress updates and
+     * completion.</p>
      *
      * <p><strong>Progress Reporting:</strong> The task publishes progress values
-     * from 0-100 representing the percentage of file processed.</p>
+     * from 0-100 representing the percentage of file bytes processed.</p>
      */
     public static abstract class CsvImportTask extends SwingWorker<CsvImportResult, Integer> {
         /** The CSV file to import */
@@ -267,127 +294,159 @@ public class TimeSeriesCsvImporter {
 
         @Override
         protected CsvImportResult doInBackground() throws Exception {
-            return importFile();
+            return parse(csvFile, options, this::setProgress, this::isCancelled);
         }
+    }
 
-        /**
-         * Performs the actual CSV import operation.
-         *
-         * <p>This method handles the complete import process including:</p>
-         * <ol>
-         *   <li>File reading and delimiter detection</li>
-         *   <li>Header parsing and validation</li>
-         *   <li>Date format detection</li>
-         *   <li>Data parsing with progress reporting</li>
-         *   <li>Time series creation and validation</li>
-         * </ol>
-         *
-         * @return the import result with data, warnings, and statistics
-         * @throws IOException if file reading fails
-         */
-        private CsvImportResult importFile() throws IOException {
-            long startTime = System.currentTimeMillis();
+    /**
+     * Parses a CSV file with no progress reporting or cancellation.
+     *
+     * @param csvFile the CSV file to import
+     * @param options import options (null for defaults)
+     * @return the import result (never null; fatal problems are reported via
+     *         {@link CsvImportResult#getErrors()} rather than thrown)
+     */
+    public static CsvImportResult parse(File csvFile, CsvImportOptions options) {
+        return parse(csvFile, options, null, null);
+    }
 
-            List<String> warnings = new ArrayList<>();
-            List<String> errors = new ArrayList<>();
-            List<NamedSeries> series = new ArrayList<>();
+    /**
+     * Parses a CSV file.
+     *
+     * <p>This method handles the complete import process including:</p>
+     * <ol>
+     *   <li>Delimiter detection from a sample of leading lines</li>
+     *   <li>Header parsing and validation</li>
+     *   <li>Date format detection (formatter + date-only vs. date-time)</li>
+     *   <li>Streaming data parse with byte-based progress reporting</li>
+     *   <li>Time series creation and validation</li>
+     * </ol>
+     *
+     * @param csvFile the CSV file to import
+     * @param options import options (null for defaults)
+     * @param progress optional sink for 0–100 byte-based progress; may be null
+     * @param cancelled optional cancellation check polled per data row; may be null
+     * @return the import result (never null; fatal problems — including I/O failures —
+     *         are reported via {@link CsvImportResult#getErrors()} rather than thrown)
+     */
+    public static CsvImportResult parse(File csvFile, CsvImportOptions options,
+                                        IntConsumer progress, BooleanSupplier cancelled) {
+        long startTime = System.currentTimeMillis();
+        CsvImportOptions opts = options != null ? options : new CsvImportOptions();
 
+        List<String> warnings = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        List<NamedSeries> series = new ArrayList<>();
+
+        long fileLength = Math.max(1, csvFile.length());
+
+        try {
+            CountingInputStream counter = new CountingInputStream(new FileInputStream(csvFile));
             try (BufferedReader reader = new BufferedReader(
-                    new FileReader(csvFile, StandardCharsets.UTF_8))) {
+                    new InputStreamReader(counter, StandardCharsets.UTF_8))) {
 
-                // Read all lines first to determine size for progress reporting
-                List<String> lines = new ArrayList<>();
+                // Sample the leading lines once for delimiter + date-format detection,
+                // then stream the rest — the file is never held in memory whole.
+                List<String> sample = new ArrayList<>(SAMPLE_LINES);
                 String line;
-                while ((line = reader.readLine()) != null) {
-                    lines.add(line);
+                while (sample.size() < SAMPLE_LINES && (line = reader.readLine()) != null) {
+                    sample.add(line);
                 }
 
-                if (lines.isEmpty()) {
+                if (sample.isEmpty()) {
                     errors.add("CSV file is empty");
                     return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
                 // Detect delimiter
-                char delimiter = detectDelimiter(lines.subList(0, Math.min(10, lines.size())));
+                char delimiter = detectDelimiter(sample);
 
                 // Parse header
-                String[] headers = parseLine(lines.get(0), delimiter);
+                String[] headers = parseLine(sample.get(0), delimiter);
                 if (headers.length < 2) {
                     errors.add("CSV must have at least 2 columns (time + at least one data series)");
                     return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
-                // Detect date format using first few data rows
-                DateTimeFormatter dateFormat = detectDateFormat(lines, delimiter, warnings);
+                // Detect date format — the formatter AND whether it is date-only — once,
+                // using the sampled data rows, so per-row parsing never relies on
+                // exception-driven fallback in the steady state.
+                DateFormatSpec dateFormat = detectDateFormat(sample, delimiter);
                 if (dateFormat == null) {
                     errors.add("Could not detect date format in first column");
                     return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
                 }
 
-                // Prepare data structures
+                // Prepare primitive column accumulators (no boxing, no per-row lists)
                 int seriesCount = headers.length - 1;
-                List<LocalDateTime> dateTimes = new ArrayList<>();
-                List<List<Double>> seriesValues = new ArrayList<>();
+                ColumnAccumulator columns = new ColumnAccumulator(seriesCount);
+                double[] rowValues = new double[seriesCount];
 
-                for (int i = 0; i < seriesCount; i++) {
-                    seriesValues.add(new ArrayList<>());
-                }
-
-                // Parse data rows
+                // Parse data rows: first the remaining sampled lines, then the stream
                 int validRows = 0;
-                int totalRows = lines.size();
+                int totalRows = 1;   // header line
+                int sampleIdx = 1;
+                int lastProgress = -1;
 
-                for (int lineNum = 1; lineNum < lines.size(); lineNum++) {
-                    if (isCancelled()) {
-                        return createResult(series, warnings, errors, startTime, dateFormat, totalRows, validRows, 0);
+                while (true) {
+                    String dataLine;
+                    if (sampleIdx < sample.size()) {
+                        dataLine = sample.get(sampleIdx++);
+                    } else {
+                        dataLine = reader.readLine();
+                        if (dataLine == null) break;
+                    }
+                    int fileLine = ++totalRows;  // 1-based physical line number
+
+                    if (cancelled != null && cancelled.getAsBoolean()) {
+                        return createResult(series, warnings, errors, startTime,
+                            dateFormat.formatter(), totalRows, validRows, 0);
                     }
 
-                    // Report progress
-                    int progress = (int) ((lineNum * 100.0) / lines.size());
-                    setProgress(progress);
+                    if (progress != null) {
+                        int pct = (int) (counter.getCount() * 100 / fileLength);
+                        if (pct != lastProgress) {
+                            lastProgress = pct;
+                            progress.accept(Math.min(100, pct));
+                        }
+                    }
 
-                    String dataLine = lines.get(lineNum);
-                    if (dataLine.trim().isEmpty()) continue;
+                    if (dataLine.isBlank()) continue;
 
                     String[] values = parseLine(dataLine, delimiter);
                     if (values.length != headers.length) {
                         warnings.add(String.format("Line %d: Expected %d columns, found %d",
-                            lineNum + 1, headers.length, values.length));
+                            fileLine, headers.length, values.length));
                         continue;
                     }
 
                     // Parse timestamp
-                    LocalDateTime dateTime = parseDateTime(values[0].trim(), dateFormat);
-                    if (dateTime == null) {
+                    long timestamp = parseTimestampMillis(values[0].trim(), dateFormat);
+                    if (timestamp == INVALID_TS) {
                         warnings.add(String.format("Line %d: Could not parse date/time '%s'",
-                            lineNum + 1, values[0]));
+                            fileLine, values[0]));
                         continue;
                     }
 
                     // Parse data values
                     boolean hasValidData = false;
-                    List<Double> rowValues = new ArrayList<>();
-
                     for (int i = 1; i < values.length; i++) {
-                        Double value = parseNumericValue(values[i].trim());
-                        rowValues.add(value);
-                        if (value != null && !value.isNaN()) {
+                        double value = parseNumericValue(values[i].trim());
+                        rowValues[i - 1] = value;
+                        if (!Double.isNaN(value)) {
                             hasValidData = true;
                         }
                     }
 
-                    if (hasValidData || !options.skipRowsWithAllMissingValues) {
-                        dateTimes.add(dateTime);
-                        for (int i = 0; i < seriesCount; i++) {
-                            seriesValues.get(i).add(rowValues.get(i));
-                        }
+                    if (hasValidData || !opts.skipRowsWithAllMissingValues) {
+                        columns.add(timestamp, rowValues);
                         validRows++;
                     }
                 }
 
                 // Create TimeSeriesData objects
                 if (validRows > 0) {
-                    LocalDateTime[] dateTimeArray = dateTimes.toArray(new LocalDateTime[0]);
+                    long[] timestampArray = columns.timestamps();
 
                     for (int i = 0; i < seriesCount; i++) {
                         String seriesName = headers[i + 1].trim();
@@ -395,11 +454,7 @@ public class TimeSeriesCsvImporter {
                             seriesName = "Series " + (i + 1);
                         }
 
-                        double[] valueArray = seriesValues.get(i).stream()
-                            .mapToDouble(v -> v != null ? v : Double.NaN)
-                            .toArray();
-
-                        TimeSeriesData data = new TimeSeriesData(dateTimeArray, valueArray);
+                        TimeSeriesData data = new TimeSeriesData(timestampArray, columns.column(i));
                         // Split dotted column headers (e.g. "node.x.dsflow" from a saved run)
                         // into hierarchy segments so reloaded result CSVs nest like the run.
                         series.add(NamedSeries.dotted(seriesName, data));
@@ -413,23 +468,71 @@ public class TimeSeriesCsvImporter {
                     errors.add("No valid data rows found");
                 }
 
-                return createResult(series, warnings, errors, startTime, dateFormat, totalRows, validRows, seriesCount);
+                if (progress != null) {
+                    progress.accept(100);
+                }
+                return createResult(series, warnings, errors, startTime,
+                    dateFormat.formatter(), totalRows, validRows, seriesCount);
+            }
+        } catch (Exception e) {
+            errors.add("Parse error: " + e.getMessage());
+            return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
+        }
+    }
 
-            } catch (Exception e) {
-                errors.add("Parse error: " + e.getMessage());
-                return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
+    /**
+     * Creates an import result with the given parameters.
+     */
+    private static CsvImportResult createResult(List<NamedSeries> series, List<String> warnings, List<String> errors,
+                                                long startTime, DateTimeFormatter dateFormat, int totalRows,
+                                                int validRows, int seriesCount) {
+        long parseTimeMs = System.currentTimeMillis() - startTime;
+        ImportStatistics stats = new ImportStatistics(totalRows, validRows, 1, seriesCount, parseTimeMs, dateFormat);
+        return new CsvImportResult(series, warnings, errors, stats);
+    }
+
+    /**
+     * Accumulates parsed rows into one growable primitive array per column —
+     * timestamps plus one {@code double[]} per series. All columns grow in lockstep,
+     * so a single size/capacity pair covers them.
+     */
+    private static final class ColumnAccumulator {
+        private long[] timestamps;
+        private final double[][] columns;
+        private int size;
+
+        ColumnAccumulator(int seriesCount) {
+            int initialCapacity = 1024;
+            timestamps = new long[initialCapacity];
+            columns = new double[seriesCount][];
+            for (int i = 0; i < seriesCount; i++) {
+                columns[i] = new double[initialCapacity];
             }
         }
 
-        /**
-         * Creates an import result with the given parameters.
-         */
-        private CsvImportResult createResult(List<NamedSeries> series, List<String> warnings, List<String> errors,
-                                           long startTime, DateTimeFormatter dateFormat, int totalRows,
-                                           int validRows, int seriesCount) {
-            long parseTimeMs = System.currentTimeMillis() - startTime;
-            ImportStatistics stats = new ImportStatistics(totalRows, validRows, 1, seriesCount, parseTimeMs, dateFormat);
-            return new CsvImportResult(series, warnings, errors, stats);
+        void add(long timestamp, double[] rowValues) {
+            if (size == timestamps.length) {
+                int newCapacity = timestamps.length + (timestamps.length >> 1);
+                timestamps = Arrays.copyOf(timestamps, newCapacity);
+                for (int i = 0; i < columns.length; i++) {
+                    columns[i] = Arrays.copyOf(columns[i], newCapacity);
+                }
+            }
+            timestamps[size] = timestamp;
+            for (int i = 0; i < columns.length; i++) {
+                columns[i][size] = rowValues[i];
+            }
+            size++;
+        }
+
+        /** @return the accumulated timestamps, trimmed to size */
+        long[] timestamps() {
+            return Arrays.copyOf(timestamps, size);
+        }
+
+        /** @return column {@code i}'s accumulated values, trimmed to size */
+        double[] column(int i) {
+            return Arrays.copyOf(columns[i], size);
         }
     }
 
@@ -520,23 +623,40 @@ public class TimeSeriesCsvImporter {
     }
 
     /**
-     * Attempts to detect the date format used in the CSV file.
+     * The detected date format: the formatter plus whether values are date-only
+     * (parsed via {@link LocalDate}) or full date-times. Capturing date-only-ness at
+     * detection time means steady-state parsing takes the right branch directly instead
+     * of throwing and catching a {@link DateTimeParseException} on every row of a
+     * date-only file (the common daily case).
      */
-    private static DateTimeFormatter detectDateFormat(List<String> lines, char delimiter, List<String> warnings) {
-        if (lines.size() < 2) return null;
+    private record DateFormatSpec(DateTimeFormatter formatter, boolean dateOnly) {}
+
+    /**
+     * Attempts to detect the date format used in the CSV file from sampled lines.
+     */
+    private static DateFormatSpec detectDateFormat(List<String> sampleLines, char delimiter) {
+        if (sampleLines.size() < 2) return null;
 
         // Try parsing first few data rows with different formats
-        for (int lineNum = 1; lineNum < Math.min(6, lines.size()); lineNum++) {
-            String[] values = parseLine(lines.get(lineNum), delimiter);
+        for (int lineNum = 1; lineNum < Math.min(6, sampleLines.size()); lineNum++) {
+            String[] values = parseLine(sampleLines.get(lineNum), delimiter);
             if (values.length == 0) continue;
 
             String dateString = values[0].trim();
             if (dateString.isEmpty()) continue;
 
             for (DateTimeFormatter formatter : DATE_FORMATTERS) {
-                LocalDateTime result = parseDateTime(dateString, formatter);
-                if (result != null) {
-                    return formatter; // Found working format
+                try {
+                    LocalDateTime.parse(dateString, formatter);
+                    return new DateFormatSpec(formatter, false);
+                } catch (DateTimeParseException e) {
+                    // fall through to date-only probe
+                }
+                try {
+                    LocalDate.parse(dateString, formatter);
+                    return new DateFormatSpec(formatter, true);
+                } catch (DateTimeParseException e) {
+                    // try next formatter
                 }
             }
         }
@@ -545,39 +665,64 @@ public class TimeSeriesCsvImporter {
     }
 
     /**
-     * Parses a date/time string using the specified formatter.
+     * Parses a date/time string to epoch millis (UTC) using the detected format,
+     * taking the date-only or date-time branch directly. The opposite branch is kept
+     * as a rare fallback for mixed files; unparseable values yield {@link #INVALID_TS}.
      */
-    private static LocalDateTime parseDateTime(String dateString, DateTimeFormatter formatter) {
-        if (dateString == null || dateString.trim().isEmpty()) {
-            return null;
+    private static long parseTimestampMillis(String dateString, DateFormatSpec spec) {
+        if (dateString.isEmpty()) {
+            return INVALID_TS;
         }
-
-        try {
-            // Try parsing as LocalDateTime first
-            return LocalDateTime.parse(dateString, formatter);
-        } catch (DateTimeParseException e) {
+        if (spec.dateOnly()) {
             try {
-                // If that fails, try parsing as LocalDate and convert to LocalDateTime at start of day
-                java.time.LocalDate localDate = java.time.LocalDate.parse(dateString, formatter);
-                return localDate.atStartOfDay();
-            } catch (DateTimeParseException e2) {
-                return null;
+                return LocalDate.parse(dateString, spec.formatter()).toEpochDay() * 86_400_000L;
+            } catch (DateTimeParseException e) {
+                try {
+                    return LocalDateTime.parse(dateString, spec.formatter())
+                        .toInstant(ZoneOffset.UTC).toEpochMilli();
+                } catch (DateTimeParseException e2) {
+                    return INVALID_TS;
+                }
+            }
+        } else {
+            try {
+                return LocalDateTime.parse(dateString, spec.formatter())
+                    .toInstant(ZoneOffset.UTC).toEpochMilli();
+            } catch (DateTimeParseException e) {
+                try {
+                    return LocalDate.parse(dateString, spec.formatter()).toEpochDay() * 86_400_000L;
+                } catch (DateTimeParseException e2) {
+                    return INVALID_TS;
+                }
             }
         }
     }
 
     /**
      * Parses a numeric value string, handling missing values and common formats.
+     * Kalix numbers are dot-decimal everywhere in the world; a comma is treated as a
+     * thousands separator only when it forms complete groups ("1,234,567.89").
+     * Anything else — notably a decimal comma like {@code 1,5} in a semicolon-delimited
+     * European file — is rejected as NaN rather than silently misread ({@code 1,5} must
+     * never become 15).
+     *
+     * <p>Package-private for testing. Returns a primitive: missing or unparseable
+     * values are {@link Double#NaN}.</p>
      */
-    private static Double parseNumericValue(String valueString) {
+    static double parseNumericValue(String valueString) {
         if (valueString == null || isMissingValue(valueString)) {
             return Double.NaN;
         }
 
-        // Handle common numeric formats
-        String cleaned = valueString.replace(",", "").replace(" ", "");
+        String cleaned = valueString.replace(" ", "");
+        if (cleaned.indexOf(',') >= 0) {
+            if (!THOUSANDS_GROUPED_PATTERN.matcher(cleaned).matches()) {
+                return Double.NaN;
+            }
+            cleaned = cleaned.replace(",", "");
+        }
 
-        if (!NUMERIC_PATTERN.matcher(cleaned).matches()) {
+        if (!isPlainNumber(cleaned)) {
             return Double.NaN;
         }
 
@@ -586,6 +731,63 @@ public class TimeSeriesCsvImporter {
         } catch (NumberFormatException e) {
             return Double.NaN;
         }
+    }
+
+    /**
+     * Hand-rolled equivalent of the numeric-format regex
+     * {@code ^[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?$} — integers, decimals, and
+     * scientific notation. Called once per data cell, so it avoids the per-call
+     * {@code Matcher} machinery on the hot path. Notably (and deliberately, matching
+     * the regex) it rejects {@code Double.parseDouble}-isms like "Infinity", "NaN",
+     * hex floats, and trailing type suffixes ("1d").
+     *
+     * <p>Package-private for testing.</p>
+     */
+    static boolean isPlainNumber(String s) {
+        int n = s.length();
+        int i = 0;
+        if (i < n && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+            i++;
+        }
+        // Mantissa: optional digits, optional single dot, then required digits.
+        int intDigits = 0;
+        while (i < n && isAsciiDigit(s.charAt(i))) {
+            i++;
+            intDigits++;
+        }
+        if (i < n && s.charAt(i) == '.') {
+            i++;
+            int fracDigits = 0;
+            while (i < n && isAsciiDigit(s.charAt(i))) {
+                i++;
+                fracDigits++;
+            }
+            if (fracDigits == 0) {
+                return false;   // "1." / "." — digits required after the dot
+            }
+        } else if (intDigits == 0) {
+            return false;       // no digits at all (or bare sign)
+        }
+        // Optional exponent: e/E, optional sign, required digits.
+        if (i < n && (s.charAt(i) == 'e' || s.charAt(i) == 'E')) {
+            i++;
+            if (i < n && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+                i++;
+            }
+            int expDigits = 0;
+            while (i < n && isAsciiDigit(s.charAt(i))) {
+                i++;
+                expDigits++;
+            }
+            if (expDigits == 0) {
+                return false;
+            }
+        }
+        return i == n;
+    }
+
+    private static boolean isAsciiDigit(char c) {
+        return c >= '0' && c <= '9';
     }
 
     /**
