@@ -6,13 +6,20 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * Transforms time series data according to plot type.
  * Transformations are applied after aggregation but before Y-axis scaling.
+ *
+ * <p>All transforms work in primitive {@code long[]}/{@code double[]} space
+ * (per manifestos/performance.md): output series are built via the primitive
+ * {@link TimeSeriesData#TimeSeriesData(long[], double[])} constructor, and
+ * reference-series alignment uses a linear two-pointer merge over the sorted
+ * timestamp arrays (the same pattern as
+ * {@link com.kalix.ide.flowviz.stats.TimeSeriesMasker}) — no per-point boxing
+ * or hashing.</p>
  */
 public class PlotTypeTransformer {
     private static final Logger logger = LoggerFactory.getLogger(PlotTypeTransformer.class);
@@ -92,14 +99,7 @@ public class PlotTypeTransformer {
                 }
             }
 
-            // Create new series with cumulative values
-            LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
-            TimeSeriesData cumulativeSeries = new TimeSeriesData(
-                dateTimes,
-                cumulativeValues
-            );
-
-            result.addSeries(seriesKey, cumulativeSeries);
+            result.addSeries(seriesKey, new TimeSeriesData(timestamps, cumulativeValues));
         }
 
         return result;
@@ -126,22 +126,6 @@ public class PlotTypeTransformer {
             return new DataSet();
         }
 
-        // Build timestamp -> value map for reference series
-        long[] refTimestamps = referenceSeries.getTimestamps();
-        double[] refValues = referenceSeries.getValues();
-        boolean[] refValidPoints = referenceSeries.getValidPoints();
-
-        java.util.Map<Long, Double> referenceMap = new java.util.HashMap<>();
-        for (int i = 0; i < refTimestamps.length; i++) {
-            // Only add valid points; invalid points effectively don't exist in the map
-            if (refValidPoints[i]) {
-                referenceMap.put(refTimestamps[i], refValues[i]);
-            } else {
-                // Mark invalid with NaN
-                referenceMap.put(refTimestamps[i], Double.NaN);
-            }
-        }
-
         // Process each series
         for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
@@ -153,36 +137,22 @@ public class PlotTypeTransformer {
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
 
+            // Reference values aligned onto this series' timestamps (NaN where absent/invalid)
+            double[] alignedRef = alignReference(referenceSeries, timestamps);
+
             // Calculate differences
             double[] differences = new double[timestamps.length];
 
             for (int i = 0; i < timestamps.length; i++) {
-                long timestamp = timestamps[i];
-
-                // Check if reference has this timestamp
-                if (!referenceMap.containsKey(timestamp)) {
-                    differences[i] = Double.NaN;
-                    continue;
-                }
-
-                double refValue = referenceMap.get(timestamp);
-
-                // If either value is invalid, result is NaN
-                if (!validPoints[i] || Double.isNaN(refValue)) {
+                // If either value is missing or invalid, result is NaN
+                if (!validPoints[i] || Double.isNaN(alignedRef[i])) {
                     differences[i] = Double.NaN;
                 } else {
-                    differences[i] = values[i] - refValue;
+                    differences[i] = values[i] - alignedRef[i];
                 }
             }
 
-            // Create new series with difference values
-            LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
-            TimeSeriesData differenceSeries = new TimeSeriesData(
-                dateTimes,
-                differences
-            );
-
-            result.addSeries(seriesKey, differenceSeries);
+            result.addSeries(seriesKey, new TimeSeriesData(timestamps, differences));
         }
 
         return result;
@@ -209,20 +179,6 @@ public class PlotTypeTransformer {
             return new DataSet();
         }
 
-        // Build timestamp -> value map for reference series
-        long[] refTimestamps = referenceSeries.getTimestamps();
-        double[] refValues = referenceSeries.getValues();
-        boolean[] refValidPoints = referenceSeries.getValidPoints();
-
-        java.util.Map<Long, Double> referenceMap = new java.util.HashMap<>();
-        for (int i = 0; i < refTimestamps.length; i++) {
-            if (refValidPoints[i]) {
-                referenceMap.put(refTimestamps[i], refValues[i]);
-            } else {
-                referenceMap.put(refTimestamps[i], Double.NaN);
-            }
-        }
-
         // Process each series
         for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
@@ -234,39 +190,24 @@ public class PlotTypeTransformer {
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
 
+            // Reference values aligned onto this series' timestamps (NaN where absent/invalid)
+            double[] alignedRef = alignReference(referenceSeries, timestamps);
+
             // Calculate cumulative differences
             double[] cumulativeDifferences = new double[timestamps.length];
             double runningTotal = 0.0;
 
             for (int i = 0; i < timestamps.length; i++) {
-                long timestamp = timestamps[i];
-
-                // Check if reference has this timestamp
-                if (!referenceMap.containsKey(timestamp)) {
-                    cumulativeDifferences[i] = Double.NaN;
-                    continue;
-                }
-
-                double refValue = referenceMap.get(timestamp);
-
-                // If either value is invalid, result is NaN (but don't update running total)
-                if (!validPoints[i] || Double.isNaN(refValue)) {
+                // If either value is missing or invalid, result is NaN (but don't update running total)
+                if (!validPoints[i] || Double.isNaN(alignedRef[i])) {
                     cumulativeDifferences[i] = Double.NaN;
                 } else {
-                    double difference = values[i] - refValue;
-                    runningTotal += difference;
+                    runningTotal += values[i] - alignedRef[i];
                     cumulativeDifferences[i] = runningTotal;
                 }
             }
 
-            // Create new series with cumulative difference values
-            LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
-            TimeSeriesData cumulativeDifferenceSeries = new TimeSeriesData(
-                dateTimes,
-                cumulativeDifferences
-            );
-
-            result.addSeries(seriesKey, cumulativeDifferenceSeries);
+            result.addSeries(seriesKey, new TimeSeriesData(timestamps, cumulativeDifferences));
         }
 
         return result;
@@ -278,7 +219,9 @@ public class PlotTypeTransformer {
      * Exceedance probability is calculated using the Cunnane formula with alpha=0.4:
      *   p = (rank - 0.4) / (n + 0.2) * 100%
      *
-     * Values are sorted from largest to smallest (NaN values at bottom).
+     * Values are sorted from largest to smallest. Invalid (missing) points are dropped
+     * entirely — they carry no information on this plot type, and keeping them would
+     * push the plot's X-bounds past 100%.
      * Plotting positions are stored as "fake timestamps" (percentile * 1,000,000) for rendering.
      * Each series is independent.
      */
@@ -294,79 +237,41 @@ public class PlotTypeTransformer {
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
 
-            // Count valid (non-NaN) points
+            // Gather the valid values (invalid points are dropped from the output)
             int validCount = 0;
             for (boolean valid : validPoints) {
                 if (valid) validCount++;
             }
 
-            // Create array of indices for sorting
-            Integer[] indices = new Integer[values.length];
+            double[] sortedValues = new double[validCount];
+            int k = 0;
             for (int i = 0; i < values.length; i++) {
-                indices[i] = i;
-            }
-
-            // Sort indices by values (largest first), NaN at bottom
-            java.util.Arrays.sort(indices, (a, b) -> {
-                double valueA = values[a];
-                double valueB = values[b];
-
-                // NaN sorting: NaN values go to the end
-                boolean nanA = Double.isNaN(valueA);
-                boolean nanB = Double.isNaN(valueB);
-
-                if (nanA && nanB) return 0;
-                if (nanA) return 1;  // A is NaN, goes after B
-                if (nanB) return -1; // B is NaN, A goes before B
-
-                // Both valid: sort descending (largest first)
-                return Double.compare(valueB, valueA);
-            });
-
-            // Build sorted values and calculate Cunnane plotting positions
-            double[] sortedValues = new double[values.length];
-            long[] percentileTimestamps = new long[values.length];
-
-            int rank = 1; // 1-based ranking for Cunnane formula
-            for (int i = 0; i < values.length; i++) {
-                sortedValues[i] = values[indices[i]];
-
-                if (!Double.isNaN(sortedValues[i])) {
-                    // Cunnane formula: p = (rank - 0.4) / (n + 0.2)
-                    double percentile = ((rank - 0.4) / (validCount + 0.2)) * 100.0;
-                    rank++;
-
-                    // Store as fake timestamp (multiply by 1,000,000)
-                    percentileTimestamps[i] = (long)(percentile * 1_000_000);
-                } else {
-                    // NaN values: assign percentile beyond 100%
-                    percentileTimestamps[i] = 101_000_000 + i;
+                if (validPoints[i]) {
+                    sortedValues[k++] = values[i];
                 }
             }
 
-            // Create new series with sorted values and percentile timestamps
-            LocalDateTime[] dateTimes = timestampsToDateTimes(percentileTimestamps);
-            TimeSeriesData exceedanceSeries = new TimeSeriesData(
-                dateTimes,
-                sortedValues
-            );
+            // Primitive ascending sort, then read out descending (largest first)
+            Arrays.sort(sortedValues);
 
-            result.addSeries(seriesKey, exceedanceSeries);
+            double[] exceedanceValues = new double[validCount];
+            long[] percentileTimestamps = new long[validCount];
+
+            for (int rank = 1; rank <= validCount; rank++) {
+                // Cunnane formula: p = (rank - 0.4) / (n + 0.2)
+                double percentile = ((rank - 0.4) / (validCount + 0.2)) * 100.0;
+
+                // Store as fake timestamp (multiply by 1,000,000)
+                percentileTimestamps[rank - 1] = (long) (percentile * 1_000_000);
+                exceedanceValues[rank - 1] = sortedValues[validCount - rank];
+            }
+
+            result.addSeries(seriesKey, new TimeSeriesData(percentileTimestamps, exceedanceValues));
         }
 
         return result;
     }
 
-    /**
-     * Transforms to double mass curve: cumulative reference values on X-axis,
-     * cumulative series values on Y-axis.
-     *
-     * For each series, only timestamps where both the reference and the series have valid
-     * data are included. Cumulative sums are computed over these common valid points only.
-     * Reference cumulative values are encoded as fake timestamps (value * NUMERIC_SCALE).
-     *
-     * The reference series itself is included as a 1:1 line (cumRef vs cumRef).
-     */
     /**
      * Transforms each series to residual mass: cumulative deviation from mean over time.
      * Equivalent to cumsum(value - mean) for valid points. NaN values produce NaN output
@@ -414,18 +319,22 @@ public class PlotTypeTransformer {
                 }
             }
 
-            LocalDateTime[] dateTimes = timestampsToDateTimes(timestamps);
-            TimeSeriesData residualSeries = new TimeSeriesData(
-                dateTimes,
-                residualMass
-            );
-
-            result.addSeries(seriesKey, residualSeries);
+            result.addSeries(seriesKey, new TimeSeriesData(timestamps, residualMass));
         }
 
         return result;
     }
 
+    /**
+     * Transforms to double mass curve: cumulative reference values on X-axis,
+     * cumulative series values on Y-axis.
+     *
+     * For each series, only timestamps where both the reference and the series have valid
+     * data are included. Cumulative sums are computed over these common valid points only.
+     * Reference cumulative values are encoded as fake timestamps (value * NUMERIC_SCALE).
+     *
+     * The reference series itself is included as a 1:1 line (cumRef vs cumRef).
+     */
     private static DataSet transformDoubleMass(DataSet input, List<SeriesRef> selectedSeriesKeys) {
         if (selectedSeriesKeys.isEmpty()) {
             return new DataSet();
@@ -441,18 +350,6 @@ public class PlotTypeTransformer {
             return new DataSet();
         }
 
-        // Build timestamp -> value map for reference series (valid points only)
-        long[] refTimestamps = referenceSeries.getTimestamps();
-        double[] refValues = referenceSeries.getValues();
-        boolean[] refValidPoints = referenceSeries.getValidPoints();
-
-        java.util.Map<Long, Double> referenceMap = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < refTimestamps.length; i++) {
-            if (refValidPoints[i]) {
-                referenceMap.put(refTimestamps[i], refValues[i]);
-            }
-        }
-
         // Process each series
         for (SeriesRef seriesKey : selectedSeriesKeys) {
             TimeSeriesData series = input.getSeries(seriesKey);
@@ -464,39 +361,37 @@ public class PlotTypeTransformer {
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
 
-            // Collect indices where both reference and this series have valid data
-            java.util.List<Integer> commonIndices = new java.util.ArrayList<>();
+            // Reference values aligned onto this series' timestamps (NaN where absent/invalid)
+            double[] alignedRef = alignReference(referenceSeries, timestamps);
+
+            // Build cumulative sums over the points where both series are valid,
+            // writing into full-size buffers and trimming once at the end.
+            double[] cumulativeY = new double[timestamps.length];
+            long[] fakeTimestamps = new long[timestamps.length];
+            double cumRef = 0.0;
+            double cumSeries = 0.0;
+            int n = 0;
+
             for (int i = 0; i < timestamps.length; i++) {
-                if (validPoints[i] && referenceMap.containsKey(timestamps[i])) {
-                    commonIndices.add(i);
+                if (!validPoints[i] || Double.isNaN(alignedRef[i])) {
+                    continue;
                 }
+                cumRef += alignedRef[i];
+                cumSeries += values[i];
+
+                fakeTimestamps[n] = (long) (cumRef * NUMERIC_SCALE);
+                cumulativeY[n] = cumSeries;
+                n++;
             }
 
-            if (commonIndices.isEmpty()) {
+            if (n == 0) {
                 continue;
             }
 
-            // Build cumulative sums over common valid points
-            int n = commonIndices.size();
-            double[] cumulativeY = new double[n];
-            long[] fakeTimestamps = new long[n];
-            double cumRef = 0.0;
-            double cumSeries = 0.0;
-
-            for (int j = 0; j < n; j++) {
-                int idx = commonIndices.get(j);
-                cumRef += referenceMap.get(timestamps[idx]);
-                cumSeries += values[idx];
-
-                fakeTimestamps[j] = (long) (cumRef * NUMERIC_SCALE);
-                cumulativeY[j] = cumSeries;
-            }
-
             // Create new series with fake timestamps encoding cumulative reference on X
-            LocalDateTime[] dateTimes = timestampsToDateTimes(fakeTimestamps);
             TimeSeriesData doubleMassSeries = new TimeSeriesData(
-                dateTimes,
-                cumulativeY
+                n == timestamps.length ? fakeTimestamps : Arrays.copyOf(fakeTimestamps, n),
+                n == timestamps.length ? cumulativeY : Arrays.copyOf(cumulativeY, n)
             );
 
             result.addSeries(seriesKey, doubleMassSeries);
@@ -506,16 +401,37 @@ public class PlotTypeTransformer {
     }
 
     /**
-     * Utility: Converts timestamps array to LocalDateTime array.
+     * Aligns the reference series onto the given (sorted, ascending) timestamp grid using a
+     * linear two-pointer merge — the same house pattern as
+     * {@link com.kalix.ide.flowviz.stats.TimeSeriesMasker}. Entry {@code i} holds the
+     * reference value at {@code timestamps[i]}, or {@link Double#NaN} when the reference has
+     * no point (or no valid point) at that timestamp. Duplicate reference timestamps resolve
+     * to the last occurrence, matching the previous hash-map behaviour.
      */
-    private static LocalDateTime[] timestampsToDateTimes(long[] timestamps) {
-        LocalDateTime[] dateTimes = new LocalDateTime[timestamps.length];
+    private static double[] alignReference(TimeSeriesData reference, long[] timestamps) {
+        long[] refTimestamps = reference.getTimestamps();
+        double[] refValues = reference.getValues();
+        boolean[] refValidPoints = reference.getValidPoints();
+        int m = refTimestamps.length;
+
+        double[] aligned = new double[timestamps.length];
+        int j = 0;
         for (int i = 0; i < timestamps.length; i++) {
-            dateTimes[i] = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamps[i]),
-                ZoneOffset.UTC
-            );
+            long t = timestamps[i];
+            while (j < m && refTimestamps[j] < t) {
+                j++;
+            }
+            if (j < m && refTimestamps[j] == t) {
+                // Duplicate reference timestamps: last one wins
+                int last = j;
+                while (last + 1 < m && refTimestamps[last + 1] == t) {
+                    last++;
+                }
+                aligned[i] = refValidPoints[last] ? refValues[last] : Double.NaN;
+            } else {
+                aligned[i] = Double.NaN;
+            }
         }
-        return dateTimes;
+        return aligned;
     }
 }
