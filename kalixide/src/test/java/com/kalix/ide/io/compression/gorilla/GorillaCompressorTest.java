@@ -197,4 +197,60 @@ class GorillaCompressorTest {
         assertEquals(base64, compressor.compressDoubleBase64(series),
             "Java encoder diverged from Rust encoder for the fixture series");
     }
+
+    /**
+     * The primitive-array decode path must agree bit-for-bit with the List path:
+     * {@code decompressDouble}/{@code decompressFloat} are thin wrappers over it,
+     * and the array form is what the Pixie/STDIO hot paths consume.
+     */
+    @Test
+    void arrayDecodeMatchesListDecode() throws Exception {
+        // Double: the Rust-encoded cross-language fixture (same payload as
+        // decodesRustEncodedFixture), through both decode paths.
+        String base64 = "AAAAAAABUYAAAAAMAAAAAAAAAABAj0AAAAAAABIK4VK17mZmZmZmavwgAAAAFn9/Nbpujexc3/4AAAAAAAATAfgAehIEAz/9AQwEUSiOkA==";
+        GorillaCompressor compressor = new GorillaCompressor(TIMESTEP);
+        List<TimeValueDouble> viaList = compressor.decompressDoubleBase64(base64);
+        GorillaCompressor.DoubleArraySeries viaArrays = compressor.decompressDoubleArraysBase64(base64);
+
+        assertEquals(viaList.size(), viaArrays.size(), "double size mismatch");
+        for (int i = 0; i < viaList.size(); i++) {
+            assertEquals(viaList.get(i).timestamp, viaArrays.timestamps[i],
+                "double timestamp mismatch at index " + i);
+            assertEquals(Double.doubleToRawLongBits(viaList.get(i).value),
+                Double.doubleToRawLongBits(viaArrays.values[i]),
+                "double value bits mismatch at index " + i);
+        }
+
+        // Float: encode a varying series (repeats, XOR windows, full fallbacks)
+        // and compare both decode paths against the original bits.
+        List<GorillaCompressor.TimeValueFloat> floatSeries = new ArrayList<>();
+        for (int i = 0; i < 2000; i++) {
+            floatSeries.add(new GorillaCompressor.TimeValueFloat(
+                3600L * i, 50.0f + 30.0f * (float) Math.sin(i * 0.1)));
+        }
+        GorillaCompressor floatCompressor = new GorillaCompressor(3600L);
+        byte[] compressed = floatCompressor.compressFloat(floatSeries);
+        List<GorillaCompressor.TimeValueFloat> floatViaList = floatCompressor.decompressFloat(compressed);
+        GorillaCompressor.FloatArraySeries floatViaArrays = floatCompressor.decompressFloatArrays(compressed);
+
+        assertEquals(floatSeries.size(), floatViaArrays.size(), "float size mismatch");
+        for (int i = 0; i < floatSeries.size(); i++) {
+            assertEquals(floatViaList.get(i).timestamp, floatViaArrays.timestamps[i],
+                "float timestamp mismatch at index " + i);
+            assertEquals(Float.floatToRawIntBits(floatSeries.get(i).value),
+                Float.floatToRawIntBits(floatViaArrays.values[i]),
+                "float value bits mismatch at index " + i);
+            assertEquals(Float.floatToRawIntBits(floatViaList.get(i).value),
+                Float.floatToRawIntBits(floatViaArrays.values[i]),
+                "float list/array decode divergence at index " + i);
+        }
+    }
+
+    /** Empty input decodes to empty arrays, mirroring the empty-List behaviour. */
+    @Test
+    void arrayDecodeOfEmptyInputIsEmpty() throws Exception {
+        GorillaCompressor compressor = new GorillaCompressor(TIMESTEP);
+        assertEquals(0, compressor.decompressDoubleArrays(new byte[0]).size());
+        assertEquals(0, compressor.decompressFloatArrays(new byte[0]).size());
+    }
 }

@@ -207,44 +207,47 @@ public class PixieReader {
         byte[] compressedData = new byte[(int) dataLength];
         binaryFile.readFully(compressedData);
 
-        // Decompress based on codec
-        List<GorillaCompressor.TimeValueDouble> gorillaData;
+        // Decompress based on codec, via the codec's primitive-array path
+        // (no per-point TimeValue objects for multi-million-point series).
+        long[] timestampsSec;
+        double[] values;
         long timestepSeconds = meta.timestep; // Already in seconds
 
         switch (codec) {
-            case CODEC_GORILLA_DOUBLE:
+            case CODEC_GORILLA_DOUBLE: {
                 GorillaCompressor compressor = new GorillaCompressor(timestepSeconds);
-                gorillaData = compressor.decompressDouble(compressedData);
+                GorillaCompressor.DoubleArraySeries series = compressor.decompressDoubleArrays(compressedData);
+                timestampsSec = series.timestamps;
+                values = series.values;
                 break;
-            case CODEC_GORILLA_FLOAT:
-                // For now, convert float to double
+            }
+            case CODEC_GORILLA_FLOAT: {
+                // For now, widen float to double
                 GorillaCompressor floatCompressor = new GorillaCompressor(timestepSeconds);
-                List<GorillaCompressor.TimeValueFloat> floatData = floatCompressor.decompressFloat(compressedData);
-                gorillaData = new ArrayList<>();
-                for (GorillaCompressor.TimeValueFloat point : floatData) {
-                    gorillaData.add(new GorillaCompressor.TimeValueDouble(point.timestamp, point.value));
+                GorillaCompressor.FloatArraySeries series = floatCompressor.decompressFloatArrays(compressedData);
+                timestampsSec = series.timestamps;
+                values = new double[series.size()];
+                for (int i = 0; i < values.length; i++) {
+                    values[i] = series.values[i];
                 }
                 break;
+            }
             default:
                 throw new IOException("Unsupported codec: " + codec);
         }
 
         // Convert to TimeSeriesData
-        return convertToTimeSeriesData(gorillaData);
+        return convertToTimeSeriesData(timestampsSec, values);
     }
 
-    private TimeSeriesData convertToTimeSeriesData(List<GorillaCompressor.TimeValueDouble> gorillaData) {
-        long[] timestampsMs = new long[gorillaData.size()];
-        double[] values = new double[gorillaData.size()];
-
-        for (int i = 0; i < gorillaData.size(); i++) {
-            GorillaCompressor.TimeValueDouble point = gorillaData.get(i);
-            // Pixie stream carries epoch seconds; TimeSeriesData holds epoch millis.
-            timestampsMs[i] = point.timestamp * 1000L;
-            values[i] = point.value;
+    private TimeSeriesData convertToTimeSeriesData(long[] timestampsSec, double[] values) {
+        // Pixie stream carries epoch seconds; TimeSeriesData holds epoch millis.
+        // The decoder handed us these arrays, so convert in place.
+        for (int i = 0; i < timestampsSec.length; i++) {
+            timestampsSec[i] *= 1000L;
         }
 
-        return new TimeSeriesData(timestampsMs, values);
+        return new TimeSeriesData(timestampsSec, values);
     }
 
     private int readUInt16(RandomAccessFile file) throws IOException {
