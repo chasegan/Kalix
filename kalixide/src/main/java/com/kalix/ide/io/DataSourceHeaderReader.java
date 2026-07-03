@@ -26,10 +26,12 @@ public interface DataSourceHeaderReader {
     List<String> readSeriesNames(File file) throws IOException;
 
     /**
-     * Cleanses a name (file name or column name) for use as a data reference.
-     * Trims whitespace and replaces all non-alphanumeric characters with underscores.
+     * Cleanses a name (file name or column name) into the engine's {@code data.*}
+     * reference form. Trims whitespace (as the engine's CSV reader does for
+     * headers, {@code src/io/csv_io.rs}) and then applies the engine's
+     * sanitisation rule via {@link com.kalix.ide.utils.EngineNames#sanitize}.
      */
     static String cleanseName(String name) {
-        return name.trim().replaceAll("[^a-zA-Z0-9]", "_");
+        return com.kalix.ide.utils.EngineNames.sanitize(name.trim());
     }
 }

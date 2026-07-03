@@ -1,6 +1,7 @@
 package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,8 +144,8 @@ public class CommandExecutor {
             // Apply all replacements as a single atomic undo operation
             replacementApplier.accept(lineReplacements);
 
-            String oldFileSanitised = sanitiseFileName(oldPath);
-            String newFileSanitised = sanitiseFileName(newPath);
+            String oldFileSanitised = EngineNames.sanitizeFileName(oldPath);
+            String newFileSanitised = EngineNames.sanitizeFileName(newPath);
             logger.info("Renamed input file '{}' to '{}' (alias: {} -> {}, {} references updated)",
                 oldPath, newPath, oldFileSanitised, newFileSanitised, replacements.size());
             return true;
@@ -204,8 +205,8 @@ public class CommandExecutor {
             // Apply all replacements as a single atomic undo operation
             replacementApplier.accept(lineReplacements);
 
-            String oldAliasSanitised = sanitiseFileName(oldAlias);
-            String newAliasSanitised = sanitiseFileName(newAlias);
+            String oldAliasSanitised = EngineNames.sanitize(oldAlias);
+            String newAliasSanitised = EngineNames.sanitize(newAlias);
             logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
                     oldAlias, newAlias, oldAliasSanitised, newAliasSanitised, replacements.size());
             return true;
@@ -236,7 +237,10 @@ public class CommandExecutor {
                 return false;
             }
 
-            newAlias = sanitiseFileName(newAlias.trim());
+            // Aliases are sanitised with the engine's plain name rule (not the
+            // filename-derivation rule): the engine runs user aliases straight
+            // through sanitize_name (src/timeseries_input.rs).
+            newAlias = EngineNames.sanitize(newAlias.trim());
 
             // Check if new path already exists
             if (parsedModel.getInputFileAliases().containsKey(newAlias)) {
@@ -265,8 +269,8 @@ public class CommandExecutor {
             // Apply all replacements as a single atomic undo operation
             replacementApplier.accept(lineReplacements);
 
-            String oldAliasSanitised = sanitiseFileName(oldPath);
-            String newAliasSanitised = sanitiseFileName(newAlias);
+            String oldAliasSanitised = EngineNames.sanitizeFileName(oldPath);
+            String newAliasSanitised = EngineNames.sanitize(newAlias);
             logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
                     oldPath, newAlias, oldAliasSanitised, newAliasSanitised, replacements.size());
             return true;
@@ -369,8 +373,8 @@ public class CommandExecutor {
     private List<TextReplacement> findInputFileReferences(String oldPath, String newPath,
                                                           INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
-        String oldPathSanitised = sanitiseFileName(oldPath);
-        String newPathSanitised = sanitiseFileName(newPath);
+        String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
+        String newPathSanitised = EngineNames.sanitizeFileName(newPath);
 
         // 1. Replace the input file path in [inputs] section
         Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
@@ -432,8 +436,8 @@ public class CommandExecutor {
     private List<TextReplacement> findInputFileReferencesAddAlias(String oldPath, String newAlias,
                                                                   INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
-        String oldPathSanitised = sanitiseFileName(oldPath);
-        String newPathSanitised = sanitiseFileName(newAlias);
+        String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
+        String newPathSanitised = EngineNames.sanitize(newAlias);
 
         // 1. Replace the input file path in [inputs] section with alias = path format
         Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
@@ -496,8 +500,8 @@ public class CommandExecutor {
     private List<TextReplacement> findInputFileAliasReferences(String oldAlias, String newAlias,
                                                           INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
-        String oldAliasSanitised = sanitiseFileName(oldAlias);
-        String newAliasSanitised = sanitiseFileName(newAlias);
+        String oldAliasSanitised = EngineNames.sanitize(oldAlias);
+        String newAliasSanitised = EngineNames.sanitize(newAlias);
 
         // 1. Replace the input file path in [inputs] section
         Integer inputLineNumber = parsedModel.getInputFileAliasLineNumbers().get(oldAlias);
@@ -647,23 +651,6 @@ public class CommandExecutor {
                 JOptionPane.ERROR_MESSAGE
             );
         });
-    }
-
-    /**
-     * Converts a file path to an alias used in data references.
-     * Mirrors the Rust sanitize_name() logic in misc_functions.rs.
-     * <p>
-     * Example: /data/patterns.csv -> patterns_csv
-     * Example: ^/inputs/my.data.csv -> my_data_csv
-     *
-     * @param filePath The file path (can be absolute, relative, or trailhead path)
-     * @return The sanitized alias name
-     */
-    private static String sanitiseFileName(String filePath) {
-        // Extract filename from path
-        java.nio.file.Path path = java.nio.file.Paths.get(filePath);
-        String filename = path.getFileName().toString();
-        return filename.replaceAll("[^a-z0-9_]", "_").toLowerCase();
     }
 
     /**
