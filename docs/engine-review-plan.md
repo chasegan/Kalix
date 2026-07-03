@@ -20,7 +20,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 6 | DataCache: capacity prealloc, single-write recording, first-step read validation | **Done** (perf/datacache) |
 | 7 | Remove per-point timestamps (regular grids assumed platform-wide) | **Done** (perf/remove-timestamps) |
 | 8 | DynamicInput: allocation-free, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | **Done** (perf/dynamic-input) |
-| 9 | Small hot-loop items (Cell-based sim context, hoisted catch_unwind, node config hoists) | Pending |
+| 9 | Small hot-loop items (Cell context, hoisted catch_unwind, dead-flag deletion) | **Done** (perf/hot-loop-small) — measured flat; kept only the simplifications |
 | 10 | Optimiser: reuse workers across generations; slim Model clone | Pending |
 | 11 | Optimiser: precompute per-eval invariants; split reset from topology build | Pending |
 | 12 | CSV fast read/write (single date parse, reused record, fast-float, buffered writes) | Pending |
@@ -281,6 +281,31 @@ Outputs verified bit-identical to the pre-change binary on three speed
 models; 319 unit tests and 28/28 regression models pass. The step-6
 complexity back-out criterion (if flat, simplify) was not triggered: the
 numbers are decisively non-flat.
+
+## Step 9 record — small hot-loop items (done 2026-07-03)
+
+Measured outcome: FLAT — all four speed tests within noise of the step-7
+baseline. Per the standing rule (complexity must pay), only the changes that
+*reduce* complexity were kept:
+
+- Simulation context: `RefCell<SimulationContext>` replaced by two plain
+  `Cell`s (phase, node index). A Cell store is a branchless write with
+  nothing to poison; the struct and its borrow machinery are deleted
+  (net -20 lines). Speed-neutral in practice — kept as a simplification.
+- `catch_unwind` hoisted from per-timestep to around the whole loop: one
+  landing pad instead of one per step; error reporting identical (context is
+  thread-local, current_timestamp survives the unwind). Line-neutral,
+  semantically simpler.
+- SacramentoNode's `recording_obscure_things` micro-optimisation deleted —
+  its own TODO suspected it was unmeasurable; it was.
+- BACKED OUT: UnregulatedUserNode feature-flag bools (has_flow_threshold
+  etc.) — added state that must stay in sync with the DynamicInputs, for no
+  measured gain. Reverted per the back-out rule.
+
+Conclusion recorded for future readers: at current model scales the per-node
+per-step scaffolding (context writes, panic machinery, enum-discriminant
+branches) is not where time lives. The remaining big-ticket items are the
+optimiser loop (steps 10-11) and IO (step 12).
 
 ## Review findings not yet scheduled (context for steps)
 
