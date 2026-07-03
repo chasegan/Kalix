@@ -382,15 +382,18 @@ public class OptimisationProgressManager {
             return;
         }
 
+        // Only the newest point matters here; the old code materialised two full
+        // copy-lists per progress tick just to read their last elements.
+        OptimisationResult.ConvergencePoint last = result.lastConvergencePoint();
+
         // Update best objective label
-        if (!result.getConvergenceBestObjective().isEmpty()) {
-            double bestValue = result.getConvergenceBestObjective().get(result.getConvergenceBestObjective().size() - 1);
-            bestObjectiveLabel.setText(String.format("Best: %.6f", bestValue));
+        if (last != null) {
+            bestObjectiveLabel.setText(String.format("Best: %.6f", last.getBestObjective()));
         }
 
         // Update evaluation progress label
-        if (!result.getConvergenceEvaluations().isEmpty()) {
-            int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
+        if (last != null) {
+            int currentEval = last.getEvaluation();
 
             // Display count with percentage from backend if available
             String progressText;

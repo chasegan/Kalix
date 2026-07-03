@@ -127,6 +127,14 @@ public class OptimisationResult {
         return new ArrayList<>(convergenceHistory);
     }
 
+    /**
+     * The most recent convergence point, or null. O(1) and copy-free - the label
+     * updaters run on every progress tick and only ever need the tail.
+     */
+    public ConvergencePoint lastConvergencePoint() {
+        return convergenceHistory.isEmpty() ? null : convergenceHistory.get(convergenceHistory.size() - 1);
+    }
+
     public void addConvergencePoint(int evaluation, double bestObjective, List<Double> populationValues) {
         convergenceHistory.add(new ConvergencePoint(evaluation, bestObjective, populationValues));
     }

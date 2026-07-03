@@ -120,7 +120,7 @@ public class TimeSeriesRenderer {
                 drawLineOrphans(g2d, series, viewport, strategy.indexRange, gapThreshold, style);
             }
         } else {
-            renderLOD(g2d, series, viewport, strategy.lodData, style, connectAcrossGaps);
+            renderLOD(g2d, series, viewport, strategy.lodData, style, renderMode, connectAcrossGaps);
 
             // Band mode: an isolated live pixel column (dead on both sides) draws nothing, so the
             // orphan marker is the only way to surface it. LOD never draws per-point markers.
@@ -349,8 +349,14 @@ public class TimeSeriesRenderer {
         return code;
     }
     
+    /** Fixed stroke for the vertical range connectors - a band-fill aid, not the line. */
+    private static final BasicStroke LOD_CONNECTOR_STROKE = new BasicStroke(0.5f);
+    /** Stroke for per-column range bars when a scatter (POINTS) series exceeds LOD density. */
+    private static final BasicStroke LOD_POINTS_BAR_STROKE = new BasicStroke(1.0f);
+
     private void renderLOD(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
-                          LODManager.LODData lodData, LineStyle style, boolean connectAcrossGaps) {
+                          LODManager.LODData lodData, LineStyle style,
+                          SeriesRenderMode renderMode, boolean connectAcrossGaps) {
         double[][] minMaxBands = lodData.minMaxBands;
         boolean[] hasValidData = lodData.hasValidData;
 
@@ -359,6 +365,11 @@ public class TimeSeriesRenderer {
         int clipRight = viewport.getPlotX() + viewport.getPlotWidth();
         int clipTop = viewport.getPlotY();
         int clipBottom = viewport.getPlotY() + viewport.getPlotHeight();
+
+        // A scatter (POINTS) series must not sprout connected envelope lines above the
+        // LOD threshold - that would redraw a point cloud as two joined outlines,
+        // misrepresenting the data. It gets only the per-column range bars below.
+        boolean drawEnvelope = renderMode != SeriesRenderMode.POINTS;
 
         // The min/max outlines are the series' line, so they take its custom stroke
         // (thickness + dash). The vertical connectors below keep their own fixed
@@ -419,12 +430,18 @@ public class TimeSeriesRenderer {
             }
         }
 
-        // Draw the envelope paths
-        g2d.draw(upperPath);
-        g2d.draw(lowerPath);
+        // Draw the envelope paths (skipped for scatter series)
+        if (drawEnvelope) {
+            g2d.draw(upperPath);
+            g2d.draw(lowerPath);
+        }
 
-        // Second pass: draw vertical connectors only where there's significant range
-        g2d.setStroke(new BasicStroke(1.0f));
+        // Second pass: vertical range bars. For line series these are connectors drawn
+        // only where the column's range is visually significant; for scatter series
+        // they are the sole representation, so every live column draws (a 1px mark
+        // when the column's range rounds to nothing). One stroke set per pass - the
+        // old per-column stroke allocation cost two BasicStrokes per pixel column.
+        g2d.setStroke(drawEnvelope ? LOD_CONNECTOR_STROKE : LOD_POINTS_BAR_STROKE);
 
         for (int pixelX = 0; pixelX < lodData.pixelWidth; pixelX++) {
             if (!hasValidData[pixelX]) continue;
@@ -443,12 +460,8 @@ public class TimeSeriesRenderer {
                 minScreenY = Math.max(clipTop, Math.min(clipBottom, minScreenY));
                 maxScreenY = Math.max(clipTop, Math.min(clipBottom, maxScreenY));
 
-                // Only draw vertical connector if there's a significant range (more than 3 pixels)
-                if (Math.abs(maxScreenY - minScreenY) > 3) {
-                    // Draw thin vertical line to show full range
-                    g2d.setStroke(new BasicStroke(0.5f));
+                if (!drawEnvelope || Math.abs(maxScreenY - minScreenY) > 3) {
                     g2d.drawLine(screenX, minScreenY, screenX, maxScreenY);
-                    g2d.setStroke(new BasicStroke(1.0f));
                 }
             }
         }
@@ -570,5 +583,4 @@ public class TimeSeriesRenderer {
 
     // Cache management
     public void clearCache() { lodManager.clearCache(); }
-    public int getCacheSize() { return lodManager.getCacheSize(); }
 }
