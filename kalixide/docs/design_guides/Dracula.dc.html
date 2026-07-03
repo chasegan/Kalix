@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<!--
+  KALIX DARK THEME — DRACULA
+  Judgement notes (brief was silent → decisions made):
+  • Wall (#343746) sits a deliberate step ABOVE the content well (#282a36, the real
+    Dracula base) so chrome/content layer properly; titlebar (#21222c) is darkest.
+  • #6272a4 was overloaded (border+focus+selection+tooltip+gridline). Split: selection
+    uses Dracula's own #44475a tint; tooltip/titlebar go to #21222c; gridlines drop to
+    near-invisible; #6272a4 survives only as the comment/blackhole family colour.
+  • Node & plot palettes derived from Dracula's accent set, spread across lightness so
+    they read on the map bg and stay colour-blind-separable / print-safe.
+-->
+<style>
+  :root {
+    /* ---- Application chrome ---- */
+    --surface-default:#343746; --surface-content:#282a36; --surface-popup:#3c4055; --surface-titlebar:#21222c;
+    --text-primary:#d5d6e0; --text-content:#f8f8f2;
+    --selection-bg:#44475a; --selection-fg:#f8f8f2;
+    --focus-ring:#bd93f9; --accent:#bd93f9; --accent-hover:#caa9fa; --hover-bg:#3f4256;
+    --border:#44475a; --separator:#383b4c;
+    --scrollbar-track:#282a36; --scrollbar-thumb:#4c5066; --scrollbar-thumb-hover:#5e6280;
+    --tooltip-bg:#21222c; --tooltip-fg:#f8f8f2; --tab-selected-bg:#282a36;
+    /* ---- Editor & syntax ---- */
+    --editor-bg:#282a36; --editor-fg:#f8f8f2; --editor-selection:#44475a; --editor-current-line:#313442;
+    --syntax-section:#bd93f9; --syntax-identifier:#d5d6e0; --syntax-string:#f1fa8c;
+    --syntax-operator:#ff79c6; --syntax-comment:#7d8ac0; --syntax-whitespace:#3f4358;
+    /* ---- Schematic map ---- */
+    --map-bg:#2b2e3b; --map-gridline:#34384a; --map-node-label-text:#d5d6e0; --map-node-label-halo:#21222c;
+    --node-storage:#8be9fd; --node-inflow:#50fa7b; --node-gauge:#f1fa8c; --node-rr:#ffb86c; --node-routing:#bd93f9;
+    --node-splitter:#ff79c6; --node-user-regulated:#ff5555; --node-user-unregulated:#ffa07a; --node-blackhole:#6272a4; --node-order-control:#5fd7c0;
+    /* ---- Time-series plots ---- */
+    --plot-bg:#21222c; --plot-grid:#313442; --plot-axis:#5a5e73; --plot-label:#b8bad0;
+    --plot-series-1:#8be9fd; --plot-series-2:#ffb86c; --plot-series-3:#50fa7b; --plot-series-4:#ff6e6e; --plot-series-5:#bd93f9;
+    --plot-series-6:#f1fa8c; --plot-series-7:#ff92d0; --plot-series-8:#9aa5c4; --plot-series-9:#45b8c9; --plot-series-10:#d0a070;
+    --plot-legend-bg:#282a36; --plot-legend-border:#44475a; --plot-legend-fg:#d5d6e0;
+    --plot-hover-bg:#21222c; --plot-hover-fg:#f8f8f2; --plot-empty-fg:#6272a4;
+  }
+  html,body{margin:0;background:var(--surface-default);}
+</style>
+</helmet>
+<div style="background:var(--surface-default); min-height:100vh; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+  <div style="padding:22px 26px 0; display:flex; align-items:baseline; gap:14px;">
+    <div style="font:800 26px sans-serif; color:var(--accent);">Dracula</div>
+    <div style="font:13px sans-serif; color:var(--text-primary); opacity:.65;">KalixIDE dark theme · purple-accented</div>
+  </div>
+  <dc-import name="KalixThemeMock" hint-size="100%,900px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

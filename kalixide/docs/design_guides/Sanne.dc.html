@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<!--
+  KALIX DARK THEME — SANNE
+  Judgement notes (brief was silent → decisions made):
+  • Bold pink personality kept, but pink now earns its place: it is the ACCENT and the
+    SELECTION TINT (#5a3a4d, muted — not hot pink) only. Tooltip, titlebar and scrollbar
+    thumb are warm neutral plum-greys, NOT pink, so the accent reads as signal not noise.
+  • Warm plum-grey base (#2a2530 wall / #221e28 well) gives the pink somewhere calm to sit;
+    neutrals mixed warm to match, not copy-pasted.
+  • Node/plot palettes are varied hydrological hues (pink reserved to the regulated-user node
+    + chrome); lightness-spread for colour-blind separability and print.
+-->
+<style>
+  :root {
+    --surface-default:#2a2530; --surface-content:#221e28; --surface-popup:#322c39; --surface-titlebar:#1b1820;
+    --text-primary:#d7cdd3; --text-content:#f0e8ed;
+    --selection-bg:#5a3a4d; --selection-fg:#fbeef4;
+    --focus-ring:#f072a8; --accent:#f072a8; --accent-hover:#f68dbb; --hover-bg:#332c38;
+    --border:#423a48; --separator:#322b38;
+    --scrollbar-track:#221e28; --scrollbar-thumb:#473d4c; --scrollbar-thumb-hover:#5a4e60;
+    --tooltip-bg:#1b1820; --tooltip-fg:#f0e8ed; --tab-selected-bg:#221e28;
+    --editor-bg:#221e28; --editor-fg:#e4dbe1; --editor-selection:#5a3a4d; --editor-current-line:#2a2531;
+    --syntax-section:#f072a8; --syntax-identifier:#d7cdd3; --syntax-string:#d8b06a;
+    --syntax-operator:#6fc7c0; --syntax-comment:#94899a; --syntax-whitespace:#3a3342;
+    --map-bg:#241f2a; --map-gridline:#2e2834; --map-node-label-text:#d7cdd3; --map-node-label-halo:#16131a;
+    --node-storage:#5ab6d8; --node-inflow:#57c6b0; --node-gauge:#e2c26a; --node-rr:#91c072; --node-routing:#d59a68;
+    --node-splitter:#b28bea; --node-user-regulated:#f072a8; --node-user-unregulated:#f3a0c4; --node-blackhole:#918794; --node-order-control:#e2856b;
+    --plot-bg:#1b1820; --plot-grid:#2b2532; --plot-axis:#5b5262; --plot-label:#a99faf;
+    --plot-series-1:#5ab6d8; --plot-series-2:#d59a68; --plot-series-3:#91c072; --plot-series-4:#ec6a8f; --plot-series-5:#b28bea;
+    --plot-series-6:#e2c26a; --plot-series-7:#57c6b0; --plot-series-8:#9d93a6; --plot-series-9:#e2856b; --plot-series-10:#d98bc0;
+    --plot-legend-bg:#221e28; --plot-legend-border:#423a48; --plot-legend-fg:#d7cdd3;
+    --plot-hover-bg:#1b1820; --plot-hover-fg:#f0e8ed; --plot-empty-fg:#6f6577;
+  }
+  html,body{margin:0;background:var(--surface-default);}
+</style>
+</helmet>
+<div style="background:var(--surface-default); min-height:100vh; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+  <div style="padding:22px 26px 0; display:flex; align-items:baseline; gap:14px;">
+    <div style="font:800 26px sans-serif; color:var(--accent);">Sanne</div>
+    <div style="font:13px sans-serif; color:var(--text-primary); opacity:.65;">KalixIDE dark theme · pink-accented</div>
+  </div>
+  <dc-import name="KalixThemeMock" hint-size="100%,900px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<!--
+  KALIX DARK THEME — OBSIDIAN
+  Judgement notes (brief was silent → decisions made):
+  • Near-black stone base with a violet undertone (#1c1b22 wall / #16151b well); violet
+    #a78bfa kept as the CHROME accent (selection tint, focus, default button, syntax section).
+  • The shipped "ten shades of purple" node palette was unusable for type-at-a-glance — replaced
+    with a genuinely varied hydrological palette (water blues/teals, catchment green, earthy
+    routing, rose users, stone sink) while violet stays the app's signature only in chrome.
+  • Plot series mirror that varied palette, lightness-spread for colour-blind separability.
+-->
+<style>
+  :root {
+    --surface-default:#1c1b22; --surface-content:#16151b; --surface-popup:#24222c; --surface-titlebar:#121016;
+    --text-primary:#c9c5d4; --text-content:#e6e3ef;
+    --selection-bg:#3a3350; --selection-fg:#f0edf7;
+    --focus-ring:#a78bfa; --accent:#a78bfa; --accent-hover:#bda4fc; --hover-bg:#262330;
+    --border:#322e3d; --separator:#262230;
+    --scrollbar-track:#16151b; --scrollbar-thumb:#38334a; --scrollbar-thumb-hover:#4a4360;
+    --tooltip-bg:#121016; --tooltip-fg:#e6e3ef; --tab-selected-bg:#16151b;
+    --editor-bg:#16151b; --editor-fg:#d2cede; --editor-selection:#3a3350; --editor-current-line:#1e1c26;
+    --syntax-section:#a78bfa; --syntax-identifier:#c9c5d4; --syntax-string:#8fc9b9;
+    --syntax-operator:#d98bc9; --syntax-comment:#8b8499; --syntax-whitespace:#2e2a3a;
+    --map-bg:#191820; --map-gridline:#221f2b; --map-node-label-text:#cbc7d6; --map-node-label-halo:#100e15;
+    --node-storage:#5eb8e8; --node-inflow:#4fc9c0; --node-gauge:#e0c56b; --node-rr:#86c46a; --node-routing:#d79a5e;
+    --node-splitter:#a78bfa; --node-user-regulated:#e56d84; --node-user-unregulated:#ec9aa2; --node-blackhole:#8a8496; --node-order-control:#c58bd8;
+    --plot-bg:#131117; --plot-grid:#221f2b; --plot-axis:#524d63; --plot-label:#a29cb2;
+    --plot-series-1:#5eb8e8; --plot-series-2:#d79a5e; --plot-series-3:#86c46a; --plot-series-4:#e56d84; --plot-series-5:#a78bfa;
+    --plot-series-6:#e0c56b; --plot-series-7:#4fc9c0; --plot-series-8:#9992a6; --plot-series-9:#c58bd8; --plot-series-10:#cf9f7a;
+    --plot-legend-bg:#16151b; --plot-legend-border:#322e3d; --plot-legend-fg:#cbc7d6;
+    --plot-hover-bg:#131117; --plot-hover-fg:#e6e3ef; --plot-empty-fg:#6b6580;
+  }
+  html,body{margin:0;background:var(--surface-default);}
+</style>
+</helmet>
+<div style="background:var(--surface-default); min-height:100vh; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+  <div style="padding:22px 26px 0; display:flex; align-items:baseline; gap:14px;">
+    <div style="font:800 26px sans-serif; color:var(--accent);">Obsidian</div>
+    <div style="font:13px sans-serif; color:var(--text-primary); opacity:.65;">KalixIDE dark theme · purple &amp; stone</div>
+  </div>
+  <dc-import name="KalixThemeMock" hint-size="100%,900px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

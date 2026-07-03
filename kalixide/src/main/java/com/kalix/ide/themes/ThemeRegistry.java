@@ -26,7 +26,8 @@ public final class ThemeRegistry {
         theme("dracula", NodeTheme.Theme.DRACULA, SyntaxTheme.Theme.DRACULA),
         theme("one-dark", NodeTheme.Theme.ONE_DARK, SyntaxTheme.Theme.ONE_DARK),
         theme("obsidian", NodeTheme.Theme.OBSIDIAN, SyntaxTheme.Theme.OBSIDIAN),
-        theme("sanne", NodeTheme.Theme.SANNE, SyntaxTheme.Theme.SANNE)
+        theme("sanne", NodeTheme.Theme.SANNE, SyntaxTheme.Theme.SANNE),
+        theme("kalix-dark", NodeTheme.Theme.KALIX_DARK, SyntaxTheme.Theme.KALIX_DARK)
     );
 
     private static KalixTheme theme(String id, NodeTheme.Theme nodeTheme, SyntaxTheme.Theme syntaxTheme) {

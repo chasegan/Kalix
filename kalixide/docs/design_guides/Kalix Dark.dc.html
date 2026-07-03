@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<!--
+  KALIX DARK THEME — KALIX DARK (new flagship)
+  Judgement notes (no legacy identity → free design):
+  • The definitive dark theme for a serious hydrological IDE: a deep cool slate base
+    (#1a2027 wall / #141a20 well / #10151a plot) with ONE confident aqua accent (#3fb6c4) —
+    water as motif, restraint as the risk-control. Aqua is the only saturated chrome colour.
+  • Strict surface hierarchy: titlebar < plot < editor/content well < wall < popup.
+  • Node palette guided by hydrology (reservoir blue, inflow teal, gauge gold, catchment green,
+    earthy routing/loss, periwinkle splitter, rose/coral users, stone sink, violet ops) and
+    spread across lightness so all ten separate on the map and survive dichromacy + print.
+  • Syntax: aqua section headers (strongest), river-green values, warm-amber operators for a
+    calibrated pop against the cool field; comments pass AA, whitespace near-invisible.
+-->
+<style>
+  :root {
+    --surface-default:#1a2027; --surface-content:#141a20; --surface-popup:#212a33; --surface-titlebar:#10151a;
+    --text-primary:#c4ccd4; --text-content:#e6ecf1;
+    --selection-bg:#234b57; --selection-fg:#eaf6f8;
+    --focus-ring:#3fb6c4; --accent:#3fb6c4; --accent-hover:#57c9d6; --hover-bg:#222b33;
+    --border:#2b343d; --separator:#20272f;
+    --scrollbar-track:#141a20; --scrollbar-thumb:#313c46; --scrollbar-thumb-hover:#404d59;
+    --tooltip-bg:#10151a; --tooltip-fg:#e6ecf1; --tab-selected-bg:#141a20;
+    --editor-bg:#141a20; --editor-fg:#d3dae1; --editor-selection:#234b57; --editor-current-line:#1a2129;
+    --syntax-section:#4fc3d6; --syntax-identifier:#c4ccd4; --syntax-string:#7fbf8f;
+    --syntax-operator:#d9a566; --syntax-comment:#7f909c; --syntax-whitespace:#283039;
+    --map-bg:#172029; --map-gridline:#202b34; --map-node-label-text:#c4ccd4; --map-node-label-halo:#0d1217;
+    --node-storage:#3fa9d6; --node-inflow:#45c6bf; --node-gauge:#e0c168; --node-rr:#82c06a; --node-routing:#cf9a5e;
+    --node-splitter:#7f9ce0; --node-user-regulated:#e56d84; --node-user-unregulated:#ef9a86; --node-blackhole:#8a919b; --node-order-control:#b98be0;
+    --plot-bg:#10151a; --plot-grid:#1f2831; --plot-axis:#4e5b66; --plot-label:#9aa6b0;
+    --plot-series-1:#3fa9d6; --plot-series-2:#cf9a5e; --plot-series-3:#82c06a; --plot-series-4:#e56d84; --plot-series-5:#7f9ce0;
+    --plot-series-6:#e0c168; --plot-series-7:#45c6bf; --plot-series-8:#97a1ac; --plot-series-9:#b98be0; --plot-series-10:#ef9a86;
+    --plot-legend-bg:#141a20; --plot-legend-border:#2b343d; --plot-legend-fg:#c4ccd4;
+    --plot-hover-bg:#10151a; --plot-hover-fg:#e6ecf1; --plot-empty-fg:#5c6b76;
+  }
+  html,body{margin:0;background:var(--surface-default);}
+</style>
+</helmet>
+<div style="background:var(--surface-default); min-height:100vh; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+  <div style="padding:22px 26px 0; display:flex; align-items:baseline; gap:14px;">
+    <div style="font:800 26px sans-serif; color:var(--accent);">Kalix Dark</div>
+    <div style="font:13px sans-serif; color:var(--text-primary); opacity:.65;">KalixIDE flagship dark theme · aqua on deep slate</div>
+  </div>
+  <dc-import name="KalixThemeMock" hint-size="100%,900px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

@@ -33,6 +33,14 @@ a custom title bar by setting `TitlePane.background`.
 Resolution order for any key: theme file, then `defaults.properties`, then
 FlatLaf's `@baseTheme` base defaults.
 
+## Provenance of the dark palettes
+
+The dark themes (Dracula, One Dark, Obsidian, Sanne, Kalix Dark) are gleaned
+from commissioned designer mocks in `kalixide/docs/design_guides/` — one
+self-contained HTML per theme defining every colour as a role-named CSS custom
+property. Those files are the source of truth for the dark values here and for
+the matching `NodeTheme` / `SyntaxTheme` palettes; change them in step.
+
 ## Editing and adding themes
 
 - Edit a colour: change the value here; no Java required.

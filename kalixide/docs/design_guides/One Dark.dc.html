@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<!--
+  KALIX DARK THEME — ONE DARK
+  Judgement notes (brief was silent → decisions made):
+  • Real layering restored: wall #282c34 sits ABOVE content well #21252b (was near-identical);
+    titlebar #1b1e24 darkest, popup #2f343e lifts above the wall.
+  • Loud opaque selection #4d78cc replaced with a mid-saturation blue-grey TINT #3e4a5f that
+    keeps selected text at AA; accent blue #61afef reserved for actual accent controls.
+  • Hover/scrollbar greys re-mixed cool to match the blue-grey base (previous ones were warm
+    greys pasted in from Dracula). Grid/table lines dropped well below border weight.
+  • Node & plot palettes rebuilt from One Dark's multicolour set, spread across lightness.
+-->
+<style>
+  :root {
+    --surface-default:#282c34; --surface-content:#21252b; --surface-popup:#2f343e; --surface-titlebar:#1b1e24;
+    --text-primary:#abb2bf; --text-content:#d7dae0;
+    --selection-bg:#3e4a5f; --selection-fg:#eaeef3;
+    --focus-ring:#61afef; --accent:#61afef; --accent-hover:#7cc0f5; --hover-bg:#2f343e;
+    --border:#3a4048; --separator:#30353d;
+    --scrollbar-track:#21252b; --scrollbar-thumb:#3e4552; --scrollbar-thumb-hover:#4b5364;
+    --tooltip-bg:#1b1e24; --tooltip-fg:#d7dae0; --tab-selected-bg:#21252b;
+    --editor-bg:#21252b; --editor-fg:#abb2bf; --editor-selection:#3e4a5f; --editor-current-line:#262b33;
+    --syntax-section:#c678dd; --syntax-identifier:#c8cdd6; --syntax-string:#98c379;
+    --syntax-operator:#56b6c2; --syntax-comment:#7f8895; --syntax-whitespace:#3a4048;
+    --map-bg:#23272e; --map-gridline:#2c313a; --map-node-label-text:#c8cdd6; --map-node-label-halo:#16191e;
+    --node-storage:#61afef; --node-inflow:#56b6c2; --node-gauge:#e5c07b; --node-rr:#98c379; --node-routing:#d19a66;
+    --node-splitter:#c678dd; --node-user-regulated:#e06c75; --node-user-unregulated:#ef9aa0; --node-blackhole:#7f8896; --node-order-control:#4bb8a8;
+    --plot-bg:#1b1e24; --plot-grid:#2a2f38; --plot-axis:#565d6b; --plot-label:#9aa1ad;
+    --plot-series-1:#61afef; --plot-series-2:#d19a66; --plot-series-3:#98c379; --plot-series-4:#e06c75; --plot-series-5:#c678dd;
+    --plot-series-6:#e5c07b; --plot-series-7:#56b6c2; --plot-series-8:#98a0ae; --plot-series-9:#4bb8a8; --plot-series-10:#cf87b8;
+    --plot-legend-bg:#21252b; --plot-legend-border:#3a4048; --plot-legend-fg:#c8cdd6;
+    --plot-hover-bg:#1b1e24; --plot-hover-fg:#d7dae0; --plot-empty-fg:#5c6370;
+  }
+  html,body{margin:0;background:var(--surface-default);}
+</style>
+</helmet>
+<div style="background:var(--surface-default); min-height:100vh; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+  <div style="padding:22px 26px 0; display:flex; align-items:baseline; gap:14px;">
+    <div style="font:800 26px sans-serif; color:var(--accent);">One Dark</div>
+    <div style="font:13px sans-serif; color:var(--text-primary); opacity:.65;">KalixIDE dark theme · cool blue-grey, blue accent</div>
+  </div>
+  <dc-import name="KalixThemeMock" hint-size="100%,900px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

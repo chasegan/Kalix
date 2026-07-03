@@ -39,7 +39,7 @@ class ThemePropertiesSnapshotTest {
     /** The full expected id list — a registry edit must be a deliberate act here too. */
     private static final List<String> EXPECTED_THEME_IDS = List.of(
         "light", "keylime", "lapland", "nemo", "sunset-warmth",
-        "botanical", "dracula", "one-dark", "obsidian", "sanne");
+        "botanical", "dracula", "one-dark", "obsidian", "sanne", "kalix-dark");
 
     static Stream<KalixTheme> themes() {
         return ThemeRegistry.all().stream();
