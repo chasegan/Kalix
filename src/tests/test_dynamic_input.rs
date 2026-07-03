@@ -1441,3 +1441,100 @@ fn test_this_multiple_references() {
     assert_eq!(input.get_value(&data_cache), 30.0);
     assert_eq!(input.to_string(), "this.dsflow - this.usflow");
 }
+
+
+// ---------------------------------------------------------------------------
+// Tests for the lowered hot-path evaluator (2026-07): construction-time
+// validation, short-circuiting, and fold semantics. Each expression references
+// a data series so it stays a Function variant (constant-only expressions are
+// folded at parse time and never reach the optimised evaluator).
+// ---------------------------------------------------------------------------
+
+/// Build a cache with a single series "data.x" holding the given values.
+fn cache_with_x(values: &[f64]) -> DataCache {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800);
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+    let idx = data_cache.get_or_add_new_series("data.x", true);
+    let mut ts = Timeseries::new_daily();
+    ts.start_timestamp = start_timestamp;
+    for &v in values {
+        ts.push_value(v);
+    }
+    data_cache.series[idx] = ts;
+    data_cache.set_current_step(0);
+    data_cache
+}
+
+fn eval_x(expression: &str, x: f64) -> f64 {
+    let mut data_cache = cache_with_x(&[x]);
+    let input = DynamicInput::from_string(expression, &mut data_cache, true, None)
+        .unwrap_or_else(|e| panic!("'{}' failed to parse: {}", expression, e));
+    input.get_value(&data_cache)
+}
+
+/// Unknown function names must be rejected at model load, not at runtime.
+#[test]
+fn test_unknown_function_errors_at_load() {
+    let mut data_cache = cache_with_x(&[1.0]);
+    let result = DynamicInput::from_string("foo(data.x)", &mut data_cache, true, None);
+    let err = result.expect_err("unknown function should fail at load time");
+    assert!(err.contains("foo"), "error should name the function: {}", err);
+}
+
+/// Wrong argument counts must be rejected at model load.
+#[test]
+fn test_wrong_arity_errors_at_load() {
+    for bad in ["sqrt(data.x, 2)", "pow(data.x)", "if(data.x, 1)", "min(data.x)", "atan2(data.x)"] {
+        let mut data_cache = cache_with_x(&[1.0]);
+        let result = DynamicInput::from_string(bad, &mut data_cache, true, None);
+        assert!(result.is_err(), "'{}' should fail at load time", bad);
+    }
+}
+
+/// Lowered single- and two-argument built-ins produce the same values as before.
+#[test]
+fn test_lowered_builtin_values() {
+    assert_eq!(eval_x("sqrt(data.x)", 9.0), 3.0);
+    assert_eq!(eval_x("abs(data.x)", -4.5), 4.5);
+    assert_eq!(eval_x("pow(data.x, 2)", 5.0), 25.0);
+    assert_eq!(eval_x("floor(data.x)", 2.9), 2.0);
+    assert!((eval_x("atan2(data.x, 1)", 1.0) - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
+}
+
+/// Variadic min/max/sum/avg fold correctly (including with >2 args).
+#[test]
+fn test_fold_builtin_values() {
+    assert_eq!(eval_x("min(data.x, 3, 7)", 5.0), 3.0);
+    assert_eq!(eval_x("max(data.x, 3, 7)", 5.0), 7.0);
+    assert_eq!(eval_x("sum(data.x, 1, 2)", 5.0), 8.0);
+    assert_eq!(eval_x("avg(data.x, 3)", 5.0), 4.0);
+    // NaN handling matches f64::min/max (the non-NaN operand wins), as before.
+    assert_eq!(eval_x("min(data.x, 2)", f64::NAN), 2.0);
+}
+
+/// if() short-circuits: only the taken branch is evaluated. Division by zero in
+/// the untaken branch is irrelevant either way (IEEE semantics), but the values
+/// must match the old both-branches-evaluated behaviour exactly.
+#[test]
+fn test_if_values_and_truthiness() {
+    assert_eq!(eval_x("if(data.x > 3, 10, 20)", 5.0), 10.0);
+    assert_eq!(eval_x("if(data.x > 3, 10, 20)", 1.0), 20.0);
+    // NaN condition is truthy (NaN != 0.0), matching the pre-lowering builtin.
+    assert_eq!(eval_x("if(data.x, 1, 2)", f64::NAN), 1.0);
+    // Zero condition is false.
+    assert_eq!(eval_x("if(data.x, 1, 2)", 0.0), 2.0);
+}
+
+/// && and || short-circuit without changing their numeric results.
+#[test]
+fn test_and_or_values() {
+    assert_eq!(eval_x("data.x > 3 && data.x < 10", 5.0), 1.0);
+    assert_eq!(eval_x("data.x > 3 && data.x < 10", 2.0), 0.0);
+    assert_eq!(eval_x("data.x > 99 || data.x > 3", 5.0), 1.0);
+    assert_eq!(eval_x("data.x > 99 || data.x > 6", 5.0), 0.0);
+    // NaN operands are truthy, matching the non-short-circuit forms.
+    assert_eq!(eval_x("data.x && 1", f64::NAN), 1.0);
+    assert_eq!(eval_x("data.x || 0", f64::NAN), 1.0);
+}

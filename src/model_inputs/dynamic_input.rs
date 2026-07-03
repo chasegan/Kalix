@@ -10,7 +10,11 @@
 /// - `DirectReference`: Zero overhead (single array lookup)
 /// - `DirectConstantReference`: Zero overhead (single array lookup)
 /// - `Constant`: Zero overhead (returns stored value)
-/// - `Function`: Minimal overhead (direct array indexing + arithmetic, no HashMap lookups)
+/// - `Function`: Minimal overhead — a tree walk of pure arithmetic. Evaluation is
+///   infallible and allocation-free: unknown functions and wrong argument counts are
+///   rejected when the expression is parsed (at model load), `if`/`&&`/`||`
+///   short-circuit, and variadic min/max/sum/avg fold an accumulator instead of
+///   building an argument buffer.
 ///
 /// # Error Handling - IEEE 754 Standard
 ///
@@ -25,7 +29,8 @@
 use std::collections::HashMap;
 use crate::data_management::data_cache::DataCache;
 use crate::functions::{parse_function, EvaluationConfig, VariableContext};
-use crate::functions::ast::{ExpressionNode, evaluate_binary_op, evaluate_unary_op};
+use crate::functions::ast::{ExpressionNode, FunctionRef, evaluate_binary_op, evaluate_unary_op};
+use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
 use crate::model_inputs::linear_combination::detect_linear_combination;
 use crate::misc::misc_functions::format_f64;
@@ -133,14 +138,36 @@ pub enum OptimizedExpressionNode {
         operand: Box<OptimizedExpressionNode>,
     },
 
-    /// Function call with optimised arguments.
-    ///
-    /// The function reference was resolved at parse time (see
-    /// [`crate::functions::ast::FunctionRef`]) so evaluation dispatches via an enum
-    /// match — no string compare or HashMap lookup on the hot path.
-    FunctionCall {
-        func: crate::functions::ast::FunctionRef,
-        args: Vec<Box<OptimizedExpressionNode>>,
+    /// Single-argument built-in (abs, sqrt, sin, ..., round), lowered at
+    /// construction to a plain function pointer — no dispatch, no argument
+    /// buffer, no arity check on the hot path.
+    Func1 {
+        f: fn(f64) -> f64,
+        arg: Box<OptimizedExpressionNode>,
+    },
+
+    /// Two-argument built-in (pow, atan2), lowered to a function pointer.
+    Func2 {
+        f: fn(f64, f64) -> f64,
+        a: Box<OptimizedExpressionNode>,
+        b: Box<OptimizedExpressionNode>,
+    },
+
+    /// `if(cond, then, else)` — short-circuits: only the taken branch is
+    /// evaluated. Expressions are pure, so this cannot change results; it only
+    /// skips wasted work. The condition follows the same truthiness rule as
+    /// before (non-zero is true, including NaN).
+    If {
+        cond: Box<OptimizedExpressionNode>,
+        then_branch: Box<OptimizedExpressionNode>,
+        else_branch: Box<OptimizedExpressionNode>,
+    },
+
+    /// Variadic built-in (min, max, sum, avg) evaluated by folding an
+    /// accumulator over the children — no argument buffer is ever built.
+    Fold {
+        op: FoldOp,
+        args: Vec<OptimizedExpressionNode>,
     },
 
     /// Simulation context reference (sim.* namespace)
@@ -150,58 +177,92 @@ pub enum OptimizedExpressionNode {
     },
 }
 
+/// Accumulator operation for the variadic built-ins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoldOp {
+    Min,
+    Max,
+    Sum,
+    Avg,
+}
+
 impl OptimizedExpressionNode {
-    /// Evaluate the expression using direct data cache access
+    /// Evaluate the expression using direct data cache access.
     ///
-    /// This method provides high-performance evaluation with no HashMap lookups
-    /// or string operations - just direct array indexing and arithmetic.
-    pub fn evaluate(&self, data_cache: &DataCache) -> Result<f64, String> {
+    /// Infallible by construction: every fallible condition (unknown function
+    /// names, wrong argument counts, unresolved variables) is rejected when the
+    /// optimised AST is built, so the hot path is pure arithmetic — no Result
+    /// plumbing, no argument buffers, no allocation.
+    pub fn evaluate(&self, data_cache: &DataCache) -> f64 {
         match self {
-            OptimizedExpressionNode::Constant { value } => Ok(*value),
+            OptimizedExpressionNode::Constant { value } => *value,
 
             OptimizedExpressionNode::DataCacheReference { cache_index } => {
-                Ok(data_cache.get_current_value(*cache_index))
+                data_cache.get_current_value(*cache_index)
             }
 
             OptimizedExpressionNode::DataCacheReferenceWithOffset { cache_index, offset, default_value } => {
-                Ok(data_cache.get_value_with_offset_or_default(*cache_index, *offset, *default_value))
+                data_cache.get_value_with_offset_or_default(*cache_index, *offset, *default_value)
             }
 
             OptimizedExpressionNode::ConstantReference { cache_index } => {
-                Ok(data_cache.constants.get_value(*cache_index))
+                data_cache.constants.get_value(*cache_index)
             }
 
-            OptimizedExpressionNode::BinaryOp { left, op, right } => {
-                let left_val = left.evaluate(data_cache)?;
-                let right_val = right.evaluate(data_cache)?;
-                evaluate_binary_op(*op, left_val, right_val)
-                    .map_err(|e| format!("{}", e))
-            }
+            OptimizedExpressionNode::BinaryOp { left, op, right } => match op {
+                // && and || short-circuit: the right operand is only evaluated
+                // when it can affect the outcome. Truthiness (non-zero = true,
+                // including NaN) matches the non-short-circuit forms exactly.
+                BinaryOperator::And => {
+                    if left.evaluate(data_cache) == 0.0 {
+                        0.0
+                    } else if right.evaluate(data_cache) != 0.0 { 1.0 } else { 0.0 }
+                }
+                BinaryOperator::Or => {
+                    if left.evaluate(data_cache) != 0.0 {
+                        1.0
+                    } else if right.evaluate(data_cache) != 0.0 { 1.0 } else { 0.0 }
+                }
+                _ => evaluate_binary_op(*op, left.evaluate(data_cache), right.evaluate(data_cache)),
+            },
 
             OptimizedExpressionNode::UnaryOp { op, operand } => {
-                let val = operand.evaluate(data_cache)?;
-                evaluate_unary_op(*op, val)
-                    .map_err(|e| format!("{}", e))
+                evaluate_unary_op(*op, operand.evaluate(data_cache))
             }
 
-            OptimizedExpressionNode::FunctionCall { func, args } => {
-                let arg_values: Result<Vec<f64>, String> = args
-                    .iter()
-                    .map(|arg| arg.evaluate(data_cache))
-                    .collect();
-                let arg_values = arg_values?;
-                evaluate_function(func, &arg_values)
+            OptimizedExpressionNode::Func1 { f, arg } => f(arg.evaluate(data_cache)),
+
+            OptimizedExpressionNode::Func2 { f, a, b } => {
+                f(a.evaluate(data_cache), b.evaluate(data_cache))
             }
 
-            OptimizedExpressionNode::SimContext { field } => {
-                Ok(match field {
-                    SimField::Year => data_cache.get_timestamp_year() as f64,
-                    SimField::Month => data_cache.get_timestamp_month() as f64,
-                    SimField::Day => data_cache.get_timestamp_day() as f64,
-                    SimField::DayOfYear => data_cache.get_day_of_year() as f64,
-                    SimField::Step => data_cache.current_step as f64,
-                })
+            OptimizedExpressionNode::If { cond, then_branch, else_branch } => {
+                if cond.evaluate(data_cache) != 0.0 {
+                    then_branch.evaluate(data_cache)
+                } else {
+                    else_branch.evaluate(data_cache)
+                }
             }
+
+            OptimizedExpressionNode::Fold { op, args } => {
+                let mut iter = args.iter();
+                // Construction guarantees at least one argument.
+                let mut acc = iter.next().expect("fold has >= 1 arg").evaluate(data_cache);
+                match op {
+                    FoldOp::Min => for a in iter { acc = acc.min(a.evaluate(data_cache)); },
+                    FoldOp::Max => for a in iter { acc = acc.max(a.evaluate(data_cache)); },
+                    FoldOp::Sum | FoldOp::Avg => for a in iter { acc += a.evaluate(data_cache); },
+                }
+                if matches!(op, FoldOp::Avg) { acc / args.len() as f64 } else { acc }
+            }
+
+            OptimizedExpressionNode::SimContext { field } => match field {
+                SimField::Year => data_cache.get_timestamp_year() as f64,
+                SimField::Month => data_cache.get_timestamp_month() as f64,
+                SimField::Day => data_cache.get_timestamp_day() as f64,
+                SimField::DayOfYear => data_cache.get_day_of_year() as f64,
+                SimField::Step => data_cache.current_step as f64,
+            },
         }
     }
 
@@ -308,12 +369,8 @@ impl OptimizedExpressionNode {
                         Self::from_expression_node(arg_expr, data_variable_map, constant_variable_map)
                     })
                     .collect();
-                let args_opt = args_opt?;
 
-                Ok(OptimizedExpressionNode::FunctionCall {
-                    func: func.clone(),
-                    args: args_opt.into_iter().map(Box::new).collect(),
-                })
+                lower_function_call(func, args_opt?)
             }
         }
     }
@@ -631,11 +688,8 @@ impl DynamicInput {
                     .map(|(&idx, &weight)| data_cache.get_current_value(idx) * weight)
                     .sum()
             }
-            DynamicInput::Function { expression, optimised_ast } => {
-                optimised_ast.evaluate(data_cache).unwrap_or_else(|e| {
-                    eprintln!("ERROR: Critical evaluation failure in expression '{}': {}. Returning 0.0. This indicates a parser bug.", expression, e);
-                    0.0
-                })
+            DynamicInput::Function { optimised_ast, .. } => {
+                optimised_ast.evaluate(data_cache)
             }
         }
     }
@@ -703,21 +757,104 @@ fn transform_to_optimised_ast(
     }
 }
 
-// Function evaluation. The simulation hot path: dispatches via the parse-time-resolved
-// FunctionRef. Built-in calls hit an enum jump table directly; Named falls back to an
-// error here (model evaluation has no FunctionRegistry — context functions like
-// `lin_range`/`log_range`/`g` are only meaningful inside the optimisation parameter path).
-fn evaluate_function(
-    func: &crate::functions::ast::FunctionRef,
-    args: &[f64],
-) -> Result<f64, String> {
-    use crate::functions::ast::FunctionRef;
-    match func {
-        FunctionRef::Builtin(b) => b.call(args).map_err(|e| format!("Function error: {}", e)),
-        FunctionRef::Named(name) => Err(format!(
-            "Unknown function: {} (no context function registry available here)",
-            name
-        )),
+/// Lower a parsed function call into its specialised hot-path form, validating
+/// the function name and argument count once, at construction. This is what
+/// makes `OptimizedExpressionNode::evaluate` infallible and allocation-free:
+/// by the time an expression is evaluated, no unknown-function or wrong-arity
+/// condition can exist.
+///
+/// Named (non-built-in) references are rejected here: model evaluation has no
+/// FunctionRegistry — context functions like `lin_range`/`log_range`/`g` are
+/// only meaningful inside the optimisation parameter path.
+fn lower_function_call(
+    func: &FunctionRef,
+    mut args: Vec<OptimizedExpressionNode>,
+) -> Result<OptimizedExpressionNode, String> {
+    use BuiltinFunction as B;
+
+    let builtin = match func {
+        FunctionRef::Builtin(b) => *b,
+        FunctionRef::Named(name) => {
+            return Err(format!(
+                "Unknown function '{}' (context functions like lin_range/log_range/g \
+                 are only available in optimisation parameter expressions)",
+                name
+            ));
+        }
+    };
+
+    let arity_err = |expected: &str, got: usize| {
+        Err(format!(
+            "Function '{}' expects {} argument(s), got {}",
+            builtin.name(), expected, got
+        ))
+    };
+
+    // Single-argument built-ins lower to a plain function pointer.
+    let f1: Option<fn(f64) -> f64> = match builtin {
+        B::Abs => Some(f64::abs),
+        B::Sqrt => Some(f64::sqrt),
+        B::Sin => Some(f64::sin),
+        B::Cos => Some(f64::cos),
+        B::Tan => Some(f64::tan),
+        B::Asin => Some(f64::asin),
+        B::Acos => Some(f64::acos),
+        B::Atan => Some(f64::atan),
+        B::Exp => Some(f64::exp),
+        B::Ln => Some(f64::ln),
+        B::Log10 => Some(f64::log10),
+        B::Log2 => Some(f64::log2),
+        B::Ceil => Some(f64::ceil),
+        B::Floor => Some(f64::floor),
+        B::Round => Some(f64::round),
+        _ => None,
+    };
+    if let Some(f) = f1 {
+        if args.len() != 1 {
+            return arity_err("1", args.len());
+        }
+        return Ok(OptimizedExpressionNode::Func1 { f, arg: Box::new(args.remove(0)) });
+    }
+
+    match builtin {
+        B::Pow | B::Atan2 => {
+            if args.len() != 2 {
+                return arity_err("2", args.len());
+            }
+            let b = args.pop().unwrap();
+            let a = args.pop().unwrap();
+            let f: fn(f64, f64) -> f64 = if builtin == B::Pow { f64::powf } else { f64::atan2 };
+            Ok(OptimizedExpressionNode::Func2 { f, a: Box::new(a), b: Box::new(b) })
+        }
+        B::If => {
+            if args.len() != 3 {
+                return arity_err("3", args.len());
+            }
+            let else_branch = args.pop().unwrap();
+            let then_branch = args.pop().unwrap();
+            let cond = args.pop().unwrap();
+            Ok(OptimizedExpressionNode::If {
+                cond: Box::new(cond),
+                then_branch: Box::new(then_branch),
+                else_branch: Box::new(else_branch),
+            })
+        }
+        B::Min | B::Max => {
+            if args.len() < 2 {
+                return arity_err("at least 2", args.len());
+            }
+            let op = if builtin == B::Min { FoldOp::Min } else { FoldOp::Max };
+            Ok(OptimizedExpressionNode::Fold { op, args })
+        }
+        B::Sum | B::Avg => {
+            if args.is_empty() {
+                return arity_err("at least 1", args.len());
+            }
+            let op = if builtin == B::Sum { FoldOp::Sum } else { FoldOp::Avg };
+            Ok(OptimizedExpressionNode::Fold { op, args })
+        }
+        // All single-argument built-ins were handled above.
+        _ => unreachable!("built-in '{}' not handled in lowering", builtin.name()),
     }
 }
 

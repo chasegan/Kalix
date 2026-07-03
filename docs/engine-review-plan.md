@@ -19,7 +19,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 5 | Speed test suite + `[profile.release]` tuning | **Done** (feature/speed-suite) |
 | 6 | DataCache: preallocate recorder series; name→idx hashmap | Pending |
 | 7 | Remove timestamps from cache-resident series | Pending — decide irregular-series future first |
-| 8 | DynamicInput: stack-allocated args, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | Pending |
+| 8 | DynamicInput: allocation-free, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | **Done** (perf/dynamic-input) |
 | 9 | Small hot-loop items (Cell-based sim context, hoisted catch_unwind, node config hoists) | Pending |
 | 10 | Optimiser: reuse workers across generations; slim Model clone | Pending |
 | 11 | Optimiser: precompute per-eval invariants; split reset from topology build | Pending |
@@ -173,6 +173,39 @@ untuned baseline (min of repeats, Apple M-series): Sacramento −20%,
 unregulated −5%, regulated −4%. Build time 8s → 28s. `panic = "abort"` is
 deliberately NOT set (catch_unwind error reporting); noted in Cargo.toml.
 All 310 unit tests and 28/28 regression models pass on the LTO build.
+
+## Step 8 record — DynamicInput evaluator (done 2026-07-03)
+
+The `Function` hot path was a Box-tree walk with a `Result` branch at every
+node and a heap-allocated `Vec<f64>` for every function call's arguments.
+Reworked by lowering `FunctionCall` at construction time
+(`dynamic_input.rs::lower_function_call`):
+
+- Single/two-argument built-ins become `Func1`/`Func2` holding plain function
+  pointers (`f64::abs`, `f64::powf`, ...) — no dispatch, no buffer.
+- `if(c,a,b)` becomes a first-class `If` variant that short-circuits (only the
+  taken branch evaluates); `&&`/`||` short-circuit inside the BinaryOp arm.
+  Expressions are pure, so short-circuiting cannot change results; NaN
+  truthiness (non-zero = true) is preserved exactly.
+- Variadic `min`/`max`/`sum`/`avg` become a `Fold` variant evaluated with an
+  accumulator — the argument buffer is gone entirely, no smallvec needed.
+- Unknown function names and wrong argument counts are rejected at model load
+  with clear messages (previously: runtime eprintln + silent 0.0). With errors
+  impossible by construction, `evaluate` returns bare `f64` — the `Result`
+  plumbing is gone from the hot path (`evaluate_binary_op`/`evaluate_unary_op`
+  are now infallible too; all operators are total over f64 per the IEEE
+  policy).
+
+Measured on the speed suite (sim min, thin-LTO):
+- 3_unregulated_users_with_functions: 183.4 -> 91-95 ms (-49%). Expression
+  overhead over the expression-free control fell 148 -> ~57 ms: ~71 -> ~28 ns
+  per evaluation.
+- 4_regulated_system: 82.3 -> 63.6 ms (-23%) — its seasonal `if(sim.month...)`
+  orders and harmony fractions benefit from the same machinery.
+- Models 1 and 2 (no expressions): unchanged, as expected.
+
+316 unit tests (6 new pinning load-time validation, fold semantics, and
+short-circuit truthiness) and 28/28 regression models pass.
 
 ## Review findings not yet scheduled (context for steps)
 
