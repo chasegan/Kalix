@@ -4,9 +4,8 @@ import com.formdev.flatlaf.FlatPropertiesLaf;
 import java.util.Properties;
 
 /**
- * Adapter to bridge between the unified theme system and the existing legacy theme system.
- * Allows gradual migration by providing compatibility methods that generate legacy theme objects
- * from unified theme definitions.
+ * Converts a {@link UnifiedThemeDefinition} into the FlatLaf look-and-feel
+ * object that {@code ThemeManager} installs.
  */
 public class ThemeCompatibilityAdapter {
 

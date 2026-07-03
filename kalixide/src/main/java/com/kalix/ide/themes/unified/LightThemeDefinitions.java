@@ -8,10 +8,10 @@ package com.kalix.ide.themes.unified;
 public class LightThemeDefinitions {
 
     /**
-     * REFACTORED: Create the Light theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Light theme.
      * This demonstrates the new architecture that preserves exact colors while eliminating code duplication.
      */
-    public static UnifiedThemeDefinition createLightThemeRefactored() {
+    public static UnifiedThemeDefinition createLightTheme() {
         ExactColorTheme lightTheme = new ExactColorTheme("Light", false);
 
         // Set exact colors (same as before, but organized)
@@ -64,10 +64,10 @@ public class LightThemeDefinitions {
     }
 
     /**
-     * REFACTORED: Create the Keylime theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Keylime theme.
      * This demonstrates the second theme migration to the new architecture.
      */
-    public static UnifiedThemeDefinition createKeylimeThemeRefactored() {
+    public static UnifiedThemeDefinition createKeylimeTheme() {
         ExactColorTheme keylimeTheme = new ExactColorTheme("Keylime", false);
 
         keylimeTheme
@@ -201,10 +201,10 @@ public class LightThemeDefinitions {
     }
 
     /**
-     * REFACTORED: Create the Lapland theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Lapland theme.
      * Nordic blue theme with clean, minimalist design.
      */
-    public static UnifiedThemeDefinition createLaplandThemeRefactored() {
+    public static UnifiedThemeDefinition createLaplandTheme() {
         ExactColorTheme laplandTheme = new ExactColorTheme("Lapland", false);
 
         laplandTheme
@@ -341,10 +341,10 @@ public class LightThemeDefinitions {
 
 
     /**
-     * REFACTORED: Create the Nemo theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Nemo theme.
      * Ocean-themed light theme with clownfish orange accents and coral reef colors.
      */
-    public static UnifiedThemeDefinition createNemoThemeRefactored() {
+    public static UnifiedThemeDefinition createNemoTheme() {
         ExactColorTheme nemoTheme = new ExactColorTheme("Nemo", false);
 
         nemoTheme
@@ -488,10 +488,10 @@ public class LightThemeDefinitions {
 
 
     /**
-     * REFACTORED: Create the Sunset Warmth theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Sunset Warmth theme.
      * Warm sunset-themed light theme with vibrant orange accents and cream backgrounds.
      */
-    public static UnifiedThemeDefinition createSunsetWarmthThemeRefactored() {
+    public static UnifiedThemeDefinition createSunsetWarmthTheme() {
         ExactColorTheme sunsetTheme = new ExactColorTheme("Sunset Warmth", false);
 
         sunsetTheme

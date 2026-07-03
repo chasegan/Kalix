@@ -4,26 +4,20 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * Unified theme definition that generates all three theme types from a single color palette.
- * This is the central class that ties together the unified theme system.
+ * A fully resolved application theme: a name, a dark flag, and the complete
+ * FlatLaf property map. Built by {@link ExactColorTheme} and consumed by
+ * {@link ThemeCompatibilityAdapter} to create the look and feel.
  */
 public class UnifiedThemeDefinition {
 
-    private final ColorPalette palette;
     private final String name;
-    private final Map<String, String> customApplicationProperties;
+    private final boolean isDark;
+    private final Map<String, String> properties;
 
-    public UnifiedThemeDefinition(String name, ColorPalette palette, Map<String, String> customApplicationProperties) {
+    public UnifiedThemeDefinition(String name, boolean isDark, Map<String, String> properties) {
         this.name = name;
-        this.palette = palette;
-        this.customApplicationProperties = customApplicationProperties;
-    }
-
-    /**
-     * Get the color palette for this theme
-     */
-    public ColorPalette getColorPalette() {
-        return palette;
+        this.isDark = isDark;
+        this.properties = properties;
     }
 
     /**
@@ -37,18 +31,20 @@ public class UnifiedThemeDefinition {
      * Whether this is a dark theme (drives FlatLaf's base defaults selection)
      */
     public boolean isDark() {
-        return palette.isDark();
+        return isDark;
     }
 
     /**
      * Generate application theme properties
      */
     public Properties generateApplicationProperties() {
-        return ApplicationThemeSpec.generateProperties(palette, customApplicationProperties);
+        Properties props = new Properties();
+        properties.forEach(props::setProperty);
+        return props;
     }
 
     @Override
     public String toString() {
-        return String.format("UnifiedThemeDefinition{name='%s', palette=%s}", name, palette);
+        return String.format("UnifiedThemeDefinition{name='%s', isDark=%s}", name, isDark);
     }
 }

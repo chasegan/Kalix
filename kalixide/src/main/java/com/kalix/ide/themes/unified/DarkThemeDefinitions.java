@@ -9,10 +9,10 @@ public class DarkThemeDefinitions {
 
 
     /**
-     * REFACTORED: Create the Sanne theme using component builders (eliminates 150+ lines of duplication)
+     * Create the Sanne theme.
      * Dark theme with vibrant pink accents and rich dark gray backgrounds.
      */
-    public static UnifiedThemeDefinition createSanneThemeRefactored() {
+    public static UnifiedThemeDefinition createSanneTheme() {
         ExactColorTheme sanneTheme = new ExactColorTheme("Sanne", true);
 
         sanneTheme
@@ -157,10 +157,9 @@ public class DarkThemeDefinitions {
 
 
     /**
-     * Create the unified Obsidian theme definition - refactored version
-     * Uses component builders to eliminate duplication while preserving exact colors.
+     * Create the Obsidian theme.
      */
-    public static UnifiedThemeDefinition createObsidianThemeRefactored() {
+    public static UnifiedThemeDefinition createObsidianTheme() {
         ExactColorTheme obsidianTheme = new ExactColorTheme("Obsidian", true);
 
         obsidianTheme
@@ -310,12 +309,11 @@ public class DarkThemeDefinitions {
 
 
 
-    // =================== REFACTORED THEME METHODS ===================
 
     /**
-     * REFACTORED: Create the Dracula theme using component builders
+     * Create the Dracula theme.
      */
-    public static UnifiedThemeDefinition createDraculaThemeRefactored() {
+    public static UnifiedThemeDefinition createDraculaTheme() {
         ExactColorTheme draculaTheme = new ExactColorTheme("Dracula", true);
         draculaTheme
             .setColor("Component.background", "#414450").setColor("Panel.background", "#414450")
@@ -388,9 +386,9 @@ public class DarkThemeDefinitions {
     }
 
     /**
-     * REFACTORED: Create the One Dark theme using component builders
+     * Create the One Dark theme.
      */
-    public static UnifiedThemeDefinition createOneDarkThemeRefactored() {
+    public static UnifiedThemeDefinition createOneDarkTheme() {
         ExactColorTheme oneDarkTheme = new ExactColorTheme("One Dark", true);
         oneDarkTheme
             .setColor("Component.background", "#21252b").setColor("Panel.background", "#21252b")
@@ -463,9 +461,9 @@ public class DarkThemeDefinitions {
     }
 
     /**
-     * REFACTORED: Create the Botanical theme using component builders
+     * Create the Botanical theme.
      */
-    public static UnifiedThemeDefinition createBotanicalThemeRefactored() {
+    public static UnifiedThemeDefinition createBotanicalTheme() {
         ExactColorTheme botanicalTheme = new ExactColorTheme("Botanical", false);
         botanicalTheme
             .setColor("Component.background", "#f5f8f3").setColor("Panel.background", "#edf5e8")

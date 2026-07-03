@@ -41,16 +41,16 @@ class ThemePropertiesSnapshotTest {
 
     static Stream<UnifiedThemeDefinition> themes() {
         return Stream.of(
-            LightThemeDefinitions.createLightThemeRefactored(),
-            LightThemeDefinitions.createKeylimeThemeRefactored(),
-            LightThemeDefinitions.createLaplandThemeRefactored(),
-            LightThemeDefinitions.createNemoThemeRefactored(),
-            LightThemeDefinitions.createSunsetWarmthThemeRefactored(),
-            DarkThemeDefinitions.createBotanicalThemeRefactored(),
-            DarkThemeDefinitions.createSanneThemeRefactored(),
-            DarkThemeDefinitions.createObsidianThemeRefactored(),
-            DarkThemeDefinitions.createDraculaThemeRefactored(),
-            DarkThemeDefinitions.createOneDarkThemeRefactored());
+            LightThemeDefinitions.createLightTheme(),
+            LightThemeDefinitions.createKeylimeTheme(),
+            LightThemeDefinitions.createLaplandTheme(),
+            LightThemeDefinitions.createNemoTheme(),
+            LightThemeDefinitions.createSunsetWarmthTheme(),
+            DarkThemeDefinitions.createBotanicalTheme(),
+            DarkThemeDefinitions.createSanneTheme(),
+            DarkThemeDefinitions.createObsidianTheme(),
+            DarkThemeDefinitions.createDraculaTheme(),
+            DarkThemeDefinitions.createOneDarkTheme());
     }
 
     @Test

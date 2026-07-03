@@ -56,16 +56,6 @@ public class ThemeManager {
     }
 
     /**
-     * Gets the current unified theme definition if available.
-     * This allows components to access the full color palette.
-     *
-     * @return The current unified theme definition or null if using legacy theme
-     */
-    public UnifiedThemeDefinition getCurrentUnifiedTheme() {
-        return getUnifiedThemeDefinition(currentTheme);
-    }
-    
-    /**
      * Initializes the look and feel based on stored preferences.
      * Should be called during application startup.
      * 
@@ -120,7 +110,6 @@ public class ThemeManager {
     
     /**
      * Gets a unified theme definition if available, null otherwise.
-     * This allows for gradual migration from legacy to unified themes.
      *
      * @param themeName The name of the theme
      * @return The unified theme definition or null if not available
@@ -129,27 +118,27 @@ public class ThemeManager {
         switch (themeName) {
             // Light themes
             case "Light":
-                return LightThemeDefinitions.createLightThemeRefactored();
+                return LightThemeDefinitions.createLightTheme();
             case "Keylime":
-                return LightThemeDefinitions.createKeylimeThemeRefactored();
+                return LightThemeDefinitions.createKeylimeTheme();
             case "Lapland":
-                return LightThemeDefinitions.createLaplandThemeRefactored();
+                return LightThemeDefinitions.createLaplandTheme();
             case "Nemo":
-                return LightThemeDefinitions.createNemoThemeRefactored();
+                return LightThemeDefinitions.createNemoTheme();
             case "Sunset Warmth":
-                return LightThemeDefinitions.createSunsetWarmthThemeRefactored();
+                return LightThemeDefinitions.createSunsetWarmthTheme();
             case "Botanical":
-                return DarkThemeDefinitions.createBotanicalThemeRefactored();
+                return DarkThemeDefinitions.createBotanicalTheme();
 
             // Dark themes
             case "Sanne":
-                return DarkThemeDefinitions.createSanneThemeRefactored();
+                return DarkThemeDefinitions.createSanneTheme();
             case "Obsidian":
-                return DarkThemeDefinitions.createObsidianThemeRefactored();
+                return DarkThemeDefinitions.createObsidianTheme();
             case "Dracula":
-                return DarkThemeDefinitions.createDraculaThemeRefactored();
+                return DarkThemeDefinitions.createDraculaTheme();
             case "One Dark":
-                return DarkThemeDefinitions.createOneDarkThemeRefactored();
+                return DarkThemeDefinitions.createOneDarkTheme();
 
             default:
                 return null; // Unknown theme
@@ -175,7 +164,7 @@ public class ThemeManager {
         // All themes should now use the unified system
         // This fallback should rarely be used since all known themes are unified
         System.err.println("Unknown theme '" + theme + "', falling back to unified Light theme");
-        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightThemeRefactored();
+        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightTheme();
 
         FlatPropertiesLaf lightLaf = ThemeCompatibilityAdapter.createApplicationTheme(lightTheme);
         UIManager.setLookAndFeel(lightLaf);
