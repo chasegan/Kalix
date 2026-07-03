@@ -5,19 +5,15 @@ import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.themes.KalixTheme;
 import com.kalix.ide.themes.SyntaxTheme;
-import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
+import com.kalix.ide.themes.ThemePreferences;
 import com.kalix.ide.utils.Platform;
 import com.kalix.ide.utils.PlatformUtils;
-import com.kalix.ide.themes.unified.LightThemeDefinitions;
-import com.kalix.ide.themes.unified.DarkThemeDefinitions;
 import com.kalix.ide.themes.unified.ThemeCompatibilityAdapter;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.prefs.Preferences;
 
 /**
  * Manages theme switching functionality for the application.
@@ -25,62 +21,60 @@ import java.util.prefs.Preferences;
  */
 public class ThemeManager {
     
-    private final Preferences prefs;
-    private String currentTheme;
+    private KalixTheme currentTheme;
     private final Component parentComponent;
-    
+
     // Theme-aware components
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
-    
+
     /**
      * Creates a new ThemeManager instance.
      *
-     * @param prefs The preferences object for storing theme settings (legacy OS preferences)
      * @param parentComponent The parent component for UI updates
      */
-    public ThemeManager(Preferences prefs, Component parentComponent) {
-        this.prefs = prefs;
+    public ThemeManager(Component parentComponent) {
         this.parentComponent = parentComponent;
-        // Load theme from new file-based preference system
-        this.currentTheme = PreferenceManager.getFileString(PreferenceKeys.UI_THEME, AppConstants.DEFAULT_THEME);
+        // Resolve the stored theme (migrating legacy display names to stable ids)
+        this.currentTheme = ThemePreferences.applicationTheme();
     }
-    
+
     /**
-     * Gets the current theme name.
+     * Gets the current theme.
      *
-     * @return The current theme name
+     * @return The current theme
      */
-    public String getCurrentTheme() {
+    public KalixTheme getCurrentTheme() {
         return currentTheme;
     }
 
     /**
      * Initializes the look and feel based on stored preferences.
      * Should be called during application startup.
-     * 
+     *
      * @throws UnsupportedLookAndFeelException if the theme cannot be set
      */
     public void initializeLookAndFeel() throws UnsupportedLookAndFeelException {
         setLookAndFeelForTheme(currentTheme);
         configureFlatLafProperties();
     }
-    
+
     /**
-     * Switches to a new theme with animation.
-     * 
-     * @param theme The name of the theme to switch to
+     * Switches to a new theme with animation. When the node or syntax theme is
+     * in follow mode (the default), the matching linked palette is applied to
+     * all documents and editors as part of the same switch.
+     *
+     * @param theme The theme to switch to
      * @return A status message describing the result
      */
-    public String switchTheme(String theme) {
-        if (currentTheme.equals(theme)) {
-            return "Already using " + theme + " theme";
+    public String switchTheme(KalixTheme theme) {
+        if (currentTheme == theme) {
+            return "Already using " + theme.displayName() + " theme";
         }
-        
+
         this.currentTheme = theme;
-        // Save theme to new file-based preference system
-        PreferenceManager.setFileString(PreferenceKeys.UI_THEME, theme);
-        
+        ThemePreferences.storeApplicationTheme(theme);
+
         // Apply the new theme with animation. FlatLaf's documented order is
         // showSnapshot -> setLookAndFeel -> update UI -> hideSnapshotWithAnimation,
         // so the cross-fade blends the OLD look into the fully updated NEW look.
@@ -97,77 +91,44 @@ public class ThemeManager {
             // Update all components while the snapshot overlay is still showing
             updateAllWindows();
 
-            return "Switched to " + theme + " theme";
+            // Node and syntax themes in follow mode track the application theme
+            applyFollowedThemes(theme);
+
+            return "Switched to " + theme.displayName() + " theme";
         } catch (UnsupportedLookAndFeelException e) {
             System.err.println(AppConstants.ERROR_FAILED_LOOK_AND_FEEL + e.getMessage());
-            return "Failed to switch to " + theme + " theme";
+            return "Failed to switch to " + theme.displayName() + " theme";
         } finally {
             // Always dismiss the snapshot overlay, even when the switch fails —
             // otherwise the UI is left frozen behind the stale snapshot.
             FlatAnimatedLafChange.hideSnapshotWithAnimation();
         }
     }
-    
+
     /**
-     * Gets a unified theme definition if available, null otherwise.
-     *
-     * @param themeName The name of the theme
-     * @return The unified theme definition or null if not available
+     * Applies the theme's linked node and syntax palettes wherever the user has
+     * not made an explicit choice (follow mode, the default). Explicit choices
+     * are left untouched.
      */
-    private UnifiedThemeDefinition getUnifiedThemeDefinition(String themeName) {
-        switch (themeName) {
-            // Light themes
-            case "Light":
-                return LightThemeDefinitions.createLightTheme();
-            case "Keylime":
-                return LightThemeDefinitions.createKeylimeTheme();
-            case "Lapland":
-                return LightThemeDefinitions.createLaplandTheme();
-            case "Nemo":
-                return LightThemeDefinitions.createNemoTheme();
-            case "Sunset Warmth":
-                return LightThemeDefinitions.createSunsetWarmthTheme();
-            case "Botanical":
-                return DarkThemeDefinitions.createBotanicalTheme();
-
-            // Dark themes
-            case "Sanne":
-                return DarkThemeDefinitions.createSanneTheme();
-            case "Obsidian":
-                return DarkThemeDefinitions.createObsidianTheme();
-            case "Dracula":
-                return DarkThemeDefinitions.createDraculaTheme();
-            case "One Dark":
-                return DarkThemeDefinitions.createOneDarkTheme();
-
-            default:
-                return null; // Unknown theme
+    private void applyFollowedThemes(KalixTheme theme) {
+        if (ThemePreferences.isNodeThemeFollowing()
+                && parentComponent instanceof com.kalix.ide.KalixIDE ide) {
+            SwingUtilities.invokeLater(() -> ide.setNodeTheme(theme.nodeTheme()));
+        }
+        if (ThemePreferences.isSyntaxThemeFollowing()) {
+            updateSyntaxTheme(theme.syntaxTheme());
         }
     }
 
     /**
      * Sets the look and feel for the specified theme.
-     * Supports both legacy and unified theme systems.
      *
-     * @param theme The theme name
+     * @param theme The theme
      * @throws UnsupportedLookAndFeelException if the theme is not supported
      */
-    private void setLookAndFeelForTheme(String theme) throws UnsupportedLookAndFeelException {
-        // Try unified theme system first
-        UnifiedThemeDefinition unifiedTheme = getUnifiedThemeDefinition(theme);
-        if (unifiedTheme != null) {
-            FlatPropertiesLaf unifiedLaf = ThemeCompatibilityAdapter.createApplicationTheme(unifiedTheme);
-            UIManager.setLookAndFeel(unifiedLaf);
-            return;
-        }
-
-        // All themes should now use the unified system
-        // This fallback should rarely be used since all known themes are unified
-        System.err.println("Unknown theme '" + theme + "', falling back to unified Light theme");
-        UnifiedThemeDefinition lightTheme = LightThemeDefinitions.createLightTheme();
-
-        FlatPropertiesLaf lightLaf = ThemeCompatibilityAdapter.createApplicationTheme(lightTheme);
-        UIManager.setLookAndFeel(lightLaf);
+    private void setLookAndFeelForTheme(KalixTheme theme) throws UnsupportedLookAndFeelException {
+        FlatPropertiesLaf laf = ThemeCompatibilityAdapter.createApplicationTheme(theme.definition());
+        UIManager.setLookAndFeel(laf);
     }
 
     /**

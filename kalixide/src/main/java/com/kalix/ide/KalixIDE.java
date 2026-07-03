@@ -206,7 +206,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void initializeManagers() {
         // Theme manager
-        themeManager = new ThemeManager(prefs, this);
+        themeManager = new ThemeManager(this);
         
         // Title bar manager
         titleBarManager = new TitleBarManager(this);
@@ -429,9 +429,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         EnhancedTextEditor editor = document.getEditor();
         MapPanel map = document.getMapPanel();
 
-        // Map appearance from saved preferences.
-        map.setNodeTheme(NodeTheme.themeFromString(
-            PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME)));
+        // Map appearance from saved preferences (follow mode resolves to the
+        // application theme's linked node palette).
+        map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
         map.setShowGridlines(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
 
         // Editor features, each bound to this document's own model and working directory.
@@ -1453,10 +1453,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
                 toggleGridlines(showGridlines);
 
-                // Update node theme
-                String nodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
-                com.kalix.ide.themes.NodeTheme.Theme nodeTheme = com.kalix.ide.themes.NodeTheme.themeFromString(nodeThemeName);
-                setNodeTheme(nodeTheme);
+                // Update node theme (follow mode resolves to the application theme's)
+                setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
 
                 // Sync toolbar button state
                 syncToggleButtonStates();
@@ -1487,11 +1485,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     @Override
     public void setNodeTheme(NodeTheme.Theme theme) {
         // Apply to every open document's map so background tabs stay consistent.
+        // Persistence is deliberately NOT done here: the preferences dialog stores
+        // the user's choice (a theme id or the "follow" sentinel) via
+        // ThemePreferences, and this method is also invoked with the *resolved*
+        // palette when following the application theme — persisting that would
+        // overwrite the sentinel with a concrete theme.
         for (KalixDocument document : documentManager.getDocuments()) {
             document.getMapPanel().setNodeTheme(theme);
         }
-        // Save the preference
-        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
     
     public void clearAppData() {
@@ -2012,8 +2013,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         SwingUtilities.invokeLater(() -> {
             try {
                 // Initialize theme from preferences
-                Preferences prefs = Preferences.userNodeForPackage(KalixIDE.class);
-                ThemeManager tempThemeManager = new ThemeManager(prefs, null);
+                ThemeManager tempThemeManager = new ThemeManager(null);
                 tempThemeManager.initializeLookAndFeel();
 
             } catch (UnsupportedLookAndFeelException e) {

@@ -54,13 +54,8 @@ public final class AppConstants {
     public static final String INI_FILES_DESCRIPTION = "INI Files (*.ini)";
     
     
-    // Themes
-    public static final String[] AVAILABLE_THEMES = {
-        "Light", "Keylime", "Lapland", "Nemo", "Sunset Warmth", "Botanical", "Dracula", "One Dark", "Obsidian", "Sanne"
-    };
-    public static final String DEFAULT_THEME = "Light";
-    public static final String DEFAULT_NODE_THEME = "Vibrant";
-    
+    // Themes: the theme list, ids and defaults live in com.kalix.ide.themes.ThemeRegistry
+
     // Preferences keys (DEPRECATED - use PreferenceKeys class for better organization)
     // TODO: Remove these constants and use PreferenceKeys class throughout codebase
     @Deprecated public static final String PREF_THEME = "theme";

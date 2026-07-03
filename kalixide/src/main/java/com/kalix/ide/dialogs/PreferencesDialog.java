@@ -8,6 +8,9 @@ import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.themes.KalixTheme;
+import com.kalix.ide.themes.ThemePreferences;
+import com.kalix.ide.themes.ThemeRegistry;
 import com.kalix.ide.utils.Platform;
 import com.kalix.ide.utils.PlatformUtils;
 import com.kalix.ide.utils.TerminalLauncher;
@@ -364,9 +367,12 @@ public class PreferencesDialog extends JDialog {
      * Theme preferences panel.
      */
     private class ThemePreferencePanel extends PreferencePanel {
-        private JComboBox<String> themeComboBox;
-        private JComboBox<com.kalix.ide.themes.NodeTheme.Theme> nodeThemeComboBox;
-        private JComboBox<com.kalix.ide.themes.SyntaxTheme.Theme> syntaxThemeComboBox;
+        /** Combo entry meaning "no explicit choice — follow the application theme". */
+        private static final String FOLLOW_ITEM = "Follow application theme";
+
+        private JComboBox<KalixTheme> themeComboBox;
+        private JComboBox<Object> nodeThemeComboBox;
+        private JComboBox<Object> syntaxThemeComboBox;
 
         public ThemePreferencePanel() {
             super("Themes");
@@ -384,82 +390,89 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(new JLabel("Application Theme:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            themeComboBox = new JComboBox<>(AppConstants.AVAILABLE_THEMES);
+            themeComboBox = new JComboBox<>(ThemeRegistry.all().toArray(new KalixTheme[0]));
+            themeComboBox.setRenderer(themeDisplayNameRenderer());
             themeComboBox.setSelectedItem(themeManager.getCurrentTheme());
             themeComboBox.addActionListener(e -> {
-                String selectedTheme = (String) themeComboBox.getSelectedItem();
-                if (!selectedTheme.equals(themeManager.getCurrentTheme())) {
+                KalixTheme selectedTheme = (KalixTheme) themeComboBox.getSelectedItem();
+                if (selectedTheme != null && selectedTheme != themeManager.getCurrentTheme()) {
                     themeManager.switchTheme(selectedTheme);
                 }
             });
             formPanel.add(themeComboBox, gbc);
 
-            // Node theme selection
+            // Node theme selection: follow the application theme (default) or an explicit palette
             gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             formPanel.add(new JLabel("Node Theme:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            nodeThemeComboBox = new JComboBox<>(com.kalix.ide.themes.NodeTheme.getAllThemes());
-
-            // Set custom renderer to show display names instead of enum names
-            nodeThemeComboBox.setRenderer(new DefaultListCellRenderer() {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if (value instanceof com.kalix.ide.themes.NodeTheme.Theme) {
-                        setText(((com.kalix.ide.themes.NodeTheme.Theme) value).getDisplayName());
-                    }
-                    return this;
-                }
-            });
-
-            // Get current node theme from preference or default
-            String currentNodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
-            com.kalix.ide.themes.NodeTheme.Theme currentNodeTheme = com.kalix.ide.themes.NodeTheme.themeFromString(currentNodeThemeName);
-            nodeThemeComboBox.setSelectedItem(currentNodeTheme);
+            nodeThemeComboBox = new JComboBox<>(themeItemsWithFollow());
+            nodeThemeComboBox.setRenderer(themeDisplayNameRenderer());
+            nodeThemeComboBox.setSelectedItem(
+                ThemePreferences.explicitNodeTheme().<Object>map(t -> t).orElse(FOLLOW_ITEM));
 
             nodeThemeComboBox.addActionListener(e -> {
-                com.kalix.ide.themes.NodeTheme.Theme selectedNodeTheme = (com.kalix.ide.themes.NodeTheme.Theme) nodeThemeComboBox.getSelectedItem();
-                if (selectedNodeTheme != null) {
-                    // Save preference using display name instead of enum name
-                    PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, selectedNodeTheme.getDisplayName());
-
-                    // Notify callback to update map display
-                    if (changeCallback != null) {
-                        changeCallback.onMapPreferencesChanged();
-                    }
+                Object selected = nodeThemeComboBox.getSelectedItem();
+                if (selected instanceof KalixTheme theme) {
+                    ThemePreferences.storeNodeTheme(theme);
+                } else {
+                    ThemePreferences.storeNodeThemeFollow();
+                }
+                // Notify callback to update map display (re-resolves the preference)
+                if (changeCallback != null) {
+                    changeCallback.onMapPreferencesChanged();
                 }
             });
             formPanel.add(nodeThemeComboBox, gbc);
 
-            // Syntax theme selection
+            // Syntax theme selection: follow the application theme (default) or an explicit palette
             gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             formPanel.add(new JLabel("Syntax Theme:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            syntaxThemeComboBox = new JComboBox<>(com.kalix.ide.themes.SyntaxTheme.getAllThemes());
-
-            // Get current syntax theme from preference or default
-            String currentSyntaxThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
-            com.kalix.ide.themes.SyntaxTheme.Theme currentSyntaxTheme = com.kalix.ide.themes.SyntaxTheme.getThemeByName(currentSyntaxThemeName);
-            syntaxThemeComboBox.setSelectedItem(currentSyntaxTheme);
+            syntaxThemeComboBox = new JComboBox<>(themeItemsWithFollow());
+            syntaxThemeComboBox.setRenderer(themeDisplayNameRenderer());
+            syntaxThemeComboBox.setSelectedItem(
+                ThemePreferences.explicitSyntaxTheme().<Object>map(t -> t).orElse(FOLLOW_ITEM));
 
             syntaxThemeComboBox.addActionListener(e -> {
-                com.kalix.ide.themes.SyntaxTheme.Theme selectedSyntaxTheme = (com.kalix.ide.themes.SyntaxTheme.Theme) syntaxThemeComboBox.getSelectedItem();
-                if (selectedSyntaxTheme != null) {
-                    // Save preference
-                    PreferenceManager.setFileString(PreferenceKeys.UI_SYNTAX_THEME, selectedSyntaxTheme.name());
-
-                    // Notify ThemeManager to update syntax highlighting
-                    if (themeManager != null) {
-                        themeManager.updateSyntaxTheme(selectedSyntaxTheme);
-                    }
+                Object selected = syntaxThemeComboBox.getSelectedItem();
+                if (selected instanceof KalixTheme theme) {
+                    ThemePreferences.storeSyntaxTheme(theme);
+                } else {
+                    ThemePreferences.storeSyntaxThemeFollow();
+                }
+                // Apply the now-effective syntax palette to all editors
+                if (themeManager != null) {
+                    themeManager.updateSyntaxTheme(ThemePreferences.effectiveSyntaxTheme());
                 }
             });
             formPanel.add(syntaxThemeComboBox, gbc);
 
 
             add(formPanel, BorderLayout.NORTH);
+        }
+
+        /** The follow entry followed by every registered theme, in registry order. */
+        private Object[] themeItemsWithFollow() {
+            java.util.List<Object> items = new java.util.ArrayList<>();
+            items.add(FOLLOW_ITEM);
+            items.addAll(ThemeRegistry.all());
+            return items.toArray();
+        }
+
+        /** Renders KalixTheme items by display name; other items (the follow entry) as-is. */
+        private DefaultListCellRenderer themeDisplayNameRenderer() {
+            return new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof KalixTheme theme) {
+                        setText(theme.displayName());
+                    }
+                    return this;
+                }
+            };
         }
     }
 

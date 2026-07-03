@@ -49,13 +49,16 @@ public class PreferenceKeys {
     /** STDIO format for get_result responses ("pixie" or "csv", default: "pixie") */
     public static final String STDIO_DATA_FORMAT = "stdio.dataFormat";
 
-    /** UI theme selection (string, default: "Light") */
+    /** Application theme: a stable theme id such as "one-dark" (default: "light").
+     *  Read/written via ThemePreferences, which migrates legacy display names. */
     public static final String UI_THEME = "ui.theme";
 
-    /** Node theme selection (string, default: "LIGHT") */
+    /** Node theme: a theme id, or "follow" to track the application theme (the default).
+     *  Read/written via ThemePreferences, which migrates legacy stored names. */
     public static final String UI_NODE_THEME = "ui.nodeTheme";
 
-    /** Syntax theme selection (string, default: "LIGHT") */
+    /** Syntax theme: a theme id, or "follow" to track the application theme (the default).
+     *  Read/written via ThemePreferences, which migrates legacy enum names. */
     public static final String UI_SYNTAX_THEME = "ui.syntaxTheme";
 
     /** Width in pixels of the project tree region (OS UI state). */
