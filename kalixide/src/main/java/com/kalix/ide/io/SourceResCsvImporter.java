@@ -6,9 +6,7 @@ import javax.swing.SwingWorker;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -272,37 +270,6 @@ public final class SourceResCsvImporter {
             } catch (DateTimeParseException e2) {
                 return null;
             }
-        }
-    }
-
-    /** Tracks how many bytes have been consumed, for byte-based progress reporting. */
-    private static final class CountingInputStream extends FilterInputStream {
-        private volatile long count = 0;
-
-        CountingInputStream(InputStream in) {
-            super(in);
-        }
-
-        long getCount() {
-            return count;
-        }
-
-        @Override
-        public int read() throws IOException {
-            int b = super.read();
-            if (b >= 0) {
-                count++;
-            }
-            return b;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            int n = super.read(b, off, len);
-            if (n > 0) {
-                count += n;
-            }
-            return n;
         }
     }
 

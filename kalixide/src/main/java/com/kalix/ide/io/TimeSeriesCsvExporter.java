@@ -8,13 +8,13 @@ import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Utility class for exporting time series data to CSV format.
@@ -36,6 +36,10 @@ import java.util.TreeSet;
  * 2023-01-01T12:30:00,11.2,21.3,15.8
  * 2023-01-02,12.0,,16.2
  * </pre>
+ *
+ * <p><strong>Performance:</strong> rows are produced by a k-way merge over the series'
+ * sorted timestamp arrays ({@link CsvExportUtil#forEachMergedRow}) — O(total points)
+ * overall, no per-row allocation, no per-cell search. Output is UTF-8.</p>
  *
  * <p><strong>Thread Safety:</strong> This class is stateless and thread-safe.</p>
  *
@@ -72,7 +76,7 @@ public class TimeSeriesCsvExporter {
      * @throws IOException if an I/O error occurs while writing the file
      * @throws IllegalArgumentException if dataSet is null or empty
      *
-     * @see #exportDataToCsv(DataSet, File, PlotType)
+     * @see #exportDataToCsv(DataSet, File, PlotType, LabelResolver)
      */
     public static void export(DataSet dataSet, File outputFile) throws IOException {
         export(dataSet, outputFile, null, null);
@@ -129,10 +133,10 @@ public class TimeSeriesCsvExporter {
     /**
      * Performs the actual CSV export operation.
      *
-     * <p>This method collects all unique timestamps across all series, then
-     * writes them in chronological order with corresponding values for each series.
-     * The algorithm ensures that all data points are included even if series
-     * have different timestamp sets.</p>
+     * <p>Rows are visited in chronological order by merging the series' sorted
+     * timestamp arrays; every data point is included even if series have different
+     * timestamp sets (a series without a point at a row's timestamp gets an empty
+     * cell).</p>
      *
      * @param dataSet the dataset to export
      * @param file the output file
@@ -157,48 +161,17 @@ public class TimeSeriesCsvExporter {
         List<String> headers = new ArrayList<>(labeled.keySet());
         List<TimeSeriesData> allSeries = new ArrayList<>(labeled.values());
 
-        // Collect all unique timestamps across all series
-        Set<Long> allTimestamps = collectAllTimestamps(allSeries);
-
         boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
 
         // Pick a single date format for the whole file based on the resolution of the data.
         // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
         // first regular-interval series; falls back to date-only if none is regular.
-        long stepSeconds = inferStepSeconds(allSeries);
+        long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
 
-        try (FileWriter writer = new FileWriter(file)) {
+        try (Writer writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
             writeHeader(writer, headers, isExceedance);
-            writeDataRows(writer, allSeries, allTimestamps, isExceedance, stepSeconds);
+            writeDataRows(writer, allSeries, isExceedance, stepSeconds);
         }
-    }
-
-    private static long inferStepSeconds(List<TimeSeriesData> allSeries) {
-        for (TimeSeriesData series : allSeries) {
-            if (series.hasRegularInterval()) {
-                return series.getIntervalMillis() / 1000;
-            }
-        }
-        return 0;
-    }
-
-    /**
-     * Collects all unique timestamps from all time series in the dataset.
-     *
-     * <p>Uses a {@link TreeSet} to automatically sort timestamps in chronological
-     * order while eliminating duplicates.</p>
-     *
-     * @param allSeries list of all time series data
-     * @return sorted set of unique timestamps
-     */
-    private static Set<Long> collectAllTimestamps(List<TimeSeriesData> allSeries) {
-        Set<Long> allTimestamps = new TreeSet<>();
-        for (TimeSeriesData series : allSeries) {
-            for (long timestamp : series.getTimestamps()) {
-                allTimestamps.add(timestamp);
-            }
-        }
-        return allTimestamps;
     }
 
     /**
@@ -206,18 +179,13 @@ public class TimeSeriesCsvExporter {
      *
      * <p>The header includes "Datetime" (or "Percentile" for exceedance) as the first column,
      * followed by each time series name. Series names are properly escaped for CSV format.</p>
-     *
-     * @param writer the file writer
-     * @param allSeries list of all time series data
-     * @param isExceedance true if this is exceedance data
-     * @throws IOException if writing fails
      */
-    private static void writeHeader(FileWriter writer, List<String> headers, boolean isExceedance)
+    private static void writeHeader(Writer writer, List<String> headers, boolean isExceedance)
             throws IOException {
         writer.write(isExceedance ? "Percentile" : "Datetime");
         for (String header : headers) {
             writer.write(",");
-            writer.write(escapeCsvField(header));
+            writer.write(CsvExportUtil.escapeCsvField(header));
         }
         writer.write("\n");
     }
@@ -225,79 +193,38 @@ public class TimeSeriesCsvExporter {
     /**
      * Writes all data rows to the CSV file.
      *
-     * <p>Each row corresponds to one unique timestamp. For each timestamp,
-     * the method looks up the corresponding value in each time series.
-     * If a series doesn't have data for that timestamp, an empty cell is written.</p>
+     * <p>Each row corresponds to one unique timestamp, produced by the k-way merge in
+     * {@link CsvExportUtil#forEachMergedRow}. A series without a valid point at a row's
+     * timestamp gets an empty cell.</p>
      *
      * @param writer the file writer
      * @param allSeries list of all time series data
-     * @param allTimestamps sorted set of all unique timestamps
      * @param isExceedance true if this is exceedance data (format first column as percentile)
+     * @param stepSeconds resolution driving the timestamp format (0 = date-only)
      * @throws IOException if writing fails
      */
-    private static void writeDataRows(FileWriter writer, List<TimeSeriesData> allSeries,
-                                    Set<Long> allTimestamps, boolean isExceedance,
-                                    long stepSeconds) throws IOException {
-        for (Long timestamp : allTimestamps) {
+    private static void writeDataRows(Writer writer, List<TimeSeriesData> allSeries,
+                                      boolean isExceedance, long stepSeconds) throws IOException {
+        StringBuilder row = new StringBuilder(64);
+        CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> {
+            row.setLength(0);
             // Format first column based on plot type
             if (isExceedance) {
                 // Convert fake timestamp to percentile
                 double percentile = timestamp / 1_000_000.0;
-                writer.write(String.format(java.util.Locale.ROOT, "%.2f", percentile));
+                row.append(String.format(java.util.Locale.ROOT, "%.2f", percentile));
             } else {
-                writer.write(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
+                row.append(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
             }
 
-            // Write values for each series
-            for (TimeSeriesData series : allSeries) {
-                writer.write(",");
-                Double value = getValueAtTimestamp(series, timestamp);
-                if (value != null && !Double.isNaN(value)) {
-                    writer.write(String.valueOf(value));
+            // Write values for each series; NaN/missing → empty cell
+            for (double value : values) {
+                row.append(',');
+                if (!Double.isNaN(value)) {
+                    row.append(value);
                 }
-                // For NaN/missing values, write empty cell (nothing)
             }
-            writer.write("\n");
-        }
-    }
-
-    /**
-     * Escapes a field for safe CSV output.
-     *
-     * <p>Fields containing commas, quotes, or newlines are wrapped in double quotes.
-     * Internal quotes are escaped by doubling them ("" becomes """").</p>
-     *
-     * @param field the field to escape
-     * @return escaped field safe for CSV output
-     */
-    private static String escapeCsvField(String field) {
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
-            return "\"" + field.replace("\"", "\"\"") + "\"";
-        }
-        return field;
-    }
-
-    /**
-     * Retrieves the value of a time series at a specific timestamp.
-     *
-     * <p>This method searches through the time series data to find a value
-     * that matches the given timestamp exactly. Only valid (non-NaN) data
-     * points are returned.</p>
-     *
-     * @param series the time series to search
-     * @param timestamp the target timestamp
-     * @return the value at the timestamp, or null if not found or invalid
-     */
-    private static Double getValueAtTimestamp(TimeSeriesData series, long timestamp) {
-        long[] timestamps = series.getTimestamps();
-        double[] values = series.getValues();
-        boolean[] validPoints = series.getValidPoints();
-
-        for (int i = 0; i < timestamps.length; i++) {
-            if (timestamps[i] == timestamp && validPoints[i]) {
-                return values[i];
-            }
-        }
-        return null; // Not found or invalid
+            writer.write(row.append('\n').toString());
+        });
     }
 }
