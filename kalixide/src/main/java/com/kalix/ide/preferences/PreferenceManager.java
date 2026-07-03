@@ -269,7 +269,20 @@ public class PreferenceManager {
             }
 
             String json = generateSimpleJson(filePreferences);
-            Files.writeString(preferenceFile.toPath(), json);
+
+            // Atomic write: a crash mid-write must never truncate the preferences
+            // file (load treats a corrupt file as empty, losing every setting).
+            // Write a sibling temp file, then move it over the target.
+            java.nio.file.Path target = preferenceFile.toPath();
+            java.nio.file.Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+            Files.writeString(temp, json);
+            try {
+                Files.move(temp, target,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (Exception e) {
             System.err.println("Warning: Could not save preferences to " +
                 preferenceFile.getAbsolutePath() + ": " + e.getMessage());
@@ -284,6 +297,15 @@ public class PreferenceManager {
     }
 
     // ==== SIMPLE JSON IMPLEMENTATION ====
+    //
+    // A minimal, dependency-free JSON reader/writer for the flat preference shape:
+    // one object of string/boolean/number/string-array values. The writer emits
+    // strictly valid JSON (full string escaping, so quotes, backslashes in Windows
+    // paths, and newlines in free-text preferences round-trip and stay readable by
+    // external tools). The reader is a character-level parser -- no regex splitting,
+    // so commas and quotes inside string values are handled correctly -- and is
+    // deliberately lenient about invalid escape sequences so files written by the
+    // pre-escaping implementation (raw backslashes in paths) load unchanged.
 
     /**
      * Parses a simple JSON object into a Map.
@@ -291,123 +313,189 @@ public class PreferenceManager {
      */
     private static Map<String, Object> parseSimpleJson(String json) {
         Map<String, Object> result = new HashMap<>();
+        JsonCursor cur = new JsonCursor(json);
 
-        // Remove whitespace and outer braces
-        json = json.trim();
-        if (json.startsWith("{") && json.endsWith("}")) {
-            json = json.substring(1, json.length() - 1).trim();
+        cur.skipWhitespace();
+        if (!cur.tryConsume('{')) {
+            return result; // not an object -- treat as empty
         }
-
-        if (json.isEmpty()) {
+        cur.skipWhitespace();
+        if (cur.tryConsume('}')) {
             return result;
         }
 
-        // Split by commas (simple approach - doesn't handle arrays with commas)
-        String[] pairs = json.split(",(?=\\s*\"[^\"]+\"\\s*:)");
-
-        for (String pair : pairs) {
-            pair = pair.trim();
-            int colonIndex = pair.indexOf(":");
-            if (colonIndex > 0) {
-                String key = pair.substring(0, colonIndex).trim();
-                String value = pair.substring(colonIndex + 1).trim();
-
-                // Remove quotes from key
-                if (key.startsWith("\"") && key.endsWith("\"")) {
-                    key = key.substring(1, key.length() - 1);
-                }
-
-                // Parse value
-                Object parsedValue = parseJsonValue(value);
-                if (parsedValue != null) {
-                    result.put(key, parsedValue);
-                }
+        while (true) {
+            cur.skipWhitespace();
+            if (cur.peek() != '"') {
+                break; // malformed key -- salvage what was parsed so far
             }
+            String key = cur.readString();
+            cur.skipWhitespace();
+            if (!cur.tryConsume(':')) {
+                break;
+            }
+            cur.skipWhitespace();
+            Object value = cur.readValue();
+            result.put(key, value);
+            cur.skipWhitespace();
+            if (cur.tryConsume(',')) {
+                continue;
+            }
+            break; // '}' or end of input
         }
 
         return result;
     }
 
-    /**
-     * Parses a JSON value (string, boolean, number, or string array).
-     */
-    private static Object parseJsonValue(String value) {
-        value = value.trim();
+    /** Character-level cursor over a JSON document. */
+    private static final class JsonCursor {
+        private final String s;
+        private int pos;
 
-        // Boolean values
-        if ("true".equals(value)) {
-            return true;
-        } else if ("false".equals(value)) {
+        JsonCursor(String s) {
+            this.s = s;
+        }
+
+        void skipWhitespace() {
+            while (pos < s.length() && Character.isWhitespace(s.charAt(pos))) {
+                pos++;
+            }
+        }
+
+        char peek() {
+            return pos < s.length() ? s.charAt(pos) : '\0';
+        }
+
+        boolean tryConsume(char c) {
+            if (pos < s.length() && s.charAt(pos) == c) {
+                pos++;
+                return true;
+            }
             return false;
         }
-        // Null value
-        else if ("null".equals(value)) {
-            return null;
-        }
-        // String array
-        else if (value.startsWith("[") && value.endsWith("]")) {
-            return parseJsonStringArray(value);
-        }
-        // String value
-        else if (value.startsWith("\"") && value.endsWith("\"")) {
-            return value.substring(1, value.length() - 1);
-        }
-        // Number value
-        else {
-            try {
-                if (value.contains(".")) {
-                    return Double.parseDouble(value);
-                } else {
-                    return Integer.parseInt(value);
-                }
-            } catch (NumberFormatException e) {
-                return value; // Return as string if not a valid number
+
+        /** Reads a value: string, array of strings, boolean, null, or number. */
+        Object readValue() {
+            char c = peek();
+            if (c == '"') {
+                return readString();
+            }
+            if (c == '[') {
+                return readStringArray();
+            }
+            // Literal: read until a delimiter
+            int start = pos;
+            while (pos < s.length() && ",}]".indexOf(s.charAt(pos)) < 0
+                    && !Character.isWhitespace(s.charAt(pos))) {
+                pos++;
+            }
+            String literal = s.substring(start, pos);
+            switch (literal) {
+                case "true": return true;
+                case "false": return false;
+                case "null": return null;
+                default:
+                    try {
+                        return literal.contains(".")
+                            ? (Object) Double.parseDouble(literal)
+                            : (Object) Integer.parseInt(literal);
+                    } catch (NumberFormatException e) {
+                        return literal; // preserve unknown literals as strings
+                    }
             }
         }
-    }
 
-    /**
-     * Parses a JSON string array.
-     */
-    private static List<String> parseJsonStringArray(String arrayStr) {
-        List<String> result = new ArrayList<>();
+        /** Reads a double-quoted string, unescaping it. Cursor must be on the opening quote. */
+        String readString() {
+            pos++; // opening quote
+            StringBuilder sb = new StringBuilder();
+            while (pos < s.length()) {
+                char c = s.charAt(pos++);
+                if (c == '"') {
+                    return sb.toString();
+                }
+                if (c == '\\' && pos < s.length()) {
+                    char esc = s.charAt(pos++);
+                    switch (esc) {
+                        case '"': sb.append('"'); break;
+                        case '\\': sb.append('\\'); break;
+                        case '/': sb.append('/'); break;
+                        case 'n': sb.append('\n'); break;
+                        case 'r': sb.append('\r'); break;
+                        case 't': sb.append('\t'); break;
+                        case 'b': sb.append('\b'); break;
+                        case 'f': sb.append('\f'); break;
+                        case 'u':
+                            if (pos + 4 <= s.length()) {
+                                try {
+                                    sb.append((char) Integer.parseInt(s.substring(pos, pos + 4), 16));
+                                    pos += 4;
+                                    break;
+                                } catch (NumberFormatException ignored) {
+                                    // fall through to lenient handling
+                                }
+                            }
+                            sb.append('\\').append('u');
+                            break;
+                        default:
+                            // Lenient: files written by the pre-escaping implementation
+                            // contain raw backslashes (Windows paths). Keep both chars.
+                            sb.append('\\').append(esc);
+                    }
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.toString(); // unterminated string -- salvage
+        }
 
-        // Remove brackets
-        arrayStr = arrayStr.substring(1, arrayStr.length() - 1).trim();
-
-        if (arrayStr.isEmpty()) {
+        /** Reads a JSON array of strings. Cursor must be on the opening bracket. */
+        List<String> readStringArray() {
+            List<String> result = new ArrayList<>();
+            pos++; // opening bracket
+            skipWhitespace();
+            if (tryConsume(']')) {
+                return result;
+            }
+            while (pos < s.length()) {
+                skipWhitespace();
+                if (peek() == '"') {
+                    result.add(readString());
+                } else {
+                    // Non-string element -- skip to next delimiter
+                    while (pos < s.length() && ",]".indexOf(s.charAt(pos)) < 0) {
+                        pos++;
+                    }
+                }
+                skipWhitespace();
+                if (tryConsume(',')) {
+                    continue;
+                }
+                tryConsume(']');
+                break;
+            }
             return result;
         }
-
-        // Split by commas
-        String[] items = arrayStr.split(",");
-        for (String item : items) {
-            item = item.trim();
-            if (item.startsWith("\"") && item.endsWith("\"")) {
-                result.add(item.substring(1, item.length() - 1));
-            }
-        }
-
-        return result;
     }
 
     /**
      * Generates simple JSON from a Map.
      * Only supports flat key-value pairs with string, boolean, number, and string list values.
+     * Keys are written in sorted order so the file diffs cleanly under version control.
      */
     private static String generateSimpleJson(Map<String, Object> map) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
 
         boolean first = true;
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
+        for (String key : new java.util.TreeMap<>(map).keySet()) {
             if (!first) {
                 sb.append(",\n");
             }
             first = false;
 
-            sb.append("  \"").append(entry.getKey()).append("\": ");
-            sb.append(formatJsonValue(entry.getValue()));
+            sb.append("  ").append(quoteJsonString(key)).append(": ");
+            sb.append(formatJsonValue(map.get(key)));
         }
 
         sb.append("\n}");
@@ -433,13 +521,39 @@ public class PreferenceManager {
                     sb.append(", ");
                 }
                 first = false;
-                sb.append("\"").append(item.toString()).append("\"");
+                sb.append(quoteJsonString(item.toString()));
             }
             sb.append("]");
             return sb.toString();
         } else {
             // String value
-            return "\"" + value + "\"";
+            return quoteJsonString(value.toString());
         }
+    }
+
+    /** Quotes and escapes a string per the JSON grammar. */
+    private static String quoteJsonString(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 2);
+        sb.append('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                case '\b': sb.append("\\b"); break;
+                case '\f': sb.append("\\f"); break;
+                default:
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        sb.append('"');
+        return sb.toString();
     }
 }
