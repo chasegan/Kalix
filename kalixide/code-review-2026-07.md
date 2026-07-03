@@ -24,6 +24,18 @@ Grades are health assessments of each subsystem as found:
 
 ## P0 — Data corruption / data loss (fix first, in any order)
 
+> **STATUS 2026-07-03: all seven P0 items FIXED** (Wave 1), with regression tests:
+> #1 raw-bits codec + NaN-payload cross-language fixture (both suites); #2 writer
+> now converts ms→s at the boundary, round-trip test asserts timestamps + .pxt
+> content; #3 encode-side range guard in both GorillaCompressor.java and
+> gorilla.rs; #4 `Locale.ROOT` at all four file/clipboard-bound sites **plus** the
+> JVM FORMAT-category locale pinned to ROOT in `KalixIDE.main`; #5 atomic
+> temp-file+move writes and a real escaping JSON writer/parser (lenient reader for
+> legacy unescaped files); #6 commas accepted only as full thousands groupings;
+> #7 rename now checks `target.exists()` and uses `Files.move`. Also landed:
+> Pixie units documented in the STDIO spec + kalixide/CLAUDE.md; PixieReader uses
+> the primitive TimeSeriesData ctor; dead 146-line main() harness deleted.
+
 1. **Gorilla decoder corrupts all values after a non-canonical NaN** —
    `GorillaCompressor.java:430` (double), `:536` (float); also `:182–226`.
    Decoder re-derives its XOR base via `Double.doubleToLongBits(value)`, which
