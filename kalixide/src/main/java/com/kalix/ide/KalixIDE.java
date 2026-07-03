@@ -1950,6 +1950,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
             ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
             toolBar = components.toolBar;
+            fileTreeToggleButton = components.fileTreeToggleButton;
             lintingToggleButton = components.lintingToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;

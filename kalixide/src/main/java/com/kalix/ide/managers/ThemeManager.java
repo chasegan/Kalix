@@ -91,21 +91,31 @@ public class ThemeManager {
         // Save theme to new file-based preference system
         PreferenceManager.setFileString(PreferenceKeys.UI_THEME, theme);
         
-        // Apply the new theme with animation
+        // Apply the new theme with animation. FlatLaf's documented order is
+        // showSnapshot -> setLookAndFeel -> update UI -> hideSnapshotWithAnimation,
+        // so the cross-fade blends the OLD look into the fully updated NEW look.
         FlatAnimatedLafChange.showSnapshot();
-        
+
         try {
             setLookAndFeelForTheme(theme);
+
+            // Re-derive UIManager tweaks that depend on the now-current LaF
+            // (e.g. TabbedPane.selectedBackground is copied from Panel.background);
+            // the values set at startup are stale after a runtime switch.
+            configureFlatLafProperties();
+
+            // Update all components while the snapshot overlay is still showing
+            updateAllWindows();
+
+            return "Switched to " + theme + " theme";
         } catch (UnsupportedLookAndFeelException e) {
             System.err.println(AppConstants.ERROR_FAILED_LOOK_AND_FEEL + e.getMessage());
             return "Failed to switch to " + theme + " theme";
+        } finally {
+            // Always dismiss the snapshot overlay, even when the switch fails —
+            // otherwise the UI is left frozen behind the stale snapshot.
+            FlatAnimatedLafChange.hideSnapshotWithAnimation();
         }
-        
-        // Update all components with animation
-        FlatAnimatedLafChange.hideSnapshotWithAnimation();
-        updateAllWindows();
-        
-        return "Switched to " + theme + " theme";
     }
     
     /**

@@ -78,6 +78,13 @@ public class ExactColorTheme {
         new FormComponentTheme().applyTheme(properties, this);
         new CustomKalixTheme().applyTheme(properties, this);
 
+        // Pass every explicitly set color through verbatim. The builders above only
+        // read a fixed key list, so without this any key they don't know about
+        // (e.g. Slider.*, Spinner.buttonBackground, RadioButton.icon.centerDiameter)
+        // would be silently discarded. Builders now only supply fallbacks for keys
+        // a theme omits.
+        properties.putAll(colors);
+
         return properties;
     }
 

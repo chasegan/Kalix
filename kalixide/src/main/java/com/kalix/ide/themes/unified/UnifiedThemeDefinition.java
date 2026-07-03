@@ -34,6 +34,13 @@ public class UnifiedThemeDefinition {
     }
 
     /**
+     * Whether this is a dark theme (drives FlatLaf's base defaults selection)
+     */
+    public boolean isDark() {
+        return palette.isDark();
+    }
+
+    /**
      * Generate application theme properties
      */
     public Properties generateApplicationProperties() {

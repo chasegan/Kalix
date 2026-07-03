@@ -94,11 +94,6 @@ public class PreferencesDialog extends JDialog {
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Ensure tooltips are enabled
-        ToolTipManager.sharedInstance().setEnabled(true);
-        ToolTipManager.sharedInstance().setInitialDelay(300);
-        ToolTipManager.sharedInstance().setDismissDelay(500);
-
         // Create tree navigation
         createPreferencesTree();
         JScrollPane treeScrollPane = new JScrollPane(preferencesTree);
