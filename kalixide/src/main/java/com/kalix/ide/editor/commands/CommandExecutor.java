@@ -11,6 +11,7 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -59,29 +60,16 @@ public class CommandExecutor {
                 return false;
             }
 
-            // Get current text
-            String currentText = editor.getText();
-
             // Find all references and build replacement list
-            List<TextReplacement> replacements = findNodeReferences(oldName, newName, parsedModel);
+            List<TextReplacement> replacements = findNodeReferences(editor.getText(), oldName, newName, parsedModel);
 
             if (replacements.isEmpty()) {
                 showError("No references found for node '" + oldName + "'");
                 return false;
             }
 
-            // Convert TextReplacement to LineReplacement and apply atomically
-            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
-            for (TextReplacement replacement : replacements) {
-                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
-                    replacement.getLineNumber(),
-                    replacement.getOldText(),
-                    replacement.getNewText()
-                ));
-            }
-
             // Apply all replacements as a single atomic undo operation
-            replacementApplier.accept(lineReplacements);
+            applyReplacements(replacements);
 
             logger.info("Renamed node '{}' to '{}' ({} references updated)", oldName, newName, replacements.size());
             return true;
@@ -120,29 +108,16 @@ public class CommandExecutor {
                 return false;
             }
 
-            // Get current text
-            String currentText = editor.getText();
-
             // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileReferences(oldPath, newPath, parsedModel);
+            List<TextReplacement> replacements = findInputFileReferences(editor.getText(), oldPath, newPath, parsedModel);
 
             if (replacements.isEmpty()) {
                 showError("No references found for input file '" + oldPath + "'");
                 return false;
             }
 
-            // Convert TextReplacement to LineReplacement and apply atomically
-            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
-            for (TextReplacement replacement : replacements) {
-                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
-                    replacement.getLineNumber(),
-                    replacement.getOldText(),
-                    replacement.getNewText()
-                ));
-            }
-
             // Apply all replacements as a single atomic undo operation
-            replacementApplier.accept(lineReplacements);
+            applyReplacements(replacements);
 
             String oldFileSanitised = EngineNames.sanitizeFileName(oldPath);
             String newFileSanitised = EngineNames.sanitizeFileName(newPath);
@@ -185,25 +160,15 @@ public class CommandExecutor {
             }
 
             // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileAliasReferences(oldAlias, newAlias, parsedModel);
+            List<TextReplacement> replacements = findInputFileAliasReferences(editor.getText(), oldAlias, newAlias, parsedModel);
 
             if (replacements.isEmpty()) {
                 showError("No references found for input file '" + oldAlias + "'");
                 return false;
             }
 
-            // Convert TextReplacement to LineReplacement and apply atomically
-            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
-            for (TextReplacement replacement : replacements) {
-                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
-                        replacement.getLineNumber(),
-                        replacement.getOldText(),
-                        replacement.getNewText()
-                ));
-            }
-
             // Apply all replacements as a single atomic undo operation
-            replacementApplier.accept(lineReplacements);
+            applyReplacements(replacements);
 
             String oldAliasSanitised = EngineNames.sanitize(oldAlias);
             String newAliasSanitised = EngineNames.sanitize(newAlias);
@@ -249,25 +214,15 @@ public class CommandExecutor {
             }
 
             // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileReferencesAddAlias(oldPath, newAlias, parsedModel);
+            List<TextReplacement> replacements = findInputFileReferencesAddAlias(editor.getText(), oldPath, newAlias, parsedModel);
 
             if (replacements.isEmpty()) {
                 showError("No references found for input file '" + oldPath + "'");
                 return false;
             }
 
-            // Convert TextReplacement to LineReplacement and apply atomically
-            List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
-            for (TextReplacement replacement : replacements) {
-                lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
-                        replacement.getLineNumber(),
-                        replacement.getOldText(),
-                        replacement.getNewText()
-                ));
-            }
-
             // Apply all replacements as a single atomic undo operation
-            replacementApplier.accept(lineReplacements);
+            applyReplacements(replacements);
 
             String oldAliasSanitised = EngineNames.sanitizeFileName(oldPath);
             String newAliasSanitised = EngineNames.sanitize(newAlias);
@@ -283,25 +238,37 @@ public class CommandExecutor {
     }
 
     /**
-     * Finds all legitimate references to a node.
+     * Finds all legitimate references to a node, each anchored to the exact column
+     * range of the match so that replacement cannot touch look-alike text elsewhere
+     * on the line (keys, comments, other names sharing a substring).
      *
+     * @param text        The current document text
      * @param oldName     The node to find references for
      * @param newName     The new name to replace with
      * @param parsedModel The parsed model
-     * @return List of text replacements to perform
+     * @return List of range-anchored text replacements to perform
      */
-    private List<TextReplacement> findNodeReferences(String oldName, String newName,
-                                                     INIModelParser.ParsedModel parsedModel) {
+    List<TextReplacement> findNodeReferences(String text, String oldName, String newName,
+                                             INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
+        String[] lines = text.split("\n", -1);
 
         // 1. Rename the node section header: [node.OldName] -> [node.NewName]
         INIModelParser.Section nodeSection = parsedModel.getSections().get("node." + oldName);
         if (nodeSection != null) {
-            replacements.add(new TextReplacement(
-                nodeSection.getStartLine(),
-                "[node." + oldName + "]",
-                "[node." + newName + "]"
-            ));
+            String headerLine = lineAt(lines, nodeSection.getStartLine());
+            String oldHeader = "[node." + oldName + "]";
+            int column = headerLine != null ? headerLine.indexOf(oldHeader) : -1;
+            if (column >= 0) {
+                replacements.add(new TextReplacement(
+                    nodeSection.getStartLine(),
+                    column,
+                    oldHeader,
+                    "[node." + newName + "]"
+                ));
+            } else {
+                logger.warn("Header '[node.{}]' not found on line {}", oldName, nodeSection.getStartLine());
+            }
         } else {
             logger.warn("Node section 'node.{}' not found in parsed model", oldName);
         }
@@ -314,11 +281,7 @@ public class CommandExecutor {
                 // Check ds_1, ds_2, ds_3, etc.
                 if (prop.getKey().matches("ds_\\d+")) {
                     if (prop.getValue().trim().equals(oldName)) {
-                        replacements.add(new TextReplacement(
-                            prop.getLineNumber(),
-                            oldName,
-                            newName
-                        ));
+                        addValueSpanReplacement(replacements, lines, prop.getLineNumber(), oldName, newName);
                     }
                 }
             }
@@ -326,35 +289,27 @@ public class CommandExecutor {
 
         // 3. Find output references: node.NodeName.property
         // Output references are stored separately in the parsed model (not as section properties)
+        Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.");
+        String nodeRefReplacement = "node." + newName + ".";
         for (String outputRef : parsedModel.getOutputReferences()) {
             // Match: node.OldName.anything
-            if (outputRef.contains("node." + oldName + ".")) {
+            if (nodeRefPattern.matcher(outputRef).find()) {
                 Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
                 if (lineNumber != null) {
-                    replacements.add(new TextReplacement(
-                        lineNumber,
-                        "node." + oldName + ".",
-                        "node." + newName + "."
-                    ));
+                    addPatternMatches(replacements, lines, lineNumber, nodeRefPattern, false, nodeRefReplacement);
                 }
             }
         }
 
         // 4. Find node references in function expressions: node.NodeName.property within property values
         // These can appear in any property value, especially function_expression types
-        Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.");
         for (INIModelParser.Section section : parsedModel.getSections().values()) {
             if (!section.getName().startsWith("node.")) continue;
 
             for (INIModelParser.Property prop : section.getProperties().values()) {
-                String value = prop.getValue();
                 // Check if this property value contains a reference to the old node name
-                if (nodeRefPattern.matcher(value).find()) {
-                    replacements.add(new TextReplacement(
-                        prop.getLineNumber(),
-                        "node." + oldName + ".",
-                        "node." + newName + "."
-                    ));
+                if (nodeRefPattern.matcher(prop.getValue()).find()) {
+                    addPatternMatches(replacements, lines, prop.getLineNumber(), nodeRefPattern, true, nodeRefReplacement);
                 }
             }
         }
@@ -365,191 +320,251 @@ public class CommandExecutor {
     /**
      * Finds all legitimate references to an input file.
      *
+     * @param text        The current document text
      * @param oldPath     The old file path
      * @param newPath     The new file path
      * @param parsedModel The parsed model
-     * @return List of text replacements to perform
+     * @return List of range-anchored text replacements to perform
      */
-    private List<TextReplacement> findInputFileReferences(String oldPath, String newPath,
-                                                          INIModelParser.ParsedModel parsedModel) {
+    List<TextReplacement> findInputFileReferences(String text, String oldPath, String newPath,
+                                                  INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
+        String[] lines = text.split("\n", -1);
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
         String newPathSanitised = EngineNames.sanitizeFileName(newPath);
 
         // 1. Replace the input file path in [inputs] section
-        Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
-        if (inputLineNumber != null) {
-            replacements.add(new TextReplacement(
-                inputLineNumber,
-                oldPath,
-                newPath
-            ));
-        } else {
-            logger.warn("Input file path '{}' not found in parsed model", oldPath);
-        }
+        addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newPath);
 
-        // 2. Find all data.{name}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
-        // Do not rename input file aliases
-        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldPathSanitised) + "\\.");
-        for (INIModelParser.Section section : parsedModel.getSections().values()) {
-            if (!section.getName().startsWith("node.")) continue;
-
-            for (INIModelParser.Property prop : section.getProperties().values()) {
-                String value = prop.getValue();
-                // Check if this property value contains a reference to the old alias
-                if (dataRefPattern.matcher(value).find()) {
-                    replacements.add(new TextReplacement(
-                        prop.getLineNumber(),
-                        "data." + oldPathSanitised + ".",
-                        "data." + newPathSanitised + "."
-                    ));
-                }
-            }
-        }
-
-        // 3. Find output references: data.{alias}.*
-        for (String outputRef : parsedModel.getOutputReferences()) {
-            // Match: data.old_alias.anything
-            if (outputRef.contains("data." + oldPathSanitised + ".")) {
-                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
-                if (lineNumber != null) {
-                    replacements.add(new TextReplacement(
-                        lineNumber,
-                        "data." + oldPathSanitised + ".",
-                        "data." + newPathSanitised + "."
-                    ));
-                }
-            }
-        }
+        // 2 & 3. Rewrite data.{name}.* references in property values and output references
+        addDataReferenceReplacements(replacements, lines, parsedModel, oldPathSanitised, newPathSanitised);
 
         return replacements;
     }
 
     /**
-     * Finds all legitimate references to an input file.
+     * Finds all references to an input file, converting it to aliased form.
      *
+     * @param text        The current document text
      * @param oldPath     The old file path
-     * @param newAlias     The new file path
+     * @param newAlias    The new alias (already engine-sanitised)
      * @param parsedModel The parsed model
-     * @return List of text replacements to perform
+     * @return List of range-anchored text replacements to perform
      */
-    private List<TextReplacement> findInputFileReferencesAddAlias(String oldPath, String newAlias,
-                                                                  INIModelParser.ParsedModel parsedModel) {
+    List<TextReplacement> findInputFileReferencesAddAlias(String text, String oldPath, String newAlias,
+                                                          INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
+        String[] lines = text.split("\n", -1);
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
-        String newPathSanitised = EngineNames.sanitize(newAlias);
+        String newAliasSanitised = EngineNames.sanitize(newAlias);
 
         // 1. Replace the input file path in [inputs] section with alias = path format
-        Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
-        if (inputLineNumber != null) {
-            replacements.add(new TextReplacement(
-                    inputLineNumber,
-                    oldPath,
-                    newAlias + " = " + oldPath
-            ));
-        } else {
-            logger.warn("Input file path '{}' not found in parsed model", oldPath);
-        }
+        addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newAlias + " = " + oldPath);
 
-        // 2. Find all data.{name}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
-        // Do not rename input file aliases
-        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldPathSanitised) + "\\.");
-        for (INIModelParser.Section section : parsedModel.getSections().values()) {
-            if (!section.getName().startsWith("node.")) continue;
-
-            for (INIModelParser.Property prop : section.getProperties().values()) {
-                String value = prop.getValue();
-                // Check if this property value contains a reference to the old alias
-                if (dataRefPattern.matcher(value).find()) {
-                    replacements.add(new TextReplacement(
-                            prop.getLineNumber(),
-                            "data." + oldPathSanitised + ".",
-                            "data." + newPathSanitised + "."
-                    ));
-                }
-            }
-        }
-
-        // 3. Find output references: data.{alias}.*
-        for (String outputRef : parsedModel.getOutputReferences()) {
-            // Match: data.old_alias.anything
-            if (outputRef.contains("data." + oldPathSanitised + ".")) {
-                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
-                if (lineNumber != null) {
-                    replacements.add(new TextReplacement(
-                            lineNumber,
-                            "data." + oldPathSanitised + ".",
-                            "data." + newPathSanitised + "."
-                    ));
-                }
-            }
-        }
+        // 2 & 3. Rewrite data.{name}.* references in property values and output references
+        addDataReferenceReplacements(replacements, lines, parsedModel, oldPathSanitised, newAliasSanitised);
 
         return replacements;
     }
-
 
     /**
      * Finds all legitimate references to an input file alias.
      *
+     * @param text        The current document text
      * @param oldAlias    The old file alias
      * @param newAlias    The new file alias
      * @param parsedModel The parsed model
-     * @return List of text replacements to perform
+     * @return List of range-anchored text replacements to perform
      */
-    private List<TextReplacement> findInputFileAliasReferences(String oldAlias, String newAlias,
-                                                          INIModelParser.ParsedModel parsedModel) {
+    List<TextReplacement> findInputFileAliasReferences(String text, String oldAlias, String newAlias,
+                                                       INIModelParser.ParsedModel parsedModel) {
         List<TextReplacement> replacements = new ArrayList<>();
+        String[] lines = text.split("\n", -1);
         String oldAliasSanitised = EngineNames.sanitize(oldAlias);
         String newAliasSanitised = EngineNames.sanitize(newAlias);
 
-        // 1. Replace the input file path in [inputs] section
+        // 1. Replace the alias key on its "alias = path" line in the [inputs] section.
+        // Anchored to the key position so a path that happens to contain the alias
+        // text is never rewritten.
         Integer inputLineNumber = parsedModel.getInputFileAliasLineNumbers().get(oldAlias);
-        if (inputLineNumber != null) {
-            replacements.add(new TextReplacement(
-                    inputLineNumber,
-                    oldAlias,
-                    newAlias
-            ));
+        String aliasLine = inputLineNumber != null ? lineAt(lines, inputLineNumber) : null;
+        if (aliasLine != null) {
+            Matcher keyMatcher = Pattern.compile("^\\s*(" + Pattern.quote(oldAlias) + ")\\s*=").matcher(aliasLine);
+            if (keyMatcher.find()) {
+                replacements.add(new TextReplacement(
+                        inputLineNumber,
+                        keyMatcher.start(1),
+                        oldAlias,
+                        newAlias
+                ));
+            } else {
+                logger.warn("Alias key '{}' not found on line {}", oldAlias, inputLineNumber);
+            }
         } else {
             logger.warn("Input file alias '{}' not found in parsed model", oldAlias);
         }
 
-        // 2. Find all data.{name}.* references in property values (e.g., data.patterns_csv.by_name.pattern_1)
-        // Do not rename input file aliases
-        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldAliasSanitised) + "\\.");
+        // 2 & 3. Rewrite data.{alias}.* references in property values and output references
+        addDataReferenceReplacements(replacements, lines, parsedModel, oldAliasSanitised, newAliasSanitised);
+
+        return replacements;
+    }
+
+    /**
+     * Adds the replacement of an input file path on its [inputs] line, anchored to
+     * the exact position of the path text (searched backwards so the path portion of
+     * an "alias = path" line is matched, never the alias).
+     */
+    private void addInputsLinePathReplacement(List<TextReplacement> replacements, String[] lines,
+                                              INIModelParser.ParsedModel parsedModel,
+                                              String oldPath, String newText) {
+        Integer inputLineNumber = parsedModel.getInputFileLineNumbers().get(oldPath);
+        String inputLine = inputLineNumber != null ? lineAt(lines, inputLineNumber) : null;
+        if (inputLine == null) {
+            logger.warn("Input file path '{}' not found in parsed model", oldPath);
+            return;
+        }
+        int end = commentStartColumn(inputLine);
+        int column = inputLine.lastIndexOf(oldPath, end - oldPath.length());
+        if (column >= 0) {
+            replacements.add(new TextReplacement(inputLineNumber, column, oldPath, newText));
+        } else {
+            logger.warn("Input file path '{}' not found on line {}", oldPath, inputLineNumber);
+        }
+    }
+
+    /**
+     * Adds range-anchored replacements for every {@code data.<oldName>.} reference in
+     * node property values and output references.
+     */
+    private void addDataReferenceReplacements(List<TextReplacement> replacements, String[] lines,
+                                              INIModelParser.ParsedModel parsedModel,
+                                              String oldNameSanitised, String newNameSanitised) {
+        Pattern dataRefPattern = Pattern.compile("\\bdata\\." + Pattern.quote(oldNameSanitised) + "\\.");
+        String dataRefReplacement = "data." + newNameSanitised + ".";
+
+        // Property values (e.g., data.patterns_csv.by_name.pattern_1 in expressions)
         for (INIModelParser.Section section : parsedModel.getSections().values()) {
             if (!section.getName().startsWith("node.")) continue;
 
             for (INIModelParser.Property prop : section.getProperties().values()) {
-                String value = prop.getValue();
-                // Check if this property value contains a reference to the old alias
-                if (dataRefPattern.matcher(value).find()) {
-                    replacements.add(new TextReplacement(
-                            prop.getLineNumber(),
-                            "data." + oldAliasSanitised + ".",
-                            "data." + newAliasSanitised + "."
-                    ));
+                // Check if this property value contains a reference to the old name
+                if (dataRefPattern.matcher(prop.getValue()).find()) {
+                    addPatternMatches(replacements, lines, prop.getLineNumber(), dataRefPattern, true, dataRefReplacement);
                 }
             }
         }
 
-        // 3. Find output references: data.{alias}.*
+        // Output references: data.{name}.*
         for (String outputRef : parsedModel.getOutputReferences()) {
-            // Match: data.old_alias.anything
-            if (outputRef.contains("data." + oldAliasSanitised + ".")) {
+            if (dataRefPattern.matcher(outputRef).find()) {
                 Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
                 if (lineNumber != null) {
-                    replacements.add(new TextReplacement(
-                            lineNumber,
-                            "data." + oldAliasSanitised + ".",
-                            "data." + newAliasSanitised + "."
-                    ));
+                    addPatternMatches(replacements, lines, lineNumber, dataRefPattern, false, dataRefReplacement);
                 }
             }
         }
+    }
 
-        return replacements;
+    /**
+     * Adds a replacement for a property whose entire (trimmed) value is the old name
+     * (e.g. {@code ds_1 = oldName}), anchored to the value span: after the first
+     * {@code =}, before any inline comment, whitespace-trimmed. The key and any
+     * comment on the same line are untouchable by construction.
+     */
+    private void addValueSpanReplacement(List<TextReplacement> replacements, String[] lines,
+                                         int lineNumber, String oldName, String newName) {
+        String line = lineAt(lines, lineNumber);
+        if (line == null) {
+            return;
+        }
+        int eq = line.indexOf('=');
+        if (eq < 0) {
+            return; // value on a continuation line; nothing to rename on this line
+        }
+        int end = commentStartColumn(line);
+        int valueStart = eq + 1;
+        while (valueStart < end && Character.isWhitespace(line.charAt(valueStart))) {
+            valueStart++;
+        }
+        int valueEnd = end;
+        while (valueEnd > valueStart && Character.isWhitespace(line.charAt(valueEnd - 1))) {
+            valueEnd--;
+        }
+        if (line.substring(valueStart, valueEnd).equals(oldName)) {
+            replacements.add(new TextReplacement(lineNumber, valueStart, oldName, newName));
+        }
+    }
+
+    /**
+     * Adds one range-anchored replacement per match of {@code pattern} on the given
+     * line, searching only up to any inline comment and — when {@code valueRegionOnly}
+     * — only after the first {@code =}.
+     */
+    private void addPatternMatches(List<TextReplacement> replacements, String[] lines, int lineNumber,
+                                   Pattern pattern, boolean valueRegionOnly, String newText) {
+        String line = lineAt(lines, lineNumber);
+        if (line == null) {
+            return;
+        }
+        int from = 0;
+        if (valueRegionOnly) {
+            int eq = line.indexOf('=');
+            if (eq < 0) {
+                return; // reference sits on a continuation line; out of reach of line-based rename
+            }
+            from = eq + 1;
+        }
+        int end = commentStartColumn(line);
+        if (from >= end) {
+            return;
+        }
+        Matcher matcher = pattern.matcher(line).region(from, end);
+        while (matcher.find()) {
+            replacements.add(new TextReplacement(lineNumber, matcher.start(), matcher.group(), newText));
+        }
+    }
+
+    /**
+     * Returns the raw text of a 1-based line number, or {@code null} if out of range.
+     */
+    private static String lineAt(String[] lines, int lineNumber) {
+        int index = lineNumber - 1;
+        return (index >= 0 && index < lines.length) ? lines[index] : null;
+    }
+
+    /**
+     * Returns the column where an inline comment ({@code #} or {@code ;}) starts on
+     * the line, or the line length if there is none. Mirrors
+     * {@code INIModelParser.removeComments}, so ranges computed here address the same
+     * region the parser read values from.
+     */
+    private static int commentStartColumn(String line) {
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '#' || c == ';') {
+                return i;
+            }
+        }
+        return line.length();
+    }
+
+    /**
+     * Converts range-anchored {@link TextReplacement}s to editor
+     * {@link com.kalix.ide.editor.EnhancedTextEditor.LineReplacement}s and applies
+     * them as a single atomic undo operation.
+     */
+    private void applyReplacements(List<TextReplacement> replacements) {
+        List<com.kalix.ide.editor.EnhancedTextEditor.LineReplacement> lineReplacements = new ArrayList<>();
+        for (TextReplacement replacement : replacements) {
+            lineReplacements.add(new com.kalix.ide.editor.EnhancedTextEditor.LineReplacement(
+                    replacement.getLineNumber(),
+                    replacement.getStartColumn(),
+                    replacement.getOldText(),
+                    replacement.getNewText()
+            ));
+        }
+        replacementApplier.accept(lineReplacements);
     }
 
     /**
@@ -654,21 +669,29 @@ public class CommandExecutor {
     }
 
     /**
-     * Represents a text replacement at a specific line.
+     * Represents a range-anchored text replacement: on line {@code lineNumber},
+     * {@code oldText} beginning at column {@code startColumn} is replaced by
+     * {@code newText}.
      */
-    private static class TextReplacement {
+    static class TextReplacement {
         private final int lineNumber;
+        private final int startColumn; // 0-based column of oldText within the line
         private final String oldText;
         private final String newText;
 
-        public TextReplacement(int lineNumber, String oldText, String newText) {
+        public TextReplacement(int lineNumber, int startColumn, String oldText, String newText) {
             this.lineNumber = lineNumber;
+            this.startColumn = startColumn;
             this.oldText = oldText;
             this.newText = newText;
         }
 
         public int getLineNumber() {
             return lineNumber;
+        }
+
+        public int getStartColumn() {
+            return startColumn;
         }
 
         public String getOldText() {

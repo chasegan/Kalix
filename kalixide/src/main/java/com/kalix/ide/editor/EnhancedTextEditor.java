@@ -1069,9 +1069,13 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Applies multiple text replacements as a single atomic undo operation.
-     * Each replacement specifies a line number and the old/new text.
+     * Each replacement names a line, an exact column range on that line
+     * (via {@link LineReplacement#startColumn}), the text expected there, and
+     * the replacement text. Ranges are exact: only the addressed occurrence is
+     * touched, so renaming node {@code s} on {@code ds_1 = s  # s} cannot
+     * rewrite the key or the comment.
      *
-     * @param replacements List of line-based text replacements
+     * @param replacements List of range-anchored line replacements
      */
     public void applyAtomicReplacements(java.util.List<LineReplacement> replacements) {
         if (replacements.isEmpty()) {
@@ -1086,27 +1090,38 @@ public class EnhancedTextEditor extends JPanel {
             textArea.beginAtomicEdit();
 
             try {
-                // Apply replacements in reverse order to maintain line positions
-                // Sort by line number descending
+                // Apply replacements bottom-up, right-to-left, so earlier edits
+                // cannot shift the positions of the ones still to apply.
                 java.util.List<LineReplacement> sortedReplacements = new java.util.ArrayList<>(replacements);
-                sortedReplacements.sort((a, b) -> Integer.compare(b.lineNumber, a.lineNumber));
+                sortedReplacements.sort(
+                    java.util.Comparator.comparingInt((LineReplacement r) -> r.lineNumber)
+                        .thenComparingInt(r -> r.startColumn)
+                        .reversed());
 
                 for (LineReplacement replacement : sortedReplacements) {
                     int lineIndex = replacement.lineNumber - 1; // Convert 1-based to 0-based
 
                     if (lineIndex >= 0 && lineIndex < lines.length) {
+                        String originalLine = lines[lineIndex];
+                        String newLine = spliceLine(originalLine, replacement);
+                        if (newLine == null) {
+                            // The addressed range no longer holds the expected text
+                            // (stale detection, or a duplicate replacement already
+                            // applied at this range). Skip rather than corrupt.
+                            logger.warn("Skipping stale replacement at line {} col {}: expected '{}'",
+                                replacement.lineNumber, replacement.startColumn, replacement.oldText);
+                            continue;
+                        }
+
                         // Find the start position of this line in the document
                         int startPos = 0;
                         for (int i = 0; i < lineIndex; i++) {
                             startPos += lines[i].length() + 1; // +1 for newline
                         }
 
-                        String originalLine = lines[lineIndex];
-                        String newLine = originalLine.replace(replacement.oldText, replacement.newText);
-
-                        // Replace the line content in the document
-                        doc.remove(startPos, originalLine.length());
-                        doc.insertString(startPos, newLine, null);
+                        // Replace only the addressed range in the document
+                        doc.remove(startPos + replacement.startColumn, replacement.oldText.length());
+                        doc.insertString(startPos + replacement.startColumn, replacement.newText, null);
 
                         // Update our lines array for subsequent replacements
                         lines[lineIndex] = newLine;
@@ -1126,15 +1141,37 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Represents a line-based text replacement.
+     * Applies one range-anchored replacement to a line's text, verifying that the
+     * addressed range actually holds the expected old text.
+     *
+     * @return the new line text, or {@code null} if the range is out of bounds or
+     *         does not match {@code replacement.oldText}
+     */
+    static String spliceLine(String line, LineReplacement replacement) {
+        int start = replacement.startColumn;
+        if (start < 0 || start + replacement.oldText.length() > line.length()
+                || !line.regionMatches(start, replacement.oldText, 0, replacement.oldText.length())) {
+            return null;
+        }
+        return line.substring(0, start) + replacement.newText
+            + line.substring(start + replacement.oldText.length());
+    }
+
+    /**
+     * Represents a range-anchored text replacement: on line {@code lineNumber},
+     * the text {@code oldText} beginning at column {@code startColumn} is
+     * replaced by {@code newText}.
      */
     public static class LineReplacement {
         public final int lineNumber; // 1-based
+        /** 0-based column of {@code oldText} within the line. */
+        public final int startColumn;
         public final String oldText;
         public final String newText;
 
-        public LineReplacement(int lineNumber, String oldText, String newText) {
+        public LineReplacement(int lineNumber, int startColumn, String oldText, String newText) {
             this.lineNumber = lineNumber;
+            this.startColumn = startColumn;
             this.oldText = oldText;
             this.newText = newText;
         }

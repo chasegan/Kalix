@@ -470,6 +470,7 @@ public class ParameterSheetWindow extends JDialog {
 
             replacements.add(new EnhancedTextEditor.LineReplacement(
                     change.originalLineNumber,
+                    0, // whole-line replacement
                     lines[lineIndex],
                     newLine
             ));
