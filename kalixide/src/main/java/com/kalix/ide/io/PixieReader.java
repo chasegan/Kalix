@@ -234,17 +234,17 @@ public class PixieReader {
     }
 
     private TimeSeriesData convertToTimeSeriesData(List<GorillaCompressor.TimeValueDouble> gorillaData) {
-        LocalDateTime[] dateTimes = new LocalDateTime[gorillaData.size()];
+        long[] timestampsMs = new long[gorillaData.size()];
         double[] values = new double[gorillaData.size()];
 
         for (int i = 0; i < gorillaData.size(); i++) {
             GorillaCompressor.TimeValueDouble point = gorillaData.get(i);
-            dateTimes[i] = LocalDateTime.ofInstant(
-                java.time.Instant.ofEpochSecond(point.timestamp), ZoneOffset.UTC);
+            // Pixie stream carries epoch seconds; TimeSeriesData holds epoch millis.
+            timestampsMs[i] = point.timestamp * 1000L;
             values[i] = point.value;
         }
 
-        return new TimeSeriesData(dateTimes, values);
+        return new TimeSeriesData(timestampsMs, values);
     }
 
     private int readUInt16(RandomAccessFile file) throws IOException {

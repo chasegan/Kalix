@@ -43,6 +43,10 @@ Key files: `TerminalLauncher.java`, `TerminalActions.java`; tests in `TerminalLa
 Custom binary format using Gorilla compression:
 - **Binary format (.pxb)**: Gorilla-compressed time series data
 - **Metadata format (.pxt)**: Human-readable CSV with series info
+- **Units: epoch SECONDS throughout** (timestamps, timestep, .pxt start/end) — the
+  convention is set by the Rust engine (`src/io/pixie_io.rs`). `TimeSeriesData` holds
+  epoch milliseconds, so writers/readers convert exactly once at the Pixie boundary
+  (see `PixieWriter.convertToGorilla*`, `PixieReader.convertToTimeSeriesData`).
 - **FlowViz integration**: Drag-and-drop support, format auto-detection
 - **Critical fix**: Fixed decompression bugs with proper data point counting
 

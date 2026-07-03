@@ -244,7 +244,7 @@ End the session and exit.
 - Description: Retrieve timeseries result data
 - Parameters: `series_name` (string, required), `format` (string, default "pixie")
 - Supported formats:
-  - `"pixie"` (recommended): a compressed bitstream, base64-encoded into `r.data`. The bitstream carries timestep, count, and per-point timestamps, so no separate metadata is needed to decode. The codec is a custom delta/XOR scheme *inspired by* Facebook's Gorilla algorithm — it is not a literal Gorilla implementation. The wire `codec` identifier is `gorilla_double` for historical reasons.
+  - `"pixie"` (recommended): a compressed bitstream, base64-encoded into `r.data`. The bitstream carries timestep, count, and per-point timestamps, so no separate metadata is needed to decode. **All timestamps and the timestep in the bitstream are epoch SECONDS** (the Pixie convention, established by the Rust engine — the same units as `.pxb` files); consumers holding milliseconds must convert at this boundary. The codec is a custom delta/XOR scheme *inspired by* Facebook's Gorilla algorithm — it is not a literal Gorilla implementation. The wire `codec` identifier is `gorilla_double` for historical reasons.
   - `"csv"`: Comma-separated `start_timestamp,timestep_seconds,value1,value2,…` ASCII string in `r.data`. Retained for human inspection / external consumers.
 
 **save_results**
