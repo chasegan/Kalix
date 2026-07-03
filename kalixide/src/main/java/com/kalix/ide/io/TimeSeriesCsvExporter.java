@@ -243,7 +243,7 @@ public class TimeSeriesCsvExporter {
             if (isExceedance) {
                 // Convert fake timestamp to percentile
                 double percentile = timestamp / 1_000_000.0;
-                writer.write(String.format("%.2f", percentile));
+                writer.write(String.format(java.util.Locale.ROOT, "%.2f", percentile));
             } else {
                 writer.write(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
             }

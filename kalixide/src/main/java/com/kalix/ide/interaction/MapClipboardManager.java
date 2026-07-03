@@ -348,7 +348,8 @@ public class MapClipboardManager {
                 double newX = oldX + offsetX;
                 double newY = oldY + offsetY;
 
-                String newLoc = String.format("loc = %.2f, %.2f", newX, newY);
+                // Locale.ROOT: model text always uses dot decimals (see TextCoordinateUpdater).
+                String newLoc = String.format(java.util.Locale.ROOT, "loc = %.2f, %.2f", newX, newY);
                 return sectionText.substring(0, matcher.start()) + newLoc + sectionText.substring(matcher.end());
             } catch (NumberFormatException e) {
                 logger.warn("Error translating coordinates: {}", e.getMessage());

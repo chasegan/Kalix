@@ -97,9 +97,11 @@ public class TextCoordinateUpdater {
             Matcher matcher = nodePattern.matcher(currentText);
 
             if (matcher.find()) {
-                // Format coordinates with reasonable precision (2 decimal places)
-                String formattedX = String.format("%.2f", x);
-                String formattedY = String.format("%.2f", y);
+                // Format coordinates with reasonable precision (2 decimal places).
+                // Locale.ROOT: model files always use dot decimals, regardless of the
+                // user's OS locale (a comma-decimal locale would corrupt the loc line).
+                String formattedX = String.format(java.util.Locale.ROOT, "%.2f", x);
+                String formattedY = String.format(java.util.Locale.ROOT, "%.2f", y);
 
                 // Calculate positions and replacement text
                 int coordStart = matcher.start(2);  // Start of X coordinate

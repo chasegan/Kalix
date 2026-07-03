@@ -1981,6 +1981,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public static void main(String[] args) {
         String filePath = args.length > 0 ? args[0] : null;
+
+        // Kalix uses the same number/date conventions everywhere in the world:
+        // dot decimals, ISO-style dates. Pinning the FORMAT locale makes every
+        // String.format/printf in the app locale-independent (a comma-decimal OS
+        // locale would otherwise corrupt model files and CSV output). The DISPLAY
+        // locale (dialog button labels etc.) is deliberately left as the user's own.
+        java.util.Locale.setDefault(java.util.Locale.Category.FORMAT, java.util.Locale.ROOT);
+
         // Initialize Windows-specific integration (AppUserModelID for taskbar pinning)
         // Must be called early, before any UI is created
         WindowsIntegration.initialize();
