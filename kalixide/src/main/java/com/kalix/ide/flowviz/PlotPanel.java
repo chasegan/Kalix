@@ -150,8 +150,9 @@ public class PlotPanel extends JPanel {
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
     public PlotPanel() {
-        setBackground(Color.WHITE);
-        
+        // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
+        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
+
         // Initialize data structures
         visibleSeries = new java.util.ArrayList<>();
         renderer = new TimeSeriesRenderer(visibleSeries);
@@ -194,6 +195,14 @@ public class PlotPanel extends JPanel {
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
 
         setupMouseListeners();
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        // Re-resolve the theme's plot background after a LaF/theme switch (ThemeManager
+        // runs SwingUtilities.updateComponentTreeUI over open FlowViz windows).
+        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
     }
 
     @Override
@@ -511,7 +520,7 @@ public class PlotPanel extends JPanel {
             renderer.render(g2d, displayDataSet, currentViewport);
         } else {
             // Fallback to empty state
-            g2d.setColor(Color.LIGHT_GRAY);
+            g2d.setColor(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().emptyForeground);
             g2d.setFont(new Font("Arial", Font.PLAIN, 16));
 
             String message = "No data loaded";

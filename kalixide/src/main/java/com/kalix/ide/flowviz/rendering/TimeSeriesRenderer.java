@@ -52,33 +52,36 @@ public class TimeSeriesRenderer {
     }
     
     public void render(Graphics2D g2d, DataSet dataSet, ViewPort viewport) {
+        // Resolve the current theme's plot colours once per paint (never per draw call).
+        PlotColors colors = PlotColors.fromUIManager();
+
         if (dataSet.isEmpty()) {
-            renderEmptyState(g2d, viewport);
+            renderEmptyState(g2d, viewport, colors);
             return;
         }
-        
+
         // Set rendering hints
         if (antiAliasing) {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         }
-        
+
         // Clear plot area
-        g2d.setColor(Color.WHITE);
-        g2d.fillRect(viewport.getPlotX(), viewport.getPlotY(), 
+        g2d.setColor(colors.background);
+        g2d.fillRect(viewport.getPlotX(), viewport.getPlotY(),
                     viewport.getPlotWidth(), viewport.getPlotHeight());
-        
+
         // Calculate axis information once for both grid and axis drawing
         AxisRenderer.AxisInfo axisInfo = axisRenderer.calculateAxisInfo(viewport);
 
         // Draw grid
         if (showGrid) {
-            axisRenderer.drawGrid(g2d, viewport, axisInfo);
+            axisRenderer.drawGrid(g2d, viewport, axisInfo, colors);
         }
 
         // Draw axes
-        axisRenderer.drawAxes(g2d, viewport, axisInfo);
-        
+        axisRenderer.drawAxes(g2d, viewport, axisInfo, colors);
+
         // Draw time series data in legend order (visibleSeries list order)
         for (SeriesRef ref : visibleSeries) {
             TimeSeriesData series = dataSet.getSeries(ref);
@@ -88,7 +91,7 @@ public class TimeSeriesRenderer {
         }
         
         // Draw plot border
-        drawPlotBorder(g2d, viewport);
+        drawPlotBorder(g2d, viewport, colors);
     }
     
     private void renderSeries(Graphics2D g2d, SeriesRef ref, TimeSeriesData series, ViewPort viewport, LineStyle style) {
@@ -518,8 +521,8 @@ public class TimeSeriesRenderer {
         }
     }
 
-    private void drawPlotBorder(Graphics2D g2d, ViewPort viewport) {
-        g2d.setColor(Color.BLACK);
+    private void drawPlotBorder(Graphics2D g2d, ViewPort viewport, PlotColors colors) {
+        g2d.setColor(colors.axis);
         g2d.setStroke(new BasicStroke(1.0f));
         g2d.drawRect(viewport.getPlotX(), viewport.getPlotY(),
                     viewport.getPlotWidth(), viewport.getPlotHeight());
@@ -530,8 +533,8 @@ public class TimeSeriesRenderer {
         "# the Abyss stares back at you. - Friedrich Nietzsche"
     };
 
-    private void renderEmptyState(Graphics2D g2d, ViewPort viewport) {
-        g2d.setColor(Color.LIGHT_GRAY);
+    private void renderEmptyState(Graphics2D g2d, ViewPort viewport, PlotColors colors) {
+        g2d.setColor(colors.emptyForeground);
         g2d.setFont(new Font("Arial", Font.ITALIC, 14));
         FontMetrics fm = g2d.getFontMetrics();
 

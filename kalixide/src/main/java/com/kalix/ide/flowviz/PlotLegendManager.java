@@ -2,6 +2,7 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.rendering.PlotColors;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.SeriesMarker;
@@ -49,18 +50,21 @@ public class PlotLegendManager {
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
 
-    // Colors
-    private static final Color BG_COLOR = new Color(255, 255, 255, 235); // 92% opacity
-    private static final Color HEADER_BG_START = new Color(245, 245, 245);
-    private static final Color HEADER_BG_END = new Color(236, 236, 236);
-    private static final Color BORDER_COLOR = new Color(204, 204, 204);
-    private static final Color HEADER_DIVIDER = new Color(221, 221, 221);
-    private static final Color TITLE_COLOR = new Color(51, 51, 51);
-    private static final Color SERIES_NAME_COLOR = new Color(68, 68, 68);
-    private static final Color BUTTON_COLOR = new Color(102, 102, 102);
+    // Colors. The theme supplies three legend roles (background, border, foreground)
+    // via the Kalix.plot.* keys; the remaining tints are derived from them once per
+    // paint in refreshColors(). The derivations reproduce the historical hard-coded
+    // values exactly under the light defaults (bg #ffffff, fg #444444).
     private static final Color ENTRY_HOVER_COLOR = new Color(173, 216, 230, 51); // Light blue 20% opacity
-    private static final Color BUTTON_HOVER_COLOR = new Color(0, 0, 0, 13); // 5% opacity
     private static final Color SHADOW_COLOR = new Color(0, 0, 0, 38); // 15% opacity
+    private Color bgColor;        // legendBackground at 92% opacity (alpha 235)
+    private Color headerBgStart;  // legendBackground shifted 10 towards contrast
+    private Color headerBgEnd;    // legendBackground shifted 19 towards contrast
+    private Color borderColor;    // legendBorder
+    private Color headerDivider;  // legendBackground shifted 34 towards contrast
+    private Color titleColor;     // legendForeground strengthened by 17
+    private Color seriesNameColor; // legendForeground
+    private Color buttonColor;    // legendForeground softened by 34
+    private Color buttonHoverColor; // 5% scrim in the contrast direction
 
     // State
     private boolean enabled = true;
@@ -260,12 +264,37 @@ public class PlotLegendManager {
     }
 
     /**
+     * Resolves the theme's legend colours (once per paint) and derives the header,
+     * title, and button tints from them. On a light legend the derived values are
+     * byte-identical to the legacy hard-coded constants; on a dark legend the same
+     * shifts run in the opposite direction.
+     */
+    private void refreshColors() {
+        PlotColors colors = PlotColors.fromUIManager();
+        Color background = colors.legendBackground;
+        Color foreground = colors.legendForeground;
+        boolean dark = PlotColors.isDark(background);
+
+        bgColor = PlotColors.withAlpha(background, 235);
+        borderColor = colors.legendBorder;
+        headerBgStart = PlotColors.shiftForContrast(background, background, 10);
+        headerBgEnd = PlotColors.shiftForContrast(background, background, 19);
+        headerDivider = PlotColors.shiftForContrast(background, background, 34);
+        seriesNameColor = foreground;
+        titleColor = PlotColors.shiftForContrast(foreground, background, 17);
+        buttonColor = PlotColors.shiftForContrast(foreground, background, -34);
+        buttonHoverColor = dark ? new Color(255, 255, 255, 13) : new Color(0, 0, 0, 13);
+    }
+
+    /**
      * Renders the legend on the plot.
      */
     public void render(Graphics2D g2d, ViewPort viewport) {
         if (!enabled || entries.isEmpty()) {
             return;
         }
+
+        refreshColors();
 
         // Calculate dimensions
         int width = calculateWidth(g2d);
@@ -295,11 +324,11 @@ public class PlotLegendManager {
 
             // Draw main background
             RoundRectangle2D background = new RoundRectangle2D.Double(x, y, width, height, CORNER_RADIUS, CORNER_RADIUS);
-            g.setColor(BG_COLOR);
+            g.setColor(bgColor);
             g.fill(background);
 
             // Draw border
-            g.setColor(BORDER_COLOR);
+            g.setColor(borderColor);
             g.setStroke(new BasicStroke(1.0f));
             g.draw(background);
 
@@ -335,14 +364,14 @@ public class PlotLegendManager {
             x, y, COLLAPSED_WIDTH, COLLAPSED_HEIGHT, CORNER_RADIUS, CORNER_RADIUS
         );
         GradientPaint gradient = new GradientPaint(
-            x, y, HEADER_BG_START,
-            x, y + COLLAPSED_HEIGHT, HEADER_BG_END
+            x, y, headerBgStart,
+            x, y + COLLAPSED_HEIGHT, headerBgEnd
         );
         g.setPaint(gradient);
         g.fill(background);
 
         // Draw border
-        g.setColor(BORDER_COLOR);
+        g.setColor(borderColor);
         g.setStroke(new BasicStroke(1.0f));
         g.draw(background);
 
@@ -359,20 +388,20 @@ public class PlotLegendManager {
 
         // Draw hover background
         if (collapseButtonHovered) {
-            g.setColor(BUTTON_HOVER_COLOR);
+            g.setColor(buttonHoverColor);
             g.fill(background);
         }
 
         // Draw button text
-        g.setColor(BUTTON_COLOR);
+        g.setColor(buttonColor);
         g.drawString(buttonText, buttonX, buttonY);
     }
 
     private void drawHeader(Graphics2D g, int x, int y, int width) {
         // Header background with gradient
         GradientPaint gradient = new GradientPaint(
-            x, y, HEADER_BG_START,
-            x, y + HEADER_HEIGHT, HEADER_BG_END
+            x, y, headerBgStart,
+            x, y + HEADER_HEIGHT, headerBgEnd
         );
 
         // Draw gradient fill - full rectangle for header area
@@ -381,7 +410,7 @@ public class PlotLegendManager {
 
         // If expanded, draw divider line at bottom of header
         if (!collapsed) {
-            g.setColor(HEADER_DIVIDER);
+            g.setColor(headerDivider);
             g.drawLine(x, y + HEADER_HEIGHT, x + width, y + HEADER_HEIGHT);
         }
 
@@ -397,12 +426,12 @@ public class PlotLegendManager {
 
         // Draw title hover background
         if (titleHovered) {
-            g.setColor(BUTTON_HOVER_COLOR);
+            g.setColor(buttonHoverColor);
             g.fillRoundRect(titleX - 2, titleY, titleWidth + 4, HEADER_HEIGHT - 4, 4, 4);
         }
 
         // Draw title text
-        g.setColor(TITLE_COLOR);
+        g.setColor(titleColor);
         g.drawString("Key", titleX, y + 16);
 
         // Draw collapse button
@@ -416,12 +445,12 @@ public class PlotLegendManager {
 
         // Draw button hover background
         if (collapseButtonHovered) {
-            g.setColor(BUTTON_HOVER_COLOR);
+            g.setColor(buttonHoverColor);
             g.fillRoundRect(buttonX - 2, buttonY, buttonWidth + 4, HEADER_HEIGHT - 4, 4, 4);
         }
 
         // Draw button text
-        g.setColor(BUTTON_COLOR);
+        g.setColor(buttonColor);
         g.setFont(new Font("Monospaced", Font.PLAIN, 10));
         g.drawString(buttonText, buttonX, y + 16);
     }
@@ -444,7 +473,7 @@ public class PlotLegendManager {
             paintLineSample(g, lineStyleFor(entry.ref), x + PADDING, lineY);
 
             // Draw series name (transformed based on display mode)
-            g.setColor(SERIES_NAME_COLOR);
+            g.setColor(seriesNameColor);
             g.setFont(new Font("Dialog", Font.PLAIN, 10));
             int nameX = x + PADDING + LINE_SAMPLE_WIDTH + 6;
 

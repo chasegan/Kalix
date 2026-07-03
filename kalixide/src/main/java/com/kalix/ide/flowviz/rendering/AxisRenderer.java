@@ -15,7 +15,6 @@ import java.util.List;
 public class AxisRenderer {
 
     // Constants for rendering
-    private static final Color GRID_COLOR = new Color(240, 240, 240);
     private static final float GRID_STROKE_WIDTH = 0.5f;
     private static final float AXIS_STROKE_WIDTH = 1.0f;
     private static final int MIN_TARGET_TICKS = 3;
@@ -250,9 +249,10 @@ public class AxisRenderer {
      * @param g2d Graphics context
      * @param viewport Current viewport
      * @param axisInfo Pre-calculated axis information
+     * @param colors The current theme's plot colours (resolved once per paint)
      */
-    public void drawGrid(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        g2d.setColor(GRID_COLOR);
+    public void drawGrid(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo, PlotColors colors) {
+        g2d.setColor(colors.grid);
         g2d.setStroke(new BasicStroke(GRID_STROKE_WIDTH));
 
         int plotX = viewport.getPlotX();
@@ -283,21 +283,21 @@ public class AxisRenderer {
      * @param g2d Graphics context
      * @param viewport Current viewport
      * @param axisInfo Pre-calculated axis information
+     * @param colors The current theme's plot colours (resolved once per paint)
      */
-    public void drawAxes(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        g2d.setColor(Color.BLACK);
+    public void drawAxes(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo, PlotColors colors) {
         g2d.setStroke(new BasicStroke(AXIS_STROKE_WIDTH));
         g2d.setFont(new Font("Arial", Font.PLAIN, 10));
 
-        drawTimeAxis(g2d, viewport, axisInfo);
-        drawValueAxis(g2d, viewport, axisInfo);
-        drawAxisTitles(g2d, viewport, axisInfo);
+        drawTimeAxis(g2d, viewport, axisInfo, colors);
+        drawValueAxis(g2d, viewport, axisInfo, colors);
+        drawAxisTitles(g2d, viewport, axisInfo, colors);
     }
 
     /**
      * Draws the time axis with ticks and labels.
      */
-    private void drawTimeAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
+    private void drawTimeAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo, PlotColors colors) {
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
         int plotWidth = viewport.getPlotWidth();
@@ -327,11 +327,13 @@ public class AxisRenderer {
 
             if (screenX >= plotX && screenX <= plotX + plotWidth) {
                 // Draw tick mark
+                g2d.setColor(colors.axis);
                 g2d.drawLine(screenX, plotY + plotHeight, screenX, plotY + plotHeight + TICK_MARK_LENGTH);
 
                 // Draw label
                 String timeLabel = formatXAxisLabel(tickTime, tickIntervalMs, viewport.getXAxisType());
                 int labelWidth = fm.stringWidth(timeLabel);
+                g2d.setColor(colors.label);
                 g2d.drawString(timeLabel, screenX - labelWidth / 2,
                              plotY + plotHeight + TIME_LABEL_OFFSET);
             }
@@ -341,7 +343,7 @@ public class AxisRenderer {
     /**
      * Draws the value axis with ticks and labels.
      */
-    private void drawValueAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
+    private void drawValueAxis(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo, PlotColors colors) {
         int plotX = viewport.getPlotX();
         int plotY = viewport.getPlotY();
         int plotHeight = viewport.getPlotHeight();
@@ -354,11 +356,13 @@ public class AxisRenderer {
 
             if (screenY >= plotY && screenY <= plotY + plotHeight) {
                 // Draw tick mark
+                g2d.setColor(colors.axis);
                 g2d.drawLine(plotX - TICK_MARK_LENGTH, screenY, plotX, screenY);
 
                 // Draw label
                 String valueLabel = formatValue(tickValue, decimalPlaces);
                 int labelHeight = fm.getAscent();
+                g2d.setColor(colors.label);
                 g2d.drawString(valueLabel, plotX - VALUE_LABEL_OFFSET - fm.stringWidth(valueLabel),
                              screenY + labelHeight / 2);
             }
@@ -464,8 +468,8 @@ public class AxisRenderer {
     /**
      * Draws axis titles for both time and value axes.
      */
-    private void drawAxisTitles(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo) {
-        g2d.setColor(Color.BLACK);
+    private void drawAxisTitles(Graphics2D g2d, ViewPort viewport, AxisInfo axisInfo, PlotColors colors) {
+        g2d.setColor(colors.label);
         g2d.setFont(new Font("Arial", Font.BOLD, 12));
         FontMetrics titleFm = g2d.getFontMetrics();
 

@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.rendering.PlotColors;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
@@ -118,6 +119,11 @@ public class CoordinateDisplayManager {
         g2d.setFont(COORDINATE_FONT);
         FontMetrics fm = g2d.getFontMetrics(COORDINATE_FONT);
 
+        // Resolve the theme's hover-box colours once per paint (not per coordinate box).
+        PlotColors colors = PlotColors.fromUIManager();
+        Color hoverBg = PlotColors.withAlpha(colors.hoverBackground, 160);
+        Color hoverFg = colors.hoverForeground;
+
         // Calculate positions and handle stacking
         List<Rectangle> usedAreas = new ArrayList<>();
 
@@ -147,7 +153,7 @@ public class CoordinateDisplayManager {
             usedAreas.add(optimalRect);
 
             // Draw the coordinate box and point
-            drawCoordinateBox(g2d, optimalRect, coord.color, displayText, fm);
+            drawCoordinateBox(g2d, optimalRect, coord.color, displayText, fm, hoverBg, hoverFg);
             drawDataPoint(g2d, screenX, screenY, coord.color);
         }
     }
@@ -379,10 +385,10 @@ public class CoordinateDisplayManager {
     /**
      * Draws a coordinate display box with translucent background and border.
      */
-    private void drawCoordinateBox(Graphics2D g2d, Rectangle bounds, Color seriesColor, String text, FontMetrics fm) {
-        // Draw more transparent background
-        Color bgColor = new Color(255, 255, 255, 160);
-        g2d.setColor(bgColor);
+    private void drawCoordinateBox(Graphics2D g2d, Rectangle bounds, Color seriesColor, String text, FontMetrics fm,
+                                   Color hoverBg, Color hoverFg) {
+        // Draw more transparent background (theme hover colour; alpha applied by caller)
+        g2d.setColor(hoverBg);
         g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
         // Draw thin border
@@ -394,7 +400,7 @@ public class CoordinateDisplayManager {
         g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
         // Draw text (font already set once per paint in renderCoordinateOverlays)
-        g2d.setColor(Color.BLACK);
+        g2d.setColor(hoverFg);
 
         int textX = bounds.x + 4;
         int textY = bounds.y + fm.getAscent() + 2;
