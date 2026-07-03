@@ -47,6 +47,7 @@ mod test_node_routing;
 mod test_unit_hydrograph;
 
 #[cfg(test)]
+mod test_read_validation;
 mod test_sacramento_model;
 
 #[cfg(test)]

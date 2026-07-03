@@ -17,7 +17,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 3 | STDIO interrupt: run commands on a worker thread | **Done** (fix/stdio-interrupt) |
 | 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | **Done** (fix/optimiser-robustness) |
 | 5 | Speed test suite + `[profile.release]` tuning | **Done** (feature/speed-suite) |
-| 6 | DataCache: preallocate recorder series; name→idx hashmap | Pending |
+| 6 | DataCache: capacity prealloc, single-write recording, first-step read validation | **Done** (perf/datacache) |
 | 7 | Remove timestamps from cache-resident series | Pending — decide irregular-series future first |
 | 8 | DynamicInput: allocation-free, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | **Done** (perf/dynamic-input) |
 | 9 | Small hot-loop items (Cell-based sim context, hoisted catch_unwind, node config hoists) | Pending |
@@ -206,6 +206,49 @@ Measured on the speed suite (sim min, thin-LTO):
 
 316 unit tests (6 new pinning load-time validation, fold semantics, and
 short-circuit truthiness) and 28/28 regression models pass.
+
+## Step 6 record — DataCache recording + fail-fast reads (done 2026-07-03)
+
+Design constraint (Chas, settled): an expression referencing a value not yet
+computed at that point in the timestep MUST fail clearly — never read
+silently. A series' length is the watermark of how far it has been computed;
+the bounds check on reads carries that contract and stays.
+
+Changes:
+- Recorder series get capacity reserved once (`DataCache::reserve_all`, called
+  from configure when sim length is known); lengths still grow step by step,
+  preserving the watermark. `add_value_at_index` common path is now a single
+  push (was: push NaN, then overwrite). The blanket 64,000-element
+  `Timeseries::new` preallocation (~1 MB/series regardless of need) is gone.
+- `get_current_value` panics with a diagnostic naming the series and
+  suggesting `[-1, default]`, instead of a raw index-out-of-bounds. Cost:
+  identical (the check replaces the implicit bounds check; panic path compiled
+  cold).
+- First-timestep validation walk: on step 0 (condition is simply
+  `current_step == 0` — no flag, so every fresh run re-validates), each
+  Function expression walks its AST and checked-reads every zero-offset
+  reference, covering branches that short-circuit evaluation would skip. An
+  illegal reference now fails deterministically on step 0 of every run, even
+  hidden in an `if` branch that data never selects. Empirical at point-of-use:
+  no assumptions about phases or about who writes which series.
+- Pinned by tests: same-step forward reference fails naming the series;
+  illegal reference in an UNTAKEN branch fails on step 0 (mutation-checked:
+  fails without the walk); `[-1, default]` form runs and produces the
+  expected lagged values.
+
+Performance notes (measured, interleaved A/B on the speed suite):
+- First attempt regressed model 3 by ~9%: LLVM inlined the recursive
+  validator into `get_value`, bloating the hot function. `#[cold]
+  #[inline(never)]` on `validate_reads` fully recovered it. Lesson recorded:
+  cold-path helpers called from hot functions need explicit inline barriers.
+- Final numbers at parity with step 8 everywhere (7.5/36.7/94.2/64.8 ms);
+  recording's former double-write was cheap — the remaining recorder cost is
+  the timestamps vector (step 7).
+- Half B (dropping the read bounds check after validation): measured moot.
+  The checked read benchmarks at parity with plain indexing (len shares the
+  Vec header cache line; branch never taken). Nothing to buy; the check
+  stays, carrying the fail-fast contract. Revisit only if a profiler ever
+  fingers it post-step-7.
 
 ## Review findings not yet scheduled (context for steps)
 

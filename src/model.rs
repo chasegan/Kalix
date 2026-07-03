@@ -199,6 +199,12 @@ impl Model {
         self.data_cache.set_start_and_stepsize(self.configuration.sim_start_timestamp,
                                                self.configuration.sim_stepsize);
 
+        // Reserve capacity in every cache series for the whole simulation, so
+        // per-step recording never reallocates. Capacity only: series lengths
+        // remain the computed-this-far watermark that the fail-fast read
+        // contract depends on (see DataCache::get_current_value).
+        self.data_cache.reserve_all(self.configuration.sim_nsteps as usize);
+
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
 

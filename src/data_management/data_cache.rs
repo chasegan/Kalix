@@ -1,5 +1,5 @@
 ﻿use crate::data_management::constants_cache::ConstantsCache;
-use crate::tid::utils::{u64_to_year_month_day_and_seconds};
+use crate::tid::utils::{u64_to_iso_datetime_string, u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
 #[derive(Default)]
@@ -285,18 +285,39 @@ impl DataCache {
     }
 
 
+    /// Reserve capacity in every series for a simulation of `n_steps` steps.
+    ///
+    /// Called once from `Model::configure` when the simulation length becomes
+    /// known, so that per-step recording (`add_value_at_index`) never
+    /// reallocates. Capacity only — lengths are untouched, because a series'
+    /// length is the watermark of how far the simulation has computed it (the
+    /// fail-fast contract in `get_current_value` depends on that).
+    pub fn reserve_all(&mut self, n_steps: usize) {
+        for ts in &mut self.series {
+            ts.values.reserve_exact(n_steps.saturating_sub(ts.values.len()));
+            ts.timestamps.reserve_exact(n_steps.saturating_sub(ts.timestamps.len()));
+        }
+    }
+
     /*
     Add a new result value to a given recorder (specified by index)
      */
-    pub  fn add_value_at_index(&mut self, series_idx: usize, value: f64) {
-        //Make sure the series has enough values
-        //TODO: this is dirty. We shouldn't have to check this every single time.
-        while self.series[series_idx].len() <= self.current_step {
-            self.series[series_idx].push_value(f64::NAN); //Extend the series by adding a NAN
+    pub fn add_value_at_index(&mut self, series_idx: usize, value: f64) {
+        let series = &mut self.series[series_idx];
+        let len = series.len();
+        if len == self.current_step {
+            // Common case: recording the next step, into preallocated capacity.
+            series.push_value(value);
+        } else if len > self.current_step {
+            // Re-recording a step (e.g. a re-run over an existing cache).
+            series.values[self.current_step] = value;
+        } else {
+            // A writer skipped some steps: pad the gap with NaN.
+            while series.len() < self.current_step {
+                series.push_value(f64::NAN);
+            }
+            series.push_value(value);
         }
-
-        //Set the value
-        self.series[series_idx].values[self.current_step] = value;
     }
 
 
@@ -310,17 +331,35 @@ impl DataCache {
     ///
     /// The value at the current timestep.
     ///
-    /// # Safety & Performance
+    /// # Fail-fast contract
     ///
-    /// This method does NOT perform bounds checking for maximum performance in the hot path.
-    /// It will panic if:
-    /// - `series_idx` is out of bounds
-    /// - `current_step` exceeds the series length
-    ///
-    /// Use only indices obtained from `get_or_add_new_series()` and ensure the current
-    /// timestep is valid before calling.
+    /// A series' length is the watermark of how far the simulation has computed
+    /// it. Reading a value that has not been written yet — an expression
+    /// referencing something computed later in the timestep — panics with a
+    /// message naming the series, so modellers learn immediately that the
+    /// reference is illegal. The check is a single always-false-predicted
+    /// branch on the hot path; the panic path is compiled cold.
     pub fn get_current_value(&self, series_idx: usize) -> f64 {
-        self.series[series_idx].values[self.current_step]
+        match self.series[series_idx].values.get(self.current_step) {
+            Some(&value) => value,
+            None => self.unwritten_value_panic(series_idx),
+        }
+    }
+
+    /// Cold panic path for `get_current_value`: only ever reached on a run
+    /// that is already failing, so the message can afford to be helpful.
+    #[cold]
+    #[inline(never)]
+    fn unwritten_value_panic(&self, series_idx: usize) -> ! {
+        let name = &self.series_name[series_idx];
+        panic!(
+            "Expression references '{}', which has no value yet at {} — it is \
+             computed later in the timestep. To use the previous timestep's \
+             value, add an offset, e.g. '{}[-1, 0.0]'.",
+            name,
+            u64_to_iso_datetime_string(self.current_timestamp),
+            name
+        )
     }
 
     /// Get a value from a data series with a temporal offset.
