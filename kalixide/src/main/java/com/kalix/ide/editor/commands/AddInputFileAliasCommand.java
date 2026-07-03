@@ -8,9 +8,10 @@ import javax.swing.*;
 import java.util.function.Supplier;
 
 /**
- * Command to rename an input file path throughout the document.
- * Updates the file path in [inputs] section and all data.{alias}.* references
- * in property values and output references.
+ * Command to add an alias for an input file.
+ * Converts the file's [inputs] line to {@code alias = path} form and rewrites all
+ * {@code data.{file}.*} references in property values and output references to
+ * {@code data.{alias}.*}.
  */
 public class AddInputFileAliasCommand implements EditorCommand {
 
@@ -50,8 +51,8 @@ public class AddInputFileAliasCommand implements EditorCommand {
             return;
         }
 
-        // Prompt user for new path
-        String newAlias = promptForNewName(oldPath);
+        // Prompt user for the alias
+        String newAlias = promptForAlias(oldPath);
         if (newAlias == null) {
             // User cancelled
             return;
@@ -79,21 +80,38 @@ public class AddInputFileAliasCommand implements EditorCommand {
     }
 
     /**
-     * Prompts the user to enter a new input file path.
+     * Prompts the user to enter an alias for the input file, suggesting the
+     * sanitized filename stem (not the path, which sanitisation would mangle).
      *
-     * @param currentPath The current input file path
-     * @return The new path, or null if cancelled
+     * @param currentPath The input file path being aliased
+     * @return The alias, or null if cancelled
      */
-    private String promptForNewName(String currentPath) {
+    private String promptForAlias(String currentPath) {
         return (String) JOptionPane.showInputDialog(
             parentFrame,
-            "Enter new alias for input file '" + currentPath + "':",
-            "Rename Input File",
+            "Enter alias for input file '" + currentPath + "':",
+            "Add File Alias",
             JOptionPane.PLAIN_MESSAGE,
             null,
             null,
-            currentPath
+            suggestAlias(currentPath)
         );
+    }
+
+    /**
+     * Suggests an alias for a file path: the filename stem (final path component,
+     * final extension dropped) in the engine's sanitized form, so the suggestion
+     * survives {@code CommandExecutor.addInputFileAlias}'s sanitisation unchanged.
+     * Example: {@code ./data/MyData.csv} &rarr; {@code mydata}.
+     */
+    static String suggestAlias(String filePath) {
+        java.nio.file.Path fileName = java.nio.file.Paths.get(filePath).getFileName();
+        String name = fileName != null ? fileName.toString() : filePath;
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            name = name.substring(0, dot);
+        }
+        return com.kalix.ide.utils.EngineNames.sanitize(name);
     }
 
     /**
