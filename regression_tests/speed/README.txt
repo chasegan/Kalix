@@ -18,10 +18,15 @@ The models
 ----------
 1_sacramento_long    Single Sacramento node, 300 years daily. Raw
                      rainfall-runoff arithmetic; also the largest CSV load.
-2_unregulated_users  Six parallel reaches, ~72 unregulated users with pump
-                     capacity and flow-threshold expressions patterned on real
-                     unregulated systems. DynamicInput expression evaluation.
-3_regulated_system   Three valleys of storages (series + parallel), lag+PWL
+2_unregulated_users  Six parallel reaches, 72 unregulated users on plain
+                     scalar demands. The CONTROL for test 3: identical
+                     network, no expressions.
+3_unregulated_users_with_functions
+                     The same reaches and users, with pump capacity and
+                     flow-threshold expressions patterned on real unregulated
+                     systems. The 2-vs-3 gap isolates the cost of DynamicInput
+                     expression evaluation (2026-07 baseline: 35 vs 183 ms).
+4_regulated_system   Three valleys of storages (series + parallel), lag+PWL
                      routing, seasonal regulated users, joining into a trunk.
                      Ordering phase and the storage backward-Euler solver.
 

@@ -153,9 +153,13 @@ models, each emphasising a hot-path subsystem, generated deterministically by
 
 1. `1_sacramento_long` — one Sacramento node, 300 years daily (rainfall-runoff
    arithmetic; also the largest CSV load).
-2. `2_unregulated_users` — 6 reaches, 72 unregulated users with pump/threshold
+2. `2_unregulated_users` — 6 reaches, 72 unregulated users on scalar demands:
+   the expression-free CONTROL for model 3.
+3. `3_unregulated_users_with_functions` — same network with pump/threshold
    expressions patterned on the upper Condamine (DynamicInput evaluation).
-3. `3_regulated_system` — 3 valleys of storages in series+parallel, lag+PWL
+   The 2-vs-3 gap isolates expression cost: 35 vs 183 ms sim (5.2x, ~71 ns
+   per expression evaluation) — step 8's instrument.
+4. `4_regulated_system` — 3 valleys of storages in series+parallel, lag+PWL
    routing, seasonal regulated users, common trunk (ordering + storage solver).
 
 `run_speed_tests.py` runs each N times (bench.json) with `kalix sim -p`,

@@ -18,3 +18,15 @@
   1_sacramento_long: n=15 sim_min=7.9 sim_median=7.9 sim_sd=0.11 load_min=54.4 output_min=56.6 total_min=119.0
   2_unregulated_users: n=7 sim_min=184.7 sim_median=189.1 sim_sd=16.26 load_min=16.5 output_min=37.5 total_min=239.1
   3_regulated_system: n=7 sim_min=81.4 sim_median=83.0 sim_sd=1.03 load_min=16.1 output_min=58.4 total_min=156.4
+
+[2026-07-03T10:17:35] commit=dafdc13+dirty machine=Chass-MacBook-Air.local arm64
+  1_sacramento_long: n=15 sim_min=7.9 sim_median=8.0 sim_sd=4.72 load_min=54.5 output_min=56.8 total_min=120.1
+  2_unregulated_users: n=7 sim_min=58.2 sim_median=58.7 sim_sd=8.53 load_min=16.2 output_min=34.5 total_min=109.5
+  3_unregulated_users_with_functions: n=7 sim_min=185.0 sim_median=188.0 sim_sd=17.10 load_min=16.5 output_min=37.3 total_min=239.3
+  4_regulated_system: n=7 sim_min=81.9 sim_median=83.0 sim_sd=1.04 load_min=16.0 output_min=58.2 total_min=156.1
+
+[2026-07-03T10:19:32] commit=dafdc13+dirty machine=Chass-MacBook-Air.local arm64
+  1_sacramento_long: n=15 sim_min=7.8 sim_median=7.9 sim_sd=0.11 load_min=54.4 output_min=56.4 total_min=118.8
+  2_unregulated_users: n=7 sim_min=35.3 sim_median=35.4 sim_sd=0.18 load_min=16.0 output_min=34.0 total_min=85.2
+  3_unregulated_users_with_functions: n=7 sim_min=183.4 sim_median=187.2 sim_sd=11.97 load_min=16.4 output_min=37.2 total_min=237.1
+  4_regulated_system: n=7 sim_min=82.3 sim_median=82.7 sim_sd=1.25 load_min=16.1 output_min=58.2 total_min=156.9
