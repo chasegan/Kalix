@@ -167,7 +167,6 @@ impl Model {
             for full_path in paths_to_fill {
                 if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
                     self.data_cache.series[idx].values.clear();
-                    self.data_cache.series[idx].timestamps.clear();
                     self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
                     self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
 
@@ -691,7 +690,7 @@ impl Model {
         for output_name in &self.outputs {
             if let Some(idx) = self.data_cache.get_existing_series_idx(output_name) {
                 let ts = &self.data_cache.series[idx];
-                if ts.timestamps.len() == expected_len {
+                if ts.values.len() == expected_len {
                     vec_ts.push(ts);
                 }
             }
