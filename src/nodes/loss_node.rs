@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{recorder, single_outlet_node_impls, Node};
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
@@ -45,6 +44,8 @@ impl LossNode {
 }
 
 impl Node for LossNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
@@ -131,21 +132,11 @@ impl Node for LossNode {
         self.order_translation_table.cap_if_unfinished();
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
-        self.recorder_idx_loss = data_cache.get_series_idx(
-            make_result_name(&self.name, "loss").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
+        self.recorder_idx_loss = recorder(data_cache, &self.name, "loss");
 
         // Return
         Ok(())
@@ -195,9 +186,6 @@ impl Node for LossNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
         if let Some(idx) = self.recorder_idx_loss {
             data_cache.add_value_at_index(idx, self.loss);
         }
@@ -206,26 +194,7 @@ impl Node for LossNode {
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }

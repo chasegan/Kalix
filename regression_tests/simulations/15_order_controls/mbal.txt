@@ -13,6 +13,11 @@ INFLOW NODES
 REGULATED_USER NODES
   user1, -19.83695652173913
 
+ORDER_CONTROL NODES
+  choke, 0
+  enviro, 0
+  setter, 0
+
 STORAGE NODES
   big_dam, 1.9021739130434783
   other_dam, 28.5

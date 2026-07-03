@@ -24,7 +24,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 10 | Optimiser: reuse workers across generations; slim Model clone | **Done** (perf/optimiser) |
 | 11 | Optimiser: precompute per-eval invariants (targets, series indices, zero-copy align, name→idx map) | **Done** (perf/optimiser) |
 | 12 | Fast CSV + pixie IO (hand-rolled date parse/format, reused record, no per-cell alloc, byte-chunked Gorilla) | **Done** (perf/io-fast) |
-| 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | Pending |
+| 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | **Done** (lean/nodes) |
 | 14 | Data-driven INI model IO (design discussion first) | Pending |
 | 15 | File-order rule made doctrine: `manifestos/node-definition-order.md` | **Done** (on main) |
 
@@ -366,6 +366,40 @@ speed suite unchanged. Wall-clock on the picnic model (1 node) is flat - its
 clone was never expensive; the structural win scales with model size (a
 Condamine-class clone is ~40 MB x n_threads x generations avoided). Accepted
 on implementation cleanliness per Chas without a big-model benchmark.
+
+## Step 13 record — node boilerplate and dead code (done 2026-07-03)
+
+Leanness only; outputs verified byte-identical and the speed suite is flat.
+
+- `node_enum.rs`: seven hand-written 13-arm matches replaced by one
+  `dispatch!` macro listing the variants once (same static dispatch, same
+  codegen). Adding a node type now touches one variant list, not seven
+  matches.
+- `Node` trait stripped of its dyn-clone machinery (nodes are only ever
+  stored as NodeEnum variants, never trait objects); the dyn-clone
+  dependency is gone from Cargo.toml.
+- New `nodes::recorder()` helper replaces the 127
+  `get_series_idx(make_result_name(...))` incantations (3 lines -> 1 each).
+- `single_outlet_node_impls!` macro provides the four Node methods that were
+  verbatim-identical across nine nodes (add_usflow / remove_dsflow /
+  get_mass_balance / dsorders_mut). Deliberate notation-not-abstraction: the
+  macro body is the exact code it replaced, defined once in nodes/mod.rs.
+- StorageNode's 24 unrolled `recorder_idx_ds_{1..4}_*` fields and four named
+  order buffers became six `[Option<usize>; 4]` arrays and one
+  `[FifoBuffer; 4]`; initialise/order/flow phases loop over outlets, with
+  outlet 0's spill-carrying special case kept explicit.
+- Dead code deleted: routing node's 90-line commented-out optimiser block,
+  nine commented record blocks, three write-only `storage` fields, the
+  legacy `Optimiser` trait, `clone_multi`, the empty `cmaes`/`sp_uci`
+  modules, and SCE's `USE_EXPERIMENTAL_FALLBACK` branch.
+- Bonus find: the mass-balance report's hardcoded type list silently omitted
+  ORDER_CONTROL nodes (the author's old TODO feared exactly this). Fixed —
+  unlisted types now append instead of vanishing — and six regression
+  baselines regained their missing (all-zero) ORDER_CONTROL sections after
+  verifying each diff was purely additive.
+
+Net -715 lines in src/ (-679 in src/nodes/) with two new reusable pieces
+(the recorder helper and the two macros).
 
 ## Review findings not yet scheduled (context for steps)
 

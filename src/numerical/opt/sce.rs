@@ -26,10 +26,6 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
-/// Experimental flag: Use parameter recombination instead of random fallback
-/// when reflection and contraction both fail to improve
-const USE_EXPERIMENTAL_FALLBACK: bool = false;
-
 /// Configuration for SCE-UA algorithm
 pub struct SceConfig {
     /// Number of complexes
@@ -509,23 +505,12 @@ impl Sce {
 
                 // If still worse than worst, apply fallback strategy
                 if proposal_individual.objective > worst.objective {
-                    if USE_EXPERIMENTAL_FALLBACK {
-                        // EXPERIMENTAL: Generate proposal by recombining parameters from complex members
-                        // This keeps the new point within the "successful" parameter space
-                        let recombined_params = self.recombine_from_complex(&complex.members, n_params, rng);
-                        if let Ok(obj) = self.evaluate_individual(problem, &recombined_params) {
-                            proposal_individual = Individual::new(recombined_params);
-                            proposal_individual.objective = obj;
-                            evaluations += 1;
-                        }
-                    } else {
-                        // ORIGINAL: Generate completely random point across entire [0,1] space
-                        let random_params = self.random_individual(n_params, rng);
-                        if let Ok(obj) = self.evaluate_individual(problem, &random_params) {
-                            proposal_individual = Individual::new(random_params);
-                            proposal_individual.objective = obj;
-                            evaluations += 1;
-                        }
+                    // ORIGINAL: Generate completely random point across entire [0,1] space
+                    let random_params = self.random_individual(n_params, rng);
+                    if let Ok(obj) = self.evaluate_individual(problem, &random_params) {
+                        proposal_individual = Individual::new(random_params);
+                        proposal_individual.objective = obj;
+                        evaluations += 1;
                     }
                 }
             }

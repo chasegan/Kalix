@@ -40,7 +40,3 @@ pub trait Optimisable: Send {
     fn clone_for_parallel(&self) -> Box<dyn Optimisable>;
 }
 
-/// Helper function to create n clones for parallel evaluation
-pub fn clone_multi(problem: &dyn Optimisable, n: usize) -> Vec<Box<dyn Optimisable>> {
-    (0..n).map(|_| problem.clone_for_parallel()).collect()
-}

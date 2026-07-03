@@ -670,22 +670,27 @@ impl Model {
             total_mbal += mbal_per_timestep;
         }
 
-        // Now put all the sections together
-        for type_name in [
+        // Now put all the sections together: the preferred order first, then
+        // any node types not in the list (e.g. newly added ones) so nothing
+        // silently vanishes from the report.
+        let preferred_order = [
             "inflow",
             "sacramento", "gr4j",
-            "regulated_user", "unregulated_user", "loss",
+            "regulated_user", "unregulated_user", "order_control", "loss",
             "storage", "routing",
             "splitter", "confluence", "gauge",
-            "blackhole"] {
-            match report_section_dict.get(type_name) {
-                Some(s) => {
-                    report.push_str(s);
-                    report.push_str("\n");
-                }
-                None => {}
+            "blackhole"];
+        for type_name in preferred_order {
+            if let Some(s) = report_section_dict.remove(type_name) {
+                report.push_str(&s);
+                report.push_str("\n");
             }
-            //TODO: I did this list so that I could control the order, but what if the type_name is not in this list (e.g. due to someone adding a node type).
+        }
+        let mut leftovers: Vec<_> = report_section_dict.into_iter().collect();
+        leftovers.sort_by(|a, b| a.0.cmp(&b.0));
+        for (_, s) in leftovers {
+            report.push_str(&s);
+            report.push_str("\n");
         }
 
         // Write the total line

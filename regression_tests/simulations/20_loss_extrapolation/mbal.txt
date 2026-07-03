@@ -11,6 +11,12 @@ INFLOW NODES
   blah, 45
   n1, 22.5
 
+ORDER_CONTROL NODES
+  dem, 0
+  mud, 0
+  nop, 0
+  som, 0
+
 LOSS NODES
   dim, 0
   grog, -35.604395604395606

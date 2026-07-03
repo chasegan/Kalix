@@ -1,11 +1,9 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{recorder, single_outlet_node_impls, Node};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
-use crate::numerical::opt::OptimisableComponent;
 
 const MAX_DS_LINKS: usize = 1;
 const PWL_TT_PREFIX: &str = "pwl_tt_";
@@ -200,6 +198,8 @@ impl RoutingNode {
 
 
 impl Node for RoutingNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String>{
 
         // Initialize only internal state
@@ -336,21 +336,11 @@ impl Node for RoutingNode {
         self.div_sto_array.fill(0.0);
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_volume = data_cache.get_series_idx(
-            make_result_name(&self.name, "volume").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_volume = recorder(data_cache, &self.name, "volume");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
 
         //Return
         Ok(())
@@ -534,122 +524,7 @@ impl Node for RoutingNode {
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }
-
-// ============================================================================
-// OptimisableComponent Implementation
-// ============================================================================
-
-// impl OptimisableComponent for RoutingNode {
-//     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
-//
-//         // Nonlinear Muskingum parameters
-//         if name == "nlm_k" {
-//             self.nlm_k = value;
-//             return Ok(());
-//         } else if name == "nlm_m" {
-//             self.nlm_m = value;
-//             return Ok(());
-//         }
-//
-//         let idx_str = &param_name[crate::nodes::rainfall_weights::PWL_TT_PREFIX.len()..];
-//
-//         // Check bounds - idx should be 0 to n-2 for n stations
-//         let n_stations = data_indices.len();
-//         if n_stations <= 1 {
-//             return Err(format!("Node '{}': No distribution parameters for single station", self.name));
-//         }
-//
-//         if idx >= n_stations - 1 {
-//             return Err(format!(
-//                 "Node '{}': Rainfall distribution index {} out of range (max: {})",
-//                 node_name, idx, n_stations - 2
-//             ));
-//         }
-//
-//
-//         // PWL travel times
-//         // TODO: The substring after "pwl_tt_" should be a 0-based integer indicating the table
-//         //  pwl_tt value that needs to be changed
-//         if name.starts_with(PWL_TT_PREFIX) {
-//             let idx_str = &name[PWL_TT_PREFIX.len()..];
-//             let idx = idx_str.parse::<usize>()
-//                 .map_err(|_| format!("Node '{}': Invalid pwl_tt_ index: {}", self.name, idx_str))?;
-//
-//
-//             //
-//
-//             self.pwl_tt
-//         }
-//
-//         // The param name was not handled
-//         Err(format!("Unknown routing parameter: {}", name))
-//     }
-//
-//     fn get_param(&self, name: &str) -> Result<f64, String> {
-//         // Try to handle as rainfall weight parameter first
-//         if let Some(value) = RainfallWeightHandler::try_get_param(&self.rain_mm_input, name, &self.name)? {
-//             return Ok(value);
-//         }
-//
-//         // Standard Sacramento parameters
-//         match name {
-//             "adimp" => Ok(self.sacramento_model.adimp),
-//             "lzfpm" => Ok(self.sacramento_model.lzfpm),
-//             "lzfsm" => Ok(self.sacramento_model.lzfsm),
-//             "lzpk" => Ok(self.sacramento_model.lzpk),
-//             "lzsk" => Ok(self.sacramento_model.lzsk),
-//             "lztwm" => Ok(self.sacramento_model.lztwm),
-//             "pctim" => Ok(self.sacramento_model.pctim),
-//             "pfree" => Ok(self.sacramento_model.pfree),
-//             "rexp" => Ok(self.sacramento_model.rexp),
-//             "sarva" => Ok(self.sacramento_model.sarva),
-//             "side" => Ok(self.sacramento_model.side),
-//             "ssout" => Ok(self.sacramento_model.ssout),
-//             "uzfwm" => Ok(self.sacramento_model.uzfwm),
-//             "uzk" => Ok(self.sacramento_model.uzk),
-//             "uztwm" => Ok(self.sacramento_model.uztwm),
-//             "zperc" => Ok(self.sacramento_model.zperc),
-//             "laguh" => Ok(self.sacramento_model.get_laguh()),
-//             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
-//         }
-//     }
-//
-//     fn list_params(&self) -> Vec<String> {
-//         let mut params = vec![
-//             "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
-//             "pctim", "pfree", "rexp", "sarva", "side",
-//             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
-//         ]
-//             .iter()
-//             .map(|s| s.to_string())
-//             .collect::<Vec<_>>();
-//
-//         // Add rainfall parameters if using linear combination
-//         params.extend(RainfallWeightHandler::list_params(&self.rain_mm_input));
-//
-//         params
-//     }
-// }

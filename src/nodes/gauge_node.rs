@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{recorder, single_outlet_node_impls, Node};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::model_inputs::DynamicInput;
@@ -44,6 +43,8 @@ impl GaugeNode {
 }
 
 impl Node for GaugeNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
@@ -53,27 +54,13 @@ impl Node for GaugeNode {
         //DynamicInput is already initialized during parsing
 
         // Initialize result recorders
-        self.recorder_idx_delta = data_cache.get_series_idx(
-            make_result_name(&self.name, "delta").as_str(), false
-        );
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
-        self.recorder_idx_force_flow = data_cache.get_series_idx(
-            make_result_name(&self.name, "force_flow").as_str(), false
-        );
-        self.recorder_idx_reference_flow = data_cache.get_series_idx(
-            make_result_name(&self.name, "reference_flow").as_str(), false
-        );
+        self.recorder_idx_delta = recorder(data_cache, &self.name, "delta");
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
+        self.recorder_idx_force_flow = recorder(data_cache, &self.name, "force_flow");
+        self.recorder_idx_reference_flow = recorder(data_cache, &self.name, "reference_flow");
 
         // Return
         Ok(())
@@ -140,26 +127,7 @@ impl Node for GaugeNode {
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }

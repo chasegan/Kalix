@@ -1,6 +1,5 @@
-use super::Node;
+use super::{recorder, single_outlet_node_impls, Node};
 use super::rainfall_weights::RainfallWeightHandler;
-use crate::misc::misc_functions::make_result_name;
 use crate::model_inputs::DynamicInput;
 use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_management::data_cache::DataCache;
@@ -23,7 +22,6 @@ pub struct SacramentoNode {
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
-    storage: f64,
     rain: f64,
     pet: f64,
     runoff_depth_mm: f64,
@@ -61,12 +59,13 @@ impl SacramentoNode {
 }
 
 impl Node for SacramentoNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
-        self.storage = 0.0;
         self.rain = 0.0;
         self.pet = 0.0;
         self.runoff_depth_mm = 0.0;
@@ -84,42 +83,18 @@ impl Node for SacramentoNode {
         }
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_rain_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "rain").as_str(), false
-        );
-        self.recorder_idx_evap_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "evap").as_str(), false
-        );
-        self.recorder_idx_roimp = data_cache.get_series_idx(
-            make_result_name(&self.name, "roimp").as_str(), false
-        );
-        self.recorder_idx_flosf = data_cache.get_series_idx(
-            make_result_name(&self.name, "flosf").as_str(), false
-        );
-        self.recorder_idx_flobf = data_cache.get_series_idx(
-            make_result_name(&self.name, "flobf").as_str(), false
-        );
-        self.recorder_idx_floin = data_cache.get_series_idx(
-            make_result_name(&self.name, "floin").as_str(), false
-        );
-        self.recorder_idx_runoff_volume_megs = data_cache.get_series_idx(
-            make_result_name(&self.name, "runoff_volume").as_str(), false
-        );
-        self.recorder_idx_runoff_depth_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "runoff_depth").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_rain_mm = recorder(data_cache, &self.name, "rain");
+        self.recorder_idx_evap_mm = recorder(data_cache, &self.name, "evap");
+        self.recorder_idx_roimp = recorder(data_cache, &self.name, "roimp");
+        self.recorder_idx_flosf = recorder(data_cache, &self.name, "flosf");
+        self.recorder_idx_flobf = recorder(data_cache, &self.name, "flobf");
+        self.recorder_idx_floin = recorder(data_cache, &self.name, "floin");
+        self.recorder_idx_runoff_volume_megs = recorder(data_cache, &self.name, "runoff_volume");
+        self.recorder_idx_runoff_depth_mm = recorder(data_cache, &self.name, "runoff_depth");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
 
         //Return
         Ok(())
@@ -187,36 +162,14 @@ impl Node for SacramentoNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }
 
 // ============================================================================
