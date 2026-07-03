@@ -27,13 +27,19 @@ impl Timeseries {
     /// Construct a new, empty Timeseries with the given step_size (in seconds).
     /// Production code should always call this with the model's actual timestep —
     /// daily was the implicit assumption that broke sub-daily simulations.
+    ///
+    /// No capacity is preallocated here: series that live in the DataCache are
+    /// sized in one shot by `DataCache::reserve_all` once the simulation length
+    /// is known, and file-loading paths grow by amortised push. (A previous
+    /// blanket 64,000-element preallocation cost ~1 MB per series regardless
+    /// of need.)
     pub fn new(step_size: u64) -> Timeseries {
         Timeseries {
             name: "Unnamed timeseries".to_string(),
             start_timestamp: 0,
             step_size,
-            values: Vec::with_capacity(64_000usize),
-            timestamps: Vec::with_capacity(64_000usize),
+            values: Vec::new(),
+            timestamps: Vec::new(),
             next_played_index: 0,
             current_played_value: f64::NAN,
         }

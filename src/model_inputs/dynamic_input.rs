@@ -266,6 +266,58 @@ impl OptimizedExpressionNode {
         }
     }
 
+    /// Visit every zero-offset DataCache reference in the expression and perform
+    /// the checked read, regardless of which branches evaluation would take.
+    ///
+    /// Called on the first timestep only (see `DynamicInput::get_value`).
+    /// Evaluation short-circuits `if`/`&&`/`||`, so an illegal reference — one
+    /// whose value is computed later in the timestep — could otherwise hide in
+    /// an untaken branch and only fail (or silently misbehave) when data first
+    /// selects that branch, possibly years into a run. Walking the whole tree
+    /// on step 0 makes the failure deterministic: first step, every run.
+    ///
+    /// Offset references are skipped: they fall back to their explicit default
+    /// when out of range, which is legal by design.
+    #[cold]
+    #[inline(never)]
+    pub fn validate_reads(&self, data_cache: &DataCache) {
+        match self {
+            OptimizedExpressionNode::Constant { .. }
+            | OptimizedExpressionNode::ConstantReference { .. }
+            | OptimizedExpressionNode::SimContext { .. }
+            | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. } => {}
+
+            OptimizedExpressionNode::DataCacheReference { cache_index } => {
+                // The checked read panics with the series name if no value
+                // exists yet; the value itself is discarded.
+                data_cache.get_current_value(*cache_index);
+            }
+
+            OptimizedExpressionNode::BinaryOp { left, right, .. } => {
+                left.validate_reads(data_cache);
+                right.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::UnaryOp { operand, .. } => {
+                operand.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::Func1 { arg, .. } => arg.validate_reads(data_cache),
+            OptimizedExpressionNode::Func2 { a, b, .. } => {
+                a.validate_reads(data_cache);
+                b.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::If { cond, then_branch, else_branch } => {
+                cond.validate_reads(data_cache);
+                then_branch.validate_reads(data_cache);
+                else_branch.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::Fold { args, .. } => {
+                for arg in args {
+                    arg.validate_reads(data_cache);
+                }
+            }
+        }
+    }
+
     /// Transform an ExpressionNode to an OptimizedExpressionNode by resolving variables to indices
     fn from_expression_node(
         node: &ExpressionNode,
@@ -689,6 +741,16 @@ impl DynamicInput {
                     .sum()
             }
             DynamicInput::Function { optimised_ast, .. } => {
+                // First-timestep validation. No flag needed: `current_step == 0`
+                // is the whole condition, which also re-arms validation on every
+                // fresh run (a new run always starts by setting step 0). After
+                // step 0 this is a single always-false predicted branch.
+                // Other variants need no walk: they read all of their references
+                // unconditionally on every step, so their first real read IS the
+                // validation.
+                if data_cache.current_step == 0 {
+                    optimised_ast.validate_reads(data_cache);
+                }
                 optimised_ast.evaluate(data_cache)
             }
         }
