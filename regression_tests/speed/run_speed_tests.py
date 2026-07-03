@@ -17,10 +17,14 @@ the least contaminated by OS scheduling noise. Medians are shown for context.
 Numbers are only comparable within one machine (hostname).
 
 Usage:
-    ./run_speed_tests.py             # run all tests
-    ./run_speed_tests.py 2           # run only tests whose folder starts with "2"
+    ./run_speed_tests.py                          # run all tests
+    ./run_speed_tests.py 2                        # only tests starting with "2"
+    ./run_speed_tests.py --binary B --commit REF  # measure a historical build,
+                                                  # attributing rows to REF
+                                                  # (e.g. a release tag)
 """
 
+import argparse
 import csv
 import getpass
 import json
@@ -28,7 +32,6 @@ import platform
 import re
 import statistics
 import subprocess
-import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -132,19 +135,35 @@ def cpu_class():
     return platform.processor() or platform.machine()
 
 
-def environment_info():
-    """Identity + environment fields recorded with every result row."""
-    dirty = bool(run_cmd(["git", "status", "--porcelain"]))
-    version_file = HERE.parent.parent / "VERSION"
-    try:
-        kalix_version = version_file.read_text().strip()
-    except OSError:
-        kalix_version = "unknown"
+def environment_info(commit_ref=None):
+    """Identity + environment fields recorded with every result row.
+
+    With `commit_ref` (e.g. a release tag, for measuring a historical build
+    via --binary), the commit fields describe that ref — assumed clean — and
+    kalix_version is read from the ref's VERSION file.
+    """
+    if commit_ref:
+        # ^{commit} peels annotated tags to the commit they point at (a bare
+        # tag ref would otherwise yield the tag object's sha and header text).
+        commit = f"{commit_ref}^{{commit}}"
+        sha = run_cmd(["git", "rev-parse", "--short", commit]) or "unknown"
+        dirty = False
+        commit_date = run_cmd(["git", "log", "-1", "--format=%cI", commit]) or "unknown"
+        kalix_version = run_cmd(["git", "show", f"{commit_ref}:VERSION"]) or "unknown"
+    else:
+        sha = run_cmd(["git", "rev-parse", "--short", "HEAD"]) or "unknown"
+        dirty = bool(run_cmd(["git", "status", "--porcelain"]))
+        commit_date = run_cmd(["git", "show", "-s", "--format=%cI", "HEAD"]) or "unknown"
+        version_file = HERE.parent.parent / "VERSION"
+        try:
+            kalix_version = version_file.read_text().strip()
+        except OSError:
+            kalix_version = "unknown"
     return {
         "test_date": datetime.now().isoformat(timespec="seconds"),
-        "commit_sha": run_cmd(["git", "rev-parse", "--short", "HEAD"]) or "unknown",
+        "commit_sha": sha,
         "commit_dirty": str(dirty).lower(),
-        "commit_date": run_cmd(["git", "show", "-s", "--format=%cI", "HEAD"]) or "unknown",
+        "commit_date": commit_date,
         "kalix_version": kalix_version,
         "user": run_cmd(["git", "config", "user.name"]) or getpass.getuser(),
         "hostname": platform.node(),
@@ -175,13 +194,24 @@ def append_results(rows):
 
 
 def main():
-    name_filter = sys.argv[1] if len(sys.argv) > 1 else None
-    binary = find_release_binary()
-    tests = find_tests(name_filter)
+    parser = argparse.ArgumentParser(description="Run the Kalix speed test suite.")
+    parser.add_argument("filter", nargs="?", help="only run tests whose folder starts with this")
+    parser.add_argument("--binary", help="path to a kalix binary (default: target/release/kalix)")
+    parser.add_argument("--commit", help="git ref the binary was built from (required with --binary)")
+    args = parser.parse_args()
+
+    if bool(args.binary) != bool(args.commit):
+        raise SystemExit("--binary and --commit must be used together, so rows "
+                         "are attributed to the right commit.")
+
+    binary = Path(args.binary) if args.binary else find_release_binary()
+    if not binary.exists():
+        raise SystemExit(f"Binary not found: {binary}")
+    tests = find_tests(args.filter)
     if not tests:
         raise SystemExit("No speed tests found.")
 
-    env = environment_info()
+    env = environment_info(commit_ref=args.commit)
     commit = env["commit_sha"] + ("+dirty" if env["commit_dirty"] == "true" else "")
     print(f"Kalix speed tests | commit {commit} | {env['hostname']} | {env['test_date']}\n")
     header = (f"{'test':26s} {'n':>3s}  "
