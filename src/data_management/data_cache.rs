@@ -1,4 +1,5 @@
-﻿use crate::data_management::constants_cache::ConstantsCache;
+﻿use rustc_hash::FxHashMap;
+use crate::data_management::constants_cache::ConstantsCache;
 use crate::tid::utils::{u64_to_iso_datetime_string, u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
@@ -8,6 +9,12 @@ pub struct DataCache {
     pub series: Vec<Timeseries>,
     pub series_name: Vec<String>,
     pub is_critical: Vec<bool>,
+
+    /// Case-insensitive name -> index lookup (keys lowercased). Mirrors
+    /// series_name so that series resolution - which nodes do for every
+    /// recorder on every initialise, and the optimiser once per evaluation -
+    /// is O(1) instead of a linear scan over every series name.
+    name_lookup: FxHashMap<String, usize>,
     pub current_step: usize,
     pub start_timestamp: u64,
     pub current_timestamp: u64,
@@ -88,6 +95,7 @@ impl DataCache {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
+        self.name_lookup.clear();
 
         // Set up the timing
         self.start_timestamp = start_timestamp;
@@ -213,13 +221,9 @@ impl DataCache {
         if name.is_empty() {
             return None;
         }
-        for i in 0..self.series_name.len() {
-            if self.series_name[i].eq_ignore_ascii_case(name) {
-                if flag_as_critical { self.is_critical[i] = true; }
-                return Some(i);
-            }
-        }
-        None
+        let idx = *self.name_lookup.get(&name.to_lowercase())?;
+        if flag_as_critical { self.is_critical[idx] = true; }
+        Some(idx)
     }
 
 
@@ -231,12 +235,7 @@ impl DataCache {
         if name.is_empty() {
             return None;
         }
-        for i in 0..self.series_name.len() {
-            if self.series_name[i].eq_ignore_ascii_case(name) {
-                return Some(i);
-            }
-        }
-        None
+        self.name_lookup.get(&name.to_lowercase()).copied()
     }
 
 
@@ -263,6 +262,7 @@ impl DataCache {
             self.series.push(answer);
             self.series_name.push(name.to_string());
             self.is_critical.push(flag_as_critical);
+            self.name_lookup.insert(name.to_lowercase(), idx);
             idx
         }
     }
@@ -271,6 +271,9 @@ impl DataCache {
     /// Update the display name of an existing series (e.g. to match the casing
     /// specified by the modeller in the [outputs] section).
     pub fn update_series_name(&mut self, idx: usize, name: &str) {
+        let old_key = self.series_name[idx].to_lowercase();
+        self.name_lookup.remove(&old_key);
+        self.name_lookup.insert(name.to_lowercase(), idx);
         self.series_name[idx] = name.to_string();
         self.series[idx].name = name.to_string();
     }
@@ -279,9 +282,12 @@ impl DataCache {
     /*
      */
     pub fn add_series(&mut self, name: &str, series: Timeseries) {
+        let idx = self.series.len();
         self.series.push(series);
         self.series_name.push(name.to_string());
         self.is_critical.push(false);
+        // First-registered name wins on lookup, matching the old linear scan.
+        self.name_lookup.entry(name.to_lowercase()).or_insert(idx);
     }
 
 

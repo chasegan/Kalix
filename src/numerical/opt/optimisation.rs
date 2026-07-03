@@ -69,6 +69,22 @@ pub struct OptimisationProblem {
 
     /// Composite objective expression over per-term losses
     pub expression: ParsedFunction,
+
+    /// Parameter targets resolved once (first set_params) from their string
+    /// addresses to direct indices - no per-evaluation string splitting,
+    /// lowercasing, or node lookups. One entry per config mapping, in order.
+    resolved_targets: Option<Vec<ResolvedTarget>>,
+
+    /// Simulated-series index per comparison, resolved on first evaluation.
+    sim_series_indices: Option<Vec<usize>>,
+}
+
+/// A parameter target address, pre-resolved for the evaluation hot path.
+enum ResolvedTarget {
+    /// A constant in the data cache's constants table.
+    Constant(usize),
+    /// A node parameter, applied via OptimisableComponent::set_param.
+    NodeParam { node_idx: usize, param_name: String },
 }
 
 impl OptimisationProblem {
@@ -79,7 +95,11 @@ impl OptimisationProblem {
         comparisons: Vec<ComparisonPair>,
         expression: ParsedFunction,
     ) -> Self {
-        Self { model, config, comparisons, expression }
+        Self {
+            model, config, comparisons, expression,
+            resolved_targets: None,
+            sim_series_indices: None,
+        }
     }
 
     /// Create a single-comparison problem with a trivial expression of just the term name
@@ -104,75 +124,83 @@ impl OptimisationProblem {
         )
     }
 
-    /// Apply parameter values to the model
-    ///
-    /// This maps from genes to model parameters using the ParameterMappingConfig,
-    /// then sets each parameter on the appropriate component (node or constant).
-    ///
-    /// Supports two address formats:
-    /// - "node.name.param" - for node parameters
-    /// - "c.blah.blah.blah" - for constants
-    fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
-        // Evaluate all mappings: genes -> (target, physical_value)
-        let param_values = self.config.evaluate(genes);
-
-        // Apply each parameter to the model
-        for (target, value) in param_values {
-            // Parse target address
+    /// Resolve every mapping's target address ("node.name.param" or
+    /// "c.constant") to a direct index. Runs once per problem; the per-
+    /// evaluation path then applies values by index with no string work.
+    fn resolve_targets(&mut self) -> Result<Vec<ResolvedTarget>, String> {
+        let mut resolved = Vec::with_capacity(self.config.mappings.len());
+        for mapping in &self.config.mappings {
+            let target = &mapping.target;
             let parts: Vec<&str> = target.split('.').collect();
 
             if parts.len() >= 2 && parts[0] == "c" {
-                // Handle constant: "c.something"
-                self.model.data_cache.set_param(&target, value)
-                    .map_err(|e| format!("Error setting constant {}: {}", &target, e))?;
+                // Same registration path set_param used, so behaviour
+                // (including creating a not-yet-seen constant) is unchanged.
+                let idx = self.model.data_cache.constants.add_if_needed_and_get_idx(target);
+                resolved.push(ResolvedTarget::Constant(idx));
             } else if parts.len() == 3 && parts[0] == "node" {
-                // Handle node parameter: "node.name.param"
                 let node_name = parts[1];
                 let param_name = parts[2];
-
-                // Get node index
-                let node_idx = self
-                    .model
-                    .get_node_idx(node_name)
+                let node_idx = self.model.get_node_idx(node_name)
                     .ok_or_else(|| format!("Node not found: {}", node_name))?;
-
-                // Set parameter on the node using OptimisableComponent trait
-                match &mut self.model.nodes[node_idx] {
-                    NodeEnum::SacramentoNode(node) => {
-                        node.set_param(param_name, value)
-                            .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
-                    }
-                    NodeEnum::Gr4jNode(node) => {
-                        node.set_param(param_name, value)
-                            .map_err(|e| format!("Error setting {}.{}: {}", node_name, param_name, e))?;
-                    }
-                    _ => {
+                match &self.model.nodes[node_idx] {
+                    NodeEnum::SacramentoNode(_) | NodeEnum::Gr4jNode(_) => {}
+                    other => {
                         return Err(format!(
                             "Node '{}' (type: {}) does not support parameter optimisation",
-                            node_name,
-                            self.model.nodes[node_idx].get_type_as_string()
+                            node_name, other.get_type_as_string()
                         ));
                     }
                 }
+                resolved.push(ResolvedTarget::NodeParam {
+                    node_idx,
+                    param_name: param_name.to_string(),
+                });
             } else {
                 return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'c.constant_name'", target));
             }
         }
+        Ok(resolved)
+    }
 
+    /// Apply parameter values to the model via the pre-resolved targets.
+    fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
+        if self.resolved_targets.is_none() {
+            self.resolved_targets = Some(self.resolve_targets()?);
+        }
+        let targets = self.resolved_targets.as_ref().unwrap();
+
+        // Physical values in mapping order (no target strings on this path)
+        let values = self.config.evaluate_values(genes);
+
+        for (target, &value) in targets.iter().zip(values.iter()) {
+            match target {
+                ResolvedTarget::Constant(idx) => {
+                    self.model.data_cache.constants.set_value_by_idx(*idx, value);
+                }
+                ResolvedTarget::NodeParam { node_idx, param_name } => {
+                    match &mut self.model.nodes[*node_idx] {
+                        NodeEnum::SacramentoNode(node) => node.set_param(param_name, value),
+                        NodeEnum::Gr4jNode(node) => node.set_param(param_name, value),
+                        _ => unreachable!("checked during target resolution"),
+                    }
+                    .map_err(|e| format!("Error setting {}: {}", param_name, e))?;
+                }
+            }
+        }
         Ok(())
     }
 
     /// Align observed and simulated timeseries temporally.
     ///
     /// Both series live on regular grids (timestamp of point i is
-    /// start + i * step), so alignment is pure index arithmetic: no per-
-    /// evaluation timestamp hashing. Returns the overlapping (observed,
-    /// simulated) value ranges.
-    fn align_timeseries(
-        &self,
+    /// start + i * step), so alignment is pure index arithmetic. Returns the
+    /// overlapping index ranges into observed.values and simulated.values -
+    /// the caller slices both directly, so nothing is copied per evaluation.
+    fn align_ranges(
         observed: &Timeseries,
         simulated: &Timeseries,
-    ) -> Result<(Vec<f64>, Vec<f64>), String> {
+    ) -> Result<(std::ops::Range<usize>, std::ops::Range<usize>), String> {
         if observed.step_size != simulated.step_size {
             return Err(format!(
                 "Observed step_size ({}s) differs from simulated step_size ({}s)",
@@ -216,11 +244,9 @@ impl OptimisationProblem {
         let sim_start = (i_start as i64 + offset) as usize;
         let sim_end = (i_end as i64 + offset) as usize;
 
-        Ok((
-            observed.values[i_start..i_end].to_vec(),
-            simulated.values[sim_start..sim_end].to_vec(),
-        ))
+        Ok((i_start..i_end, sim_start..sim_end))
     }
+
 
     /// Extract current parameter values from model
     ///
@@ -262,26 +288,38 @@ impl Optimisable for OptimisationProblem {
         // Run the model
         self.model.run()?;
 
+        // Resolve each term's simulated-series index once (stable for the
+        // life of the problem and its worker clones).
+        if self.sim_series_indices.is_none() {
+            let mut indices = Vec::with_capacity(self.comparisons.len());
+            for comparison in &self.comparisons {
+                let idx = self.model.data_cache
+                    .get_existing_series_idx(&comparison.simulated_series_name)
+                    .ok_or_else(|| {
+                        format!(
+                            "Simulated series not found for term '{}': {}",
+                            comparison.name, comparison.simulated_series_name
+                        )
+                    })?;
+                indices.push(idx);
+            }
+            self.sim_series_indices = Some(indices);
+        }
+        let sim_indices = self.sim_series_indices.as_ref().unwrap();
+
         // Compute each term's loss and stash by term name for expression evaluation
         let mut term_values: HashMap<String, f64> = HashMap::with_capacity(self.comparisons.len());
-        for comparison in &self.comparisons {
-            let sim_idx = self
-                .model
-                .data_cache
-                .get_series_idx(&comparison.simulated_series_name, false)
-                .ok_or_else(|| {
-                    format!(
-                        "Simulated series not found for term '{}': {}",
-                        comparison.name, comparison.simulated_series_name
-                    )
-                })?;
-
+        for (comparison, &sim_idx) in self.comparisons.iter().zip(sim_indices.iter()) {
             let simulated_ts = &self.model.data_cache.series[sim_idx];
-            let (aligned_obs, aligned_sim) = self.align_timeseries(&comparison.observed, simulated_ts)
+            let (obs_range, sim_range) = Self::align_ranges(&comparison.observed, simulated_ts)
                 .map_err(|e| format!("In term '{}': {}", comparison.name, e))?;
 
-            let value = comparison.statistic.calculate(&aligned_obs, &aligned_sim)
-                .map_err(|e| format!("In term '{}': {}", comparison.name, e))?;
+            // Aligned data are contiguous slices of both series - no copies.
+            let value = comparison.statistic.calculate(
+                &comparison.observed.values[obs_range],
+                &simulated_ts.values[sim_range],
+            )
+            .map_err(|e| format!("In term '{}': {}", comparison.name, e))?;
             term_values.insert(comparison.name.clone(), value);
         }
 
@@ -298,10 +336,17 @@ impl Optimisable for OptimisationProblem {
 
     fn clone_for_parallel(&self) -> Box<dyn Optimisable> {
         Box::new(Self {
-            model: self.model.clone(),
+            // Slim clone: no round-trip INI documents, no raw inputs once
+            // configured (see Model::clone_for_run) - a worker only needs
+            // what the simulation itself touches.
+            model: self.model.clone_for_run(),
             config: self.config.clone(),
             comparisons: self.comparisons.clone(),
             expression: self.expression.clone(),
+            // Resolved indices stay valid in the clone (same node order,
+            // same constants table, same series layout).
+            resolved_targets: None,
+            sim_series_indices: self.sim_series_indices.clone(),
         })
     }
 }

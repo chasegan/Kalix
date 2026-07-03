@@ -75,6 +75,33 @@ impl Model {
         }
     }
 
+    /// Clone for repeated re-runs (optimiser workers): everything the
+    /// simulation needs, nothing it doesn't. The round-trip INI documents are
+    /// never cloned (they exist only for saving), and the raw input files are
+    /// skipped when the model is already configured - their data lives in the
+    /// data_cache by then.
+    pub fn clone_for_run(&self) -> Model {
+        let configured = !self.execution_order.is_empty();
+        Model {
+            configuration: self.configuration.clone(),
+            inputs: if configured { vec![] } else { self.inputs.clone() },
+            input_file_paths: vec![],
+            outputs: self.outputs.clone(),
+            account_manager: self.account_manager.clone(),
+            data_cache: self.data_cache.clone(),
+            working_directory: self.working_directory.clone(),
+            nodes: self.nodes.clone(),
+            links: self.links.clone(),
+            outgoing_links: self.outgoing_links.clone(),
+            incoming_links: self.incoming_links.clone(),
+            execution_order: self.execution_order.clone(),
+            simple_ordering_system: self.simple_ordering_system.clone(),
+            node_lookup: self.node_lookup.clone(),
+            ini_document: None,
+            baseline_canonical: None,
+        }
+    }
+
     /// Adds a node to the model and returns its index
     pub fn add_node(&mut self, node: NodeEnum) -> usize {
         let idx = self.nodes.len();

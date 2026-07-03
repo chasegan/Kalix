@@ -240,6 +240,22 @@ impl ParameterMappingConfig {
             .collect()
     }
 
+    /// Evaluate all mappings, returning the physical values only, in mapping
+    /// order. The hot-path sibling of [`Self::evaluate`]: the optimiser
+    /// resolves targets once per run, so it doesn't need the target strings
+    /// (re)cloned on every candidate evaluation.
+    pub fn evaluate_values(&self, genes: &[f64]) -> Vec<f64> {
+        self.gene.set_values(genes);
+
+        let ctx = VariableContext::new(&self.empty_vars, &self.eval_config)
+            .with_functions(&self.registry);
+
+        self.mappings.iter()
+            .map(|m| m.expression.evaluate(&ctx)
+                .expect("expression already validated during discovery pass"))
+            .collect()
+    }
+
     /// Human-readable gene names in dimension order, e.g. `["g(1)", "g(3)"]`.
     pub fn gene_names(&self) -> Vec<String> {
         self.gene.gene_names()
