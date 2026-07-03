@@ -1,7 +1,10 @@
 package com.kalix.ide.preferences;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.prefs.Preferences;
 
@@ -9,8 +12,26 @@ import java.util.prefs.Preferences;
  * Hybrid preference management system that stores user-configurable preferences
  * in a local JSON file (kalix_prefs.json) and transient UI state in OS preferences.
  *
- * File preferences are portable and shareable between users/machines.
+ * <p>File preferences are portable and shareable between users/machines.
  * OS preferences handle rapidly-changing UI state like window positions.
+ * Access goes through the typed {@link Pref} constants in {@link PreferenceKeys};
+ * the stringly accessors here are package-private plumbing for {@link Pref}.
+ *
+ * <p><b>Preference file location precedence:</b>
+ * <ol>
+ *   <li>The directory containing the application JAR (portable installs),
+ *       resolved via the code-source URI so install paths with spaces or
+ *       non-ASCII characters work.</li>
+ *   <li>In development — when the code source is a classes directory such as
+ *       Gradle's {@code build/classes/java/main} — the working directory.</li>
+ *   <li>If the directory chosen above is not writable, a per-user config
+ *       directory ({@code ~/.kalix}), noted once on stderr.</li>
+ * </ol>
+ *
+ * <p>Reads never write: a missing key yields the caller's default without
+ * persisting it, so untouched defaults are not recorded as explicit choices
+ * and two running instances do not rewrite each other's file at startup.
+ * Sets are saved to disk immediately.
  */
 public class PreferenceManager {
 
@@ -27,50 +48,76 @@ public class PreferenceManager {
     }
 
     /**
-     * Initialize the preference file location (next to executable).
+     * Initialize the preference file location. See the class javadoc for the
+     * directory precedence.
      */
     private static void initializePreferenceFile() {
+        File dir = resolveApplicationDirectory();
+        if (!isWritableDirectory(dir)) {
+            File fallback = new File(System.getProperty("user.home"), ".kalix");
+            System.err.println("Kalix: preference directory " + dir.getAbsolutePath()
+                + " is not writable; using " + fallback.getAbsolutePath());
+            dir = fallback;
+        }
+        preferenceFile = new File(dir, "kalix_prefs.json");
+    }
+
+    /**
+     * The directory the application runs from: the JAR's directory for installs,
+     * or the working directory in development (code source is a classes directory,
+     * e.g. Gradle's {@code build/classes/java/main}). Resolved via the code-source
+     * URI, not its raw path, so URL-encoded characters ("My%20Folder") cannot
+     * silently point at a nonexistent directory.
+     */
+    private static File resolveApplicationDirectory() {
         try {
-            // Get the directory containing the currently running JAR
-            String jarPath = PreferenceManager.class.getProtectionDomain()
-                .getCodeSource().getLocation().getPath();
-            File jarFile = new File(jarPath);
-            File jarDir = jarFile.getParentFile();
-
-            // For development (not in JAR), use current working directory
-            if (jarDir == null || jarPath.endsWith("/classes/")) {
-                jarDir = new File(System.getProperty("user.dir"));
+            URI location = PreferenceManager.class.getProtectionDomain()
+                .getCodeSource().getLocation().toURI();
+            Path codeSource = Paths.get(location);
+            if (Files.isDirectory(codeSource)) {
+                // Development: running from a classes directory, not a JAR
+                return new File(System.getProperty("user.dir"));
             }
-
-            preferenceFile = new File(jarDir, "kalix_prefs.json");
+            Path jarDir = codeSource.getParent();
+            return jarDir != null ? jarDir.toFile() : new File(System.getProperty("user.dir"));
         } catch (Exception e) {
-            // Fallback to current directory
-            preferenceFile = new File("kalix_prefs.json");
+            // No code source / opaque URI - fall back to the working directory
+            return new File(System.getProperty("user.dir"));
         }
     }
 
-    // ==== FILE-BASED PREFERENCE METHODS ====
+    /** True when the directory exists and can be written to. */
+    private static boolean isWritableDirectory(File dir) {
+        return dir.isDirectory() && Files.isWritable(dir.toPath());
+    }
+
+    /**
+     * Test hook: redirect the preference file and drop all cached state so the
+     * next read reloads from the given file. Package-private, tests only.
+     */
+    static synchronized void redirectForTesting(File file) {
+        preferenceFile = file;
+        filePreferences = new HashMap<>();
+        preferencesLoaded = false;
+    }
+
+    // ==== FILE-BASED PREFERENCE METHODS (package-private plumbing for Pref) ====
 
     /**
      * Gets a boolean preference from the file-based preference system.
-     * If the value is missing or invalid, returns the default and saves it to the file.
+     * A missing or invalid value yields the default without writing it back.
      */
-    public static boolean getFileBoolean(String key, boolean defaultValue) {
+    static boolean getFileBoolean(String key, boolean defaultValue) {
         ensureLoaded();
         Object value = filePreferences.get(key);
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        // Missing/invalid - use default and save it
-        setFileBoolean(key, defaultValue);
-        return defaultValue;
+        return value instanceof Boolean ? (Boolean) value : defaultValue;
     }
 
     /**
      * Sets a boolean preference in the file-based preference system.
      * Changes are immediately saved to disk.
      */
-    public static void setFileBoolean(String key, boolean value) {
+    static void setFileBoolean(String key, boolean value) {
         ensureLoaded();
         filePreferences.put(key, value);
         saveToFile();
@@ -78,24 +125,19 @@ public class PreferenceManager {
 
     /**
      * Gets a string preference from the file-based preference system.
-     * If the value is missing or invalid, returns the default and saves it to the file.
+     * A missing or invalid value yields the default without writing it back.
      */
-    public static String getFileString(String key, String defaultValue) {
+    static String getFileString(String key, String defaultValue) {
         ensureLoaded();
         Object value = filePreferences.get(key);
-        if (value instanceof String) {
-            return (String) value;
-        }
-        // Missing/invalid - use default and save it
-        setFileString(key, defaultValue);
-        return defaultValue;
+        return value instanceof String ? (String) value : defaultValue;
     }
 
     /**
      * Sets a string preference in the file-based preference system.
      * Changes are immediately saved to disk.
      */
-    public static void setFileString(String key, String value) {
+    static void setFileString(String key, String value) {
         ensureLoaded();
         filePreferences.put(key, value);
         saveToFile();
@@ -103,24 +145,19 @@ public class PreferenceManager {
 
     /**
      * Gets an integer preference from the file-based preference system.
-     * If the value is missing or invalid, returns the default and saves it to the file.
+     * A missing or invalid value yields the default without writing it back.
      */
-    public static int getFileInt(String key, int defaultValue) {
+    static int getFileInt(String key, int defaultValue) {
         ensureLoaded();
         Object value = filePreferences.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).intValue();
-        }
-        // Missing/invalid - use default and save it
-        setFileInt(key, defaultValue);
-        return defaultValue;
+        return value instanceof Number ? ((Number) value).intValue() : defaultValue;
     }
 
     /**
      * Sets an integer preference in the file-based preference system.
      * Changes are immediately saved to disk.
      */
-    public static void setFileInt(String key, int value) {
+    static void setFileInt(String key, int value) {
         ensureLoaded();
         filePreferences.put(key, value);
         saveToFile();
@@ -128,24 +165,19 @@ public class PreferenceManager {
 
     /**
      * Gets a double preference from the file-based preference system.
-     * If the value is missing or invalid, returns the default and saves it to the file.
+     * A missing or invalid value yields the default without writing it back.
      */
-    public static double getFileDouble(String key, double defaultValue) {
+    static double getFileDouble(String key, double defaultValue) {
         ensureLoaded();
         Object value = filePreferences.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        // Missing/invalid - use default and save it
-        setFileDouble(key, defaultValue);
-        return defaultValue;
+        return value instanceof Number ? ((Number) value).doubleValue() : defaultValue;
     }
 
     /**
      * Sets a double preference in the file-based preference system.
      * Changes are immediately saved to disk.
      */
-    public static void setFileDouble(String key, double value) {
+    static void setFileDouble(String key, double value) {
         ensureLoaded();
         filePreferences.put(key, value);
         saveToFile();
@@ -153,21 +185,15 @@ public class PreferenceManager {
 
     /**
      * Gets a string list preference from the file-based preference system.
-     * If the value is missing or invalid, returns the default and saves it to the file.
+     * A missing or invalid value yields the default without writing it back.
      */
     @SuppressWarnings("unchecked")
-    public static List<String> getFileStringList(String key, List<String> defaultValue) {
+    static List<String> getFileStringList(String key, List<String> defaultValue) {
         ensureLoaded();
         Object value = filePreferences.get(key);
         if (value instanceof List) {
-            try {
-                return (List<String>) value;
-            } catch (ClassCastException e) {
-                // Invalid list type - use default
-            }
+            return (List<String>) value;
         }
-        // Missing/invalid - use default and save it
-        setFileStringList(key, defaultValue);
         return defaultValue;
     }
 
@@ -175,53 +201,53 @@ public class PreferenceManager {
      * Sets a string list preference in the file-based preference system.
      * Changes are immediately saved to disk.
      */
-    public static void setFileStringList(String key, List<String> value) {
+    static void setFileStringList(String key, List<String> value) {
         ensureLoaded();
         filePreferences.put(key, value);
         saveToFile();
     }
 
-    // ==== OS-BASED PREFERENCE METHODS ====
+    // ==== OS-BASED PREFERENCE METHODS (package-private plumbing for Pref) ====
 
     /**
      * Gets a boolean preference from the OS preference system.
      */
-    public static boolean getOsBoolean(String key, boolean defaultValue) {
+    static boolean getOsBoolean(String key, boolean defaultValue) {
         return osPrefs.getBoolean(key, defaultValue);
     }
 
     /**
      * Sets a boolean preference in the OS preference system.
      */
-    public static void setOsBoolean(String key, boolean value) {
+    static void setOsBoolean(String key, boolean value) {
         osPrefs.putBoolean(key, value);
     }
 
     /**
      * Gets a string preference from the OS preference system.
      */
-    public static String getOsString(String key, String defaultValue) {
+    static String getOsString(String key, String defaultValue) {
         return osPrefs.get(key, defaultValue);
     }
 
     /**
      * Sets a string preference in the OS preference system.
      */
-    public static void setOsString(String key, String value) {
+    static void setOsString(String key, String value) {
         osPrefs.put(key, value);
     }
 
     /**
      * Gets an integer preference from the OS preference system.
      */
-    public static int getOsInt(String key, int defaultValue) {
+    static int getOsInt(String key, int defaultValue) {
         return osPrefs.getInt(key, defaultValue);
     }
 
     /**
      * Sets an integer preference in the OS preference system.
      */
-    public static void setOsInt(String key, int value) {
+    static void setOsInt(String key, int value) {
         osPrefs.putInt(key, value);
     }
 

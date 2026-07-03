@@ -1,7 +1,6 @@
 package com.kalix.ide.themes;
 
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 
 import java.util.Optional;
 
@@ -41,8 +40,7 @@ public final class ThemePreferences {
      * registry default.
      */
     public static KalixTheme applicationTheme() {
-        String stored = PreferenceManager.getFileString(
-            PreferenceKeys.UI_THEME, ThemeRegistry.defaultTheme().id());
+        String stored = PreferenceKeys.UI_THEME.get();
 
         Optional<KalixTheme> byId = ThemeRegistry.byId(stored);
         if (byId.isPresent()) {
@@ -51,12 +49,12 @@ public final class ThemePreferences {
 
         KalixTheme resolved = ThemeRegistry.byLegacyDisplayName(stored)
             .orElseGet(ThemeRegistry::defaultTheme);
-        PreferenceManager.setFileString(PreferenceKeys.UI_THEME, resolved.id());
+        PreferenceKeys.UI_THEME.set(resolved.id());
         return resolved;
     }
 
     public static void storeApplicationTheme(KalixTheme theme) {
-        PreferenceManager.setFileString(PreferenceKeys.UI_THEME, theme.id());
+        PreferenceKeys.UI_THEME.set(theme.id());
     }
 
     // ========== Node theme (ui.nodeTheme) ==========
@@ -68,7 +66,7 @@ public final class ThemePreferences {
      * {@value #FOLLOW}.
      */
     public static Optional<KalixTheme> explicitNodeTheme() {
-        String stored = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, FOLLOW);
+        String stored = PreferenceKeys.UI_NODE_THEME.get();
         if (FOLLOW.equals(stored)) {
             return Optional.empty();
         }
@@ -80,8 +78,7 @@ public final class ThemePreferences {
 
         Optional<KalixTheme> legacy = ThemeRegistry.byLegacyDisplayName(stored)
             .or(() -> legacyNodeEnumName(stored));
-        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME,
-            legacy.map(KalixTheme::id).orElse(FOLLOW));
+        PreferenceKeys.UI_NODE_THEME.set(legacy.map(KalixTheme::id).orElse(FOLLOW));
         return legacy;
     }
 
@@ -104,11 +101,11 @@ public final class ThemePreferences {
     }
 
     public static void storeNodeTheme(KalixTheme theme) {
-        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, theme.id());
+        PreferenceKeys.UI_NODE_THEME.set(theme.id());
     }
 
     public static void storeNodeThemeFollow() {
-        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, FOLLOW);
+        PreferenceKeys.UI_NODE_THEME.set(FOLLOW);
     }
 
     // ========== Syntax theme (ui.syntaxTheme) ==========
@@ -119,7 +116,7 @@ public final class ThemePreferences {
      * names are migrated to ids; unresolvable values become {@value #FOLLOW}.
      */
     public static Optional<KalixTheme> explicitSyntaxTheme() {
-        String stored = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, FOLLOW);
+        String stored = PreferenceKeys.UI_SYNTAX_THEME.get();
         if (FOLLOW.equals(stored)) {
             return Optional.empty();
         }
@@ -131,8 +128,7 @@ public final class ThemePreferences {
 
         Optional<KalixTheme> legacy = ThemeRegistry.byLegacyDisplayName(stored)
             .or(() -> legacySyntaxEnumName(stored));
-        PreferenceManager.setFileString(PreferenceKeys.UI_SYNTAX_THEME,
-            legacy.map(KalixTheme::id).orElse(FOLLOW));
+        PreferenceKeys.UI_SYNTAX_THEME.set(legacy.map(KalixTheme::id).orElse(FOLLOW));
         return legacy;
     }
 
@@ -155,10 +151,10 @@ public final class ThemePreferences {
     }
 
     public static void storeSyntaxTheme(KalixTheme theme) {
-        PreferenceManager.setFileString(PreferenceKeys.UI_SYNTAX_THEME, theme.id());
+        PreferenceKeys.UI_SYNTAX_THEME.set(theme.id());
     }
 
     public static void storeSyntaxThemeFollow() {
-        PreferenceManager.setFileString(PreferenceKeys.UI_SYNTAX_THEME, FOLLOW);
+        PreferenceKeys.UI_SYNTAX_THEME.set(FOLLOW);
     }
 }

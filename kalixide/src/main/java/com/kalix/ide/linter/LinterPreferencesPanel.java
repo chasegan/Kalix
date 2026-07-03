@@ -2,7 +2,6 @@ package com.kalix.ide.linter;
 
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -65,7 +64,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
         // Enable linting checkbox
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3;
         enableLintingCheckBox = new JCheckBox("Enable model linting");
-        enableLintingCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.LINTER_ENABLED, true));
+        enableLintingCheckBox.setSelected(PreferenceKeys.LINTER_ENABLED.get());
         enableLintingCheckBox.addActionListener(e -> onLintingEnabledChanged());
         contentPanel.add(enableLintingCheckBox, gbc);
 
@@ -74,7 +73,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
         contentPanel.add(new JLabel("Schema File:"), gbc);
 
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        schemaPathField = new JTextField(PreferenceManager.getFileString(PreferenceKeys.LINTER_SCHEMA_PATH, ""));
+        schemaPathField = new JTextField(PreferenceKeys.LINTER_SCHEMA_PATH.get());
         schemaPathField.setToolTipText("Leave empty to use the default embedded schema");
         contentPanel.add(schemaPathField, gbc);
 
@@ -163,7 +162,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
 
     private void onLintingEnabledChanged() {
         boolean enabled = enableLintingCheckBox.isSelected();
-        PreferenceManager.setFileBoolean(PreferenceKeys.LINTER_ENABLED, enabled);
+        PreferenceKeys.LINTER_ENABLED.set(enabled);
 
         // Update schema manager to propagate the change
         Set<String> disabledRules = rulesTableModel != null ?
@@ -216,7 +215,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
 
     private void saveSchemaPath() {
         String path = schemaPathField.getText().trim();
-        PreferenceManager.setFileString(PreferenceKeys.LINTER_SCHEMA_PATH, path);
+        PreferenceKeys.LINTER_SCHEMA_PATH.set(path);
     }
 
     private void updateSchemaStatus() {

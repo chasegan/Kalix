@@ -7,7 +7,6 @@ import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.SeriesMarker;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.style.StrokeStyle;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import java.awt.*;
@@ -723,13 +722,13 @@ public class PlotLegendManager {
      * Loads legend preferences.
      */
     public void loadPreferences() {
-        enabled = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_ENABLED, true);
-        collapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
-        x = PreferenceManager.getFileInt(PreferenceKeys.PLOT_LEGEND_POSITION_X, -1);
-        y = PreferenceManager.getFileInt(PreferenceKeys.PLOT_LEGEND_POSITION_Y, -1);
+        enabled = PreferenceKeys.PLOT_LEGEND_ENABLED.get();
+        collapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
+        x = PreferenceKeys.PLOT_LEGEND_POSITION_X.get();
+        y = PreferenceKeys.PLOT_LEGEND_POSITION_Y.get();
 
         // Load display mode
-        String modeString = PreferenceManager.getFileString(PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE, "FULL_NAME");
+        String modeString = PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE.get();
         try {
             displayMode = DisplayMode.valueOf(modeString);
         } catch (IllegalArgumentException e) {
@@ -741,10 +740,10 @@ public class PlotLegendManager {
      * Saves legend preferences.
      */
     public void savePreferences() {
-        PreferenceManager.setFileBoolean(PreferenceKeys.PLOT_LEGEND_ENABLED, enabled);
-        PreferenceManager.setFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, collapsed);
-        PreferenceManager.setFileInt(PreferenceKeys.PLOT_LEGEND_POSITION_X, x);
-        PreferenceManager.setFileInt(PreferenceKeys.PLOT_LEGEND_POSITION_Y, y);
-        PreferenceManager.setFileString(PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE, displayMode.name());
+        PreferenceKeys.PLOT_LEGEND_ENABLED.set(enabled);
+        PreferenceKeys.PLOT_LEGEND_COLLAPSED.set(collapsed);
+        PreferenceKeys.PLOT_LEGEND_POSITION_X.set(x);
+        PreferenceKeys.PLOT_LEGEND_POSITION_Y.set(y);
+        PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE.set(displayMode.name());
     }
 }

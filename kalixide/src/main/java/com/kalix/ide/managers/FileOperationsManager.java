@@ -3,7 +3,6 @@ package com.kalix.ide.managers;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -79,7 +78,7 @@ public class FileOperationsManager {
         document.setFile(null);
 
         // Clear last opened file preference since user is starting fresh
-        PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, "");
+        PreferenceKeys.LAST_OPENED_FILE.set("");
 
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
@@ -138,7 +137,7 @@ public class FileOperationsManager {
 
         // Add to recent files and remember as last opened for session restoration.
         addRecentFileCallback.accept(file.getAbsolutePath());
-        PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, file.getAbsolutePath());
+        PreferenceKeys.LAST_OPENED_FILE.set(file.getAbsolutePath());
 
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
@@ -201,7 +200,7 @@ public class FileOperationsManager {
             document.setDirty(false);
 
             // Save as last opened file for session restoration
-            PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, currentFile.getAbsolutePath());
+            PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
 
             String statusMessage = String.format("Saved model: %s", currentFile.getName());
             statusUpdateCallback.accept(statusMessage);
@@ -279,7 +278,7 @@ public class FileOperationsManager {
                 addRecentFileCallback.accept(selectedFile.getAbsolutePath());
 
                 // Save as last opened file for session restoration
-                PreferenceManager.setOsString(PreferenceKeys.LAST_OPENED_FILE, selectedFile.getAbsolutePath());
+                PreferenceKeys.LAST_OPENED_FILE.set(selectedFile.getAbsolutePath());
 
                 String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
                 statusUpdateCallback.accept(statusMessage);

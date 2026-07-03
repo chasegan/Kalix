@@ -2,7 +2,6 @@ package com.kalix.ide.components;
 
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.swing.UIManager;
@@ -79,7 +78,7 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
      * Uses FontManager to get JetBrains Mono or an appropriate fallback.
      */
     protected void configureMonospaceFont() {
-        int fontSize = PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12);
+        int fontSize = PreferenceKeys.EDITOR_FONT_SIZE.get();
         Font monoFont = FontManager.getMonospaceFont(fontSize);
         setFont(monoFont);
     }

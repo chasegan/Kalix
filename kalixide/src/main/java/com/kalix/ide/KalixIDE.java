@@ -25,7 +25,6 @@ import com.kalix.ide.managers.IconManager;
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.TerminalActions;
@@ -178,7 +177,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         // Restore the last opened project folder, if any.
-        String savedFolder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        String savedFolder = PreferenceKeys.UI_WORKSPACE_FOLDER.get();
         if (!savedFolder.isEmpty()) {
             File folder = new File(savedFolder);
             if (folder.isDirectory()) {
@@ -349,8 +348,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String activePath = (active != null && active.getFile() != null)
             ? active.getFile().getAbsolutePath() : "";
 
-        PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, entries.toString());
-        PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, activePath);
+        PreferenceKeys.UI_OPEN_DOCUMENTS.set(entries.toString());
+        PreferenceKeys.UI_ACTIVE_DOCUMENT.set(activePath);
     }
 
     /**
@@ -360,11 +359,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @return true if at least one document was restored
      */
     private boolean restoreSession() {
-        String entriesStr = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
+        String entriesStr = PreferenceKeys.UI_OPEN_DOCUMENTS.get();
         if (entriesStr.isEmpty()) {
             return false;
         }
-        String activePath = PreferenceManager.getOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
+        String activePath = PreferenceKeys.UI_ACTIVE_DOCUMENT.get();
 
         boolean restoredAny = false;
         restoringSession = true;
@@ -432,7 +431,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Map appearance from saved preferences (follow mode resolves to the
         // application theme's linked node palette).
         map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
-        map.setShowGridlines(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
+        map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
 
         // Editor features, each bound to this document's own model and working directory.
         editor.initializeLinter(schemaManager);
@@ -665,20 +664,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
-        int treeWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_TREE_WIDTH, AppConstants.DEFAULT_TREE_WIDTH);
-        int mapWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_MAP_WIDTH, AppConstants.DEFAULT_MAP_WIDTH);
+        int treeWidth = PreferenceKeys.UI_TREE_WIDTH.get();
+        int mapWidth = PreferenceKeys.UI_MAP_WIDTH.get();
         boolean treeCollapsed = computeInitialTreeCollapsed();
-        boolean mapCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, false);
+        boolean mapCollapsed = PreferenceKeys.UI_MAP_COLLAPSED.get();
 
         workspacePanel = new WorkspacePanel(
             projectTreePanel, documentTabPane, contextViewPanel,
             treeWidth, mapWidth, treeCollapsed, mapCollapsed);
 
         workspacePanel.setLayoutChangeListener((tw, mw, tc, mc) -> {
-            PreferenceManager.setOsInt(PreferenceKeys.UI_TREE_WIDTH, tw);
-            PreferenceManager.setOsInt(PreferenceKeys.UI_MAP_WIDTH, mw);
-            PreferenceManager.setOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, tc);
-            PreferenceManager.setOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, mc);
+            PreferenceKeys.UI_TREE_WIDTH.set(tw);
+            PreferenceKeys.UI_MAP_WIDTH.set(mw);
+            PreferenceKeys.UI_TREE_COLLAPSED.set(tc);
+            PreferenceKeys.UI_MAP_COLLAPSED.set(mc);
         });
 
         return workspacePanel;
@@ -694,12 +693,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (!savedFolderIsValid()) {
             return true;
         }
-        return PreferenceManager.getOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, false);
+        return PreferenceKeys.UI_TREE_COLLAPSED.get();
     }
 
     /** @return true if the saved workspace folder preference points at an existing directory */
     private boolean savedFolderIsValid() {
-        String folder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        String folder = PreferenceKeys.UI_WORKSPACE_FOLDER.get();
         return !folder.isEmpty() && new File(folder).isDirectory();
     }
 
@@ -964,7 +963,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void loadModelFolder(String folderPath) {
         projectTreePanel.openFolder(folderPath);
-        PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folderPath);
+        PreferenceKeys.UI_WORKSPACE_FOLDER.set(folderPath);
         // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
         if (workspacePanel != null) {
             workspacePanel.setTreeCollapsed(false);
@@ -1108,7 +1107,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     private boolean checkUnsavedChanges(KalixDocument document, String messageFormat) {
-        boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
+        boolean promptOnExit = PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.get();
 
         if (!promptOnExit || !document.isDirty()) {
             return true; // No prompt needed or no unsaved changes
@@ -1450,7 +1449,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public void onMapPreferencesChanged() {
                 // Update map display with new preferences
-                boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
+                boolean showGridlines = PreferenceKeys.MAP_SHOW_GRIDLINES.get();
                 toggleGridlines(showGridlines);
 
                 // Update node theme (follow mode resolves to the application theme's)
@@ -1635,14 +1634,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             document.getMapPanel().setShowGridlines(showGridlines);
         }
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, showGridlines);
+        PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
     }
     
     @Override
     public void toggleShowHiddenFiles(boolean show) {
         // Single source of truth: persist to the shareable file-based prefs, then apply to the tree.
         // Both the View-menu checkbox and the tree's right-click checkbox route here.
-        PreferenceManager.setFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, show);
+        PreferenceKeys.TREE_SHOW_HIDDEN_FILES.set(show);
         if (projectTreePanel != null) {
             projectTreePanel.setShowHidden(show);
         }
@@ -1650,7 +1649,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public boolean isShowHiddenFiles() {
-        return PreferenceManager.getFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, true);
+        return PreferenceKeys.TREE_SHOW_HIDDEN_FILES.get();
     }
 
     @Override
@@ -1658,7 +1657,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Falls back to the saved preference before any document/map exists (toolbar build).
         return mapPanel != null
             ? mapPanel.isShowGridlines()
-            : PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
+            : PreferenceKeys.MAP_SHOW_GRIDLINES.get();
     }
 
     @Override
@@ -1871,10 +1870,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         // Get the external editor command from preferences
-        String commandTemplate = PreferenceManager.getFileString(
-            PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND,
-            "code <folder_path> <file_path>"
-        );
+        String commandTemplate = PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get();
 
         if (commandTemplate.trim().isEmpty()) {
             updateStatus("External editor command not configured in preferences");
@@ -1971,7 +1967,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * If the file doesn't exist or no preference is set, falls back to default behavior.
      */
     private void loadLastOpenedFile() {
-        String lastFilePath = PreferenceManager.getOsString(PreferenceKeys.LAST_OPENED_FILE, "");
+        String lastFilePath = PreferenceKeys.LAST_OPENED_FILE.get();
 
         if (!lastFilePath.isEmpty()) {
             File lastFile = new File(lastFilePath);

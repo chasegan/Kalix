@@ -1,148 +1,193 @@
 package com.kalix.ide.preferences;
 
+import com.kalix.ide.constants.AppConstants;
+
 import java.util.List;
 
 /**
- * Centralized constants for all preference keys used throughout the application.
+ * Every preference used by the application, as typed {@link Pref} constants.
  *
- * File-based preferences are stored in kalix_prefs.json and are portable/shareable.
- * OS-based preferences are stored in the system's preference store and handle UI state.
+ * <p>Each constant fixes the key's storage tier, value type, and default in one
+ * place — call sites just {@code KEY.get()} / {@code KEY.set(...)}:
+ * <ul>
+ *   <li><b>File-based</b> ({@code kalix_prefs.json}): portable, human-editable
+ *       settings, shareable between users/machines.</li>
+ *   <li><b>OS-based</b> (Java Preferences): machine-specific, transient UI
+ *       state (panel widths, session restoration, ...).</li>
+ * </ul>
  */
-public class PreferenceKeys {
+public final class PreferenceKeys {
 
     // ==== FILE-BASED PREFERENCES (kalix_prefs.json) ====
-    // These preferences are portable and should be shared between users/machines
+    // Portable settings, shared between users/machines.
 
-    /** FlowViz coordinate display toggle (boolean, default: false) */
-    public static final String FLOWVIZ_SHOW_COORDINATES = "flowviz.showCoordinates";
+    /** FlowViz coordinate display toggle. */
+    public static final Pref<Boolean> FLOWVIZ_SHOW_COORDINATES =
+        Pref.fileBoolean("flowviz.showCoordinates", false);
 
-    /** FlowViz 64-bit precision toggle for data export (boolean, default: true) */
-    public static final String FLOWVIZ_PRECISION64 = "flowviz.precision64";
+    /** FlowViz 64-bit precision toggle for data export. */
+    public static final Pref<Boolean> FLOWVIZ_PRECISION64 =
+        Pref.fileBoolean("flowviz.precision64", true);
 
-    /** FlowViz Auto-Y mode toggle (boolean, default: true) */
-    public static final String FLOWVIZ_AUTO_Y_MODE = "flowviz.autoYMode";
+    /** FlowViz Auto-Y mode toggle. */
+    public static final Pref<Boolean> FLOWVIZ_AUTO_Y_MODE =
+        Pref.fileBoolean("flowviz.autoYMode", true);
 
-    /** Plot legend enabled toggle (boolean, default: true) */
-    public static final String PLOT_LEGEND_ENABLED = "plot.legend.enabled";
+    /** Plot legend enabled toggle. */
+    public static final Pref<Boolean> PLOT_LEGEND_ENABLED =
+        Pref.fileBoolean("plot.legend.enabled", true);
 
-    /** Plot legend collapsed state (boolean, default: false) */
-    public static final String PLOT_LEGEND_COLLAPSED = "plot.legend.collapsed";
+    /** Plot legend collapsed state. */
+    public static final Pref<Boolean> PLOT_LEGEND_COLLAPSED =
+        Pref.fileBoolean("plot.legend.collapsed", false);
 
-    /** Plot legend X position (int, default: -1 for auto-position) */
-    public static final String PLOT_LEGEND_POSITION_X = "plot.legend.position.x";
+    /** Plot legend X position (-1 = auto-position). */
+    public static final Pref<Integer> PLOT_LEGEND_POSITION_X =
+        Pref.fileInt("plot.legend.position.x", -1);
 
-    /** Plot legend Y position (int, default: -1 for auto-position) */
-    public static final String PLOT_LEGEND_POSITION_Y = "plot.legend.position.y";
+    /** Plot legend Y position (-1 = auto-position). */
+    public static final Pref<Integer> PLOT_LEGEND_POSITION_Y =
+        Pref.fileInt("plot.legend.position.y", -1);
 
-    /** Plot legend display mode (string, default: "FULL_NAME") */
-    public static final String PLOT_LEGEND_DISPLAY_MODE = "plot.legend.display.mode";
+    /** Plot legend display mode ({@code LegendDisplayMode} enum name). */
+    public static final Pref<String> PLOT_LEGEND_DISPLAY_MODE =
+        Pref.fileString("plot.legend.display.mode", "FULL_NAME");
 
-    /** Log scale auto-zoom minimum value threshold (double, default: 0.001) */
-    public static final String PLOT_LOG_SCALE_MIN_THRESHOLD = "plot.logScale.minThreshold";
+    /** Log scale auto-zoom minimum value threshold. */
+    public static final Pref<Double> PLOT_LOG_SCALE_MIN_THRESHOLD =
+        Pref.fileDouble("plot.logScale.minThreshold", 1.0);
 
-    /** Custom plot palettes, one encoded string per user-defined palette (string list, default: empty) */
-    public static final String PLOT_PALETTES = "plot.palettes";
+    /** Custom plot palettes, one encoded string per user-defined palette. */
+    public static final Pref<List<String>> PLOT_PALETTES =
+        Pref.fileStringList("plot.palettes", List.of());
 
-    /** Name of the globally active plot palette (string, default: "Default") */
-    public static final String PLOT_ACTIVE_PALETTE = "plot.activePalette";
+    /** Name of the globally active plot palette ({@code PlotPalette.ORIGINAL_NAME}). */
+    public static final Pref<String> PLOT_ACTIVE_PALETTE =
+        Pref.fileString("plot.activePalette", com.kalix.ide.flowviz.style.PlotPalette.ORIGINAL_NAME);
 
-    /** STDIO format for get_result responses ("pixie" or "csv", default: "pixie") */
-    public static final String STDIO_DATA_FORMAT = "stdio.dataFormat";
+    /** STDIO format for get_result responses ("pixie" or "csv"). */
+    public static final Pref<String> STDIO_DATA_FORMAT =
+        Pref.fileString("stdio.dataFormat", "pixie");
 
-    /** Application theme: a stable theme id such as "one-dark" (default: "light").
+    /** Application theme: a stable theme id such as "one-dark".
      *  Read/written via ThemePreferences, which migrates legacy display names. */
-    public static final String UI_THEME = "ui.theme";
+    public static final Pref<String> UI_THEME =
+        Pref.fileString("ui.theme", "light");
 
     /** Node theme: a theme id, or "follow" to track the application theme (the default).
      *  Read/written via ThemePreferences, which migrates legacy stored names. */
-    public static final String UI_NODE_THEME = "ui.nodeTheme";
+    public static final Pref<String> UI_NODE_THEME =
+        Pref.fileString("ui.nodeTheme", "follow");
 
     /** Syntax theme: a theme id, or "follow" to track the application theme (the default).
      *  Read/written via ThemePreferences, which migrates legacy enum names. */
-    public static final String UI_SYNTAX_THEME = "ui.syntaxTheme";
+    public static final Pref<String> UI_SYNTAX_THEME =
+        Pref.fileString("ui.syntaxTheme", "follow");
 
-    /** Width in pixels of the project tree region (OS UI state). */
-    public static final String UI_TREE_WIDTH = "ui.treeWidth";
+    /** Editor font size in points. */
+    public static final Pref<Integer> EDITOR_FONT_SIZE =
+        Pref.fileInt("editor.fontSize", 12);
 
-    /** Width in pixels of the contextual view (map) region (OS UI state). */
-    public static final String UI_MAP_WIDTH = "ui.mapWidth";
+    /** Map gridlines visibility toggle. */
+    public static final Pref<Boolean> MAP_SHOW_GRIDLINES =
+        Pref.fileBoolean("map.showGridlines", true);
 
-    /** Whether the project tree region is collapsed (OS UI state). */
-    public static final String UI_TREE_COLLAPSED = "ui.treeCollapsed";
+    /** Whether the project tree shows hidden (dot-prefixed) files/folders. */
+    public static final Pref<Boolean> TREE_SHOW_HIDDEN_FILES =
+        Pref.fileBoolean("tree.showHiddenFiles", true);
 
-    /** Whether the contextual view (map) region is collapsed (OS UI state). */
-    public static final String UI_MAP_COLLAPSED = "ui.mapCollapsed";
+    /** KalixCLI binary search path (";"-delimited directories; "" = system PATH). */
+    public static final Pref<String> CLI_BINARY_PATH =
+        Pref.fileString("cli.binaryPath", "");
 
-    /** Absolute path of the currently open project folder, or empty if none (OS UI state). */
-    public static final String UI_WORKSPACE_FOLDER = "ui.workspaceFolder";
+    /** Auto-reload clean files when they change externally. */
+    public static final Pref<Boolean> FILE_AUTO_RELOAD =
+        Pref.fileBoolean("file.autoReload", false);
 
-    /** Open document tabs as newline-separated {@code caret<TAB>absolutePath} entries (OS UI state). */
-    public static final String UI_OPEN_DOCUMENTS = "ui.openDocuments";
+    /** Prompt to save unsaved changes before closing. */
+    public static final Pref<Boolean> FILE_PROMPT_SAVE_ON_EXIT =
+        Pref.fileBoolean("file.promptSaveOnExit", true);
 
-    /** Absolute path of the active document tab to restore (OS UI state). */
-    public static final String UI_ACTIVE_DOCUMENT = "ui.activeDocument";
+    /** External editor command template. */
+    public static final Pref<String> FILE_EXTERNAL_EDITOR_COMMAND =
+        Pref.fileString("file.externalEditorCommand", "code <folder_path> <file_path>");
 
-    /** Editor font size (int, default: 12) */
-    public static final String EDITOR_FONT_SIZE = "editor.fontSize";
-
-    /** Map gridlines visibility toggle (boolean, default: true) */
-    public static final String MAP_SHOW_GRIDLINES = "map.showGridlines";
-
-    /** Whether the project tree shows hidden (dot-prefixed) files/folders (boolean, default: true) */
-    public static final String TREE_SHOW_HIDDEN_FILES = "tree.showHiddenFiles";
-
-    /** KalixCLI binary path (string, default: "") */
-    public static final String CLI_BINARY_PATH = "cli.binaryPath";
-
-    /** Auto-reload clean files when they change externally (boolean, default: false) */
-    public static final String FILE_AUTO_RELOAD = "file.autoReload";
-
-    /** Prompt to save unsaved changes before closing (boolean, default: true) */
-    public static final String FILE_PROMPT_SAVE_ON_EXIT = "file.promptSaveOnExit";
-
-    /** External editor command template (string, default: "code <folder_path> <file_path>") */
-    public static final String FILE_EXTERNAL_EDITOR_COMMAND = "file.externalEditorCommand";
+    /** Default Windows value of {@link #FILE_PYTHON_TERMINAL_COMMAND}. */
+    public static final String DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS =
+        "%windir%\\System32\\cmd.exe \"/K\" %USERPROFILE%\\anaconda3\\Scripts\\activate.bat";
 
     /**
-     * Legacy combined terminal command (string, Windows default: cmd.exe "/K" &lt;activation&gt;).
+     * Legacy combined terminal command (Windows default: cmd.exe "/K" &lt;activation&gt;).
      * Superseded by the per-platform {@code FILE_TERMINAL_ACTIVATION_*} keys; retained as a
      * migration fallback for the Windows activation command. See {@code TerminalLauncher}.
      */
-    public static final String FILE_PYTHON_TERMINAL_COMMAND = "file.pythonTerminalCommand";
+    public static final Pref<String> FILE_PYTHON_TERMINAL_COMMAND =
+        Pref.fileString("file.pythonTerminalCommand", DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS);
 
     /**
-     * Terminal activation command run after entering the working directory, per platform
-     * (string, default: ""). Typically activates a Python/conda environment; blank = plain shell.
+     * Terminal activation command run after entering the working directory, per platform.
+     * Typically activates a Python/conda environment; blank = plain shell.
      */
-    public static final String FILE_TERMINAL_ACTIVATION_WINDOWS = "file.terminalActivation.windows";
-    public static final String FILE_TERMINAL_ACTIVATION_MACOS = "file.terminalActivation.macos";
-    public static final String FILE_TERMINAL_ACTIVATION_LINUX = "file.terminalActivation.linux";
+    public static final Pref<String> FILE_TERMINAL_ACTIVATION_WINDOWS =
+        Pref.fileString("file.terminalActivation.windows", "");
+    public static final Pref<String> FILE_TERMINAL_ACTIVATION_MACOS =
+        Pref.fileString("file.terminalActivation.macos", "");
+    public static final Pref<String> FILE_TERMINAL_ACTIVATION_LINUX =
+        Pref.fileString("file.terminalActivation.linux", "");
 
-    /** macOS terminal application to launch (string, default: "Terminal"; e.g. "iTerm", "Warp", "Ghostty") */
-    public static final String FILE_MACOS_TERMINAL_APP = "file.macosTerminalApp";
+    /** Default macOS terminal application (the built-in Terminal.app). */
+    public static final String DEFAULT_MACOS_TERMINAL_APP = "Terminal";
 
-    /** Enable model linting (boolean, default: true) */
-    public static final String LINTER_ENABLED = "linter.enabled";
+    /** macOS terminal application to launch (e.g. "iTerm", "Warp", "Ghostty"). */
+    public static final Pref<String> FILE_MACOS_TERMINAL_APP =
+        Pref.fileString("file.macosTerminalApp", DEFAULT_MACOS_TERMINAL_APP);
 
-    /** Custom linter schema file path (string, default: "") */
-    public static final String LINTER_SCHEMA_PATH = "linter.schemaPath";
+    /** Enable model linting. */
+    public static final Pref<Boolean> LINTER_ENABLED =
+        Pref.fileBoolean("linter.enabled", true);
 
-    /** Disabled linter rules (string array, default: empty) */
-    public static final String LINTER_DISABLED_RULES = "linter.disabledRules";
+    /** Custom linter schema file path ("" = built-in schema). */
+    public static final Pref<String> LINTER_SCHEMA_PATH =
+        Pref.fileString("linter.schemaPath", "");
+
+    /** Disabled linter rules. */
+    public static final Pref<List<String>> LINTER_DISABLED_RULES =
+        Pref.fileStringList("linter.disabledRules", List.of());
 
     // ==== OS-BASED PREFERENCES (Java Preferences) ====
-    // These preferences are machine-specific and handle transient UI state
+    // Machine-specific, transient UI state.
 
-    /** Last opened file path for session restoration (string, default: "") */
-    public static final String LAST_OPENED_FILE = "lastOpenedFile";
+    /** Width in pixels of the project tree region. */
+    public static final Pref<Integer> UI_TREE_WIDTH =
+        Pref.osInt("ui.treeWidth", AppConstants.DEFAULT_TREE_WIDTH);
 
-    // ==== DEFAULT VALUES ====
+    /** Width in pixels of the contextual view (map) region. */
+    public static final Pref<Integer> UI_MAP_WIDTH =
+        Pref.osInt("ui.mapWidth", AppConstants.DEFAULT_MAP_WIDTH);
 
-    /** Default Python terminal command for Windows */
-    public static final String DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS = "%windir%\\System32\\cmd.exe \"/K\" %USERPROFILE%\\anaconda3\\Scripts\\activate.bat";
+    /** Whether the project tree region is collapsed. */
+    public static final Pref<Boolean> UI_TREE_COLLAPSED =
+        Pref.osBoolean("ui.treeCollapsed", false);
 
-    /** Default macOS terminal application (the built-in Terminal.app) */
-    public static final String DEFAULT_MACOS_TERMINAL_APP = "Terminal";
+    /** Whether the contextual view (map) region is collapsed. */
+    public static final Pref<Boolean> UI_MAP_COLLAPSED =
+        Pref.osBoolean("ui.mapCollapsed", false);
+
+    /** Absolute path of the currently open project folder, or empty if none. */
+    public static final Pref<String> UI_WORKSPACE_FOLDER =
+        Pref.osString("ui.workspaceFolder", "");
+
+    /** Open document tabs as newline-separated {@code caret<TAB>absolutePath} entries. */
+    public static final Pref<String> UI_OPEN_DOCUMENTS =
+        Pref.osString("ui.openDocuments", "");
+
+    /** Absolute path of the active document tab to restore. */
+    public static final Pref<String> UI_ACTIVE_DOCUMENT =
+        Pref.osString("ui.activeDocument", "");
+
+    /** Last opened file path for session restoration. */
+    public static final Pref<String> LAST_OPENED_FILE =
+        Pref.osString("lastOpenedFile", "");
 
     // Private constructor to prevent instantiation
     private PreferenceKeys() {

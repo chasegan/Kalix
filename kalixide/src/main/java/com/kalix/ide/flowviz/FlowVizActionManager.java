@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz;
 
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -138,7 +137,7 @@ public class FlowVizActionManager {
         plotPanel.setAutoYMode(autoYMode);
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYMode);
+        PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYMode);
 
         menuManager.updateMenuStates();
     }
@@ -152,7 +151,7 @@ public class FlowVizActionManager {
         plotPanel.setShowCoordinates(newState);
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, newState);
+        PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(newState);
 
     }
 
@@ -163,7 +162,7 @@ public class FlowVizActionManager {
         precision64 = !precision64;
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64);
+        PreferenceKeys.FLOWVIZ_PRECISION64.set(precision64);
 
         menuManager.updateMenuStates();
     }
@@ -238,10 +237,10 @@ public class FlowVizActionManager {
      */
     private void loadPreferences() {
         // Load precision preference (default: true for 64-bit)
-        precision64 = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true);
+        precision64 = PreferenceKeys.FLOWVIZ_PRECISION64.get();
 
         // Load auto-Y mode preference (default: true)
-        autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+        autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
         plotPanel.setAutoYMode(autoYMode);
     }
 

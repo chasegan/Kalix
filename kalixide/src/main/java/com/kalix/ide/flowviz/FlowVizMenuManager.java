@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz;
 
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -294,7 +293,7 @@ public class FlowVizMenuManager {
      */
     public void loadMenuPreferences() {
         // Load coordinate display preference (default: false)
-        boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
+        boolean showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
 
         // Update the menu checkbox to match
         if (coordinateToggle != null) {

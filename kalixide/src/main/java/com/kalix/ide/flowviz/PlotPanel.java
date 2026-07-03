@@ -34,7 +34,6 @@ import java.awt.event.MouseAdapter;
 import java.util.List;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -317,7 +316,7 @@ public class PlotPanel extends JPanel {
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
+        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
         if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
             minValue = logScaleMin;
         }

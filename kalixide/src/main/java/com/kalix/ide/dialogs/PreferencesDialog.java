@@ -21,7 +21,11 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -47,6 +51,15 @@ public class PreferencesDialog extends JDialog {
     }
 
     private PreferenceChangeCallback changeCallback;
+
+    /**
+     * Commits for free-text fields, run on dialog close. Free-text fields do not
+     * save per keystroke (each write serializes the whole preference file, and
+     * half-typed values are not meaningful); instead each field registers a
+     * commit here and also runs it on Enter and on focus-lost. Commits skip
+     * writing when the value is unchanged, so running them repeatedly is free.
+     */
+    private final List<Runnable> pendingTextCommits = new ArrayList<>();
 
     // Main components
     private JTree preferencesTree;
@@ -135,7 +148,6 @@ public class PreferencesDialog extends JDialog {
         getRootPane().getActionMap().put("closeDialog", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                savePendingChanges();
                 dispose();
             }
         });
@@ -302,10 +314,7 @@ public class PreferencesDialog extends JDialog {
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> {
-            savePendingChanges();
-            dispose();
-        });
+        closeButton.addActionListener(e -> dispose());
 
         buttonPanel.add(closeButton);
         getRootPane().setDefaultButton(closeButton);
@@ -314,14 +323,26 @@ public class PreferencesDialog extends JDialog {
     }
 
     /**
-     * Saves any pending changes from text fields that haven't been committed yet.
+     * Saves any pending changes from free-text fields that haven't been committed yet.
      */
     private void savePendingChanges() {
-        // Save Kalix CLI path if it has been edited
-        if (kalixCliPanel != null && kalixCliPanel.binaryPathField != null) {
-            String path = kalixCliPanel.binaryPathField.getText().trim();
-            PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, path);
-        }
+        pendingTextCommits.forEach(Runnable::run);
+    }
+
+    /**
+     * Wires a free-text field to commit on Enter and on focus-lost, and registers
+     * the commit to run when the dialog closes. The commit itself must skip
+     * writing when the value is unchanged.
+     */
+    private void commitOnFocusLostAndClose(JTextField field, Runnable commit) {
+        field.addActionListener(e -> commit.run());
+        field.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                commit.run();
+            }
+        });
+        pendingTextCommits.add(commit);
     }
 
     /**
@@ -340,6 +361,8 @@ public class PreferencesDialog extends JDialog {
      */
     @Override
     public void dispose() {
+        // Commit free-text fields on every close path (Close button, Escape, window decoration)
+        savePendingChanges();
         // Cleanup linter panel listeners
         if (linterPanel != null) {
             linterPanel.dispose();
@@ -500,15 +523,9 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(new JLabel("External Editor Command:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            externalEditorField = new JTextField(PreferenceManager.getFileString(
-                PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, "code <folder_path> <file_path>"));
+            externalEditorField = new JTextField(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get());
             externalEditorField.setToolTipText("Command to launch an external editor. Use <folder_path> for the folder containing the current file and <file_path> for the full path to the current file.");
-            externalEditorField.addActionListener(e -> saveExternalEditorCommand());
-            externalEditorField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
-                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
-                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveExternalEditorCommand(); }
-            });
+            commitOnFocusLostAndClose(externalEditorField, this::saveExternalEditorCommand);
             formPanel.add(externalEditorField, gbc);
 
             // Terminal activation command (per-platform). Shows the effective value, which on
@@ -520,12 +537,7 @@ public class PreferencesDialog extends JDialog {
             activationField = new JTextField(TerminalLauncher.getActivationCommand());
             activationField.setToolTipText("Shell command(s) run after entering the working directory, e.g. to "
                 + "activate a Python/conda environment (\"conda activate myenv\"). Leave blank for a plain terminal.");
-            activationField.addActionListener(e -> saveActivationCommand());
-            activationField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
-                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
-                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveActivationCommand(); }
-            });
+            commitOnFocusLostAndClose(activationField, this::saveActivationCommand);
             formPanel.add(activationField, gbc);
 
             // macOS terminal application (only relevant on macOS).
@@ -534,16 +546,10 @@ public class PreferencesDialog extends JDialog {
                 formPanel.add(new JLabel("macOS Terminal App:"), gbc);
 
                 gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-                macosTerminalAppField = new JTextField(PreferenceManager.getFileString(
-                    PreferenceKeys.FILE_MACOS_TERMINAL_APP, PreferenceKeys.DEFAULT_MACOS_TERMINAL_APP));
+                macosTerminalAppField = new JTextField(PreferenceKeys.FILE_MACOS_TERMINAL_APP.get());
                 macosTerminalAppField.setToolTipText("Terminal application to launch on macOS. "
                     + "\"Terminal\" and \"iTerm\" support activation; others (Warp, Ghostty, …) open at the folder only.");
-                macosTerminalAppField.addActionListener(e -> saveMacosTerminalApp());
-                macosTerminalAppField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                    public void insertUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
-                    public void removeUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
-                    public void changedUpdate(javax.swing.event.DocumentEvent e) { saveMacosTerminalApp(); }
-                });
+                commitOnFocusLostAndClose(macosTerminalAppField, this::saveMacosTerminalApp);
                 formPanel.add(macosTerminalAppField, gbc);
             }
 
@@ -552,17 +558,26 @@ public class PreferencesDialog extends JDialog {
 
         private void saveExternalEditorCommand() {
             String command = externalEditorField.getText().trim();
-            PreferenceManager.setFileString(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND, command);
+            if (!command.equals(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get())) {
+                PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.set(command);
+            }
         }
 
         private void saveActivationCommand() {
             String command = activationField.getText().trim();
-            PreferenceManager.setFileString(TerminalLauncher.activationPreferenceKey(), command);
+            // Compare against the effective command (which the field was seeded with),
+            // so an untouched field never writes - in particular it does not turn the
+            // Windows legacy-key fallback into an explicit per-platform value.
+            if (!command.equals(TerminalLauncher.getActivationCommand())) {
+                TerminalLauncher.activationPreference().set(command);
+            }
         }
 
         private void saveMacosTerminalApp() {
             String app = macosTerminalAppField.getText().trim();
-            PreferenceManager.setFileString(PreferenceKeys.FILE_MACOS_TERMINAL_APP, app);
+            if (!app.equals(PreferenceKeys.FILE_MACOS_TERMINAL_APP.get())) {
+                PreferenceKeys.FILE_MACOS_TERMINAL_APP.set(app);
+            }
         }
     }
 
@@ -588,11 +603,11 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
             gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             autoReloadCheckBox = new JCheckBox("Auto-reload clean files when changed externally");
-            autoReloadCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, false));
+            autoReloadCheckBox.setSelected(PreferenceKeys.FILE_AUTO_RELOAD.get());
             autoReloadCheckBox.setToolTipText("Automatically reload clean (unchanged) files when modified by external programs. Files with unsaved changes will not be reloaded to prevent data loss.");
             autoReloadCheckBox.addActionListener(e -> {
                 boolean enabled = autoReloadCheckBox.isSelected();
-                PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
+                PreferenceKeys.FILE_AUTO_RELOAD.set(enabled);
 
                 // Notify callback to update file watching
                 if (changeCallback != null) {
@@ -605,11 +620,11 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
             gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             promptSaveOnExitCheckBox = new JCheckBox("Prompt to save unsaved changes before closing");
-            promptSaveOnExitCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true));
+            promptSaveOnExitCheckBox.setSelected(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.get());
             promptSaveOnExitCheckBox.setToolTipText("Show a confirmation dialog when closing the application with unsaved changes, giving you the option to save your work.");
             promptSaveOnExitCheckBox.addActionListener(e -> {
                 boolean enabled = promptSaveOnExitCheckBox.isSelected();
-                PreferenceManager.setFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, enabled);
+                PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.set(enabled);
             });
             formPanel.add(promptSaveOnExitCheckBox, gbc);
 
@@ -659,8 +674,9 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(new JLabel("Path:"), gbc);
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            binaryPathField = new JTextField(PreferenceManager.getFileString(PreferenceKeys.CLI_BINARY_PATH, ""));
+            binaryPathField = new JTextField(PreferenceKeys.CLI_BINARY_PATH.get());
             binaryPathField.setToolTipText("Leave empty to use kalix from system PATH. Use ';' to separate multiple directories.");
+            commitOnFocusLostAndClose(binaryPathField, this::saveBinaryPath);
             formPanel.add(binaryPathField, gbc);
 
             gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
@@ -711,6 +727,13 @@ public class PreferencesDialog extends JDialog {
             formPanel.add(exeLocInfoArea, gbc);
         }
 
+        private void saveBinaryPath() {
+            String path = binaryPathField.getText().trim();
+            if (!path.equals(PreferenceKeys.CLI_BINARY_PATH.get())) {
+                PreferenceKeys.CLI_BINARY_PATH.set(path);
+            }
+        }
+
         private void browseBinary(ActionEvent e) {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Add Directory to Search Path");
@@ -743,7 +766,7 @@ public class PreferencesDialog extends JDialog {
                 }
 
                 binaryPathField.setText(newPath);
-                PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, newPath);
+                PreferenceKeys.CLI_BINARY_PATH.set(newPath);
                 statusLabel.setText("Status: Path changed - click Test");
                 statusLabel.setForeground(Color.BLUE);
                 pathLabel.setText("");
@@ -754,7 +777,7 @@ public class PreferencesDialog extends JDialog {
             String path = binaryPathField.getText().trim();
 
             // Save the path first
-            PreferenceManager.setFileString(PreferenceKeys.CLI_BINARY_PATH, path);
+            PreferenceKeys.CLI_BINARY_PATH.set(path);
 
             testButton.setEnabled(false);
             statusLabel.setText("Status: Testing...");
@@ -816,9 +839,9 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             precision64CheckBox = new JCheckBox("Use 64-bit precision for data export");
             precision64CheckBox.setToolTipText("Higher accuracy but larger file sizes; 32-bit is sufficient for most applications");
-            precision64CheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true));
+            precision64CheckBox.setSelected(PreferenceKeys.FLOWVIZ_PRECISION64.get());
             precision64CheckBox.addActionListener(e -> {
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64CheckBox.isSelected());
+                PreferenceKeys.FLOWVIZ_PRECISION64.set(precision64CheckBox.isSelected());
 
                 // Notify callback to update FlowViz windows
                 if (changeCallback != null) {
@@ -831,9 +854,9 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             showCoordinatesCheckBox = new JCheckBox("Show coordinates in FlowViz");
             showCoordinatesCheckBox.setToolTipText("Display current cursor position in FlowViz charts");
-            showCoordinatesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false));
+            showCoordinatesCheckBox.setSelected(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get());
             showCoordinatesCheckBox.addActionListener(e -> {
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, showCoordinatesCheckBox.isSelected());
+                PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(showCoordinatesCheckBox.isSelected());
 
                 // Notify callback to update FlowViz windows
                 if (changeCallback != null) {
@@ -846,9 +869,9 @@ public class PreferencesDialog extends JDialog {
             gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
             autoYModeCheckBox = new JCheckBox("Enable Auto-Y mode in FlowViz");
             autoYModeCheckBox.setToolTipText("Automatically adjust Y-axis scaling in FlowViz charts");
-            autoYModeCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true));
+            autoYModeCheckBox.setSelected(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
             autoYModeCheckBox.addActionListener(e -> {
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYModeCheckBox.isSelected());
+                PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYModeCheckBox.isSelected());
 
                 // Notify callback to update FlowViz windows
                 if (changeCallback != null) {
@@ -863,14 +886,9 @@ public class PreferencesDialog extends JDialog {
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             logScaleMinField = new JTextField(String.valueOf(
-                PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 0.001)), 10);
+                PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get()), 10);
             logScaleMinField.setToolTipText("Minimum Y value for log scale auto-zoom (prevents excessive zoom-out from tiny values)");
-            logScaleMinField.addActionListener(e -> saveLogScaleMinimum());
-            logScaleMinField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                public void insertUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
-                public void removeUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
-                public void changedUpdate(javax.swing.event.DocumentEvent e) { saveLogScaleMinimum(); }
-            });
+            commitOnFocusLostAndClose(logScaleMinField, this::saveLogScaleMinimum);
             formPanel.add(logScaleMinField, gbc);
 
             // STDIO data format setting (pixie vs csv for get_result responses)
@@ -896,11 +914,11 @@ public class PreferencesDialog extends JDialog {
                 "Wire format for timeseries results from kalixcli. 'pixie' uses Gorilla compression "
                 + "(smaller, faster); 'csv' is human-readable plain text (larger, slower).");
             stdioFormatComboBox.setSelectedItem(
-                PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "pixie"));
+                PreferenceKeys.STDIO_DATA_FORMAT.get());
             stdioFormatComboBox.addActionListener(e -> {
                 String selected = (String) stdioFormatComboBox.getSelectedItem();
                 if (selected != null) {
-                    PreferenceManager.setFileString(PreferenceKeys.STDIO_DATA_FORMAT, selected);
+                    PreferenceKeys.STDIO_DATA_FORMAT.set(selected);
                 }
             });
             formPanel.add(stdioFormatComboBox, gbc);
@@ -911,8 +929,8 @@ public class PreferencesDialog extends JDialog {
         private void saveLogScaleMinimum() {
             try {
                 double value = Double.parseDouble(logScaleMinField.getText().trim());
-                if (value > 0) {
-                    PreferenceManager.setFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, value);
+                if (value > 0 && value != PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get()) {
+                    PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.set(value);
 
                     // Notify callback to update FlowViz windows
                     if (changeCallback != null) {
@@ -1046,10 +1064,10 @@ public class PreferencesDialog extends JDialog {
             // Map gridlines setting
             gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
             gridlinesCheckBox = new JCheckBox("Show gridlines on map");
-            gridlinesCheckBox.setSelected(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
+            gridlinesCheckBox.setSelected(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
             gridlinesCheckBox.addActionListener(e -> {
                 boolean enabled = gridlinesCheckBox.isSelected();
-                PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, enabled);
+                PreferenceKeys.MAP_SHOW_GRIDLINES.set(enabled);
 
                 // Notify callback to update map display and toolbar button
                 if (changeCallback != null) {
@@ -1086,7 +1104,7 @@ public class PreferencesDialog extends JDialog {
 
             gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
             SpinnerNumberModel spinnerModel = new SpinnerNumberModel(
-                PreferenceManager.getFileInt(PreferenceKeys.EDITOR_FONT_SIZE, 12), // current value
+                PreferenceKeys.EDITOR_FONT_SIZE.get().intValue(), // current value (unboxed: keep the int constructor)
                 8,    // minimum
                 24,   // maximum
                 1     // step
@@ -1102,7 +1120,7 @@ public class PreferencesDialog extends JDialog {
 
             fontSizeSpinner.addChangeListener(e -> {
                 int fontSize = (Integer) fontSizeSpinner.getValue();
-                PreferenceManager.setFileInt(PreferenceKeys.EDITOR_FONT_SIZE, fontSize);
+                PreferenceKeys.EDITOR_FONT_SIZE.set(fontSize);
 
                 // Update the text editor font immediately
                 if (textEditor != null) {

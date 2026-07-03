@@ -95,3 +95,6 @@ ignored/
 notion_integration
 # Claude Code agent worktrees (session-local)
 .claude/worktrees/
+
+# Kalix IDE local preferences (written next to the working dir in dev runs)
+kalix_prefs.json

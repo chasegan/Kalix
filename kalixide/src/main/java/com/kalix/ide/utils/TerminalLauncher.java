@@ -1,7 +1,7 @@
 package com.kalix.ide.utils;
 
+import com.kalix.ide.preferences.Pref;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,12 +89,12 @@ public class TerminalLauncher {
     }
 
     /**
-     * Returns the preference key holding the activation command for the current platform.
-     * Exposed so the preferences UI writes to the same key the launcher reads.
+     * Returns the preference holding the activation command for the current platform.
+     * Exposed so the preferences UI writes to the same preference the launcher reads.
      *
-     * @return the per-platform activation preference key
+     * @return the per-platform activation preference
      */
-    public static String activationPreferenceKey() {
+    public static Pref<String> activationPreference() {
         return switch (PlatformUtils.getCurrentPlatform()) {
             case WINDOWS -> PreferenceKeys.FILE_TERMINAL_ACTIVATION_WINDOWS;
             case MACOS -> PreferenceKeys.FILE_TERMINAL_ACTIVATION_MACOS;
@@ -115,14 +115,12 @@ public class TerminalLauncher {
      * @return the activation command, trimmed; never null
      */
     public static String getActivationCommand() {
-        String configured = PreferenceManager.getFileString(activationPreferenceKey(), "");
+        String configured = activationPreference().get();
         if (configured != null && !configured.isBlank()) {
             return configured.trim();
         }
         if (PlatformUtils.getCurrentPlatform() == Platform.WINDOWS) {
-            String legacy = PreferenceManager.getFileString(
-                    PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND,
-                    PreferenceKeys.DEFAULT_PYTHON_TERMINAL_COMMAND_WINDOWS);
+            String legacy = PreferenceKeys.FILE_PYTHON_TERMINAL_COMMAND.get();
             return extractLegacyActivation(legacy);
         }
         return "";
@@ -165,8 +163,7 @@ public class TerminalLauncher {
      * simply opens at the directory (a warning is logged if one was configured).
      */
     private static void openMacTerminal(File directory) throws IOException {
-        String app = PreferenceManager.getFileString(
-                PreferenceKeys.FILE_MACOS_TERMINAL_APP, PreferenceKeys.DEFAULT_MACOS_TERMINAL_APP);
+        String app = PreferenceKeys.FILE_MACOS_TERMINAL_APP.get();
         if (app == null || app.isBlank()) {
             app = PreferenceKeys.DEFAULT_MACOS_TERMINAL_APP;
         }

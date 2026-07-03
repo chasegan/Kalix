@@ -5,7 +5,6 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -310,7 +309,7 @@ public class TimeSeriesRequestManager {
 
         try {
             // Wire format is user-configurable via Preferences > Data & Visualization.
-            String format = PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "pixie");
+            String format = PreferenceKeys.STDIO_DATA_FORMAT.get();
             if (!"pixie".equals(format) && !"csv".equals(format)) {
                 format = "pixie"; // defensive: unknown saved value falls back to default
             }

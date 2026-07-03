@@ -5,7 +5,6 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.MapStyleResolver;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -438,7 +437,7 @@ public class FlowVizWindow extends JFrame {
      */
     private void loadPreferences() {
         // Load coordinate display preference (default: false)
-        boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
+        boolean showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
         plotPanel.setShowCoordinates(showCoordinates);
 
         // Other preferences are loaded by the action manager

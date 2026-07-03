@@ -2,7 +2,6 @@ package com.kalix.ide.linter;
 
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,11 +44,11 @@ public class SchemaManager {
      */
     private void loadLinterPreferences() {
         // Load linting enabled flag
-        lintingEnabled = PreferenceManager.getFileBoolean(PreferenceKeys.LINTER_ENABLED, true);
+        lintingEnabled = PreferenceKeys.LINTER_ENABLED.get();
 
         // Load disabled rules
         disabledRules.clear();
-        List<String> disabledRulesList = PreferenceManager.getFileStringList(PreferenceKeys.LINTER_DISABLED_RULES, List.of());
+        List<String> disabledRulesList = PreferenceKeys.LINTER_DISABLED_RULES.get();
         disabledRules.addAll(disabledRulesList);
 
     }
@@ -59,7 +58,7 @@ public class SchemaManager {
      */
     public void reloadSchema() {
         try {
-            String customSchemaPath = PreferenceManager.getFileString(PreferenceKeys.LINTER_SCHEMA_PATH, "");
+            String customSchemaPath = PreferenceKeys.LINTER_SCHEMA_PATH.get();
 
             if (customSchemaPath.isEmpty()) {
                 // Use default embedded schema
@@ -111,9 +110,9 @@ public class SchemaManager {
         boolean wasEnabled = this.lintingEnabled;
 
         // Save to preferences
-        PreferenceManager.setFileBoolean(PreferenceKeys.LINTER_ENABLED, enabled);
-        PreferenceManager.setFileString(PreferenceKeys.LINTER_SCHEMA_PATH, schemaPath != null ? schemaPath : "");
-        PreferenceManager.setFileStringList(PreferenceKeys.LINTER_DISABLED_RULES, disabledRuleNames.stream().toList());
+        PreferenceKeys.LINTER_ENABLED.set(enabled);
+        PreferenceKeys.LINTER_SCHEMA_PATH.set(schemaPath != null ? schemaPath : "");
+        PreferenceKeys.LINTER_DISABLED_RULES.set(disabledRuleNames.stream().toList());
 
         // Update local state
         this.lintingEnabled = enabled;
@@ -143,7 +142,7 @@ public class SchemaManager {
     }
 
     public String getCurrentSchemaPath() {
-        return PreferenceManager.getFileString(PreferenceKeys.LINTER_SCHEMA_PATH, "");
+        return PreferenceKeys.LINTER_SCHEMA_PATH.get();
     }
 
     /**

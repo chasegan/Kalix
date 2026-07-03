@@ -11,7 +11,6 @@ import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.YAxisScale;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -194,9 +193,9 @@ public class VisualizationTabManager {
          */
         public static TabSettings getDefaults() {
             TabSettings settings = new TabSettings();
-            settings.showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
-            settings.autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
-            settings.legendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
+            settings.showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
+            settings.autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
+            settings.legendCollapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
             return settings;
         }
     }
@@ -652,7 +651,7 @@ public class VisualizationTabManager {
             autoYToggle.addActionListener(e -> {
                 boolean enabled = autoYToggle.isSelected();
                 plotPanel.setAutoYMode(enabled);
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, enabled);
+                PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
                 if (enabled) {
                     // Fit Y-axis to visible data in current X range (don't change X zoom)
                     plotPanel.fitYAxis();
@@ -667,7 +666,7 @@ public class VisualizationTabManager {
                 "Show Coordinates", initialState);
             button.addActionListener(e -> {
                 plotPanel.setShowCoordinates(button.isSelected());
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, button.isSelected());
+                PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(button.isSelected());
             });
             toolbar.add(button);
             return this;
@@ -680,7 +679,7 @@ public class VisualizationTabManager {
             // Update collapsed state when button is clicked
             button.addActionListener(e -> {
                 plotPanel.setLegendCollapsed(!button.isSelected());
-                PreferenceManager.setFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, !button.isSelected());
+                PreferenceKeys.PLOT_LEGEND_COLLAPSED.set(!button.isSelected());
             });
 
             // Set up callback to update button when collapsed state changes from other sources
