@@ -85,7 +85,6 @@ public class ProcessExecutor {
         private Map<String, String> environmentVariables;
         private Consumer<String> stdoutCallback;
         private Consumer<String> stderrCallback;
-        private Consumer<String> progressCallback;
         
         public ProcessConfig workingDirectory(Path workingDirectory) {
             this.workingDirectory = workingDirectory;
@@ -112,18 +111,12 @@ public class ProcessExecutor {
             return this;
         }
         
-        public ProcessConfig onProgress(Consumer<String> callback) {
-            this.progressCallback = callback;
-            return this;
-        }
-        
         // Getters
         public Path getWorkingDirectory() { return workingDirectory; }
         public long getTimeoutSeconds() { return timeoutSeconds; }
         public Map<String, String> getEnvironmentVariables() { return environmentVariables; }
         public Consumer<String> getStdoutCallback() { return stdoutCallback; }
         public Consumer<String> getStderrCallback() { return stderrCallback; }
-        public Consumer<String> getProgressCallback() { return progressCallback; }
     }
     
     /**
@@ -398,15 +391,13 @@ public class ProcessExecutor {
             try {
                 // Create stream monitors
                 StreamMonitor stdoutMonitor = new StreamMonitor(
-                    process.getInputStream(), 
-                    config.getStdoutCallback(),
-                    config.getProgressCallback()
+                    process.getInputStream(),
+                    config.getStdoutCallback()
                 );
-                
+
                 StreamMonitor stderrMonitor = new StreamMonitor(
                     process.getErrorStream(),
-                    config.getStderrCallback(),
-                    null // No progress parsing on stderr
+                    config.getStderrCallback()
                 );
                 
                 // Start monitoring streams
