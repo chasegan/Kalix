@@ -16,7 +16,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 2 | Sacramento `evapuzfw` fix + revalidation | **Done** (fix/sacramento-evapuzfw) |
 | 3 | STDIO interrupt: run commands on a worker thread | **Done** (fix/stdio-interrupt) |
 | 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | **Done** (fix/optimiser-robustness) |
-| 5 | Criterion benchmark harness + `[profile.release]` tuning | Pending — pick 2–3 representative models |
+| 5 | Speed test suite + `[profile.release]` tuning | **Done** (feature/speed-suite) |
 | 6 | DataCache: preallocate recorder series; name→idx hashmap | Pending |
 | 7 | Remove timestamps from cache-resident series | Pending — decide irregular-series future first |
 | 8 | DynamicInput: stack-allocated args, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | Pending |
@@ -143,6 +143,32 @@ Five independent correctness fixes:
 Verification: 310 unit tests (7 new — window seeding/validation across all
 8 objectives, KGE zero-mean, SCE callback), 28/28 regression models, and a
 live STDIO optimisation run.
+
+## Step 5 record — speed test suite + release tuning (done 2026-07-03)
+
+New `regression_tests/speed/` suite, structured like the simulation regression
+suite (numbered folders auto-detected by a python runner). Three synthetic
+models, each emphasising a hot-path subsystem, generated deterministically by
+`generate_models.py` (models + data committed; regenerate, don't hand-edit):
+
+1. `1_sacramento_long` — one Sacramento node, 300 years daily (rainfall-runoff
+   arithmetic; also the largest CSV load).
+2. `2_unregulated_users` — 6 reaches, 72 unregulated users with pump/threshold
+   expressions patterned on the upper Condamine (DynamicInput evaluation).
+3. `3_regulated_system` — 3 valleys of storages in series+parallel, lag+PWL
+   routing, seasonal regulated users, common trunk (ordering + storage solver).
+
+`run_speed_tests.py` runs each N times (bench.json) with `kalix sim -p`,
+reports min/median/sd per phase, and appends history (commit, machine) to
+`speed_log.txt`. Compare MIN values, same machine only. Run it whenever the
+hot path changes (performance §4).
+
+First customer: `[profile.release] lto codegen-units=1`. Measured fat vs thin
+LTO on the suite; **thin won or tied everywhere** and was adopted. Sim time vs
+untuned baseline (min of repeats, Apple M-series): Sacramento −20%,
+unregulated −5%, regulated −4%. Build time 8s → 28s. `panic = "abort"` is
+deliberately NOT set (catch_unwind error reporting); noted in Cargo.toml.
+All 310 unit tests and 28/28 regression models pass on the LTO build.
 
 ## Review findings not yet scheduled (context for steps)
 
