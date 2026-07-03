@@ -194,10 +194,12 @@ public class FlowVizActionManager {
      */
     public void showAbout() {
         JOptionPane.showMessageDialog(plotPanel.getParent(),
-            "FlowViz - Time Series Visualization Tool\\n" +
-            "Version 1.0\\n\\n" +
-            "High-performance visualization for large datasets\\n" +
-            "Part of the Kalix Hydrologic Modeling Platform",
+            """
+            FlowViz - Time Series Visualization Tool
+            Version 1.0
+
+            High-performance visualization for large datasets
+            Part of the Kalix Hydrologic Modeling Platform""",
             "About FlowViz",
             JOptionPane.INFORMATION_MESSAGE);
     }
@@ -207,22 +209,26 @@ public class FlowVizActionManager {
      */
     public void showShortcuts() {
         JOptionPane.showMessageDialog(plotPanel.getParent(),
-            "FlowViz Keyboard & Mouse Shortcuts:\\n\\n" +
-            "Ctrl+N - New session (clear all data)\\n" +
-            "Ctrl+O - Add CSV file to current session\\n" +
-            "Ctrl+W - Close window\\n" +
-            "L - Toggle data panel\\n" +
-            "+ - Zoom in\\n" +
-            "- - Zoom out\\n" +
-            "Mouse wheel - Zoom at cursor\\n" +
-            "Mouse drag - Pan view\\n" +
-            "Double-click plot - Reset zoom to fit data\\n\\n" +
-            "Data Reordering:\\n" +
-            "Click data item - Select item\\n" +
-            "Cmd+↑/Ctrl+↑ - Move selected item up (toward background)\\n" +
-            "Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)\\n\\n" +
-            "File Loading:\\n" +
-            "Drag & drop CSV files onto window - Load multiple files at once",
+            """
+            FlowViz Keyboard & Mouse Shortcuts:
+
+            Ctrl+N - New session (clear all data)
+            Ctrl+O - Add CSV file to current session
+            Ctrl+W - Close window
+            L - Toggle data panel
+            + - Zoom in
+            - - Zoom out
+            Mouse wheel - Zoom at cursor
+            Mouse drag - Pan view
+            Double-click plot - Reset zoom to fit data
+
+            Data Reordering:
+            Click data item - Select item
+            Cmd+↑/Ctrl+↑ - Move selected item up (toward background)
+            Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)
+
+            File Loading:
+            Drag & drop CSV files onto window - Load multiple files at once""",
             "Keyboard & Mouse Shortcuts",
             JOptionPane.INFORMATION_MESSAGE);
     }

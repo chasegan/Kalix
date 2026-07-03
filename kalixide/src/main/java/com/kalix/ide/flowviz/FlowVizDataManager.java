@@ -41,6 +41,8 @@ public class FlowVizDataManager {
     private Consumer<File> currentFileUpdater;
     private Runnable titleUpdater;
     private Runnable zoomToFitAction;
+    private Runnable beginPlotUpdateBatch;
+    private Runnable endPlotUpdateBatch;
     private java.util.function.Supplier<File> baseDirectorySupplier;
 
     /**
@@ -75,13 +77,38 @@ public class FlowVizDataManager {
      * @param currentFileUpdater Consumer function to update the current file reference for title display
      * @param titleUpdater Runnable to refresh the window title after data changes
      * @param zoomToFitAction Runnable to trigger zoom-to-fit operation after data import
+     * @param beginPlotUpdateBatch Runnable invoked before adding a file's series, suppressing
+     *                             per-series plot rebuilds (may be null)
+     * @param endPlotUpdateBatch Runnable invoked after a file's series are all added, performing
+     *                           the single deferred plot rebuild (may be null)
      */
     public void setupCallbacks(Consumer<File> currentFileUpdater,
                              Runnable titleUpdater,
-                             Runnable zoomToFitAction) {
+                             Runnable zoomToFitAction,
+                             Runnable beginPlotUpdateBatch,
+                             Runnable endPlotUpdateBatch) {
         this.currentFileUpdater = currentFileUpdater;
         this.titleUpdater = titleUpdater;
         this.zoomToFitAction = zoomToFitAction;
+        this.beginPlotUpdateBatch = beginPlotUpdateBatch;
+        this.endPlotUpdateBatch = endPlotUpdateBatch;
+    }
+
+    /**
+     * Adds every series of a just-imported file to the data set as one batched plot update:
+     * per-series rebuilds are suppressed for the duration and a single rebuild runs at the end.
+     */
+    private void addSeriesBatched(Runnable addAll) {
+        if (beginPlotUpdateBatch != null) {
+            beginPlotUpdateBatch.run();
+        }
+        try {
+            addAll.run();
+        } finally {
+            if (endPlotUpdateBatch != null) {
+                endPlotUpdateBatch.run();
+            }
+        }
     }
 
     /**
@@ -379,12 +406,14 @@ public class FlowVizDataManager {
 
         String fileName = resCsvFile.getName();
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Display label: "filename.res.csv: SeriesName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(resCsvFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : importResult.getSeries()) {
+                // Display label: "filename.res.csv: SeriesName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(resCsvFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(resCsvFile);
         titleUpdater.run();
@@ -501,15 +530,15 @@ public class FlowVizDataManager {
 
         // Add new data (don't clear existing data)
         String fileName = pixieFile.getName();
-        int addedCount = 0;
 
-        for (NamedSeries ns : seriesList) {
-            // Display label: "filename.pxt: SeriesName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(pixieFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-            addedCount++;
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : seriesList) {
+                // Display label: "filename.pxt: SeriesName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(pixieFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(pixieFile);
         titleUpdater.run();
@@ -637,12 +666,14 @@ public class FlowVizDataManager {
         // Add new data (don't clear existing data)
         String fileName = csvFile.getName();
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Display label: "filename.csv: ColumnName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(csvFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : importResult.getSeries()) {
+                // Display label: "filename.csv: ColumnName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(csvFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(csvFile);
         titleUpdater.run();

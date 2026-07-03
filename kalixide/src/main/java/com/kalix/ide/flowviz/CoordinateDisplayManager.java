@@ -25,6 +25,9 @@ import java.util.List;
  */
 public class CoordinateDisplayManager {
 
+    /** Font for the coordinate overlay text; shared, immutable, allocated once. */
+    private static final Font COORDINATE_FONT = new Font("Arial", Font.PLAIN, 10);
+
     private final JComponent parentComponent;
     private final List<SeriesRef> visibleSeries;
 
@@ -36,6 +39,10 @@ public class CoordinateDisplayManager {
     private Point lastMousePosition;
     private List<CoordinateInfo> currentCoordinates = new ArrayList<>();
     private Timer coordinateUpdateTimer;
+
+    // Current data context, refreshed each paint via updateCoordinateDisplay().
+    private DataSet dataSet;
+    private ViewPort currentViewport;
 
     /**
      * Creates a new coordinate display manager for handling mouse hover coordinate display.
@@ -106,6 +113,11 @@ public class CoordinateDisplayManager {
 
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        // One font + metrics lookup per paint, not per coordinate (the loop below runs once
+        // per visible series on every repaint while hovering).
+        g2d.setFont(COORDINATE_FONT);
+        FontMetrics fm = g2d.getFontMetrics(COORDINATE_FONT);
+
         // Calculate positions and handle stacking
         List<Rectangle> usedAreas = new ArrayList<>();
 
@@ -121,7 +133,6 @@ public class CoordinateDisplayManager {
             String displayText = timeText + ", " + valueText;
 
             // Calculate rectangle bounds (single line)
-            FontMetrics fm = g2d.getFontMetrics(new Font("Arial", Font.PLAIN, 10));
             int textWidth = fm.stringWidth(displayText);
             int textHeight = fm.getHeight();
 
@@ -174,9 +185,16 @@ public class CoordinateDisplayManager {
         this.currentViewport = viewport;
     }
 
-    // Private fields for coordinate updating
-    private DataSet dataSet;
-    private ViewPort currentViewport;
+    /**
+     * Releases resources held by this manager. Stops the throttling timer so it cannot keep
+     * the manager (and its parent component) reachable after the owning panel is torn down.
+     * Call from the owning component's teardown path.
+     */
+    public void dispose() {
+        if (coordinateUpdateTimer != null) {
+            coordinateUpdateTimer.stop();
+        }
+    }
 
     /**
      * Starts a throttled coordinate update.
@@ -375,9 +393,8 @@ public class CoordinateDisplayManager {
         g2d.setStroke(new BasicStroke(1.0f));
         g2d.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
-        // Draw text
+        // Draw text (font already set once per paint in renderCoordinateOverlays)
         g2d.setColor(Color.BLACK);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 10));
 
         int textX = bounds.x + 4;
         int textY = bounds.y + fm.getAscent() + 2;

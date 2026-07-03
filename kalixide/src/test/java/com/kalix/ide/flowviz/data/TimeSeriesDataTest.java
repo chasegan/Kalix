@@ -174,6 +174,147 @@ class TimeSeriesDataTest {
             "Monthly data must report no fixed cadence (intervals vary 28–31 days)");
     }
 
+    // ---- getIndexRange boundary semantics (half-open [startIndex, endIndex), end-inclusive
+    // in time: a point lying exactly on the viewport end must be inside the range) ----
+
+    private static final long HOUR_MS = 60L * 60 * 1000;
+
+    /** Ad-hoc (genuinely irregular) series: forces the binary-search path in getIndexRange. */
+    private static TimeSeriesData adHocSeries() {
+        long[] offsetsHours = {0, 1, 7, 50, 51, 200, 333, 334};
+        long[] ts = new long[offsetsHours.length];
+        double[] v = new double[offsetsHours.length];
+        for (int i = 0; i < ts.length; i++) {
+            ts[i] = offsetsHours[i] * HOUR_MS;
+            v[i] = i;
+        }
+        TimeSeriesData series = new TimeSeriesData(ts, v);
+        assertFalse(series.isContiguous(), "precondition: series must take the binary-search path");
+        return series;
+    }
+
+    /** Reference oracle: exclusive end bound = number of timestamps <= endTime. */
+    private static int expectedEndExclusive(long[] ts, long endTime) {
+        int i = 0;
+        while (i < ts.length && ts[i] <= endTime) i++;
+        return i;
+    }
+
+    /** Reference oracle: inclusive start bound = first index with timestamp >= startTime. */
+    private static int expectedStartInclusive(long[] ts, long startTime) {
+        int i = 0;
+        while (i < ts.length && ts[i] < startTime) i++;
+        return i;
+    }
+
+    /**
+     * The regression: a viewport whose end lies EXACTLY on a point of a non-contiguous series
+     * must include that point. Before the fix, binarySearchTimestamp returned the index OF the
+     * matching point, which getIndexRange treats as an exclusive end — silently dropping it,
+     * inconsistent with the contiguous fast path's +1.
+     */
+    @Test
+    void irregularSeriesViewportEndExactlyOnPointIncludesThatPoint() {
+        TimeSeriesData series = adHocSeries();
+
+        // End exactly on the last point (the classic "zoom to fit drops the last point" case).
+        TimeSeriesData.IndexRange range = series.getIndexRange(0, 334 * HOUR_MS);
+        assertEquals(0, range.startIndex);
+        assertEquals(8, range.endIndex, "point exactly at viewport end must be included");
+
+        // End exactly on a mid-series point.
+        range = series.getIndexRange(7 * HOUR_MS, 51 * HOUR_MS);
+        assertEquals(2, range.startIndex, "start exactly on a point includes it");
+        assertEquals(5, range.endIndex, "end exactly on the 51h point must include index 4");
+    }
+
+    @Test
+    void irregularSeriesViewportEndBetweenPointsIncludesLastEarlierPoint() {
+        TimeSeriesData series = adHocSeries();
+
+        // End at 100h sits between the points at 51h (index 4) and 200h (index 5).
+        TimeSeriesData.IndexRange range = series.getIndexRange(0, 100 * HOUR_MS);
+        assertEquals(0, range.startIndex);
+        assertEquals(5, range.endIndex, "range must stop after the 51h point (index 4)");
+    }
+
+    @Test
+    void irregularSeriesViewportEndPastSeriesEndIncludesAllPoints() {
+        TimeSeriesData series = adHocSeries();
+
+        TimeSeriesData.IndexRange range = series.getIndexRange(-10 * HOUR_MS, 1000 * HOUR_MS);
+        assertEquals(0, range.startIndex);
+        assertEquals(8, range.endIndex, "viewport spanning the whole series includes every point");
+    }
+
+    @Test
+    void irregularSeriesViewportEntirelyBeforeSeriesStartIsEmpty() {
+        TimeSeriesData series = adHocSeries();
+
+        TimeSeriesData.IndexRange range = series.getIndexRange(-10 * HOUR_MS, -5 * HOUR_MS);
+        assertTrue(range.isEmpty(), "viewport ending before the first point must be empty");
+        assertEquals(0, range.size());
+    }
+
+    /**
+     * Both index paths — the contiguous O(1) arithmetic fast path and the binary-search path —
+     * must implement the same half-open, end-inclusive-in-time semantics. Each is checked
+     * against the same reference oracle: end bounds everywhere (exactly on a point, between
+     * points, past the end), start bounds on-grid and out-of-range. (For a start strictly
+     * between points the fast path deliberately reaches one point further back — floor division
+     * keeps the line segment entering the viewport — so mid-interval starts are not compared.)
+     */
+    @Test
+    void contiguousFastPathMatchesBinarySearchSemanticsOnSharedOracle() {
+        // Contiguous daily grid: takes the fast path.
+        int n = 10;
+        long[] gridTs = new long[n];
+        double[] gridV = new double[n];
+        for (int i = 0; i < n; i++) {
+            gridTs[i] = i * DAY_MS;
+            gridV[i] = i;
+        }
+        TimeSeriesData grid = new TimeSeriesData(gridTs, gridV);
+        assertTrue(grid.isContiguous(), "precondition: series must take the fast path");
+
+        TimeSeriesData adHoc = adHocSeries();
+
+        for (TimeSeriesData series : new TimeSeriesData[]{grid, adHoc}) {
+            long[] ts = series.getTimestamps();
+            long first = ts[0];
+            long last = ts[ts.length - 1];
+
+            // End positions: every point (exact match), midway between consecutive points,
+            // before the start, and past the end.
+            java.util.List<Long> ends = new java.util.ArrayList<>();
+            for (long t : ts) ends.add(t);
+            for (int i = 0; i + 1 < ts.length; i++) ends.add((ts[i] + ts[i + 1]) / 2);
+            // At least one full step before the series: the fast path's integer division
+            // truncates toward zero, so ends within (first - step, first) are a pre-existing
+            // fast-path quirk outside this comparison's scope.
+            ends.add(first - 2 * DAY_MS);
+            ends.add(last + 1);
+            ends.add(last + 365 * DAY_MS);
+
+            for (long end : ends) {
+                TimeSeriesData.IndexRange range = series.getIndexRange(first, end);
+                assertEquals(expectedEndExclusive(ts, end), range.endIndex,
+                    "endIndex for end=" + end + " on "
+                        + (series.isContiguous() ? "fast path" : "binary-search path"));
+            }
+
+            // Start positions: on-grid (every point) and before the series start.
+            for (long start : ts) {
+                TimeSeriesData.IndexRange range = series.getIndexRange(start, last);
+                assertEquals(expectedStartInclusive(ts, start), range.startIndex,
+                    "startIndex for start=" + start + " on "
+                        + (series.isContiguous() ? "fast path" : "binary-search path"));
+            }
+            TimeSeriesData.IndexRange range = series.getIndexRange(first - DAY_MS, last);
+            assertEquals(0, range.startIndex, "start before the series clamps to 0");
+        }
+    }
+
     // ---- Densification (representation B) ----
 
     @Test
