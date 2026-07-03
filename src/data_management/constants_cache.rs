@@ -70,6 +70,13 @@ impl ConstantsCache {
         idx
     }
 
+    /// Set the value of an existing constant by index (fast path for the
+    /// optimiser, which resolves each target's index once per run).
+    pub fn set_value_by_idx(&mut self, idx: usize, value: f64) {
+        self.value[idx] = value;
+        self.is_assigned[idx] = true;
+    }
+
     /// Get the number of constants
     pub fn len(&self) -> usize {
         self.names.len()

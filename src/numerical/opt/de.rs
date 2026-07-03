@@ -187,6 +187,19 @@ impl DifferentialEvolution {
             };
         }
 
+        // Persistent worker pool for parallel evaluation, created ONCE.
+        // The initial population above was evaluated on the main problem, so
+        // it is configured by now and the worker clones are slim (see
+        // Optimisable::clone_for_parallel).
+        let workers: Vec<std::sync::Arc<std::sync::Mutex<Box<dyn Optimisable>>>> =
+            if thread_pool.is_some() {
+                (0..self.config.n_threads)
+                    .map(|_| std::sync::Arc::new(std::sync::Mutex::new(problem.clone_for_parallel())))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
         // Main DE loop - terminate based on evaluations
         let mut generation = 0;
         let mut interrupted = false;
@@ -246,7 +259,7 @@ impl DifferentialEvolution {
 
             // Evaluate trials (parallel or sequential based on thread pool)
             let trial_objectives = if let Some(ref pool) = thread_pool {
-                self.evaluate_parallel_with_pool(problem, &trials, pool, &mut n_evaluations)
+                self.evaluate_parallel_with_pool(&workers, &trials, pool, &mut n_evaluations)
             } else {
                 self.evaluate_sequential(problem, &trials, &mut n_evaluations)
             };
@@ -326,26 +339,20 @@ impl DifferentialEvolution {
         }).collect()
     }
 
-    /// Evaluate trials in parallel using a cached thread pool with worker-based approach
+    /// Evaluate trials in parallel on a persistent worker pool.
     ///
-    /// Creates n_threads worker problems (not population_size!) and distributes trials
-    /// across workers using round-robin assignment. This dramatically reduces cloning overhead.
+    /// The workers are created ONCE per optimisation run (see optimise) and
+    /// reused for every generation - re-cloning the problem (a full model,
+    /// input data included) per generation was the single largest overhead
+    /// in a parallel calibration.
     fn evaluate_parallel_with_pool(
         &self,
-        problem: &dyn Optimisable,
+        workers: &[std::sync::Arc<std::sync::Mutex<Box<dyn Optimisable>>>],
         trials: &[Vec<f64>],
         pool: &rayon::ThreadPool,
         n_evaluations: &mut usize
     ) -> Vec<f64> {
         use rayon::prelude::*;
-        use std::sync::{Arc, Mutex};
-
-        // Create n_threads worker problems (NOT population_size!)
-        // Each worker will handle multiple trials sequentially
-        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
-            (0..self.config.n_threads)
-                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
-                .collect();
 
         let eval_counter = AtomicUsize::new(0);
 
@@ -356,7 +363,7 @@ impl DifferentialEvolution {
                   .map(|(i, trial)| {
                       // Round-robin assignment to workers
                       let worker_idx = i % self.config.n_threads;
-                      let worker = &worker_problems[worker_idx];
+                      let worker = &workers[worker_idx];
 
                       // Lock worker, evaluate, unlock
                       let mut prob = worker.lock().unwrap();

@@ -21,8 +21,8 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 7 | Remove per-point timestamps (regular grids assumed platform-wide) | **Done** (perf/remove-timestamps) |
 | 8 | DynamicInput: allocation-free, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | **Done** (perf/dynamic-input) |
 | 9 | Small hot-loop items (Cell context, hoisted catch_unwind, dead-flag deletion) | **Done** (perf/hot-loop-small) — measured flat; kept only the simplifications |
-| 10 | Optimiser: reuse workers across generations; slim Model clone | Pending |
-| 11 | Optimiser: precompute per-eval invariants; split reset from topology build | Pending |
+| 10 | Optimiser: reuse workers across generations; slim Model clone | **Done** (perf/optimiser) |
+| 11 | Optimiser: precompute per-eval invariants (targets, series indices, zero-copy align, name→idx map) | **Done** (perf/optimiser) |
 | 12 | Fast CSV + pixie IO (hand-rolled date parse/format, reused record, no per-cell alloc, byte-chunked Gorilla) | **Done** (perf/io-fast) |
 | 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | Pending |
 | 14 | Data-driven INI model IO (design discussion first) | Pending |
@@ -337,6 +337,35 @@ Measured (suite, min):
 - Model 1 total wall-clock 119 -> 41 ms (-66%). Sim times unchanged.
 Verified: CSV and .pxb outputs byte-identical to the pre-change binary;
 323 tests (7 new); 28/28 regression models.
+
+## Steps 10-11 record — optimiser throughput (done 2026-07-03)
+
+One branch, both steps:
+- Worker problems are created ONCE per optimisation run and reused for every
+  generation/shuffle (previously re-cloned n_threads x per generation in DE
+  and both SCE parallel paths).
+- `Model::clone_for_run`: the calibration clone drops the round-trip INI
+  documents always, and the raw input files once configured (their data lives
+  in the data_cache by then).
+- Parameter targets resolved once from string addresses to direct indices
+  (constants by table index via new `set_value_by_idx`; node params by node
+  index) - no per-evaluation splitting/lowercasing/lookup. New
+  `ParameterMappingConfig::evaluate_values` avoids re-cloning target strings.
+- Comparison series indices cached after first evaluation; alignment returns
+  index ranges and the statistics consume slices directly - zero copies per
+  evaluation.
+- DataCache gained the deferred name->idx FxHashMap (case-insensitive), making
+  per-run node re-initialisation O(1) per recorder lookup.
+- NOT done (measured reasoning): replacing the Gene Mutex+BTreeMap in `g(i)`
+  lookups - ~17 locks per evaluation is microseconds against a
+  multi-millisecond model run.
+
+Verification: same seed => bit-identical best objective (96531.311077) on the
+picnic calibration, main vs branch; 323 tests; 28/28 regression models; sim
+speed suite unchanged. Wall-clock on the picnic model (1 node) is flat - its
+clone was never expensive; the structural win scales with model size (a
+Condamine-class clone is ~40 MB x n_threads x generations avoided). Accepted
+on implementation cleanliness per Chas without a big-model benchmark.
 
 ## Review findings not yet scheduled (context for steps)
 

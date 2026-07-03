@@ -22,7 +22,7 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
@@ -135,9 +135,22 @@ impl Sce {
         // Step 1: Generate initial population using Latin Hypercube Sampling
         let mut population = self.latin_hypercube_sampling(s, n_params, &mut rng);
 
+        // Persistent worker pool, created ONCE per run and reused for the
+        // initial evaluation and every shuffle - re-cloning the problem (a
+        // full model) per shuffle was the largest overhead of a parallel
+        // calibration. Workers cloned before the first evaluation configure
+        // themselves on their first use.
+        let workers: Vec<Arc<Mutex<Box<dyn Optimisable>>>> = if thread_pool.is_some() {
+            (0..self.config.n_threads)
+                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         // Step 2: Evaluate initial population (parallel if configured)
         let mut n_evaluations = if let Some(ref pool) = thread_pool {
-            self.evaluate_population_parallel(&mut population, problem, pool)
+            self.evaluate_population_parallel(&mut population, &workers, pool)
         } else {
             self.evaluate_population_sequential(&mut population, problem)
         };
@@ -197,7 +210,7 @@ impl Sce {
             let evolution_result = if let Some(ref pool) = thread_pool {
                 self.evolve_complexes_parallel(
                     &mut complexes,
-                    problem,
+                    &workers,
                     breeding_iterations,
                     p,
                     n_params,
@@ -373,7 +386,7 @@ impl Sce {
     fn evolve_complexes_parallel(
         &self,
         complexes: &mut [Complex],
-        problem: &dyn Optimisable,
+        workers: &[Arc<Mutex<Box<dyn Optimisable>>>],
         breeding_iterations: usize,
         p: usize,
         n_params: usize,
@@ -381,13 +394,7 @@ impl Sce {
         rng: &mut StdRng,
         pool: &rayon::ThreadPool,
     ) -> EvolutionResult {
-        use std::sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}};
-
-        // Create n_threads worker problems (NOT per-complex!)
-        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
-            (0..self.config.n_threads)
-                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
-                .collect();
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let eval_counter = AtomicUsize::new(0);
 
@@ -403,7 +410,7 @@ impl Sce {
                      .for_each(|(i, complex)| {
                          // Round-robin assignment to workers
                          let worker_idx = i % self.config.n_threads;
-                         let worker = &worker_problems[worker_idx];
+                         let worker = &workers[worker_idx];
 
                          // Lock worker for this complex's evolution
                          let mut prob = worker.lock().unwrap();
@@ -676,18 +683,11 @@ impl Sce {
     fn evaluate_population_parallel(
         &self,
         individuals: &mut [Individual],
-        problem: &dyn Optimisable,
+        workers: &[Arc<Mutex<Box<dyn Optimisable>>>],
         pool: &rayon::ThreadPool,
     ) -> usize {
         use rayon::prelude::*;
-        use std::sync::{Arc, Mutex};
         use std::sync::atomic::{AtomicUsize, Ordering};
-
-        // Create n_threads worker problems (NOT population_size!)
-        let worker_problems: Vec<Arc<Mutex<Box<dyn Optimisable>>>> =
-            (0..self.config.n_threads)
-                .map(|_| Arc::new(Mutex::new(problem.clone_for_parallel())))
-                .collect();
 
         let eval_counter = AtomicUsize::new(0);
 
@@ -701,7 +701,7 @@ impl Sce {
                   .map(|(i, param_vec)| {
                       // Round-robin assignment to workers
                       let worker_idx = i % self.config.n_threads;
-                      let worker = &worker_problems[worker_idx];
+                      let worker = &workers[worker_idx];
 
                       // Lock worker, evaluate, unlock
                       let mut prob = worker.lock().unwrap();
