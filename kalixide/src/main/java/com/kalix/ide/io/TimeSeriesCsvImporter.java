@@ -567,15 +567,31 @@ public class TimeSeriesCsvImporter {
     }
 
     /**
+     * Commas are accepted in numbers only as complete thousands groupings
+     * ("1,234,567.89"). See {@link #parseNumericValue}.
+     */
+    private static final java.util.regex.Pattern THOUSANDS_GROUPED_PATTERN =
+        java.util.regex.Pattern.compile("[+-]?\\d{1,3}(,\\d{3})+(\\.\\d+)?([eE][+-]?\\d+)?");
+
+    /**
      * Parses a numeric value string, handling missing values and common formats.
+     * Kalix numbers are dot-decimal everywhere in the world; a comma is treated as a
+     * thousands separator only when it forms complete groups. Anything else — notably
+     * a decimal comma like {@code 1,5} in a semicolon-delimited European file — is
+     * rejected as NaN rather than silently misread ({@code 1,5} must never become 15).
      */
     private static Double parseNumericValue(String valueString) {
         if (valueString == null || isMissingValue(valueString)) {
             return Double.NaN;
         }
 
-        // Handle common numeric formats
-        String cleaned = valueString.replace(",", "").replace(" ", "");
+        String cleaned = valueString.replace(" ", "");
+        if (cleaned.indexOf(',') >= 0) {
+            if (!THOUSANDS_GROUPED_PATTERN.matcher(cleaned).matches()) {
+                return Double.NaN;
+            }
+            cleaned = cleaned.replace(",", "");
+        }
 
         if (!NUMERIC_PATTERN.matcher(cleaned).matches()) {
             return Double.NaN;
