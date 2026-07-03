@@ -370,18 +370,18 @@ public class TimeSeriesRequestManager {
     static TimeSeriesData decodePixiePayload(String seriesName, String base64Data) throws java.io.IOException {
         // Constructor's timestep arg is only used by the encoder; decoder reads it from the bitstream.
         GorillaCompressor codec = new GorillaCompressor(0);
-        List<GorillaCompressor.TimeValueDouble> points = codec.decompressDoubleBase64(base64Data);
+        // Primitive-array decode: no per-point TimeValue/boxing on this hot path
+        // (multi-million-point series arrive here over STDIO after every run).
+        GorillaCompressor.DoubleArraySeries series = codec.decompressDoubleArraysBase64(base64Data);
 
-        int n = points.size();
+        int n = series.size();
         LocalDateTime[] dateTimes = new LocalDateTime[n];
-        double[] values = new double[n];
+        double[] values = series.values;
         for (int i = 0; i < n; i++) {
-            GorillaCompressor.TimeValueDouble p = points.get(i);
             // Kalix stores timestamps in offset-binary u64: signed = bits ^ 2^63
             // (mirrors Rust's wrap_to_i64 in src/tid/utils.rs).
-            long signedSeconds = p.timestamp ^ Long.MIN_VALUE;
+            long signedSeconds = series.timestamps[i] ^ Long.MIN_VALUE;
             dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
-            values[i] = p.value;
         }
         // If the stream omits missing timesteps, the decoded points have gaps. Materialise the
         // full grid (NaN at missing slots) so run series share one representation and keep the
