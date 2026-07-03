@@ -5,7 +5,8 @@ import java.util.Properties;
 
 /**
  * A fully resolved application theme: a name, a dark flag, and the complete
- * FlatLaf property map. Built by {@link ExactColorTheme} and consumed by
+ * FlatLaf property map. Built by {@link UnifiedThemeLoader} from the theme's
+ * {@code resources/themes/<id>.properties} file and consumed by
  * {@link ThemeCompatibilityAdapter} to create the look and feel.
  */
 public class UnifiedThemeDefinition {

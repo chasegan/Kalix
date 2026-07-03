@@ -1,7 +1,6 @@
 package com.kalix.ide.themes;
 
-import com.kalix.ide.themes.unified.DarkThemeDefinitions;
-import com.kalix.ide.themes.unified.LightThemeDefinitions;
+import com.kalix.ide.themes.unified.UnifiedThemeLoader;
 
 import java.util.List;
 import java.util.Optional;
@@ -11,32 +10,28 @@ import java.util.Optional;
  *
  * <p>Everything that needs "the list of themes" — the preferences combos, the
  * theme manager, the snapshot test — derives it from here, in this order.
- * Adding a theme means adding exactly one entry to {@link #all()}.
+ * The colours themselves live in {@code resources/themes/<id>.properties}
+ * (see the README there); adding a theme means adding that file plus exactly
+ * one entry here linking it to its node and syntax palettes.
  */
 public final class ThemeRegistry {
 
     private static final List<KalixTheme> THEMES = List.of(
-        new KalixTheme("light", LightThemeDefinitions.createLightTheme(),
-            NodeTheme.Theme.LIGHT, SyntaxTheme.Theme.LIGHT),
-        new KalixTheme("keylime", LightThemeDefinitions.createKeylimeTheme(),
-            NodeTheme.Theme.KEYLIME, SyntaxTheme.Theme.KEYLIME),
-        new KalixTheme("lapland", LightThemeDefinitions.createLaplandTheme(),
-            NodeTheme.Theme.LAPLAND, SyntaxTheme.Theme.LAPLAND),
-        new KalixTheme("nemo", LightThemeDefinitions.createNemoTheme(),
-            NodeTheme.Theme.NEMO, SyntaxTheme.Theme.NEMO),
-        new KalixTheme("sunset-warmth", LightThemeDefinitions.createSunsetWarmthTheme(),
-            NodeTheme.Theme.SUNSET_WARMTH, SyntaxTheme.Theme.SUNSET_WARMTH),
-        new KalixTheme("botanical", DarkThemeDefinitions.createBotanicalTheme(),
-            NodeTheme.Theme.BOTANICAL, SyntaxTheme.Theme.BOTANICAL),
-        new KalixTheme("dracula", DarkThemeDefinitions.createDraculaTheme(),
-            NodeTheme.Theme.DRACULA, SyntaxTheme.Theme.DRACULA),
-        new KalixTheme("one-dark", DarkThemeDefinitions.createOneDarkTheme(),
-            NodeTheme.Theme.ONE_DARK, SyntaxTheme.Theme.ONE_DARK),
-        new KalixTheme("obsidian", DarkThemeDefinitions.createObsidianTheme(),
-            NodeTheme.Theme.OBSIDIAN, SyntaxTheme.Theme.OBSIDIAN),
-        new KalixTheme("sanne", DarkThemeDefinitions.createSanneTheme(),
-            NodeTheme.Theme.SANNE, SyntaxTheme.Theme.SANNE)
+        theme("light", NodeTheme.Theme.LIGHT, SyntaxTheme.Theme.LIGHT),
+        theme("keylime", NodeTheme.Theme.KEYLIME, SyntaxTheme.Theme.KEYLIME),
+        theme("lapland", NodeTheme.Theme.LAPLAND, SyntaxTheme.Theme.LAPLAND),
+        theme("nemo", NodeTheme.Theme.NEMO, SyntaxTheme.Theme.NEMO),
+        theme("sunset-warmth", NodeTheme.Theme.SUNSET_WARMTH, SyntaxTheme.Theme.SUNSET_WARMTH),
+        theme("botanical", NodeTheme.Theme.BOTANICAL, SyntaxTheme.Theme.BOTANICAL),
+        theme("dracula", NodeTheme.Theme.DRACULA, SyntaxTheme.Theme.DRACULA),
+        theme("one-dark", NodeTheme.Theme.ONE_DARK, SyntaxTheme.Theme.ONE_DARK),
+        theme("obsidian", NodeTheme.Theme.OBSIDIAN, SyntaxTheme.Theme.OBSIDIAN),
+        theme("sanne", NodeTheme.Theme.SANNE, SyntaxTheme.Theme.SANNE)
     );
+
+    private static KalixTheme theme(String id, NodeTheme.Theme nodeTheme, SyntaxTheme.Theme syntaxTheme) {
+        return new KalixTheme(id, UnifiedThemeLoader.load(id), nodeTheme, syntaxTheme);
+    }
 
     private ThemeRegistry() {
     }
