@@ -5,7 +5,7 @@
 //! error messages indicating where the failure occurred.
 
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::panic;
 use crate::tid::utils::u64_to_auto_datetime_string;
 
@@ -28,67 +28,48 @@ impl SimPhase {
     }
 }
 
+// Two independent Cells rather than a RefCell<struct>: the setters run per
+// node per timestep (hundreds of millions of times on a big run) and a Cell
+// store is a plain write - no borrow-flag check, no branch, nothing to poison
+// (per manifestos/performance.md §3.5: the context is written hot, read only
+// on the cold panic path).
 thread_local! {
-    static SIM_CONTEXT: RefCell<SimulationContext> = RefCell::new(SimulationContext::new());
+    static SIM_PHASE: Cell<SimPhase> = const { Cell::new(SimPhase::Unknown) };
+    static SIM_NODE: Cell<usize> = const { Cell::new(NO_NODE) };
 }
 
 /// Sentinel value indicating no node is set (usize::MAX is never a valid node index)
 const NO_NODE: usize = usize::MAX;
 
-/// Tracks the current state of simulation for error reporting
-/// Stores only integers on the hot path for minimal overhead
-#[derive(Default)]
-pub struct SimulationContext {
-    pub phase: SimPhase,
-    pub node_idx: usize,
-}
-
-impl SimulationContext {
-    fn new() -> Self {
-        Self {
-            phase: SimPhase::Unknown,
-            node_idx: NO_NODE,
-        }
-    }
-}
-
 /// Set the current phase
 #[inline]
 pub fn set_context_phase(phase: SimPhase) {
-    SIM_CONTEXT.with(|ctx| {
-        ctx.borrow_mut().phase = phase;
-    });
+    SIM_PHASE.with(|c| c.set(phase));
 }
 
 /// Set the current node index
 #[inline]
 pub fn set_context_node(node_idx: usize) {
-    SIM_CONTEXT.with(|ctx| {
-        ctx.borrow_mut().node_idx = node_idx;
-    });
+    SIM_NODE.with(|c| c.set(node_idx));
 }
 
 /// Get the raw context for error formatting
 pub fn get_context() -> (SimPhase, Option<usize>) {
-    SIM_CONTEXT.with(|ctx| {
-        let c = ctx.borrow();
-        let node = if c.node_idx == NO_NODE { None } else { Some(c.node_idx) };
-        (c.phase, node)
-    })
+    let phase = SIM_PHASE.with(|c| c.get());
+    let node_idx = SIM_NODE.with(|c| c.get());
+    let node = if node_idx == NO_NODE { None } else { Some(node_idx) };
+    (phase, node)
 }
 
 /// Clear the simulation context (called when simulation completes or before starting)
 pub fn clear_context() {
-    SIM_CONTEXT.with(|ctx| {
-        let mut c = ctx.borrow_mut();
-        c.phase = SimPhase::Unknown;
-        c.node_idx = NO_NODE;
-    });
+    SIM_PHASE.with(|c| c.set(SimPhase::Unknown));
+    SIM_NODE.with(|c| c.set(NO_NODE));
 }
 
 /// Check if we're currently inside a simulation (phase is not Unknown)
 pub fn is_in_simulation() -> bool {
-    SIM_CONTEXT.with(|ctx| ctx.borrow().phase != SimPhase::Unknown)
+    SIM_PHASE.with(|c| c.get() != SimPhase::Unknown)
 }
 
 /// Install a custom panic hook that suppresses output when inside a simulation.

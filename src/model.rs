@@ -271,43 +271,47 @@ impl Model {
         let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
             / self.configuration.sim_stepsize) + 1;
 
-        //Run all timesteps
+        //Run all timesteps. catch_unwind wraps the WHOLE loop, not each step:
+        //one landing pad instead of one per timestep, and no per-step
+        //optimisation barrier. Error reporting is unchanged - the simulation
+        //context is thread-local, and data_cache.current_timestamp still holds
+        //the failing step's timestamp after the unwind.
         self.data_cache.set_current_step(0);
-        while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
 
-            // Check for interrupt at start of each timestep
-            if interrupt_check() {
-                clear_context();
-                return Ok(false); // Simulation was interrupted
-            }
+                // Check for interrupt at start of each timestep
+                if interrupt_check() {
+                    return false; // Simulation was interrupted
+                }
 
-            // Run the network with panic catching for better error messages
-            let result = catch_unwind(AssertUnwindSafe(|| {
+                // Run the network
                 self.run_timestep(self.data_cache.current_timestamp);
-            }));
 
-            if let Err(panic_info) = result {
-                return Err(format_simulation_error(
-                    panic_info,
-                    self.data_cache.current_timestamp,
-                    |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
-                ));
+                //Report progress if callback provided
+                if let Some(ref mut callback) = progress_callback {
+                    let step = self.data_cache.current_step as u64;
+                    callback(step, total_steps);
+                }
+
+                //Increment time
+                self.data_cache.increment_current_step();
             }
+            true // Simulation completed successfully
+        }));
 
-            //Report progress if callback provided
-            if let Some(ref mut callback) = progress_callback {
-                let step = self.data_cache.current_step as u64;
-                callback(step, total_steps);
+        match outcome {
+            Ok(completed) => {
+                // Clear context on completion or interruption
+                clear_context();
+                Ok(completed)
             }
-
-            //Increment time
-            self.data_cache.increment_current_step();
+            Err(panic_info) => Err(format_simulation_error(
+                panic_info,
+                self.data_cache.current_timestamp,
+                |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
+            )),
         }
-
-        // Clear context on successful completion
-        clear_context();
-
-        Ok(true) // Simulation completed successfully
     }
 
     /// Determine the simulation period on the basis of the available input data

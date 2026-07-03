@@ -33,7 +33,6 @@ pub struct SacramentoNode {
     pub dsorders: [f64; MAX_DS_LINKS],
 
     // Recorders
-    recording_obscure_things: bool,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_rain_mm: Option<usize>,
     recorder_idx_evap_mm: Option<usize>,
@@ -122,17 +121,6 @@ impl Node for SacramentoNode {
             make_result_name(&self.name, "ds_1_order").as_str(), false
         );
 
-        // Just doing this so I can skip checking all these each timestep (unless they are needed)
-        // TODO: test whether this optimisation is measurable. I suspect I'm being totally crazy!
-        self.recording_obscure_things =
-            self.recorder_idx_roimp.is_some() ||
-            self.recorder_idx_flosf.is_some() ||
-            self.recorder_idx_flobf.is_some() ||
-            self.recorder_idx_floin.is_some() ||
-            self.recorder_idx_runoff_volume_megs.is_some() ||
-            self.recorder_idx_runoff_depth_mm.is_some() ||
-            self.recorder_idx_evap_mm.is_some();
-
         //Return
         Ok(())
     }
@@ -172,28 +160,26 @@ impl Node for SacramentoNode {
         if let Some(idx) = self.recorder_idx_rain_mm {
             data_cache.add_value_at_index(idx, self.rain);
         }
-        if self.recording_obscure_things {
-            if let Some(idx) = self.recorder_idx_evap_mm {
-                data_cache.add_value_at_index(idx, self.pet);
-            }
-            if let Some(idx) = self.recorder_idx_roimp {
-                data_cache.add_value_at_index(idx, self.sacramento_model.roimp * self.area_km2);
-            }
-            if let Some(idx) = self.recorder_idx_flosf {
-                data_cache.add_value_at_index(idx, self.sacramento_model.flosf * self.area_km2);
-            }
-            if let Some(idx) = self.recorder_idx_floin {
-                data_cache.add_value_at_index(idx, self.sacramento_model.floin * self.area_km2);
-            }
-            if let Some(idx) = self.recorder_idx_flobf {
-                data_cache.add_value_at_index(idx, self.sacramento_model.flobf * self.area_km2);
-            }
-            if let Some(idx) = self.recorder_idx_runoff_volume_megs {
-                data_cache.add_value_at_index(idx, self.runoff_volume_megs);
-            }
-            if let Some(idx) = self.recorder_idx_runoff_depth_mm {
-                data_cache.add_value_at_index(idx, self.runoff_depth_mm);
-            }
+        if let Some(idx) = self.recorder_idx_evap_mm {
+            data_cache.add_value_at_index(idx, self.pet);
+        }
+        if let Some(idx) = self.recorder_idx_roimp {
+            data_cache.add_value_at_index(idx, self.sacramento_model.roimp * self.area_km2);
+        }
+        if let Some(idx) = self.recorder_idx_flosf {
+            data_cache.add_value_at_index(idx, self.sacramento_model.flosf * self.area_km2);
+        }
+        if let Some(idx) = self.recorder_idx_floin {
+            data_cache.add_value_at_index(idx, self.sacramento_model.floin * self.area_km2);
+        }
+        if let Some(idx) = self.recorder_idx_flobf {
+            data_cache.add_value_at_index(idx, self.sacramento_model.flobf * self.area_km2);
+        }
+        if let Some(idx) = self.recorder_idx_runoff_volume_megs {
+            data_cache.add_value_at_index(idx, self.runoff_volume_megs);
+        }
+        if let Some(idx) = self.recorder_idx_runoff_depth_mm {
+            data_cache.add_value_at_index(idx, self.runoff_depth_mm);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
