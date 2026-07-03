@@ -289,6 +289,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             fileOperations::getCurrentProjectDirectory
         );
 
+        // Kill resident kalixcli sessions on ANY JVM exit - exitApplication is only one
+        // exit path (clearAppData calls System.exit directly; the JVM can also be killed
+        // externally). Without this, orphaned engine processes survive holding full run
+        // results in memory. shutdown() is idempotent, so overlapping with the normal
+        // exit path is harmless.
+        Runtime.getRuntime().addShutdownHook(new Thread(
+            () -> stdioTaskManager.getSessionManager().shutdown(),
+            "kalixcli-session-shutdown"));
+
         // Suppliers for auxiliary windows always reflect the active document.
         RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
         RunManager.setEditorTextSupplier(() -> {

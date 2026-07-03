@@ -50,6 +50,19 @@ public class OptimisationInfo {
                 return OptimisationStatus.DONE;
             }
 
+            // Program still mid-flight but the process is gone: the program can never
+            // advance, so the session's terminal state wins. Without this, a killed or
+            // crashed optimisation rendered "Optimising" forever (the STOPPED branch
+            // below was unreachable while a live program was installed).
+            switch (session.getState()) {
+                case TERMINATED:
+                    return OptimisationStatus.STOPPED;
+                case ERROR:
+                    return OptimisationStatus.ERROR;
+                default:
+                    break;
+            }
+
             String stateDesc = program.getStateDescription();
             if (stateDesc.contains("Ready")) {
                 return OptimisationStatus.STARTING;

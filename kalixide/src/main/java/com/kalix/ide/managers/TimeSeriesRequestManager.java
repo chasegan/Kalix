@@ -93,6 +93,12 @@ public class TimeSeriesRequestManager {
         }
     }
 
+    /**
+     * How long a single get_result may stay pending before its future fails. Generous:
+     * a multi-decade hourly series is ~20MB of base64 over the pipe plus a decode.
+     */
+    private static final long REQUEST_TIMEOUT_SECONDS = 60;
+
     public TimeSeriesRequestManager(SessionManager sessionManager) {
         this.sessionManager = sessionManager;
         this.requestExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -104,8 +110,36 @@ public class TimeSeriesRequestManager {
         this.cache = new ConcurrentHashMap<>();
         this.completedCache = new ConcurrentHashMap<>();
 
+        // A dead session can never answer: fail its pending futures so consumers see
+        // an error instead of "Loading..." forever - and so the stuck cache entry
+        // doesn't block every retry of that series for the session's lifetime.
+        sessionManager.addSessionEventListener(event -> {
+            SessionManager.SessionState state = event.getNewState();
+            if (state == SessionManager.SessionState.TERMINATED
+                    || state == SessionManager.SessionState.ERROR) {
+                failPendingFuturesForSession(event.getSessionKey(),
+                    "Session " + state.name().toLowerCase() + " before responding");
+            }
+        });
+
         // Start the request processing loop
         startRequestProcessor();
+    }
+
+    /** Fails and removes every in-flight future belonging to the given session. */
+    private void failPendingFuturesForSession(String sessionKey, String reason) {
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) {
+            return;
+        }
+        String prefix = kalixcliUid + ":";
+        cache.entrySet().removeIf(entry -> {
+            if (entry.getKey().startsWith(prefix)) {
+                entry.getValue().completeExceptionally(new RuntimeException(reason));
+                return true;
+            }
+            return false;
+        });
     }
 
     /**
@@ -138,8 +172,16 @@ public class TimeSeriesRequestManager {
             return CompletableFuture.completedFuture(cachedData);
         }
 
-        // Create new request
+        // Create new request. The timeout is a backstop for responses that never
+        // arrive (wedged CLI, message lost): without it the stuck entry makes the
+        // series permanently unfetchable for this session.
         CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
+        future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+              .whenComplete((data, throwable) -> {
+                  if (throwable != null) {
+                      cache.remove(cacheKey, future);
+                  }
+              });
         cache.put(cacheKey, future);
 
         TimeSeriesRequest request = new TimeSeriesRequest(sessionKey, seriesName, future);
@@ -192,7 +234,19 @@ public class TimeSeriesRequestManager {
     public void clearCacheForSession(String sessionKey) {
         String kalixcliUid = getKalixcliUid(sessionKey);
         if (kalixcliUid == null) return;
+        clearCacheForKalixcliUid(kalixcliUid);
+        logger.debug("Cleared cache for session {} (kalixcliUid: {})", sessionKey, kalixcliUid);
+    }
 
+    /**
+     * Clears all cached data for a kalixcli UID directly. Use this when the session has
+     * already left the session manager (run removal) - {@link #clearCacheForSession}
+     * cannot resolve the UID for a removed session, and its cache entries would
+     * otherwise be unreachable forever.
+     *
+     * @param kalixcliUid the CLI-assigned session UID whose entries should be dropped
+     */
+    public void clearCacheForKalixcliUid(String kalixcliUid) {
         String prefix = kalixcliUid + ":";
 
         // Remove from completed cache
@@ -206,8 +260,6 @@ public class TimeSeriesRequestManager {
             }
             return false;
         });
-
-        logger.debug("Cleared cache for session {} (kalixcliUid: {})", sessionKey, kalixcliUid);
     }
 
     /**
@@ -346,16 +398,18 @@ public class TimeSeriesRequestManager {
                 throw new IllegalArgumentException("Unsupported get_result format: '" + format + "'");
         }
 
-        // Update cache
+        // Only responses with a live request populate the cache. A response landing
+        // after clearCacheForSession (a new run just completed on the same session -
+        // kalixcliUid persists across runs) is the PREVIOUS run's data; caching it
+        // would serve stale results to the next fetch.
         String cacheKey = kalixcliUid + ":" + seriesName;
-        completedCache.put(cacheKey, timeSeriesData);
-
         CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
-        if (future != null) {
-            future.complete(timeSeriesData);
-        } else {
-            logger.warn("No pending future found for cacheKey: '{}'", cacheKey);
+        if (future == null || future.isCancelled()) {
+            logger.debug("Dropping get_result response with no live request: '{}'", cacheKey);
+            return;
         }
+        completedCache.put(cacheKey, timeSeriesData);
+        future.complete(timeSeriesData);
     }
 
     /**

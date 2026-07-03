@@ -74,6 +74,28 @@ public class OptimisationSessionManager {
         this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
         this.modelTextSupplier = modelTextSupplier;
+
+        // Track session death for our optimisations. Without this, a crashed or
+        // terminated kalixcli was invisible here: the tree kept rendering the frozen
+        // program state ("Optimising") forever. RunManager has always had the
+        // equivalent listener - this closes the gap on the optimisation side.
+        stdioTaskManager.getSessionManager().addSessionEventListener(event -> {
+            String sessionKey = event.getSessionKey();
+            if (!sessionToOptInfo.containsKey(sessionKey)) {
+                return;
+            }
+            SessionManager.SessionState state = event.getNewState();
+            if (state == SessionManager.SessionState.TERMINATED) {
+                lastKnownStatus.put(sessionKey, OptimisationStatus.STOPPED);
+            } else if (state == SessionManager.SessionState.ERROR) {
+                lastKnownStatus.put(sessionKey, OptimisationStatus.ERROR);
+            } else {
+                return;
+            }
+            if (onSessionCompleted != null) {
+                onSessionCompleted.accept(sessionKey);
+            }
+        });
     }
 
     /**
@@ -300,24 +322,36 @@ public class OptimisationSessionManager {
      * @param sessionKey The session key
      * @param isActive Whether the session is currently active
      */
-    public void removeOptimisation(String sessionKey, boolean isActive) {
+    public void removeOptimisation(String sessionKey) {
         if (sessionKey == null) {
             return;
         }
 
-        // Terminate session if active
-        if (isActive) {
-            stopOptimisation(sessionKey);
+        // Always release the CLI process. Every "New" spawns a real kalixcli session
+        // immediately, so even a never-run (CONFIGURING) optimisation owns a live
+        // process - the old status==RUNNING guard leaked those until application exit.
+        SessionManager.KalixSession session =
+            stdioTaskManager.getSessionManager().getActiveSessions().get(sessionKey);
+        if (session != null) {
+            if (session.isActive()) {
+                stdioTaskManager.terminateSession(sessionKey)
+                    .thenCompose(v -> stdioTaskManager.removeSession(sessionKey));
+            } else {
+                stdioTaskManager.removeSession(sessionKey);
+            }
         }
 
         // Get name before removing
         String optName = sessionToOptName.get(sessionKey);
 
-        // Remove from tracking maps
+        // Remove from tracking maps - all of them; sessionToModelText and
+        // sessionToConfigText each pin a full model text per optimisation.
         sessionToOptName.remove(sessionKey);
         sessionToOptInfo.remove(sessionKey);
         lastKnownStatus.remove(sessionKey);
         optimisationResults.remove(sessionKey);
+        sessionToModelText.remove(sessionKey);
+        sessionToConfigText.remove(sessionKey);
 
         if (statusUpdater != null && optName != null) {
             statusUpdater.accept("Removed: " + optName);

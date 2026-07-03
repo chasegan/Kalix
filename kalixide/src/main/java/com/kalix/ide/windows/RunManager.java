@@ -845,6 +845,7 @@ public class RunManager extends JFrame {
 
                 // Clean up tracking maps
                 for (String sessionKey : sessionsToRemove) {
+                    removeRunData(sessionToTreeNode.get(sessionKey));
                     sessionToTreeNode.remove(sessionKey);
                     sessionToRunName.remove(sessionKey);
                     lastKnownStatus.remove(sessionKey);
@@ -866,9 +867,18 @@ public class RunManager extends JFrame {
                     }
                 }
 
-                // Notify tree model of removals
-                int[] indices = removedIndices.stream().mapToInt(Integer::intValue).toArray();
-                Object[] children = removedChildren.toArray();
+                // Notify tree model of removals. nodesWereRemoved requires ascending
+                // indices; collection order here follows HashMap iteration, so sort the
+                // (index, child) pairs together.
+                List<Integer> order = new ArrayList<>();
+                for (int i = 0; i < removedIndices.size(); i++) order.add(i);
+                order.sort(java.util.Comparator.comparingInt(removedIndices::get));
+                int[] indices = new int[order.size()];
+                Object[] children = new Object[order.size()];
+                for (int i = 0; i < order.size(); i++) {
+                    indices[i] = removedIndices.get(order.get(i));
+                    children[i] = removedChildren.get(order.get(i));
+                }
                 treeModel.nodesWereRemoved(currentRunsNode, indices, children);
             }
         });
@@ -1710,6 +1720,42 @@ public class RunManager extends JFrame {
      *
      * <p>Wired as the {@code removeDatasetDelegate} of {@link RunContextMenuManager}.</p>
      */
+    /**
+     * Scrubs a removed run's data everywhere outside the source tree: the shared
+     * {@code plotDataSet} pool, slot assignments, every tab's selections, and both
+     * levels of the fetch cache. The runs-side counterpart of
+     * {@link #removeLoadedDataset} - without it a day of modelling retains every
+     * removed run's series (multi-decade double[]s) until application exit.
+     */
+    private void removeRunData(DefaultMutableTreeNode runNode) {
+        if (runNode == null || !(runNode.getUserObject() instanceof RunInfoImpl runInfo)) {
+            return;
+        }
+
+        long runId = runInfo.getRunId();
+        List<com.kalix.ide.flowviz.data.SeriesRef> refs = new ArrayList<>();
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : plotDataSet.getSeriesRefs()) {
+            if (ref instanceof com.kalix.ide.flowviz.data.RunSeries runSeries
+                    && runSeries.runId() == runId) {
+                refs.add(ref);
+            }
+        }
+        for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+            plotDataSet.removeSeries(ref);
+            seriesSlotManager.removeSlot(ref);
+        }
+        if (!refs.isEmpty()) {
+            tabManager.removeSeriesFromAllTabs(refs);
+        }
+
+        // Clear by UID, not session key: the session has already left the session
+        // manager, so key-based lookup cannot reach these entries any more.
+        String kalixcliUid = runInfo.getSession().getKalixcliUid();
+        if (kalixcliUid != null) {
+            timeSeriesRequestManager.clearCacheForKalixcliUid(kalixcliUid);
+        }
+    }
+
     public void removeLoadedDataset(DatasetLoaderManager.LoadedDatasetInfo info) {
         String absPath = info.file.getAbsolutePath();
 

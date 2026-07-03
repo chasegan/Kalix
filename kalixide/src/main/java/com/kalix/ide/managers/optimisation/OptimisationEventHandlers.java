@@ -133,14 +133,48 @@ public class OptimisationEventHandlers {
      * @param sessionKey The session key
      * @param resultJson The result JSON string
      */
+    /** Shared, thread-safe mapper - a fresh ObjectMapper per result is pure waste. */
+    private static final ObjectMapper RESULT_MAPPER = new ObjectMapper();
+
+    /**
+     * Sentinel prefix OptimisationProgram puts on the result callback when the backend
+     * reports an error instead of a result. Not JSON - must be handled before parsing.
+     */
+    private static final String ERROR_SENTINEL = "ERROR: ";
+
     public void handleOptimisationResult(String sessionKey, String resultJson) {
         SwingUtilities.invokeLater(() -> {
             OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
             if (result != null) {
+                // A backend error arrives as "ERROR: <message>", not JSON. Feeding it
+                // to the parser used to throw, skipping end-time/status/progress
+                // cleanup - the elapsed timer ticked forever and the real error text
+                // was lost behind "Failed to parse result".
+                if (resultJson != null && resultJson.startsWith(ERROR_SENTINEL)) {
+                    String errorText = resultJson.substring(ERROR_SENTINEL.length());
+                    result.setSuccess(false);
+                    result.setMessage(errorText);
+                    result.setEndTime(java.time.LocalDateTime.now());
+                    sessionManager.updateStatus(sessionKey, OptimisationStatus.ERROR);
+                    OptimisationInfo errInfo = sessionManager.getOptimisationInfo(sessionKey);
+                    if (errInfo != null) {
+                        progressManager.completeProgress(errInfo, result);
+                    }
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Optimisation failed: " + errorText);
+                    }
+                    if (treeNodeUpdater != null) {
+                        treeNodeUpdater.accept(sessionKey);
+                    }
+                    if (detailsUpdater != null) {
+                        detailsUpdater.accept(sessionKey);
+                    }
+                    return;
+                }
+
                 // Parse the result JSON to extract all fields
                 try {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode rootNode = mapper.readTree(resultJson);
+                    JsonNode rootNode = RESULT_MAPPER.readTree(resultJson);
 
                     // Extract fields from the result object
                     if (rootNode.has("best_objective")) {
@@ -164,10 +198,14 @@ public class OptimisationEventHandlers {
                         result.setOptimisedModelIni(rootNode.get("optimised_model_ini").asText());
                     }
 
-                    // Extract parameters
-                    if (rootNode.has("parameters_physical")) {
+                    // Extract parameters. The engine emits "params_physical"
+                    // (commands.rs); "parameters_physical" is kept as a fallback for
+                    // any older payloads.
+                    JsonNode paramsNode = rootNode.has("params_physical")
+                        ? rootNode.get("params_physical")
+                        : rootNode.get("parameters_physical");
+                    if (paramsNode != null && paramsNode.isObject()) {
                         Map<String, Double> paramsPhysical = new HashMap<>();
-                        JsonNode paramsNode = rootNode.get("parameters_physical");
                         paramsNode.fields().forEachRemaining(entry ->
                             paramsPhysical.put(entry.getKey(), entry.getValue().asDouble()));
                         result.setParametersPhysical(paramsPhysical);

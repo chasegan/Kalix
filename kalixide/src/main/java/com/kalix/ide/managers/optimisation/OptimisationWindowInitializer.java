@@ -270,10 +270,7 @@ public class OptimisationWindowInitializer {
                 JOptionPane.YES_NO_OPTION);
 
             if (confirm == JOptionPane.YES_OPTION) {
-                sessionManager.removeOptimisation(
-                    optInfo.getSessionKey(),
-                    optInfo.getStatus() == OptimisationStatus.RUNNING
-                );
+                sessionManager.removeOptimisation(optInfo.getSessionKey());
                 // sessionManager.getTreeNode(...) returns an orphan node never added to the tree model;
                 // the tree manager owns the node that's actually displayed, so remove via that path.
                 treeManager.removeOptimisation(optInfo.getSessionKey());
