@@ -38,9 +38,10 @@ Reading the numbers
 -------------------
 - Compare the MIN of repeated runs: it is the least contaminated by OS noise.
 - Numbers are only comparable within one machine (join on hostname).
-- speed_results_analysis.ipynb plots the database (timelines, indexed drift,
-  per-phase breakdowns, and the test 3 minus test 2 expression-cost
-  instrument). Re-run all cells after adding results.
+- speed_results_analysis.ipynb is the team dashboard: everyone sees all
+  machines and all histories on one view (colour = machine; tests are
+  panels; each machine's drift is indexed to its own latest measurement).
+  Re-run all cells after adding results.
 - speed_results.csv is the long-term results database: one row per test per
   run, recording commit (sha, date, dirty flag), environment (user, hostname,
   os, cpu, rustc), and per-phase metrics. It lets the team track performance
