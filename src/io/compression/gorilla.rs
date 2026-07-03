@@ -64,10 +64,25 @@ impl BitWriter {
         }
     }
 
+    /// Append the low `num_bits` of `value`, most-significant bit first.
+    /// Byte-at-a-time (up to 9 iterations for 64 bits) rather than the old
+    /// bit-at-a-time loop (64); the produced bitstream is identical, and is
+    /// pinned by the cross-language fixture test below.
     fn write_bits(&mut self, value: u64, num_bits: usize) {
-        for i in (0..num_bits).rev() {
-            let bit = ((value >> i) & 1) == 1;
-            self.write_bit(bit);
+        let mut remaining = num_bits;
+        while remaining > 0 {
+            let free = 8 - self.bit_count;
+            let take = free.min(remaining);
+            let shift = remaining - take;
+            let chunk = ((value >> shift) & ((1u64 << take) - 1)) as u8;
+            self.current_byte |= chunk << (free - take);
+            self.bit_count += take;
+            remaining -= take;
+            if self.bit_count == 8 {
+                self.buffer.push(self.current_byte);
+                self.current_byte = 0;
+                self.bit_count = 0;
+            }
         }
     }
 
@@ -112,11 +127,25 @@ impl<'a> BitReader<'a> {
         Some(bit)
     }
 
+    /// Read `num_bits` (MSB first), byte-at-a-time. Mirrors write_bits.
     fn read_bits(&mut self, num_bits: usize) -> Option<u64> {
         let mut value = 0u64;
-        for _ in 0..num_bits {
-            let bit = self.read_bit()?;
-            value = (value << 1) | if bit { 1 } else { 0 };
+        let mut remaining = num_bits;
+        while remaining > 0 {
+            if self.byte_index >= self.data.len() {
+                return None;
+            }
+            let available = 8 - self.bit_index;
+            let take = available.min(remaining);
+            let byte = self.data[self.byte_index];
+            let chunk = (byte >> (available - take)) as u64 & ((1u64 << take) - 1);
+            value = (value << take) | chunk;
+            self.bit_index += take;
+            remaining -= take;
+            if self.bit_index == 8 {
+                self.byte_index += 1;
+                self.bit_index = 0;
+            }
         }
         Some(value)
     }
@@ -663,6 +692,33 @@ mod tests {
         assert_roundtrip_double(&regular_series(&[
             0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.0, 1.0e300, 5.0e-324,
         ]));
+    }
+
+    /// The exact bitstream is pinned: this series and base64 are the same
+    /// fixture asserted by the Java side (GorillaCompressorTest.java), so any
+    /// change to the encoding on either side fails one of the two suites.
+    #[test]
+    fn test_bitstream_fixture_matches_java() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+
+        let timestamps: [u64; 12] = [0, 86400, 172800, 259200, 345600, 432000,
+            518400, 604800, 1604800, 1691200, 1777600, 1864000];
+        let value_bits: [u64; 12] = [
+            0x408f400000000000, 0x408f400000000000, 0x406e000000000000,
+            0x405599999999999a, 0x405599999999999b, 0x3fbf9add3746f62e,
+            0x7ff8000000000000, 0x7ff0000000000000, 0x8000000000000000,
+            0x4045000000000000, 0x4045000000000000, 0x407f400000000000,
+        ];
+        let series: Vec<TimeValueDouble> = timestamps.iter().zip(value_bits.iter())
+            .map(|(&t, &b)| TimeValueDouble::new(t, f64::from_bits(b)))
+            .collect();
+
+        let compressed = GorillaCompressor::new(86400).compress_double(&series).unwrap();
+        assert_eq!(
+            STANDARD.encode(&compressed),
+            "AAAAAAABUYAAAAAMAAAAAAAAAABAj0AAAAAAABIK4VK17mZmZmZmavwgAAAAFn9/Nbpujexc3/4AAAAAAAATAfgAehIEAz/9AQwEUSiOkA==",
+            "encoder bitstream diverged from the committed cross-language fixture"
+        );
     }
 
     /// Irregular timestamps whose delta-of-deltas goes negative beyond the 12-bit

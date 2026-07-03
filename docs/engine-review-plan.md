@@ -23,7 +23,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 9 | Small hot-loop items (Cell context, hoisted catch_unwind, dead-flag deletion) | **Done** (perf/hot-loop-small) — measured flat; kept only the simplifications |
 | 10 | Optimiser: reuse workers across generations; slim Model clone | Pending |
 | 11 | Optimiser: precompute per-eval invariants; split reset from topology build | Pending |
-| 12 | CSV fast read/write (single date parse, reused record, fast-float, buffered writes) | Pending |
+| 12 | Fast CSV + pixie IO (hand-rolled date parse/format, reused record, no per-cell alloc, byte-chunked Gorilla) | **Done** (perf/io-fast) |
 | 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | Pending |
 | 14 | Data-driven INI model IO (design discussion first) | Pending |
 | 15 | Topological sort at configure time (or manifesto the file-order rule) | Pending |
@@ -306,6 +306,37 @@ Conclusion recorded for future readers: at current model scales the per-node
 per-step scaffolding (context writes, panic machinery, enum-discriminant
 branches) is not where time lives. The remaining big-ticket items are the
 optimiser loop (steps 10-11) and IO (step 12).
+
+## Step 12 record — fast CSV and pixie IO (done 2026-07-03)
+
+Stage-by-stage measurement first (110k-row file): chrono date parsing was 51%
+of read time (try_parse_datetime always attempts a doomed NaiveDateTime parse
+before NaiveDate for date-only formats, so every row paid two chrono parses);
+csv-crate per-row StringRecord allocation 24%; f64 parsing only 2% — the
+review's fast-float recommendation was measured moot and dropped. Write side:
+format!(",{value}") per cell was 51%; unreserved String regrowth much of the
+rest.
+
+Changes (all behaviour-preserving by construction):
+- Hand-rolled digit parser for the twelve known date formats (validating:
+  Feb 30 rejected, 1-2 digit day/month accepted, trailing garbage rejected)
+  with chrono kept for detection and as fallback — accepted inputs and error
+  behaviour identical, pinned by equivalence tests against chrono.
+- Read loop reuses one StringRecord (csv crate's zero-alloc pattern).
+- write_ts: capacity reserved up front; values written with write! into the
+  buffer (no per-cell temporary); dates via a fast civil-date formatter
+  (chrono fallback outside years 0-9999). Output bytes identical.
+- Gorilla BitWriter/BitReader now work byte-at-a-time instead of bit-at-a-
+  time (~7x fewer loop iterations); the bitstream is identical and now
+  pinned on BOTH sides by the cross-language fixture (new Rust test asserts
+  the same base64 the Java test asserts).
+
+Measured (suite, min):
+- Load: model 1 54.6 -> 11.6 ms (-79%); models 2-4 ~16 -> ~8.3 ms (-48%).
+- Output: model 1 58 -> 22.6 ms (-61%); others -53 to -56%.
+- Model 1 total wall-clock 119 -> 41 ms (-66%). Sim times unchanged.
+Verified: CSV and .pxb outputs byte-identical to the pre-change binary;
+323 tests (7 new); 28/28 regression models.
 
 ## Review findings not yet scheduled (context for steps)
 

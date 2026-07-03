@@ -1,7 +1,7 @@
 extern crate csv;
 
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{date_string_to_u64_flexible, date_string_to_u64_with_format, u64_to_date_string_for_step_size};
+use crate::tid::utils::{append_date_string_for_step_size, date_string_to_u64_flexible, date_string_to_u64_with_format};
 use std::fs;
 use std::path::Path;
 
@@ -110,13 +110,18 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
         row_timestamps.push(t_u64);
     }
 
-    // Iterate through the records and parse the data
-    for result in reader.records() {
+    // Iterate through the records and parse the data. One StringRecord is
+    // reused for every row (the csv crate's documented zero-allocation
+    // pattern) instead of allocating a fresh record per row.
+    let mut record = csv::StringRecord::new();
+    loop {
+        match reader.read_record(&mut record) {
+            Ok(true) => {}
+            Ok(false) => break,
+            Err(e) => return Err(
+                format!("Error reading '{}' line {}: {}", filename, file_line + 1, e)),
+        }
         file_line += 1;
-
-        // Unwrap the record
-        let record = result.map_err(|e|
-            format!("Error reading '{}' line {}: {}", filename, file_line, e))?;
 
         // Parse the timestamp column (first column)
         let t_str = record.get(0)
@@ -221,8 +226,11 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
         }
     }
 
-    // Starting building the file contents, starting with the header row
-    let mut data_string = String::new();
+    // Build the whole file in one buffer, reserved up front so a large output
+    // never regrows (a 45 MB result file would otherwise be memcpy'd ~20
+    // times as the buffer doubles).
+    let estimated_row_bytes = 21 + timeseries_vector.len() * 20;
+    let mut data_string = String::with_capacity(64 + data_length * estimated_row_bytes);
     data_string.push_str("Time");
     for ts in timeseries_vector.iter() {
         data_string.push_str(",");
@@ -233,15 +241,17 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
     // Build the data section. Pick a single date format for the whole file based on the
     // step_size of the first series (all series in a write share the same step_size in
     // practice). Sub-daily data gets ISO datetime; daily-or-coarser gets date-only.
+    // Values are written straight into the buffer (write! - no per-cell
+    // temporary String), keeping the output bytes identical to before.
+    use std::fmt::Write as _;
     if timeseries_vector.len() > 0 {
         let step_size = timeseries_vector[0].step_size;
         for i in 0..data_length {
             let timestamp = timeseries_vector[0].timestamp_at(i);
-            let timestamp_string = u64_to_date_string_for_step_size(timestamp, step_size);
-            data_string.push_str(&timestamp_string);
+            append_date_string_for_step_size(&mut data_string, timestamp, step_size);
             for ts in timeseries_vector.iter() {
                 let value = ts.values[i];
-                data_string.push_str(format!(",{value}").as_str());
+                let _ = write!(data_string, ",{value}");
             }
             data_string.push_str("\r\n");
         }
