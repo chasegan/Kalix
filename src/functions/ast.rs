@@ -191,12 +191,12 @@ impl ASTNode for ExpressionNode {
             ExpressionNode::BinaryOp { left, op, right } => {
                 let left_val = left.evaluate(context)?;
                 let right_val = right.evaluate(context)?;
-                evaluate_binary_op(*op, left_val, right_val)
+                Ok(evaluate_binary_op(*op, left_val, right_val))
             }
             
             ExpressionNode::UnaryOp { op, operand } => {
                 let val = operand.evaluate(context)?;
-                evaluate_unary_op(*op, val)
+                Ok(evaluate_unary_op(*op, val))
             }
             
             ExpressionNode::FunctionCall { func, args } => {
@@ -251,36 +251,38 @@ impl ASTNode for ExpressionNode {
     }
 }
 
-/// Evaluate a binary operation
+/// Evaluate a binary operation. Infallible: every operator is total over f64
+/// (IEEE 754 semantics for division by zero etc.), so no Result plumbing is
+/// needed on the hot path.
 ///
 /// This function is public to allow reuse in optimised evaluation contexts.
-pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> Result<f64, EvaluationError> {
+pub fn evaluate_binary_op(op: BinaryOperator, left: f64, right: f64) -> f64 {
     match op {
-        BinaryOperator::Add => Ok(left + right),
-        BinaryOperator::Subtract => Ok(left - right),
-        BinaryOperator::Multiply => Ok(left * right),
-        BinaryOperator::Divide => Ok(left / right),
-        BinaryOperator::Modulo => Ok(left % right),
-        BinaryOperator::Power => Ok(left.powf(right)),
-        BinaryOperator::Equal => Ok(if (left - right).abs() < f64::EPSILON { 1.0 } else { 0.0 }),
-        BinaryOperator::NotEqual => Ok(if (left - right).abs() >= f64::EPSILON { 1.0 } else { 0.0 }),
-        BinaryOperator::LessThan => Ok(if left < right { 1.0 } else { 0.0 }),
-        BinaryOperator::LessThanOrEqual => Ok(if left <= right { 1.0 } else { 0.0 }),
-        BinaryOperator::GreaterThan => Ok(if left > right { 1.0 } else { 0.0 }),
-        BinaryOperator::GreaterThanOrEqual => Ok(if left >= right { 1.0 } else { 0.0 }),
-        BinaryOperator::And => Ok(if left != 0.0 && right != 0.0 { 1.0 } else { 0.0 }),
-        BinaryOperator::Or => Ok(if left != 0.0 || right != 0.0 { 1.0 } else { 0.0 }),
+        BinaryOperator::Add => left + right,
+        BinaryOperator::Subtract => left - right,
+        BinaryOperator::Multiply => left * right,
+        BinaryOperator::Divide => left / right,
+        BinaryOperator::Modulo => left % right,
+        BinaryOperator::Power => left.powf(right),
+        BinaryOperator::Equal => if (left - right).abs() < f64::EPSILON { 1.0 } else { 0.0 },
+        BinaryOperator::NotEqual => if (left - right).abs() >= f64::EPSILON { 1.0 } else { 0.0 },
+        BinaryOperator::LessThan => if left < right { 1.0 } else { 0.0 },
+        BinaryOperator::LessThanOrEqual => if left <= right { 1.0 } else { 0.0 },
+        BinaryOperator::GreaterThan => if left > right { 1.0 } else { 0.0 },
+        BinaryOperator::GreaterThanOrEqual => if left >= right { 1.0 } else { 0.0 },
+        BinaryOperator::And => if left != 0.0 && right != 0.0 { 1.0 } else { 0.0 },
+        BinaryOperator::Or => if left != 0.0 || right != 0.0 { 1.0 } else { 0.0 },
     }
 }
 
-/// Evaluate a unary operation
+/// Evaluate a unary operation. Infallible (see `evaluate_binary_op`).
 ///
 /// This function is public to allow reuse in optimised evaluation contexts.
-pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> Result<f64, EvaluationError> {
+pub fn evaluate_unary_op(op: UnaryOperator, operand: f64) -> f64 {
     match op {
-        UnaryOperator::Plus => Ok(operand),
-        UnaryOperator::Minus => Ok(-operand),
-        UnaryOperator::Not => Ok(if operand == 0.0 { 1.0 } else { 0.0 }),
+        UnaryOperator::Plus => operand,
+        UnaryOperator::Minus => -operand,
+        UnaryOperator::Not => if operand == 0.0 { 1.0 } else { 0.0 },
     }
 }
 
