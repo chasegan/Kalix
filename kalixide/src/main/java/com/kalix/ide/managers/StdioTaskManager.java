@@ -28,6 +28,7 @@ public class StdioTaskManager {
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
     private final JFrame parentFrame;
+    private final ProcessExecutor processExecutor;
     private final SessionManager sessionManager;
     private final Supplier<File> workingDirectorySupplier;
     private final Supplier<File> projectDirectorySupplier;
@@ -50,6 +51,7 @@ public class StdioTaskManager {
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.parentFrame = parentFrame;
+        this.processExecutor = processExecutor;
         this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
 
@@ -82,7 +84,9 @@ public class StdioTaskManager {
      * @return CompletableFuture with the session key
      */
     public CompletableFuture<String> runModelFromMemory(String modelText) {
-        // Use dedicated thread pool instead of common ForkJoinPool to avoid thread exhaustion
+        // Dedicated thread pool instead of the common ForkJoinPool: this lambda blocks
+        // on sessionFuture.get(), and blocking common-pool workers starves every other
+        // common-pool user in the JVM.
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // Get current working directory if available
@@ -111,27 +115,18 @@ public class StdioTaskManager {
                 CompletableFuture<String> sessionFuture = sessionManager.startSession(cliLocation.get().getPath(), config);
                 String sessionKey = sessionFuture.get(); // Wait for session to start
                 
-                // Now set up the Run Model program synchronously
+                // Now set up the Run Model program. No startup delay is needed: the
+                // program waits for the CLI's initial rdy itself, and installProgram
+                // replays that signal if it already arrived.
                 try {
-                    Thread.sleep(500); // Give process time to start
-                    
-                    // Create and start the Run Model program
                     RunModelProgram runModelProgram = new RunModelProgram(
                         sessionKey,
                         sessionManager,
                         statusUpdater,
                         this::updateProgressFromSession
                     );
-                    
-                    // Attach program to session
-                    Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
-                    if (session.isPresent()) {
-                        session.get().setActiveProgram(runModelProgram);
-                        runModelProgram.start(modelText);
-                    } else {
-                        throw new RuntimeException("Session not found: " + sessionKey);
-                    }
-                    
+                    runModelProgram.start(modelText);
+                    sessionManager.installProgram(sessionKey, runModelProgram);
                 } catch (Exception e) {
                     // Clean up session if RunModelProgram setup fails
                     sessionManager.terminateSession(sessionKey);
@@ -143,7 +138,7 @@ public class StdioTaskManager {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to run model from memory", e);
             }
-        });
+        }, processExecutor.getExecutorService());
     }
 
 
@@ -174,6 +169,17 @@ public class StdioTaskManager {
      */
     public CompletableFuture<Void> terminateSession(String sessionKey) {
         return sessionManager.terminateSession(sessionKey);
+    }
+
+    /**
+     * Requests a cooperative stop of the session's running task (protocol stp message).
+     * The session stays alive; the task ends at its next interrupt check.
+     *
+     * @param sessionKey the session whose task should stop
+     * @return CompletableFuture that completes when the stop request has been sent
+     */
+    public CompletableFuture<Void> stopSession(String sessionKey) {
+        return sessionManager.stopSession(sessionKey, "User requested stop");
     }
     
     /**

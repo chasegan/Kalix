@@ -208,7 +208,7 @@ public class RunManager extends JFrame {
 
         // Connect TimeSeriesRequestManager to SessionManager for response handling
         stdioTaskManager.getSessionManager().setTimeSeriesResponseHandler(
-            timeSeriesRequestManager::handleJsonResponse
+            timeSeriesRequestManager::handleResultMessage
         );
 
         setupWindow(parentFrame);

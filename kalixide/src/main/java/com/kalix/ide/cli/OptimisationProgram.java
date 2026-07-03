@@ -26,8 +26,11 @@ public class OptimisationProgram extends AbstractSessionProgram {
 
     private final Consumer<String> resultCallback;
     private final Consumer<java.util.List<String>> parametersCallback;
-    private ProgramState currentState = ProgramState.WAITING_FOR_INITIAL_READY;
-    private String modelIni;
+    // Written on monitor threads and the installer thread; read from the EDT
+    // (status descriptions, isActive). Transitions are guarded by synchronized
+    // methods; volatile covers the reads.
+    private volatile ProgramState currentState = ProgramState.WAITING_FOR_INITIAL_READY;
+    private volatile String modelIni;
 
     /**
      * Creates a new Optimisation program instance.
@@ -83,7 +86,12 @@ public class OptimisationProgram extends AbstractSessionProgram {
     }
 
     @Override
-    public boolean handleMessage(JsonMessage.SystemMessage message) {
+    public void onSessionReady() {
+        handleInitialReady();
+    }
+
+    @Override
+    public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
         if (msgType == null) {
             return false;
@@ -137,18 +145,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                                                   JsonMessage.SystemMessage message) {
         switch (msgType) {
             case READY:
-                // CLI is ready, now send load_model_string command
-                currentState = ProgramState.STARTING;
-                String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
-                sessionManager.sendCommand(sessionKey, loadCommand)
-                    .thenRun(() -> {
-                        statusUpdater.accept("Loading model for optimisation");
-                    })
-                    .exceptionally(throwable -> {
-                        currentState = ProgramState.FAILED;
-                        statusUpdater.accept("Failed to send model: " + throwable.getMessage());
-                        return null;
-                    });
+                handleInitialReady();
                 return true;
 
             case ERROR:
@@ -162,6 +159,29 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Ignore other messages while waiting for initial READY
                 return false;
         }
+    }
+
+    /**
+     * The initial-ready transition, callable from both the live message path and
+     * {@link #onSessionReady()} (which SessionManager.installProgram invokes when the
+     * startup rdy arrived before this program was attached). Synchronized and
+     * state-guarded so the two paths cannot both fire it.
+     */
+    private synchronized void handleInitialReady() {
+        if (currentState != ProgramState.WAITING_FOR_INITIAL_READY || modelIni == null) {
+            return;
+        }
+        currentState = ProgramState.STARTING;
+        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
+        sessionManager.sendCommand(sessionKey, loadCommand)
+            .thenRun(() -> {
+                statusUpdater.accept("Loading model for optimisation");
+            })
+            .exceptionally(throwable -> {
+                currentState = ProgramState.FAILED;
+                statusUpdater.accept("Failed to send model: " + throwable.getMessage());
+                return null;
+            });
     }
 
     /**
@@ -358,13 +378,29 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 return true;
 
             case RESULT:
-                // Optimisation complete
+                // Only run_optimisation's own result completes the program. A stopped
+                // optimisation also arrives here: the CLI returns the best-so-far
+                // solution as a normal result flagged "interrupted": true.
+                if (!"run_optimisation".equals(message.getCommand())) {
+                    return false;
+                }
                 currentState = ProgramState.COMPLETED;
-                statusUpdater.accept("Optimisation completed");
+                boolean interrupted = message.getResult() != null
+                    && message.getResult().path("interrupted").asBoolean(false);
+                statusUpdater.accept(interrupted
+                    ? "Optimisation stopped - returning best solution found so far"
+                    : "Optimisation completed");
                 if (resultCallback != null) {
                     // Pass the entire result JSON for detailed parsing
                     resultCallback.accept(extractResultMessage(message));
                 }
+                return true;
+
+            case STOPPED:
+                // Defensive: an older CLI (pre best-so-far delivery) acknowledges a stop
+                // with stp and no result payload.
+                currentState = ProgramState.COMPLETED;
+                statusUpdater.accept("Optimisation stopped");
                 return true;
 
             case ERROR:

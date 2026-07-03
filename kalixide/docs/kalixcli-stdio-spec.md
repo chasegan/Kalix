@@ -286,12 +286,15 @@ End the session and exit.
 ### 6.3 Interruption Handling
 - Frontend can send stop message during command execution
 - Only interruptible commands respond to stop messages
-- Stopped commands send stopped message with partial execution time
-  (a stopped command sends `stp` only — never `res` or `err` as well)
-- System returns to ready state after interruption (`rdy` with `rc: 2`)
 - Interruption is cooperative: simulations stop at the next timestep,
-  optimisations at the next generation/shuffle (returning the best
-  solution found so far)
+  optimisations at the next generation/shuffle
+- **Stopped simulations** send the `stp` message with partial execution time
+  (`stp` only — never `res` or `err` as well), then `rdy` with `rc: 2`
+- **Stopped optimisations return the best solution found so far as a normal
+  result**: a full `res` message (same shape as an uninterrupted run — best
+  objective, parameters, optimised model INI) with `"interrupted": true` in
+  `r`, followed by `rdy` with `rc: 0`. The work already done is delivered,
+  not discarded.
 
 ## 7. Implementation Notes
 

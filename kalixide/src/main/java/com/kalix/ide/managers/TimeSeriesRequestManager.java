@@ -284,41 +284,29 @@ public class TimeSeriesRequestManager {
      * Handle a JSON response from kalixcli and parse timeseries data if it's a get_result response
      * Call this method when you receive JSON responses from the session
      */
-    public void handleJsonResponse(String jsonResponse) {
-        JsonNode response;
-        try {
-            response = objectMapper.readTree(jsonResponse);
-        } catch (Exception e) {
-            logger.error("Failed to parse JSON response", e);
+    public void handleResultMessage(com.kalix.ide.cli.JsonMessage.SystemMessage message) {
+        // The message arrives already parsed by SessionManager - these responses carry
+        // multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
+        if (!"get_result".equals(message.getCommand())) {
             return;
         }
 
-        String messageType = response.path("m").asText();
-        if (!"res".equals(messageType)) {
-            return;
-        }
-
-        String command = response.path("cmd").asText();
-        if (!"get_result".equals(command)) {
-            return;
-        }
-
-        JsonNode result = response.path("r");
-        String seriesName = result.path("series_name").asText();
-        String kalixcliUid = response.path("uid").asText();
+        JsonNode result = message.getResult();
+        String seriesName = result != null ? result.path("series_name").asText() : "";
+        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
         String cacheKey = kalixcliUid + ":" + seriesName;
 
-        boolean success = response.path("ok").asBoolean(false);
-        if (!success) {
-            String errMsg = response.path("msg").asText("get_result command failed");
+        if (!Boolean.TRUE.equals(message.getSuccess())) {
+            String errMsg = message.getErrorMessage() != null
+                ? message.getErrorMessage() : "get_result command failed";
             logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
             failPendingFuture(cacheKey, new RuntimeException("get_result failed: " + errMsg));
             return;
         }
 
-        String dataString = result.path("data").asText();
+        String dataString = result != null ? result.path("data").asText() : "";
         // Format defaults to "pixie" if the field is absent (older responses or defensive fallback).
-        String format = result.path("format").asText("pixie");
+        String format = result != null ? result.path("format").asText("pixie") : "pixie";
         try {
             handleTimeSeriesResult(seriesName, dataString, kalixcliUid, format);
         } catch (Exception e) {

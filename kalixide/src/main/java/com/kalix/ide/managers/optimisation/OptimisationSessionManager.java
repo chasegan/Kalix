@@ -146,9 +146,6 @@ public class OptimisationSessionManager {
                         return;
                     }
 
-                    // Set the active program
-                    session.setActiveProgram(program);
-
                     // Store model and config for later use
                     sessionToModelText.put(sessionKey, modelText);
                     sessionToConfigText.put(sessionKey, configText);
@@ -172,8 +169,12 @@ public class OptimisationSessionManager {
                         onOptimisationCreated.accept(optInfo);
                     }
 
-                    // Load the model
+                    // Load the model: initialize stores the model text, then
+                    // installProgram attaches the program and replays the initial
+                    // ready signal if the CLI's startup rdy already arrived (the
+                    // race that used to wedge sessions at "Waiting for CLI").
                     program.initialize(modelText);
+                    stdioTaskManager.getSessionManager().installProgram(sessionKey, program);
 
                     logger.info("Created optimisation: {} ({})", optName, sessionKey);
 
@@ -275,19 +276,19 @@ public class OptimisationSessionManager {
         }
 
         try {
-            stdioTaskManager.terminateSession(sessionKey);
-
-            // Update status
-            lastKnownStatus.put(sessionKey, OptimisationStatus.STOPPED);
+            // Cooperative stop (protocol stp), not a force-kill: the optimiser breaks at
+            // its next generation and returns the best solution found so far, which
+            // arrives as a normal result. The session stays alive.
+            stdioTaskManager.stopSession(sessionKey);
 
             if (statusUpdater != null) {
                 String optName = sessionToOptName.get(sessionKey);
                 if (optName != null) {
-                    statusUpdater.accept("Stopped: " + optName);
+                    statusUpdater.accept("Stop requested: " + optName);
                 }
             }
 
-            logger.info("Stopped optimisation: {}", sessionKey);
+            logger.info("Stop requested for optimisation: {}", sessionKey);
         } catch (Exception e) {
             logger.error("Failed to stop optimisation: {}", sessionKey, e);
         }

@@ -46,6 +46,16 @@ public abstract class AbstractSessionProgram {
     public abstract boolean handleMessage(JsonMessage.SystemMessage message);
 
     /**
+     * Invoked by {@link SessionManager#installProgram} when the program is attached to a
+     * session that has ALREADY emitted its initial {@code rdy} (consumed generically before
+     * the program existed). Programs that wait for the initial ready must treat this
+     * exactly like receiving that {@code rdy} — otherwise a fast-starting CLI wedges the
+     * program in its waiting state forever. Default: no-op.
+     */
+    public void onSessionReady() {
+    }
+
+    /**
      * Checks if the program is still active (not completed or failed).
      *
      * @return true if the program is still active

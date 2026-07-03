@@ -164,6 +164,12 @@ public class RunContextMenuManager {
         renameItem.addActionListener(e -> renameRun());
         contextMenu.add(renameItem);
 
+        // Cooperative stop of a running simulation (protocol stp): the engine finishes
+        // its current timestep and the session stays alive. Enabled only while running.
+        JMenuItem stopItem = new JMenuItem("Stop");
+        stopItem.addActionListener(e -> stopRun());
+        contextMenu.add(stopItem);
+
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> removeRun());
         contextMenu.add(removeItem);
@@ -210,7 +216,9 @@ public class RunContextMenuManager {
                 // but get different actions.
                 DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
                 Object userObject = node.getUserObject();
-                if (userObject instanceof RunInfo) {
+                if (userObject instanceof RunInfo runInfo) {
+                    stopItem.setEnabled(runInfo.getSession().getState()
+                        == SessionManager.SessionState.RUNNING);
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
@@ -452,6 +460,29 @@ public class RunContextMenuManager {
     /**
      * Removes a run from the context menu - terminates if active and removes from list.
      */
+    /**
+     * Sends a cooperative stop (protocol stp) to the selected run's session. The run
+     * transitions to stopped when the engine acknowledges at its next timestep; the
+     * session itself stays alive.
+     */
+    private void stopRun() {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
+
+        String sessionKey = runInfo.getSession().getSessionKey();
+        stdioTaskManager.stopSession(sessionKey).exceptionally(throwable -> {
+            SwingUtilities.invokeLater(() -> {
+                if (statusUpdater != null) {
+                    statusUpdater.accept("Failed to stop run: " + throwable.getMessage());
+                }
+            });
+            return null;
+        });
+    }
+
     public void removeRun() {
         TreePath selectedPath = runTree.getSelectionPath();
         if (selectedPath == null) return;

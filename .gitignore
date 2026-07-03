@@ -93,3 +93,5 @@ Thumbs.db
 # Ignored folder for large test data
 ignored/
 notion_integration
+# Claude Code agent worktrees (session-local)
+.claude/worktrees/
