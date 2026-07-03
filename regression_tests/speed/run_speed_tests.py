@@ -6,19 +6,23 @@ Automatically finds every numbered subdirectory containing a kalix.ini, runs it
 several times with the release CLI binary, and reports per-phase timing
 statistics (loading / simulation / output / total, as printed by `kalix sim -p`).
 
-Results are printed as a table and appended to speed_log.txt together with the
-git commit and machine identity, so the log accumulates a timing history for
-this machine across engine changes.
+Results are printed as a table and appended to speed_results.csv — a long-term
+database (one row per test per run) recording the commit, environment, and
+per-phase metrics, so the team can track performance drift across months of
+development. Rows from a dirty working tree are flagged (commit_dirty) so drift
+analysis can filter them.
 
-Interpretation: prefer the MIN column when comparing engine changes — it is the
-least contaminated by OS scheduling noise. Medians are shown for context.
-Numbers are only comparable within one machine.
+Interpretation: prefer the MIN columns when comparing engine changes — they are
+the least contaminated by OS scheduling noise. Medians are shown for context.
+Numbers are only comparable within one machine (hostname).
 
 Usage:
     ./run_speed_tests.py             # run all tests
     ./run_speed_tests.py 2           # run only tests whose folder starts with "2"
 """
 
+import csv
+import getpass
 import json
 import platform
 import re
@@ -105,19 +109,69 @@ def run_test(binary, test_dir, tmp_dir):
     return stats
 
 
-def git_commit():
+def run_cmd(args, cwd=HERE):
     try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=HERE, capture_output=True, text=True,
-        ).stdout.strip()
-        dirty = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=HERE, capture_output=True, text=True,
-        ).stdout.strip()
-        return commit + ("+dirty" if dirty else "")
+        return subprocess.run(args, cwd=cwd, capture_output=True, text=True).stdout.strip()
     except OSError:
-        return "unknown"
+        return ""
+
+
+def cpu_class():
+    """Best-effort CPU model string, per platform."""
+    system = platform.system()
+    if system == "Darwin":
+        return run_cmd(["sysctl", "-n", "machdep.cpu.brand_string"]) or platform.processor()
+    if system == "Linux":
+        try:
+            with open("/proc/cpuinfo") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        return line.split(":", 1)[1].strip()
+        except OSError:
+            pass
+    return platform.processor() or platform.machine()
+
+
+def environment_info():
+    """Identity + environment fields recorded with every result row."""
+    dirty = bool(run_cmd(["git", "status", "--porcelain"]))
+    version_file = HERE.parent.parent / "VERSION"
+    try:
+        kalix_version = version_file.read_text().strip()
+    except OSError:
+        kalix_version = "unknown"
+    return {
+        "test_date": datetime.now().isoformat(timespec="seconds"),
+        "commit_sha": run_cmd(["git", "rev-parse", "--short", "HEAD"]) or "unknown",
+        "commit_dirty": str(dirty).lower(),
+        "commit_date": run_cmd(["git", "show", "-s", "--format=%cI", "HEAD"]) or "unknown",
+        "kalix_version": kalix_version,
+        "user": run_cmd(["git", "config", "user.name"]) or getpass.getuser(),
+        "hostname": platform.node(),
+        "os": f"{platform.system()} {platform.release()} {platform.machine()}",
+        "cpu_class": cpu_class(),
+        "rustc_version": run_cmd(["rustc", "--version"]) or "unknown",
+    }
+
+
+RESULTS_CSV = HERE / "speed_results.csv"
+CSV_FIELDS = [
+    "test_date", "commit_sha", "commit_dirty", "commit_date", "kalix_version",
+    "user", "hostname", "os", "cpu_class", "rustc_version",
+    "test_name", "repeats",
+    "sim_min_ms", "sim_median_ms", "sim_sd_ms",
+    "load_min_ms", "output_min_ms", "total_min_ms",
+]
+
+
+def append_results(rows):
+    """Append result rows to the long-term CSV database (header if new file)."""
+    is_new = not RESULTS_CSV.exists()
+    with open(RESULTS_CSV, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        if is_new:
+            writer.writeheader()
+        writer.writerows(rows)
 
 
 def main():
@@ -127,34 +181,36 @@ def main():
     if not tests:
         raise SystemExit("No speed tests found.")
 
-    commit = git_commit()
-    machine = f"{platform.node()} {platform.machine()}"
-    timestamp = datetime.now().isoformat(timespec="seconds")
-
-    print(f"Kalix speed tests | commit {commit} | {machine} | {timestamp}\n")
+    env = environment_info()
+    commit = env["commit_sha"] + ("+dirty" if env["commit_dirty"] == "true" else "")
+    print(f"Kalix speed tests | commit {commit} | {env['hostname']} | {env['test_date']}\n")
     header = (f"{'test':26s} {'n':>3s}  "
               f"{'sim min':>9s} {'sim med':>9s} {'sim sd':>7s}  "
               f"{'load min':>9s} {'out min':>9s} {'total min':>10s}")
     print(header)
     print("-" * len(header))
 
-    log_lines = [f"\n[{timestamp}] commit={commit} machine={machine}"]
+    rows = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         for test_dir in tests:
             s = run_test(binary, test_dir, tmp_dir)
             print(f"{test_dir.name:26s} {s['repeats']:3d}  "
                   f"{s['sim']['min']:8.1f}m {s['sim']['median']:8.1f}m {s['sim']['sd']:6.1f}m  "
                   f"{s['load']['min']:8.1f}m {s['output']['min']:8.1f}m {s['total']['min']:9.1f}m")
-            log_lines.append(
-                f"  {test_dir.name}: n={s['repeats']} "
-                f"sim_min={s['sim']['min']:.1f} sim_median={s['sim']['median']:.1f} "
-                f"sim_sd={s['sim']['sd']:.2f} load_min={s['load']['min']:.1f} "
-                f"output_min={s['output']['min']:.1f} total_min={s['total']['min']:.1f}"
-            )
+            rows.append({
+                **env,
+                "test_name": test_dir.name,
+                "repeats": s["repeats"],
+                "sim_min_ms": f"{s['sim']['min']:.1f}",
+                "sim_median_ms": f"{s['sim']['median']:.1f}",
+                "sim_sd_ms": f"{s['sim']['sd']:.2f}",
+                "load_min_ms": f"{s['load']['min']:.1f}",
+                "output_min_ms": f"{s['output']['min']:.1f}",
+                "total_min_ms": f"{s['total']['min']:.1f}",
+            })
 
-    with open(HERE / "speed_log.txt", "a") as f:
-        f.write("\n".join(log_lines) + "\n")
-    print("\nAppended results to speed_log.txt (units: ms).")
+    append_results(rows)
+    print(f"\nAppended {len(rows)} row(s) to speed_results.csv (units: ms).")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,11 @@ regenerate.
 Reading the numbers
 -------------------
 - Compare the MIN of repeated runs: it is the least contaminated by OS noise.
-- Numbers are only comparable within one machine.
-- speed_log.txt accumulates a history (timestamp, git commit, machine) so
-  engine changes can be tracked over time. Re-run the suite whenever you touch
+- Numbers are only comparable within one machine (join on hostname).
+- speed_results.csv is the long-term results database: one row per test per
+  run, recording commit (sha, date, dirty flag), environment (user, hostname,
+  os, cpu, rustc), and per-phase metrics. It lets the team track performance
+  drift across months - including drift from compiler upgrades (rustc_version)
+  and releases (kalix_version). Rows with commit_dirty=true are development
+  noise; filter them for drift analysis. Re-run the suite whenever you touch
   the hot path (per manifestos/performance.md §4).
