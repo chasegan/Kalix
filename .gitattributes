@@ -1,0 +1,8 @@
+# Force LF line endings for regression-test INI fixtures on every platform.
+#
+# The byte-for-byte INI round-trip tests `include_str!` these fixtures and
+# compare them against the serializer's output, which is always LF (the parser
+# strips \r via str::lines()). Without this, a Windows checkout (core.autocrlf)
+# would convert them to CRLF and break the comparison. Scoped narrowly to the
+# fixtures the tests read, so no other file's checkout behaviour changes.
+regression_tests/**/*.ini text eol=lf
