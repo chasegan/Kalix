@@ -2,6 +2,7 @@ package com.kalix.ide.linter;
 
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.preferences.ui.PreferencePage;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -17,7 +18,8 @@ import java.util.List;
 /**
  * Preferences panel for configuring linter settings including rule management and schema selection.
  */
-public class LinterPreferencesPanel extends JPanel implements LinterManager.ValidationCompletionListener {
+public class LinterPreferencesPanel extends JPanel
+        implements PreferencePage, LinterManager.ValidationCompletionListener {
 
     /**
      * Callback interface for linting preference changes.
@@ -40,6 +42,21 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
     private JLabel schemaStatusLabel;
     private JTable rulesTable;
     private RulesTableModel rulesTableModel;
+
+    @Override
+    public String id() {
+        return "linter";
+    }
+
+    @Override
+    public String treePath() {
+        return "Editor/Model Linting";
+    }
+
+    @Override
+    public JComponent component() {
+        return this;
+    }
 
     public LinterPreferencesPanel(SchemaManager schemaManager, LinterManager linterManager) {
         super(new BorderLayout());
@@ -457,6 +474,7 @@ public class LinterPreferencesPanel extends JPanel implements LinterManager.Vali
     /**
      * Cleanup when panel is no longer needed.
      */
+    @Override
     public void dispose() {
         if (linterManager != null) {
             linterManager.removeValidationListener(this);

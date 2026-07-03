@@ -9,6 +9,7 @@ import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
+import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
@@ -26,6 +27,15 @@ import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.preferences.ui.DataVisualizationPreferencePage;
+import com.kalix.ide.preferences.ui.FontPreferencePage;
+import com.kalix.ide.preferences.ui.IntegrationsPreferencePage;
+import com.kalix.ide.preferences.ui.KalixCliPreferencePage;
+import com.kalix.ide.preferences.ui.LoadSavePreferencePage;
+import com.kalix.ide.preferences.ui.NodeDiagramPreferencePage;
+import com.kalix.ide.preferences.ui.PreferencePage;
+import com.kalix.ide.preferences.ui.SystemPreferencePage;
+import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
@@ -49,6 +59,7 @@ import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.KeyStroke;
 import java.io.File;
+import java.util.List;
 import java.util.prefs.Preferences;
 
 /**
@@ -1412,10 +1423,36 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showPreferences() {
-        // Create callback to handle preference changes
-        PreferencesDialog.PreferenceChangeCallback callback = new PreferencesDialog.PreferenceChangeCallback() {
-            @Override
-            public void onAutoReloadChanged(boolean enabled) {
+        // Narrow callbacks for the preference pages; each page receives only what it uses.
+        Runnable onMapPreferencesChanged = () -> {
+            // Update map display with new preferences
+            boolean showGridlines = PreferenceKeys.MAP_SHOW_GRIDLINES.get();
+            toggleGridlines(showGridlines);
+
+            // Update node theme (follow mode resolves to the application theme's)
+            setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+
+            // Sync toolbar button state
+            syncToggleButtonStates();
+        };
+
+        Runnable onFlowVizPreferencesChanged = () -> {
+            // Update all open FlowViz windows with new preferences
+            for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
+                window.reloadPreferences();
+            }
+        };
+
+        LinterPreferencesPanel linterPage = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
+        // Sync the toolbar button state when linting is enabled/disabled
+        linterPage.setLintingChangeCallback(enabled -> syncToggleButtonStates());
+
+        ThemePreferencePage themePage = new ThemePreferencePage(themeManager, onMapPreferencesChanged);
+
+        // Tree order: the dialog derives both its navigation tree and its cards from this list.
+        List<PreferencePage> pages = List.of(
+            new SystemPreferencePage(this::clearAppData),
+            new LoadSavePreferencePage(enabled -> {
                 // Use the existing method to properly update file watching
                 toggleAutoReload(enabled);
 
@@ -1424,61 +1461,18 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
                 // Sync toolbar button state
                 syncToggleButtonStates();
-            }
+            }),
+            themePage,
+            new FontPreferencePage(textEditor, ThemeManager::notifyFontSizeChanged),
+            linterPage,
+            new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates()),
+            new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
+            new KalixCliPreferencePage(),
+            new IntegrationsPreferencePage()
+        );
 
-            @Override
-            public void onLintingChanged(boolean enabled) {
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onGridlinesChanged(boolean visible) {
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onFlowVizPreferencesChanged() {
-                // Update all open FlowViz windows with new preferences
-                for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
-                    window.reloadPreferences();
-                }
-            }
-
-            @Override
-            public void onMapPreferencesChanged() {
-                // Update map display with new preferences
-                boolean showGridlines = PreferenceKeys.MAP_SHOW_GRIDLINES.get();
-                toggleGridlines(showGridlines);
-
-                // Update node theme (follow mode resolves to the application theme's)
-                setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
-
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onSystemActionRequested(String action) {
-                if ("clearAppData".equals(action)) {
-                    clearAppData();
-                }
-            }
-
-            @Override
-            public void onFontSizeChanged(int fontSize) {
-                // Use centralized ThemeManager to update all components
-                ThemeManager.notifyFontSizeChanged(fontSize);
-            }
-        };
-
-        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, schemaManager, callback);
-        boolean preferencesChanged = preferencesDialog.showDialog();
-
-        if (preferencesChanged) {
-            updateStatus("Preferences updated");
-        }
+        // Preferences apply immediately, so the dialog has no result to report.
+        new PreferencesDialog(this, pages, themePage).showDialog();
     }
     
     @Override

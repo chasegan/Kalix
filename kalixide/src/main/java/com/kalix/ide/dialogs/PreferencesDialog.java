@@ -1,112 +1,90 @@
 package com.kalix.ide.dialogs;
 
-import com.kalix.ide.cli.KalixCliLocator;
-import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.editor.EnhancedTextEditor;
-import com.kalix.ide.linter.LinterPreferencesPanel;
-import com.kalix.ide.linter.SchemaManager;
-import com.kalix.ide.managers.ThemeManager;
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.themes.KalixTheme;
-import com.kalix.ide.themes.ThemePreferences;
-import com.kalix.ide.themes.ThemeRegistry;
-import com.kalix.ide.utils.Platform;
-import com.kalix.ide.utils.PlatformUtils;
-import com.kalix.ide.utils.TerminalLauncher;
+import com.kalix.ide.preferences.ui.PreferencePage;
 
-import javax.swing.*;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTree;
+import javax.swing.KeyStroke;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
-import java.io.File;
-import java.util.ArrayList;
+import java.awt.event.KeyEvent;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 /**
  * Professional preferences dialog with tree-based navigation.
- * Organizes preferences into hierarchical categories with immediate application of changes.
+ *
+ * <p>Both the navigation tree and the card panel are built from one ordered list
+ * of {@link PreferencePage}s: each page's {@link PreferencePage#treePath()} places
+ * it in the tree (category nodes are created in encounter order), and selecting
+ * its tree node shows its component, mapped by identity — a page cannot appear in
+ * the tree without its content, or vice versa.
+ *
+ * <p>Preferences apply immediately as the user changes them; free-text fields
+ * additionally commit on every dialog-close path via
+ * {@link PreferencePage#commitPendingEdits()}.
  */
 public class PreferencesDialog extends JDialog {
 
-    private final JFrame parent;
-    private final ThemeManager themeManager;
-    private final EnhancedTextEditor textEditor;
-    private final SchemaManager schemaManager;
-
-    // Callback interface for preference changes
-    public interface PreferenceChangeCallback {
-        void onAutoReloadChanged(boolean enabled);
-        void onLintingChanged(boolean enabled);
-        void onGridlinesChanged(boolean visible);
-        void onFlowVizPreferencesChanged();
-        void onMapPreferencesChanged();
-        void onSystemActionRequested(String action);
-        void onFontSizeChanged(int fontSize);
-    }
-
-    private PreferenceChangeCallback changeCallback;
-
-    /**
-     * Commits for free-text fields, run on dialog close. Free-text fields do not
-     * save per keystroke (each write serializes the whole preference file, and
-     * half-typed values are not meaningful); instead each field registers a
-     * commit here and also runs it on Enter and on focus-lost. Commits skip
-     * writing when the value is unchanged, so running them repeatedly is free.
-     */
-    private final List<Runnable> pendingTextCommits = new ArrayList<>();
+    private final List<PreferencePage> pages;
+    private final PreferencePage initialPage;
 
     // Main components
     private JTree preferencesTree;
     private JPanel contentPanel;
     private CardLayout cardLayout;
 
-    // Preference panels
-    private ThemePreferencePanel themePanel;
-    private FilePreferencePanel filePanel;
-    private LoadSavePreferencePanel loadSavePanel;
-    private KalixCliPreferencePanel kalixCliPanel;
-    private CompressionPreferencePanel compressionPanel;
-    private LinterPreferencesPanel linterPanel;
-    private SystemPreferencePanel systemPanel;
-    private NodeDiagramPreferencePanel nodeDiagramPanel;
-    private FontPreferencePanel fontPanel;
+    /** Tree node for each page, for programmatic selection. */
+    private final Map<PreferencePage, DefaultMutableTreeNode> pageTreeNodes = new IdentityHashMap<>();
 
-    // Panel identifiers
-    private static final String THEME_PANEL = "theme";
-    private static final String FILE_PANEL = "file";
-    private static final String LOAD_SAVE_PANEL = "loadsave";
-    private static final String KALIXCLI_PANEL = "kalixcli";
-    private static final String COMPRESSION_PANEL = "compression";
-    private static final String LINTER_PANEL = "linter";
-    private static final String SYSTEM_PANEL = "system";
-    private static final String NODE_DIAGRAM_PANEL = "nodediagram";
-    private static final String FONT_PANEL = "font";
+    /** A page's leaf entry in the navigation tree. */
+    private record PageTreeItem(PreferencePage page) {
+        /** The tree displays the last segment of the page's tree path. */
+        @Override
+        public String toString() {
+            String path = page.treePath();
+            return path.substring(path.lastIndexOf('/') + 1);
+        }
+    }
 
     /**
-     * Creates a new professional preferences dialog with callback.
+     * Creates a new preferences dialog.
+     *
+     * @param parent      the owning frame
+     * @param pages       the pages, in tree order
+     * @param initialPage the page selected when the dialog opens (must be in {@code pages})
      */
-    public PreferencesDialog(JFrame parent, ThemeManager themeManager, EnhancedTextEditor textEditor,
-                           SchemaManager schemaManager, PreferenceChangeCallback changeCallback) {
+    public PreferencesDialog(JFrame parent, List<PreferencePage> pages, PreferencePage initialPage) {
         super(parent, "Preferences", true);
-        this.parent = parent;
-        this.themeManager = themeManager;
-        this.textEditor = textEditor;
-        this.schemaManager = schemaManager;
-        this.changeCallback = changeCallback;
+        this.pages = List.copyOf(pages);
+        this.initialPage = initialPage;
 
-        initializeDialog();
+        initializeDialog(parent);
     }
 
     /**
      * Initializes the dialog layout and components.
      */
-    private void initializeDialog() {
+    private void initializeDialog(JFrame parent) {
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -116,13 +94,13 @@ public class PreferencesDialog extends JDialog {
         treeScrollPane.setPreferredSize(new Dimension(200, 0));
         treeScrollPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 5));
 
-        // Create content panel with card layout
+        // Create content panel with one card per page, keyed by page id
         cardLayout = new CardLayout();
         contentPanel = new JPanel(cardLayout);
         contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 5, 10, 10));
-
-        // Create and add preference panels
-        createPreferencePanels();
+        for (PreferencePage page : pages) {
+            contentPanel.add(page.component(), page.id());
+        }
 
         // Create main split pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -144,7 +122,7 @@ public class PreferencesDialog extends JDialog {
 
         // Add Escape key binding to close dialog
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-            .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), "closeDialog");
+            .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeDialog");
         getRootPane().getActionMap().put("closeDialog", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -152,40 +130,46 @@ public class PreferencesDialog extends JDialog {
             }
         });
 
-        // Select first item by default
-        preferencesTree.setSelectionRow(1); // Select "Theme" initially
+        // Select the initial page (its selection listener shows the matching card)
+        DefaultMutableTreeNode initialNode = pageTreeNodes.get(initialPage);
+        if (initialNode != null) {
+            preferencesTree.setSelectionPath(new TreePath(initialNode.getPath()));
+        }
     }
 
     /**
-     * Creates the preferences tree structure.
+     * Creates the preferences tree from the page list. Each page's tree path
+     * places it under category nodes created on demand, in encounter order, so
+     * the tree structure and the page list can never drift apart.
      */
     private void createPreferencesTree() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("Preferences");
+        Map<String, DefaultMutableTreeNode> categoryNodes = new HashMap<>();
 
-        // General branch (first item)
-        root.add(new DefaultMutableTreeNode("General"));
+        for (PreferencePage page : pages) {
+            String[] segments = page.treePath().split("/");
 
-        // Editor branch
-        DefaultMutableTreeNode editor = new DefaultMutableTreeNode("Editor");
-        editor.add(new DefaultMutableTreeNode("Load and Save"));
-        editor.add(new DefaultMutableTreeNode("Themes"));
-        editor.add(new DefaultMutableTreeNode("Font"));
-        editor.add(new DefaultMutableTreeNode("Model Linting"));
-        editor.add(new DefaultMutableTreeNode("Node Diagram"));
-        root.add(editor);
+            // Walk/create the category chain (all segments but the last)
+            DefaultMutableTreeNode parent = root;
+            StringBuilder categoryPath = new StringBuilder();
+            for (int i = 0; i < segments.length - 1; i++) {
+                if (categoryPath.length() > 0) {
+                    categoryPath.append('/');
+                }
+                categoryPath.append(segments[i]);
+                DefaultMutableTreeNode existing = categoryNodes.get(categoryPath.toString());
+                if (existing == null) {
+                    existing = new DefaultMutableTreeNode(segments[i]);
+                    parent.add(existing);
+                    categoryNodes.put(categoryPath.toString(), existing);
+                }
+                parent = existing;
+            }
 
-        // Run Management below Model Linting
-        DefaultMutableTreeNode runManagement = new DefaultMutableTreeNode("Run Management");
-        runManagement.add(new DefaultMutableTreeNode("Data & Visualization"));
-        root.add(runManagement);
-
-        // Simulation branch
-        DefaultMutableTreeNode kalix = new DefaultMutableTreeNode("Simulation");
-        kalix.add(new DefaultMutableTreeNode("Kalix"));
-        root.add(kalix);
-
-        // Integrations at the bottom
-        root.add(new DefaultMutableTreeNode("Integrations"));
+            DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new PageTreeItem(page));
+            parent.add(leaf);
+            pageTreeNodes.put(page, leaf);
+        }
 
         preferencesTree = new JTree(new DefaultTreeModel(root));
         preferencesTree.setRootVisible(false);
@@ -193,82 +177,18 @@ public class PreferencesDialog extends JDialog {
         preferencesTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
         // Expand all nodes
-        for (int i = 0; i < preferencesTree.getRowCount(); i++) {
-            preferencesTree.expandRow(i);
-        }
+        expandAllNodes();
 
-        // Add selection listener
+        // Show the selected page's card; category nodes leave the current card in place
         preferencesTree.addTreeSelectionListener(e -> {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) preferencesTree.getLastSelectedPathComponent();
-            if (node == null) return;
-
-            String nodeName = node.toString();
-            switch (nodeName) {
-                case "Load and Save":
-                    cardLayout.show(contentPanel, LOAD_SAVE_PANEL);
-                    break;
-                case "Themes":
-                    cardLayout.show(contentPanel, THEME_PANEL);
-                    break;
-                case "Font":
-                    cardLayout.show(contentPanel, FONT_PANEL);
-                    break;
-                case "Integrations":
-                    cardLayout.show(contentPanel, FILE_PANEL);
-                    break;
-                case "Kalix":
-                    cardLayout.show(contentPanel, KALIXCLI_PANEL);
-                    break;
-                case "Data & Visualization":
-                    cardLayout.show(contentPanel, COMPRESSION_PANEL);
-                    break;
-                case "Model Linting":
-                    cardLayout.show(contentPanel, LINTER_PANEL);
-                    break;
-                case "Node Diagram":
-                    cardLayout.show(contentPanel, NODE_DIAGRAM_PANEL);
-                    break;
-                case "General":
-                    cardLayout.show(contentPanel, SYSTEM_PANEL);
-                    break;
+            if (node != null && node.getUserObject() instanceof PageTreeItem item) {
+                cardLayout.show(contentPanel, item.page().id());
             }
         });
 
         // Add context menu for tree
         createTreeContextMenu();
-    }
-
-    /**
-     * Creates all preference panels and adds them to the card layout.
-     */
-    private void createPreferencePanels() {
-        themePanel = new ThemePreferencePanel();
-        filePanel = new FilePreferencePanel();
-        loadSavePanel = new LoadSavePreferencePanel();
-        kalixCliPanel = new KalixCliPreferencePanel();
-        compressionPanel = new CompressionPreferencePanel();
-        linterPanel = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
-
-        // Set callback to notify when linting is enabled/disabled
-        linterPanel.setLintingChangeCallback(enabled -> {
-            if (changeCallback != null) {
-                changeCallback.onLintingChanged(enabled);
-            }
-        });
-
-        systemPanel = new SystemPreferencePanel();
-        nodeDiagramPanel = new NodeDiagramPreferencePanel();
-        fontPanel = new FontPreferencePanel();
-
-        contentPanel.add(themePanel, THEME_PANEL);
-        contentPanel.add(filePanel, FILE_PANEL);
-        contentPanel.add(loadSavePanel, LOAD_SAVE_PANEL);
-        contentPanel.add(kalixCliPanel, KALIXCLI_PANEL);
-        contentPanel.add(compressionPanel, COMPRESSION_PANEL);
-        contentPanel.add(linterPanel, LINTER_PANEL);
-        contentPanel.add(systemPanel, SYSTEM_PANEL);
-        contentPanel.add(nodeDiagramPanel, NODE_DIAGRAM_PANEL);
-        contentPanel.add(fontPanel, FONT_PANEL);
     }
 
     /**
@@ -323,37 +243,11 @@ public class PreferencesDialog extends JDialog {
     }
 
     /**
-     * Saves any pending changes from free-text fields that haven't been committed yet.
+     * Shows the preferences dialog (modal; returns when it closes). Preferences
+     * apply immediately as the user changes them, so there is no result to report.
      */
-    private void savePendingChanges() {
-        pendingTextCommits.forEach(Runnable::run);
-    }
-
-    /**
-     * Wires a free-text field to commit on Enter and on focus-lost, and registers
-     * the commit to run when the dialog closes. The commit itself must skip
-     * writing when the value is unchanged.
-     */
-    private void commitOnFocusLostAndClose(JTextField field, Runnable commit) {
-        field.addActionListener(e -> commit.run());
-        field.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent e) {
-                commit.run();
-            }
-        });
-        pendingTextCommits.add(commit);
-    }
-
-    /**
-     * Shows the preferences dialog.
-     * @return true if any preferences were changed, false otherwise
-     */
-    public boolean showDialog() {
+    public void showDialog() {
         setVisible(true);
-        // Since preferences apply immediately, we return false for now
-        // Future implementation could track changes for status updates
-        return false;
     }
 
     /**
@@ -362,786 +256,9 @@ public class PreferencesDialog extends JDialog {
     @Override
     public void dispose() {
         // Commit free-text fields on every close path (Close button, Escape, window decoration)
-        savePendingChanges();
-        // Cleanup linter panel listeners
-        if (linterPanel != null) {
-            linterPanel.dispose();
-        }
+        pages.forEach(PreferencePage::commitPendingEdits);
+        // Release any listeners the pages registered
+        pages.forEach(PreferencePage::dispose);
         super.dispose();
-    }
-
-    /**
-     * Base class for all preference panels.
-     */
-    private abstract class PreferencePanel extends JPanel {
-        public PreferencePanel(String title) {
-            setLayout(new BorderLayout());
-            setBorder(BorderFactory.createTitledBorder(title));
-        }
-
-        protected JPanel createFormPanel() {
-            JPanel panel = new JPanel(new GridBagLayout());
-            panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-            return panel;
-        }
-    }
-
-    /**
-     * Theme preferences panel.
-     */
-    private class ThemePreferencePanel extends PreferencePanel {
-        /** Combo entry meaning "no explicit choice — follow the application theme". */
-        private static final String FOLLOW_ITEM = "Follow application theme";
-
-        private JComboBox<KalixTheme> themeComboBox;
-        private JComboBox<Object> nodeThemeComboBox;
-        private JComboBox<Object> syntaxThemeComboBox;
-
-        public ThemePreferencePanel() {
-            super("Themes");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Application theme selection
-            gbc.gridx = 0; gbc.gridy = 0;
-            formPanel.add(new JLabel("Application Theme:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            themeComboBox = new JComboBox<>(ThemeRegistry.all().toArray(new KalixTheme[0]));
-            themeComboBox.setRenderer(themeDisplayNameRenderer());
-            themeComboBox.setSelectedItem(themeManager.getCurrentTheme());
-            themeComboBox.addActionListener(e -> {
-                KalixTheme selectedTheme = (KalixTheme) themeComboBox.getSelectedItem();
-                if (selectedTheme != null && selectedTheme != themeManager.getCurrentTheme()) {
-                    themeManager.switchTheme(selectedTheme);
-                }
-            });
-            formPanel.add(themeComboBox, gbc);
-
-            // Node theme selection: follow the application theme (default) or an explicit palette
-            gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("Node Theme:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            nodeThemeComboBox = new JComboBox<>(themeItemsWithFollow());
-            nodeThemeComboBox.setRenderer(themeDisplayNameRenderer());
-            nodeThemeComboBox.setSelectedItem(
-                ThemePreferences.explicitNodeTheme().<Object>map(t -> t).orElse(FOLLOW_ITEM));
-
-            nodeThemeComboBox.addActionListener(e -> {
-                Object selected = nodeThemeComboBox.getSelectedItem();
-                if (selected instanceof KalixTheme theme) {
-                    ThemePreferences.storeNodeTheme(theme);
-                } else {
-                    ThemePreferences.storeNodeThemeFollow();
-                }
-                // Notify callback to update map display (re-resolves the preference)
-                if (changeCallback != null) {
-                    changeCallback.onMapPreferencesChanged();
-                }
-            });
-            formPanel.add(nodeThemeComboBox, gbc);
-
-            // Syntax theme selection: follow the application theme (default) or an explicit palette
-            gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("Syntax Theme:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            syntaxThemeComboBox = new JComboBox<>(themeItemsWithFollow());
-            syntaxThemeComboBox.setRenderer(themeDisplayNameRenderer());
-            syntaxThemeComboBox.setSelectedItem(
-                ThemePreferences.explicitSyntaxTheme().<Object>map(t -> t).orElse(FOLLOW_ITEM));
-
-            syntaxThemeComboBox.addActionListener(e -> {
-                Object selected = syntaxThemeComboBox.getSelectedItem();
-                if (selected instanceof KalixTheme theme) {
-                    ThemePreferences.storeSyntaxTheme(theme);
-                } else {
-                    ThemePreferences.storeSyntaxThemeFollow();
-                }
-                // Apply the now-effective syntax palette to all editors
-                if (themeManager != null) {
-                    themeManager.updateSyntaxTheme(ThemePreferences.effectiveSyntaxTheme());
-                }
-            });
-            formPanel.add(syntaxThemeComboBox, gbc);
-
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-
-        /** The follow entry followed by every registered theme, in registry order. */
-        private Object[] themeItemsWithFollow() {
-            java.util.List<Object> items = new java.util.ArrayList<>();
-            items.add(FOLLOW_ITEM);
-            items.addAll(ThemeRegistry.all());
-            return items.toArray();
-        }
-
-        /** Renders KalixTheme items by display name; other items (the follow entry) as-is. */
-        private DefaultListCellRenderer themeDisplayNameRenderer() {
-            return new DefaultListCellRenderer() {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if (value instanceof KalixTheme theme) {
-                        setText(theme.displayName());
-                    }
-                    return this;
-                }
-            };
-        }
-    }
-
-    /**
-     * File preferences panel.
-     */
-    private class FilePreferencePanel extends PreferencePanel {
-        private JTextField externalEditorField;
-        private JTextField activationField;
-        private JTextField macosTerminalAppField;
-
-        public FilePreferencePanel() {
-            super("Integrations");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // External editor command
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("External Editor Command:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            externalEditorField = new JTextField(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get());
-            externalEditorField.setToolTipText("Command to launch an external editor. Use <folder_path> for the folder containing the current file and <file_path> for the full path to the current file.");
-            commitOnFocusLostAndClose(externalEditorField, this::saveExternalEditorCommand);
-            formPanel.add(externalEditorField, gbc);
-
-            // Terminal activation command (per-platform). Shows the effective value, which on
-            // Windows includes the migrated legacy command; saving writes the new per-platform key.
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("Terminal Activation Command:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            activationField = new JTextField(TerminalLauncher.getActivationCommand());
-            activationField.setToolTipText("Shell command(s) run after entering the working directory, e.g. to "
-                + "activate a Python/conda environment (\"conda activate myenv\"). Leave blank for a plain terminal.");
-            commitOnFocusLostAndClose(activationField, this::saveActivationCommand);
-            formPanel.add(activationField, gbc);
-
-            // macOS terminal application (only relevant on macOS).
-            if (PlatformUtils.getCurrentPlatform() == Platform.MACOS) {
-                gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-                formPanel.add(new JLabel("macOS Terminal App:"), gbc);
-
-                gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-                macosTerminalAppField = new JTextField(PreferenceKeys.FILE_MACOS_TERMINAL_APP.get());
-                macosTerminalAppField.setToolTipText("Terminal application to launch on macOS. "
-                    + "\"Terminal\" and \"iTerm\" support activation; others (Warp, Ghostty, …) open at the folder only.");
-                commitOnFocusLostAndClose(macosTerminalAppField, this::saveMacosTerminalApp);
-                formPanel.add(macosTerminalAppField, gbc);
-            }
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-
-        private void saveExternalEditorCommand() {
-            String command = externalEditorField.getText().trim();
-            if (!command.equals(PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get())) {
-                PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.set(command);
-            }
-        }
-
-        private void saveActivationCommand() {
-            String command = activationField.getText().trim();
-            // Compare against the effective command (which the field was seeded with),
-            // so an untouched field never writes - in particular it does not turn the
-            // Windows legacy-key fallback into an explicit per-platform value.
-            if (!command.equals(TerminalLauncher.getActivationCommand())) {
-                TerminalLauncher.activationPreference().set(command);
-            }
-        }
-
-        private void saveMacosTerminalApp() {
-            String app = macosTerminalAppField.getText().trim();
-            if (!app.equals(PreferenceKeys.FILE_MACOS_TERMINAL_APP.get())) {
-                PreferenceKeys.FILE_MACOS_TERMINAL_APP.set(app);
-            }
-        }
-    }
-
-    /**
-     * Load and Save preferences panel.
-     */
-    private class LoadSavePreferencePanel extends PreferencePanel {
-        private JCheckBox autoReloadCheckBox;
-        private JCheckBox promptSaveOnExitCheckBox;
-
-        public LoadSavePreferencePanel() {
-            super("Load and Save");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Auto-reload setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            autoReloadCheckBox = new JCheckBox("Auto-reload clean files when changed externally");
-            autoReloadCheckBox.setSelected(PreferenceKeys.FILE_AUTO_RELOAD.get());
-            autoReloadCheckBox.setToolTipText("Automatically reload clean (unchanged) files when modified by external programs. Files with unsaved changes will not be reloaded to prevent data loss.");
-            autoReloadCheckBox.addActionListener(e -> {
-                boolean enabled = autoReloadCheckBox.isSelected();
-                PreferenceKeys.FILE_AUTO_RELOAD.set(enabled);
-
-                // Notify callback to update file watching
-                if (changeCallback != null) {
-                    changeCallback.onAutoReloadChanged(enabled);
-                }
-            });
-            formPanel.add(autoReloadCheckBox, gbc);
-
-            // Prompt save on exit setting
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
-            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            promptSaveOnExitCheckBox = new JCheckBox("Prompt to save unsaved changes before closing");
-            promptSaveOnExitCheckBox.setSelected(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.get());
-            promptSaveOnExitCheckBox.setToolTipText("Show a confirmation dialog when closing the application with unsaved changes, giving you the option to save your work.");
-            promptSaveOnExitCheckBox.addActionListener(e -> {
-                boolean enabled = promptSaveOnExitCheckBox.isSelected();
-                PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.set(enabled);
-            });
-            formPanel.add(promptSaveOnExitCheckBox, gbc);
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-    }
-
-    /**
-     * Kalix CLI preferences panel.
-     */
-    private class KalixCliPreferencePanel extends PreferencePanel {
-        private JTextField binaryPathField;
-        private JButton browseButton;
-        private JButton testButton;
-        private JLabel statusLabel;
-        private JTextArea pathLabel;
-
-        public KalixCliPreferencePanel() {
-            super("Kalix");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Info area
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 1.0; gbc.weighty = 0;
-            JTextArea infoArea = new JTextArea();
-            infoArea.setEditable(false);
-            infoArea.setOpaque(false);
-            infoArea.setWrapStyleWord(true);
-            infoArea.setLineWrap(true);
-            infoArea.setFocusable(false);
-            infoArea.setText(
-                    "Specify directories to search for the Kalix CLI binary. " +
-                    "Multiple directories can be specified using ';' as a delimiter " +
-                    "(e.g., /usr/local/bin;/opt/kalix/bin). " +
-                    "If left empty, the system will search for 'kalix' in the system PATH.");
-            formPanel.add(infoArea, gbc);
-
-            // Binary path
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            formPanel.add(new JLabel("Path:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            binaryPathField = new JTextField(PreferenceKeys.CLI_BINARY_PATH.get());
-            binaryPathField.setToolTipText("Leave empty to use kalix from system PATH. Use ';' to separate multiple directories.");
-            commitOnFocusLostAndClose(binaryPathField, this::saveBinaryPath);
-            formPanel.add(binaryPathField, gbc);
-
-            gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            browseButton = new JButton("Add...");
-            browseButton.addActionListener(this::browseBinary);
-            formPanel.add(browseButton, gbc);
-
-            // Test and status
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
-            testButton = new JButton("Test");
-            testButton.addActionListener(this::testConnection);
-            formPanel.add(testButton, gbc);
-
-            gbc.gridx = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            statusLabel = new JLabel("Status: Not tested");
-            statusLabel.setFont(statusLabel.getFont().deriveFont(Font.ITALIC));
-            formPanel.add(statusLabel, gbc);
-
-            // Path label (shows actual binary path)
-            gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0; gbc.weighty = 1.0;
-            pathLabel = new JTextArea("");
-            pathLabel.setEditable(false);
-            pathLabel.setOpaque(false);
-            pathLabel.setLineWrap(true);
-            pathLabel.setWrapStyleWord(false);  // Wrap at character boundaries for paths
-            pathLabel.setFont(pathLabel.getFont().deriveFont(Font.PLAIN, 11f));
-            pathLabel.setForeground(Color.GRAY);
-            pathLabel.setFocusable(false);  // Prevent cursor from appearing
-            formPanel.add(pathLabel, gbc);
-            add(formPanel, BorderLayout.CENTER);
-
-            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 0;
-            JTextArea exeLocInfoArea = new JTextArea();
-            exeLocInfoArea.setEditable(false);
-            exeLocInfoArea.setOpaque(false);
-            exeLocInfoArea.setWrapStyleWord(true);
-            exeLocInfoArea.setLineWrap(true);
-            exeLocInfoArea.setFocusable(false);
-            StringBuilder exeLocInfoAreaTextBuilder = new StringBuilder();
-            Optional<File> exeLoc = KalixCliLocator.getExecutableLocation();
-            if (exeLoc.isPresent()) {
-                exeLocInfoAreaTextBuilder.append("\n");
-                exeLocInfoAreaTextBuilder.append("KalixIDE executable located at: ");
-                exeLocInfoAreaTextBuilder.append(exeLoc.get());
-            }
-            String infoAreaText = exeLocInfoAreaTextBuilder.toString();
-            exeLocInfoArea.setText(infoAreaText);
-            formPanel.add(exeLocInfoArea, gbc);
-        }
-
-        private void saveBinaryPath() {
-            String path = binaryPathField.getText().trim();
-            if (!path.equals(PreferenceKeys.CLI_BINARY_PATH.get())) {
-                PreferenceKeys.CLI_BINARY_PATH.set(path);
-            }
-        }
-
-        private void browseBinary(ActionEvent e) {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Add Directory to Search Path");
-            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-
-            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selectedDir = fileChooser.getSelectedFile();
-
-                // Convert to relative path (relative to current working directory)
-                java.nio.file.Path currentDir = java.nio.file.Paths.get("").toAbsolutePath();
-                java.nio.file.Path selectedPath = selectedDir.toPath().toAbsolutePath();
-                java.nio.file.Path relativePath;
-
-                try {
-                    relativePath = currentDir.relativize(selectedPath);
-                } catch (IllegalArgumentException ex) {
-                    // Paths on different drives (Windows) - use absolute path
-                    relativePath = selectedPath;
-                }
-
-                String pathToAdd = relativePath.toString();
-
-                // Append to existing path with ';' delimiter
-                String currentPath = binaryPathField.getText().trim();
-                String newPath;
-                if (currentPath.isEmpty()) {
-                    newPath = pathToAdd;
-                } else {
-                    newPath = currentPath + ";" + pathToAdd;
-                }
-
-                binaryPathField.setText(newPath);
-                PreferenceKeys.CLI_BINARY_PATH.set(newPath);
-                statusLabel.setText("Status: Path changed - click Test");
-                statusLabel.setForeground(Color.BLUE);
-                pathLabel.setText("");
-            }
-        }
-
-        private void testConnection(ActionEvent e) {
-            String path = binaryPathField.getText().trim();
-
-            // Save the path first
-            PreferenceKeys.CLI_BINARY_PATH.set(path);
-
-            testButton.setEnabled(false);
-            statusLabel.setText("Status: Testing...");
-            statusLabel.setForeground(Color.BLUE);
-            pathLabel.setText("");
-
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    // Use findKalixCli which handles semicolon-delimited paths
-                    Optional<com.kalix.ide.cli.KalixCliLocator.CliLocation> location =
-                        com.kalix.ide.cli.KalixCliLocator.findKalixCli(path);
-
-                    if (location.isPresent()) {
-                        statusLabel.setText("Status: ✓ Found - " + location.get().getVersion());
-                        statusLabel.setForeground(new Color(0, 128, 0));
-                        pathLabel.setText("Path: " + location.get().getPath().toAbsolutePath());
-                    } else {
-                        if (path.isEmpty()) {
-                            statusLabel.setText("Status: ✗ Not found in system PATH");
-                        } else {
-                            statusLabel.setText("Status: ✗ Not found in specified directories");
-                        }
-                        statusLabel.setForeground(Color.RED);
-                        pathLabel.setText("");
-                    }
-                } catch (Exception ex) {
-                    statusLabel.setText("Status: ✗ Test failed");
-                    statusLabel.setForeground(Color.RED);
-                    pathLabel.setText("");
-                } finally {
-                    testButton.setEnabled(true);
-                }
-            });
-        }
-    }
-
-    /**
-     * Compression preferences panel.
-     */
-    private class CompressionPreferencePanel extends PreferencePanel {
-        private JCheckBox precision64CheckBox;
-        private JCheckBox showCoordinatesCheckBox;
-        private JCheckBox autoYModeCheckBox;
-        private JTextField logScaleMinField;
-        private JComboBox<String> stdioFormatComboBox;
-
-        public CompressionPreferencePanel() {
-            super("Data & Visualization");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // 64-bit precision setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            precision64CheckBox = new JCheckBox("Use 64-bit precision for data export");
-            precision64CheckBox.setToolTipText("Higher accuracy but larger file sizes; 32-bit is sufficient for most applications");
-            precision64CheckBox.setSelected(PreferenceKeys.FLOWVIZ_PRECISION64.get());
-            precision64CheckBox.addActionListener(e -> {
-                PreferenceKeys.FLOWVIZ_PRECISION64.set(precision64CheckBox.isSelected());
-
-                // Notify callback to update FlowViz windows
-                if (changeCallback != null) {
-                    changeCallback.onFlowVizPreferencesChanged();
-                }
-            });
-            formPanel.add(precision64CheckBox, gbc);
-
-            // Show coordinates setting
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            showCoordinatesCheckBox = new JCheckBox("Show coordinates in FlowViz");
-            showCoordinatesCheckBox.setToolTipText("Display current cursor position in FlowViz charts");
-            showCoordinatesCheckBox.setSelected(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get());
-            showCoordinatesCheckBox.addActionListener(e -> {
-                PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(showCoordinatesCheckBox.isSelected());
-
-                // Notify callback to update FlowViz windows
-                if (changeCallback != null) {
-                    changeCallback.onFlowVizPreferencesChanged();
-                }
-            });
-            formPanel.add(showCoordinatesCheckBox, gbc);
-
-            // Auto-Y mode setting
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            autoYModeCheckBox = new JCheckBox("Enable Auto-Y mode in FlowViz");
-            autoYModeCheckBox.setToolTipText("Automatically adjust Y-axis scaling in FlowViz charts");
-            autoYModeCheckBox.setSelected(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
-            autoYModeCheckBox.addActionListener(e -> {
-                PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYModeCheckBox.isSelected());
-
-                // Notify callback to update FlowViz windows
-                if (changeCallback != null) {
-                    changeCallback.onFlowVizPreferencesChanged();
-                }
-            });
-            formPanel.add(autoYModeCheckBox, gbc);
-
-            // Log scale minimum threshold setting
-            gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
-            formPanel.add(new JLabel("Log scale auto-zoom minimum:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            logScaleMinField = new JTextField(String.valueOf(
-                PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get()), 10);
-            logScaleMinField.setToolTipText("Minimum Y value for log scale auto-zoom (prevents excessive zoom-out from tiny values)");
-            commitOnFocusLostAndClose(logScaleMinField, this::saveLogScaleMinimum);
-            formPanel.add(logScaleMinField, gbc);
-
-            // STDIO data format setting (pixie vs csv for get_result responses)
-            gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
-            formPanel.add(new JLabel("STDIO data format:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            stdioFormatComboBox = new JComboBox<>(new String[]{"pixie", "csv"});
-            stdioFormatComboBox.setRenderer(new DefaultListCellRenderer() {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value, int index,
-                                                              boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if ("pixie".equals(value)) {
-                        setText("Compressed (pixie, recommended)");
-                    } else if ("csv".equals(value)) {
-                        setText("Plain text (csv, debug)");
-                    }
-                    return this;
-                }
-            });
-            stdioFormatComboBox.setToolTipText(
-                "Wire format for timeseries results from kalixcli. 'pixie' uses Gorilla compression "
-                + "(smaller, faster); 'csv' is human-readable plain text (larger, slower).");
-            stdioFormatComboBox.setSelectedItem(
-                PreferenceKeys.STDIO_DATA_FORMAT.get());
-            stdioFormatComboBox.addActionListener(e -> {
-                String selected = (String) stdioFormatComboBox.getSelectedItem();
-                if (selected != null) {
-                    PreferenceKeys.STDIO_DATA_FORMAT.set(selected);
-                }
-            });
-            formPanel.add(stdioFormatComboBox, gbc);
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-
-        private void saveLogScaleMinimum() {
-            try {
-                double value = Double.parseDouble(logScaleMinField.getText().trim());
-                if (value > 0 && value != PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get()) {
-                    PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.set(value);
-
-                    // Notify callback to update FlowViz windows
-                    if (changeCallback != null) {
-                        changeCallback.onFlowVizPreferencesChanged();
-                    }
-                }
-            } catch (NumberFormatException ex) {
-                // Invalid input - don't save
-            }
-        }
-    }
-
-    /**
-     * System preferences panel.
-     */
-    private class SystemPreferencePanel extends PreferencePanel {
-        public SystemPreferencePanel() {
-            super("General");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // System info (moved to top)
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 1.0; gbc.weighty = 0;
-            JTextArea systemInfo = new JTextArea();
-            systemInfo.setEditable(false);
-            systemInfo.setOpaque(false);
-            systemInfo.setText("Application: " + AppConstants.APP_NAME + " " + AppConstants.APP_VERSION + "\n" +
-                "Java Version: " + System.getProperty("java.version") + "\n" +
-                "Operating System: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + "\n" +
-                "User Directory: " + System.getProperty("user.dir"));
-            formPanel.add(systemInfo, gbc);
-
-            // Preference file location
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            gbc.insets = new Insets(15, 5, 5, 5); // Extra top margin for separation
-            formPanel.add(new JLabel("Preferences File:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            gbc.insets = new Insets(15, 5, 5, 5);
-            JTextField prefFileField = new JTextField(PreferenceManager.getPreferenceFilePath());
-            prefFileField.setEditable(false);
-            formPanel.add(prefFileField, gbc);
-
-            gbc.gridx = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            gbc.insets = new Insets(15, 5, 5, 5);
-            JButton locateButton = new JButton("Locate");
-            locateButton.addActionListener(e -> {
-                try {
-                    File prefFile = new File(PreferenceManager.getPreferenceFilePath());
-                    if (Desktop.isDesktopSupported()) {
-                        Desktop.getDesktop().open(prefFile.getParentFile());
-                    }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this,
-                        "Could not open file location: " + ex.getMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            });
-            formPanel.add(locateButton, gbc);
-
-            // Clear app data section
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 1.0; gbc.weighty = 1.0;
-            gbc.insets = new Insets(15, 5, 5, 5); // Extra top margin for separation
-
-            JPanel clearDataPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            JButton clearAppDataButton = new JButton("Clear App Data...");
-            clearAppDataButton.addActionListener(e -> clearAppData());
-            clearDataPanel.add(clearAppDataButton);
-
-            JLabel clearDataLabel = new JLabel("Clear Kalix application preferences from operating system.");
-            clearDataLabel.setFont(clearDataLabel.getFont().deriveFont(Font.ITALIC));
-            clearDataPanel.add(clearDataLabel);
-
-            formPanel.add(clearDataPanel, gbc);
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-
-        private void clearAppData() {
-            // Show confirmation dialog
-            int result = JOptionPane.showConfirmDialog(
-                this,
-                "This will clear all Kalix IDE application data including:\n\n" +
-                "• Theme preferences\n" +
-                "• Node theme preferences\n" +
-                "• Recent files list\n" +
-                "• Window position and size settings\n" +
-                "• Split pane divider positions\n" +
-                "• All other saved preferences\n\n" +
-                "Are you sure you want to continue?\n\n" +
-                "Note: The application will restart after clearing data.",
-                "Clear App Data",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-            );
-
-            if (result == JOptionPane.YES_OPTION) {
-                // Notify the main application to handle the clearing
-                if (changeCallback != null) {
-                    changeCallback.onSystemActionRequested("clearAppData");
-                }
-            }
-        }
-    }
-
-    /**
-     * Node diagram preferences panel.
-     */
-    private class NodeDiagramPreferencePanel extends PreferencePanel {
-        private JCheckBox gridlinesCheckBox;
-
-        public NodeDiagramPreferencePanel() {
-            super("Node Diagram");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Map gridlines setting
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-            gridlinesCheckBox = new JCheckBox("Show gridlines on map");
-            gridlinesCheckBox.setSelected(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
-            gridlinesCheckBox.addActionListener(e -> {
-                boolean enabled = gridlinesCheckBox.isSelected();
-                PreferenceKeys.MAP_SHOW_GRIDLINES.set(enabled);
-
-                // Notify callback to update map display and toolbar button
-                if (changeCallback != null) {
-                    changeCallback.onMapPreferencesChanged();
-                    changeCallback.onGridlinesChanged(enabled);
-                }
-            });
-            formPanel.add(gridlinesCheckBox, gbc);
-
-            add(formPanel, BorderLayout.NORTH);
-        }
-    }
-
-    /**
-     * Font preferences panel.
-     */
-    private class FontPreferencePanel extends PreferencePanel {
-        private JSpinner fontSizeSpinner;
-
-        public FontPreferencePanel() {
-            super("Font");
-            initializePanel();
-        }
-
-        private void initializePanel() {
-            JPanel formPanel = createFormPanel();
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5);
-            gbc.anchor = GridBagConstraints.WEST;
-
-            // Font size setting
-            gbc.gridx = 0; gbc.gridy = 0;
-            formPanel.add(new JLabel("Font Size:"), gbc);
-
-            gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-            SpinnerNumberModel spinnerModel = new SpinnerNumberModel(
-                PreferenceKeys.EDITOR_FONT_SIZE.get().intValue(), // current value (unboxed: keep the int constructor)
-                8,    // minimum
-                24,   // maximum
-                1     // step
-            );
-            fontSizeSpinner = new JSpinner(spinnerModel);
-            fontSizeSpinner.setToolTipText("Set the font size for the text editor (8-24 points)");
-
-            // Set a reasonable width for the spinner
-            JComponent editor = fontSizeSpinner.getEditor();
-            if (editor instanceof JSpinner.DefaultEditor) {
-                ((JSpinner.DefaultEditor) editor).getTextField().setColumns(3);
-            }
-
-            fontSizeSpinner.addChangeListener(e -> {
-                int fontSize = (Integer) fontSizeSpinner.getValue();
-                PreferenceKeys.EDITOR_FONT_SIZE.set(fontSize);
-
-                // Update the text editor font immediately
-                if (textEditor != null) {
-                    textEditor.updateFontSize(fontSize);
-                }
-
-                // Notify callback listeners (e.g., to update MinimalEditorWindows)
-                if (changeCallback != null) {
-                    changeCallback.onFontSizeChanged(fontSize);
-                }
-            });
-            formPanel.add(fontSizeSpinner, gbc);
-
-            gbc.gridx = 2; gbc.weightx = 0;
-            formPanel.add(new JLabel("pt"), gbc);
-
-            // Add a filler to push everything to the left
-            gbc.gridx = 3; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            formPanel.add(Box.createHorizontalGlue(), gbc);
-
-            add(formPanel, BorderLayout.NORTH);
-        }
     }
 }
