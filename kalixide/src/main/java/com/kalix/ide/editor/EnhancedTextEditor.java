@@ -912,8 +912,13 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Toggles comments on the current line or all lines in the selection.
-     * Uses "#" as the comment character. If a line starts with "#" (after whitespace),
-     * it removes the comment. Otherwise, it adds a comment.
+     * Uses "#" as the comment character. If every non-blank line starts with "#"
+     * (after whitespace), comments are removed; otherwise they are added.
+     *
+     * <p>All line coordinates are snapshotted from the document <em>before</em> any
+     * edit and the edits are applied bottom-up, so the selection-restore arithmetic
+     * works in one consistent coordinate space regardless of how many lines are
+     * selected (the old per-line re-read drifted for selections spanning 3+ lines).
      */
     public void toggleComment() {
         try {
@@ -929,95 +934,129 @@ public class EnhancedTextEditor extends JPanel {
                 endLine--;
             }
 
-            // Check if all lines are commented (to decide whether to comment or uncomment)
-            boolean allCommented = true;
-            for (int line = startLine; line <= endLine; line++) {
+            // Snapshot pre-edit line starts and contents (without trailing newline)
+            int lineCount = endLine - startLine + 1;
+            int[] lineStarts = new int[lineCount];
+            String[] contents = new String[lineCount];
+            for (int i = 0; i < lineCount; i++) {
+                int line = startLine + i;
                 int lineStart = textArea.getLineStartOffset(line);
                 int lineEnd = textArea.getLineEndOffset(line);
                 String lineText = textArea.getText(lineStart, lineEnd - lineStart);
-                String trimmed = lineText.trim();
-                if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
-                    allCommented = false;
-                    break;
+                if (lineText.endsWith("\n")) {
+                    lineText = lineText.substring(0, lineText.length() - 1);
                 }
+                lineStarts[i] = lineStart;
+                contents[i] = lineText;
             }
 
-            // Now toggle comments on all lines
-            int newSelectionStart = selectionStart;
-            int newSelectionEnd = selectionEnd;
-            int offsetDelta = 0;
+            // Check if all lines are commented (to decide whether to comment or uncomment)
+            boolean allCommented = areAllCommented(contents);
+
+            // Compute the toggled lines purely, then apply
+            String[] newContents = new String[lineCount];
+            int[] deltas = new int[lineCount];
+            for (int i = 0; i < lineCount; i++) {
+                newContents[i] = toggleLineComment(contents[i], allCommented);
+                deltas[i] = newContents[i].length() - contents[i].length();
+            }
 
             // Group all line edits into a single undo step so one Cmd/Ctrl+Z
             // (un)comments the whole selection rather than one line at a time.
+            // Bottom-up, so the pre-edit offsets stay valid for the pending edits.
             textArea.beginAtomicEdit();
             try {
-            for (int line = startLine; line <= endLine; line++) {
-                int lineStart = textArea.getLineStartOffset(line);
-                int lineEnd = textArea.getLineEndOffset(line);
-                String lineText = textArea.getText(lineStart, lineEnd - lineStart);
-
-                String newLine;
-                int lineDelta = 0;
-
-                if (allCommented) {
-                    // Uncomment: remove "# " or "#" from the start (after whitespace)
-                    int firstNonWhitespace = 0;
-                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
-                        firstNonWhitespace++;
+                for (int i = lineCount - 1; i >= 0; i--) {
+                    if (!newContents[i].equals(contents[i])) {
+                        textArea.replaceRange(newContents[i], lineStarts[i], lineStarts[i] + contents[i].length());
                     }
-
-                    if (firstNonWhitespace < lineText.length() && lineText.charAt(firstNonWhitespace) == '#') {
-                        String before = lineText.substring(0, firstNonWhitespace);
-                        String after = lineText.substring(firstNonWhitespace + 1);
-
-                        // Also remove the space after # if present
-                        if (after.startsWith(" ")) {
-                            after = after.substring(1);
-                            lineDelta = -2;
-                        } else {
-                            lineDelta = -1;
-                        }
-                        newLine = before + after;
-                    } else {
-                        newLine = lineText;
-                    }
-                } else {
-                    // Comment: add "# " at the start (after whitespace)
-                    int firstNonWhitespace = 0;
-                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
-                        firstNonWhitespace++;
-                    }
-
-                    String before = lineText.substring(0, firstNonWhitespace);
-                    String after = lineText.substring(firstNonWhitespace);
-                    newLine = before + "# " + after;
-                    lineDelta = 2;
                 }
-
-                // Replace the line
-                textArea.replaceRange(newLine, lineStart, lineEnd);
-
-                // Update selection offsets
-                if (lineStart <= selectionStart) {
-                    newSelectionStart += lineDelta;
-                }
-                if (lineStart < selectionEnd) {
-                    newSelectionEnd += lineDelta;
-                }
-
-                offsetDelta += lineDelta;
-            }
             } finally {
                 textArea.endAtomicEdit();
             }
 
-            // Restore selection
-            textArea.setSelectionStart(newSelectionStart);
-            textArea.setSelectionEnd(newSelectionEnd);
+            // Restore selection, shifted by the per-line length changes
+            int[] newSelection = shiftSelectionForLineDeltas(selectionStart, selectionEnd, lineStarts, deltas);
+            int documentLength = textArea.getDocument().getLength();
+            textArea.setSelectionStart(Math.min(newSelection[0], documentLength));
+            textArea.setSelectionEnd(Math.min(newSelection[1], documentLength));
 
         } catch (Exception ex) {
             logger.error("Error toggling comments", ex);
         }
+    }
+
+    /**
+     * @return true if every non-blank line starts with '#' after leading whitespace
+     *         (blank lines are ignored)
+     */
+    static boolean areAllCommented(String[] lineContents) {
+        for (String content : lineContents) {
+            String trimmed = content.trim();
+            if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Toggles the comment marker on one line's content (no trailing newline).
+     *
+     * @param content   the line content
+     * @param uncomment true to remove "#" (and one following space) after leading
+     *                  whitespace; false to insert "# " after leading whitespace
+     * @return the toggled line content (unchanged when uncommenting a line with no '#')
+     */
+    static String toggleLineComment(String content, boolean uncomment) {
+        int firstNonWhitespace = 0;
+        while (firstNonWhitespace < content.length() && Character.isWhitespace(content.charAt(firstNonWhitespace))) {
+            firstNonWhitespace++;
+        }
+        String before = content.substring(0, firstNonWhitespace);
+        String after = content.substring(firstNonWhitespace);
+
+        if (uncomment) {
+            if (!after.startsWith("#")) {
+                return content;
+            }
+            after = after.substring(1);
+            // Also remove the space after # if present
+            if (after.startsWith(" ")) {
+                after = after.substring(1);
+            }
+            return before + after;
+        }
+        return before + "# " + after;
+    }
+
+    /**
+     * Shifts a selection for per-line length changes, all expressed in pre-edit
+     * document coordinates: the start moves with the delta of its own line, the end
+     * with the deltas of every edited line that begins before it. The start is
+     * clamped to its line start (relevant when uncommenting with the caret inside
+     * the removed marker) and the end never precedes the start.
+     *
+     * @param selectionStart pre-edit selection start
+     * @param selectionEnd   pre-edit selection end
+     * @param lineStarts     pre-edit start offsets of the edited lines (ascending)
+     * @param deltas         length change of each edited line
+     * @return {newSelectionStart, newSelectionEnd}
+     */
+    static int[] shiftSelectionForLineDeltas(int selectionStart, int selectionEnd, int[] lineStarts, int[] deltas) {
+        int newStart = selectionStart;
+        int newEnd = selectionEnd;
+        for (int i = 0; i < lineStarts.length; i++) {
+            if (lineStarts[i] <= selectionStart) {
+                newStart += deltas[i];
+            }
+            if (lineStarts[i] < selectionEnd) {
+                newEnd += deltas[i];
+            }
+        }
+        newStart = Math.max(newStart, lineStarts.length > 0 ? lineStarts[0] : 0);
+        newEnd = Math.max(newEnd, newStart);
+        return new int[] {newStart, newEnd};
     }
 
     /**
