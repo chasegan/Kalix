@@ -37,8 +37,10 @@ class GorillaCompressorTest {
         for (int i = 0; i < series.size(); i++) {
             assertEquals(series.get(i).timestamp, decompressed.get(i).timestamp,
                 "timestamp mismatch at index " + i);
-            assertEquals(Double.doubleToLongBits(series.get(i).value),
-                Double.doubleToLongBits(decompressed.get(i).value),
+            // Raw bits: the codec's contract is bit-exact round-tripping, including
+            // NaN payloads (doubleToLongBits would canonicalize them and hide drift).
+            assertEquals(Double.doubleToRawLongBits(series.get(i).value),
+                Double.doubleToRawLongBits(decompressed.get(i).value),
                 "value bits mismatch at index " + i);
         }
         return compressed.length * 8.0 / series.size();
@@ -118,6 +120,45 @@ class GorillaCompressorTest {
     }
 
     /**
+     * Non-canonical NaN payloads (e.g. {@code 0xFFF8…} from {@code 0.0/0.0} on x86) must
+     * pass through the codec bit-exactly: a decoder that canonicalizes NaN mid-stream
+     * desynchronizes the XOR chain and corrupts every subsequent value (historically,
+     * 1.5 after such a NaN decoded as -1.5). Cross-language fixture: same series and
+     * base64 pinned in the Rust suite (test_nan_payload_fixture_matches_java).
+     */
+    @Test
+    void nanPayloadFixtureMatchesRust() throws Exception {
+        String base64 = "AAAAAAABUYAAAAAGAAAAAAAAAAA/8AAAAAAAAEA3ACgBbf/gAAAAAvu9oAIAAAAAAAAhGf/g";
+
+        long[] valueBits = {
+            0x3ff0000000000000L, // 1.0
+            0xfff8000000000000L, // negative quiet NaN (x86 0.0/0.0)
+            0x3ff8000000000000L, // 1.5 — the value corrupted by a canonicalizing decoder
+            0x7ff800000000beefL, // quiet NaN with payload bits
+            0x4004000000000000L, // 2.5
+            0x7ff8000000000000L  // canonical quiet NaN
+        };
+
+        GorillaCompressor compressor = new GorillaCompressor(TIMESTEP);
+        List<TimeValueDouble> decoded = compressor.decompressDoubleBase64(base64);
+
+        assertEquals(valueBits.length, decoded.size(), "fixture size mismatch");
+        for (int i = 0; i < valueBits.length; i++) {
+            assertEquals(TIMESTEP * i, decoded.get(i).timestamp, "timestamp mismatch at index " + i);
+            assertEquals(valueBits[i], Double.doubleToRawLongBits(decoded.get(i).value),
+                "value bits mismatch at index " + i);
+        }
+
+        // And the Java encoder must produce the identical byte stream for the same input.
+        List<TimeValueDouble> series = new ArrayList<>();
+        for (int i = 0; i < valueBits.length; i++) {
+            series.add(new TimeValueDouble(TIMESTEP * i, Double.longBitsToDouble(valueBits[i])));
+        }
+        assertEquals(base64, compressor.compressDoubleBase64(series),
+            "Java encoder diverged from Rust encoder for the NaN-payload fixture");
+    }
+
+    /**
      * Cross-language fixture: this base64 payload was produced by the Rust encoder
      * (src/io/compression/gorilla.rs) from the series below. Decoding it here proves the
      * Java decoder matches the Rust encoder bit-for-bit. If either implementation's
@@ -144,7 +185,7 @@ class GorillaCompressorTest {
         assertEquals(timestamps.length, decoded.size(), "fixture size mismatch");
         for (int i = 0; i < timestamps.length; i++) {
             assertEquals(timestamps[i], decoded.get(i).timestamp, "timestamp mismatch at index " + i);
-            assertEquals(valueBits[i], Double.doubleToLongBits(decoded.get(i).value),
+            assertEquals(valueBits[i], Double.doubleToRawLongBits(decoded.get(i).value),
                 "value bits mismatch at index " + i);
         }
 
