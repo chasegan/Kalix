@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use crate::model::Model;
+use crate::numerical::mathfn::u64_subtraction;
 use crate::nodes::NodeEnum;
 use crate::timeseries::Timeseries;
 use crate::functions::{ParsedFunction, VariableContext, EvaluationConfig, parse_function};
@@ -161,46 +162,64 @@ impl OptimisationProblem {
         Ok(())
     }
 
-    /// Align observed and simulated timeseries temporally
+    /// Align observed and simulated timeseries temporally.
     ///
-    /// Returns aligned (observed, simulated) vectors that only include timesteps
-    /// where both series have data.
+    /// Both series live on regular grids (timestamp of point i is
+    /// start + i * step), so alignment is pure index arithmetic: no per-
+    /// evaluation timestamp hashing. Returns the overlapping (observed,
+    /// simulated) value ranges.
     fn align_timeseries(
         &self,
         observed: &Timeseries,
         simulated: &Timeseries,
     ) -> Result<(Vec<f64>, Vec<f64>), String> {
-        let mut aligned_obs = Vec::new();
-        let mut aligned_sim = Vec::new();
-
-        // Create lookup map for simulated data
-        let sim_map: std::collections::HashMap<u64, f64> = simulated
-            .timestamps
-            .iter()
-            .zip(&simulated.values)
-            .map(|(&t, &v)| (t, v))
-            .collect();
-
-        // Iterate through observed timestamps and find matches
-        for (&obs_time, &obs_value) in observed.timestamps.iter().zip(&observed.values) {
-            // Look for matching timestamp in simulated
-            if let Some(&sim_value) = sim_map.get(&obs_time) {
-                aligned_obs.push(obs_value);
-                aligned_sim.push(sim_value);
-            }
+        if observed.step_size != simulated.step_size {
+            return Err(format!(
+                "Observed step_size ({}s) differs from simulated step_size ({}s)",
+                observed.step_size, simulated.step_size
+            ));
+        }
+        let step = simulated.step_size;
+        if step == 0 {
+            return Err("Cannot align timeseries with step_size 0".to_string());
         }
 
-        if aligned_obs.is_empty() {
+        // How many steps is observed[0] ahead of simulated[0]?
+        let offset = u64_subtraction(observed.start_timestamp / step,
+                                     simulated.start_timestamp / step);
+        if observed.start_timestamp % step != simulated.start_timestamp % step {
             return Err(format!(
-                "No overlapping timestamps found between observed ({}..{}) and simulated ({}..{}) data",
-                observed.timestamps.first().unwrap_or(&0),
-                observed.timestamps.last().unwrap_or(&0),
-                simulated.timestamps.first().unwrap_or(&0),
-                simulated.timestamps.last().unwrap_or(&0),
+                "Observed and simulated grids are not aligned: starts {} and {} \
+                 differ by a non-whole number of {}s steps",
+                observed.start_timestamp, simulated.start_timestamp, step
             ));
         }
 
-        Ok((aligned_obs, aligned_sim))
+        // Observed index i pairs with simulated index i + offset. Clip to the
+        // overlap of both series.
+        let obs_len = observed.values.len() as i64;
+        let sim_len = simulated.values.len() as i64;
+        let i_start = 0.max(-offset);
+        let i_end = obs_len.min(sim_len - offset);
+
+        if i_end <= i_start {
+            return Err(format!(
+                "No overlapping timestamps found between observed ({}..{}) and simulated ({}..{}) data",
+                observed.timestamp_at(0),
+                observed.timestamp_at(observed.values.len().saturating_sub(1)),
+                simulated.timestamp_at(0),
+                simulated.timestamp_at(simulated.values.len().saturating_sub(1)),
+            ));
+        }
+
+        let (i_start, i_end) = (i_start as usize, i_end as usize);
+        let sim_start = (i_start as i64 + offset) as usize;
+        let sim_end = (i_end as i64 + offset) as usize;
+
+        Ok((
+            observed.values[i_start..i_end].to_vec(),
+            simulated.values[sim_start..sim_end].to_vec(),
+        ))
     }
 
     /// Extract current parameter values from model

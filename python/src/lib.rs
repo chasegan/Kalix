@@ -120,11 +120,6 @@ fn _write_pixie_raw(
 
     let start_timestamp = wrap_to_u64(ts[0]);
 
-    // The writer reads `series.timestamps[..]` for per-point timestamps and
-    // metadata start/end times — it doesn't derive them from start_timestamp + step_size.
-    // Pre-build the wrapped u64 timestamps once and share them across all series.
-    let timestamps_wrapped: Vec<u64> = ts.iter().map(|&t| wrap_to_u64(t)).collect();
-
     let mut series_vec: Vec<Timeseries> = Vec::with_capacity(series_names.len());
     for (name, arr) in series_names.into_iter().zip(values_per_series.iter()) {
         let values_slice = arr.as_slice()?;
@@ -139,7 +134,6 @@ fn _write_pixie_raw(
         let mut t = Timeseries::new(step_size);
         t.name = name;
         t.start_timestamp = start_timestamp;
-        t.timestamps = timestamps_wrapped.clone();
         t.values = values_slice.to_vec();
         series_vec.push(t);
     }

@@ -14,9 +14,10 @@ pub struct Timeseries {
     pub start_timestamp: u64,      //The timestamp to be used for the first value
     pub step_size: u64,            //The amount of time between consecutive timestamps. (Notionally in seconds).
 
-    //Vectors
+    //Values. Timestamps are not stored: timesteps are regular by design
+    //(assumption settled 2026-07), so the timestamp of point i is always
+    //start_timestamp + i * step_size — see timestamp_at().
     pub values: Vec<f64>,          //All the values
-    pub timestamps: Vec<u64>,      //All the timestamps in Unix timestamps offset from i64 to u64
 
     //Player
     pub next_played_index: usize,  //The index of next value being 'played' by the Timeseries
@@ -39,7 +40,6 @@ impl Timeseries {
             start_timestamp: 0,
             step_size,
             values: Vec::new(),
-            timestamps: Vec::new(),
             next_played_index: 0,
             current_played_value: f64::NAN,
         }
@@ -63,27 +63,31 @@ impl Timeseries {
     }
 
 
+    /// The timestamp of point `i`, derived from the regular grid.
+    #[inline]
+    pub fn timestamp_at(&self, i: usize) -> u64 {
+        self.start_timestamp + i as u64 * self.step_size
+    }
+
     /*
-    Adds a new value to the end of the Timeseries. Useful for building a timeseries. Method accepts
-    a timestamp u64.
+    Adds a new value to the end of the Timeseries. The FIRST push anchors the
+    series (sets start_timestamp); subsequent timestamps are implied by the
+    regular grid, so the passed timestamp is otherwise unused.
     */
     pub fn push(&mut self, timestamp: u64, value: f64) {
-        self.timestamps.push(timestamp);
+        if self.values.is_empty() {
+            self.start_timestamp = timestamp;
+        }
         self.values.push(value)
     }
 
 
     /*
-    Adds a new value to the end of the Timeseries. Automatically determines the next timestamp
-    based on previous one and the step_size (or uses start_timestamp if there are no timestamps yet).
+    Adds a new value to the end of the Timeseries. The timestamp is implied by
+    the regular grid (start_timestamp + i * step_size).
      */
     pub fn push_value(&mut self, value: f64) {
-        let len = self.values.len();
-        if len == 0 {
-            self.push(self.start_timestamp, value);
-        } else {
-            self.push(self.timestamps[len - 1] + self.step_size, value);
-        };
+        self.values.push(value);
     }
 
 
@@ -122,17 +126,17 @@ impl Timeseries {
         const MAX_PRINTING_POINTS: usize = 24;
         if n <= MAX_PRINTING_POINTS {
             for i in 0..n {
-                println!("  {}: {}: {}", i, self.timestamps[i], self.values[i]);
+                println!("  {}: {}: {}", i, self.timestamp_at(i), self.values[i]);
             }
         } else {
             for i in 0..(MAX_PRINTING_POINTS - 1) {
-                println!("  {}: {}: {}", i, self.timestamps[i], self.values[i]);
+                println!("  {}: {}: {}", i, self.timestamp_at(i), self.values[i]);
             }
             println!("  ..");
             println!(
                 "  {}: {}: {}",
                 n - 1,
-                self.timestamps[n - 1],
+                self.timestamp_at(n - 1),
                 self.values[n - 1]
             );
         }

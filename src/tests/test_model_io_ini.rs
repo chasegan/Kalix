@@ -69,7 +69,7 @@ fn test_model_2_io_ini_read() {
     let ans = &m.data_cache.series[ds_idx];
     assert_eq!(ans.len(), 6);
     assert_eq!(ans.sum(), 38.1);
-    println!("Timestamps: {:?}", ans.timestamps);
+    println!("Start timestamp: {}", ans.start_timestamp);
 
     //Write the results
     m.write_outputs("./src/tests/example_models/2/output.csv").expect("Csv write failed");

@@ -25,11 +25,11 @@ fn test_gorilla() {
     let mut min_compressed_size = 99999999999999usize;
     let mut max_compressed_size = 0usize;
     for t in vec_of_ts {
-        let first_datetime = t.timestamps[0];
+        let first_datetime = t.timestamp_at(0);
         let writer = BufferedWriter::new();
         let mut encoder = StdEncoder::new(first_datetime, writer);
         for i in 0..t.len() {
-            let p = DataPoint::new(t.timestamps[i], t.values[i]);
+            let p = DataPoint::new(t.timestamp_at(i), t.values[i]);
             encoder.encode(p)
         }
         let bytes = encoder.close();
@@ -69,7 +69,7 @@ fn test_gorilla_drop_repeat_vals() {
     let start = SystemTime::now();
     let mut total_len = 0;
     for t in vec_of_ts {
-        let first_datetime = t.timestamps[0];
+        let first_datetime = t.timestamp_at(0);
         let writer = BufferedWriter::new();
         let mut encoder = StdEncoder::new(first_datetime, writer);
         let mut previous_value = f64::NAN;
@@ -82,7 +82,7 @@ fn test_gorilla_drop_repeat_vals() {
             if v == previous_value {
                 //pass
             } else {
-                let p = DataPoint::new(t.timestamps[i],  v);
+                let p = DataPoint::new(t.timestamp_at(i),  v);
                 encoder.encode(p);
                 previous_value = v;
             }
@@ -120,7 +120,7 @@ fn test_gorilla_with_dummy_dates() {
     let start = SystemTime::now();
     let mut total_len = 0;
     for t in vec_of_ts {
-        let first_datetime = t.timestamps[0];
+        let first_datetime = t.timestamp_at(0);
         let writer = BufferedWriter::new();
         let mut encoder = StdEncoder::new(first_datetime, writer);
         for i in 0..t.len() {

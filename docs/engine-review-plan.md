@@ -18,7 +18,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 4 | Optimiser robustness (NaN mask, `total_cmp`, KGE guard, SCE callback) + version string | **Done** (fix/optimiser-robustness) |
 | 5 | Speed test suite + `[profile.release]` tuning | **Done** (feature/speed-suite) |
 | 6 | DataCache: capacity prealloc, single-write recording, first-step read validation | **Done** (perf/datacache) |
-| 7 | Remove timestamps from cache-resident series | Pending — decide irregular-series future first |
+| 7 | Remove per-point timestamps (regular grids assumed platform-wide) | **Done** (perf/remove-timestamps) |
 | 8 | DynamicInput: allocation-free, infallible evaluate, short-circuit `if`/`&&`/`\|\|` | **Done** (perf/dynamic-input) |
 | 9 | Small hot-loop items (Cell-based sim context, hoisted catch_unwind, node config hoists) | Pending |
 | 10 | Optimiser: reuse workers across generations; slim Model clone | Pending |
@@ -249,6 +249,38 @@ Performance notes (measured, interleaved A/B on the speed suite):
   Vec header cache line; branch never taken). Nothing to buy; the check
   stays, carrying the fail-fast contract. Revisit only if a profiler ever
   fingers it post-step-7.
+
+## Step 7 record — timestamps removed from Timeseries (done 2026-07-03)
+
+Decision (Chas, settled): timesteps are regular by design, platform-wide; no
+plans for irregular series ever. The per-point `timestamps: Vec<u64>` field is
+gone from `Timeseries`; the timestamp of point i is `start_timestamp +
+i * step_size` (`timestamp_at(i)`).
+
+Consequences through the codebase:
+- Recording is a single value push per series per step (the timestamp push was
+  the surviving half of the recorder cost identified in the review).
+- CSV read still parses/validates every date (regular-spacing check kept) but
+  stores timestamps only in one transient local vec instead of duplicating
+  them into every column's series.
+- CSV/pixie writers and `get_result` derive timestamps on the fly.
+- `align_timeseries` (optimiser, per evaluation) went from building a
+  HashMap of the whole simulated series to pure index arithmetic — step 11
+  work forced forward by the field's removal.
+- Python bindings simplified (no more prebuilt timestamp vec).
+
+Measured (sim min vs step-6 baseline, thin-LTO):
+- 1_sacramento_long: 7.5 -> 6.3-6.4 ms (**-15%**)
+- 2_unregulated_users: 36.7 -> 33.3 ms (**-9%**)
+- 3_unregulated_users_with_functions: 94.2 -> 85.2 ms (**-10%**)
+- 4_regulated_system: 64.8 -> 59.6 ms (**-8%**)
+- Peak memory: model 1 30 -> 23 MB (-25%), model 3 57 -> 35 MB (-39%).
+- Load times down ~1-2 ms (CSV read no longer duplicates timestamps per column).
+
+Outputs verified bit-identical to the pre-change binary on three speed
+models; 319 unit tests and 28/28 regression models pass. The step-6
+complexity back-out criterion (if flat, simplify) was not triggered: the
+numbers are decisively non-flat.
 
 ## Review findings not yet scheduled (context for steps)
 

@@ -75,6 +75,10 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     let mut detected_format: Option<&str> = None;
     let mut file_line = 1;
 
+    // Timestamps are parsed for validation (regular spacing) and to anchor the
+    // series, but stored only locally: series carry values on a regular grid.
+    let mut row_timestamps: Vec<u64> = Vec::new();
+
     // If there's no header, we need to process the first row as data
     if !has_header {
         file_line += 1;
@@ -101,8 +105,9 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
                         field, filename, file_line, i + 1))?
             };
 
-            answer[i].push(t_u64, value);
+            answer[i].values.push(value);
         }
+        row_timestamps.push(t_u64);
     }
 
     // Iterate through the records and parse the data
@@ -145,17 +150,18 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
                         field, filename, file_line, i + 1))?
             };
 
-            answer[i].push(t_u64, value);
+            answer[i].values.push(value);
         }
+        row_timestamps.push(t_u64);
     }
 
-    // Set the start_timestamp and infer step_size from the loaded timestamps.
-    // TODO: I should get rid of this "start_timestamp" property. It is a recipe for disaster.
-    let inferred_step_size = infer_step_size(&answer.first().map(|ts| ts.timestamps.as_slice()).unwrap_or(&[]))
+    // Set the start_timestamp and infer step_size from the parsed row timestamps
+    // (kept locally during the read: series store values only, on a regular grid).
+    let inferred_step_size = infer_step_size(&row_timestamps)
         .map_err(|e| format!("In '{}': {}", filename, e))?;
     for ts in answer.iter_mut() {
         if ts.len() > 0 {
-            ts.start_timestamp = ts.timestamps[0];
+            ts.start_timestamp = row_timestamps[0];
         }
         if let Some(step_size) = inferred_step_size {
             ts.step_size = step_size;
@@ -207,10 +213,10 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
     // Check that all timeseries in the vector have the same length
     let data_length = match timeseries_vector.len() {
         0 => { 0 }
-        _ => {timeseries_vector[0].timestamps.len() }
+        _ => { timeseries_vector[0].values.len() }
     };
     for tsv in &timeseries_vector {
-        if tsv.timestamps.len() != data_length {
+        if tsv.values.len() != data_length {
             return Err(CsvError::WriteError("Cannot handle timeseries with different lengths.".to_string()))
         }
     }
@@ -227,18 +233,17 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
     // Build the data section. Pick a single date format for the whole file based on the
     // step_size of the first series (all series in a write share the same step_size in
     // practice). Sub-daily data gets ISO datetime; daily-or-coarser gets date-only.
-    let mut i = 0;
     if timeseries_vector.len() > 0 {
         let step_size = timeseries_vector[0].step_size;
-        for timestamp in timeseries_vector[0].timestamps.iter() {
-            let timestamp_string = u64_to_date_string_for_step_size(*timestamp, step_size);
+        for i in 0..data_length {
+            let timestamp = timeseries_vector[0].timestamp_at(i);
+            let timestamp_string = u64_to_date_string_for_step_size(timestamp, step_size);
             data_string.push_str(&timestamp_string);
             for ts in timeseries_vector.iter() {
                 let value = ts.values[i];
                 data_string.push_str(format!(",{value}").as_str());
             }
             data_string.push_str("\r\n");
-            i += 1;
         }
     }
 

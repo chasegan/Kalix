@@ -295,7 +295,6 @@ impl DataCache {
     pub fn reserve_all(&mut self, n_steps: usize) {
         for ts in &mut self.series {
             ts.values.reserve_exact(n_steps.saturating_sub(ts.values.len()));
-            ts.timestamps.reserve_exact(n_steps.saturating_sub(ts.timestamps.len()));
         }
     }
 
@@ -433,7 +432,7 @@ impl DataCache {
         println!("Start timestamp: {}", self.start_timestamp);
         for i in 0..self.series.len() {
             let start_date = Self::get_start_date(&self.series[i]);
-            println!("{}, {}, {}:{}", self.series_name[i], start_date, self.series[i].timestamps.len(), self.series[i].values.len());
+            println!("{}, {}, {}", self.series_name[i], start_date, self.series[i].values.len());
         }
     }
 
@@ -443,7 +442,7 @@ impl DataCache {
      */
     fn get_start_date(series: &Timeseries) -> String {
         if series.len() > 0 {
-            series.timestamps[0].to_string()
+            series.timestamp_at(0).to_string()
         } else {
             String::from("-")
         }

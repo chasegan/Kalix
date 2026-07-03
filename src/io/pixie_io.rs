@@ -234,18 +234,18 @@ pub fn write_series_with_precision(
             // Update current offset
             current_offset += 2 + 4 + compressed.len() as u64;
 
-            // Store metadata
+            // Store metadata (timestamps are derived from the regular grid)
             let metadata = SeriesMetadata {
                 index: i + 1, // Base-1 indexing to match Java
                 offset,
-                start_time: if series.timestamps.is_empty() { 0 } else { series.timestamps[0] },
-                end_time: if series.timestamps.is_empty() {
+                start_time: if series.values.is_empty() { 0 } else { series.timestamp_at(0) },
+                end_time: if series.values.is_empty() {
                     0
                 } else {
-                    series.timestamps[series.timestamps.len() - 1]
+                    series.timestamp_at(series.values.len() - 1)
                 },
                 timestep: timestep_seconds, // Already in seconds
-                length: series.timestamps.len(),
+                length: series.values.len(),
                 series_name: series.name.clone(),
             };
             metadata_list.push(metadata);
@@ -412,19 +412,16 @@ fn read_series_from_binary(file: &mut File, meta: &SeriesMetadata) -> Result<Tim
     let mut timeseries = Timeseries::new(meta.timestep);
     timeseries.name = meta.series_name.clone();
 
-    for (timestamp, value) in points {
-        timeseries.push(timestamp, value);
+    if let Some(&(first_timestamp, _)) = points.first() {
+        timeseries.start_timestamp = first_timestamp;
     }
-
-    if !timeseries.timestamps.is_empty() {
-        timeseries.start_timestamp = timeseries.timestamps[0];
-    }
+    timeseries.values.extend(points.iter().map(|&(_, v)| v));
 
     Ok(timeseries)
 }
 
 fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Result<Vec<u8>, PixieError> {
-    if series.timestamps.is_empty() {
+    if series.values.is_empty() {
         return Ok(Vec::new());
     }
 
@@ -432,11 +429,11 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
 
     match codec {
         CODEC_GORILLA_DOUBLE => {
-            // Convert to TimeValueDouble format, unwrapping timestamps to i64 for gorilla
-            let points: Vec<TimeValueDouble> = series.timestamps.iter()
-                .zip(series.values.iter())
-                .map(|(&timestamp, &value)| {
-                    let unix_timestamp = wrap_to_i64(timestamp);
+            // Timestamps are derived from the regular grid, unwrapped to i64 for gorilla
+            let points: Vec<TimeValueDouble> = series.values.iter()
+                .enumerate()
+                .map(|(i, &value)| {
+                    let unix_timestamp = wrap_to_i64(series.timestamp_at(i));
                     TimeValueDouble::new(unix_timestamp as u64, value)
                 })
                 .collect();
@@ -445,11 +442,10 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
                 .map_err(|e| PixieError::CompressionError(format!("Failed to compress double data: {}", e)))
         },
         CODEC_GORILLA_FLOAT => {
-            // Convert to TimeValueFloat format, unwrapping timestamps to i64 for gorilla
-            let points: Vec<TimeValueFloat> = series.timestamps.iter()
-                .zip(series.values.iter())
-                .map(|(&timestamp, &value)| {
-                    let unix_timestamp = wrap_to_i64(timestamp);
+            let points: Vec<TimeValueFloat> = series.values.iter()
+                .enumerate()
+                .map(|(i, &value)| {
+                    let unix_timestamp = wrap_to_i64(series.timestamp_at(i));
                     TimeValueFloat::new(unix_timestamp as u64, value as f32)
                 })
                 .collect();
@@ -462,19 +458,11 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
 }
 
 fn detect_timestep(series: &Timeseries) -> u64 {
-    if series.timestamps.len() < 2 {
-        return 86400; // Default 86400 seconds (1 day)
-    }
-
-    // Use the step_size if it's reasonable, otherwise calculate from data
-    if series.step_size > 0 && series.step_size < 1_000_000 {
-        // step_size is in seconds
+    // Timesteps are regular by design; the series' step_size is authoritative.
+    if series.step_size > 0 {
         series.step_size
     } else {
-        // Calculate average interval from timestamps
-        let total_interval = series.timestamps[series.timestamps.len() - 1] - series.timestamps[0];
-        let avg_interval = total_interval / (series.timestamps.len() - 1) as u64;
-        avg_interval
+        86400 // Default (1 day) for anchorless series
     }
 }
 
@@ -558,7 +546,8 @@ mod tests {
 
         // Verify
         assert_eq!(result.name, ts.name);
-        assert_eq!(result.timestamps, ts.timestamps);
+        assert_eq!(result.start_timestamp, ts.start_timestamp);
+        assert_eq!(result.values.len(), ts.values.len());
 
         // Check values with some tolerance for floating point precision
         for (original, result) in ts.values.iter().zip(result.values.iter()) {
