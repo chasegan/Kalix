@@ -2,6 +2,7 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
@@ -11,7 +12,6 @@ import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -36,7 +36,7 @@ class RunTreeController {
 
     private final RunManager window;
     private final StdioTaskManager stdioTaskManager;
-    private final JTree timeseriesSourceTree;
+    private final JCheckboxTree timeseriesSourceTree;
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode currentRunsNode;
     private final VisualizationTabManager tabManager;
@@ -54,7 +54,7 @@ class RunTreeController {
 
     RunTreeController(RunManager window,
                       StdioTaskManager stdioTaskManager,
-                      JTree timeseriesSourceTree,
+                      JCheckboxTree timeseriesSourceTree,
                       DefaultTreeModel treeModel,
                       DefaultMutableTreeNode currentRunsNode,
                       VisualizationTabManager tabManager,
@@ -202,9 +202,9 @@ class RunTreeController {
                             lastRunTracker.onRunCompleted(runInfo, completionTime);
                         }
 
-                        // Update outputs if this run is currently selected
-                        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
-                        if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
+                        // Update outputs if this run is currently checked
+                        TreePath existingPath = new TreePath(existingNode.getPath());
+                        if (timeseriesSourceTree.isPathChecked(existingPath)) {
                             window.updateOutputsTree();
                         }
                     }
@@ -362,8 +362,10 @@ class RunTreeController {
     }
 
     /**
-     * Selects the run associated with the given sessionKey.
-     * This will expand the tree and select the run node if found.
+     * Selects and checks the run associated with the given sessionKey, so its outputs are
+     * shown. This will expand the tree, select the run node (for visual focus), and check
+     * it (so {@link RunManager#updateOutputsTree} - which reads checked, not selected,
+     * paths - picks it up) if found.
      */
     void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
@@ -374,9 +376,10 @@ class RunTreeController {
                 // Expand parent nodes to make the run visible
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
-                // Select the run
+                // Select and check the run
                 fetchCoordinator.setUpdatingSelection(true);
                 timeseriesSourceTree.setSelectionPath(pathToRun);
+                timeseriesSourceTree.setCheckedPaths(java.util.List.of(pathToRun));
                 fetchCoordinator.setUpdatingSelection(false);
 
                 // Scroll to make the selection visible

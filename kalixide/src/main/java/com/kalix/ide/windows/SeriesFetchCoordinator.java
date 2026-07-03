@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.SessionManager;
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
@@ -16,15 +17,10 @@ import com.kalix.ide.managers.TreeFilterManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
-import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.AWTEvent;
-import java.awt.EventQueue;
-import java.awt.event.InputEvent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,7 +47,7 @@ class SeriesFetchCoordinator {
     private static final Logger logger = LoggerFactory.getLogger(SeriesFetchCoordinator.class);
 
     private final RunManager window;
-    private final JTree timeseriesTree;
+    private final JCheckboxTree timeseriesTree;
     private final DefaultTreeModel timeseriesTreeModel;
     private final TreeFilterManager treeFilterManager;
     private final OutputsTreeBuilder outputsTreeBuilder;
@@ -73,7 +69,7 @@ class SeriesFetchCoordinator {
     private boolean isUpdatingSelection = false;
 
     SeriesFetchCoordinator(RunManager window,
-                           JTree timeseriesTree,
+                           JCheckboxTree timeseriesTree,
                            DefaultTreeModel timeseriesTreeModel,
                            TreeFilterManager treeFilterManager,
                            OutputsTreeBuilder outputsTreeBuilder,
@@ -109,27 +105,27 @@ class SeriesFetchCoordinator {
     }
 
     /**
-     * Handles selection changes in the timeseries tree.
-     * Supports recursive selection: selecting a parent node plots all its leaf children.
+     * Handles checked-state changes in the timeseries tree.
+     * Supports recursive checking: checking a parent node plots all its leaf children.
      * Fetches timeseries data for leaf nodes and updates plot and stats.
      */
-    void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        // Ignore selection changes during programmatic updates
+    void onOutputsTreeCheckedChanged() {
+        // Ignore checked-state changes during programmatic updates
         if (isUpdatingSelection) {
             return;
         }
 
-        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
+        TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
 
-        if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear the target tab's series when nothing is selected
+        if (checkedPaths == null || checkedPaths.length == 0) {
+            // Clear the target tab's series when nothing is checked
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
         }
 
-        // Collect all leaf nodes recursively (parent selection = all children)
+        // Collect all leaf nodes recursively (parent checked = all children)
         List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
-        for (TreePath path : selectedPaths) {
+        for (TreePath path : checkedPaths) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             collectLeafNodes(node, allLeaves);
         }
@@ -140,7 +136,7 @@ class SeriesFetchCoordinator {
             return;
         }
 
-        // Build new set of selected series, ref-keyed directly from the leaves
+        // Build new set of checked series, ref-keyed directly from the leaves
         Set<SeriesRef> newSelectedSeries = new LinkedHashSet<>();
         Map<SeriesRef, OutputsTreeBuilder.SeriesLeafNode> refToLeaf = new HashMap<>();
 
@@ -154,8 +150,8 @@ class SeriesFetchCoordinator {
         // Get the target tab's current series for diffing
         Set<SeriesRef> currentTabSeries = tabManager.getTargetTabSelectedSeries();
 
-        // When filtering with an additive click, preserve series hidden by the filter
-        if (treeFilterManager.isFiltering() && isAdditiveSelectionEvent()) {
+        // Preserve series hidden by filter.
+        if (treeFilterManager.isFiltering()) {
             Set<SeriesRef> visibleRefs = getVisibleSeriesKeys();
             for (SeriesRef ref : currentTabSeries) {
                 if (!visibleRefs.contains(ref)) {
@@ -328,22 +324,6 @@ class SeriesFetchCoordinator {
             return lastRunInfo.getSession();
         }
         return runInfo.getSession();
-    }
-
-    /**
-     * Checks whether the event currently being dispatched is an additive selection gesture
-     * (Cmd/Ctrl/Shift held). Uses EventQueue.getCurrentEvent() so that this works correctly
-     * even when called from a TreeSelectionListener (which fires during the UI delegate's
-     * mouse handler, before any separately registered MouseListeners).
-     */
-    private boolean isAdditiveSelectionEvent() {
-        AWTEvent event = EventQueue.getCurrentEvent();
-        if (event instanceof InputEvent inputEvent) {
-            int modifiers = inputEvent.getModifiersEx()
-                    & (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK);
-            return modifiers != 0;
-        }
-        return false;
     }
 
     /**

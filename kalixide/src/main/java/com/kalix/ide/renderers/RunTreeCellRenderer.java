@@ -15,7 +15,7 @@ import java.awt.Component;
  * Custom tree cell renderer for the run tree.
  * Provides colored text and icons based on run status and node type.
  */
-public class RunTreeCellRenderer extends DefaultTreeCellRenderer {
+public class RunTreeCellRenderer extends CheckboxTreeCellRenderer {
 
     private static final int TREE_ICON_SIZE = 12; // 75% of standard toolbar icon size
 

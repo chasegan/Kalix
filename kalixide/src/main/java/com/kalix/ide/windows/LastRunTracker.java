@@ -1,5 +1,6 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -8,7 +9,6 @@ import com.kalix.ide.managers.TimeSeriesRequestManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -25,7 +25,7 @@ import java.util.Set;
  * When a run completes ({@link #onRunCompleted}):
  * <ol>
  *   <li>Cache is cleared for the session ({@link TimeSeriesRequestManager#clearCacheForSession})</li>
- *   <li>If "Last" was selected, timeseries tree is rebuilt to show new outputs</li>
+ *   <li>If "Last" was checked, timeseries tree is rebuilt to show new outputs</li>
  *   <li>Plotted "[Last]" series are refreshed with new data ({@link #refreshLastSeries})</li>
  * </ol>
  *
@@ -38,7 +38,7 @@ class LastRunTracker {
     private static final Logger logger = LoggerFactory.getLogger(LastRunTracker.class);
 
     private final RunManager window;
-    private final JTree timeseriesSourceTree;
+    private final JCheckboxTree timeseriesSourceTree;
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode lastRunNode;
     private final VisualizationTabManager tabManager;
@@ -63,7 +63,7 @@ class LastRunTracker {
     private long lastRunCompletionTime = 0L;
 
     LastRunTracker(RunManager window,
-                   JTree timeseriesSourceTree,
+                   JCheckboxTree timeseriesSourceTree,
                    DefaultTreeModel treeModel,
                    DefaultMutableTreeNode lastRunNode,
                    VisualizationTabManager tabManager,
@@ -157,27 +157,18 @@ class LastRunTracker {
         // Check if we're replacing an existing Last child or creating the first one
         DefaultMutableTreeNode oldChildNode = null;
         int oldChildIndex = -1;
-        boolean wasLastSelected = false;
+        TreePath oldLastPath = null;
+        boolean wasLastChecked = false;
 
         if (lastRunChildNode != null) {
             oldChildIndex = lastRunNode.getIndex(lastRunChildNode);
             oldChildNode = lastRunChildNode;
-
-            // Check if the old Last child was selected
-            TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-            if (selectedPaths != null) {
-                TreePath oldLastPath = new TreePath(lastRunChildNode.getPath());
-                for (TreePath path : selectedPaths) {
-                    if (path.equals(oldLastPath)) {
-                        wasLastSelected = true;
-                        break;
-                    }
-                }
-            }
+            oldLastPath = new TreePath(lastRunChildNode.getPath());
+            wasLastChecked = timeseriesSourceTree.isPathChecked(oldLastPath);
         }
 
-        // If Last was selected, block all selection events during the entire update
-        if (wasLastSelected) {
+        // If Last was checked, block all checked-state events during the entire update
+        if (wasLastChecked) {
             fetchCoordinator.setUpdatingSelection(true);
         }
 
@@ -189,6 +180,12 @@ class LastRunTracker {
         );
 
         if (oldChildNode != null) {
+            // Old node is leaving the tree - drop its checked entry so it doesn't linger as
+            // a dangling, unreachable "checked" path.
+            if (wasLastChecked) {
+                timeseriesSourceTree.uncheckPath(oldLastPath);
+            }
+
             // Replacing existing child - remove old, add new
             lastRunNode.remove(oldChildNode);
             treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
@@ -201,18 +198,18 @@ class LastRunTracker {
             treeModel.nodesWereInserted(lastRunNode, new int[]{0});
         }
 
-        // If Last was previously selected, rebuild the timeseries tree to show new outputs
-        if (wasLastSelected) {
+        // If Last was previously checked, rebuild the timeseries tree to show new outputs
+        if (wasLastChecked) {
             TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
 
-            // Restore run tree selection to the new Last node
-            timeseriesSourceTree.addSelectionPath(newLastPath);
+            // Check the new Last node so its outputs are picked up below
+            timeseriesSourceTree.checkPath(newLastPath);
 
             // Rebuild the timeseries tree to include any new outputs from the new run
             // This is necessary because the new run may have different outputs than the old one
             window.updateOutputsTree();
 
-            // Restore selection for series that still exist in the new tree
+            // Restore checked state for series that still exist in the new tree
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
             Set<SeriesRef> restoredSeries = window.restoreTreeSelectionForSeries(tabSeries);
 
@@ -251,7 +248,7 @@ class LastRunTracker {
      * So the pool never holds a {@code LastSeries} key that could go stale: when Last
      * changes, a {@code LastSeries} ref simply resolves to a different {@code RunSeries}.
      * This method just ensures that target is populated. The
-     * {@code onOutputsTreeSelectionChanged} "already in pool" short-circuit is therefore
+     * {@code onOutputsTreeCheckedChanged} "already in pool" short-circuit is therefore
      * correct by construction — a {@code getSeries(LastSeries)} probe resolves to the
      * current run's data or to {@code null} (triggering a fetch).
      *

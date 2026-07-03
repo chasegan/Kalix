@@ -13,7 +13,7 @@ import java.awt.Component;
  * Custom tree cell renderer for the timeseries/outputs tree.
  * Provides themed icons based on variable names for better visual identification.
  */
-public class OutputsTreeCellRenderer extends DefaultTreeCellRenderer {
+public class OutputsTreeCellRenderer extends CheckboxTreeCellRenderer {
 
     private static final int TREE_ICON_SIZE = 12; // 75% of standard toolbar icon size
 
