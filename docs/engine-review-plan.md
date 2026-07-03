@@ -26,7 +26,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 12 | Fast CSV + pixie IO (hand-rolled date parse/format, reused record, no per-cell alloc, byte-chunked Gorilla) | **Done** (perf/io-fast) |
 | 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | Pending |
 | 14 | Data-driven INI model IO (design discussion first) | Pending |
-| 15 | Topological sort at configure time (or manifesto the file-order rule) | Pending |
+| 15 | File-order rule made doctrine: `manifestos/node-definition-order.md` | **Done** (on main) |
 
 ## Step 1 record — Gorilla codec (done 2026-07-02)
 
@@ -393,6 +393,7 @@ Full detail lives in the conversation record of 2026-07-02; the essentials:
   `ini_doc_model_io_0_0_1.rs` duplicates node field knowledge in two 13-arm
   matches (parse + render); dead code (commented RoutingNode optimiser block,
   legacy Optimiser trait, unused `storage` fields).
-- **Open decisions**: F1 — is definition-order-as-topology doctrine or should
-  configure() topo-sort? (step 15). F2 — do irregular series have a future that
-  needs per-point timestamps in file-side Timeseries? (step 7).
+- **Open decisions**: both settled. F1 (step 15): definition-order-as-topology
+  is doctrine — see `manifestos/node-definition-order.md`; the engine validates
+  and never sorts. F2 (step 7): regular grids platform-wide, per-point
+  timestamps removed.

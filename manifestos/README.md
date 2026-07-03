@@ -18,6 +18,10 @@ they are for, and how to write one. Read it before adding to this folder.
 - **[Identity and labels](identity-and-labels.md)** — identity is a stable, typed
   token; the label is a projection of it, never stored, keyed on, or parsed.
   Applies to runs, nodes, datasets, files, series.
+- **[Node definition order](node-definition-order.md)** — definition order IS
+  execution order: the file reads downstream and runs as written. The engine
+  validates order and never sorts; automatic arrangement belongs in tools that
+  rewrite the file, visibly.
 - **[Performance](performance.md)** — fast by default (no waiting for a profiler to
   grant permission); bare-metal on the engine's hot path. No hash maps, no branches,
   no allocation in the inner loop; clarity still leads on the cold path.

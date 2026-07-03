@@ -569,7 +569,12 @@ impl Model {
     }
 
 
-    /// Check execution order
+    /// Check execution order.
+    ///
+    /// Definition order IS execution order (per node-definition-order §2):
+    /// the engine validates that every link points down the file and refuses
+    /// otherwise. It deliberately does NOT topologically sort - the model
+    /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
 
         // Execution order according to node index
