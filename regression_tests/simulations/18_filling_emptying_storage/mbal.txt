@@ -12,6 +12,9 @@ INFLOW NODES
   inflow1_level, 2.1
   inflow2_level, 2.5
 
+ORDER_CONTROL NODES
+  enviro, 0
+
 STORAGE NODES
   emptying_storage, 50
   filling_storage, -70

@@ -19,169 +19,81 @@ pub enum NodeEnum {
     OrderControlNode(OrderControlNode),
 }
 
+/// Dispatch a method call to whichever node variant this is. Expands to the
+/// exact 13-arm match that was previously hand-written per method (same
+/// static dispatch, same codegen); adding a node type now means adding one
+/// enum variant and one line here instead of editing seven matches.
+macro_rules! dispatch {
+    ($self:expr, $node:ident => $call:expr) => {
+        match $self {
+            NodeEnum::BlackholeNode($node) => $call,
+            NodeEnum::ConfluenceNode($node) => $call,
+            NodeEnum::GaugeNode($node) => $call,
+            NodeEnum::LossNode($node) => $call,
+            NodeEnum::SplitterNode($node) => $call,
+            NodeEnum::UnregulatedUserNode($node) => $call,
+            NodeEnum::RegulatedUserNode($node) => $call,
+            NodeEnum::Gr4jNode($node) => $call,
+            NodeEnum::InflowNode($node) => $call,
+            NodeEnum::RoutingNode($node) => $call,
+            NodeEnum::SacramentoNode($node) => $call,
+            NodeEnum::StorageNode($node) => $call,
+            NodeEnum::OrderControlNode($node) => $call,
+        }
+    };
+}
+
 impl NodeEnum {
     pub fn get_type_as_string(&self) -> String {
-        match self {
-            NodeEnum::BlackholeNode(_) => "blackhole".to_string(),
-            NodeEnum::ConfluenceNode(_) => "confluence".to_string(),
-            NodeEnum::GaugeNode(_) => "gauge".to_string(),
-            NodeEnum::LossNode(_) => "loss".to_string(),
-            NodeEnum::SplitterNode(_) => "splitter".to_string(),
-            NodeEnum::UnregulatedUserNode(_) => "unregulated_user".to_string(),
-            NodeEnum::RegulatedUserNode(_) => "regulated_user".to_string(),
-            NodeEnum::Gr4jNode(_) => "gr4j".to_string(),
-            NodeEnum::InflowNode(_) => "inflow".to_string(),
-            NodeEnum::RoutingNode(_) => "routing".to_string(),
-            NodeEnum::SacramentoNode(_) => "sacramento".to_string(),
-            NodeEnum::StorageNode(_) => "storage".to_string(),
-            NodeEnum::OrderControlNode(_) => "order_control".to_string(),
-        }
+        let name = match self {
+            NodeEnum::BlackholeNode(_) => "blackhole",
+            NodeEnum::ConfluenceNode(_) => "confluence",
+            NodeEnum::GaugeNode(_) => "gauge",
+            NodeEnum::LossNode(_) => "loss",
+            NodeEnum::SplitterNode(_) => "splitter",
+            NodeEnum::UnregulatedUserNode(_) => "unregulated_user",
+            NodeEnum::RegulatedUserNode(_) => "regulated_user",
+            NodeEnum::Gr4jNode(_) => "gr4j",
+            NodeEnum::InflowNode(_) => "inflow",
+            NodeEnum::RoutingNode(_) => "routing",
+            NodeEnum::SacramentoNode(_) => "sacramento",
+            NodeEnum::StorageNode(_) => "storage",
+            NodeEnum::OrderControlNode(_) => "order_control",
+        };
+        name.to_string()
     }
 }
 
 impl Node for NodeEnum {
-    fn initialise(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> Result<(),String> {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::ConfluenceNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::GaugeNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::LossNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::SplitterNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::UnregulatedUserNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::RegulatedUserNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::Gr4jNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::InflowNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::RoutingNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::SacramentoNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::StorageNode(node) => node.initialise(data_cache, account_manager),
-            NodeEnum::OrderControlNode(node) => node.initialise(data_cache, account_manager),
-        }
+    fn initialise(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> Result<(), String> {
+        dispatch!(self, node => node.initialise(data_cache, account_manager))
     }
 
     fn get_name(&self) -> &str {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.get_name(),
-            NodeEnum::ConfluenceNode(node) => node.get_name(),
-            NodeEnum::GaugeNode(node) => node.get_name(),
-            NodeEnum::LossNode(node) => node.get_name(),
-            NodeEnum::SplitterNode(node) => node.get_name(),
-            NodeEnum::UnregulatedUserNode(node) => node.get_name(),
-            NodeEnum::RegulatedUserNode(node) => node.get_name(),
-            NodeEnum::Gr4jNode(node) => node.get_name(),
-            NodeEnum::InflowNode(node) => node.get_name(),
-            NodeEnum::RoutingNode(node) => node.get_name(),
-            NodeEnum::SacramentoNode(node) => node.get_name(),
-            NodeEnum::StorageNode(node) => node.get_name(),
-            NodeEnum::OrderControlNode(node) => node.get_name(),
-        }
+        dispatch!(self, node => node.get_name())
     }
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache) {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::ConfluenceNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::GaugeNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::LossNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::SplitterNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::UnregulatedUserNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::RegulatedUserNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::Gr4jNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::InflowNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::RoutingNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::SacramentoNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::StorageNode(node) => node.run_order_phase(data_cache),
-            NodeEnum::OrderControlNode(node) => node.run_order_phase(data_cache),
-        }
+        dispatch!(self, node => node.run_order_phase(data_cache))
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::ConfluenceNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::GaugeNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::LossNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::SplitterNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::UnregulatedUserNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::RegulatedUserNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::Gr4jNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::InflowNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::RoutingNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::SacramentoNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::StorageNode(node) => node.run_flow_phase(data_cache, account_manager),
-            NodeEnum::OrderControlNode(node) => node.run_flow_phase(data_cache, account_manager),
-        }
+        dispatch!(self, node => node.run_flow_phase(data_cache, account_manager))
     }
 
     fn add_usflow(&mut self, flow: f64, inlet: u8) {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::ConfluenceNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::GaugeNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::LossNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::SplitterNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::UnregulatedUserNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::RegulatedUserNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::Gr4jNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::InflowNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::RoutingNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::SacramentoNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::StorageNode(node) => node.add_usflow(flow, inlet),
-            NodeEnum::OrderControlNode(node) => node.add_usflow(flow, inlet),
-        }
+        dispatch!(self, node => node.add_usflow(flow, inlet))
     }
 
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::ConfluenceNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::GaugeNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::LossNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::SplitterNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::UnregulatedUserNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::RegulatedUserNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::Gr4jNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::InflowNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::RoutingNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::SacramentoNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::StorageNode(node) => node.remove_dsflow(outlet),
-            NodeEnum::OrderControlNode(node) => node.remove_dsflow(outlet),
-        }
+        dispatch!(self, node => node.remove_dsflow(outlet))
     }
 
     fn get_mass_balance(&self) -> f64 {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.get_mass_balance(),
-            NodeEnum::ConfluenceNode(node) => node.get_mass_balance(),
-            NodeEnum::GaugeNode(node) => node.get_mass_balance(),
-            NodeEnum::LossNode(node) => node.get_mass_balance(),
-            NodeEnum::SplitterNode(node) => node.get_mass_balance(),
-            NodeEnum::UnregulatedUserNode(node) => node.get_mass_balance(),
-            NodeEnum::RegulatedUserNode(node) => node.get_mass_balance(),
-            NodeEnum::Gr4jNode(node) => node.get_mass_balance(),
-            NodeEnum::InflowNode(node) => node.get_mass_balance(),
-            NodeEnum::RoutingNode(node) => node.get_mass_balance(),
-            NodeEnum::SacramentoNode(node) => node.get_mass_balance(),
-            NodeEnum::StorageNode(node) => node.get_mass_balance(),
-            NodeEnum::OrderControlNode(node) => node.get_mass_balance(),
-        }
+        dispatch!(self, node => node.get_mass_balance())
     }
 
     fn dsorders_mut(&mut self) -> &mut [f64] {
-        match self {
-            NodeEnum::BlackholeNode(node) => node.dsorders_mut(),
-            NodeEnum::ConfluenceNode(node) => node.dsorders_mut(),
-            NodeEnum::GaugeNode(node) => node.dsorders_mut(),
-            NodeEnum::LossNode(node) => node.dsorders_mut(),
-            NodeEnum::SplitterNode(node) => node.dsorders_mut(),
-            NodeEnum::UnregulatedUserNode(node) => node.dsorders_mut(),
-            NodeEnum::RegulatedUserNode(node) => node.dsorders_mut(),
-            NodeEnum::Gr4jNode(node) => node.dsorders_mut(),
-            NodeEnum::InflowNode(node) => node.dsorders_mut(),
-            NodeEnum::RoutingNode(node) => node.dsorders_mut(),
-            NodeEnum::SacramentoNode(node) => node.dsorders_mut(),
-            NodeEnum::StorageNode(node) => node.dsorders_mut(),
-            NodeEnum::OrderControlNode(node) => node.dsorders_mut(),
-        }
+        dispatch!(self, node => node.dsorders_mut())
     }
 }
-

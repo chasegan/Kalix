@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{Node, recorder};
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
@@ -75,24 +74,12 @@ impl Node for SplitterNode {
         }
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
-        self.recorder_idx_ds_2 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2").as_str(), false
-        );
-        self.recorder_idx_ds_2_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_order").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
+        self.recorder_idx_ds_2 = recorder(data_cache, &self.name, "ds_2");
+        self.recorder_idx_ds_2_order = recorder(data_cache, &self.name, "ds_2_order");
 
         // Return
         Ok(())
@@ -140,9 +127,6 @@ impl Node for SplitterNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.ds_1_flow);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
         if let Some(idx) = self.recorder_idx_ds_2 {
             data_cache.add_value_at_index(idx, self.ds_2_flow);
         }

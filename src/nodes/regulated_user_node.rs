@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{recorder, single_outlet_node_impls, Node};
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
@@ -59,6 +58,8 @@ impl RegulatedUserNode {
 }
 
 impl Node for RegulatedUserNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
@@ -73,33 +74,15 @@ impl Node for RegulatedUserNode {
         // DynamicInput is already initialized during parsing
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_pump_capacity = data_cache.get_series_idx(
-            make_result_name(&self.name, "pump").as_str(), false
-        );
-        self.recorder_idx_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "order").as_str(), false
-        );
-        self.recorder_idx_order_due = data_cache.get_series_idx(
-            make_result_name(&self.name, "order_due").as_str(), false
-        );
-        self.recorder_idx_demand = data_cache.get_series_idx(
-            make_result_name(&self.name, "demand").as_str(), false
-        );
-        self.recorder_idx_diversion = data_cache.get_series_idx(
-            make_result_name(&self.name, "diversion").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_ids_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_pump_capacity = recorder(data_cache, &self.name, "pump");
+        self.recorder_idx_order = recorder(data_cache, &self.name, "order");
+        self.recorder_idx_order_due = recorder(data_cache, &self.name, "order_due");
+        self.recorder_idx_demand = recorder(data_cache, &self.name, "demand");
+        self.recorder_idx_diversion = recorder(data_cache, &self.name, "diversion");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_ids_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
 
         // Return
         Ok(())
@@ -174,34 +157,12 @@ impl Node for RegulatedUserNode {
         if let Some(idx) = self.recorder_ids_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }

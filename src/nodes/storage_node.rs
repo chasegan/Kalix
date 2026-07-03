@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{Node, recorder};
 use crate::model_inputs::DynamicInput;
 use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
@@ -61,10 +60,7 @@ pub struct StorageNode {
     pub us_orders: f64,
     pub has_target_level: bool,
     pub target_level_order_buffer: FifoBuffer,
-    pub ds_1_order_buffer: FifoBuffer,
-    pub ds_2_order_buffer: FifoBuffer,
-    pub ds_3_order_buffer: FifoBuffer,
-    pub ds_4_order_buffer: FifoBuffer,
+    pub ds_order_buffers: [FifoBuffer; MAX_DS_LINKS],
 
     // Outlet definitions (MOL, capacity) - parsed from INI
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
@@ -88,30 +84,13 @@ pub struct StorageNode {
     recorder_idx_pond_demand: Option<usize>,
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
-    recorder_idx_ds_1: Option<usize>,
-    recorder_idx_ds_1_order: Option<usize>,
-    recorder_idx_ds_1_order_due: Option<usize>,
-    recorder_idx_ds_1_outlet: Option<usize>,
-    recorder_idx_ds_1_spill: Option<usize>,
-    recorder_idx_ds_1_force_release: Option<usize>,
-    recorder_idx_ds_2: Option<usize>,
-    recorder_idx_ds_2_order: Option<usize>,
-    recorder_idx_ds_2_order_due: Option<usize>,
-    recorder_idx_ds_2_outlet: Option<usize>,
-    recorder_idx_ds_2_spill: Option<usize>,
-    recorder_idx_ds_2_force_release: Option<usize>,
-    recorder_idx_ds_3: Option<usize>,
-    recorder_idx_ds_3_order: Option<usize>,
-    recorder_idx_ds_3_order_due: Option<usize>,
-    recorder_idx_ds_3_outlet: Option<usize>,
-    recorder_idx_ds_3_spill: Option<usize>,
-    recorder_idx_ds_3_force_release: Option<usize>,
-    recorder_idx_ds_4: Option<usize>,
-    recorder_idx_ds_4_order: Option<usize>,
-    recorder_idx_ds_4_order_due: Option<usize>,
-    recorder_idx_ds_4_outlet: Option<usize>,
-    recorder_idx_ds_4_spill: Option<usize>,
-    recorder_idx_ds_4_force_release: Option<usize>,
+    // Per-outlet recorder indices, one slot per ds link (ds_1 = index 0).
+    recorder_idx_ds: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_ds_order: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_ds_order_due: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_ds_outlet: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_ds_spill: [Option<usize>; MAX_DS_LINKS],
+    recorder_idx_ds_force_release: [Option<usize>; MAX_DS_LINKS],
 }
 
 impl StorageNode {
@@ -559,120 +538,29 @@ impl Node for StorageNode {
         self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_volume = data_cache.get_series_idx(
-            make_result_name(&self.name, "volume").as_str(), false
-        );
-        self.recorder_idx_level = data_cache.get_series_idx(
-            make_result_name(&self.name, "level").as_str(), false
-        );
-        self.recorder_idx_target_level = data_cache.get_series_idx(
-            make_result_name(&self.name, "target_level").as_str(), false
-        );
-        self.recorder_idx_area = data_cache.get_series_idx(
-            make_result_name(&self.name, "area").as_str(), false
-        );
-        self.recorder_idx_seep_megs = data_cache.get_series_idx(
-            make_result_name(&self.name, "seep_vol").as_str(), false
-        );
-        self.recorder_idx_rain_megs = data_cache.get_series_idx(
-            make_result_name(&self.name, "rain_vol").as_str(), false
-        );
-        self.recorder_idx_evap_megs = data_cache.get_series_idx(
-            make_result_name(&self.name, "evap_vol").as_str(), false
-        );
-        self.recorder_idx_rain_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "rain").as_str(), false
-        );
-        self.recorder_idx_evap_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "evap").as_str(), false
-        );
-        self.recorder_idx_seep_mm = data_cache.get_series_idx(
-            make_result_name(&self.name, "seep").as_str(), false
-        );
-        self.recorder_idx_pond_diversion = data_cache.get_series_idx(
-            make_result_name(&self.name, "pond_diversion").as_str(), false
-        );
-        self.recorder_idx_pond_demand = data_cache.get_series_idx(
-            make_result_name(&self.name, "pond_demand").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_outlet").as_str(), false
-        );
-        self.recorder_idx_ds_1_spill = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_spill").as_str(), false
-        );
-        self.recorder_idx_ds_2 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2").as_str(), false
-        );
-        self.recorder_idx_ds_2_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_outlet").as_str(), false
-        );
-        self.recorder_idx_ds_2_spill = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_spill").as_str(), false
-        );
-        self.recorder_idx_ds_3 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3").as_str(), false
-        );
-        self.recorder_idx_ds_3_spill = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_spill").as_str(), false
-        );
-        self.recorder_idx_ds_3_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_outlet").as_str(), false
-        );
-        self.recorder_idx_ds_4 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4").as_str(), false
-        );
-        self.recorder_idx_ds_4_outlet = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_outlet").as_str(), false
-        );
-        self.recorder_idx_ds_4_spill = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_spill").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
-        self.recorder_idx_ds_2_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_order").as_str(), false
-        );
-        self.recorder_idx_ds_3_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_order").as_str(), false
-        );
-        self.recorder_idx_ds_4_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_order").as_str(), false
-        );
-        self.recorder_idx_ds_1_order_due = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order_due").as_str(), false
-        );
-        self.recorder_idx_ds_2_order_due = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_order_due").as_str(), false
-        );
-        self.recorder_idx_ds_3_order_due = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_order_due").as_str(), false
-        );
-        self.recorder_idx_ds_4_order_due = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_order_due").as_str(), false
-        );
-        self.recorder_idx_ds_1_force_release = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_force_release").as_str(), false
-        );
-        self.recorder_idx_ds_2_force_release = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_2_force_release").as_str(), false
-        );
-        self.recorder_idx_ds_3_force_release = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_3_force_release").as_str(), false
-        );
-        self.recorder_idx_ds_4_force_release = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_4_force_release").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_volume = recorder(data_cache, &self.name, "volume");
+        self.recorder_idx_level = recorder(data_cache, &self.name, "level");
+        self.recorder_idx_target_level = recorder(data_cache, &self.name, "target_level");
+        self.recorder_idx_area = recorder(data_cache, &self.name, "area");
+        self.recorder_idx_seep_megs = recorder(data_cache, &self.name, "seep_vol");
+        self.recorder_idx_rain_megs = recorder(data_cache, &self.name, "rain_vol");
+        self.recorder_idx_evap_megs = recorder(data_cache, &self.name, "evap_vol");
+        self.recorder_idx_rain_mm = recorder(data_cache, &self.name, "rain");
+        self.recorder_idx_evap_mm = recorder(data_cache, &self.name, "evap");
+        self.recorder_idx_seep_mm = recorder(data_cache, &self.name, "seep");
+        self.recorder_idx_pond_diversion = recorder(data_cache, &self.name, "pond_diversion");
+        self.recorder_idx_pond_demand = recorder(data_cache, &self.name, "pond_demand");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        for i in 0..MAX_DS_LINKS {
+            let n = i + 1;
+            self.recorder_idx_ds[i] = recorder(data_cache, &self.name, &format!("ds_{n}"));
+            self.recorder_idx_ds_order[i] = recorder(data_cache, &self.name, &format!("ds_{n}_order"));
+            self.recorder_idx_ds_order_due[i] = recorder(data_cache, &self.name, &format!("ds_{n}_order_due"));
+            self.recorder_idx_ds_outlet[i] = recorder(data_cache, &self.name, &format!("ds_{n}_outlet"));
+            self.recorder_idx_ds_spill[i] = recorder(data_cache, &self.name, &format!("ds_{n}_spill"));
+            self.recorder_idx_ds_force_release[i] = recorder(data_cache, &self.name, &format!("ds_{n}_force_release"));
+        }
 
         Ok(())
     }
@@ -681,38 +569,16 @@ impl Node for StorageNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache) {
 
-        // Record new downstream orders
-        if let Some(idx) = self.recorder_idx_ds_1_order {
-            data_cache.add_value_at_index(idx, self.ds_orders[0]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_2_order {
-            data_cache.add_value_at_index(idx, self.ds_orders[1]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_3_order {
-            data_cache.add_value_at_index(idx, self.ds_orders[2]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_4_order {
-            data_cache.add_value_at_index(idx, self.ds_orders[3]);
-        }
-
-        // Update orders due
-        self.ds_orders_due[0] = self.ds_1_order_buffer.push(self.ds_orders[0]);
-        self.ds_orders_due[1] = self.ds_2_order_buffer.push(self.ds_orders[1]);
-        self.ds_orders_due[2] = self.ds_3_order_buffer.push(self.ds_orders[2]);
-        self.ds_orders_due[3] = self.ds_4_order_buffer.push(self.ds_orders[3]);
-
-        // Record orders due
-        if let Some(idx) = self.recorder_idx_ds_1_order_due {
-            data_cache.add_value_at_index(idx, self.ds_orders_due[0]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_2_order_due {
-            data_cache.add_value_at_index(idx, self.ds_orders_due[1]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_3_order_due {
-            data_cache.add_value_at_index(idx, self.ds_orders_due[2]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_4_order_due {
-            data_cache.add_value_at_index(idx, self.ds_orders_due[3]);
+        // Record downstream orders, roll each outlet's order buffer, record
+        // what is due today.
+        for i in 0..MAX_DS_LINKS {
+            if let Some(idx) = self.recorder_idx_ds_order[i] {
+                data_cache.add_value_at_index(idx, self.ds_orders[i]);
+            }
+            self.ds_orders_due[i] = self.ds_order_buffers[i].push(self.ds_orders[i]);
+            if let Some(idx) = self.recorder_idx_ds_order_due[i] {
+                data_cache.add_value_at_index(idx, self.ds_orders_due[i]);
+            }
         }
 
         // Calculate orders
@@ -839,54 +705,26 @@ impl Node for StorageNode {
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
         }
-        if let Some(idx) = self.recorder_idx_ds_1 {
-            data_cache.add_value_at_index(idx, self.ds_flows[0]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_1_outlet {
-            let ds_1_outlet_flow = (self.ds_flows[0] - self.spill).max(0.0);
-            data_cache.add_value_at_index(idx, ds_1_outlet_flow);
-        }
-        if let Some(idx) = self.recorder_idx_ds_1_spill {
-            data_cache.add_value_at_index(idx, self.spill);
-        }
-        if let Some(idx) = self.recorder_idx_ds_2 {
-            data_cache.add_value_at_index(idx, self.ds_flows[1]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_2_outlet {
-            data_cache.add_value_at_index(idx, self.ds_flows[1]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_2_spill {
-            data_cache.add_value_at_index(idx, 0.0);
-        }
-        if let Some(idx) = self.recorder_idx_ds_3 {
-            data_cache.add_value_at_index(idx, self.ds_flows[2]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_3_outlet {
-            data_cache.add_value_at_index(idx, self.ds_flows[2]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_3_spill {
-            data_cache.add_value_at_index(idx, 0.0);
-        }
-        if let Some(idx) = self.recorder_idx_ds_4 {
-            data_cache.add_value_at_index(idx, self.ds_flows[3]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_4_outlet {
-            data_cache.add_value_at_index(idx, self.ds_flows[3]);
-        }
-        if let Some(idx) = self.recorder_idx_ds_4_spill {
-            data_cache.add_value_at_index(idx, 0.0);
-        }
-        if let Some(idx) = self.recorder_idx_ds_1_force_release {
-            data_cache.add_value_at_index(idx, self.force_release_output(0));
-        }
-        if let Some(idx) = self.recorder_idx_ds_2_force_release {
-            data_cache.add_value_at_index(idx, self.force_release_output(1));
-        }
-        if let Some(idx) = self.recorder_idx_ds_3_force_release {
-            data_cache.add_value_at_index(idx, self.force_release_output(2));
-        }
-        if let Some(idx) = self.recorder_idx_ds_4_force_release {
-            data_cache.add_value_at_index(idx, self.force_release_output(3));
+        // Per-outlet records. Outlet 0 (ds_1) carries the spill: its outlet
+        // component is flow minus spill; the other outlets never spill.
+        for i in 0..MAX_DS_LINKS {
+            if let Some(idx) = self.recorder_idx_ds[i] {
+                data_cache.add_value_at_index(idx, self.ds_flows[i]);
+            }
+            if let Some(idx) = self.recorder_idx_ds_outlet[i] {
+                let outlet_flow = if i == 0 {
+                    (self.ds_flows[0] - self.spill).max(0.0)
+                } else {
+                    self.ds_flows[i]
+                };
+                data_cache.add_value_at_index(idx, outlet_flow);
+            }
+            if let Some(idx) = self.recorder_idx_ds_spill[i] {
+                data_cache.add_value_at_index(idx, if i == 0 { self.spill } else { 0.0 });
+            }
+            if let Some(idx) = self.recorder_idx_ds_force_release[i] {
+                data_cache.add_value_at_index(idx, self.force_release_output(i));
+            }
         }
 
         // Reset upstream inflow for next timestep

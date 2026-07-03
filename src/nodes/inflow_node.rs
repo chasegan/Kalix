@@ -1,5 +1,4 @@
-use super::Node;
-use crate::misc::misc_functions::make_result_name;
+use super::{recorder, single_outlet_node_impls, Node};
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
@@ -19,7 +18,6 @@ pub struct InflowNode {
     usflow: f64,
     inflow_value: f64,
     dsflow_primary: f64,
-    storage: f64,
 
     // Properties and internal state - regulated demands and ordering
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -47,35 +45,24 @@ impl InflowNode {
 }
 
 impl Node for InflowNode {
+    single_outlet_node_impls!();
+
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Initialize only internal state
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.inflow_value = 0.0;
         self.dsflow_primary = 0.0;
-        self.storage = 0.0;
 
         // DynamicInput is already initialized during parsing
 
         // Initialize result recorders
-        self.recorder_idx_usflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "usflow").as_str(), false
-        );
-        self.recorder_idx_inflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "inflow").as_str(), false
-        );
-        self.recorder_idx_expected_inflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "expected_inflow").as_str(), false
-        );
-        self.recorder_idx_dsflow = data_cache.get_series_idx(
-            make_result_name(&self.name, "dsflow").as_str(), false
-        );
-        self.recorder_idx_ds_1 = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1").as_str(), false
-        );
-        self.recorder_idx_ds_1_order = data_cache.get_series_idx(
-            make_result_name(&self.name, "ds_1_order").as_str(), false
-        );
+        self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
+        self.recorder_idx_inflow = recorder(data_cache, &self.name, "inflow");
+        self.recorder_idx_expected_inflow = recorder(data_cache, &self.name, "expected_inflow");
+        self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
 
         // Return
         Ok(())
@@ -128,34 +115,12 @@ impl Node for InflowNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
-        // if let Some(idx) = self.recorder_idx_ds_1_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[0]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
 
-    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
-        self.usflow += flow;
-    }
 
-    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
-        match outlet {
-            0 => {
-                let outflow = self.dsflow_primary;
-                self.dsflow_primary = 0.0;
-                outflow
-            }
-            _ => 0.0,
-        }
-    }
 
-    fn get_mass_balance(&self) -> f64 {
-        self.mbal
-    }
 
-    fn dsorders_mut(&mut self) -> &mut [f64] {
-        &mut self.dsorders
-    }
 }

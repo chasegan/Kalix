@@ -12,6 +12,12 @@ INFLOW NODES
   inflow_zero_1, 0
   inflow_zero_2, 0
 
+ORDER_CONTROL NODES
+  enviro1, 0
+  enviro2, 0
+  enviro3, 0
+  enviro4, 0
+
 STORAGE NODES
   dam, 214.28571428571428
   dam2, 142.85714285714286
