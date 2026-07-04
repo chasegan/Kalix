@@ -1,6 +1,10 @@
 package com.kalix.ide;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.BasicStroke;
@@ -11,12 +15,12 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
 
@@ -33,7 +37,7 @@ import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
 import com.kalix.ide.rendering.MapRenderer;
 import com.kalix.ide.constants.UIConstants;
 
-public class MapPanel extends JPanel implements KeyListener {
+public class MapPanel extends JPanel {
     private static final Cursor ROTATE_CURSOR = createRotateCursor();
 
     private double zoomLevel = 1.0;
@@ -93,8 +97,8 @@ public class MapPanel extends JPanel implements KeyListener {
 
         // Enable keyboard focus for delete key handling
         setFocusable(true);
-        addKeyListener(this);
 
+        setupKeyBindings();
         setupMouseListeners();
     }
 
@@ -818,99 +822,104 @@ public class MapPanel extends JPanel implements KeyListener {
         }
     }
     
-    // KeyListener implementation for delete key handling
-    
-    @Override
-    public void keyPressed(KeyEvent e) {
-        // Check for modifier key (Ctrl on Windows/Linux, Cmd on macOS)
-        boolean isModifierDown = (e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0 ||
-                                 (e.getModifiersEx() & InputEvent.META_DOWN_MASK) != 0;
+    // Keyboard bindings
 
-        // Update cursor for rotation preview when Ctrl is pressed
-        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
-                && interactionManager != null && interactionManager.canStartRotation()
-                && !interactionManager.isDragging()) {
-            setCursor(ROTATE_CURSOR);
-        }
+    /**
+     * Installs the map's keyboard shortcuts via InputMap/ActionMap using the
+     * platform menu shortcut key (Ctrl on Windows/Linux, Cmd on macOS).
+     */
+    private void setupKeyBindings() {
+        int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        InputMap inputMap = getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
-        // Find Node: Ctrl+F / Cmd+F
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_F) {
-            if (mapSearchManager != null) {
-                mapSearchManager.showFindDialog();
-            }
-            return;
-        }
+        // Find Node
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_F, menuMask), "map.find",
+            this::showFindNodeDialog);
 
-        // Undo: Ctrl+Z / Cmd+Z
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Z) {
+        // Undo
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), "map.undo", () -> {
             if (textEditor != null && textEditor.canUndo()) {
                 textEditor.undo();
             }
-            return;
-        }
+        });
 
-        // Redo: Ctrl+Y / Cmd+Y
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Y) {
+        // Redo: Ctrl+Y / Cmd+Y and the conventional Ctrl+Shift+Z / Cmd+Shift+Z
+        Runnable redo = () -> {
             if (textEditor != null && textEditor.canRedo()) {
                 textEditor.redo();
             }
-            return;
-        }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask), "map.redo", redo);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK), "map.redo");
 
-        // Cut: Ctrl+X / Cmd+X
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_X) {
+        // Cut
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_X, menuMask), "map.cut", () -> {
             if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
                 clipboardManager.cut();
                 repaint();
             }
-            return;
-        }
+        });
 
-        // Copy: Ctrl+C / Cmd+C
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_C) {
+        // Copy
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_C, menuMask), "map.copy", () -> {
             if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
                 clipboardManager.copy();
             }
-            return;
-        }
+        });
 
-        // Paste: Ctrl+V / Cmd+V (paste at center of viewport)
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_V) {
+        // Paste (at center of viewport)
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_V, menuMask), "map.paste", () -> {
             if (clipboardManager != null && clipboardManager.hasClipboardContent()) {
-                // Calculate center of viewport in world coordinates
                 double centerX = (getWidth() / 2.0 - panX) / zoomLevel;
                 double centerY = (getHeight() / 2.0 - panY) / zoomLevel;
                 clipboardManager.pasteAtMapLocation(centerX, centerY);
                 repaint();
             }
-            return;
-        }
+        });
 
-        // Delete: Delete or Backspace key
-        if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+        // Delete selection
+        Runnable delete = () -> {
             if (interactionManager != null && model != null &&
                 (model.getSelectedNodeCount() > 0 || model.getSelectedLinkCount() > 0)) {
                 interactionManager.deleteSelectedElements();
                 repaint();
             }
-        }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
+
+        // Rotation-cursor preview while the modifier key itself is held
+        Runnable previewOn = () -> {
+            if (interactionManager != null && interactionManager.canStartRotation()
+                    && !interactionManager.isDragging()) {
+                setCursor(ROTATE_CURSOR);
+            }
+        };
+        Runnable previewOff = () -> {
+            if (interactionManager != null && !interactionManager.isDragging()) {
+                setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_CONTROL, InputEvent.CTRL_DOWN_MASK, false),
+            "map.rotatePreviewOn", previewOn);
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_CONTROL, 0, true),
+            "map.rotatePreviewOff", previewOff);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_META, InputEvent.META_DOWN_MASK, false), "map.rotatePreviewOn");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_META, 0, true), "map.rotatePreviewOff");
     }
-    
-    @Override
-    public void keyReleased(KeyEvent e) {
-        // Reset cursor when Ctrl is released (rotation preview ends)
-        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
-                && interactionManager != null && !interactionManager.isDragging()) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-        }
+
+    /** Registers a keystroke-to-action binding on this panel. */
+    private void bind(InputMap inputMap, KeyStroke keyStroke, String actionName, Runnable action) {
+        inputMap.put(keyStroke, actionName);
+        getActionMap().put(actionName, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                action.run();
+            }
+        });
     }
-    
-    @Override
-    public void keyTyped(KeyEvent e) {
-        // Not used but required by KeyListener interface
-    }
-    
-    
+
+
     /**
      * Completes the rectangle selection by selecting all nodes and links within the rectangle.
      */
