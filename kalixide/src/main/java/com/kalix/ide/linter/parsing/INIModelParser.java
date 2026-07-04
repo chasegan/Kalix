@@ -107,7 +107,7 @@ public class INIModelParser {
         ParsedModel model = new ParsedModel();
 
         try {
-            String[] lines = content.split("\n");
+            String[] lines = splitLines(content);
             int lineNumber = 0;
             Section currentSection = null;
 
@@ -204,6 +204,24 @@ public class INIModelParser {
         }
 
         return model;
+    }
+
+    /**
+     * Split content into lines, stripping a trailing '\r' from each line so CRLF
+     * documents parse identically to LF documents. Without this, a "blank" line in
+     * a CRLF file survives as "\r", which {@link #collectContinuationLines} treats
+     * as a continuation line - gluing indented lines after a blank line onto the
+     * previous property, contrary to {@link IniContinuation}'s documented rule.
+     */
+    private static String[] splitLines(String content) {
+        String[] lines = content.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') {
+                lines[i] = line.substring(0, line.length() - 1);
+            }
+        }
+        return lines;
     }
 
     /**
