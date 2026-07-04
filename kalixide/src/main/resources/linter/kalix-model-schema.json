@@ -519,11 +519,6 @@
       "description": "This property is defined on another line."
     },
 
-    "data_reference_files": {
-      "severity": "warning",
-      "description": "Data references should point to files listed in inputs section"
-    },
-
     "coordinate_format": {
       "severity": "error",
       "description": "Coordinates must be two comma-separated numbers"

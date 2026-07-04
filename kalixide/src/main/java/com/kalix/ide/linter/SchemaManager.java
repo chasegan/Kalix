@@ -27,6 +27,14 @@ public class SchemaManager {
     // Callback interface for preference changes
     public interface LintingStateChangeListener {
         void onLintingEnabledChanged(boolean enabled);
+
+        /**
+         * Called when the schema or per-rule preferences change while the global
+         * enabled flag stays the same (e.g. an individual rule is toggled, or the
+         * schema file is reloaded). Listeners should revalidate so highlights
+         * reflect the new rules immediately rather than on the next keystroke.
+         */
+        default void onSchemaChanged() {}
     }
 
     private final List<LintingStateChangeListener> listeners = new CopyOnWriteArrayList<>();
@@ -54,9 +62,18 @@ public class SchemaManager {
     }
 
     /**
-     * Reload the schema from preferences.
+     * Reload the schema from preferences and notify listeners.
      */
     public void reloadSchema() {
+        reloadSchemaInternal();
+        notifySchemaChanged();
+    }
+
+    /**
+     * Reload the schema without notifying listeners (callers decide which
+     * notification, if any, applies).
+     */
+    private void reloadSchemaInternal() {
         try {
             String customSchemaPath = PreferenceKeys.LINTER_SCHEMA_PATH.get();
 
@@ -119,13 +136,16 @@ public class SchemaManager {
         this.disabledRules = new HashSet<>(disabledRuleNames);
 
         // Reload schema with new preferences
-        reloadSchema();
+        reloadSchemaInternal();
 
-        // Notify listeners if linting enabled state changed
+        // Notify listeners: an enabled-flag flip drives the full enable/disable
+        // path; otherwise the rules/schema changed in place and listeners must
+        // revalidate (stale highlights persisted until the next keystroke before).
         if (wasEnabled != enabled) {
             notifyLintingStateChanged(enabled);
+        } else {
+            notifySchemaChanged();
         }
-
     }
 
     // Getters
@@ -182,6 +202,19 @@ public class SchemaManager {
                 listener.onLintingEnabledChanged(enabled);
             } catch (Exception e) {
                 logger.warn("Error notifying linting state change listener", e);
+            }
+        }
+    }
+
+    /**
+     * Notify all listeners that the schema or per-rule preferences changed.
+     */
+    private void notifySchemaChanged() {
+        for (LintingStateChangeListener listener : listeners) {
+            try {
+                listener.onSchemaChanged();
+            } catch (Exception e) {
+                logger.warn("Error notifying schema change listener", e);
             }
         }
     }

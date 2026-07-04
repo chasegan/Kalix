@@ -235,6 +235,17 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     }
 
     /**
+     * Handle schema/rule-preference changes from SchemaManager: revalidate so
+     * highlights reflect the new rules immediately (review #45).
+     */
+    @Override
+    public void onSchemaChanged() {
+        if (eventManager != null) {
+            validateNow();
+        }
+    }
+
+    /**
      * Cleanup resources when the manager is no longer needed.
      */
     public void dispose() {
