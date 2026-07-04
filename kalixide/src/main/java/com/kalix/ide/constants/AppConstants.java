@@ -56,15 +56,6 @@ public final class AppConstants {
     
     // Themes: the theme list, ids and defaults live in com.kalix.ide.themes.ThemeRegistry
 
-    // Preferences keys (DEPRECATED - use PreferenceKeys class for better organization)
-    // TODO: Remove these constants and use PreferenceKeys class throughout codebase
-    @Deprecated public static final String PREF_THEME = "theme";
-    @Deprecated public static final String PREF_NODE_THEME = "node.theme";
-    @Deprecated public static final String PREF_EDITOR_THEME = "editor.theme";
-    @Deprecated public static final String PREF_SHOW_GRIDLINES = "map.show.gridlines";
-    @Deprecated public static final String PREF_FLOWVIZ_SHOW_COORDINATES = "flowviz.show.coordinates";
-    
-    
     // Status messages
     public static final String STATUS_READY = "Ready";
     public static final String STATUS_NEW_MODEL_CREATED = "New model created";

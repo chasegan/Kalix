@@ -293,10 +293,10 @@ public class FileOperationsManager {
     }
 
     /**
-     * Saves all models to the previously opened file(s). 
-     * 
-     * Implemented as a w
-     * If no file is currently open, delegates to saveAsModel().
+     * Saves every open document to its previously opened file.
+     *
+     * Implemented as a loop over the document manager's documents, saving each
+     * in turn; a document with no backing file falls through to saveAsModel().
      */
     public void saveAllModels() {
         for (KalixDocument document : documentManager.getDocuments()) {

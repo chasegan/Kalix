@@ -10,7 +10,6 @@ import java.awt.Color;
  * All constants are grouped by functionality and include documentation explaining
  * their purpose and recommended usage.
  *
- * @author Claude Code Assistant
  * @version 1.0
  */
 public final class UIConstants {
@@ -101,27 +100,6 @@ public final class UIConstants {
         public static final Color DARK_GRID_COLOR = new Color(80, 80, 80);
 
         private Theme() { throw new UnsupportedOperationException("Constants class"); }
-    }
-
-    /**
-     * Animation and performance constants
-     */
-    public static final class Performance {
-        private Performance() { throw new UnsupportedOperationException("Constants class"); }
-    }
-
-    /**
-     * Layout and spacing constants
-     */
-    public static final class Layout {
-        private Layout() { throw new UnsupportedOperationException("Constants class"); }
-    }
-
-    /**
-     * FlowViz specific constants
-     */
-    public static final class FlowViz {
-        private FlowViz() { throw new UnsupportedOperationException("Constants class"); }
     }
 
     /**

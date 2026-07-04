@@ -14,7 +14,8 @@ import java.awt.event.KeyEvent;
  */
 public class KeyboardShortcutManager {
 
-    private static final boolean IS_MAC = System.getProperty("os.name").toLowerCase().contains("mac");
+    private static final boolean IS_MAC =
+        com.kalix.ide.utils.PlatformUtils.getCurrentPlatform() == com.kalix.ide.utils.Platform.MACOS;
 
     // macOS modifier symbols
     private static final String MAC_COMMAND = "⌘";

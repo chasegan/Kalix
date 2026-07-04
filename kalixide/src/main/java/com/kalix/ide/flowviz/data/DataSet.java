@@ -1,5 +1,8 @@
 package com.kalix.ide.flowviz.data;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +29,8 @@ import java.util.function.Function;
  * @see com.kalix.ide.windows.VisualizationTabManager
  */
 public class DataSet {
+
+    private static final Logger logger = LoggerFactory.getLogger(DataSet.class);
     // Storage keyed by SeriesRef. Insertion order preserved (matches plot series stacking order).
     private final Map<SeriesRef, TimeSeriesData> seriesByRef = new LinkedHashMap<>();
     private long globalMinTime = Long.MAX_VALUE;
@@ -255,7 +260,7 @@ public class DataSet {
             try {
                 listener.onSeriesAdded(ref, data);
             } catch (Exception e) {
-                System.err.println("Error in DataSet listener: " + e.getMessage());
+                logger.warn("Error in DataSet listener", e);
             }
         }
     }
@@ -265,7 +270,7 @@ public class DataSet {
             try {
                 listener.onSeriesRemoved(ref);
             } catch (Exception e) {
-                System.err.println("Error in DataSet listener: " + e.getMessage());
+                logger.warn("Error in DataSet listener", e);
             }
         }
     }
@@ -275,7 +280,7 @@ public class DataSet {
             try {
                 listener.onDataChanged();
             } catch (Exception e) {
-                System.err.println("Error in DataSet listener: " + e.getMessage());
+                logger.warn("Error in DataSet listener", e);
             }
         }
     }

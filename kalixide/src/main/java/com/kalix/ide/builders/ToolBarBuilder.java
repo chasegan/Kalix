@@ -3,11 +3,25 @@ package com.kalix.ide.builders;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.icons.KalixIcon;
+import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JToggleButton;
+import javax.swing.JToolBar;
+import javax.swing.UIManager;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 
@@ -16,6 +30,8 @@ import java.awt.image.BufferedImage;
  * Creates a toolbar with commonly used actions and appropriate icons.
  */
 public class ToolBarBuilder {
+
+    private static final Logger logger = LoggerFactory.getLogger(ToolBarBuilder.class);
 
     /**
      * Container for toolbar and its toggle buttons.
@@ -269,7 +285,7 @@ public class ToolBarBuilder {
                 }
                 return svgIcon;
             } catch (Exception e) {
-                System.err.println("Failed to load Kalix SVG logo, falling back to raster: " + e.getMessage());
+                logger.warn("Failed to load Kalix SVG logo, falling back to raster", e);
             }
         }
 
@@ -303,7 +319,7 @@ public class ToolBarBuilder {
                 return new ImageIcon(scaledImage);
             }
         } catch (Exception e) {
-            System.err.println("Failed to load Kalix logo: " + e.getMessage());
+            logger.warn("Failed to load Kalix logo", e);
         }
 
         // Last resort: a simple generated placeholder.
@@ -316,12 +332,7 @@ public class ToolBarBuilder {
      * @return {@code true} if the active theme is dark
      */
     private boolean isDarkTheme() {
-        Color toolbarBackground = UIManager.getColor("ToolBar.background");
-        if (toolbarBackground != null) {
-            int sum = toolbarBackground.getRed() + toolbarBackground.getGreen() + toolbarBackground.getBlue();
-            return sum < 384; // Same threshold used elsewhere
-        }
-        return false; // Assume light theme if colour unavailable
+        return ThemeUtils.isDark(UIManager.getColor("ToolBar.background"));
     }
 
     /**
@@ -391,20 +402,8 @@ public class ToolBarBuilder {
      * @return Color for toolbar icons that contrasts with the current theme
      */
     private Color getThemeAwareIconColor() {
-        // Get the current toolbar background color from the theme
-        Color toolbarBackground = UIManager.getColor("ToolBar.background");
-        
-        if (toolbarBackground != null) {
-            // Calculate if the theme is dark or light
-            int sum = toolbarBackground.getRed() + toolbarBackground.getGreen() + toolbarBackground.getBlue();
-            boolean isDarkTheme = sum < 384; // Same threshold used in MapPanel
-            
-            // Return appropriate icon color
-            return isDarkTheme ? Color.LIGHT_GRAY : Color.DARK_GRAY;
-        }
-        
-        // Fallback to dark gray if theme color not available
-        return Color.DARK_GRAY;
+        return ThemeUtils.isDark(UIManager.getColor("ToolBar.background"))
+            ? Color.LIGHT_GRAY : Color.DARK_GRAY;
     }
 
     /**

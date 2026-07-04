@@ -105,11 +105,9 @@ public class TextCoordinateUpdater {
             }
 
         } catch (BadLocationException e) {
-            logger.error("Bad location error updating coordinates for {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
+            logger.error("Bad location error updating coordinates for {}", nodeName, e);
         } catch (Exception e) {
-            logger.error("Error updating coordinates for {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
+            logger.error("Error updating coordinates for {}", nodeName, e);
         }
     }
     
@@ -170,11 +168,10 @@ public class TextCoordinateUpdater {
             }
             
         } catch (BadLocationException e) {
-            logger.error("Bad location error scrolling to node {}: {}", nodeName, e.getMessage());
+            logger.error("Bad location error scrolling to node {}", nodeName, e);
             return false;
         } catch (Exception e) {
-            logger.error("Error scrolling to node {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
+            logger.error("Error scrolling to node {}", nodeName, e);
             return false;
         }
     }

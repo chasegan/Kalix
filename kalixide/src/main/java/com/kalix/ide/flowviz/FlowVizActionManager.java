@@ -17,7 +17,6 @@ import java.util.function.Consumer;
  * The manager uses callback patterns to communicate with the parent window
  * and other components without creating tight coupling.
  *
- * @author Claude Code Assistant
  * @version 1.0
  */
 public class FlowVizActionManager {

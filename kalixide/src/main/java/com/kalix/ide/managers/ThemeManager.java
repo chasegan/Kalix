@@ -1,5 +1,7 @@
 package com.kalix.ide.managers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.formdev.flatlaf.FlatPropertiesLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.kalix.ide.constants.AppConstants;
@@ -20,6 +22,8 @@ import java.awt.*;
  * Handles both initial theme loading and runtime theme changes with animations.
  */
 public class ThemeManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(ThemeManager.class);
     
     private KalixTheme currentTheme;
     private final Component parentComponent;
@@ -96,7 +100,7 @@ public class ThemeManager {
 
             return "Switched to " + theme.displayName() + " theme";
         } catch (UnsupportedLookAndFeelException e) {
-            System.err.println(AppConstants.ERROR_FAILED_LOOK_AND_FEEL + e.getMessage());
+            logger.error(AppConstants.ERROR_FAILED_LOOK_AND_FEEL, e);
             return "Failed to switch to " + theme.displayName() + " theme";
         } finally {
             // Always dismiss the snapshot overlay, even when the switch fails —

@@ -82,7 +82,6 @@ import java.util.regex.Pattern;
  * <p><strong>Thread Safety:</strong> This class is stateless and thread-safe.
  * Multiple import operations can run concurrently.</p>
  *
- * @author Claude Code Assistant
  * @since 1.0
  * @see TimeSeriesCsvExporter
  * @see DataSet

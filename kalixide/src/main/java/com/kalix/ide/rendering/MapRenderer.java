@@ -21,7 +21,6 @@ import com.kalix.ide.constants.UIConstants;
  * The renderer is stateless and receives all necessary rendering context
  * through method parameters, making it thread-safe and easily testable.
  *
- * @author Claude Code Assistant
  * @version 1.1
  */
 public class MapRenderer {
@@ -527,11 +526,6 @@ public class MapRenderer {
      * @return true if light theme, false if dark theme
      */
     private boolean isLightTheme() {
-        Color bg = UIManager.getColor("Panel.background");
-        if (bg == null) {
-            return true; // Default to light theme
-        }
-        // Consider theme light if the sum of RGB values exceeds threshold
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= UIConstants.Theme.LIGHT_THEME_RGB_THRESHOLD;
+        return !com.kalix.ide.utils.ThemeUtils.isDark(UIManager.getColor("Panel.background"));
     }
 }

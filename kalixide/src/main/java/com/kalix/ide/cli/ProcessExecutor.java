@@ -1,5 +1,8 @@
 package com.kalix.ide.cli;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -23,6 +26,8 @@ import java.util.function.Consumer;
  * Provides process lifecycle management, stream monitoring, and cancellation support.
  */
 public class ProcessExecutor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProcessExecutor.class);
     
     private final ExecutorService executorService;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -177,7 +182,7 @@ public class ProcessExecutor {
                         }
                     } catch (IOException e) {
                         // Log but don't fail cancellation
-                        System.err.println("Warning: Failed to close interactive streams: " + e.getMessage());
+                        logger.warn("Failed to close interactive streams", e);
                     }
                 }
                 

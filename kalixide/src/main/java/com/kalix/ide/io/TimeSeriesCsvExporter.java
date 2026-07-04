@@ -43,7 +43,6 @@ import java.util.List;
  *
  * <p><strong>Thread Safety:</strong> This class is stateless and thread-safe.</p>
  *
- * @author Claude Code Assistant
  * @since 1.0
  * @see DataSet
  * @see TimeSeriesData
