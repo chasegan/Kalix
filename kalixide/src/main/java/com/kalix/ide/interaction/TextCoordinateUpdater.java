@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.model.NodeSectionLocator;
+
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.util.ArrayList;
@@ -11,30 +13,28 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
 import java.util.Set;
 import javax.swing.JViewport;
 import javax.swing.text.Document;
 import javax.swing.text.BadLocationException;
-import javax.swing.undo.CompoundEdit;
 
 /**
  * Handles updating node coordinates in the text editor when nodes are moved via dragging.
  * This provides bidirectional synchronization between the visual map and the text INI format.
- * 
- * Uses regex-based coordinate replacement to preserve INI formatting and comments.
+ *
+ * <p>All section/property location goes through {@link NodeSectionLocator} — the single
+ * INI-section grammar shared with the parser — so text edits land exactly where the
+ * parser reads.
  */
 public class TextCoordinateUpdater {
     private static final Logger logger = LoggerFactory.getLogger(TextCoordinateUpdater.class);
-    
+
     private final EnhancedTextEditor textEditor;
-    private boolean updatingFromModel = false; // Prevent infinite update loops
-    
+
     public TextCoordinateUpdater(EnhancedTextEditor textEditor) {
         this.textEditor = textEditor;
     }
-    
+
     /**
      * Update coordinates for multiple nodes as a single atomic undo operation.
      * @param nodeUpdates Map of node names to their new coordinates
@@ -44,25 +44,16 @@ public class TextCoordinateUpdater {
             return;
         }
 
-        // Set flag to prevent infinite update loops
-        updatingFromModel = true;
-
+        // Group all coordinate updates as single atomic undo operation
+        textEditor.getTextArea().beginAtomicEdit();
         try {
-            // Group all coordinate updates as single atomic undo operation
-            textEditor.getTextArea().beginAtomicEdit();
-            try {
-                for (java.util.Map.Entry<String, java.awt.geom.Point2D.Double> entry : nodeUpdates.entrySet()) {
-                    String nodeName = entry.getKey();
-                    java.awt.geom.Point2D.Double coords = entry.getValue();
-                    updateSingleNodeCoordinate(nodeName, coords.x, coords.y);
-                }
-            } finally {
-                textEditor.getTextArea().endAtomicEdit();
+            for (java.util.Map.Entry<String, java.awt.geom.Point2D.Double> entry : nodeUpdates.entrySet()) {
+                String nodeName = entry.getKey();
+                java.awt.geom.Point2D.Double coords = entry.getValue();
+                updateSingleNodeCoordinate(nodeName, coords.x, coords.y);
             }
-
         } finally {
-            // Clear the flag
-            updatingFromModel = false;
+            textEditor.getTextArea().endAtomicEdit();
         }
     }
 
@@ -83,45 +74,32 @@ public class TextCoordinateUpdater {
                 return;
             }
 
-            // Create regex pattern to match the coordinate values specifically
-            // Pattern explanation:
-            // (\[node\.nodeName\][^\[]*?loc\s*=\s*)([0-9.eE+-]+)(\s*,\s*)([0-9.eE+-]+)
-            // Group 1: Everything up to and including "loc = "
-            // Group 2: X coordinate (to replace, supports scientific notation)
-            // Group 3: Comma and whitespace
-            // Group 4: Y coordinate (to replace, supports scientific notation)
-            String escapedNodeName = Pattern.quote(nodeName);
-            String pattern = "(^\\[node\\." + escapedNodeName + "\\][^\\[]*?loc\\s*=\\s*)([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)";
-            Pattern nodePattern = Pattern.compile(pattern, Pattern.DOTALL | Pattern.MULTILINE);
-
-            Matcher matcher = nodePattern.matcher(currentText);
-
-            if (matcher.find()) {
-                // Format coordinates with reasonable precision (2 decimal places)
-                String formattedX = String.format("%.2f", x);
-                String formattedY = String.format("%.2f", y);
-
-                // Calculate positions and replacement text
-                int coordStart = matcher.start(2);  // Start of X coordinate
-                int coordEnd = matcher.end(4);      // End of Y coordinate
-                String coordReplacement = formattedX + matcher.group(3) + formattedY;
-
-                // Perform document operations (atomic edit wrapping handled by caller)
-                doc.remove(coordStart, coordEnd - coordStart);
-                doc.insertString(coordStart, coordReplacement, null);
-            } else {
+            NodeSectionLocator.NodeSection section = NodeSectionLocator.find(currentText, nodeName);
+            if (section == null) {
                 logger.warn("Could not find node section for: {}", nodeName);
+                return;
             }
+            NodeSectionLocator.LocValueSpan loc = section.locValue();
+            if (loc == null) {
+                logger.warn("Node section has no loc property: {}", nodeName);
+                return;
+            }
+
+            // Format coordinates with reasonable precision (2 decimal places),
+            // preserving the author's original separator formatting.
+            String replacement = String.format("%.2f", x) + loc.separator() + String.format("%.2f", y);
+
+            // Perform document operations (atomic edit wrapping handled by caller)
+            doc.remove(loc.start(), loc.end() - loc.start());
+            doc.insertString(loc.start(), replacement, null);
 
         } catch (BadLocationException e) {
             logger.error("Bad location error updating coordinates for {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
         } catch (Exception e) {
             logger.error("Error updating coordinates for {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
         }
     }
-    
+
     /**
      * Scrolls the text editor to the specified node definition.
      * Finds the node's section header and positions it in the visible area.
@@ -132,30 +110,29 @@ public class TextCoordinateUpdater {
         if (textEditor == null || nodeName == null || nodeName.trim().isEmpty()) {
             return false;
         }
-        
+
         try {
             Document doc = textEditor.getTextArea().getDocument();
             String currentText = doc.getText(0, doc.getLength());
-            
+
             if (currentText == null || currentText.trim().isEmpty()) {
                 return false;
             }
-            
-            // Find the node section using the existing findNodeSection method
-            NodeSection section = findNodeSection(currentText, nodeName);
-            
+
+            NodeSectionLocator.NodeSection section = NodeSectionLocator.find(currentText, nodeName);
+
             if (section != null) {
                 // Record navigation jump before moving caret
-                textEditor.recordNavigationJump(section.start);
+                textEditor.recordNavigationJump(section.start());
 
                 // Set caret position to the start of the node section (the [node.name] header)
-                textEditor.getTextArea().setCaretPosition(section.start);
+                textEditor.getTextArea().setCaretPosition(section.start());
 
                 // Smart scroll: position the node at 1/4 from the top of the viewport
                 // This provides good context and matches common editor behavior
                 if (textEditor.getTextArea().getParent() instanceof JViewport viewport) {
                     Rectangle viewRect = viewport.getViewRect();
-                    Rectangle caretRect = textEditor.getTextArea().modelToView(section.start);
+                    Rectangle caretRect = textEditor.getTextArea().modelToView(section.start());
 
                     // Position caret at 1/4 from top of viewport
                     int desiredY = caretRect.y - (viewRect.height / 4);
@@ -170,106 +147,27 @@ public class TextCoordinateUpdater {
 
                 // Note: We intentionally do NOT request focus here.
                 // The map should retain focus so Delete key works on selected nodes.
-
-                // Successfully scrolled to node
                 return true;
             } else {
                 logger.warn("Could not find node section to scroll to: {}", nodeName);
                 return false;
             }
-            
+
         } catch (BadLocationException e) {
             logger.error("Bad location error scrolling to node {}: {}", nodeName, e.getMessage());
             return false;
         } catch (Exception e) {
             logger.error("Error scrolling to node {}: {}", nodeName, e.getMessage());
-            e.printStackTrace();
             return false;
         }
     }
-    
-    /**
-     * Delete nodes from the text editor by removing their entire INI sections using document operations.
-     * This preserves undo/redo functionality by making targeted document removals.
-     * @param nodeNames Set of node names to delete from text
-     */
-    public void deleteNodesFromText(Set<String> nodeNames) {
-        if (textEditor == null || nodeNames == null || nodeNames.isEmpty()) {
-            return;
-        }
-
-        // Set flag to prevent infinite update loops
-        updatingFromModel = true;
-
-        try {
-            Document doc = textEditor.getTextArea().getDocument();
-
-            // Process nodes in reverse order to maintain document positions
-            // Sort by document position (descending) to delete from end to beginning
-            String currentText = doc.getText(0, doc.getLength());
-
-            // Find all node sections and their positions
-            java.util.List<NodeSection> sectionsToDelete = new java.util.ArrayList<>();
-            for (String nodeName : nodeNames) {
-                NodeSection section = findNodeSection(currentText, nodeName);
-                if (section != null) {
-                    sectionsToDelete.add(section);
-                }
-            }
-
-            // Sort by start position (descending) to delete from end to beginning
-            sectionsToDelete.sort((a, b) -> Integer.compare(b.start, a.start));
-
-            // Group all deletions as single atomic undo operation
-            if (!sectionsToDelete.isEmpty()) {
-                textEditor.getTextArea().beginAtomicEdit();
-                try {
-                    // Delete each section using document operations
-                    for (NodeSection section : sectionsToDelete) {
-                        doc.remove(section.start, section.length);
-                    }
-                } finally {
-                    textEditor.getTextArea().endAtomicEdit();
-                }
-            }
-
-        } catch (BadLocationException e) {
-            logger.error("Bad location error deleting nodes from text: {}", e.getMessage());
-            e.printStackTrace();
-        } catch (Exception e) {
-            logger.error("Error deleting nodes from text: {}", e.getMessage());
-            e.printStackTrace();
-        } finally {
-            // Clear the flag
-            updatingFromModel = false;
-        }
-    }
-    
-    /**
-     * Helper class to represent a node section in the document.
-     */
-    private static class NodeSection {
-        final String nodeName;
-        final int start;
-        final int length;
-
-        NodeSection(String nodeName, int start, int length) {
-            this.nodeName = nodeName;
-            this.start = start;
-            this.length = length;
-        }
-    }
 
     /**
-     * Helper class to represent a text region to be deleted.
+     * A half-open character span {@code [start, end)} of text to delete.
      */
-    private static class TextDeletion {
-        final int start;
-        final int length;
-
-        TextDeletion(int start, int length) {
-            this.start = start;
-            this.length = length;
+    record TextSpan(int start, int end) {
+        int length() {
+            return end - start;
         }
     }
 
@@ -278,6 +176,7 @@ public class TextCoordinateUpdater {
      * This handles:
      * - Removal of entire node sections for selected nodes
      * - Removal of ds_X = target property lines for selected links
+     * - Removal of dangling ds_X = deletedNode lines from surviving sections
      *
      * @param nodeNames Set of node names to delete (may be null or empty)
      * @param linkIds Set of link IDs to delete in "source->target" format (may be null or empty)
@@ -288,127 +187,97 @@ public class TextCoordinateUpdater {
             return;
         }
 
-        updatingFromModel = true;
+        textEditor.getTextArea().beginAtomicEdit();
         try {
-            textEditor.getTextArea().beginAtomicEdit();
-            try {
-                Document doc = textEditor.getTextArea().getDocument();
-                String text = doc.getText(0, doc.getLength());
+            Document doc = textEditor.getTextArea().getDocument();
+            String text = doc.getText(0, doc.getLength());
 
-                // Collect ALL deletions first
-                List<TextDeletion> deletions = new ArrayList<>();
+            List<TextSpan> deletions = computeDeletionSpans(text, nodeNames, linkIds);
 
-                // 1. Node sections to delete
-                if (nodeNames != null && !nodeNames.isEmpty()) {
-                    collectNodeSectionDeletions(text, nodeNames, deletions);
-                }
-
-                // 2. Link properties to delete (ds_X = target lines)
-                if (linkIds != null && !linkIds.isEmpty()) {
-                    collectLinkPropertyDeletions(text, linkIds, nodeNames, deletions);
-                }
-
-                // Sort by position DESCENDING and apply
-                deletions.sort((a, b) -> Integer.compare(b.start, a.start));
-                for (TextDeletion deletion : deletions) {
-                    doc.remove(deletion.start, deletion.length);
-                }
-            } finally {
-                textEditor.getTextArea().endAtomicEdit();
+            // Apply in reverse document order so earlier offsets stay valid
+            for (int i = deletions.size() - 1; i >= 0; i--) {
+                TextSpan span = deletions.get(i);
+                doc.remove(span.start(), span.length());
             }
         } catch (BadLocationException e) {
             logger.error("Error deleting elements: {}", e.getMessage());
         } finally {
-            updatingFromModel = false;
+            textEditor.getTextArea().endAtomicEdit();
         }
     }
 
     /**
-     * Collect node section deletions for the given node names.
+     * Pure computation of the text spans to delete for a node/link deletion:
+     * the deleted nodes' sections, the selected links' ds_X property lines, and any
+     * dangling ds_X lines in surviving sections that reference a deleted node.
+     * Overlapping spans are merged, and the result is sorted by position.
+     *
+     * <p>Static and Swing-free for testability.
+     *
+     * @param text      full model text
+     * @param nodeNames node names to delete (may be null or empty)
+     * @param linkIds   link IDs to delete in "source->target" format (may be null or empty)
+     * @return merged, ascending-sorted spans to remove
      */
-    private void collectNodeSectionDeletions(String text, Set<String> nodeNames,
-                                              List<TextDeletion> deletions) {
-        for (String nodeName : nodeNames) {
-            NodeSection section = findNodeSection(text, nodeName);
+    static List<TextSpan> computeDeletionSpans(String text, Set<String> nodeNames, Set<String> linkIds) {
+        Set<String> deletedNodes = nodeNames != null ? nodeNames : Set.of();
+        List<TextSpan> deletions = new ArrayList<>();
+
+        // 1. Node sections to delete
+        for (String nodeName : deletedNodes) {
+            NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, nodeName);
             if (section != null) {
-                deletions.add(new TextDeletion(section.start, section.length));
+                deletions.add(new TextSpan(section.start(), section.end()));
             }
         }
-    }
 
-    /**
-     * Collect link property deletions (ds_X = target lines) for the given link IDs.
-     * Skips links where the source node is being deleted (section removal handles those).
-     */
-    private void collectLinkPropertyDeletions(String text, Set<String> linkIds,
-                                              Set<String> deletedNodes,
-                                              List<TextDeletion> deletions) {
-        // Group by source node
+        // 2. Explicitly selected links: their ds_X lines in surviving source sections
         Map<String, Set<String>> sourceToTargets = new HashMap<>();
-        for (String linkId : linkIds) {
-            String[] parts = linkId.split("->");
-            if (parts.length == 2) {
-                String source = parts[0];
+        if (linkIds != null) {
+            for (String linkId : linkIds) {
+                String[] parts = linkId.split("->");
                 // Skip if source node is being deleted (section removal handles it)
-                if (deletedNodes == null || !deletedNodes.contains(source)) {
-                    sourceToTargets.computeIfAbsent(source, k -> new HashSet<>()).add(parts[1]);
+                if (parts.length == 2 && !deletedNodes.contains(parts[0])) {
+                    sourceToTargets.computeIfAbsent(parts[0], k -> new HashSet<>()).add(parts[1]);
                 }
             }
         }
 
-        // Find and collect ds_X lines within each source node's section
-        for (Map.Entry<String, Set<String>> entry : sourceToTargets.entrySet()) {
-            String sourceNode = entry.getKey();
-            Set<String> targets = entry.getValue();
-
-            NodeSection section = findNodeSection(text, sourceNode);
-            if (section == null) continue;
-
-            String sectionText = text.substring(section.start, section.start + section.length);
-            // Note: Don't include \s* before $ as it would match the newline
-            Pattern dsPattern = Pattern.compile("^ds_\\d+\\s*=\\s*(.+?)$", Pattern.MULTILINE);
-            Matcher matcher = dsPattern.matcher(sectionText);
-
-            while (matcher.find()) {
-                String targetNode = matcher.group(1).trim();
-                if (targets.contains(targetNode)) {
-                    int lineStart = section.start + matcher.start();
-                    int lineEnd = section.start + matcher.end();
-
-                    // Include trailing newline if present
-                    if (lineEnd < text.length() && text.charAt(lineEnd) == '\n') {
-                        lineEnd++;
-                    }
-
-                    deletions.add(new TextDeletion(lineStart, lineEnd - lineStart));
+        boolean wantDsLines = !sourceToTargets.isEmpty() || !deletedNodes.isEmpty();
+        if (wantDsLines) {
+            for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(text)) {
+                // 3. Dangling references: any ds_X line pointing at a deleted node.
+                // Lines inside deleted sections are swallowed by the span merge below.
+                boolean dangling = deletedNodes.contains(ref.target());
+                boolean selectedLink = sourceToTargets.getOrDefault(ref.sourceNode(), Set.of())
+                    .contains(ref.target());
+                if (dangling || selectedLink) {
+                    deletions.add(new TextSpan(ref.lineStart(), ref.lineEnd()));
                 }
             }
         }
+
+        return mergeSpans(deletions);
     }
 
     /**
-     * Find a node section in the text and return its position information.
-     * @param text Current text content
-     * @param nodeName Node name to find
-     * @return NodeSection with position info, or null if not found
+     * Sorts spans by start offset and merges overlapping or contained spans
+     * (e.g. a ds_X line inside a deleted node section) so each region is
+     * deleted exactly once.
      */
-    private NodeSection findNodeSection(String text, String nodeName) {
-        // Create regex pattern to match the entire node section
-        // Pattern explanation:
-        // \[node\.nodeName\]          - Match [node.nodeName] header
-        // (?:\r?\n|$)                 - Match newline or end of string after header
-        // (?:(?!\[)[^\r\n]*(?:\r?\n|$))* - Match all lines that don't start with [ (non-section lines)
-        String escapedNodeName = Pattern.quote(nodeName);
-        String pattern = "^\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
-        Pattern nodePattern = Pattern.compile(pattern, Pattern.MULTILINE);
-        
-        Matcher matcher = nodePattern.matcher(text);
-        
-        if (matcher.find()) {
-            return new NodeSection(nodeName, matcher.start(), matcher.end() - matcher.start());
-        } else {
-            logger.warn("Could not find section for node: {}", nodeName);
-            return null;
+    private static List<TextSpan> mergeSpans(List<TextSpan> spans) {
+        spans.sort((a, b) -> Integer.compare(a.start(), b.start()));
+        List<TextSpan> merged = new ArrayList<>();
+        for (TextSpan span : spans) {
+            TextSpan last = merged.isEmpty() ? null : merged.get(merged.size() - 1);
+            if (last != null && span.start() < last.end()) {
+                if (span.end() > last.end()) {
+                    merged.set(merged.size() - 1, new TextSpan(last.start(), span.end()));
+                }
+            } else {
+                merged.add(span);
+            }
         }
+        return merged;
     }
 }

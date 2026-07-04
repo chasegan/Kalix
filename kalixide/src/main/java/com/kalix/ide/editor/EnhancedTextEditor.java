@@ -246,38 +246,26 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Scrolls the editor to show the definition of the specified node.
-     * Uses the parsed model to find the section start line, then positions
+     * Locates the section via the shared INI-section grammar, then positions
      * the node at 1/4 from the top of the viewport for good context.
      *
      * @param nodeName The name of the node to scroll to
      * @return true if the node was found and scrolled to, false otherwise
      */
     public boolean scrollToNode(String nodeName) {
-        if (nodeName == null || nodeName.trim().isEmpty() || commandModelSupplier == null) {
+        if (nodeName == null || nodeName.trim().isEmpty()) {
             return false;
         }
 
         try {
-            // Use parsed model to find the node section
-            com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model = commandModelSupplier.get();
-            if (model == null) {
-                return false;
-            }
-
-            com.kalix.ide.linter.parsing.INIModelParser.Section section = model.getSections().get("node." + nodeName);
+            com.kalix.ide.model.NodeSectionLocator.NodeSection section =
+                com.kalix.ide.model.NodeSectionLocator.find(textArea.getText(), nodeName);
             if (section == null) {
                 return false;
             }
 
-            // Convert 1-based line number to document offset
-            int targetLine = section.getStartLine() - 1; // Convert to 0-based
-            int offset = 0;
-            String text = textArea.getText();
-            String[] lines = text.split("\n", -1);
-
-            for (int i = 0; i < targetLine && i < lines.length; i++) {
-                offset += lines[i].length() + 1; // +1 for newline
-            }
+            int offset = section.start();
+            int targetLine = getLineNumberForOffset(offset);
 
             // Record jump in navigation history
             NavigationHistory.Position currentPos = getCurrentPosition();
