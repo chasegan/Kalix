@@ -1,8 +1,5 @@
 package com.kalix.ide.managers.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.models.optimisation.OptimisationResult;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

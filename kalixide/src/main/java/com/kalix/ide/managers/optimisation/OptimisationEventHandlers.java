@@ -1,9 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.ProgressParser;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;

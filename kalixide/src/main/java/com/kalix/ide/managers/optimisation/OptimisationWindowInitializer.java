@@ -3,8 +3,6 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.PlotPanel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;

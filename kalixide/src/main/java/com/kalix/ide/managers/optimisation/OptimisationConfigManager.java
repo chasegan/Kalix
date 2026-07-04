@@ -3,8 +3,6 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

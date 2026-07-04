@@ -1,7 +1,5 @@
 package com.kalix.ide.managers.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 

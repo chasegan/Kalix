@@ -1,6 +1,6 @@
 package com.kalix.ide.windows.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
+import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;

@@ -1,8 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.StatusProgressBar;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

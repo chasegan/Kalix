@@ -1,4 +1,4 @@
-package com.kalix.ide.models.optimisation;
+package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.windows.optimisation.ObjectiveConfigPanel.TermRow;
 

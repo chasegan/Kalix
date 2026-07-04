@@ -1,4 +1,4 @@
-package com.kalix.ide.models.optimisation;
+package com.kalix.ide.managers.optimisation;
 
 import java.time.Duration;
 import java.time.LocalDateTime;

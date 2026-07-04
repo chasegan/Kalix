@@ -4,10 +4,6 @@ import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.managers.StdioTaskManager;
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

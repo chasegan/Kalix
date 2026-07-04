@@ -16,7 +16,6 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.models.StatsTableModel;
-import com.kalix.ide.models.RunInfoImpl;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 
