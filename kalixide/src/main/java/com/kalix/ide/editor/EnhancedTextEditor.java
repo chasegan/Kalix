@@ -86,6 +86,11 @@ public class EnhancedTextEditor extends JPanel {
     // Track line before mouse click for navigation history
     private int lineBeforeMouseClick = -1;
 
+    // Global (Toolkit-wide) mouse-press capture used for navigation history.
+    // Held so dispose() can remove it: a global listener would otherwise pin
+    // this editor's whole object graph after the document is closed.
+    private java.awt.event.AWTEventListener navigationMouseCaptureListener;
+
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
     }
@@ -155,15 +160,18 @@ public class EnhancedTextEditor extends JPanel {
      * since regular MouseListener is called after the text component processes the event.
      */
     private void setupNavigationMouseListener() {
-        // Use AWTEventListener to capture mouse events BEFORE they're processed
-        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+        // Use AWTEventListener to capture mouse events BEFORE they're processed.
+        // The listener is stored so dispose() can remove it from the Toolkit.
+        navigationMouseCaptureListener = event -> {
             if (event instanceof MouseEvent me && me.getID() == MouseEvent.MOUSE_PRESSED) {
                 if (me.getSource() == textArea) {
                     // Capture current caret position before the click moves it
                     lineBeforeMouseClick = getLineNumberForOffset(textArea.getCaretPosition());
                 }
             }
-        }, java.awt.AWTEvent.MOUSE_EVENT_MASK);
+        };
+        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(
+            navigationMouseCaptureListener, java.awt.AWTEvent.MOUSE_EVENT_MASK);
 
         // Regular mouse listener to check after the click is processed
         textArea.addMouseListener(new MouseAdapter() {
@@ -1348,9 +1356,18 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Dispose of resources when the editor is no longer needed.
+     * Dispose of resources when the editor is no longer needed (document close).
+     * Detaches everything with a lifetime longer than this editor: the global
+     * Toolkit mouse listener, the auto-complete installation and its background
+     * reader executor (via {@link AutoCompleteManager#dispose}), and the linter
+     * stack's listeners and executor (via {@code LinterManager.dispose}).
+     * Idempotent.
      */
     public void dispose() {
+        if (navigationMouseCaptureListener != null) {
+            java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(navigationMouseCaptureListener);
+            navigationMouseCaptureListener = null;
+        }
         if (autoCompleteManager != null) {
             autoCompleteManager.dispose();
             autoCompleteManager = null;

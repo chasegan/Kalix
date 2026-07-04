@@ -17,14 +17,21 @@ public class ValidationEventManager {
     private static final Logger logger = LoggerFactory.getLogger(ValidationEventManager.class);
     private static final int VALIDATION_DELAY_MS = 300;
 
-    private final RSyntaxTextArea textArea;
     private final ValidationTrigger validationTrigger;
     private Timer validationTimer;
 
+    // The document listened to and the listener added to it, retained so dispose()
+    // can detach them. An orphaned listener kept scheduling validation against a
+    // disposed orchestrator (RejectedExecutionException per keystroke) after the
+    // linter was re-initialised on the same text area.
+    private final javax.swing.text.Document document;
+    private final DocumentListener documentListener;
+
     public ValidationEventManager(RSyntaxTextArea textArea, ValidationTrigger validationTrigger) {
-        this.textArea = textArea;
         this.validationTrigger = validationTrigger;
-        setupDocumentListener();
+        this.document = textArea.getDocument();
+        this.documentListener = createDocumentListener();
+        this.document.addDocumentListener(documentListener);
     }
 
     /**
@@ -34,8 +41,8 @@ public class ValidationEventManager {
         void triggerValidation();
     }
 
-    private void setupDocumentListener() {
-        textArea.getDocument().addDocumentListener(new DocumentListener() {
+    private DocumentListener createDocumentListener() {
+        return new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 scheduleValidation();
@@ -50,7 +57,7 @@ public class ValidationEventManager {
             public void changedUpdate(DocumentEvent e) {
                 scheduleValidation();
             }
-        });
+        };
     }
 
 
@@ -83,11 +90,13 @@ public class ValidationEventManager {
     }
 
     /**
-     * Clean up resources.
+     * Clean up resources: stop any pending validation and detach the document
+     * listener added in the constructor.
      */
     public void dispose() {
         if (validationTimer != null && validationTimer.isRunning()) {
             validationTimer.stop();
         }
+        document.removeDocumentListener(documentListener);
     }
 }
