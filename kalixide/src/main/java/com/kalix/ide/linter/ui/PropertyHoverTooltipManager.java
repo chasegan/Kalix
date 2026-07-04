@@ -2,6 +2,7 @@ package com.kalix.ide.linter.ui;
 
 import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
@@ -31,7 +32,9 @@ public class PropertyHoverTooltipManager {
     private static final Logger logger = LoggerFactory.getLogger(PropertyHoverTooltipManager.class);
 
     private final RSyntaxTextArea textArea;
-    private final LinterSchema schema;
+    // Resolved per lookup (not captured at construction) so hover help follows
+    // schema reloads instead of describing the startup schema forever.
+    private final SchemaManager schemaManager;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final IntPredicate hasValidationIssue; // Function to check if a line has validation issue
 
@@ -60,11 +63,11 @@ public class PropertyHoverTooltipManager {
     private java.awt.event.MouseAdapter mouseListener;
 
     public PropertyHoverTooltipManager(RSyntaxTextArea textArea,
-                                      LinterSchema schema,
+                                      SchemaManager schemaManager,
                                       Supplier<INIModelParser.ParsedModel> modelSupplier,
                                       IntPredicate hasValidationIssue) {
         this.textArea = textArea;
-        this.schema = schema;
+        this.schemaManager = schemaManager;
         this.modelSupplier = modelSupplier;
         this.hasValidationIssue = hasValidationIssue;
         setupTooltipComponents();
@@ -199,6 +202,10 @@ public class PropertyHoverTooltipManager {
             }
 
             // Get node type definition to determine required/optional status
+            LinterSchema schema = schemaManager.getCurrentSchema();
+            if (schema == null) {
+                return null;
+            }
             NodeTypeDefinition nodeDef = schema.getNodeType(nodeType);
             if (nodeDef == null) {
                 return null;
@@ -312,7 +319,8 @@ public class PropertyHoverTooltipManager {
         html.append(" <i>(").append(status).append(")</i>");
 
         // Get parameter definition from schema
-        NodeTypeDefinition nodeDef = schema.getNodeType(propertyInfo.nodeType);
+        LinterSchema schema = schemaManager.getCurrentSchema();
+        NodeTypeDefinition nodeDef = (schema != null) ? schema.getNodeType(propertyInfo.nodeType) : null;
         if (nodeDef != null) {
             ParameterDefinition paramDef = nodeDef.getParameterDefinition(propertyInfo.propertyKey);
             if (paramDef != null) {
