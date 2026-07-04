@@ -17,7 +17,6 @@ public class HydrologicalModel {
     // Core data structures optimized for performance
     private final Map<String, ModelNode> nodes;
     private final List<ModelLink> links;
-    private final SpatialIndex spatialIndex;
     
     // Change tracking for incremental updates
     private final Set<String> modifiedNodes;
@@ -37,7 +36,6 @@ public class HydrologicalModel {
         // Use concurrent collections for thread safety
         this.nodes = new ConcurrentHashMap<>();
         this.links = new CopyOnWriteArrayList<>();
-        this.spatialIndex = new SpatialIndex(100.0); // 100 unit grid cells
         
         // Change tracking
         this.modifiedNodes = ConcurrentHashMap.newKeySet();
@@ -58,14 +56,7 @@ public class HydrologicalModel {
         Objects.requireNonNull(node, "Node cannot be null");
         Objects.requireNonNull(node.getName(), "Node name cannot be null");
         
-        // Remove old node from spatial index if it exists
-        ModelNode oldNode = nodes.get(node.getName());
-        if (oldNode != null) {
-            spatialIndex.removeNode(oldNode);
-        }
-        
         nodes.put(node.getName(), node);
-        spatialIndex.addNode(node);
         modifiedNodes.add(node.getName());
         
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_ADDED, node.getName()));
@@ -79,7 +70,6 @@ public class HydrologicalModel {
         
         ModelNode removed = nodes.remove(nodeName);
         if (removed != null) {
-            spatialIndex.removeNode(removed);
             modifiedNodes.remove(nodeName);
             
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_REMOVED, nodeName));
@@ -141,12 +131,10 @@ public class HydrologicalModel {
         // Clear existing data
         nodes.clear();
         links.clear();
-        spatialIndex.clear();
-        
+
         // Add parsed nodes (batch operation for performance)
         for (ModelNode node : parseResult.getNodes()) {
             nodes.put(node.getName(), node);
-            spatialIndex.addNode(node);
         }
         
         // Add parsed links
@@ -232,7 +220,6 @@ public class HydrologicalModel {
         for (String nodeName : diff.getRemovedNodes()) {
             ModelNode removedNode = nodes.remove(nodeName);
             if (removedNode != null) {
-                spatialIndex.removeNode(removedNode);
                 modifiedNodes.remove(nodeName); // Clean up tracking
             }
         }
@@ -242,23 +229,14 @@ public class HydrologicalModel {
             ModelNode newNode = diff.getNodeUpdates().get(nodeName);
             if (newNode != null) {
                 nodes.put(nodeName, newNode);
-                spatialIndex.addNode(newNode);
                 modifiedNodes.add(nodeName);
             }
         }
         
         for (String nodeName : diff.getModifiedNodes()) {
-            // Remove old node from spatial index
-            ModelNode oldNode = nodes.get(nodeName);
-            if (oldNode != null) {
-                spatialIndex.removeNode(oldNode);
-            }
-            
-            // Add updated node
             ModelNode newNode = diff.getNodeUpdates().get(nodeName);
             if (newNode != null) {
                 nodes.put(nodeName, newNode);
-                spatialIndex.addNode(newNode);
                 modifiedNodes.add(nodeName);
             }
         }
@@ -283,29 +261,6 @@ public class HydrologicalModel {
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.MODEL_RELOADED, "incremental", 
                 totalAffectedNodes, affectedLinkCount));
         }
-    }
-    
-    // Spatial query methods for performance
-    
-    /**
-     * Get nodes within a rectangular region (for viewport rendering)
-     */
-    public List<ModelNode> getNodesInRegion(double minX, double minY, double maxX, double maxY) {
-        return spatialIndex.getNodesInRegion(minX, minY, maxX, maxY);
-    }
-    
-    /**
-     * Get nodes near a point (for mouse interaction)
-     */
-    public List<ModelNode> getNodesNear(double x, double y) {
-        return spatialIndex.getNodesNear(x, y);
-    }
-    
-    /**
-     * Get spatial index statistics for monitoring
-     */
-    public SpatialIndex.IndexStatistics getSpatialStatistics() {
-        return spatialIndex.getStatistics();
     }
     
     // Change listener management
@@ -495,11 +450,7 @@ public class HydrologicalModel {
         
         // Create a new node with updated coordinates (ModelNode is immutable)
         ModelNode updatedNode = new ModelNode(existingNode.getName(), existingNode.getType(), x, y);
-        
-        // Update in spatial index
-        spatialIndex.removeNode(existingNode);
-        spatialIndex.addNode(updatedNode);
-        
+
         // Update in main collection
         nodes.put(nodeName, updatedNode);
         modifiedNodes.add(nodeName);
@@ -509,7 +460,7 @@ public class HydrologicalModel {
     
     /**
      * Delete all currently selected nodes from the model.
-     * Removes nodes from all collections, spatial index, and clears selection.
+     * Removes nodes from all collections and clears selection.
      */
     public void deleteSelectedNodes() {
         Set<String> nodesToDelete = new HashSet<>(selectedNodes);
@@ -518,13 +469,10 @@ public class HydrologicalModel {
             return; // Nothing to delete
         }
         
-        // Remove nodes from main collection and spatial index
+        // Remove nodes from main collection
         for (String nodeName : nodesToDelete) {
             ModelNode nodeToRemove = nodes.get(nodeName);
             if (nodeToRemove != null) {
-                // Remove from spatial index
-                spatialIndex.removeNode(nodeToRemove);
-                
                 // Remove from main collection
                 nodes.remove(nodeName);
                 

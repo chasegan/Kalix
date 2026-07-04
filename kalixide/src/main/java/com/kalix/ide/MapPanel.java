@@ -1,6 +1,10 @@
 package com.kalix.ide;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.BasicStroke;
@@ -11,12 +15,12 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
 
@@ -29,10 +33,11 @@ import com.kalix.ide.interaction.MapSearchManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.themes.unified.UnifiedThemeDefinition;
 import com.kalix.ide.rendering.MapRenderer;
 import com.kalix.ide.constants.UIConstants;
 
-public class MapPanel extends JPanel implements KeyListener {
+public class MapPanel extends JPanel {
     private static final Cursor ROTATE_CURSOR = createRotateCursor();
 
     private double zoomLevel = 1.0;
@@ -68,15 +73,15 @@ public class MapPanel extends JPanel implements KeyListener {
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
 
     // Model integration
-    private HydrologicalModel model = null;
+    private final HydrologicalModel model;
     private final NodeTheme nodeTheme = new NodeTheme();
 
-    // Interaction management
-    private MapInteractionManager interactionManager;
-    private MapContextMenuManager contextMenuManager;
-    private MapClipboardManager clipboardManager;
-    private MapSearchManager mapSearchManager;
-    private EnhancedTextEditor textEditor;
+    // Interaction management (constructor-wired; the panel is per-document)
+    private final MapInteractionManager interactionManager;
+    private final MapContextMenuManager contextMenuManager;
+    private final MapClipboardManager clipboardManager;
+    private final MapSearchManager mapSearchManager;
+    private final EnhancedTextEditor textEditor;
 
     // Rendering
     private final MapRenderer mapRenderer = new MapRenderer();
@@ -84,14 +89,42 @@ public class MapPanel extends JPanel implements KeyListener {
     // Display settings
     private boolean showGridlines = true;
 
-    public MapPanel() {
+    // Theme management (optional - for enhanced unified theme support)
+    private com.kalix.ide.managers.ThemeManager themeManager;
+
+    /**
+     * Creates a map panel permanently bound to one document's model and editor.
+     * All collaborators (interaction, clipboard, context menu, search, text sync)
+     * are wired here, symmetrically and exactly once — there is no re-wiring
+     * entry point to call in the wrong order, and no stale model listener to leak.
+     *
+     * @param model      the document's data model (never null)
+     * @param textEditor the document's editor, for bidirectional text sync (never null)
+     */
+    public MapPanel(HydrologicalModel model, EnhancedTextEditor textEditor) {
+        this.model = java.util.Objects.requireNonNull(model, "model");
+        this.textEditor = java.util.Objects.requireNonNull(textEditor, "textEditor");
+
         updateThemeColors();
 
         // Enable keyboard focus for delete key handling
         setFocusable(true);
-        addKeyListener(this);
 
+        setupKeyBindings();
         setupMouseListeners();
+
+        // Repaint whenever the model changes. The panel lives exactly as long as its
+        // model (both owned by the same KalixDocument), so this listener never leaks.
+        model.addChangeListener(event -> repaint());
+
+        TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
+        this.interactionManager = new MapInteractionManager(this, model, textUpdater);
+        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
+        this.mapSearchManager = new MapSearchManager(this, model);
+        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model);
+        this.contextMenuManager.setMapSearchManager(mapSearchManager);
+        this.contextMenuManager.setClipboardManager(clipboardManager);
+        this.contextMenuManager.setTextEditor(textEditor);
     }
 
     /**
@@ -196,10 +229,9 @@ public class MapPanel extends JPanel implements KeyListener {
                             // Don't start drag here - wait for mouseDragged event
                         }
 
-                        // Navigate to the node definition in text editor
-                        if (interactionManager != null) {
-                            interactionManager.handleNodeClick(nodeAtPoint);
-                        }
+                        // Navigation to the node's definition happens on mouseReleased,
+                        // once we know this was a click and not the start of a drag —
+                        // navigating here moved the editor caret on every drag.
                     } else {
                         // Not clicking on a node - check for links
                         com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
@@ -233,10 +265,16 @@ public class MapPanel extends JPanel implements KeyListener {
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     // End dragging if active
-                    if (interactionManager != null && interactionManager.isDragging()) {
+                    boolean wasDragging = interactionManager != null && interactionManager.isDragging();
+                    if (wasDragging) {
                         interactionManager.endDrag(e.getPoint());
                     }
-                    
+
+                    // Click (no drag) on a node: navigate to its definition in the editor
+                    if (!wasDragging && clickedNodeName != null && interactionManager != null) {
+                        interactionManager.handleNodeClick(clickedNodeName);
+                    }
+
                     // Handle rectangle selection completion
                     if (isRectangleSelecting) {
                         completeRectangleSelection();
@@ -258,7 +296,7 @@ public class MapPanel extends JPanel implements KeyListener {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
-                repaint();
+                repaintCoordinateOverlay();
             }
 
             @Override
@@ -267,15 +305,20 @@ public class MapPanel extends JPanel implements KeyListener {
                 mouseWorldY = (e.getY() - panY) / zoomLevel;
                 mouseInPanel = true;
 
-                // Show rotation cursor when Ctrl is held and multiple nodes are selected
+                // Show rotation cursor when Ctrl is held and multiple nodes are selected.
+                // Only touch the cursor on a state change — setCursor per event is wasteful.
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
-                if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
-                    setCursor(ROTATE_CURSOR);
-                } else {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                Cursor desiredCursor = (isCtrlDown && interactionManager != null
+                        && interactionManager.canStartRotation())
+                    ? ROTATE_CURSOR
+                    : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                if (getCursor() != desiredCursor) {
+                    setCursor(desiredCursor);
                 }
 
-                repaint();
+                // Idle mouse movement only changes the coordinate overlay — repaint
+                // just that region rather than the whole panel.
+                repaintCoordinateOverlay();
             }
 
             @Override
@@ -285,9 +328,13 @@ public class MapPanel extends JPanel implements KeyListener {
                 mouseWorldY = (e.getY() - panY) / zoomLevel;
                 mouseInPanel = true;
 
-                // Check if we should start node dragging
-                if (interactionManager != null && !interactionManager.isDragging() && 
-                    clickedNodeName != null && interactionManager.canStartDrag(clickStartPoint)) {
+                // Check if we should start node dragging. A drag only starts once the
+                // mouse has moved past the click tolerance, so small jitters while
+                // clicking never displace the node.
+                if (interactionManager != null && !interactionManager.isDragging() &&
+                    clickedNodeName != null && clickStartPoint != null &&
+                    e.getPoint().distance(clickStartPoint) >= UIConstants.Map.DRAG_START_THRESHOLD_PX &&
+                    interactionManager.canStartDrag(clickStartPoint)) {
                     // Start drag operation now that we know it's actually a drag
                     interactionManager.startDrag(clickStartPoint);
                 }
@@ -317,9 +364,19 @@ public class MapPanel extends JPanel implements KeyListener {
         
         addMouseListener(panningHandler);
         addMouseMotionListener(panningHandler);
-        
+
         // Mouse wheel zoom handler
         addMouseWheelListener(this::handleMouseWheelZoom);
+    }
+
+    /**
+     * Repaints only the bottom-left zoom/coordinate overlay region. The overlay sits
+     * at a fixed position, so one clip rectangle covers both the old and new text.
+     */
+    private void repaintCoordinateOverlay() {
+        final int overlayWidth = 320;
+        final int overlayHeight = 50;
+        repaint(0, Math.max(0, getHeight() - overlayHeight), overlayWidth, overlayHeight);
     }
     
     /**
@@ -327,23 +384,35 @@ public class MapPanel extends JPanel implements KeyListener {
      * Zooms in/out while keeping the point under the cursor fixed.
      */
     private void handleMouseWheelZoom(MouseWheelEvent e) {
-        // Get mouse position in screen coordinates
-        int mouseX = e.getX();
-        int mouseY = e.getY();
-        
-        // Convert mouse position to world coordinates before zoom
-        double worldX = (mouseX - panX) / zoomLevel;
-        double worldY = (mouseY - panY) / zoomLevel;
-        
-        // Calculate new zoom level
-        double zoomChange = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
-        zoomLevel = zoomLevel * zoomChange;
+        zoomAt(e.getX(), e.getY(), Math.pow(ZOOM_FACTOR, -e.getWheelRotation()));
+    }
 
-        // Adjust pan so the world point under the mouse stays at the same screen position
-        panX = mouseX - worldX * zoomLevel;
-        panY = mouseY - worldY * zoomLevel;
+    /**
+     * Multiplies the zoom level by the given factor (clamped to sane bounds),
+     * keeping the world point under the given screen anchor fixed.
+     *
+     * @param anchorScreenX Anchor X in screen coordinates
+     * @param anchorScreenY Anchor Y in screen coordinates
+     * @param factor Zoom multiplier (&gt;1 zooms in, &lt;1 zooms out)
+     */
+    private void zoomAt(double anchorScreenX, double anchorScreenY, double factor) {
+        double newZoom = clampZoom(zoomLevel * factor);
+
+        // Convert anchor position to world coordinates before zoom
+        double worldX = (anchorScreenX - panX) / zoomLevel;
+        double worldY = (anchorScreenY - panY) / zoomLevel;
+
+        zoomLevel = newZoom;
+
+        // Adjust pan so the world point under the anchor stays at the same screen position
+        panX = anchorScreenX - worldX * zoomLevel;
+        panY = anchorScreenY - worldY * zoomLevel;
 
         repaint();
+    }
+
+    private static double clampZoom(double zoom) {
+        return Math.max(UIConstants.Zoom.MIN_ZOOM, Math.min(UIConstants.Zoom.MAX_ZOOM, zoom));
     }
 
     @Override
@@ -382,10 +451,34 @@ public class MapPanel extends JPanel implements KeyListener {
     }
     
     /**
+     * Sets the theme manager for enhanced unified theme support.
+     * This is optional - MapPanel will continue to work without it.
+     *
+     * @param themeManager The theme manager instance
+     */
+    public void setThemeManager(com.kalix.ide.managers.ThemeManager themeManager) {
+        this.themeManager = themeManager;
+    }
+
+    /**
      * Updates the panel colors based on the current UI theme.
      * This method should be called when the theme changes.
+     * Now supports enhanced unified theme integration.
      */
     public void updateThemeColors() {
+        // Try unified theme system first if available
+        if (themeManager != null) {
+            UnifiedThemeDefinition unifiedTheme = themeManager.getCurrentUnifiedTheme();
+            if (unifiedTheme != null) {
+                // Use unified theme background color
+                Color themeBackground = unifiedTheme.getColorPalette().getBackground();
+                setBackground(themeBackground);
+                repaint();
+                return;
+            }
+        }
+
+        // Fallback to existing theme logic
         // First check for custom MapPanel background color
         Color customMapBg = UIManager.getColor("MapPanel.background");
         if (customMapBg != null) {
@@ -443,48 +536,19 @@ public class MapPanel extends JPanel implements KeyListener {
         return showGridlines;
     }
     
-    public void setModel(HydrologicalModel model) {
-        // Remove listener from old model if it exists
-        if (this.model != null) {
-            // We'll add this when we implement the listener
-        }
-        
-        this.model = model;
-
-        // Initialize interaction manager and context menu manager
-        if (this.model != null) {
-            this.model.addChangeListener(event -> repaint());
-            this.interactionManager = new MapInteractionManager(this, this.model);
-            this.contextMenuManager = new MapContextMenuManager(this, this.interactionManager, this.model);
-            this.mapSearchManager = new MapSearchManager(this, this.model);
-            this.contextMenuManager.setMapSearchManager(this.mapSearchManager);
-
-            // Auto-fit the model content to the current component size
-            if (getWidth() > 0 && getHeight() > 0) {
-                zoomToFit();
-            }
-        } else {
-            this.interactionManager = null;
-            this.contextMenuManager = null;
-            this.mapSearchManager = null;
-        }
-        
-        repaint();
-    }
+    // View-menu zoom operations anchor at the viewport centre so the content
+    // in view stays in view (zooming about the world origin walked it off-screen).
 
     public void zoomIn() {
-        zoomLevel *= ZOOM_FACTOR;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, ZOOM_FACTOR);
     }
 
     public void zoomOut() {
-        zoomLevel /= ZOOM_FACTOR;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, 1.0 / ZOOM_FACTOR);
     }
 
     public void resetZoom() {
-        zoomLevel = 1.0;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, 1.0 / zoomLevel);
     }
     
     public void zoomToFit() {
@@ -533,7 +597,7 @@ public class MapPanel extends JPanel implements KeyListener {
         // Calculate zoom level to fit the content
         double scaleX = getWidth() / bufferedSpanX;
         double scaleY = getHeight() / bufferedSpanY;
-        double newZoom = Math.min(scaleX, scaleY);
+        double newZoom = clampZoom(Math.min(scaleX, scaleY));
 
         // Calculate pan to center the content
         double newPanX = getWidth() / 2.0 - centerX * newZoom;
@@ -753,121 +817,104 @@ public class MapPanel extends JPanel implements KeyListener {
         }
     }
 
+    // Keyboard bindings
+
     /**
-     * Set up text synchronization with the text editor.
-     * This enables bidirectional sync between map dragging and text coordinate updates.
-     * @param textEditor The text editor to synchronize with
+     * Installs the map's keyboard shortcuts via InputMap/ActionMap using the
+     * platform menu shortcut key (Ctrl on Windows/Linux, Cmd on macOS).
      */
-    public void setupTextSynchronization(EnhancedTextEditor textEditor) {
-        this.textEditor = textEditor;
-        if (interactionManager != null && textEditor != null) {
-            TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
-            interactionManager.setTextUpdater(textUpdater);
+    private void setupKeyBindings() {
+        int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        InputMap inputMap = getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
-            // Create clipboard manager (needs model, textEditor, and textUpdater)
-            if (model != null) {
-                clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
-                if (contextMenuManager != null) {
-                    contextMenuManager.setClipboardManager(clipboardManager);
-                    contextMenuManager.setTextEditor(textEditor);
-                }
-            }
-        }
-    }
-    
-    // KeyListener implementation for delete key handling
-    
-    @Override
-    public void keyPressed(KeyEvent e) {
-        // Check for modifier key (Ctrl on Windows/Linux, Cmd on macOS)
-        boolean isModifierDown = (e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0 ||
-                                 (e.getModifiersEx() & InputEvent.META_DOWN_MASK) != 0;
+        // Find Node
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_F, menuMask), "map.find",
+            this::showFindNodeDialog);
 
-        // Update cursor for rotation preview when Ctrl is pressed
-        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
-                && interactionManager != null && interactionManager.canStartRotation()
-                && !interactionManager.isDragging()) {
-            setCursor(ROTATE_CURSOR);
-        }
-
-        // Find Node: Ctrl+F / Cmd+F
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_F) {
-            if (mapSearchManager != null) {
-                mapSearchManager.showFindDialog();
-            }
-            return;
-        }
-
-        // Undo: Ctrl+Z / Cmd+Z
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Z) {
+        // Undo
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), "map.undo", () -> {
             if (textEditor != null && textEditor.canUndo()) {
                 textEditor.undo();
             }
-            return;
-        }
+        });
 
-        // Redo: Ctrl+Y / Cmd+Y
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_Y) {
+        // Redo: Ctrl+Y / Cmd+Y and the conventional Ctrl+Shift+Z / Cmd+Shift+Z
+        Runnable redo = () -> {
             if (textEditor != null && textEditor.canRedo()) {
                 textEditor.redo();
             }
-            return;
-        }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask), "map.redo", redo);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK), "map.redo");
 
-        // Cut: Ctrl+X / Cmd+X
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_X) {
+        // Cut
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_X, menuMask), "map.cut", () -> {
             if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
                 clipboardManager.cut();
                 repaint();
             }
-            return;
-        }
+        });
 
-        // Copy: Ctrl+C / Cmd+C
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_C) {
+        // Copy
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_C, menuMask), "map.copy", () -> {
             if (clipboardManager != null && clipboardManager.canCutOrCopy()) {
                 clipboardManager.copy();
             }
-            return;
-        }
+        });
 
-        // Paste: Ctrl+V / Cmd+V (paste at center of viewport)
-        if (isModifierDown && e.getKeyCode() == KeyEvent.VK_V) {
+        // Paste (at center of viewport)
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_V, menuMask), "map.paste", () -> {
             if (clipboardManager != null && clipboardManager.hasClipboardContent()) {
-                // Calculate center of viewport in world coordinates
                 double centerX = (getWidth() / 2.0 - panX) / zoomLevel;
                 double centerY = (getHeight() / 2.0 - panY) / zoomLevel;
                 clipboardManager.pasteAtMapLocation(centerX, centerY);
                 repaint();
             }
-            return;
-        }
+        });
 
-        // Delete: Delete or Backspace key
-        if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+        // Delete selection
+        Runnable delete = () -> {
             if (interactionManager != null && model != null &&
                 (model.getSelectedNodeCount() > 0 || model.getSelectedLinkCount() > 0)) {
                 interactionManager.deleteSelectedElements();
                 repaint();
             }
-        }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
+
+        // Rotation-cursor preview while the modifier key itself is held
+        Runnable previewOn = () -> {
+            if (interactionManager != null && interactionManager.canStartRotation()
+                    && !interactionManager.isDragging()) {
+                setCursor(ROTATE_CURSOR);
+            }
+        };
+        Runnable previewOff = () -> {
+            if (interactionManager != null && !interactionManager.isDragging()) {
+                setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        };
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_CONTROL, InputEvent.CTRL_DOWN_MASK, false),
+            "map.rotatePreviewOn", previewOn);
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_CONTROL, 0, true),
+            "map.rotatePreviewOff", previewOff);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_META, InputEvent.META_DOWN_MASK, false), "map.rotatePreviewOn");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_META, 0, true), "map.rotatePreviewOff");
     }
-    
-    @Override
-    public void keyReleased(KeyEvent e) {
-        // Reset cursor when Ctrl is released (rotation preview ends)
-        if ((e.getKeyCode() == KeyEvent.VK_CONTROL || e.getKeyCode() == KeyEvent.VK_META)
-                && interactionManager != null && !interactionManager.isDragging()) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-        }
+
+    /** Registers a keystroke-to-action binding on this panel. */
+    private void bind(InputMap inputMap, KeyStroke keyStroke, String actionName, Runnable action) {
+        inputMap.put(keyStroke, actionName);
+        getActionMap().put(actionName, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                action.run();
+            }
+        });
     }
-    
-    @Override
-    public void keyTyped(KeyEvent e) {
-        // Not used but required by KeyListener interface
-    }
-    
-    
+
+
     /**
      * Completes the rectangle selection by selecting all nodes and links within the rectangle.
      */

@@ -588,16 +588,16 @@ public class FunctionExpressionValidator {
             parseOrExpression(errors);
         }
 
-        // OrExpression := AndExpression ( ('|' | '||') AndExpression )*
+        // OrExpression := AndExpression ( '||' AndExpression )*
         private void parseOrExpression(List<String> errors) throws ParseException {
             parseAndExpression(errors);
 
             while (current.type == TokenType.OPERATOR &&
-                   (current.value.equals("|") || current.value.equals("||"))) {
+                   (current.value.equals("||") || current.value.equals("|"))) {
 
-                // Check for C-style || operator
-                if (current.value.equals("||")) {
-                    errors.add("Invalid operator '||' - use '|' for logical OR");
+                // Logical OR is '||'; single '|' is invalid syntax
+                if (current.value.equals("|")) {
+                    errors.add("Invalid operator '|' - use '||' for logical OR");
                 }
 
                 advance();
@@ -605,16 +605,16 @@ public class FunctionExpressionValidator {
             }
         }
 
-        // AndExpression := ComparisonExpression ( ('&' | '&&') ComparisonExpression )*
+        // AndExpression := ComparisonExpression ( '&&' ComparisonExpression )*
         private void parseAndExpression(List<String> errors) throws ParseException {
             parseComparisonExpression(errors);
 
             while (current.type == TokenType.OPERATOR &&
-                   (current.value.equals("&") || current.value.equals("&&"))) {
+                   (current.value.equals("&&") || current.value.equals("&"))) {
 
-                // Check for C-style && operator
-                if (current.value.equals("&&")) {
-                    errors.add("Invalid operator '&&' - use '&' for logical AND");
+                // Logical AND is '&&'; single '&' is invalid syntax
+                if (current.value.equals("&")) {
+                    errors.add("Invalid operator '&' - use '&&' for logical AND");
                 }
 
                 advance();

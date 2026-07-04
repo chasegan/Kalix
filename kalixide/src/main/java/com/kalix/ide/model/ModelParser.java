@@ -58,9 +58,10 @@ public class ModelParser {
                     continue;
                 }
 
-                // Check for node section header
-                Matcher nodeMatcher = NODE_SECTION_PATTERN.matcher(line);
-                if (nodeMatcher.matches()) {
+                // Any section header closes the current node's scope. This keeps the
+                // grammar aligned with NodeSectionLocator: properties after e.g.
+                // [outputs] must not leak into the preceding node.
+                if (line.startsWith("[")) {
                     // Save previous node if complete
                     if (currentNodeName != null && currentNodeType != null &&
                         currentNodeX != null && currentNodeY != null) {
@@ -72,8 +73,9 @@ public class ModelParser {
                         }
                     }
 
-                    // Start new node
-                    currentNodeName = nodeMatcher.group(1);
+                    // Start new node if this is a node header; otherwise leave node scope
+                    Matcher nodeMatcher = NODE_SECTION_PATTERN.matcher(line);
+                    currentNodeName = nodeMatcher.matches() ? nodeMatcher.group(1) : null;
                     currentNodeType = null;
                     currentNodeX = null;
                     currentNodeY = null;

@@ -2,6 +2,7 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -229,16 +230,12 @@ public class MapClipboardManager {
     }
 
     /**
-     * Find the text boundaries of a node section.
+     * Find the text boundaries of a node section via the shared INI-section grammar.
      */
     private int[] getNodeSectionBounds(String text, String nodeName) {
-        String escapedNodeName = Pattern.quote(nodeName);
-        String pattern = "\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
-        Pattern nodePattern = Pattern.compile(pattern, Pattern.MULTILINE);
-
-        Matcher matcher = nodePattern.matcher(text);
-        if (matcher.find()) {
-            return new int[] { matcher.start(), matcher.end() };
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, nodeName);
+        if (section != null) {
+            return new int[] { section.start(), section.end() };
         }
         return null;
     }
