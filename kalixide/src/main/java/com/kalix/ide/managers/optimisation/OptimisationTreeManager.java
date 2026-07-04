@@ -1,5 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,8 +10,6 @@ import javax.swing.tree.*;
 import javax.swing.event.TreeSelectionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -25,7 +24,14 @@ public class OptimisationTreeManager {
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode rootNode;
     private final DefaultMutableTreeNode currentOptimisationsNode;
-    private final Map<String, DefaultMutableTreeNode> sessionToNodeMap = new HashMap<>();
+    /**
+     * Shared session-tree bookkeeping (owned by the window, shared with
+     * {@link OptimisationSessionManager}). This manager registers/reads the
+     * displayed tree node per session; the session manager's
+     * {@code removeOptimisation} performs the single-shot {@code remove} that
+     * clears every map for the key.
+     */
+    private final SessionTreeBookkeeping<OptimisationStatus> sessions;
 
     // Context menu actions
     private Consumer<OptimisationInfo> showModelAction;
@@ -45,8 +51,11 @@ public class OptimisationTreeManager {
 
     /**
      * Creates a new OptimisationTreeManager.
+     *
+     * @param sessions the session-tree bookkeeping shared with the session manager
      */
-    public OptimisationTreeManager() {
+    public OptimisationTreeManager(SessionTreeBookkeeping<OptimisationStatus> sessions) {
+        this.sessions = sessions;
         // Build tree structure
         this.rootNode = new DefaultMutableTreeNode("Optimisations");
         this.currentOptimisationsNode = new DefaultMutableTreeNode("Optimisation runs");
@@ -85,7 +94,7 @@ public class OptimisationTreeManager {
     public void addOptimisation(String sessionKey, OptimisationInfo info) {
         DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(info);
         currentOptimisationsNode.add(newNode);
-        sessionToNodeMap.put(sessionKey, newNode);
+        sessions.putNode(sessionKey, newNode);
 
         // Update tree model
         treeModel.nodeStructureChanged(currentOptimisationsNode);
@@ -100,16 +109,17 @@ public class OptimisationTreeManager {
     }
 
     /**
-     * Removes an optimisation from the tree.
+     * Detaches an optimisation's node from the displayed tree. Must run before
+     * {@link OptimisationSessionManager#removeOptimisation}, whose bookkeeping
+     * {@code remove} clears the sessionKey → node entry this method reads.
      *
      * @param sessionKey The session key
      */
     public void removeOptimisation(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
+        DefaultMutableTreeNode node = sessions.node(sessionKey);
         if (node != null) {
             DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
             parent.remove(node);
-            sessionToNodeMap.remove(sessionKey);
             treeModel.nodeStructureChanged(parent);
 
             logger.debug("Removed optimisation with session {}", sessionKey);
@@ -140,7 +150,7 @@ public class OptimisationTreeManager {
      * @return The tree node, or null if not found
      */
     public DefaultMutableTreeNode getNodeForSession(String sessionKey) {
-        return sessionToNodeMap.get(sessionKey);
+        return sessions.node(sessionKey);
     }
 
     /**
@@ -149,7 +159,7 @@ public class OptimisationTreeManager {
      * @param sessionKey The session key
      */
     public void refreshNode(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
+        DefaultMutableTreeNode node = sessions.node(sessionKey);
         if (node != null) {
             treeModel.nodeChanged(node);
             tree.repaint();

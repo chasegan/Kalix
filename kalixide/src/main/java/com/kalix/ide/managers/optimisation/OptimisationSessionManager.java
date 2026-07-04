@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +40,12 @@ public class OptimisationSessionManager {
      * need the OptimisationInfo by sessionKey (e.g. {@link #getOptimisationInfo}).
      */
     private final Map<String, OptimisationInfo> sessionToOptInfo = new HashMap<>();
-    private final Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
+    /**
+     * Shared session-tree bookkeeping (node + last-seen status), shared with
+     * {@link OptimisationTreeManager}. This manager owns the status entries and
+     * the single-shot removal; the tree manager owns the node entries.
+     */
+    private final SessionTreeBookkeeping<OptimisationStatus> sessions;
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
 
     // Callbacks
@@ -56,15 +62,18 @@ public class OptimisationSessionManager {
      * Creates a new OptimisationSessionManager.
      *
      * @param stdioTaskManager         The STDIO task manager
+     * @param sessions                 Session-tree bookkeeping shared with the tree manager
      * @param workingDirectorySupplier Supplier for the working directory
      * @param projectDirectorySupplier Supplier for the project directory
      * @param modelTextSupplier        Supplier for the model text
      */
     public OptimisationSessionManager(StdioTaskManager stdioTaskManager,
+                                      SessionTreeBookkeeping<OptimisationStatus> sessions,
                                       Supplier<File> workingDirectorySupplier,
                                       Supplier<File> projectDirectorySupplier,
                                       Supplier<String> modelTextSupplier) {
         this.stdioTaskManager = stdioTaskManager;
+        this.sessions = sessions;
         this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
         this.modelTextSupplier = modelTextSupplier;
@@ -80,9 +89,9 @@ public class OptimisationSessionManager {
             }
             SessionManager.SessionState state = event.getNewState();
             if (state == SessionManager.SessionState.TERMINATED) {
-                lastKnownStatus.put(sessionKey, OptimisationStatus.STOPPED);
+                sessions.putStatus(sessionKey, OptimisationStatus.STOPPED);
             } else if (state == SessionManager.SessionState.ERROR) {
-                lastKnownStatus.put(sessionKey, OptimisationStatus.ERROR);
+                sessions.putStatus(sessionKey, OptimisationStatus.ERROR);
             } else {
                 return;
             }
@@ -333,10 +342,12 @@ public class OptimisationSessionManager {
         // Get name before removing
         String optName = sessionToOptName.get(sessionKey);
 
-        // Remove from tracking maps - all of them
+        // Remove from tracking maps - all of them. The shared bookkeeping's
+        // single-shot remove clears node + status (the tree manager has already
+        // detached the node from the displayed tree).
+        sessions.remove(sessionKey);
         sessionToOptName.remove(sessionKey);
         sessionToOptInfo.remove(sessionKey);
-        lastKnownStatus.remove(sessionKey);
         optimisationResults.remove(sessionKey);
 
         if (statusUpdater != null && optName != null) {
@@ -413,7 +424,7 @@ public class OptimisationSessionManager {
      * @return The status, or null if not found
      */
     public OptimisationStatus getLastKnownStatus(String sessionKey) {
-        return lastKnownStatus.get(sessionKey);
+        return sessions.status(sessionKey);
     }
 
     /**
@@ -424,7 +435,7 @@ public class OptimisationSessionManager {
      */
     public void updateStatus(String sessionKey, OptimisationStatus status) {
         if (sessionKey != null && status != null) {
-            lastKnownStatus.put(sessionKey, status);
+            sessions.putStatus(sessionKey, status);
         }
     }
 

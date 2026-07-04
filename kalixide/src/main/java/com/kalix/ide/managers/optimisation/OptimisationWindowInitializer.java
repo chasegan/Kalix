@@ -264,10 +264,12 @@ public class OptimisationWindowInitializer {
                 JOptionPane.YES_NO_OPTION);
 
             if (confirm == JOptionPane.YES_OPTION) {
-                sessionManager.removeOptimisation(optInfo.getSessionKey());
-                // sessionManager.getTreeNode(...) returns an orphan node never added to the tree model;
-                // the tree manager owns the node that's actually displayed, so remove via that path.
+                // Detach the displayed node first: the session manager's
+                // removeOptimisation performs the shared bookkeeping's single-shot
+                // remove, which clears the sessionKey -> node entry the tree
+                // manager needs to find the node.
                 treeManager.removeOptimisation(optInfo.getSessionKey());
+                sessionManager.removeOptimisation(optInfo.getSessionKey());
                 optTree.clearSelection();
             }
         });

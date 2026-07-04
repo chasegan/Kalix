@@ -13,6 +13,7 @@ import com.kalix.ide.managers.optimisation.OptimisationSessionManager;
 import com.kalix.ide.managers.optimisation.OptimisationTreeManager;
 import com.kalix.ide.managers.optimisation.OptimisationUpdateCoordinator;
 import com.kalix.ide.managers.optimisation.OptimisationWindowInitializer;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 import com.kalix.ide.managers.optimisation.OptimisationInfo;
 import com.kalix.ide.managers.optimisation.OptimisationStatus;
@@ -149,16 +150,21 @@ public class OptimisationWindow extends JFrame {
      * Initializes all manager instances.
      */
     private void initializeManagers() {
+        // Session-tree bookkeeping shared by the session manager (status, removal)
+        // and the tree manager (displayed nodes).
+        SessionTreeBookkeeping<OptimisationStatus> sessionBookkeeping = new SessionTreeBookkeeping<>();
+
         // Initialize session manager first as others may depend on it
         this.sessionManager = new OptimisationSessionManager(
             stdioTaskManager,
+            sessionBookkeeping,
             workingDirectorySupplier,
             projectDirectorySupplier,
             modelTextSupplier
         );
 
         // Initialize other managers
-        this.treeManager = new OptimisationTreeManager();
+        this.treeManager = new OptimisationTreeManager(sessionBookkeeping);
         this.configManager = new OptimisationConfigManager(
             workingDirectorySupplier,
             modelTextSupplier

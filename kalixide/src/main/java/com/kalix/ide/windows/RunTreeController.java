@@ -7,6 +7,7 @@ import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.managers.RunContextMenuManager;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 
@@ -46,10 +47,9 @@ class RunTreeController {
     private final SeriesFetchCoordinator fetchCoordinator;
 
     // === RUN TRACKING ===
-    private final Map<String, String> sessionToRunName = new HashMap<>();
-    private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
-    private final Map<String, RunInfoImpl.DetailedRunStatus> lastKnownStatus = new HashMap<>();
-    private final Map<String, Long> completionTimestamps = new HashMap<>();
+    // sessionKey -> node/name/status/completion, with single-shot removal cleanup.
+    private final SessionTreeBookkeeping<RunInfoImpl.DetailedRunStatus> sessions =
+        new SessionTreeBookkeeping<>();
     private int runCounter = 1;
 
     RunTreeController(RunManager window,
@@ -82,17 +82,17 @@ class RunTreeController {
      * via its context menu.
      */
     Map<String, String> sessionToRunNameView() {
-        return sessionToRunName;
+        return sessions.namesView();
     }
 
     /** Whether the given session is currently shown in the tree. */
     boolean hasSession(String sessionKey) {
-        return sessionToTreeNode.containsKey(sessionKey);
+        return sessions.hasNode(sessionKey);
     }
 
     /** The display name for a session, or {@code null} if unknown. */
     String getRunNameForSession(String sessionKey) {
-        return sessionToRunName.get(sessionKey);
+        return sessions.name(sessionKey);
     }
 
     /**
@@ -105,7 +105,7 @@ class RunTreeController {
      * maintained in {@code refreshRuns} and {@code renameRun}.</p>
      */
     String runNameForId(long runId) {
-        for (DefaultMutableTreeNode node : sessionToTreeNode.values()) {
+        for (DefaultMutableTreeNode node : sessions.nodes()) {
             if (node.getUserObject() instanceof RunInfoImpl info && info.getRunId() == runId) {
                 return info.getRunName();
             }
@@ -146,10 +146,10 @@ class RunTreeController {
 
                 String sessionKey = session.getSessionKey();
 
-                if (!sessionToTreeNode.containsKey(sessionKey)) {
+                if (!sessions.hasNode(sessionKey)) {
                     // New session - add to tree
                     String runName = "Run_" + runCounter++;
-                    sessionToRunName.put(sessionKey, runName);
+                    sessions.putName(sessionKey, runName);
 
                     RunInfoImpl runInfo = new RunInfoImpl(runName, session);
                     RunInfoImpl.DetailedRunStatus initialStatus = runInfo.getDetailedRunStatus();
@@ -157,8 +157,8 @@ class RunTreeController {
                     DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
                     int insertIndex = currentRunsNode.getChildCount();
                     currentRunsNode.add(runNode);
-                    sessionToTreeNode.put(sessionKey, runNode);
-                    lastKnownStatus.put(sessionKey, initialStatus);
+                    sessions.putNode(sessionKey, runNode);
+                    sessions.putStatus(sessionKey, initialStatus);
 
                     // Track insertion for tree notification
                     insertedIndices.add(insertIndex);
@@ -168,16 +168,16 @@ class RunTreeController {
                     // (This handles fast-completing runs that finish before refreshRuns() is called)
                     if (initialStatus == RunInfoImpl.DetailedRunStatus.DONE) {
                         long completionTime = System.currentTimeMillis();
-                        completionTimestamps.put(sessionKey, completionTime);
+                        sessions.putCompletionTimestamp(sessionKey, completionTime);
 
                         lastRunTracker.onRunCompleted(runInfo, completionTime);
                     }
                 } else {
                     // Existing session - check for status changes
-                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionKey);
+                    DefaultMutableTreeNode existingNode = sessions.node(sessionKey);
                     RunInfoImpl runInfo = (RunInfoImpl) existingNode.getUserObject();
                     RunInfoImpl.DetailedRunStatus currentStatus = runInfo.getDetailedRunStatus();
-                    RunInfoImpl.DetailedRunStatus lastStatus = lastKnownStatus.get(sessionKey);
+                    RunInfoImpl.DetailedRunStatus lastStatus = sessions.status(sessionKey);
 
                     if (lastStatus != currentStatus) {
                         // Status changed - refresh this node's display
@@ -187,16 +187,16 @@ class RunTreeController {
                         if (lastStatus == RunInfoImpl.DetailedRunStatus.DONE &&
                             (currentStatus == RunInfoImpl.DetailedRunStatus.RUNNING || currentStatus == RunInfoImpl.DetailedRunStatus.LOADING || currentStatus == RunInfoImpl.DetailedRunStatus.STARTING)) {
                             // Session reused for new run - reset completion tracking for this session
-                            completionTimestamps.remove(sessionKey);
+                            sessions.clearCompletionTimestamp(sessionKey);
                         }
 
-                        lastKnownStatus.put(sessionKey, currentStatus);
+                        sessions.putStatus(sessionKey, currentStatus);
 
                         // Check if run just completed
                         if (currentStatus == RunInfoImpl.DetailedRunStatus.DONE && lastStatus != RunInfoImpl.DetailedRunStatus.DONE) {
                             // Record completion timestamp
                             long completionTime = System.currentTimeMillis();
-                            completionTimestamps.put(sessionKey, completionTime);
+                            sessions.putCompletionTimestamp(sessionKey, completionTime);
 
                             // Update Last if this is more recent
                             lastRunTracker.onRunCompleted(runInfo, completionTime);
@@ -226,7 +226,7 @@ class RunTreeController {
             List<Object> removedChildren = new ArrayList<>();
             List<String> sessionsToRemove = new ArrayList<>();
 
-            for (Map.Entry<String, DefaultMutableTreeNode> entry : sessionToTreeNode.entrySet()) {
+            for (Map.Entry<String, DefaultMutableTreeNode> entry : sessions.nodeEntries()) {
                 String sessionKey = entry.getKey();
                 if (!activeSessions.containsKey(sessionKey)) {
                     DefaultMutableTreeNode nodeToRemove = entry.getValue();
@@ -246,13 +246,9 @@ class RunTreeController {
                     currentRunsNode.remove((DefaultMutableTreeNode) child);
                 }
 
-                // Clean up tracking maps
+                // Clean up tracking maps (single-shot removal via the bookkeeping)
                 for (String sessionKey : sessionsToRemove) {
-                    removeRunData(sessionToTreeNode.get(sessionKey));
-                    sessionToTreeNode.remove(sessionKey);
-                    sessionToRunName.remove(sessionKey);
-                    lastKnownStatus.remove(sessionKey);
-                    completionTimestamps.remove(sessionKey);
+                    removeRunData(sessions.remove(sessionKey));
 
                     // If this was the Last run, clear Last node
                     lastRunTracker.onRunRemoved(sessionKey);
@@ -309,7 +305,7 @@ class RunTreeController {
         if ("Last".equals(newName)) {
             return "'Last' is reserved and cannot be used as a run name.";
         }
-        for (String existing : sessionToRunName.values()) {
+        for (String existing : sessions.names()) {
             if (existing.equals(newName)) {
                 return "A run with the name '" + newName + "' already exists.";
             }
@@ -319,7 +315,7 @@ class RunTreeController {
         // have been removed asynchronously between click and dialog close (rare; e.g. a
         // concurrent session-terminate). Reject rather than leave inconsistent state.
         String sessionKey = oldRunInfo.getSession().getSessionKey();
-        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
+        DefaultMutableTreeNode node = sessions.node(sessionKey);
         if (node == null) {
             return "This run is no longer available.";
         }
@@ -333,7 +329,7 @@ class RunTreeController {
         node.setUserObject(newRunInfo);
         treeModel.nodeChanged(node);
 
-        sessionToRunName.put(sessionKey, newName);
+        sessions.putName(sessionKey, newName);
 
         // Keep lastRunInfo pointing at the live RunInfoImpl for this session — otherwise
         // it would dangle to the now-orphan instance.
@@ -371,7 +367,7 @@ class RunTreeController {
      */
     void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionKey);
+            DefaultMutableTreeNode runNode = sessions.node(sessionKey);
             if (runNode != null) {
                 TreePath pathToRun = new TreePath(runNode.getPath());
 
