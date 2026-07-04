@@ -9,8 +9,8 @@ import java.util.function.Supplier;
 
 /**
  * Command to rename an input file alias throughout the document.
- * Updates the node section header, all downstream references, output references,
- * and node references within function expressions.
+ * Updates the alias on its {@code alias = path} line in the [inputs] section and
+ * all {@code data.{alias}.*} references in property values and output references.
  */
 public class RenameInputFileAliasCommand implements EditorCommand {
 
@@ -80,16 +80,16 @@ public class RenameInputFileAliasCommand implements EditorCommand {
     }
 
     /**
-     * Prompts the user to enter a new node name.
+     * Prompts the user to enter a new alias for the input file.
      *
-     * @param currentName The current node name
-     * @return The new name, or null if cancelled
+     * @param currentName The current alias
+     * @return The new alias, or null if cancelled
      */
     private String promptForNewName(String currentName) {
         return (String) JOptionPane.showInputDialog(
             parentFrame,
-            "Enter new name for node '" + currentName + "':",
-            "Rename Node",
+            "Enter new name for file alias '" + currentName + "':",
+            "Rename File Alias",
             JOptionPane.PLAIN_MESSAGE,
             null,
             null,

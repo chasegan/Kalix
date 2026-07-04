@@ -45,6 +45,11 @@ public class LinterTooltipManager {
     // Line number (1-based) of the issue whose tooltip is scheduled to appear, or -1 if none.
     private int pendingLine = -1;
 
+    // Listeners added to the shared text area, retained so dispose() can detach them
+    // (the text area outlives this manager when the linter is re-initialised).
+    private MouseMotionAdapter mouseMotionListener;
+    private java.awt.event.MouseAdapter mouseListener;
+
     public LinterTooltipManager(RSyntaxTextArea textArea, ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
         this.textArea = textArea;
         this.issuesByLine = issuesByLine;
@@ -69,7 +74,7 @@ public class LinterTooltipManager {
     }
 
     private void setupMouseListeners() {
-        textArea.addMouseMotionListener(new MouseMotionAdapter() {
+        mouseMotionListener = new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
                 ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
@@ -109,14 +114,16 @@ public class LinterTooltipManager {
                     }
                 }
             }
-        });
+        };
+        textArea.addMouseMotionListener(mouseMotionListener);
 
-        textArea.addMouseListener(new java.awt.event.MouseAdapter() {
+        mouseListener = new java.awt.event.MouseAdapter() {
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
                 hideCustomTooltip();
             }
-        });
+        };
+        textArea.addMouseListener(mouseListener);
     }
 
     /**
@@ -216,13 +223,22 @@ public class LinterTooltipManager {
     }
 
     /**
-     * Clean up resources.
+     * Clean up resources: stop timers, close the tooltip window, and detach the
+     * mouse listeners added to the shared text area in the constructor.
      */
     public void dispose() {
         stopTimer(hideTimer);
         stopTimer(showTimer);
         if (tooltipWindow != null) {
             tooltipWindow.dispose();
+        }
+        if (mouseMotionListener != null) {
+            textArea.removeMouseMotionListener(mouseMotionListener);
+            mouseMotionListener = null;
+        }
+        if (mouseListener != null) {
+            textArea.removeMouseListener(mouseListener);
+            mouseListener = null;
         }
     }
 }

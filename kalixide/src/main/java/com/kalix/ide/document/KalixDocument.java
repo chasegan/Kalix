@@ -236,4 +236,17 @@ public class KalixDocument {
             // Ignore: best-effort caret restore.
         }
     }
+
+    // --- Lifecycle ---
+
+    /**
+     * Releases everything this document holds beyond its own object graph — most
+     * importantly the editor's global listeners and background executors (linter,
+     * auto-complete, input-data registry) via {@link EnhancedTextEditor#dispose()}.
+     * Called by {@code DocumentManager.closeDocument} for every close path; without
+     * it every closed tab leaked its entire editor graph. Idempotent.
+     */
+    public void dispose() {
+        editor.dispose();
+    }
 }
