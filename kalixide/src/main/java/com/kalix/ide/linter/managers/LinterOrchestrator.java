@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Orchestrates the validation process by coordinating between different components.
@@ -21,20 +22,35 @@ public class LinterOrchestrator {
     private final ModelLinter linter;
     private final ScheduledExecutorService scheduler;
 
-    private ValidationResult currentValidationResult;
+    // Written on the validation thread, read from the EDT: must be volatile for
+    // cross-thread visibility (JMM).
+    private volatile ValidationResult currentValidationResult;
     private boolean validationEnabled = true;
     private volatile long lastValidationTimeMs = 0;
+
+    // Generation counter for coalescing: each performValidation() bumps it, and a
+    // queued validation that starts with a stale generation returns immediately.
+    // Prevents an unbounded backlog of full validations (each with FileValidator
+    // disk stats) when requests arrive faster than they complete.
+    private final AtomicLong validationGeneration = new AtomicLong();
 
     // Callback interface for validation completion
     public interface ValidationResultHandler {
         void onValidationCompleted(ValidationResult result);
     }
 
-    private ValidationResultHandler resultHandler;
+    private volatile ValidationResultHandler resultHandler;
 
     public LinterOrchestrator(SchemaManager schemaManager) {
+        this(schemaManager, new ModelLinter(schemaManager));
+    }
+
+    /**
+     * Package-private seam for tests that need to control validation timing.
+     */
+    LinterOrchestrator(SchemaManager schemaManager, ModelLinter linter) {
         this.schemaManager = schemaManager;
-        this.linter = new ModelLinter(schemaManager);
+        this.linter = linter;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "LinterManager-Validation");
             t.setDaemon(true);
@@ -58,9 +74,17 @@ public class LinterOrchestrator {
             return;
         }
 
+        long generation = validationGeneration.incrementAndGet();
+
         // Perform validation in background
         scheduler.execute(() -> {
             try {
+                // Superseded while queued: a newer request is (or will be) behind
+                // us on this single-threaded scheduler - skip the stale work.
+                if (generation != validationGeneration.get()) {
+                    return;
+                }
+
                 // Capture timing
                 long startTime = System.nanoTime();
                 ValidationResult result = linter.validate(content, baseDirectory);
@@ -81,13 +105,16 @@ public class LinterOrchestrator {
     }
 
     /**
-     * Clear all validation state.
+     * Clear all validation state. Also supersedes any queued validation so a
+     * stale result cannot overwrite the cleared state.
      */
     public void clearValidation() {
-        currentValidationResult = new ValidationResult();
+        validationGeneration.incrementAndGet();
+        ValidationResult cleared = new ValidationResult();
+        currentValidationResult = cleared;
 
         if (resultHandler != null) {
-            SwingUtilities.invokeLater(() -> resultHandler.onValidationCompleted(currentValidationResult));
+            SwingUtilities.invokeLater(() -> resultHandler.onValidationCompleted(cleared));
         }
     }
 
