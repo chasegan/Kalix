@@ -36,8 +36,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     private final ErrorNavigationManager navigationManager;
     private final LinterHighlighter highlighter;
 
-    // Issue tracking for UI integration
-    private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine;
+    // Issue tracking for UI integration: a line can carry several issues
+    // (e.g. an error and a warning from different validators), so map to lists.
+    private final ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine;
 
     // Base directory supplier for resolving relative paths
     private Supplier<File> baseDirectorySupplier;
@@ -63,7 +64,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
             LinterHighlighter highlighter,
             LinterTooltipManager tooltipManager,
             ErrorNavigationManager navigationManager,
-            ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
+            ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine) {
 
         this.textArea = textArea;
         this.schemaManager = schemaManager;
@@ -126,9 +127,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         // Clear previous issues
         issuesByLine.clear();
 
-        // Index issues by line number
+        // Index issues by line number, keeping every issue on a line
         for (ValidationIssue issue : result.getIssues()) {
-            issuesByLine.put(issue.getLineNumber(), issue);
+            issuesByLine.computeIfAbsent(issue.getLineNumber(), k -> new ArrayList<>()).add(issue);
         }
 
         // Update visual feedback
@@ -174,10 +175,11 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     }
 
     /**
-     * Get issues for a specific line number.
+     * Get all issues for a specific line number (empty list if none).
      */
-    public ValidationIssue getIssueForLine(int lineNumber) {
-        return issuesByLine.get(lineNumber);
+    public List<ValidationIssue> getIssuesForLine(int lineNumber) {
+        List<ValidationIssue> issues = issuesByLine.get(lineNumber);
+        return issues != null ? issues : List.of();
     }
 
     /**

@@ -238,7 +238,7 @@ public class EnhancedTextEditor extends JPanel {
         if (linterManager != null) {
             propertyHoverTooltipManager = new com.kalix.ide.linter.ui.PropertyHoverTooltipManager(
                 textArea, schemaManager, modelSupplier,
-                line -> linterManager.getIssueForLine(line) != null);
+                line -> !linterManager.getIssuesForLine(line).isEmpty());
         }
     }
 
