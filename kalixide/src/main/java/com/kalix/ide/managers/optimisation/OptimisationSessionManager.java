@@ -45,8 +45,6 @@ public class OptimisationSessionManager {
     private final Map<String, OptimisationInfo> sessionToOptInfo = new HashMap<>();
     private final Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
-    private final Map<String, String> sessionToModelText = new HashMap<>();
-    private final Map<String, String> sessionToConfigText = new HashMap<>();
 
     // Callbacks
     private Consumer<String> statusUpdater;
@@ -168,10 +166,6 @@ public class OptimisationSessionManager {
                         return;
                     }
 
-                    // Store model and config for later use
-                    sessionToModelText.put(sessionKey, modelText);
-                    sessionToConfigText.put(sessionKey, configText);
-
                     // Create optimisation info
                     OptimisationInfo optInfo = new OptimisationInfo(optName, session);
                     optInfo.setConfigSnapshot(configText);
@@ -257,10 +251,9 @@ public class OptimisationSessionManager {
                 return false;
             }
 
-            // Update config snapshot and stored config
+            // Update config snapshot
             String sessionKey = session.getSessionKey();
             optInfo.setConfigSnapshot(configText);
-            sessionToConfigText.put(sessionKey, configText);
 
             // Start optimisation with config text (not file path!)
             // Note: runOptimisation is void and manages its own async operations
@@ -344,14 +337,11 @@ public class OptimisationSessionManager {
         // Get name before removing
         String optName = sessionToOptName.get(sessionKey);
 
-        // Remove from tracking maps - all of them; sessionToModelText and
-        // sessionToConfigText each pin a full model text per optimisation.
+        // Remove from tracking maps - all of them
         sessionToOptName.remove(sessionKey);
         sessionToOptInfo.remove(sessionKey);
         lastKnownStatus.remove(sessionKey);
         optimisationResults.remove(sessionKey);
-        sessionToModelText.remove(sessionKey);
-        sessionToConfigText.remove(sessionKey);
 
         if (statusUpdater != null && optName != null) {
             statusUpdater.accept("Removed: " + optName);
@@ -525,17 +515,4 @@ public class OptimisationSessionManager {
         this.onErrorOccurred = callback;
     }
 
-    /**
-     * Updates the stored configuration text for a session.
-     * This should be called when the user modifies the config in the UI.
-     *
-     * @param sessionKey The session key
-     * @param configText The updated configuration text
-     */
-    public void updateOptimisationConfig(String sessionKey, String configText) {
-        if (sessionKey != null && configText != null) {
-            sessionToConfigText.put(sessionKey, configText);
-            logger.debug("Updated config for session: {}", sessionKey);
-        }
-    }
 }

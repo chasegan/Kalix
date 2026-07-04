@@ -234,25 +234,6 @@ public class OptimisationGuiBuilder extends JPanel {
     }
 
     /**
-     * Automatically generates expressions for all parameters.
-     * Called when the Optimisation Window opens to pre-populate the parameters table.
-     * Delegates to ParametersConfigPanel.
-     */
-    public void autoGenerateParameterExpressions() {
-        parametersPanel.autoGenerateAllExpressions();
-    }
-
-    /**
-     * Sets the list of optimisable parameters from kalixcli.
-     * Delegates to ParametersConfigPanel.
-     *
-     * @param parameters List of parameter names from get_optimisable_params
-     */
-    public void setOptimisableParameters(java.util.List<String> parameters) {
-        parametersPanel.setOptimisableParameters(parameters);
-    }
-
-    /**
      * Enables or disables all input components in the GUI builder.
      * This recursively disables all components in the three config panels.
      *

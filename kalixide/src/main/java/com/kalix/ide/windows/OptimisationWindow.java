@@ -102,7 +102,6 @@ public class OptimisationWindow extends JFrame {
     private JLabel evaluationProgressLabel; // Label showing evaluation count and progress
     private JLabel startTimeLabel;         // Label showing optimization start time
     private JLabel elapsedTimeLabel;       // Label showing current/finish time and elapsed time
-    private javax.swing.Timer elapsedTimer; // Timer to update elapsed time display
     private JButton runButton;
     private JButton loadConfigButton;
     private JButton saveConfigButton;
@@ -514,10 +513,8 @@ public class OptimisationWindow extends JFrame {
 
         if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo optInfo)) return;
 
-        String sessionKey = optInfo.getSession() != null ? optInfo.getSession().getSessionKey() : null;
-
         // Use config manager to save
-        configManager.saveCurrentConfigToOptimisation(optInfo, sessionKey, sessionManager);
+        configManager.saveCurrentConfigToOptimisation(optInfo);
     }
 
 

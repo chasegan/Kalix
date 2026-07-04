@@ -22,8 +22,6 @@ public class HydrologicalModel {
     // Change tracking for incremental updates
     private final Set<String> modifiedNodes;
     private final Set<String> modifiedLinks;
-    private final Set<String> removedNodes;
-    private final Set<String> removedLinks;
     
     // Previous parse result for incremental updates
     private ModelParser.ParseResult previousParseResult;
@@ -44,8 +42,6 @@ public class HydrologicalModel {
         // Change tracking
         this.modifiedNodes = ConcurrentHashMap.newKeySet();
         this.modifiedLinks = ConcurrentHashMap.newKeySet();
-        this.removedNodes = ConcurrentHashMap.newKeySet();
-        this.removedLinks = ConcurrentHashMap.newKeySet();
         
         // Listeners
         this.changeListeners = new CopyOnWriteArrayList<>();
@@ -71,7 +67,6 @@ public class HydrologicalModel {
         nodes.put(node.getName(), node);
         spatialIndex.addNode(node);
         modifiedNodes.add(node.getName());
-        removedNodes.remove(node.getName());
         
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_ADDED, node.getName()));
     }
@@ -86,7 +81,6 @@ public class HydrologicalModel {
         if (removed != null) {
             spatialIndex.removeNode(removed);
             modifiedNodes.remove(nodeName);
-            removedNodes.add(nodeName);
             
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_REMOVED, nodeName));
         }
@@ -101,7 +95,6 @@ public class HydrologicalModel {
         links.add(link);
         String linkId = link.getUpstreamTerminus() + "->" + link.getDownstreamTerminus();
         modifiedLinks.add(linkId);
-        removedLinks.remove(linkId);
         
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_ADDED, linkId));
     }
@@ -115,7 +108,6 @@ public class HydrologicalModel {
         if (links.remove(link)) {
             String linkId = link.getUpstreamTerminus() + "->" + link.getDownstreamTerminus();
             modifiedLinks.remove(linkId);
-            removedLinks.add(linkId);
             
             notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.LINK_REMOVED, linkId));
         }
@@ -185,8 +177,6 @@ public class HydrologicalModel {
     public void clearChangeTracking() {
         modifiedNodes.clear();
         modifiedLinks.clear();
-        removedNodes.clear();
-        removedLinks.clear();
     }
     
     /**
@@ -243,7 +233,6 @@ public class HydrologicalModel {
             ModelNode removedNode = nodes.remove(nodeName);
             if (removedNode != null) {
                 spatialIndex.removeNode(removedNode);
-                removedNodes.add(nodeName);
                 modifiedNodes.remove(nodeName); // Clean up tracking
             }
         }
@@ -255,7 +244,6 @@ public class HydrologicalModel {
                 nodes.put(nodeName, newNode);
                 spatialIndex.addNode(newNode);
                 modifiedNodes.add(nodeName);
-                removedNodes.remove(nodeName); // Clean up tracking
             }
         }
         
@@ -282,7 +270,6 @@ public class HydrologicalModel {
             links.addAll(diff.getNewLinks());
             // Clear and rebuild link change tracking
             modifiedLinks.clear();
-            removedLinks.clear();
             for (ModelLink link : diff.getNewLinks()) {
                 String linkId = link.getUpstreamTerminus() + "->" + link.getDownstreamTerminus();
                 modifiedLinks.add(linkId);
@@ -516,7 +503,6 @@ public class HydrologicalModel {
         // Update in main collection
         nodes.put(nodeName, updatedNode);
         modifiedNodes.add(nodeName);
-        removedNodes.remove(nodeName);
         
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_MODIFIED, nodeName));
     }
@@ -544,7 +530,6 @@ public class HydrologicalModel {
                 
                 // Update change tracking
                 modifiedNodes.remove(nodeName);
-                removedNodes.add(nodeName);
                 
                 // Notify of individual node removal
                 notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_REMOVED, nodeName));
@@ -557,7 +542,7 @@ public class HydrologicalModel {
         // Update version and notify of selection clear
         notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.SELECTION_CLEARED, null));
         
-        System.out.println("HydrologicalModel: Deleted " + nodesToDelete.size() + " selected nodes");
+        logger.debug("Deleted {} selected nodes", nodesToDelete.size());
     }
 
     /**
@@ -586,6 +571,6 @@ public class HydrologicalModel {
         // Clear link selection for deleted links
         selectedLinks.removeAll(linkIds);
 
-        System.out.println("HydrologicalModel: Deleted " + toRemove.size() + " links");
+        logger.debug("Deleted {} links", toRemove.size());
     }
 }

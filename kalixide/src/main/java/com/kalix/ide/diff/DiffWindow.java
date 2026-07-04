@@ -127,18 +127,11 @@ public class DiffWindow extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
 
-        // Register this instance for preference updates
+        // Register this instance for preference updates; cleanup is handled
+        // by the WeakReferences in updateAllFontSizes()
         synchronized (openWindows) {
             openWindows.add(new WeakReference<>(this));
         }
-
-        // Clean up when window is closed
-        addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosed(java.awt.event.WindowEvent e) {
-                // Cleanup is handled by WeakReferences and updateAllFontSizes()
-            }
-        });
     }
 
     private void initializeComponents(String referenceModel, String thisModel) {

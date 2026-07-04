@@ -9,7 +9,6 @@ import java.util.Map;
 public class SectionDefinition {
     public String name;
     public boolean required;
-    public String validation; // Optional validation rule name (e.g., "file_paths", "output_references")
     public Map<String, PropertyDefinition> properties = new HashMap<>();
 
     /**

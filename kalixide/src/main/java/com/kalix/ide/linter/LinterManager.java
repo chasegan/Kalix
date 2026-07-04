@@ -132,7 +132,9 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         }
 
         // Update visual feedback
-        highlighter.updateHighlights(result);        // Notify external listeners
+        highlighter.updateHighlights(result);
+
+        // Notify external listeners
         long validationTime = orchestrator.getLastValidationTimeMs();
         for (ValidationCompletionListener listener : validationListeners) {
             try {

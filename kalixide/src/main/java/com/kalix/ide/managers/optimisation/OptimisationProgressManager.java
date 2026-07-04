@@ -319,19 +319,6 @@ public class OptimisationProgressManager {
     }
 
     /**
-     * Formats a duration as HH:mm:ss.
-     *
-     * @param duration The duration to format
-     * @return Formatted string
-     */
-    private String formatDuration(Duration duration) {
-        long hours = duration.toHours();
-        long minutes = duration.toMinutesPart();
-        long seconds = duration.toSecondsPart();
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
-    }
-
-    /**
      * Updates the timing labels (start time and elapsed time) for an optimisation.
      *
      * @param optInfo The optimisation info

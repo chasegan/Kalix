@@ -20,9 +20,8 @@ public class OptimisationResult {
     private String message;
     private boolean success;
 
-    // Parameter values (both physical and normalized)
+    // Parameter values (physical units)
     private Map<String, Double> parametersPhysical = new HashMap<>();
-    private Map<String, Double> parametersNormalized = new HashMap<>();
 
     // The optimised model with updated parameters
     private String optimisedModelIni;
@@ -35,7 +34,6 @@ public class OptimisationResult {
     private final List<ConvergencePoint> convergenceHistory = new ArrayList<>();
 
     // Metadata
-    private String configurationUsed;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 

@@ -93,41 +93,6 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
         return firstToken;
     }
 
-    private void handleKeyValuePair(Segment text, char[] array, int offset, int end,
-                                  int equalsPos, int startOffset) {
-        // Add key part (everything before =)
-        if (equalsPos > offset) {
-            addToken(text, offset, equalsPos - 1, Token.IDENTIFIER, startOffset);
-        }
-
-        // Add equals sign
-        addToken(text, equalsPos, equalsPos, Token.OPERATOR,
-                startOffset + (equalsPos - offset));
-
-        // Handle value part (everything after =)
-        int valueStart = equalsPos + 1;
-        if (valueStart < end) {
-            // Look for comments in the value part
-            int commentStart = findCommentStart(array, valueStart, end);
-
-            if (commentStart >= valueStart) {
-                // Value has comment
-                if (commentStart > valueStart) {
-                    // Add value part
-                    addToken(text, valueStart, commentStart - 1, Token.LITERAL_STRING_DOUBLE_QUOTE,
-                            startOffset + (valueStart - offset));
-                }
-                // Add comment part
-                addToken(text, commentStart, end - 1, Token.COMMENT_EOL,
-                        startOffset + (commentStart - offset));
-            } else {
-                // No comment in value
-                addToken(text, valueStart, end - 1, Token.LITERAL_STRING_DOUBLE_QUOTE,
-                        startOffset + (valueStart - offset));
-            }
-        }
-    }
-
     @Override
     public int getLastTokenTypeOnLine(Segment text, int initialTokenType) {
         // This method tells RSyntaxTextArea what state to pass to the next line
@@ -158,20 +123,6 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
             if (afterBracket < end) {
                 handleRemainingTextWithComments(text, array, afterBracket, end, startOffset);
             }
-        } else {
-            addToken(text, offset, end - 1, Token.IDENTIFIER, startOffset);
-        }
-    }
-
-    private void handleCommentLine(Segment text, char[] array, int offset, int end, int startOffset) {
-        int commentStart = findCommentStart(array, offset, end);
-
-        if (commentStart >= offset) {
-            if (commentStart > offset) {
-                addToken(text, offset, commentStart - 1, Token.IDENTIFIER, startOffset);
-            }
-            addToken(text, commentStart, end - 1, Token.COMMENT_EOL,
-                    startOffset + (commentStart - offset));
         } else {
             addToken(text, offset, end - 1, Token.IDENTIFIER, startOffset);
         }

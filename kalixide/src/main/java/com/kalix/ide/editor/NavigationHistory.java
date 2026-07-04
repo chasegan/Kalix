@@ -137,38 +137,6 @@ public class NavigationHistory {
     }
 
     /**
-     * Records a single position when first navigating (e.g., initial mouse click).
-     *
-     * @param position The position to record
-     */
-    public void recordPosition(Position position) {
-        // If we're not at the end of history, truncate forward history
-        if (currentIndex < history.size() - 1) {
-            history.subList(currentIndex + 1, history.size()).clear();
-        }
-
-        // Only add if different from last position
-        if (history.isEmpty() || !entriesOnSameLine(history.get(history.size() - 1), position.line())) {
-            HistoryEntry entry = createEntry(position);
-            if (entry != null) {
-                history.add(entry);
-                currentIndex = history.size() - 1;
-
-                // Trim history if it exceeds maximum size
-                while (history.size() > MAX_HISTORY_SIZE) {
-                    history.remove(0);
-                    currentIndex--;
-                }
-
-                logger.debug("Recorded position: line {}, history size: {}, index: {}",
-                    position.line(), history.size(), currentIndex);
-
-                notifyStateChange();
-            }
-        }
-    }
-
-    /**
      * @return true if there is a previous position to go back to
      */
     public boolean canGoBack() {

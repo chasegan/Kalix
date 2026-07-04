@@ -5,7 +5,6 @@ import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.models.optimisation.OptimisationInfo;
 import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -86,12 +85,9 @@ public class OptimisationWindowInitializer {
             currentOptimisationsNode = (DefaultMutableTreeNode) rootNode.getChildAt(0);
         }
 
-        // Set custom renderer and selection listener
-        optTree.setCellRenderer(new OptimisationTreeCellRenderer());
+        // Selection listener (renderer and context menu are installed by
+        // OptimisationTreeManager's constructor - do not repeat them here)
         optTree.addTreeSelectionListener(treeSelectionHandler::accept);
-
-        // Setup tree manager's popup menu
-        treeManager.setupContextMenu();
 
         // Expand "Optimisation runs" node by default
         optTree.expandRow(0);

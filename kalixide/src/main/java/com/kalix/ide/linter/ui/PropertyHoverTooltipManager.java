@@ -49,7 +49,6 @@ public class PropertyHoverTooltipManager {
 
     // Track which property is currently displayed
     private String currentlyDisplayedProperty = null;
-    private int currentlyDisplayedLine = -1;
 
     // Track pending tooltip
     private String pendingProperty = null;
@@ -232,7 +231,6 @@ public class PropertyHoverTooltipManager {
         showTimer = new Timer(SHOW_DELAY_MS, evt -> {
             showCustomTooltip(propertyInfo, screenLocation);
             currentlyDisplayedProperty = pendingProperty;
-            currentlyDisplayedLine = pendingLine;
             pendingProperty = null;
             pendingLine = -1;
         });
@@ -274,7 +272,6 @@ public class PropertyHoverTooltipManager {
             tooltipWindow.setVisible(false);
         }
         currentlyDisplayedProperty = null;
-        currentlyDisplayedLine = -1;
     }
 
     private void buildTooltipContent(PropertyInfo propertyInfo) {

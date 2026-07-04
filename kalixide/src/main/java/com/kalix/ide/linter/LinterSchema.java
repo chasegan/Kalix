@@ -104,7 +104,6 @@ public class LinterSchema {
             SectionDefinition section = new SectionDefinition();
             section.name = sectionName;
             section.required = sectionNode.path("required").asBoolean(false);
-            section.validation = sectionNode.path("validation").asText(null);
 
             // Parse properties
             JsonNode propertiesNode = sectionNode.path("properties");

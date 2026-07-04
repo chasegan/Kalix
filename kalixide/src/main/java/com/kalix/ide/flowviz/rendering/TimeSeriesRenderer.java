@@ -24,9 +24,9 @@ public class TimeSeriesRenderer {
     private SeriesStyleResolver styleResolver;
 
     // Rendering options
-    private boolean showDataPoints = false;
-    private boolean showGrid = true;
-    private boolean antiAliasing = true;
+    private final boolean showDataPoints = false;
+    private final boolean showGrid = true;
+    private final boolean antiAliasing = true;
 
     // Gap handling: when connectAcrossGaps is false (default) the line breaks where consecutive
     // valid points are farther apart than the series' cadence allows, so missing data reads as a
@@ -552,14 +552,6 @@ public class TimeSeriesRenderer {
         }
     }
     
-    // Rendering options
-    public void setShowDataPoints(boolean show) { this.showDataPoints = show; }
-    public void setShowGrid(boolean show) { this.showGrid = show; }
-    public void setAntiAliasing(boolean enable) { this.antiAliasing = enable; }
-
-    public boolean isShowDataPoints() { return showDataPoints; }
-    public boolean isShowGrid() { return showGrid; }
-    public boolean isAntiAliasing() { return antiAliasing; }
 
     // Gap handling
     public void setConnectAcrossGaps(boolean connect) { this.connectAcrossGaps = connect; }

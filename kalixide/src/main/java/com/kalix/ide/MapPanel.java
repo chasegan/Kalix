@@ -577,12 +577,6 @@ public class MapPanel extends JPanel implements KeyListener {
         repaint();
     }
 
-    public void clearModel() {
-        repaint();
-    }
-
-
-    
     // Hit testing for node interaction
     
     /**

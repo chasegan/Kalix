@@ -90,9 +90,6 @@ public class AutoCompleteManager {
     }
 
     /**
-     * Removes auto-completion from the text area.
-     */
-    /**
      * Applies the desired popup size by accessing the private popupWindow field
      * and setting the preferred size on its content pane before re-packing.
      * The library's setChoicesWindowSize uses setSize() after pack(), which the

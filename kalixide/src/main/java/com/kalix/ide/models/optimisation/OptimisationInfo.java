@@ -2,7 +2,6 @@ package com.kalix.ide.models.optimisation;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.OptimisationProgram;
-import java.time.LocalDateTime;
 
 /**
  * Tracks information about a single optimisation run.
@@ -17,7 +16,6 @@ public class OptimisationInfo {
     private OptimisationResult result;  // Cached result (null if not complete)
     private boolean hasStartedRunning = false;  // True once optimisation has been started
     private boolean iniLocked = false;  // True once the user has edited the INI text directly
-    private LocalDateTime createdTime;
 
     /**
      * Creates a new OptimisationInfo instance.
@@ -28,7 +26,6 @@ public class OptimisationInfo {
     public OptimisationInfo(String name, SessionManager.KalixSession session) {
         this.name = name;
         this.session = session;
-        this.createdTime = LocalDateTime.now();
     }
 
     /**

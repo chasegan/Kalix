@@ -1,14 +1,12 @@
 package com.kalix.ide.editor.commands;
 
-import javax.swing.KeyStroke;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Registry for all available editor commands.
- * Commands can be looked up by context or keyboard shortcut.
+ * Commands can be looked up by context.
  */
 public class CommandRegistry {
 
@@ -33,22 +31,6 @@ public class CommandRegistry {
         return commands.stream()
             .filter(cmd -> cmd.isApplicable(context))
             .collect(Collectors.toList());
-    }
-
-    /**
-     * Finds a command by keyboard shortcut.
-     *
-     * @param keyStroke The keyboard shortcut
-     * @param context   The current context (command must also be applicable)
-     * @return Optional containing the command, or empty if not found
-     */
-    public Optional<EditorCommand> findByKeyStroke(KeyStroke keyStroke, EditorContext context) {
-        return commands.stream()
-            .filter(cmd -> cmd.isApplicable(context))
-            .filter(cmd -> cmd.getMetadata().getKeyboardShortcut()
-                .map(ks -> ks.equals(keyStroke))
-                .orElse(false))
-            .findFirst();
     }
 
     /**

@@ -35,7 +35,6 @@ public class OptimisationPanelBuilder {
 
     // Control buttons
     private JButton runButton;
-    private JButton stopButton;
 
     // Labels
     private JLabel startTimeLabel;
@@ -275,10 +274,6 @@ public class OptimisationPanelBuilder {
 
     public JButton getRunButton() {
         return runButton;
-    }
-
-    public JButton getStopButton() {
-        return stopButton;
     }
 
     public JButton getLoadConfigButton() {

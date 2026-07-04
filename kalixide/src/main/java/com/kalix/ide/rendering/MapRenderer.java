@@ -95,11 +95,10 @@ public class MapRenderer {
         g2d.translate(panX, panY);
         g2d.scale(zoomLevel, zoomLevel);
 
-        // Render world-space elements (grid, placeholder content)
+        // Render world-space elements (grid)
         if (showGridlines) {
             renderGrid(g2d, width, height, zoomLevel, panX, panY);
         }
-        renderPlaceholderContent(g2d);
 
         // Reset to screen space for screen-space elements
         g2d.setTransform(originalTransform);
@@ -195,16 +194,6 @@ public class MapRenderer {
             g2d.drawLine((int) (worldLeft - adaptiveGridSize), (int) y,
                         (int) (worldRight + adaptiveGridSize), (int) y);
         }
-    }
-
-    /**
-     * Renders placeholder content in world space.
-     * Currently empty but reserved for future model visualization elements.
-     *
-     * @param g2d Graphics context (in world space)
-     */
-    private void renderPlaceholderContent(Graphics2D g2d) {
-        // Placeholder method for future model content
     }
 
     /**

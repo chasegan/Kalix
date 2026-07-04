@@ -19,25 +19,6 @@ public class ValidationUtils {
     private static final Pattern INI_VERSION_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
 
     /**
-     * Validate output references using the standard pattern.
-     * @param outputRefs List of output references to validate
-     * @param model Parsed model for line number lookup
-     * @param result ValidationResult to add issues to
-     */
-    public static void validateOutputReferences(List<String> outputRefs, INIModelParser.ParsedModel model, ValidationResult result) {
-        for (String outputRef : outputRefs) {
-            if (!OUTPUT_REFERENCE_PATTERN.matcher(outputRef).matches()) {
-                // Get the actual line number from the model
-                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
-                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
-                result.addIssue(reportLine,
-                              "Invalid output reference format: " + outputRef,
-                              ValidationRule.Severity.ERROR, "invalid_output_reference");
-            }
-        }
-    }
-
-    /**
      * Validate output references against schema rule (for full validation).
      * @param outputRefs List of output references to validate
      * @param model Parsed model for line number lookup
@@ -184,13 +165,6 @@ public class ValidationUtils {
      */
     public static Pattern getOutputReferencePattern() {
         return OUTPUT_REFERENCE_PATTERN;
-    }
-
-    /**
-     * Get the standard INI version pattern.
-     */
-    public static Pattern getIniVersionPattern() {
-        return INI_VERSION_PATTERN;
     }
 
     /**
