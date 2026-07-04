@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(cargo test *)",
+      "Bash(./gradlew build *)",
+      "Bash(./gradlew test *)",
+      "Bash(./gradlew compileJava *)",
+      "mcp__claude_ai_Notion__notion-fetch"
+    ]
+  }
+}
