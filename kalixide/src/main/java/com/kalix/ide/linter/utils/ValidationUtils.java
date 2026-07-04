@@ -17,6 +17,8 @@ public class ValidationUtils {
     // Patterns - single source of truth
     private static final Pattern OUTPUT_REFERENCE_PATTERN = Pattern.compile("^node\\.[\\w_]+\\.(dsflow|usflow|storage)$");
     private static final Pattern INI_VERSION_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
+    // node.<name>.<property> - used to pick apart output/node references
+    private static final Pattern NODE_PROPERTY_REFERENCE_PATTERN = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
 
     /**
      * Validate output references against schema rule (for full validation).
@@ -66,11 +68,8 @@ public class ValidationUtils {
      */
     private static void validateNodeSpecificOutputs(List<String> outputRefs, INIModelParser.ParsedModel model,
                                                    LinterSchema schema, ValidationResult result, ValidationRule rule) {
-        // Basic pattern to extract node name and output property
-        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
-
         for (String outputRef : outputRefs) {
-            java.util.regex.Matcher matcher = basicPattern.matcher(outputRef);
+            java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(outputRef);
             if (!matcher.matches()) {
                 Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
                 int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
@@ -177,9 +176,7 @@ public class ValidationUtils {
      * @return Error message if invalid, null if valid
      */
     public static String validateNodeReference(String nodeRef, INIModelParser.ParsedModel model, LinterSchema schema) {
-        // Basic pattern to extract node name and output property
-        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
-        java.util.regex.Matcher matcher = basicPattern.matcher(nodeRef);
+        java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(nodeRef);
 
         if (!matcher.matches()) {
             return "Invalid node reference format: " + nodeRef + " (should be node.nodename.property)";
