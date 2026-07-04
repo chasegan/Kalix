@@ -88,9 +88,9 @@ public class NodeThemeShapeTest {
         assertEquals(8, style.getFontSize());
         assertTrue(style.isBold());
 
-        // Test font creation
-        assertNotNull(style.createFont());
-        assertEquals("SansSerif", style.createFont().getName());
+        // Test font
+        assertNotNull(style.getFont());
+        assertEquals("SansSerif", style.getFont().getName());
     }
 
     @Test

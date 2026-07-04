@@ -50,18 +50,20 @@ public class NodeTheme {
     public static class ShapeTextStyle {
         private final int fontSize;
         private final boolean bold;
+        private final Font font;
 
         public ShapeTextStyle(int fontSize, boolean bold) {
             this.fontSize = fontSize;
             this.bold = bold;
+            this.font = new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, fontSize);
         }
 
         public int getFontSize() { return fontSize; }
         public boolean isBold() { return bold; }
 
-        public Font createFont() {
-            int style = bold ? Font.BOLD : Font.PLAIN;
-            return new Font(Font.SANS_SERIF, style, fontSize);
+        /** The style's font. Cached — this is called per node per frame. */
+        public Font getFont() {
+            return font;
         }
 
         /**
@@ -84,32 +86,38 @@ public class NodeTheme {
         private final int yOffset;
         private final Color backgroundColor;
         private final int backgroundAlpha;
-        
+        private final Font font;
+        private final Color backgroundColorWithAlpha;
+
         public TextStyle(int fontSize, Color textColor, int yOffset, Color backgroundColor, int backgroundAlpha) {
             this.fontSize = fontSize;
             this.textColor = textColor;
             this.yOffset = yOffset;
             this.backgroundColor = backgroundColor;
             this.backgroundAlpha = backgroundAlpha;
+            this.font = new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
+            this.backgroundColorWithAlpha = new Color(
+                backgroundColor.getRed(),
+                backgroundColor.getGreen(),
+                backgroundColor.getBlue(),
+                backgroundAlpha
+            );
         }
-        
+
         public int getFontSize() { return fontSize; }
         public Color getTextColor() { return textColor; }
         public int getYOffset() { return yOffset; }
         public Color getBackgroundColor() { return backgroundColor; }
         public int getBackgroundAlpha() { return backgroundAlpha; }
-        
-        public Font createFont() {
-            return new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
+
+        /** The style's font. Cached — this is called per node per frame. */
+        public Font getFont() {
+            return font;
         }
-        
-        public Color createBackgroundColorWithAlpha() {
-            return new Color(
-                backgroundColor.getRed(),
-                backgroundColor.getGreen(), 
-                backgroundColor.getBlue(),
-                backgroundAlpha
-            );
+
+        /** The background color with alpha applied. Cached — called per node per frame. */
+        public Color getBackgroundColorWithAlpha() {
+            return backgroundColorWithAlpha;
         }
     }
     
@@ -340,23 +348,22 @@ public class NodeTheme {
     
     /**
      * Gets the color for a specific node type, using theme-specific mappings first,
-     * then falls back to sequential assignment from the palette.
+     * then falls back to sequential assignment from the palette. Decoded colors are
+     * cached per node type (this is called per node per frame); {@link #setTheme}
+     * clears the cache.
      * @param nodeType The type of the node
      * @return The color for this node type
      */
     public Color getColorForNodeType(String nodeType) {
-        // Check theme-specific color mapping first
-        Map<String, String> themeColorMap = currentTheme.getNodeTypeColorMap();
-        String themeSpecificColor = themeColorMap.get(nodeType);
-        if (themeSpecificColor != null) {
-            return Color.decode("#" + themeSpecificColor);
-        }
-
-        // Fall back to sequential assignment from palette
         return nodeTypeColors.computeIfAbsent(nodeType, type -> {
-            String[] palette = currentTheme.getColors();
-            String hexColor = palette[nextColorIndex % palette.length];
-            nextColorIndex++;
+            // Check theme-specific color mapping first
+            String hexColor = currentTheme.getNodeTypeColorMap().get(type);
+            if (hexColor == null) {
+                // Fall back to sequential assignment from palette
+                String[] palette = currentTheme.getColors();
+                hexColor = palette[nextColorIndex % palette.length];
+                nextColorIndex++;
+            }
             return Color.decode("#" + hexColor);
         });
     }

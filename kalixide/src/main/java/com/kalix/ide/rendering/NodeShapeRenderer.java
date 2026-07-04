@@ -317,7 +317,7 @@ public class NodeShapeRenderer {
 
         // Set up font and color
         Font originalFont = g2d.getFont();
-        g2d.setFont(textStyle.createFont());
+        g2d.setFont(textStyle.getFont());
         g2d.setColor(textStyle.getContrastingColor(backgroundColor));
 
         // Calculate text positioning

@@ -271,7 +271,7 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
-                repaint();
+                repaintCoordinateOverlay();
             }
 
             @Override
@@ -280,15 +280,20 @@ public class MapPanel extends JPanel {
                 mouseWorldY = (e.getY() - panY) / zoomLevel;
                 mouseInPanel = true;
 
-                // Show rotation cursor when Ctrl is held and multiple nodes are selected
+                // Show rotation cursor when Ctrl is held and multiple nodes are selected.
+                // Only touch the cursor on a state change — setCursor per event is wasteful.
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
-                if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
-                    setCursor(ROTATE_CURSOR);
-                } else {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                Cursor desiredCursor = (isCtrlDown && interactionManager != null
+                        && interactionManager.canStartRotation())
+                    ? ROTATE_CURSOR
+                    : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                if (getCursor() != desiredCursor) {
+                    setCursor(desiredCursor);
                 }
 
-                repaint();
+                // Idle mouse movement only changes the coordinate overlay — repaint
+                // just that region rather than the whole panel.
+                repaintCoordinateOverlay();
             }
 
             @Override
@@ -334,9 +339,19 @@ public class MapPanel extends JPanel {
         
         addMouseListener(panningHandler);
         addMouseMotionListener(panningHandler);
-        
+
         // Mouse wheel zoom handler
         addMouseWheelListener(this::handleMouseWheelZoom);
+    }
+
+    /**
+     * Repaints only the bottom-left zoom/coordinate overlay region. The overlay sits
+     * at a fixed position, so one clip rectangle covers both the old and new text.
+     */
+    private void repaintCoordinateOverlay() {
+        final int overlayWidth = 320;
+        final int overlayHeight = 50;
+        repaint(0, Math.max(0, getHeight() - overlayHeight), overlayWidth, overlayHeight);
     }
     
     /**
