@@ -73,15 +73,15 @@ public class MapPanel extends JPanel {
     private static final int NODE_SIZE = UIConstants.Map.NODE_SIZE;
 
     // Model integration
-    private HydrologicalModel model = null;
+    private final HydrologicalModel model;
     private final NodeTheme nodeTheme = new NodeTheme();
 
-    // Interaction management
-    private MapInteractionManager interactionManager;
-    private MapContextMenuManager contextMenuManager;
-    private MapClipboardManager clipboardManager;
-    private MapSearchManager mapSearchManager;
-    private EnhancedTextEditor textEditor;
+    // Interaction management (constructor-wired; the panel is per-document)
+    private final MapInteractionManager interactionManager;
+    private final MapContextMenuManager contextMenuManager;
+    private final MapClipboardManager clipboardManager;
+    private final MapSearchManager mapSearchManager;
+    private final EnhancedTextEditor textEditor;
 
     // Rendering
     private final MapRenderer mapRenderer = new MapRenderer();
@@ -92,7 +92,19 @@ public class MapPanel extends JPanel {
     // Theme management (optional - for enhanced unified theme support)
     private com.kalix.ide.managers.ThemeManager themeManager;
 
-    public MapPanel() {
+    /**
+     * Creates a map panel permanently bound to one document's model and editor.
+     * All collaborators (interaction, clipboard, context menu, search, text sync)
+     * are wired here, symmetrically and exactly once — there is no re-wiring
+     * entry point to call in the wrong order, and no stale model listener to leak.
+     *
+     * @param model      the document's data model (never null)
+     * @param textEditor the document's editor, for bidirectional text sync (never null)
+     */
+    public MapPanel(HydrologicalModel model, EnhancedTextEditor textEditor) {
+        this.model = java.util.Objects.requireNonNull(model, "model");
+        this.textEditor = java.util.Objects.requireNonNull(textEditor, "textEditor");
+
         updateThemeColors();
 
         // Enable keyboard focus for delete key handling
@@ -100,6 +112,19 @@ public class MapPanel extends JPanel {
 
         setupKeyBindings();
         setupMouseListeners();
+
+        // Repaint whenever the model changes. The panel lives exactly as long as its
+        // model (both owned by the same KalixDocument), so this listener never leaks.
+        model.addChangeListener(event -> repaint());
+
+        TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
+        this.interactionManager = new MapInteractionManager(this, model, textUpdater);
+        this.clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
+        this.mapSearchManager = new MapSearchManager(this, model);
+        this.contextMenuManager = new MapContextMenuManager(this, interactionManager, model);
+        this.contextMenuManager.setMapSearchManager(mapSearchManager);
+        this.contextMenuManager.setClipboardManager(clipboardManager);
+        this.contextMenuManager.setTextEditor(textEditor);
     }
 
     /**
@@ -511,35 +536,6 @@ public class MapPanel extends JPanel {
         return showGridlines;
     }
     
-    public void setModel(HydrologicalModel model) {
-        // Remove listener from old model if it exists
-        if (this.model != null) {
-            // We'll add this when we implement the listener
-        }
-        
-        this.model = model;
-
-        // Initialize interaction manager and context menu manager
-        if (this.model != null) {
-            this.model.addChangeListener(event -> repaint());
-            this.interactionManager = new MapInteractionManager(this, this.model);
-            this.contextMenuManager = new MapContextMenuManager(this, this.interactionManager, this.model);
-            this.mapSearchManager = new MapSearchManager(this, this.model);
-            this.contextMenuManager.setMapSearchManager(this.mapSearchManager);
-
-            // Auto-fit the model content to the current component size
-            if (getWidth() > 0 && getHeight() > 0) {
-                zoomToFit();
-            }
-        } else {
-            this.interactionManager = null;
-            this.contextMenuManager = null;
-            this.mapSearchManager = null;
-        }
-        
-        repaint();
-    }
-
     // View-menu zoom operations anchor at the viewport centre so the content
     // in view stays in view (zooming about the world origin walked it off-screen).
 
@@ -645,12 +641,6 @@ public class MapPanel extends JPanel {
         repaint();
     }
 
-    public void clearModel() {
-        repaint();
-    }
-
-
-    
     // Hit testing for node interaction
     
     /**
@@ -827,28 +817,6 @@ public class MapPanel extends JPanel {
         }
     }
 
-    /**
-     * Set up text synchronization with the text editor.
-     * This enables bidirectional sync between map dragging and text coordinate updates.
-     * @param textEditor The text editor to synchronize with
-     */
-    public void setupTextSynchronization(EnhancedTextEditor textEditor) {
-        this.textEditor = textEditor;
-        if (interactionManager != null && textEditor != null) {
-            TextCoordinateUpdater textUpdater = new TextCoordinateUpdater(textEditor);
-            interactionManager.setTextUpdater(textUpdater);
-
-            // Create clipboard manager (needs model, textEditor, and textUpdater)
-            if (model != null) {
-                clipboardManager = new MapClipboardManager(model, textEditor, textUpdater);
-                if (contextMenuManager != null) {
-                    contextMenuManager.setClipboardManager(clipboardManager);
-                    contextMenuManager.setTextEditor(textEditor);
-                }
-            }
-        }
-    }
-    
     // Keyboard bindings
 
     /**

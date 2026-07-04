@@ -58,8 +58,11 @@ public class KalixDocument {
      */
     public KalixDocument() {
         this.editor = new EnhancedTextEditor();
-        this.mapPanel = new MapPanel();
         this.model = new HydrologicalModel();
+        // The map panel is bound to its model and editor at construction; all
+        // map-side collaborators (text sync, clipboard, context menu, search)
+        // are wired inside, symmetrically and exactly once.
+        this.mapPanel = new MapPanel(model, editor);
 
         wire();
     }
@@ -68,12 +71,6 @@ public class KalixDocument {
      * Establishes the per-document connections between editor, model and map.
      */
     private void wire() {
-        // Connect map panel to this document's data model.
-        mapPanel.setModel(model);
-
-        // Set up bidirectional text synchronisation (map drags -> text coordinates).
-        mapPanel.setupTextSynchronization(editor);
-
         // Wire map panel to editor for "Show on Map" context menu action.
         editor.setMapPanel(mapPanel);
 

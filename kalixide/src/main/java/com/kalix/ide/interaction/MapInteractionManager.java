@@ -32,23 +32,18 @@ public class MapInteractionManager {
     private Point2D rotationCenter;
     private double rotationStartAngle;
     
-    // Reference to text coordinate updater (will be added later)
-    private TextCoordinateUpdater textUpdater;
-    
-    public MapInteractionManager(MapPanel mapPanel, HydrologicalModel model) {
+    // Text coordinate updater for bidirectional sync
+    private final TextCoordinateUpdater textUpdater;
+
+    public MapInteractionManager(MapPanel mapPanel, HydrologicalModel model,
+                                 TextCoordinateUpdater textUpdater) {
         this.mapPanel = mapPanel;
         this.model = model;
+        this.textUpdater = textUpdater;
         this.originalNodePositions = new HashMap<>();
     }
-    
-    /**
-     * Set the text coordinate updater for bidirectional sync.
-     * @param textUpdater The text updater instance
-     */
-    public void setTextUpdater(TextCoordinateUpdater textUpdater) {
-        this.textUpdater = textUpdater;
-    }
-    
+
+
     /**
      * Check if a drag operation can start at the given screen point.
      * Dragging can start if clicking on a selected node.
