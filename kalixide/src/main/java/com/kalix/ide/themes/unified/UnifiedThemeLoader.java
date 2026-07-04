@@ -56,7 +56,7 @@ public final class UnifiedThemeLoader {
         // Every key the theme file sets passes through verbatim.
         properties.putAll(raw);
 
-        return new UnifiedThemeDefinition(displayName, dark, properties);
+        return new UnifiedThemeDefinition(displayName, dark, properties, raw.keySet());
     }
 
     private static Map<String, String> readResource(String name) {

@@ -156,7 +156,15 @@ public class ThemeManager {
         UIManager.put("TabbedPane.tabInsets", new java.awt.Insets(4, 12, 4, 12));
         UIManager.put("TabbedPane.tabAreaInsets", new java.awt.Insets(0, 0, 0, 0));
         UIManager.put("TabbedPane.cardTabInsets", new java.awt.Insets(4, 12, 4, 12));
-        UIManager.put("TabbedPane.selectedBackground", UIManager.getColor("Panel.background"));
+        // TabbedPane.selectedBackground: a theme that sets the key in its own
+        // properties file wins (the dark themes define a designed tab-selected
+        // colour). Only themes that merely inherit the legacy default (Light)
+        // keep the historically derived Panel.background value. Putting null
+        // clears any derived value left in UIManager by a previous switch.
+        UIManager.put("TabbedPane.selectedBackground",
+            currentTheme.definition().definesExplicitly("TabbedPane.selectedBackground")
+                ? null
+                : UIManager.getColor("Panel.background"));
         UIManager.put("TabbedPane.hoverColor", UIManager.getColor("Button.hoverBackground"));
         UIManager.put("TabbedPane.focusColor", UIManager.getColor("Component.focusColor"));
         UIManager.put("TabbedPane.closeArc", 4);
