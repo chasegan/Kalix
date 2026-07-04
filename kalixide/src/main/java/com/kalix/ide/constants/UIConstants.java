@@ -30,6 +30,12 @@ public final class UIConstants {
         /** Node radius in pixels (NODE_SIZE / 2 + 1 for slightly larger circles) */
         public static final int NODE_RADIUS = NODE_SIZE / 2 + 1;
 
+        /**
+         * Mouse movement (in pixels) required before a press on a node becomes a
+         * drag. Below this, the gesture is treated as a click.
+         */
+        public static final int DRAG_START_THRESHOLD_PX = 5;
+
         private Map() { throw new UnsupportedOperationException("Constants class"); }
     }
 

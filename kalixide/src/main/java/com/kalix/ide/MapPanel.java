@@ -200,10 +200,9 @@ public class MapPanel extends JPanel implements KeyListener {
                             // Don't start drag here - wait for mouseDragged event
                         }
 
-                        // Navigate to the node definition in text editor
-                        if (interactionManager != null) {
-                            interactionManager.handleNodeClick(nodeAtPoint);
-                        }
+                        // Navigation to the node's definition happens on mouseReleased,
+                        // once we know this was a click and not the start of a drag —
+                        // navigating here moved the editor caret on every drag.
                     } else {
                         // Not clicking on a node - check for links
                         com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
@@ -237,10 +236,16 @@ public class MapPanel extends JPanel implements KeyListener {
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     // End dragging if active
-                    if (interactionManager != null && interactionManager.isDragging()) {
+                    boolean wasDragging = interactionManager != null && interactionManager.isDragging();
+                    if (wasDragging) {
                         interactionManager.endDrag(e.getPoint());
                     }
-                    
+
+                    // Click (no drag) on a node: navigate to its definition in the editor
+                    if (!wasDragging && clickedNodeName != null && interactionManager != null) {
+                        interactionManager.handleNodeClick(clickedNodeName);
+                    }
+
                     // Handle rectangle selection completion
                     if (isRectangleSelecting) {
                         completeRectangleSelection();
@@ -289,9 +294,13 @@ public class MapPanel extends JPanel implements KeyListener {
                 mouseWorldY = (e.getY() - panY) / zoomLevel;
                 mouseInPanel = true;
 
-                // Check if we should start node dragging
-                if (interactionManager != null && !interactionManager.isDragging() && 
-                    clickedNodeName != null && interactionManager.canStartDrag(clickStartPoint)) {
+                // Check if we should start node dragging. A drag only starts once the
+                // mouse has moved past the click tolerance, so small jitters while
+                // clicking never displace the node.
+                if (interactionManager != null && !interactionManager.isDragging() &&
+                    clickedNodeName != null && clickStartPoint != null &&
+                    e.getPoint().distance(clickStartPoint) >= UIConstants.Map.DRAG_START_THRESHOLD_PX &&
+                    interactionManager.canStartDrag(clickStartPoint)) {
                     // Start drag operation now that we know it's actually a drag
                     interactionManager.startDrag(clickStartPoint);
                 }

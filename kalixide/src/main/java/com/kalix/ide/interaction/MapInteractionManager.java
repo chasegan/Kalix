@@ -182,12 +182,13 @@ public class MapInteractionManager {
         if (!isDragging) {
             return;
         }
-        
-        isDragging = false;
-        
-        // Final position update
+
+        // Commit the release-point position before clearing the drag flag
+        // (updateDrag guards on isDragging, so the order matters — review #24).
         updateDrag(endScreenPoint);
-        
+
+        isDragging = false;
+
         // Sync changes to text editor if updater is available
         if (textUpdater != null) {
             // Batch update all moved nodes as a single atomic operation
