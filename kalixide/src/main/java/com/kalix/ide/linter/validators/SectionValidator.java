@@ -51,9 +51,12 @@ public class SectionValidator implements ValidationStrategy {
         for (SectionDefinition.PropertyDefinition propDef : sectionDef.properties.values()) {
             INIModelParser.Property modelProp = modelSection.getProperties().get(propDef.name);
 
-            // Check if required property is missing
+            // Check if required property is missing. Report on the line after the
+            // section header, clamped to the section's actual line range so the
+            // marker cannot point past EOF when the header is the last line.
             if (propDef.required && modelProp == null) {
-                result.addIssue(modelSection.getStartLine() + 1,
+                int reportLine = Math.min(modelSection.getStartLine() + 1, modelSection.getEndLine());
+                result.addIssue(reportLine,
                               "Missing required property: " + propDef.name,
                               ValidationRule.Severity.ERROR, "missing_property_" + propDef.name);
                 continue;

@@ -4,6 +4,7 @@ import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.io.File;
 import java.util.HashMap;
@@ -29,10 +30,13 @@ public class NodeOrderingValidator implements ValidationStrategy {
             nodeStartLines.put(node.getNodeName(), node.getStartLine());
         }
 
-        // Check each node's downstream references
+        // Check each node's downstream references. Uses the shared ds_N rule:
+        // ds_1_outlet / ds_1_order values are not node names and must not be
+        // ordering-checked (a startsWith("ds_") match here used to disagree
+        // with ReferenceValidator's deliberate ^ds_\d+$).
         for (INIModelParser.NodeSection node : model.getNodes().values()) {
             for (INIModelParser.Property prop : node.getProperties().values()) {
-                if (!prop.getKey().startsWith("ds_")) {
+                if (!ValidationUtils.isDsNodeParam(prop.getKey())) {
                     continue;
                 }
 

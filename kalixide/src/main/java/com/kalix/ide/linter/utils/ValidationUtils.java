@@ -19,6 +19,18 @@ public class ValidationUtils {
     private static final Pattern INI_VERSION_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
     // node.<name>.<property> - used to pick apart output/node references
     private static final Pattern NODE_PROPERTY_REFERENCE_PATTERN = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
+    // Downstream link parameters: ds_1, ds_2, ... - deliberately NOT ds_1_outlet,
+    // ds_1_order etc., whose values are not node names. Shared so every consumer
+    // (reference validation, ordering validation, parsing) agrees on the rule.
+    public static final Pattern DSNODE_PARAM_PATTERN = Pattern.compile("^ds_\\d+$");
+
+    /**
+     * True if the property key is a downstream link parameter (ds_1, ds_2, ...)
+     * whose value names a downstream node.
+     */
+    public static boolean isDsNodeParam(String propertyKey) {
+        return DSNODE_PARAM_PATTERN.matcher(propertyKey).matches();
+    }
 
     /**
      * Validate output references against schema rule (for full validation).
@@ -157,13 +169,6 @@ public class ValidationUtils {
             return Math.max(outputsSection.getStartLine() + 2, 1);
         }
         return 1; // Last resort
-    }
-
-    /**
-     * Get the standard output reference pattern.
-     */
-    public static Pattern getOutputReferencePattern() {
-        return OUTPUT_REFERENCE_PATTERN;
     }
 
     /**

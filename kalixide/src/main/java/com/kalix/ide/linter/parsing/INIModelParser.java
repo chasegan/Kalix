@@ -316,14 +316,15 @@ public class INIModelParser {
     }
 
     /**
-     * Get all node names referenced in downstream parameters.
+     * Get all node names referenced in downstream parameters (ds_1, ds_2, ...;
+     * per the shared rule, ds_1_outlet / ds_1_order values are not node names).
      */
     public static Set<String> getDownstreamReferences(ParsedModel model) {
         Set<String> references = new HashSet<>();
 
         for (NodeSection node : model.getNodes().values()) {
             for (Property prop : node.getProperties().values()) {
-                if (prop.getKey().startsWith("ds_")) {
+                if (com.kalix.ide.linter.utils.ValidationUtils.isDsNodeParam(prop.getKey())) {
                     references.add(prop.getValue());
                 }
             }
