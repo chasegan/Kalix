@@ -92,6 +92,10 @@ public class ThemeManager {
             // the values set at startup are stale after a runtime switch.
             configureFlatLafProperties();
 
+            // The built-in plot palette follows the theme (Kalix.plot.seriesN):
+            // re-resolve it now so plots using the default palette recolour live.
+            com.kalix.ide.flowviz.style.PlotPaletteManager.onThemeChanged();
+
             // Update all components while the snapshot overlay is still showing
             updateAllWindows();
 

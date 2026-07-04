@@ -228,6 +228,65 @@ class PlotPaletteManagerTest {
         assertEquals("Persisted", reloaded.getActivePaletteName());
     }
 
+    // ==== Theme-reactive built-in palette ====
+
+    /** Puts a colour under {@code Kalix.plot.series1}, runs the body, and always cleans up. */
+    private static void withThemeSeries1(java.awt.Color color, Runnable body) {
+        javax.swing.UIManager.put("Kalix.plot.series1", color);
+        try {
+            body.run();
+        } finally {
+            javax.swing.UIManager.put("Kalix.plot.series1", null);
+        }
+    }
+
+    @Test
+    void builtInPaletteResolvesFromThemeSeriesKeys() {
+        withThemeSeries1(java.awt.Color.MAGENTA, () -> {
+            PlotPaletteManager mgr = new PlotPaletteManager(new InMemoryPaletteStore());
+            assertEquals(java.awt.Color.MAGENTA,
+                mgr.getActivePalette().entryAt(0).color(),
+                "the built-in default must take its colours from Kalix.plot.seriesN");
+        });
+    }
+
+    @Test
+    void refreshBuiltInsFollowsAThemeChangeAndNotifiesListeners() {
+        PlotPaletteManager mgr = new PlotPaletteManager(new InMemoryPaletteStore());
+        int[] count = {0};
+        mgr.addChangeListener(() -> count[0]++);
+
+        withThemeSeries1(java.awt.Color.ORANGE, mgr::refreshBuiltInsFromTheme);
+
+        assertEquals(java.awt.Color.ORANGE, mgr.getActivePalette().entryAt(0).color());
+        assertEquals(1, count[0], "a real colour change must notify listeners");
+
+        // Restore the original theme colours (the key was removed by the helper).
+        mgr.refreshBuiltInsFromTheme();
+        assertEquals(2, count[0]);
+
+        mgr.refreshBuiltInsFromTheme();
+        assertEquals(2, count[0], "a refresh with unchanged colours must not notify");
+    }
+
+    @Test
+    void userPalettesWinOverThemeChangesWhileActive() {
+        PlotPaletteManager mgr = new PlotPaletteManager(new InMemoryPaletteStore());
+        mgr.duplicate(PlotPalette.ORIGINAL_NAME, "Mine");
+        mgr.setActivePalette("Mine");
+        java.awt.Color before = mgr.getActivePalette().entryAt(0).color();
+
+        withThemeSeries1(java.awt.Color.PINK, mgr::refreshBuiltInsFromTheme);
+
+        assertEquals(before, mgr.getActivePalette().entryAt(0).color(),
+            "an active user palette must be untouched by theme changes");
+        assertEquals(java.awt.Color.PINK,
+            mgr.getPalette(PlotPalette.ORIGINAL_NAME).entryAt(0).color(),
+            "the built-in still recolours behind the user's selection");
+
+        mgr.refreshBuiltInsFromTheme();  // restore for other tests
+    }
+
     @Test
     void persistedPaletteCollidingWithABuiltInIsDroppedOnLoad() {
         InMemoryPaletteStore store = new InMemoryPaletteStore();
