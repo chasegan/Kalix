@@ -50,7 +50,10 @@ public class ParametersConfigPanel extends JPanel {
         paramsTable = new JTable(paramsTableModel);
         paramsTable.setRowHeight(25);
         paramsTable.setShowGrid(true);
-        paramsTable.setGridColor(new Color(220, 220, 220));
+        // Theme-supplied grid colour so the table reads correctly on dark themes
+        Color gridColor = UIManager.getColor("Table.gridColor");
+        paramsTable.setGridColor(gridColor != null
+            ? gridColor : com.kalix.ide.constants.UIConstants.TableView.FALLBACK_GRID_COLOR);
         paramsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
         JScrollPane tableScrollPane = new JScrollPane(paramsTable);

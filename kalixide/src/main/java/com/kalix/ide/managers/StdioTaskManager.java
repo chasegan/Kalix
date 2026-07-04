@@ -386,11 +386,9 @@ public class StdioTaskManager {
      */
     private void updateProgressFromSession(ProgressParser.ProgressInfo progressInfo) {
         SwingUtilities.invokeLater(() -> {
-            // Use showProgress with command to set both progress and color
             progressBar.showProgress(
                 progressInfo.getPercentage() / 100.0,
-                String.format("%.0f%%", progressInfo.getPercentage()),
-                progressInfo.getRawLine() // Contains the command
+                String.format("%.0f%%", progressInfo.getPercentage())
             );
             statusUpdater.accept(progressInfo.getDescription());
         });

@@ -79,12 +79,6 @@ public class AutoHidingProgressBar extends StatusProgressBar {
     }
 
     @Override
-    public void showProgress(double initialProgress, String text, String command) {
-        super.showProgress(initialProgress, text, command);
-        resetAutoHideTimer();
-    }
-
-    @Override
     public void hideProgress() {
         cancelAutoHideTimer();
         super.hideProgress();

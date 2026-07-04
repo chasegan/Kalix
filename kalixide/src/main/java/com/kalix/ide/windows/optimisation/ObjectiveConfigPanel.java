@@ -69,7 +69,10 @@ public class ObjectiveConfigPanel extends JPanel {
         termsTable = new JTable(termsTableModel);
         termsTable.setRowHeight(25);
         termsTable.setShowGrid(true);
-        termsTable.setGridColor(new Color(220, 220, 220));
+        // Theme-supplied grid colour so the table reads correctly on dark themes
+        Color gridColor = UIManager.getColor("Table.gridColor");
+        termsTable.setGridColor(gridColor != null
+            ? gridColor : com.kalix.ide.constants.UIConstants.TableView.FALLBACK_GRID_COLOR);
         termsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         termsTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         // Show ~6 rows by default so the panel is usable even with a few terms

@@ -8,6 +8,7 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.utils.JsonUtils;
+import com.kalix.ide.utils.ThemeUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -171,7 +172,6 @@ public class SessionManagerWindow extends JFrame {
         // Initialize STDIO log area
         logArea = KalixPlainTextArea.createReadOnly(20, 60);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
-        logArea.setBackground(Color.WHITE);
         logArea.setText("Select a session to view STDIO log...");
 
         logScrollPane = new RTextScrollPane(logArea);
@@ -905,26 +905,7 @@ public class SessionManagerWindow extends JFrame {
 
                     // Color code by session state
                     if (!sel) {
-                        switch (state) {
-                            case READY:
-                                setForeground(new Color(0, 120, 0)); // Dark green
-                                break;
-                            case RUNNING:
-                                setForeground(new Color(0, 0, 200)); // Blue
-                                break;
-                            case ERROR:
-                                setForeground(new Color(200, 0, 0)); // Red
-                                break;
-                            case STARTING:
-                                setForeground(new Color(150, 150, 0)); // Dark yellow
-                                break;
-                            case TERMINATED:
-                                setForeground(new Color(128, 128, 128)); // Gray
-                                break;
-                            default:
-                                setForeground(Color.BLACK);
-                                break;
-                        }
+                        setForeground(stateColor(state));
                     }
 
                     // Set icon based on session state
@@ -950,20 +931,60 @@ public class SessionManagerWindow extends JFrame {
                             break;
                     }
                 } else if (userObject instanceof ForeignProcessInfo foreignInfo) {
-                    // Display foreign process with gray color and warning icon
+                    // Display foreign process with muted color and warning icon
                     setText(foreignInfo.toString());
 
                     if (!sel) {
-                        setForeground(new Color(128, 128, 128)); // Gray
+                        setForeground(mutedForeground());
                     }
 
                     // Set warning icon for foreign process
                     int iconSize = 12;
-                    setIcon(FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, iconSize, new Color(200, 150, 0)));
+                    setIcon(FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, iconSize,
+                        accent(new Color(200, 150, 0), new Color(222, 179, 90))));
                 }
             }
 
             return this;
+        }
+
+        /**
+         * Theme-aware status colour for a session state. Accents keep their
+         * historical light-theme values and brighten on dark trees so they stay
+         * legible (per the toolbar/menu-icon light-dark heuristic in ThemeUtils).
+         */
+        private static Color stateColor(SessionManager.SessionState state) {
+            switch (state) {
+                case READY:
+                    return accent(new Color(0, 120, 0), new Color(96, 198, 118));   // Green
+                case RUNNING:
+                    return accent(new Color(0, 0, 200), new Color(115, 160, 255));  // Blue
+                case ERROR:
+                    return accent(new Color(200, 0, 0), new Color(240, 115, 105));  // Red
+                case STARTING:
+                    return accent(new Color(150, 150, 0), new Color(206, 192, 94)); // Yellow
+                case TERMINATED:
+                    return mutedForeground();
+                default:
+                    return treeForeground();
+            }
+        }
+
+        /** {@code light} on light trees, {@code dark} on dark ones. */
+        private static Color accent(Color light, Color dark) {
+            return ThemeUtils.isDark(UIManager.getColor("Tree.background")) ? dark : light;
+        }
+
+        /** The theme's disabled/muted text colour; historical gray as fallback. */
+        private static Color mutedForeground() {
+            Color c = UIManager.getColor("Label.disabledForeground");
+            return c != null ? c : new Color(128, 128, 128);
+        }
+
+        /** The theme's default tree text colour; black as fallback. */
+        private static Color treeForeground() {
+            Color c = UIManager.getColor("Tree.foreground");
+            return c != null ? c : Color.BLACK;
         }
     }
 }
