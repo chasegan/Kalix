@@ -1528,7 +1528,7 @@ public class VisualizationTabManager {
      * Updates a series in all stats tabs, applying aggregation settings.
      * This should be called instead of directly calling model.addOrUpdateSeries().
      *
-     * @param seriesName The name of the series
+     * @param ref The identity of the series
      * @param data The original (unaggregated) time series data
      */
     public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {

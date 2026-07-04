@@ -13,17 +13,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>Each instance carries an immutable {@code runId} (assigned at construction from
  * a process-wide monotonic counter) that is used as the stable internal identity of
  * the run by {@link com.kalix.ide.flowviz.data.RunSeries}. The {@code runId} is
- * preserved across renames — renaming constructs a fresh {@code RunInfoImpl} with
- * the same session reference but a new {@code runName}, and the new instance carries
- * its own {@code runId} only because the constructor unconditionally generates one.
- * The series-identity layer therefore sees a rename as a no-op: it operates on the
- * runId of whichever {@code RunInfoImpl} is in scope, and the rename swaps in a new
- * instance with a new runId.</p>
- *
- * <p>(In the post-refactor world the pool will be keyed by runId, so callers that
- * want "the data for this run" hold onto the runId rather than the {@code RunInfoImpl}
- * reference. Renames will change which {@code RunInfoImpl} the tree node carries
- * without invalidating the runId of plotted data.)</p>
+ * preserved across renames: {@link #withName} constructs a fresh {@code RunInfoImpl}
+ * with the same runId and session but a new {@code runName}, so plotted data keyed
+ * by runId survives the relabelling.</p>
  */
 public class RunInfoImpl implements RunContextMenuManager.RunInfo {
 

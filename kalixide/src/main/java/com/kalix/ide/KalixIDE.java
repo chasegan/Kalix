@@ -88,7 +88,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private DocumentManager documentManager;
 
     // Cached views of the active document, refreshed when the active document changes.
-    // In Phase 1 there is exactly one document, so these are set once at startup.
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
