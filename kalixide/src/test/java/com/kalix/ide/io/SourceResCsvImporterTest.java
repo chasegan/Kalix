@@ -176,7 +176,8 @@ class SourceResCsvImporterTest {
         assertFalse(reader.canRead("plain.csv"));
 
         List<String> names = reader.readSeriesNames(f);
-        // Names are cleansed (non-alphanumerics → underscore) like the other header readers.
-        assertEquals(List.of("Flow_at_A", "Level_at_B"), names);
+        // Names are cleansed to the engine's data.* reference form (lowercase, then
+        // non-[a-z0-9_] -> underscore) like the other header readers; see EngineNames.
+        assertEquals(List.of("flow_at_a", "level_at_b"), names);
     }
 }
