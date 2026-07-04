@@ -50,11 +50,11 @@ public class PropertyHoverTooltipManager {
     // Cached icon for property help tooltips
     private final FontIcon helpIcon = FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, 12, new Color(70, 130, 180));
 
-    // Track which property is currently displayed
-    private String currentlyDisplayedProperty = null;
+    // Line (1-based) whose property tooltip is currently displayed, or -1 if none.
+    // Keyed by line: an INI line holds at most one property key.
+    private int currentlyDisplayedLine = -1;
 
-    // Track pending tooltip
-    private String pendingProperty = null;
+    // Line (1-based) whose tooltip is scheduled to appear, or -1 if none.
     private int pendingLine = -1;
 
     // Listeners added to the shared text area, retained so dispose() can detach them
@@ -94,34 +94,34 @@ public class PropertyHoverTooltipManager {
         mouseMotionListener = new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                PropertyInfo propertyInfo = getPropertyInfoForPosition(e.getPoint());
+                // Cheap arithmetic only on the hot mouse-move path: offset + line
+                // bounds via the document's element tree, plus a single-line text
+                // check. The full document analysis runs inside the dwell timer.
+                Candidate candidate = candidateFor(e.getPoint());
 
-                if (propertyInfo != null) {
-                    String propertyKey = propertyInfo.propertyKey + "@" + propertyInfo.line;
-
-                    // Already showing this property's tooltip: keep it visible
-                    if (propertyKey.equals(currentlyDisplayedProperty)) {
+                if (candidate != null) {
+                    // Already showing this line's tooltip: keep it visible
+                    if (candidate.line == currentlyDisplayedLine) {
                         stopTimer(hideTimer);
                         return;
                     }
 
-                    // A show for this same property is already scheduled: let it fire
-                    if (propertyKey.equals(pendingProperty) && showTimer != null && showTimer.isRunning()) {
+                    // A show for this same line is already scheduled: let it fire
+                    if (candidate.line == pendingLine && showTimer != null && showTimer.isRunning()) {
                         return;
                     }
 
-                    // Moved onto a different property: hide current, schedule new show
+                    // Moved onto a different property line: hide current, schedule new show
                     stopTimer(hideTimer);
-                    if (currentlyDisplayedProperty != null) {
+                    if (currentlyDisplayedLine != -1) {
                         hideCustomTooltip();
                     }
-                    scheduleShow(propertyInfo, e.getLocationOnScreen());
+                    scheduleShow(candidate, e.getLocationOnScreen());
                 } else {
                     // Moved off a property: cancel any pending show, hide after delay
                     stopTimer(showTimer);
-                    pendingProperty = null;
                     pendingLine = -1;
-                    if (currentlyDisplayedProperty != null && (hideTimer == null || !hideTimer.isRunning())) {
+                    if (currentlyDisplayedLine != -1 && (hideTimer == null || !hideTimer.isRunning())) {
                         hideTimer = new Timer(100, evt -> hideCustomTooltip());
                         hideTimer.setRepeats(false);
                         hideTimer.start();
@@ -165,81 +165,146 @@ public class PropertyHoverTooltipManager {
     }
 
     /**
-     * Checks if mouse is over a property KEY (not value), and returns property info if so.
-     * Returns null if validation tooltip should take precedence or if not over a property key.
+     * A cheap mouse-move hit: a position that MIGHT be a property key, identified
+     * from the single line's text alone. Confirmed by the full analysis in the
+     * dwell-timer callback.
      */
-    private PropertyInfo getPropertyInfoForPosition(Point point) {
+    private static class Candidate {
+        final int line;   // 1-based
+        final int offset; // document offset under the pointer
+
+        Candidate(int line, int offset) {
+            this.line = line;
+            this.offset = offset;
+        }
+    }
+
+    /**
+     * Cheap per-mouse-move check: resolves the pointer to a document offset and
+     * line via the document's element tree, bails if a validation tooltip takes
+     * precedence, and inspects only that line's text. No document copy, no parse.
+     */
+    private Candidate candidateFor(Point point) {
+        int offset = textArea.viewToModel2D(point);
+        if (offset < 0) {
+            return null;
+        }
         try {
-            int offset = textArea.viewToModel2D(point);
-            int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based
+            javax.swing.text.Document doc = textArea.getDocument();
+            javax.swing.text.Element root = doc.getDefaultRootElement();
+            int lineIndex = root.getElementIndex(offset);
+            javax.swing.text.Element lineElement = root.getElement(lineIndex);
+            int lineStart = lineElement.getStartOffset();
+            int line = lineIndex + 1; // 1-based
 
             // Check if validation tooltip should take precedence
             if (hasValidationIssue.test(line)) {
                 return null; // Let validation tooltip show instead
             }
 
-            // Use EditorPosition to analyze context
-            String fullText = textArea.getText();
-            INIModelParser.ParsedModel model = modelSupplier.get();
-            EditorPosition position = EditorPosition.analyze(fullText, offset, model);
-
-            // Check if we're on a property header and NOT in value position
-            if (!position.isOnPropertyHeader() || position.isInValuePosition()) {
-                return null; // Not on property key
-            }
-
-            String propertyKey = position.getPropertyKey();
-            String nodeType = position.getNodeType();
-            String sectionName = position.getSectionName();
-
-            if (propertyKey == null || sectionName == null) {
+            String lineText = doc.getText(lineStart, lineElement.getEndOffset() - lineStart);
+            if (!isPossiblePropertyKeyPosition(lineText, offset - lineStart)) {
                 return null;
             }
-
-            // Only show tooltips for node sections with a valid type
-            if (!sectionName.startsWith("node.") || nodeType == null) {
-                return null;
-            }
-
-            // Get node type definition to determine required/optional status
-            LinterSchema schema = schemaManager.getCurrentSchema();
-            if (schema == null) {
-                return null;
-            }
-            NodeTypeDefinition nodeDef = schema.getNodeType(nodeType);
-            if (nodeDef == null) {
-                return null;
-            }
-
-            boolean isRequired = nodeDef.requiredParams.contains(propertyKey);
-            boolean isOptional = nodeDef.optionalParams.contains(propertyKey);
-            boolean isDsnode = nodeDef.dsnodeParams.contains(propertyKey);
-
-            // Only show tooltips for known properties
-            if (!isRequired && !isOptional && !isDsnode) {
-                return null;
-            }
-
-            return new PropertyInfo(propertyKey, nodeType, sectionName, line,
-                                  isRequired, isOptional, isDsnode);
-
+            return new Candidate(line, offset);
         } catch (BadLocationException e) {
             return null;
         }
     }
 
     /**
-     * Schedule the tooltip for the given property to appear after the dwell delay.
+     * True if {@code column} within {@code lineText} could sit on a property KEY:
+     * the line must look like a {@code key = value} header (not blank, not a
+     * continuation, comment, or section header; an '=' before any comment marker)
+     * and the column must fall before the '='. Package-private for tests.
      */
-    private void scheduleShow(PropertyInfo propertyInfo, Point screenLocation) {
+    static boolean isPossiblePropertyKeyPosition(String lineText, int column) {
+        if (lineText == null || lineText.isEmpty() || column < 0) {
+            return false;
+        }
+        char first = lineText.charAt(0);
+        if (Character.isWhitespace(first) || first == ';' || first == '#' || first == '[') {
+            return false;
+        }
+        for (int i = 0; i < lineText.length(); i++) {
+            char c = lineText.charAt(i);
+            if (c == '=') {
+                return column < i; // on the key portion, not the value
+            }
+            if (c == ';' || c == '#') {
+                return false; // comment before any '='
+            }
+        }
+        return false; // no '=': not a property header
+    }
+
+    /**
+     * Full analysis of a candidate position, deferred to the dwell timer so it
+     * never runs on the raw mouse-move path: copies the document, resolves the
+     * parsed model, and classifies the position via {@link EditorPosition}.
+     * Returns null if the position is not a known property key of a typed node.
+     */
+    private PropertyInfo analyzeCandidate(Candidate candidate) {
+        String fullText = textArea.getText();
+        INIModelParser.ParsedModel model = modelSupplier.get();
+        EditorPosition position = EditorPosition.analyze(fullText, candidate.offset, model);
+
+        // Check if we're on a property header and NOT in value position
+        if (!position.isOnPropertyHeader() || position.isInValuePosition()) {
+            return null; // Not on property key
+        }
+
+        String propertyKey = position.getPropertyKey();
+        String nodeType = position.getNodeType();
+        String sectionName = position.getSectionName();
+
+        if (propertyKey == null || sectionName == null) {
+            return null;
+        }
+
+        // Only show tooltips for node sections with a valid type
+        if (!sectionName.startsWith("node.") || nodeType == null) {
+            return null;
+        }
+
+        // Get node type definition to determine required/optional status
+        LinterSchema schema = schemaManager.getCurrentSchema();
+        if (schema == null) {
+            return null;
+        }
+        NodeTypeDefinition nodeDef = schema.getNodeType(nodeType);
+        if (nodeDef == null) {
+            return null;
+        }
+
+        boolean isRequired = nodeDef.requiredParams.contains(propertyKey);
+        boolean isOptional = nodeDef.optionalParams.contains(propertyKey);
+        boolean isDsnode = nodeDef.dsnodeParams.contains(propertyKey);
+
+        // Only show tooltips for known properties
+        if (!isRequired && !isOptional && !isDsnode) {
+            return null;
+        }
+
+        return new PropertyInfo(propertyKey, nodeType, sectionName, candidate.line,
+                              isRequired, isOptional, isDsnode);
+    }
+
+    /**
+     * Schedule the tooltip for the candidate line to appear after the dwell delay.
+     * The expensive analysis runs inside the timer callback, so sweeping the
+     * pointer across property lines never builds anything.
+     */
+    private void scheduleShow(Candidate candidate, Point screenLocation) {
         stopTimer(showTimer);
-        pendingProperty = propertyInfo.propertyKey + "@" + propertyInfo.line;
-        pendingLine = propertyInfo.line;
+        pendingLine = candidate.line;
         showTimer = new Timer(SHOW_DELAY_MS, evt -> {
-            showCustomTooltip(propertyInfo, screenLocation);
-            currentlyDisplayedProperty = pendingProperty;
-            pendingProperty = null;
             pendingLine = -1;
+            PropertyInfo propertyInfo = analyzeCandidate(candidate);
+            if (propertyInfo != null) {
+                showCustomTooltip(propertyInfo, screenLocation);
+                currentlyDisplayedLine = candidate.line;
+            }
         });
         showTimer.setRepeats(false);
         showTimer.start();
@@ -278,7 +343,7 @@ public class PropertyHoverTooltipManager {
         if (tooltipWindow != null) {
             tooltipWindow.setVisible(false);
         }
-        currentlyDisplayedProperty = null;
+        currentlyDisplayedLine = -1;
     }
 
     private void buildTooltipContent(PropertyInfo propertyInfo) {
