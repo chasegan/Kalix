@@ -9,8 +9,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Main linter for validating Kalix model files against schema rules.
@@ -173,61 +171,41 @@ public class ModelLinter {
     /**
      * Pre-parsing check: detects standalone carriage return characters (\r not followed by \n).
      * These can cause parsing errors and appear as invisible characters in some editors.
+     *
+     * <p>Single forward pass tracking line/column as it goes; the previous
+     * regex + per-match line recount was O(n) per match, O(n^2) on CR-riddled
+     * files. Package-private for tests.</p>
      */
-    private void checkForStandaloneCarriageReturns(String content, ValidationResult result) {
-        // Pattern to match \r NOT followed by \n
-        Pattern pattern = Pattern.compile("\\r(?!\\n)");
-        Matcher matcher = pattern.matcher(content);
-
-        while (matcher.find()) {
-            int position = matcher.start();
-            int lineNumber = getLineNumber(content, position);
-            int columnNumber = getColumnNumber(content, position);
-
-            // Extract context around the CR for the error message
-            String context = getContextAroundPosition(content, position, 20);
-
-            result.addIssue(
-                lineNumber,
-                String.format("Invalid carriage return character at column %d in: '%s'. Remove hidden control characters.",
-                    columnNumber, context),
-                ValidationRule.Severity.ERROR,
-                "invalid_line_ending"
-            );
-        }
-    }
-
-    /**
-     * Get the line number (1-based) for a given character position in the content.
-     */
-    private int getLineNumber(String content, int position) {
+    static void checkForStandaloneCarriageReturns(String content, ValidationResult result) {
         int lineNumber = 1;
-        for (int i = 0; i < position && i < content.length(); i++) {
-            if (content.charAt(i) == '\n') {
-                lineNumber++;
-            }
-        }
-        return lineNumber;
-    }
+        int lineStart = 0; // index just past the most recent '\n'
 
-    /**
-     * Get the column number (1-based) for a given character position in the content.
-     */
-    private int getColumnNumber(String content, int position) {
-        int columnNumber = 1;
-        for (int i = position - 1; i >= 0; i--) {
-            if (content.charAt(i) == '\n') {
-                break;
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '\n') {
+                lineNumber++;
+                lineStart = i + 1;
+            } else if (c == '\r' && (i + 1 >= content.length() || content.charAt(i + 1) != '\n')) {
+                int columnNumber = i - lineStart + 1;
+
+                // Extract context around the CR for the error message
+                String context = getContextAroundPosition(content, i, 20);
+
+                result.addIssue(
+                    lineNumber,
+                    String.format("Invalid carriage return character at column %d in: '%s'. Remove hidden control characters.",
+                        columnNumber, context),
+                    ValidationRule.Severity.ERROR,
+                    "invalid_line_ending"
+                );
             }
-            columnNumber++;
         }
-        return columnNumber;
     }
 
     /**
      * Extract context around a position for error messages.
      */
-    private String getContextAroundPosition(String content, int position, int contextLength) {
+    private static String getContextAroundPosition(String content, int position, int contextLength) {
         int start = Math.max(0, position - contextLength);
         int end = Math.min(content.length(), position + contextLength);
 

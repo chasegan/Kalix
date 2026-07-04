@@ -18,7 +18,11 @@ public class ValidationEventManager {
     private static final int VALIDATION_DELAY_MS = 300;
 
     private final ValidationTrigger validationTrigger;
-    private Timer validationTimer;
+
+    // Single debounce timer, restarted per document change. Allocating a new
+    // javax.swing.Timer per keystroke registered and discarded a timer object
+    // on every edit for no benefit.
+    private final Timer validationTimer;
 
     // The document listened to and the listener added to it, retained so dispose()
     // can detach them. An orphaned listener kept scheduling validation against a
@@ -29,6 +33,14 @@ public class ValidationEventManager {
 
     public ValidationEventManager(RSyntaxTextArea textArea, ValidationTrigger validationTrigger) {
         this.validationTrigger = validationTrigger;
+        this.validationTimer = new Timer(VALIDATION_DELAY_MS, e -> {
+            try {
+                validationTrigger.triggerValidation();
+            } catch (Exception ex) {
+                logger.error("Error during validation trigger", ex);
+            }
+        });
+        this.validationTimer.setRepeats(false);
         this.document = textArea.getDocument();
         this.documentListener = createDocumentListener();
         this.document.addDocumentListener(documentListener);
@@ -62,30 +74,15 @@ public class ValidationEventManager {
 
 
     private void scheduleValidation() {
-        // Cancel any existing timer
-        if (validationTimer != null && validationTimer.isRunning()) {
-            validationTimer.stop();
-        }
-
-        // Schedule new validation with delay
-        validationTimer = new Timer(VALIDATION_DELAY_MS, e -> {
-            try {
-                validationTrigger.triggerValidation();
-            } catch (Exception ex) {
-                logger.error("Error during validation trigger", ex);
-            }
-        });
-        validationTimer.setRepeats(false);
-        validationTimer.start();
+        // Restart the debounce window (cancels any pending fire)
+        validationTimer.restart();
     }
 
     /**
      * Trigger immediate validation without delay.
      */
     public void validateNow() {
-        if (validationTimer != null && validationTimer.isRunning()) {
-            validationTimer.stop();
-        }
+        validationTimer.stop();
         validationTrigger.triggerValidation();
     }
 
@@ -94,9 +91,7 @@ public class ValidationEventManager {
      * listener added in the constructor.
      */
     public void dispose() {
-        if (validationTimer != null && validationTimer.isRunning()) {
-            validationTimer.stop();
-        }
+        validationTimer.stop();
         document.removeDocumentListener(documentListener);
     }
 }

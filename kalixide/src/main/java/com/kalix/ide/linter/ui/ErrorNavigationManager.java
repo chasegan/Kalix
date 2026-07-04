@@ -5,6 +5,7 @@ import com.kalix.ide.linter.model.ValidationResult;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.swing.text.BadLocationException;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -23,15 +24,15 @@ public class ErrorNavigationManager {
      * Navigate to next validation error.
      */
     public void goToNextError(ValidationResult validationResult) {
-        if (validationResult == null || !validationResult.hasErrors()) {
+        List<ValidationIssue> errors = errorsSortedByLine(validationResult);
+        if (errors.isEmpty()) {
             return;
         }
 
-        List<ValidationIssue> errors = validationResult.getErrors();
         int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
 
-        // Find next error after current line
-        ValidationIssue nextError = null;
+        // Find next error after current line; wrap to the first (lowest-line) error
+        ValidationIssue nextError = errors.get(0);
         for (ValidationIssue error : errors) {
             if (error.getLineNumber() > currentLine) {
                 nextError = error;
@@ -39,29 +40,22 @@ public class ErrorNavigationManager {
             }
         }
 
-        // If no error found after current line, wrap to first error
-        if (nextError == null && !errors.isEmpty()) {
-            nextError = errors.get(0);
-        }
-
-        if (nextError != null) {
-            goToLine(nextError.getLineNumber());
-        }
+        goToLine(nextError.getLineNumber());
     }
 
     /**
      * Navigate to previous validation error.
      */
     public void goToPreviousError(ValidationResult validationResult) {
-        if (validationResult == null || !validationResult.hasErrors()) {
+        List<ValidationIssue> errors = errorsSortedByLine(validationResult);
+        if (errors.isEmpty()) {
             return;
         }
 
-        List<ValidationIssue> errors = validationResult.getErrors();
         int currentLine = textArea.getCaretLineNumber() + 1; // Convert to 1-based
 
-        // Find previous error before current line
-        ValidationIssue prevError = null;
+        // Find previous error before current line; wrap to the last (highest-line) error
+        ValidationIssue prevError = errors.get(errors.size() - 1);
         for (int i = errors.size() - 1; i >= 0; i--) {
             ValidationIssue error = errors.get(i);
             if (error.getLineNumber() < currentLine) {
@@ -70,14 +64,21 @@ public class ErrorNavigationManager {
             }
         }
 
-        // If no error found before current line, wrap to last error
-        if (prevError == null && !errors.isEmpty()) {
-            prevError = errors.get(errors.size() - 1);
-        }
+        goToLine(prevError.getLineNumber());
+    }
 
-        if (prevError != null) {
-            goToLine(prevError.getLineNumber());
+    /**
+     * Errors ordered by line number. Validators append issues in validator-insertion
+     * order, so the raw list is not line-sorted; scanning it directly could skip
+     * errors or jump backwards.
+     */
+    private static List<ValidationIssue> errorsSortedByLine(ValidationResult validationResult) {
+        if (validationResult == null) {
+            return List.of();
         }
+        List<ValidationIssue> errors = new java.util.ArrayList<>(validationResult.getErrors());
+        errors.sort(Comparator.comparingInt(ValidationIssue::getLineNumber));
+        return errors;
     }
 
     /**
@@ -94,8 +95,12 @@ public class ErrorNavigationManager {
                 textArea.setCaretPosition(lineStart);
                 textArea.select(lineStart, lineEnd - 1); // -1 to exclude newline
 
-                // Ensure the line is visible
-                textArea.scrollRectToVisible(textArea.modelToView(lineStart));
+                // Ensure the line is visible (modelToView2D returns null before the
+                // component has been laid out, e.g. in tests)
+                java.awt.geom.Rectangle2D view = textArea.modelToView2D(lineStart);
+                if (view != null) {
+                    textArea.scrollRectToVisible(view.getBounds());
+                }
             }
         } catch (BadLocationException e) {
             // Line number out of bounds, ignore
