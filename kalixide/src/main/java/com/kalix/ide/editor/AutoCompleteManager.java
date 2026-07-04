@@ -1,6 +1,7 @@
 package com.kalix.ide.editor;
 
 import com.kalix.ide.editor.autocomplete.InputDataRegistry;
+import com.kalix.ide.editor.autocomplete.InputFileScanner;
 import com.kalix.ide.editor.autocomplete.KalixCompletionProvider;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.SchemaManager;
@@ -37,6 +38,7 @@ public class AutoCompleteManager {
 
     private AutoCompletion autoCompletion;
     private InputDataRegistry inputDataRegistry;
+    private InputFileScanner inputFileScanner;
     private boolean popupSized = false;
 
     public AutoCompleteManager(RSyntaxTextArea textArea,
@@ -60,7 +62,8 @@ public class AutoCompleteManager {
         }
 
         inputDataRegistry = new InputDataRegistry(baseDirectorySupplier);
-        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry, baseDirectorySupplier);
+        inputFileScanner = new InputFileScanner(baseDirectorySupplier);
+        KalixCompletionProvider provider = new KalixCompletionProvider(schema, modelSupplier, inputDataRegistry, inputFileScanner);
 
         autoCompletion = new AutoCompletion(provider) {
             @Override
@@ -128,6 +131,10 @@ public class AutoCompleteManager {
         if (inputDataRegistry != null) {
             inputDataRegistry.dispose();
             inputDataRegistry = null;
+        }
+        if (inputFileScanner != null) {
+            inputFileScanner.dispose();
+            inputFileScanner = null;
         }
     }
 }

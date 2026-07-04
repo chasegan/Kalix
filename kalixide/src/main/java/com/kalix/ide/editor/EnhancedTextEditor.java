@@ -1239,10 +1239,17 @@ public class EnhancedTextEditor extends JPanel {
     /**
      * Recomputes the dirty flag by comparing the current content against the clean
      * baseline. This clears the dirty flag when the user edits (or undoes) the buffer
-     * back to its last-saved content. {@code String.equals} short-circuits on length,
-     * so this is cheap unless the lengths happen to match.
+     * back to its last-saved content.
+     *
+     * <p>The document length is compared first: this runs per keystroke, and
+     * {@code getText()} materialises a copy of the whole buffer, so the copy (and
+     * the character comparison) is only paid when the lengths happen to match.</p>
      */
     private void updateDirtyFromContent() {
+        if (textArea.getDocument().getLength() != cleanText.length()) {
+            setDirty(true);
+            return;
+        }
         setDirty(!textArea.getText().equals(cleanText));
     }
     
