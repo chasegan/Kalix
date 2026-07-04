@@ -344,23 +344,35 @@ public class MapPanel extends JPanel {
      * Zooms in/out while keeping the point under the cursor fixed.
      */
     private void handleMouseWheelZoom(MouseWheelEvent e) {
-        // Get mouse position in screen coordinates
-        int mouseX = e.getX();
-        int mouseY = e.getY();
-        
-        // Convert mouse position to world coordinates before zoom
-        double worldX = (mouseX - panX) / zoomLevel;
-        double worldY = (mouseY - panY) / zoomLevel;
-        
-        // Calculate new zoom level
-        double zoomChange = Math.pow(ZOOM_FACTOR, -e.getWheelRotation());
-        zoomLevel = zoomLevel * zoomChange;
+        zoomAt(e.getX(), e.getY(), Math.pow(ZOOM_FACTOR, -e.getWheelRotation()));
+    }
 
-        // Adjust pan so the world point under the mouse stays at the same screen position
-        panX = mouseX - worldX * zoomLevel;
-        panY = mouseY - worldY * zoomLevel;
+    /**
+     * Multiplies the zoom level by the given factor (clamped to sane bounds),
+     * keeping the world point under the given screen anchor fixed.
+     *
+     * @param anchorScreenX Anchor X in screen coordinates
+     * @param anchorScreenY Anchor Y in screen coordinates
+     * @param factor Zoom multiplier (&gt;1 zooms in, &lt;1 zooms out)
+     */
+    private void zoomAt(double anchorScreenX, double anchorScreenY, double factor) {
+        double newZoom = clampZoom(zoomLevel * factor);
+
+        // Convert anchor position to world coordinates before zoom
+        double worldX = (anchorScreenX - panX) / zoomLevel;
+        double worldY = (anchorScreenY - panY) / zoomLevel;
+
+        zoomLevel = newZoom;
+
+        // Adjust pan so the world point under the anchor stays at the same screen position
+        panX = anchorScreenX - worldX * zoomLevel;
+        panY = anchorScreenY - worldY * zoomLevel;
 
         repaint();
+    }
+
+    private static double clampZoom(double zoom) {
+        return Math.max(UIConstants.Zoom.MIN_ZOOM, Math.min(UIConstants.Zoom.MAX_ZOOM, zoom));
     }
 
     @Override
@@ -513,19 +525,19 @@ public class MapPanel extends JPanel {
         repaint();
     }
 
+    // View-menu zoom operations anchor at the viewport centre so the content
+    // in view stays in view (zooming about the world origin walked it off-screen).
+
     public void zoomIn() {
-        zoomLevel *= ZOOM_FACTOR;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, ZOOM_FACTOR);
     }
 
     public void zoomOut() {
-        zoomLevel /= ZOOM_FACTOR;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, 1.0 / ZOOM_FACTOR);
     }
 
     public void resetZoom() {
-        zoomLevel = 1.0;
-        repaint();
+        zoomAt(getWidth() / 2.0, getHeight() / 2.0, 1.0 / zoomLevel);
     }
     
     public void zoomToFit() {
@@ -574,7 +586,7 @@ public class MapPanel extends JPanel {
         // Calculate zoom level to fit the content
         double scaleX = getWidth() / bufferedSpanX;
         double scaleY = getHeight() / bufferedSpanY;
-        double newZoom = Math.min(scaleX, scaleY);
+        double newZoom = clampZoom(Math.min(scaleX, scaleY));
 
         // Calculate pan to center the content
         double newPanX = getWidth() / 2.0 - centerX * newZoom;

@@ -46,6 +46,12 @@ public final class UIConstants {
         /** Standard zoom factor for zoom in/out operations */
         public static final double ZOOM_FACTOR = 1.2;
 
+        /** Lower bound for the map zoom level (pixels per world unit) */
+        public static final double MIN_ZOOM = 1e-6;
+
+        /** Upper bound for the map zoom level (pixels per world unit) */
+        public static final double MAX_ZOOM = 1e6;
+
         private Zoom() { throw new UnsupportedOperationException("Constants class"); }
     }
 
