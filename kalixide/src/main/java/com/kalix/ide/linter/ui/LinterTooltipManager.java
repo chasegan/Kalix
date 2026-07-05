@@ -6,178 +6,53 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.text.BadLocationException;
-import java.awt.*;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionAdapter;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
+import java.awt.Point;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Manages tooltip display for validation issues.
- * Handles mouse hover detection and shows custom tooltips with icons and formatting.
+ * Shows a hover tooltip for validation issues: the dwell/positioning/lifecycle machinery lives in
+ * {@link DwellTooltipSupport}; this class supplies the issue hit-test and the stacked-row content.
  * A line can carry several issues; the tooltip stacks one row per issue.
  */
-public class LinterTooltipManager {
+public class LinterTooltipManager extends DwellTooltipSupport {
 
-    private final RSyntaxTextArea textArea;
     private final ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine;
-
-    // Delay before a tooltip appears once the pointer settles on an issue line. Transient
-    // crossings (e.g. sweeping the mouse past several error lines) cancel the pending show
-    // before it fires, so no tooltip is ever built for lines the pointer merely passes over.
-    private static final int SHOW_DELAY_MS = 200;
-
-    // Tooltip components
-    private JWindow tooltipWindow;
-    private JPanel tooltipPanel;
-    private Timer hideTimer;
-    private Timer showTimer;
 
     // Cached severity icons, built once to avoid re-rendering the glyph on every tooltip build.
     private final FontIcon errorIcon = FontIcon.of(FontAwesomeSolid.TIMES, 12, Color.RED);
     private final FontIcon warningIcon = FontIcon.of(FontAwesomeSolid.EXCLAMATION_TRIANGLE, 12, Color.ORANGE);
 
-    // Line number (1-based) of the issue whose tooltip is currently displayed, or -1 if none.
-    // Used to avoid rebuilding/re-showing the tooltip on every mouseMoved event while the
-    // pointer remains over the same issue line.
-    private int currentlyDisplayedLine = -1;
-
-    // Line number (1-based) of the issue whose tooltip is scheduled to appear, or -1 if none.
-    private int pendingLine = -1;
-
-    // Listeners added to the shared text area, retained so dispose() can detach them
-    // (the text area outlives this manager when the linter is re-initialised).
-    private MouseMotionAdapter mouseMotionListener;
-    private java.awt.event.MouseAdapter mouseListener;
-
     public LinterTooltipManager(RSyntaxTextArea textArea, ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine) {
-        this.textArea = textArea;
+        super(textArea, BoxLayout.Y_AXIS, new Color(255, 255, 225)); // Light yellow background
         this.issuesByLine = issuesByLine;
-        setupTooltipComponents();
-        setupMouseListeners();
     }
 
-    private void setupTooltipComponents() {
-        tooltipWindow = new JWindow();
-        tooltipWindow.setType(Window.Type.POPUP);
-        tooltipWindow.setFocusableWindowState(false);
-
-        tooltipPanel = new JPanel();
-        tooltipPanel.setLayout(new BoxLayout(tooltipPanel, BoxLayout.Y_AXIS));
-        tooltipPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.GRAY),
-            BorderFactory.createEmptyBorder(8, 10, 8, 10)
-        ));
-        tooltipPanel.setBackground(new Color(255, 255, 225)); // Light yellow background
-
-        tooltipWindow.add(tooltipPanel);
+    /** A line carrying at least one validation issue; content is known at hover time. */
+    private record IssueTarget(int line, List<ValidationIssue> issues) implements Target {
     }
 
-    private void setupMouseListeners() {
-        mouseMotionListener = new MouseMotionAdapter() {
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                List<ValidationIssue> issues = getValidationIssuesForPosition(e.getPoint());
-
-                if (issues != null && !issues.isEmpty()) {
-                    int line = issues.get(0).getLineNumber();
-
-                    // Pointer is still over the issue line whose tooltip is already showing:
-                    // nothing to rebuild, just keep it visible.
-                    if (line == currentlyDisplayedLine) {
-                        stopTimer(hideTimer);
-                        return;
-                    }
-
-                    // A show for this same line is already scheduled: let it fire, don't reschedule.
-                    if (line == pendingLine && showTimer != null && showTimer.isRunning()) {
-                        return;
-                    }
-
-                    // Moved onto a different issue line: hide anything currently shown, then
-                    // schedule a single build+show after a short dwell delay. If the pointer
-                    // moves on before the delay elapses, the show is cancelled and never builds.
-                    stopTimer(hideTimer);
-                    if (currentlyDisplayedLine != -1) {
-                        hideCustomTooltip();
-                    }
-                    scheduleShow(line, issues, e.getLocationOnScreen());
-                } else {
-                    // Moved off an issue line: cancel any pending show, and hide after a short
-                    // delay to prevent flickering. Guard against restarting on every event.
-                    stopTimer(showTimer);
-                    pendingLine = -1;
-                    if (currentlyDisplayedLine != -1 && (hideTimer == null || !hideTimer.isRunning())) {
-                        hideTimer = new Timer(100, evt -> hideCustomTooltip());
-                        hideTimer.setRepeats(false);
-                        hideTimer.start();
-                    }
-                }
-            }
-        };
-        textArea.addMouseMotionListener(mouseMotionListener);
-
-        mouseListener = new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                hideCustomTooltip();
-            }
-        };
-        textArea.addMouseListener(mouseListener);
-    }
-
-    /**
-     * Schedule the tooltip for the given line's issues to appear after the dwell delay.
-     * Cancels any previously scheduled show.
-     */
-    private void scheduleShow(int line, List<ValidationIssue> issues, Point screenLocation) {
-        stopTimer(showTimer);
-        pendingLine = line;
-        showTimer = new Timer(SHOW_DELAY_MS, evt -> {
-            showCustomTooltip(issues, screenLocation);
-            currentlyDisplayedLine = pendingLine;
-            pendingLine = -1;
-        });
-        showTimer.setRepeats(false);
-        showTimer.start();
-    }
-
-    private static void stopTimer(Timer timer) {
-        if (timer != null && timer.isRunning()) {
-            timer.stop();
+    @Override
+    protected Target probe(Point point) {
+        List<ValidationIssue> issues = getValidationIssuesForPosition(point);
+        if (issues == null || issues.isEmpty()) {
+            return null;
         }
+        return new IssueTarget(issues.get(0).getLineNumber(), issues);
     }
 
-    private void showCustomTooltip(List<ValidationIssue> issues, Point screenLocation) {
-        buildTooltipContent(issues);
-        tooltipWindow.pack();
-
-        // Position tooltip slightly offset from mouse
-        int x = screenLocation.x + 10;
-        int y = screenLocation.y + 20;
-
-        // Adjust position if tooltip would go off screen
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        Dimension tooltipSize = tooltipWindow.getSize();
-
-        if (x + tooltipSize.width > screenSize.width) {
-            x = screenLocation.x - tooltipSize.width - 10;
-        }
-        if (y + tooltipSize.height > screenSize.height) {
-            y = screenLocation.y - tooltipSize.height - 10;
-        }
-
-        tooltipWindow.setLocation(x, y);
-        tooltipWindow.setVisible(true);
-    }
-
-    private void hideCustomTooltip() {
-        if (tooltipWindow != null) {
-            tooltipWindow.setVisible(false);
-        }
-        currentlyDisplayedLine = -1;
+    @Override
+    protected boolean populate(Target target) {
+        buildTooltipContent(((IssueTarget) target).issues());
+        return true;
     }
 
     private List<ValidationIssue> getValidationIssuesForPosition(Point point) {
@@ -234,25 +109,5 @@ public class LinterTooltipManager {
         row.add(severityLabel);
 
         return row;
-    }
-
-    /**
-     * Clean up resources: stop timers, close the tooltip window, and detach the
-     * mouse listeners added to the shared text area in the constructor.
-     */
-    public void dispose() {
-        stopTimer(hideTimer);
-        stopTimer(showTimer);
-        if (tooltipWindow != null) {
-            tooltipWindow.dispose();
-        }
-        if (mouseMotionListener != null) {
-            textArea.removeMouseMotionListener(mouseMotionListener);
-            mouseMotionListener = null;
-        }
-        if (mouseListener != null) {
-            textArea.removeMouseListener(mouseListener);
-            mouseListener = null;
-        }
     }
 }
