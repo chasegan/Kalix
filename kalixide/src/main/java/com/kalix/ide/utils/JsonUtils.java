@@ -1,5 +1,8 @@
 package com.kalix.ide.utils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * Utility class for JSON string manipulation and formatting operations.
  *
@@ -8,25 +11,34 @@ package com.kalix.ide.utils;
  */
 public final class JsonUtils {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     // Prevent instantiation
     private JsonUtils() {
         throw new UnsupportedOperationException("Utility class should not be instantiated");
     }
 
     /**
-     * Flattens JSON by removing line breaks and normalizing whitespace.
+     * Flattens JSON onto a single line for STDIO transmission.
      *
-     * This method is useful for preparing JSON strings for single-line
-     * transmission over STDIO protocols where line breaks might interfere
-     * with message parsing.
+     * <p>The input is parsed and re-serialized compactly, so structural
+     * whitespace (indentation, line breaks) is dropped while whitespace
+     * <em>inside</em> string values is preserved exactly. A textual
+     * whitespace collapse cannot tell the two apart and silently corrupts
+     * string literals, so this parses the JSON structurally instead.
      *
      * @param json the JSON string to flatten
-     * @return flattened JSON string with normalized whitespace, or empty string if input is null/empty
+     * @return compact single-line JSON, or an empty string if the input is null/empty
+     * @throws IllegalArgumentException if the input is not valid JSON
      */
     public static String flattenJson(String json) {
         if (json == null || json.trim().isEmpty()) {
             return "";
         }
-        return json.replaceAll("\\s+", " ").replaceAll("\\n|\\r", "");
+        try {
+            return OBJECT_MAPPER.readTree(json).toString();
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Cannot flatten invalid JSON: " + e.getOriginalMessage(), e);
+        }
     }
 }

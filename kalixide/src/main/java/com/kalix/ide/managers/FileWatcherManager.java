@@ -4,8 +4,10 @@ import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -39,9 +41,14 @@ public class FileWatcherManager {
     private final Consumer<File> fileReloadCallback;
     private final FsWatcher fsWatcher;
 
-    /** Open document files — remembered regardless of the auto-reload preference. */
-    private final Set<File> watchedFiles = new LinkedHashSet<>();
-    /** Per-file "ignore changes until" timestamps, set when we write a file ourselves. */
+    /**
+     * Open document files, keyed by canonical (symlink-resolved) path → the original file.
+     * OS change events arrive symlink-resolved (macOS /tmp → /private/tmp), so we match on the
+     * canonical key but hand the original file back to the reload callback (documents are keyed
+     * by the path the user opened). Remembered regardless of the auto-reload preference.
+     */
+    private final Map<File, File> watchedByCanonical = new LinkedHashMap<>();
+    /** Per-file "ignore changes until" timestamps (keyed by canonical path), set on self-save. */
     private final Map<File, Long> ignoreUntil = new ConcurrentHashMap<>();
 
     /**
@@ -61,10 +68,10 @@ public class FileWatcherManager {
      * @param files The files of all open documents
      */
     public void setWatchedFiles(Collection<File> files) {
-        watchedFiles.clear();
+        watchedByCanonical.clear();
         for (File file : files) {
             if (file != null) {
-                watchedFiles.add(file);
+                watchedByCanonical.put(canonical(file), file);
             }
         }
         restartWatch();
@@ -79,7 +86,7 @@ public class FileWatcherManager {
      */
     public void ignoreNextChange(File file) {
         if (file != null) {
-            ignoreUntil.put(file, System.currentTimeMillis() + SELF_SAVE_IGNORE_WINDOW_MS);
+            ignoreUntil.put(canonical(file), System.currentTimeMillis() + SELF_SAVE_IGNORE_WINDOW_MS);
         }
     }
 
@@ -107,7 +114,7 @@ public class FileWatcherManager {
      * Shuts down the file watcher manager and releases resources.
      */
     public void shutdown() {
-        watchedFiles.clear();
+        watchedByCanonical.clear();
         ignoreUntil.clear();
         fsWatcher.stop();
     }
@@ -117,13 +124,15 @@ public class FileWatcherManager {
      * the deduped set of their parent directories.
      */
     private void restartWatch() {
-        if (!isAutoReloadEnabled() || watchedFiles.isEmpty()) {
+        if (!isAutoReloadEnabled() || watchedByCanonical.isEmpty()) {
             fsWatcher.stop();
             return;
         }
+        // Watch the canonical parent directories so they align with the symlink-resolved paths
+        // the OS reports in events.
         Set<Path> directories = new LinkedHashSet<>();
-        for (File file : watchedFiles) {
-            File directory = file.getParentFile();
+        for (File canonicalFile : watchedByCanonical.keySet()) {
+            File directory = canonicalFile.getParentFile();
             if (directory != null) {
                 directories.add(directory.toPath());
             }
@@ -139,8 +148,9 @@ public class FileWatcherManager {
         if (event.kind() != FsWatcher.Kind.MODIFY && event.kind() != FsWatcher.Kind.CREATE) {
             return; // structural events don't change an open file's content
         }
-        File changed = event.path().toFile();
-        if (!watchedFiles.contains(changed)) {
+        File changed = canonical(event.path().toFile());
+        File original = watchedByCanonical.get(changed);
+        if (original == null) {
             return; // a sibling in a watched directory; not one of our files
         }
         Long until = ignoreUntil.get(changed);
@@ -150,6 +160,21 @@ public class FileWatcherManager {
             }
             ignoreUntil.remove(changed); // window elapsed; drop the entry
         }
-        fileReloadCallback.accept(changed);
+        // Hand back the original (as-opened) file, not the canonical form: documents are keyed
+        // by the path the user opened, so the reload lookup must use that.
+        fileReloadCallback.accept(original);
+    }
+
+    /**
+     * Resolves a file to its canonical (symlink-resolved) form so OS change events — which arrive
+     * symlink-resolved — match the files we opened. Falls back to the absolute file if the path
+     * can't be resolved (e.g. it no longer exists).
+     */
+    private static File canonical(File file) {
+        try {
+            return file.getCanonicalFile();
+        } catch (IOException e) {
+            return file.getAbsoluteFile();
+        }
     }
 }

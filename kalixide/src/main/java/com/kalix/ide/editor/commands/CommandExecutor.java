@@ -11,6 +11,8 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,40 +47,19 @@ public class CommandExecutor {
      * @return true if rename was successful, false if cancelled or failed
      */
     public boolean renameNode(String oldName, String newName, INIModelParser.ParsedModel parsedModel) {
-        try {
-            // Validate new name
-            if (newName == null || newName.trim().isEmpty()) {
-                showError("New name cannot be empty");
-                return false;
-            }
-
-            newName = newName.trim();
-
-            // Check if new name already exists
-            if (parsedModel.getSections().containsKey("node." + newName)) {
-                showError("A node named '" + newName + "' already exists");
-                return false;
-            }
-
-            // Find all references and build replacement list
-            List<TextReplacement> replacements = findNodeReferences(editor.getText(), oldName, newName, parsedModel);
-
-            if (replacements.isEmpty()) {
-                showError("No references found for node '" + oldName + "'");
-                return false;
-            }
-
-            // Apply all replacements as a single atomic undo operation
-            applyReplacements(replacements);
-
-            logger.info("Renamed node '{}' to '{}' ({} references updated)", oldName, newName, replacements.size());
-            return true;
-
-        } catch (Exception e) {
-            logger.error("Error renaming node", e);
-            showError("Failed to rename node: " + e.getMessage());
-            return false;
-        }
+        String trimmed = newName == null ? "" : newName.trim();
+        return applyRename("rename node", "node '" + oldName + "'",
+            () -> {
+                if (trimmed.isEmpty()) {
+                    return "New name cannot be empty";
+                }
+                if (parsedModel.getSections().containsKey("node." + trimmed)) {
+                    return "A node named '" + trimmed + "' already exists";
+                }
+                return null;
+            },
+            () -> findNodeReferences(editor.getText(), oldName, trimmed, parsedModel),
+            count -> logger.info("Renamed node '{}' to '{}' ({} references updated)", oldName, trimmed, count));
     }
 
     /**
@@ -93,43 +74,24 @@ public class CommandExecutor {
      * @return true if rename was successful, false if cancelled or failed
      */
     public boolean renameInputFile(String oldPath, String newPath, INIModelParser.ParsedModel parsedModel) {
-        try {
-            // Validate new path
-            if (newPath == null || newPath.trim().isEmpty()) {
-                showError("New path cannot be empty");
-                return false;
-            }
-
-            newPath = newPath.trim();
-
-            // Check if new path already exists
-            if (parsedModel.getInputFileLineNumbers().containsKey(newPath)) {
-                showError("Input file '" + newPath + "' already exists");
-                return false;
-            }
-
-            // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileReferences(editor.getText(), oldPath, newPath, parsedModel);
-
-            if (replacements.isEmpty()) {
-                showError("No references found for input file '" + oldPath + "'");
-                return false;
-            }
-
-            // Apply all replacements as a single atomic undo operation
-            applyReplacements(replacements);
-
-            String oldFileSanitised = EngineNames.sanitizeFileName(oldPath);
-            String newFileSanitised = EngineNames.sanitizeFileName(newPath);
-            logger.info("Renamed input file '{}' to '{}' (alias: {} -> {}, {} references updated)",
-                oldPath, newPath, oldFileSanitised, newFileSanitised, replacements.size());
-            return true;
-
-        } catch (Exception e) {
-            logger.error("Error renaming input file", e);
-            showError("Failed to rename input file: " + e.getMessage());
-            return false;
-        }
+        String trimmed = newPath == null ? "" : newPath.trim();
+        return applyRename("rename input file", "input file '" + oldPath + "'",
+            () -> {
+                if (trimmed.isEmpty()) {
+                    return "New path cannot be empty";
+                }
+                if (parsedModel.getInputFileLineNumbers().containsKey(trimmed)) {
+                    return "Input file '" + trimmed + "' already exists";
+                }
+                return null;
+            },
+            () -> findInputFileReferences(editor.getText(), oldPath, trimmed, parsedModel),
+            count -> {
+                String oldFileSanitised = EngineNames.sanitizeFileName(oldPath);
+                String newFileSanitised = EngineNames.sanitizeFileName(trimmed);
+                logger.info("Renamed input file '{}' to '{}' (alias: {} -> {}, {} references updated)",
+                    oldPath, trimmed, oldFileSanitised, newFileSanitised, count);
+            });
     }
 
     /**
@@ -144,43 +106,24 @@ public class CommandExecutor {
      * @return true if rename was successful, false if cancelled or failed
      */
     public boolean renameInputFileAlias(String oldAlias, String newAlias, INIModelParser.ParsedModel parsedModel) {
-        try {
-            // Validate new path
-            if (newAlias == null || newAlias.trim().isEmpty()) {
-                showError("New alias cannot be empty");
-                return false;
-            }
-
-            newAlias = newAlias.trim();
-
-            // Check if new path already exists
-            if (parsedModel.getInputFileAliases().containsKey(newAlias)) {
-                showError("Input file alias '" + newAlias + "' already exists");
-                return false;
-            }
-
-            // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileAliasReferences(editor.getText(), oldAlias, newAlias, parsedModel);
-
-            if (replacements.isEmpty()) {
-                showError("No references found for input file '" + oldAlias + "'");
-                return false;
-            }
-
-            // Apply all replacements as a single atomic undo operation
-            applyReplacements(replacements);
-
-            String oldAliasSanitised = EngineNames.sanitize(oldAlias);
-            String newAliasSanitised = EngineNames.sanitize(newAlias);
-            logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
-                    oldAlias, newAlias, oldAliasSanitised, newAliasSanitised, replacements.size());
-            return true;
-
-        } catch (Exception e) {
-            logger.error("Error renaming input file", e);
-            showError("Failed to rename input file: " + e.getMessage());
-            return false;
-        }
+        String trimmed = newAlias == null ? "" : newAlias.trim();
+        return applyRename("rename input file", "input file '" + oldAlias + "'",
+            () -> {
+                if (trimmed.isEmpty()) {
+                    return "New alias cannot be empty";
+                }
+                if (parsedModel.getInputFileAliases().containsKey(trimmed)) {
+                    return "Input file alias '" + trimmed + "' already exists";
+                }
+                return null;
+            },
+            () -> findInputFileAliasReferences(editor.getText(), oldAlias, trimmed, parsedModel),
+            count -> {
+                String oldAliasSanitised = EngineNames.sanitize(oldAlias);
+                String newAliasSanitised = EngineNames.sanitize(trimmed);
+                logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
+                        oldAlias, trimmed, oldAliasSanitised, newAliasSanitised, count);
+            });
     }
 
     /**
@@ -195,44 +138,68 @@ public class CommandExecutor {
      * @return true if rename was successful, false if cancelled or failed
      */
     public boolean addInputFileAlias(String oldPath, String newAlias, INIModelParser.ParsedModel parsedModel) {
+        String trimmed = newAlias == null ? "" : newAlias.trim();
+        // Aliases are sanitised with the engine's plain name rule (not the filename-derivation
+        // rule): the engine runs user aliases straight through sanitize_name
+        // (src/timeseries_input.rs). Empty is checked on the raw trimmed value, before sanitising.
+        String sanitised = EngineNames.sanitize(trimmed);
+        return applyRename("rename input file", "input file '" + oldPath + "'",
+            () -> {
+                if (trimmed.isEmpty()) {
+                    return "New alias cannot be empty";
+                }
+                if (parsedModel.getInputFileAliases().containsKey(sanitised)) {
+                    return "Input file alias '" + sanitised + "' already exists";
+                }
+                return null;
+            },
+            () -> findInputFileReferencesAddAlias(editor.getText(), oldPath, sanitised, parsedModel),
+            count -> {
+                String oldAliasSanitised = EngineNames.sanitizeFileName(oldPath);
+                String newAliasSanitised = EngineNames.sanitize(sanitised);
+                logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
+                        oldPath, sanitised, oldAliasSanitised, newAliasSanitised, count);
+            });
+    }
+
+    /**
+     * Shared skeleton for the rename operations: validate, find references, apply atomically as a
+     * single undo, and log — with uniform "no references" / failure error dialogs. Only the three
+     * variable steps are supplied by each caller.
+     *
+     * @param renameVerb   phrase for the failure dialog ("Failed to &lt;renameVerb&gt;") and error log
+     * @param noRefEntity  entity phrase for the "No references found for &lt;noRefEntity&gt;" dialog
+     * @param validate     returns an error message to show and abort, or {@code null} to proceed
+     * @param finder       produces the range-anchored replacements (called only if validation passed)
+     * @param logSuccess   logs the successful rename, given the number of references updated
+     * @return true if the rename was applied, false if it was rejected or failed
+     */
+    private boolean applyRename(String renameVerb, String noRefEntity,
+                                Supplier<String> validate,
+                                Supplier<List<TextReplacement>> finder,
+                                IntConsumer logSuccess) {
         try {
-            // Validate new path
-            if (newAlias == null || newAlias.trim().isEmpty()) {
-                showError("New alias cannot be empty");
+            String error = validate.get();
+            if (error != null) {
+                showError(error);
                 return false;
             }
 
-            // Aliases are sanitised with the engine's plain name rule (not the
-            // filename-derivation rule): the engine runs user aliases straight
-            // through sanitize_name (src/timeseries_input.rs).
-            newAlias = EngineNames.sanitize(newAlias.trim());
-
-            // Check if new path already exists
-            if (parsedModel.getInputFileAliases().containsKey(newAlias)) {
-                showError("Input file alias '" + newAlias + "' already exists");
-                return false;
-            }
-
-            // Find all references and build replacement list
-            List<TextReplacement> replacements = findInputFileReferencesAddAlias(editor.getText(), oldPath, newAlias, parsedModel);
-
+            List<TextReplacement> replacements = finder.get();
             if (replacements.isEmpty()) {
-                showError("No references found for input file '" + oldPath + "'");
+                showError("No references found for " + noRefEntity);
                 return false;
             }
 
-            // Apply all replacements as a single atomic undo operation
+            // Apply all replacements as a single atomic undo operation.
             applyReplacements(replacements);
 
-            String oldAliasSanitised = EngineNames.sanitizeFileName(oldPath);
-            String newAliasSanitised = EngineNames.sanitize(newAlias);
-            logger.info("Renamed input file alias '{}' to '{}' ({} -> {}, {} references updated)",
-                    oldPath, newAlias, oldAliasSanitised, newAliasSanitised, replacements.size());
+            logSuccess.accept(replacements.size());
             return true;
 
         } catch (Exception e) {
-            logger.error("Error renaming input file", e);
-            showError("Failed to rename input file: " + e.getMessage());
+            logger.error("Error during {}", renameVerb, e);
+            showError("Failed to " + renameVerb + ": " + e.getMessage());
             return false;
         }
     }

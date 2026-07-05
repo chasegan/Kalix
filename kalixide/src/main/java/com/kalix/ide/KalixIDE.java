@@ -1875,12 +1875,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             String folderPath = currentFile.getParentFile().getAbsolutePath();
             String filePath = currentFile.getAbsolutePath();
 
-            String command = commandTemplate
-                .replace("<folder_path>", folderPath)
-                .replace("<file_path>", filePath);
-
-            // Split command into parts for ProcessBuilder
-            String[] commandParts = command.split("\\s+");
+            // Tokenize the template FIRST, then substitute per token, so a
+            // substituted path containing spaces stays a single argv element
+            // instead of being shattered across arguments.
+            String[] commandParts = commandTemplate.trim().split("\\s+");
+            for (int i = 0; i < commandParts.length; i++) {
+                commandParts[i] = commandParts[i]
+                    .replace("<folder_path>", folderPath)
+                    .replace("<file_path>", filePath);
+            }
 
             ProcessBuilder processBuilder = new ProcessBuilder(commandParts);
             processBuilder.directory(currentFile.getParentFile());

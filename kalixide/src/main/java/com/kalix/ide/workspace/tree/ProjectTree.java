@@ -22,6 +22,9 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -347,7 +350,9 @@ public class ProjectTree extends JTree {
         expandPath(new TreePath(node.getPath())); // loads children via the will-expand listener
         for (int i = 0; i < node.getChildCount(); i++) {
             FileTreeNode child = (FileTreeNode) node.getChildAt(i);
-            if (child.isDirectory()) {
+            // Don't descend into symlinked directories: a link back to an ancestor would recurse
+            // forever (StackOverflowError). They can still be expanded manually.
+            if (child.isDirectory() && !Files.isSymbolicLink(child.getFile().toPath())) {
                 expandSubtree(child);
             }
         }
@@ -398,8 +403,10 @@ public class ProjectTree extends JTree {
                 break;
             }
             case OVERFLOW: {
-                // Coarse recovery: re-sync the root's loaded subtree.
-                resyncDirectory((FileTreeNode) model.getRoot());
+                // Coarse recovery: re-sync the root's loaded subtree. OVERFLOW means events were
+                // dropped/coalesced, so a deep resync (not just the root's immediate children) is
+                // exactly what's needed.
+                resyncLoadedSubtree((FileTreeNode) model.getRoot());
                 break;
             }
             case MODIFY:
@@ -463,18 +470,26 @@ public class ProjectTree extends JTree {
             return null;
         }
         FileTreeNode root = (FileTreeNode) model.getRoot();
-        File rootFile = root.getFile();
-        if (target.equals(rootFile)) {
+        // Canonicalize both sides: watcher event paths arrive symlink-resolved (macOS
+        // /tmp → /private/tmp), while the tree is built from the raw root the user opened.
+        // Relativizing the resolved forms yields the same segments regardless, so the walk
+        // (which rebuilds child files from the raw root) still lands on the right nodes.
+        Path rootReal = toReal(root.getFile().toPath());
+        Path targetReal = toReal(target.toPath());
+        if (targetReal.equals(rootReal)) {
             return root;
         }
-        java.nio.file.Path rel;
+        Path rel;
         try {
-            rel = rootFile.toPath().relativize(target.toPath());
+            rel = rootReal.relativize(targetReal);
         } catch (IllegalArgumentException ex) {
+            return null; // different roots (e.g. another drive)
+        }
+        if (rel.getNameCount() == 0 || rel.startsWith("..")) {
             return null; // target not under root
         }
         FileTreeNode current = root;
-        for (java.nio.file.Path segment : rel) {
+        for (Path segment : rel) {
             File childFile = new File(current.getFile(), segment.toString());
             FileTreeNode next = childFor(current, childFile);
             if (next == null) {
@@ -483,6 +498,18 @@ public class ProjectTree extends JTree {
             current = next;
         }
         return current;
+    }
+
+    /**
+     * Resolves a path to its real (symlink-resolved) form. Falls back to a lexical
+     * absolute-normalize if the path can't be resolved (e.g. it no longer exists).
+     */
+    private static Path toReal(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (IOException e) {
+            return path.toAbsolutePath().normalize();
+        }
     }
 
     /**
