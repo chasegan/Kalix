@@ -1,0 +1,14 @@
+{
+  "models_total": 28,
+  "models_passed": 28,
+  "models_failed": 0,
+  "all_passed": true,
+  "sample": [
+    "10_different_data_periods",
+    "11_force_flow",
+    "12_storage_variations",
+    "13_reg_user_with_routing",
+    "14_reg_users_with_inflows",
+    "15_order_controls"
+  ]
+}

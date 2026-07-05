@@ -21,6 +21,7 @@ REPO_ROOT = HERE.parent
 CANONICAL_TOKENS = REPO_ROOT / "docs" / "web" / "style-guide" / "demo-pages" / "tokens.css"
 TOKENS_DEST = HERE / "docs" / "stylesheets" / "tokens.css"
 RELEASES_FALLBACK = HERE / "data" / "releases.json"
+HEALTH_DATA = HERE / "data" / "health.json"
 
 
 def _sync_tokens() -> None:
@@ -57,9 +58,17 @@ def define_env(env):
     releases = _load_releases()
     latest = releases[0]["version"] if releases else "0.0.0"
 
-    # Available in any page as {{ latest_version }} / {{ releases }}.
+    health = {}
+    if HEALTH_DATA.exists():
+        try:
+            health = json.loads(HEALTH_DATA.read_text())
+        except json.JSONDecodeError:
+            health = {}
+
+    # Available in any page as {{ latest_version }} / {{ releases }} / {{ health }}.
     env.variables["latest_version"] = latest
     env.variables["releases"] = releases
+    env.variables["health"] = health
 
     @env.macro
     def latest_version_str():
