@@ -1,0 +1,126 @@
+/* ============================================================================
+   Kalix — Material theme adjustments + shared components
+   ----------------------------------------------------------------------------
+   tokens.css is the single source of truth (loaded first). This file only
+   consumes --kx-* tokens; do NOT hard-code colours/spacing here.
+   Light mode only.
+   ========================================================================== */
+
+/* ---- Typography: adopt the Plex scale for the typeset body ---------------- */
+.md-typeset {
+  font-size: var(--kx-text-base);
+  line-height: var(--kx-leading-relaxed);
+  color: var(--kx-text);
+}
+.md-typeset h1 {
+  font-size: var(--kx-text-4xl);
+  font-weight: var(--kx-weight-bold);
+  letter-spacing: var(--kx-tracking-tight);
+  line-height: var(--kx-leading-snug);
+  color: var(--kx-text);
+}
+.md-typeset h2 {
+  font-size: var(--kx-text-3xl);
+  font-weight: var(--kx-weight-semibold);
+  line-height: var(--kx-leading-snug);
+  margin-top: var(--kx-space-8);
+}
+.md-typeset h3 {
+  font-size: var(--kx-text-2xl);
+  font-weight: var(--kx-weight-semibold);
+}
+
+/* ---- Header: brand navy, matching the design's dark top-nav --------------- */
+.md-header {
+  background-color: var(--kx-primary-900);
+  box-shadow: var(--kx-shadow-sm);
+}
+.md-tabs {
+  background-color: var(--kx-primary-900);
+}
+
+/* ---- Inline + block code -------------------------------------------------- */
+.md-typeset code {
+  font-family: var(--kx-font-mono);
+  font-size: 0.85em;
+  border-radius: var(--kx-radius-xs);
+}
+.md-typeset pre > code {
+  border-radius: var(--kx-radius-md);
+}
+
+/* ---- Admonitions: rounded, hairline, semantic left rule ------------------- */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--kx-radius-md);
+  border-left-width: 3px;
+  box-shadow: none;
+  font-size: var(--kx-text-sm);
+}
+
+/* ---- Tables: hairline container, sunken mono header, zebra ---------------- */
+.md-typeset table:not([class]) {
+  border: var(--kx-border-line-strong);
+  border-radius: var(--kx-radius-md);
+  overflow: hidden;
+  font-size: var(--kx-text-sm);
+}
+.md-typeset table:not([class]) th {
+  background-color: var(--kx-surface-sunken);
+  font-family: var(--kx-font-mono);
+  font-size: var(--kx-text-caption);
+  text-transform: uppercase;
+  letter-spacing: var(--kx-tracking-caps);
+  color: var(--kx-text-muted);
+}
+.md-typeset table:not([class]) tr:nth-child(2n) {
+  background-color: var(--kx-neutral-50);
+}
+
+/* ---- Screenshot framing (figure) + glightbox ------------------------------ */
+.md-typeset figure img,
+.md-typeset .glightbox img {
+  border: var(--kx-border-line-strong);
+  border-radius: var(--kx-radius-lg);
+  box-shadow: var(--kx-shadow-lg);
+}
+.md-typeset figcaption {
+  font-family: var(--kx-font-mono);
+  font-size: var(--kx-text-caption);
+  color: var(--kx-text-subtle);
+}
+
+/* ---- Buttons (Material .md-button) styled as the design's primary/outline - */
+.md-typeset .md-button {
+  border-radius: var(--kx-radius-sm);
+  border: var(--kx-border-line-strong);
+  font-weight: var(--kx-weight-medium);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.md-typeset .md-button--primary {
+  background-color: var(--kx-primary-600);
+  border-color: var(--kx-primary-600);
+  color: var(--kx-primary-contrast);
+}
+.md-typeset .md-button--primary:hover {
+  background-color: var(--kx-primary-700);
+  border-color: var(--kx-primary-700);
+}
+
+/* ---- Reusable pills / status chips (used by Downloads, Code, cards) -------- */
+.kx-pill {
+  display: inline-block;
+  padding: 0.15em 0.7em;
+  border-radius: var(--kx-radius-pill);
+  font-family: var(--kx-font-mono);
+  font-size: var(--kx-text-caption);
+  letter-spacing: var(--kx-tracking-wide);
+  background-color: var(--kx-surface-sunken);
+  border: var(--kx-border-line);
+  color: var(--kx-text-muted);
+}
+.kx-pill--accent {
+  background-color: var(--kx-accent-50);
+  border-color: var(--kx-accent-300);
+  color: var(--kx-accent-700);
+}

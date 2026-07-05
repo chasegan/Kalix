@@ -1,0 +1,49 @@
+[
+  {
+    "version": "0.2.9",
+    "date": "2026-06-09",
+    "latest": true,
+    "changelog": [
+      "Optimisation now exposed to the Python API",
+      "File-tree enhancements",
+      "Changes to node outputs (#258)",
+      "Inflow: recession_factor renamed to expected_inflow (#260)"
+    ],
+    "assets": {
+      "windows": "https://github.com/chasegan/Kalix/releases/download/v0.2.9/kalix-0.2.9-windows.exe",
+      "macos": "https://github.com/chasegan/Kalix/releases/download/v0.2.9/kalix-0.2.9-macos.dmg",
+      "linux": "https://github.com/chasegan/Kalix/releases/download/v0.2.9/kalix-0.2.9-linux.AppImage"
+    },
+    "pip": "pip install kalix==0.2.9"
+  },
+  {
+    "version": "0.2.8",
+    "date": "2026-06-04",
+    "latest": false,
+    "changelog": [
+      "Run Manager stability fixes",
+      "Plot save-data corrections"
+    ],
+    "assets": {
+      "windows": "https://github.com/chasegan/Kalix/releases/download/v0.2.8/kalix-0.2.8-windows.exe",
+      "macos": "https://github.com/chasegan/Kalix/releases/download/v0.2.8/kalix-0.2.8-macos.dmg",
+      "linux": "https://github.com/chasegan/Kalix/releases/download/v0.2.8/kalix-0.2.8-linux.AppImage"
+    },
+    "pip": "pip install kalix==0.2.8"
+  },
+  {
+    "version": "0.2.6",
+    "date": "2026-06-02",
+    "latest": false,
+    "changelog": [
+      "Gorilla codec corruption fix",
+      "STDIO interrupt handling"
+    ],
+    "assets": {
+      "windows": "https://github.com/chasegan/Kalix/releases/download/v0.2.6/kalix-0.2.6-windows.exe",
+      "macos": "https://github.com/chasegan/Kalix/releases/download/v0.2.6/kalix-0.2.6-macos.dmg",
+      "linux": "https://github.com/chasegan/Kalix/releases/download/v0.2.6/kalix-0.2.6-linux.AppImage"
+    },
+    "pip": "pip install kalix==0.2.6"
+  }
+]

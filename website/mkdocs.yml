@@ -1,0 +1,178 @@
+site_name: Kalix
+site_description: >-
+  Kalix — an open-source hydrological and river-management modelling platform.
+site_url: https://kalixproject.org/
+site_author: Kalix Project
+
+repo_url: https://github.com/chasegan/Kalix
+repo_name: chasegan/Kalix
+edit_uri: ""
+
+copyright: © 2026 Kalix Project · MPL 2.0
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  custom_dir: overrides
+  language: en
+  logo: assets/wordmark.png
+  favicon: assets/favicon.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    # Light mode only — no dark variant (tokens.css drives the palette).
+    scheme: default
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - navigation.instant
+    - navigation.instant.progress
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - macros:
+      module_name: main
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      zoomable: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+      permalink_title: Anchor link to this section
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.keys
+
+extra_css:
+  - stylesheets/tokens.css
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/chasegan/Kalix
+      name: Kalix on GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/kalix/
+      name: Kalix on PyPI
+
+# Kept in the source tree but excluded from the built site (owner decision:
+# rough research/internal notes that shouldn't publish yet).
+exclude_docs: |
+  optimisation/algorithms/sc-sahel.md
+  optimisation/reparameterizations.md
+  developing/gory-details/python-api-brainstorm.md
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - tutorials/index.md
+      - 01 · Build your first model: tutorials/01-first-model.md
+      - 02 · Expressions: tutorials/02-expressions.md
+      - 03 · Relative & trailhead paths: tutorials/03-paths.md
+      - 04 · Running from the commandline: tutorials/04-commandline.md
+      - 05 · Running from Python: tutorials/05-python.md
+      - 06 · Optimisation from the commandline: tutorials/06-optimisation-cli.md
+      - 07 · Optimisation from Python: tutorials/07-optimisation-python.md
+      - Resources:
+          - Kalix binary path in KalixIDE: tutorials/resources/kalix-binary-path.md
+          - Running notebooks with uv: tutorials/resources/notebooks-uv.md
+  - Docs:
+      - docs_home.md
+      - Getting started: getting-started.md
+      - Concepts:
+          - Model file structure: concepts/model-file-structure.md
+          - Conventions: concepts/conventions.md
+          - Ordering: concepts/ordering.md
+          - Dynamic expressions:
+              - concepts/dynamic-expressions/index.md
+              - Referencing input data: concepts/dynamic-expressions/referencing-input-data.md
+              - Referencing model results: concepts/dynamic-expressions/referencing-model-results.md
+              - Simulation context variables: concepts/dynamic-expressions/simulation-context-vars.md
+              - Constants: concepts/dynamic-expressions/constants.md
+          - Parameter types: concepts/parameter-types.md
+          - Data cache: concepts/data-cache.md
+          - Input data: concepts/input-data.md
+          - Model outputs: concepts/model-outputs.md
+      - Nodes:
+          - nodes/index.md
+          - Inflow: nodes/inflow.md
+          - GR4J: nodes/gr4j.md
+          - Sacramento: nodes/sacramento.md
+          - Storage: nodes/storage.md
+          - Storage tables: nodes/storage-tables.md
+          - Routing: nodes/routing.md
+          - Confluence: nodes/confluence.md
+          - Splitter: nodes/splitter.md
+          - Loss: nodes/loss.md
+          - Gauge: nodes/gauge.md
+          - Regulated user: nodes/regulated-user.md
+          - Unregulated user: nodes/unregulated-user.md
+          - Order control: nodes/order-control.md
+          - Blackhole: nodes/blackhole.md
+      - Using Kalix:
+          - KalixIDE: using/ide.md
+          - Kalix CLI: using/cli.md
+          - Kalix in Python: using/python.md
+          - Run Manager: using/run-manager.md
+      - Optimisation:
+          - optimisation/index.md
+          - Objective functions: optimisation/objective-functions.md
+          - Algorithms:
+              - Shuffled Complex Evolution (SCE): optimisation/algorithms/sce.md
+              - CMA-ES: optimisation/algorithms/cma-es.md
+              - Differential Evolution: optimisation/algorithms/differential-evolution.md
+              - DREAM: optimisation/algorithms/dream.md
+      - Reference:
+          - Glossary: reference/glossary.md
+          - Technical reference:
+              - GR4J: reference/technical/gr4j.md
+              - Sacramento: reference/technical/sacramento.md
+      - Developing:
+          - Start developing: developing/start-developing.md
+          - The dev stack: developing/dev-stack.md
+          - Gory details:
+              - developing/gory-details/index.md
+              - Architecture Decision Records: developing/gory-details/adrs.md
+      - Planned features: planned.md
+  - Downloads: downloads.md
+  - Code: code.md
+  - Contact: contact.md

@@ -1,0 +1,7 @@
+# Build output and local tooling — not committed
+/site/
+/.venv/
+__pycache__/
+*.pyc
+# tokens.css is copied from the canonical design file at build time
+/docs/stylesheets/tokens.css

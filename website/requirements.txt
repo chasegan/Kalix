@@ -1,0 +1,11 @@
+# Kalix website build dependencies (kalixproject.org).
+# Install into an isolated venv:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+mkdocs-material>=9.5
+mkdocs-macros-plugin>=1.0
+mkdocs-glightbox>=0.4
+pymdown-extensions>=10.7
+
+# Used by the build-time generation scripts (releases, project health, speed plot).
+requests>=2.31
+pandas>=2.0
+matplotlib>=3.8
