@@ -14,7 +14,6 @@ Two jobs:
 """
 
 import json
-import shutil
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -25,10 +24,20 @@ RELEASES_FALLBACK = HERE / "data" / "releases.json"
 
 
 def _sync_tokens() -> None:
-    """Copy the canonical tokens.css into the docs tree (single source of truth)."""
-    if CANONICAL_TOKENS.exists():
-        TOKENS_DEST.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(CANONICAL_TOKENS, TOKENS_DEST)
+    """Copy the canonical tokens.css into the docs tree (single source of truth).
+
+    Only writes when the content actually differs. The destination lives inside
+    docs_dir, which `mkdocs serve` watches — rewriting it every build (even with
+    identical bytes) would churn the mtime and trigger an endless rebuild/reload
+    loop. The content-compare guard breaks that loop.
+    """
+    if not CANONICAL_TOKENS.exists():
+        return
+    new = CANONICAL_TOKENS.read_bytes()
+    if TOKENS_DEST.exists() and TOKENS_DEST.read_bytes() == new:
+        return
+    TOKENS_DEST.parent.mkdir(parents=True, exist_ok=True)
+    TOKENS_DEST.write_bytes(new)
 
 
 def _load_releases() -> list:
