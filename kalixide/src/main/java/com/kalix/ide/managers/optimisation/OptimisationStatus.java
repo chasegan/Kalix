@@ -1,4 +1,4 @@
-package com.kalix.ide.models.optimisation;
+package com.kalix.ide.managers.optimisation;
 
 /**
  * Enum representing the status of an optimisation run.

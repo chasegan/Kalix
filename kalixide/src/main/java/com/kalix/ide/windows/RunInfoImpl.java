@@ -1,4 +1,4 @@
-package com.kalix.ide.models;
+package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.RunModelProgram;

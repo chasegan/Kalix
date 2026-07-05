@@ -14,9 +14,7 @@ import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.utils.NaturalSortUtils;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
-import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.models.StatsTableModel;
-import com.kalix.ide.models.RunInfoImpl;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 
@@ -37,12 +35,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.Point;
-import java.awt.AWTEvent;
-import java.awt.EventQueue;
-import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -50,7 +43,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +74,7 @@ import java.util.function.Consumer;
  * <ol>
  *   <li>User selects source(s) in data source tree → {@link #onRunTreeSelectionChanged}</li>
  *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
- *   <li>User selects series in timeseries tree → {@link #onOutputsTreeSelectionChanged}</li>
+ *   <li>User selects series in timeseries tree → {@link SeriesFetchCoordinator#onOutputsTreeSelectionChanged}</li>
  *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
  *   <li>Data is added to shared {@link DataSet} pool → {@link #addSeriesToPool}</li>
  *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
@@ -91,17 +83,22 @@ import java.util.function.Consumer;
  * <h2>Selection Tracking</h2>
  * <ul>
  *   <li>Per-tab selected series stored in {@link VisualizationTabManager} TabInfo</li>
- *   <li>{@code isUpdatingSelection} - Flag to prevent listener feedback loops during programmatic updates</li>
+ *   <li>{@link SeriesFetchCoordinator#isUpdatingSelection()} - Guard to prevent listener
+ *       feedback loops during programmatic updates</li>
  *   <li>Tree selection is restored after rebuilds via {@link #restoreTreeSelectionForSeries}</li>
  * </ul>
  *
- * <h2>"Last" Run Handling</h2>
- * When a run completes ({@link #updateLastRun}):
- * <ol>
- *   <li>Cache is cleared for the session ({@link TimeSeriesRequestManager#clearCacheForSession})</li>
- *   <li>If "Last" was selected, timeseries tree is rebuilt to show new outputs</li>
- *   <li>Plotted "[Last]" series are refreshed with new data ({@link #refreshLastSeries})</li>
- * </ol>
+ * <h2>Window collaborators</h2>
+ * This class is the window shell (layout, wiring, delegation). The run bookkeeping and
+ * data orchestration live in three same-package collaborators:
+ * <ul>
+ *   <li>{@link RunTreeController} - session discovery/status/removal, run naming,
+ *       rename and programmatic selection</li>
+ *   <li>{@link LastRunTracker} - the "Last run" alias, its generation counter, and
+ *       refreshing plotted "[Last]" series when a run completes</li>
+ *   <li>{@link SeriesFetchCoordinator} - timeseries-tree selection diffing, cache
+ *       probes, async fetches into the pool, and the selection-update guard</li>
+ * </ul>
  *
  * @see OutputsTreeBuilder
  * @see TimeSeriesRequestManager
@@ -163,34 +160,12 @@ public class RunManager extends JFrame {
     // Per-tab selected series are managed by VisualizationTabManager (TabInfo.selectedSeries).
     // The shared plotDataSet acts as a data pool — series are added but never removed on deselect.
 
-
-    // === RUN TRACKING ===
-    private final Map<String, String> sessionToRunName = new HashMap<>();
-    private final Map<String, DefaultMutableTreeNode> sessionToTreeNode = new HashMap<>();
-    private final Map<String, RunInfoImpl.DetailedRunStatus> lastKnownStatus = new HashMap<>();
-    private int runCounter = 1;
-
-    // === LAST RUN TRACKING ===
-    // lastRunInfo points to the most recently completed run
-    // Used to resolve "[Last]" series to actual session data
-    private RunInfoImpl lastRunInfo = null;
-    // Generation counter for "Last" run identity. Incremented inside updateLastRun() each time
-    // a new run becomes "Last". Async fetches for "[Last]" series capture this value at issue
-    // time and verify it has not changed before applying the result on the EDT. If the value
-    // has changed, the response belongs to a previous Last run and is discarded — the newer
-    // updateLastRun() has already issued (or will issue) a fetch for the correct data.
-    //
-    // Mutated only on the EDT (updateLastRun is invoked from session-event handlers via
-    // SwingUtilities.invokeLater). Marked volatile so future cross-thread reads see the
-    // current value; the increment is safe because it has a single writer thread.
-    private volatile long lastRunGeneration = 0;
-    private DefaultMutableTreeNode lastRunChildNode = null;
-    private final Map<String, Long> completionTimestamps = new HashMap<>();
-    private long lastRunCompletionTime = 0L;
-
-    // Flag to prevent selection listener feedback loops during programmatic tree updates
-    // Set to true before modifying tree selection, false after
-    private boolean isUpdatingSelection = false;
+    // === WINDOW COLLABORATORS ===
+    // Extracted run bookkeeping / data orchestration (see class javadoc). Constructed in
+    // initializeManagers(); same-package, package-private classes.
+    private SeriesFetchCoordinator fetchCoordinator;
+    private LastRunTracker lastRunTracker;
+    private RunTreeController runTreeController;
 
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
@@ -275,7 +250,7 @@ public class RunManager extends JFrame {
      */
     public static void selectRunIfOpen(String sessionKey) {
         if (instance != null && instance.isVisible()) {
-            instance.selectRun(sessionKey);
+            instance.runTreeController.selectRun(sessionKey);
         }
     }
 
@@ -292,7 +267,7 @@ public class RunManager extends JFrame {
      */
     public static String getRunNameForSession(String sessionKey) {
         if (instance != null) {
-            return instance.sessionToRunName.get(sessionKey);
+            return instance.runTreeController.getRunNameForSession(sessionKey);
         }
         return null;
     }
@@ -399,10 +374,12 @@ public class RunManager extends JFrame {
         // "Last" data under the underlying run's stable RunSeries identity — the pool never
         // holds a LastSeries key, which makes stale-Last data structurally impossible.
         plotDataSet = new DataSet();
-        plotDataSet.setLastSeriesResolver(last ->
-            lastRunInfo != null
+        plotDataSet.setLastSeriesResolver(last -> {
+            RunInfoImpl lastRunInfo = lastRunTracker != null ? lastRunTracker.getLastRunInfo() : null;
+            return lastRunInfo != null
                 ? new com.kalix.ide.flowviz.data.RunSeries(lastRunInfo.getRunId(), last.baseName())
-                : null);
+                : null;
+        });
 
         // Initialize series slot assignment. Slots are resolved against the global
         // palette so every plot tab in this window styles a series consistently.
@@ -481,6 +458,46 @@ public class RunManager extends JFrame {
             labelResolver                      // Display label projection
         );
 
+        // Window collaborators. The coordinator's Last-run suppliers defer through the
+        // lastRunTracker field (assigned immediately below), breaking the construction
+        // cycle between the guard owner and the Last tracker.
+        fetchCoordinator = new SeriesFetchCoordinator(
+            this,
+            timeseriesTree,
+            timeseriesTreeModel,
+            treeFilterManager,
+            outputsTreeBuilder,
+            tabManager,
+            plotDataSet,
+            seriesSlotManager,
+            timeSeriesRequestManager,
+            datasetSeriesCache,
+            () -> lastRunTracker.getGeneration(),
+            () -> lastRunTracker.getLastRunInfo()
+        );
+        lastRunTracker = new LastRunTracker(
+            this,
+            timeseriesSourceTree,
+            treeModel,
+            lastRunNode,
+            tabManager,
+            timeSeriesRequestManager,
+            fetchCoordinator
+        );
+        runTreeController = new RunTreeController(
+            this,
+            stdioTaskManager,
+            timeseriesSourceTree,
+            treeModel,
+            currentRunsNode,
+            tabManager,
+            plotDataSet,
+            seriesSlotManager,
+            timeSeriesRequestManager,
+            lastRunTracker,
+            fetchCoordinator
+        );
+
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
             this,                             // Parent frame
@@ -501,9 +518,9 @@ public class RunManager extends JFrame {
             statusUpdater,                    // Status updater
             () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null,  // Base directory supplier
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
-            sessionToRunName,                 // Session to run name map
+            runTreeController.sessionToRunNameView(),  // Session to run name map (live)
             this::refreshRuns,                // Refresh callback
-            this::renameRun,                  // Rename delegate (validation + propagation)
+            runTreeController::renameRun,     // Rename delegate (validation + propagation)
             this::removeLoadedDataset         // Remove-dataset delegate (pool/cache/tab cleanup)
         );
 
@@ -636,7 +653,7 @@ public class RunManager extends JFrame {
         }
 
         // Check if we need to refresh the tree (new session or state changed to READY/ERROR/TERMINATED)
-        if (!sessionToTreeNode.containsKey(sessionKey) ||
+        if (!runTreeController.hasSession(sessionKey) ||
             newState == SessionManager.SessionState.READY ||
             newState == SessionManager.SessionState.ERROR ||
             newState == SessionManager.SessionState.TERMINATED) {
@@ -707,280 +724,11 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Refreshes the data source tree with current session states.
-     *
-     * Called by session event listener when sessions change state. This method:
-     * <ol>
-     *   <li>Discovers new sessions and adds them to "Current runs"</li>
-     *   <li>Detects status changes (RUNNING→DONE) for existing sessions</li>
-     *   <li>Updates "Last run" when a run completes (calls {@link #updateLastRun})</li>
-     *   <li>Triggers timeseries tree rebuild if the selected run's status changed</li>
-     * </ol>
-     *
-     * Only shows RunModelProgram sessions - other types (OptimisationProgram) are filtered out.
+     * Refreshes the data source tree with current session states. Delegates to
+     * {@link RunTreeController#refreshRuns}, which marshals itself to the EDT.
      */
     public void refreshRuns() {
-        if (stdioTaskManager == null) return;
-
-        SwingUtilities.invokeLater(() -> {
-            Map<String, SessionManager.KalixSession> activeSessions = stdioTaskManager.getActiveSessions();
-
-            // Track nodes that were inserted for proper tree notification
-            List<Integer> insertedIndices = new ArrayList<>();
-            List<DefaultMutableTreeNode> insertedNodes = new ArrayList<>();
-
-            // Check for new sessions
-            for (SessionManager.KalixSession session : activeSessions.values()) {
-                // FILTER: Only show simulation runs (RunModelProgram)
-                // Other session types (OptimisationProgram, etc.) are managed elsewhere
-                if (!(session.getActiveProgram() instanceof RunModelProgram)) {
-                    continue; // Skip non-simulation sessions
-                }
-
-                String sessionKey = session.getSessionKey();
-
-                if (!sessionToTreeNode.containsKey(sessionKey)) {
-                    // New session - add to tree
-                    String runName = "Run_" + runCounter++;
-                    sessionToRunName.put(sessionKey, runName);
-
-                    RunInfoImpl runInfo = new RunInfoImpl(runName, session);
-                    RunInfoImpl.DetailedRunStatus initialStatus = runInfo.getDetailedRunStatus();
-
-                    DefaultMutableTreeNode runNode = new DefaultMutableTreeNode(runInfo);
-                    int insertIndex = currentRunsNode.getChildCount();
-                    currentRunsNode.add(runNode);
-                    sessionToTreeNode.put(sessionKey, runNode);
-                    lastKnownStatus.put(sessionKey, initialStatus);
-
-                    // Track insertion for tree notification
-                    insertedIndices.add(insertIndex);
-                    insertedNodes.add(runNode);
-
-                    // If session is already DONE when first discovered, treat it as a completion
-                    // (This handles fast-completing runs that finish before refreshRuns() is called)
-                    if (initialStatus == RunInfoImpl.DetailedRunStatus.DONE) {
-                        long completionTime = System.currentTimeMillis();
-                        completionTimestamps.put(sessionKey, completionTime);
-
-                        if (completionTime > lastRunCompletionTime) {
-                            updateLastRun(runInfo, completionTime);
-                        }
-                    }
-                } else {
-                    // Existing session - check for status changes
-                    DefaultMutableTreeNode existingNode = sessionToTreeNode.get(sessionKey);
-                    RunInfoImpl runInfo = (RunInfoImpl) existingNode.getUserObject();
-                    RunInfoImpl.DetailedRunStatus currentStatus = runInfo.getDetailedRunStatus();
-                    RunInfoImpl.DetailedRunStatus lastStatus = lastKnownStatus.get(sessionKey);
-
-                    if (lastStatus != currentStatus) {
-                        // Status changed - refresh this node's display
-                        treeModel.nodeChanged(existingNode);
-
-                        // Detect session reuse: if session was DONE and is now RUNNING/LOADING, it's a new run
-                        if (lastStatus == RunInfoImpl.DetailedRunStatus.DONE &&
-                            (currentStatus == RunInfoImpl.DetailedRunStatus.RUNNING || currentStatus == RunInfoImpl.DetailedRunStatus.LOADING || currentStatus == RunInfoImpl.DetailedRunStatus.STARTING)) {
-                            // Session reused for new run - reset completion tracking for this session
-                            completionTimestamps.remove(sessionKey);
-                        }
-
-                        lastKnownStatus.put(sessionKey, currentStatus);
-
-                        // Check if run just completed
-                        if (currentStatus == RunInfoImpl.DetailedRunStatus.DONE && lastStatus != RunInfoImpl.DetailedRunStatus.DONE) {
-                            // Record completion timestamp
-                            long completionTime = System.currentTimeMillis();
-                            completionTimestamps.put(sessionKey, completionTime);
-
-                            // Update Last if this is more recent
-                            if (completionTime > lastRunCompletionTime) {
-                                updateLastRun(runInfo, completionTime);
-                            }
-                        }
-
-                        // Update outputs if this run is currently selected
-                        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
-                        if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
-                            updateOutputsTree();
-                        }
-                    }
-                }
-            }
-
-            // Notify tree model of inserted nodes (preserves selection)
-            if (!insertedIndices.isEmpty()) {
-                int[] indices = insertedIndices.stream().mapToInt(Integer::intValue).toArray();
-                Object[] children = insertedNodes.toArray();
-                treeModel.nodesWereInserted(currentRunsNode, indices);
-
-                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
-            }
-
-            // Check for removed sessions
-            // Need to capture indices BEFORE removal
-            List<Integer> removedIndices = new ArrayList<>();
-            List<Object> removedChildren = new ArrayList<>();
-            List<String> sessionsToRemove = new ArrayList<>();
-
-            for (Map.Entry<String, DefaultMutableTreeNode> entry : sessionToTreeNode.entrySet()) {
-                String sessionKey = entry.getKey();
-                if (!activeSessions.containsKey(sessionKey)) {
-                    DefaultMutableTreeNode nodeToRemove = entry.getValue();
-                    int indexToRemove = currentRunsNode.getIndex(nodeToRemove);
-                    if (indexToRemove >= 0) {
-                        removedIndices.add(indexToRemove);
-                        removedChildren.add(nodeToRemove);
-                        sessionsToRemove.add(sessionKey);
-                    }
-                }
-            }
-
-            // Remove sessions and notify tree
-            if (!removedIndices.isEmpty()) {
-                // Remove nodes from tree
-                for (Object child : removedChildren) {
-                    currentRunsNode.remove((DefaultMutableTreeNode) child);
-                }
-
-                // Clean up tracking maps
-                for (String sessionKey : sessionsToRemove) {
-                    removeRunData(sessionToTreeNode.get(sessionKey));
-                    sessionToTreeNode.remove(sessionKey);
-                    sessionToRunName.remove(sessionKey);
-                    lastKnownStatus.remove(sessionKey);
-                    completionTimestamps.remove(sessionKey);
-
-                    // If this was the Last run, clear Last node
-                    if (lastRunInfo != null && lastRunInfo.getSession().getSessionKey().equals(sessionKey)) {
-                        lastRunInfo = null;
-                        lastRunCompletionTime = 0L;
-
-                        // Properly remove the Last child node
-                        if (lastRunChildNode != null) {
-                            int childIndex = lastRunNode.getIndex(lastRunChildNode);
-                            Object[] removedChild = new Object[]{lastRunChildNode};
-                            lastRunNode.removeAllChildren();
-                            treeModel.nodesWereRemoved(lastRunNode, new int[]{childIndex}, removedChild);
-                            lastRunChildNode = null;
-                        }
-                    }
-                }
-
-                // Notify tree model of removals. nodesWereRemoved requires ascending
-                // indices; collection order here follows HashMap iteration, so sort the
-                // (index, child) pairs together.
-                List<Integer> order = new ArrayList<>();
-                for (int i = 0; i < removedIndices.size(); i++) order.add(i);
-                order.sort(java.util.Comparator.comparingInt(removedIndices::get));
-                int[] indices = new int[order.size()];
-                Object[] children = new Object[order.size()];
-                for (int i = 0; i < order.size(); i++) {
-                    indices[i] = removedIndices.get(order.get(i));
-                    children[i] = removedChildren.get(order.get(i));
-                }
-                treeModel.nodesWereRemoved(currentRunsNode, indices, children);
-            }
-        });
-    }
-
-    /**
-     * Updates the "Last run" node to point to the most recently completed run.
-     *
-     * This is a critical method for the "[Last]" feature. When a run completes:
-     * <ol>
-     *   <li>Updates {@code lastRunInfo} to point to the new run</li>
-     *   <li>Replaces the tree node under "Last run" with a new RunInfoImpl("Last", session)</li>
-     *   <li>If "Last" was selected in the data source tree:
-     *     <ul>
-     *       <li>Rebuilds timeseries tree to show outputs from new run (may have new/removed outputs)</li>
-     *       <li>Restores selection for series that still exist</li>
-     *       <li>Removes stale series from plot via {@link #reconcileSelectedSeriesWithTree}</li>
-     *     </ul>
-     *   </li>
-     *   <li>Calls {@link #refreshLastSeries} to update plotted "[Last]" data with new values</li>
-     * </ol>
-     *
-     * The RunInfoImpl for "Last" uses name="Last" so series display as "ds_1 [Last]" not "ds_1 [Run_3]".
-     */
-    private void updateLastRun(RunInfoImpl newLastRun, long completionTime) {
-        lastRunInfo = newLastRun;
-        lastRunGeneration++;
-        lastRunCompletionTime = completionTime;
-
-        // Check if we're replacing an existing Last child or creating the first one
-        DefaultMutableTreeNode oldChildNode = null;
-        int oldChildIndex = -1;
-        boolean wasLastSelected = false;
-
-        if (lastRunChildNode != null) {
-            oldChildIndex = lastRunNode.getIndex(lastRunChildNode);
-            oldChildNode = lastRunChildNode;
-
-            // Check if the old Last child was selected
-            TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-            if (selectedPaths != null) {
-                TreePath oldLastPath = new TreePath(lastRunChildNode.getPath());
-                for (TreePath path : selectedPaths) {
-                    if (path.equals(oldLastPath)) {
-                        wasLastSelected = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // If Last was selected, block all selection events during the entire update
-        if (wasLastSelected) {
-            isUpdatingSelection = true;
-        }
-
-        // Create new child node. The Last subtree's wrapper carries the structural
-        // "is last alias" marker via RunInfoImpl.lastAlias — seriesRefForLeaf consults
-        // that marker (not the runName string) to mint LastSeries refs.
-        lastRunChildNode = new DefaultMutableTreeNode(
-            RunInfoImpl.lastAlias(newLastRun.getSession())
-        );
-
-        if (oldChildNode != null) {
-            // Replacing existing child - remove old, add new
-            lastRunNode.remove(oldChildNode);
-            treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
-
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        } else {
-            // First time - just add
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        }
-
-        // If Last was previously selected, rebuild the timeseries tree to show new outputs
-        if (wasLastSelected) {
-            TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
-
-            // Restore run tree selection to the new Last node
-            timeseriesSourceTree.addSelectionPath(newLastPath);
-
-            // Rebuild the timeseries tree to include any new outputs from the new run
-            // This is necessary because the new run may have different outputs than the old one
-            updateOutputsTree();
-
-            // Restore selection for series that still exist in the new tree
-            Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
-
-            // Remove from tab any series that no longer exist (e.g., outputs that were removed)
-            reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
-
-            isUpdatingSelection = false;
-        }
-
-        // Expand the Last run node to show the new child
-        timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
-
-        // Refresh any plotted "[Last]" series to use the new Last run's data
-        refreshLastSeries();
+        runTreeController.refreshRuns();
     }
 
     /**
@@ -1045,7 +793,7 @@ public class RunManager extends JFrame {
      *
      * @param seriesToRestore The set of series keys to select in the tree
      */
-    private Set<com.kalix.ide.flowviz.data.SeriesRef> restoreTreeSelectionForSeries(
+    Set<com.kalix.ide.flowviz.data.SeriesRef> restoreTreeSelectionForSeries(
             Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
             timeseriesTree.clearSelection();
@@ -1081,7 +829,7 @@ public class RunManager extends JFrame {
      * Reconciles the target tab's selected series with what's actually available in the tree.
      * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
      */
-    private void reconcileSelectedSeriesWithTree(Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries,
+    void reconcileSelectedSeriesWithTree(Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries,
                                                   Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries) {
         // Find series that need to be removed from the tab
         Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
@@ -1104,21 +852,12 @@ public class RunManager extends JFrame {
 
     /**
      * Returns the current display name for a given {@code runId}, or {@code null} if
-     * no run with that id is currently known. Used by {@link com.kalix.ide.flowviz.data.DefaultLabelResolver}
-     * to project {@link com.kalix.ide.flowviz.data.RunSeries} refs to user-visible
-     * labels.
-     *
-     * <p>Linear over current runs; trivially small in practice. If profiling later
-     * shows this on a hot path, swap to an explicit {@code Map<Long, RunInfoImpl>}
-     * maintained in {@code refreshRuns} and {@code renameRun}.</p>
+     * no run with that id is currently known. Bound into the
+     * {@link com.kalix.ide.flowviz.data.DefaultLabelResolver} at construction time;
+     * delegates to {@link RunTreeController#runNameForId}.
      */
     private String runNameForId(long runId) {
-        for (DefaultMutableTreeNode node : sessionToTreeNode.values()) {
-            if (node.getUserObject() instanceof RunInfoImpl info && info.getRunId() == runId) {
-                return info.getRunName();
-            }
-        }
-        return null;
+        return runTreeController.runNameForId(runId);
     }
 
     /**
@@ -1131,237 +870,20 @@ public class RunManager extends JFrame {
         return labelResolver;
     }
 
-    /**
-     * Resolves a RunInfo to its actual session.
-     * If the run is "Last", returns the session of the actual last completed run.
-     */
-    private SessionManager.KalixSession resolveRunInfoSession(RunInfoImpl runInfo) {
-        if (runInfo.isLastAlias() && lastRunInfo != null) {
-            return lastRunInfo.getSession();
-        }
-        return runInfo.getSession();
-    }
-
     // extractSeriesName removed — there are no series-key strings to parse anymore.
     // Identity is the typed SeriesRef; baseName comes from ref.baseName().
-
-    /**
-     * Renames a run. Series identity in the pool, color map, tab selections, stats models,
-     * and undo history is the runId on {@link com.kalix.ide.flowviz.data.RunSeries}, which
-     * is preserved by {@link RunInfoImpl#withName} — no data structures need propagation.
-     * The tree node's user object is swapped to a fresh {@link RunInfoImpl} carrying the
-     * same runId, and the outputs tree is rebuilt so leaf labels re-render via the new
-     * name; the {@link com.kalix.ide.flowviz.data.LabelResolver} reprojects every other
-     * surface on the next paint.
-     *
-     * <p>Validates the new name on entry. Returns {@code null} on success, or a
-     * user-facing error string on rejection. EDT-only.</p>
-     *
-     * <p>The reserved name {@code "Last"} is rejected for display-disambiguation only:
-     * series identity is structural ({@code RunInfoImpl.isLastAlias()} distinguishes the
-     * placeholder from user runs), so a user-named "Last" run wouldn't corrupt data —
-     * but its rendered label {@code "<base> [Last]"} would be indistinguishable from the
-     * actual {@code LastSeries} alias, which is a UX hazard.</p>
-     */
-    public String renameRun(RunContextMenuManager.RunInfo oldRunInfoIface, String newName) {
-        if (!(oldRunInfoIface instanceof RunInfoImpl oldRunInfo)) {
-            return "Only simulation runs can be renamed.";
-        }
-
-        String oldName = oldRunInfo.getRunName();
-        if (newName.equals(oldName)) {
-            return null;
-        }
-
-        if (newName.isEmpty()) {
-            return "Run name cannot be empty.";
-        }
-        if ("Last".equals(newName)) {
-            return "'Last' is reserved and cannot be used as a run name.";
-        }
-        for (String existing : sessionToRunName.values()) {
-            if (existing.equals(newName)) {
-                return "A run with the name '" + newName + "' already exists.";
-            }
-        }
-
-        // Defensive: rename is initiated from a tree-node context menu, but the node may
-        // have been removed asynchronously between click and dialog close (rare; e.g. a
-        // concurrent session-terminate). Reject rather than leave inconsistent state.
-        String sessionKey = oldRunInfo.getSession().getSessionKey();
-        DefaultMutableTreeNode node = sessionToTreeNode.get(sessionKey);
-        if (node == null) {
-            return "This run is no longer available.";
-        }
-
-        // Construct a renamed instance that preserves the runId. The runId is the
-        // durable internal handle (used by RunSeries in the post-refactor identity
-        // model); renaming must NOT mint a new id, otherwise plotted series stored
-        // under the old runId would be orphaned the next time the pool is keyed by
-        // ref. The label changes; identity does not.
-        RunInfoImpl newRunInfo = oldRunInfo.withName(newName);
-        node.setUserObject(newRunInfo);
-        treeModel.nodeChanged(node);
-
-        sessionToRunName.put(sessionKey, newName);
-
-        // Keep lastRunInfo pointing at the live RunInfoImpl for this session — otherwise
-        // it would dangle to the now-orphan instance. The Last child node's wrapper
-        // (with name "Last") is untouched; refreshLastSeries resolves Last via session.
-        if (lastRunInfo == oldRunInfo) {
-            lastRunInfo = newRunInfo;
-        }
-
-        // No propagation needed: series identity is the runId on RunSeries refs, which is
-        // preserved by RunInfoImpl.withName. The pool, color map, tab selections, stats
-        // models, and undo history all key by ref — they don't know or care that the
-        // user-visible run name changed. The label is reprojected via LabelResolver on
-        // the next paint, so legends and the stats column refresh automatically.
-        //
-        // We just need to: (a) rebuild the outputs tree so its leaves regenerate against
-        // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
-        // and (b) trigger a repaint so any text surfaces that aren't actively reading the
-        // resolver see the update.
-        isUpdatingSelection = true;
-        try {
-            updateOutputsTree();
-            Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            restoreTreeSelectionForSeries(tabSeries);
-        } finally {
-            isUpdatingSelection = false;
-        }
-
-        // Cheap repaint to pick up the new label in plot legends / stats column headers
-        // that already cache projected strings.
-        tabManager.updateAllTabs(false);
-
-        return null;
-    }
-
-    /**
-     * Fetches data for the new Last run into the pool, for every plotted "[Last]" series.
-     *
-     * Called by {@link #updateLastRun} when a run completes. This method:
-     * <ol>
-     *   <li>Clears the {@link TimeSeriesRequestManager} cache for this session -
-     *       CRITICAL because cache is keyed by kalixcliUid which persists across runs</li>
-     *   <li>For each {@link com.kalix.ide.flowviz.data.LastSeries} ref selected across all
-     *       tabs, requests fresh data from the new run (sync if cached, async otherwise)
-     *       and writes it into {@code plotDataSet}.</li>
-     * </ol>
-     *
-     * The cache clear happens unconditionally (even if no "[Last]" series are selected)
-     * so that future selections will fetch fresh data.
-     *
-     * <h3>Why no stale-data handling is needed</h3>
-     * The pool stores "Last" data under the underlying run's stable {@code RunSeries}
-     * identity — {@code plotDataSet}'s {@code LastSeriesResolver} (installed in
-     * {@code initializeManagers}) redirects every {@code LastSeries} access to
-     * {@code RunSeries(lastRunId, baseName)}. So the pool never holds a {@code LastSeries}
-     * key that could go stale: when Last changes, a {@code LastSeries} ref simply resolves
-     * to a different {@code RunSeries}. This method just ensures that target is populated.
-     * The {@code onOutputsTreeSelectionChanged} "already in pool" short-circuit is therefore
-     * correct by construction — a {@code getSeries(LastSeries)} probe resolves to the
-     * current run's data or to {@code null} (triggering a fetch).
-     *
-     * <h3>Atomic swap (no empty-plot gap)</h3>
-     * Writing the new data via {@code addSeries} replaces the {@code RunSeries} entry in a
-     * single EDT operation; the previous Last's {@code RunSeries} entry is left untouched
-     * (it remains valid data for that specific run).
-     */
-    private void refreshLastSeries() {
-        if (lastRunInfo == null) {
-            return;
-        }
-
-        // Capture the generation at issue time. All async fetches below carry this value so
-        // that responses arriving after a newer updateLastRun() can be detected and dropped.
-        final long capturedGeneration = lastRunGeneration;
-
-        String newSessionKey = lastRunInfo.getSession().getSessionKey();
-
-        // Clear stale cached data from the previous run on this session
-        // This MUST happen unconditionally so that future requests for [Last] data
-        // will fetch fresh data, even if no [Last] series are currently selected
-        timeSeriesRequestManager.clearCacheForSession(newSessionKey);
-
-        // Find all LastSeries refs across all tabs. Identity is the typed ref now —
-        // the obsolete `endsWith(" [Last]")` string matching has been deleted, which
-        // structurally closes issue #8 (no string-suffix collisions are possible).
-        Set<com.kalix.ide.flowviz.data.SeriesRef> allTabSeries = tabManager.getAllSelectedSeriesAcrossTabs();
-        List<com.kalix.ide.flowviz.data.LastSeries> lastSeriesRefs = allTabSeries.stream()
-            .filter(r -> r instanceof com.kalix.ide.flowviz.data.LastSeries)
-            .map(r -> (com.kalix.ide.flowviz.data.LastSeries) r)
-            .collect(java.util.stream.Collectors.toList());
-
-        if (lastSeriesRefs.isEmpty()) {
-            return;
-        }
-
-        boolean anySyncReplacement = false;
-
-        for (com.kalix.ide.flowviz.data.LastSeries ref : lastSeriesRefs) {
-            String seriesName = ref.baseName();
-
-            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(newSessionKey, seriesName);
-            if (cachedData != null) {
-                // Synchronous replacement on EDT — atomic via DataSet.addSeries replacing
-                // the existing entry for this ref.
-                addSeriesToPool(ref, cachedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
-                anySyncReplacement = true;
-            } else {
-                // Async fetch. requestTimeSeries returns an existing in-flight future
-                // for the same (session, seriesName) if one exists, so duplicate
-                // requests piggyback cheaply.
-                timeSeriesRequestManager.requestTimeSeries(newSessionKey, seriesName)
-                    .thenAccept(timeSeriesData -> {
-                        SwingUtilities.invokeLater(() -> {
-                            // Drop response if a newer run has become "Last" since this
-                            // request was issued.
-                            if (capturedGeneration != lastRunGeneration) {
-                                return;
-                            }
-                            addSeriesToPool(ref, timeSeriesData);
-                            tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
-
-                            // Only refresh tabs if something on screen needs to redraw.
-                            if (tabManager.isSeriesSelectedOnAnyTab(ref)) {
-                                tabManager.updateAllTabs(false);
-                            }
-                        });
-                    })
-                    .exceptionally(throwable -> {
-                        SwingUtilities.invokeLater(() -> {
-                            logger.error("Failed to fetch timeseries for Last run: {} from session {}",
-                                seriesName, newSessionKey, throwable);
-                        });
-                        return null;
-                    });
-            }
-        }
-
-        // Refresh once after the synchronous work, only if any series was swapped now. Async
-        // callbacks refresh independently when their data arrives. Avoids the prior bug
-        // where this unconditional refresh fired before async data was ready, rebuilding
-        // displayDataSet with the series missing.
-        if (anySyncReplacement) {
-            tabManager.updateAllTabs(false);
-        }
-    }
-
 
     /**
      * Handles tree selection changes to update the timeseries tree.
      */
     private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
         // Ignore selection changes during programmatic updates
-        if (isUpdatingSelection) {
+        if (fetchCoordinator.isUpdatingSelection()) {
             return;
         }
 
         // Block timeseries tree selection events during rebuild and restoration
-        isUpdatingSelection = true;
+        fetchCoordinator.setUpdatingSelection(true);
         updateOutputsTree();
 
         // Restore visual selection to match what's currently plotted on active tab
@@ -1369,7 +891,7 @@ public class RunManager extends JFrame {
         Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
         reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
 
-        isUpdatingSelection = false;
+        fetchCoordinator.setUpdatingSelection(false);
     }
 
     /**
@@ -1377,20 +899,20 @@ public class RunManager extends JFrame {
      * applied. Purely visual - does NOT change selection or affect plots.
      */
     private void onFilterTextChanged() {
-        isUpdatingSelection = true;
+        fetchCoordinator.setUpdatingSelection(true);
         try {
             outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
             updateOutputsTree();
             restoreTreeSelectionForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
-            isUpdatingSelection = false;
+            fetchCoordinator.setUpdatingSelection(false);
         }
     }
 
     /**
      * Updates the timeseries tree based on current run tree selection.
      */
-    private void updateOutputsTree() {
+    void updateOutputsTree() {
         TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
         if (selectedPaths == null || selectedPaths.length == 0) {
             outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
@@ -1425,289 +947,19 @@ public class RunManager extends JFrame {
     // TimeSeriesData instance can sit under any ref.
 
     /**
-     * Handles selection changes in the timeseries tree.
-     * Supports recursive selection: selecting a parent node plots all its leaf children.
-     * Fetches timeseries data for leaf nodes and updates plot and stats.
+     * Handles selection changes in the timeseries tree. Delegates to
+     * {@link SeriesFetchCoordinator#onOutputsTreeSelectionChanged}.
      */
     private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        // Ignore selection changes during programmatic updates
-        if (isUpdatingSelection) {
-            return;
-        }
-
-        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
-
-        if (selectedPaths == null || selectedPaths.length == 0) {
-            // Clear the target tab's series when nothing is selected
-            tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
-            return;
-        }
-
-        // Collect all leaf nodes recursively (parent selection = all children)
-        List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
-        for (TreePath path : selectedPaths) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            collectLeafNodes(node, allLeaves);
-        }
-
-        // If no valid leaves found, clear the target tab
-        if (allLeaves.isEmpty()) {
-            tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
-            return;
-        }
-
-        // Build new set of selected series, ref-keyed directly from the leaves
-        Set<com.kalix.ide.flowviz.data.SeriesRef> newSelectedSeries = new LinkedHashSet<>();
-        Map<com.kalix.ide.flowviz.data.SeriesRef, OutputsTreeBuilder.SeriesLeafNode> refToLeaf = new HashMap<>();
-
-        for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
-            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
-            if (ref == null) continue;
-            newSelectedSeries.add(ref);
-            refToLeaf.put(ref, leaf);
-        }
-
-        // Get the target tab's current series for diffing
-        Set<com.kalix.ide.flowviz.data.SeriesRef> currentTabSeries = tabManager.getTargetTabSelectedSeries();
-
-        // When filtering with an additive click, preserve series hidden by the filter
-        if (treeFilterManager.isFiltering() && isAdditiveSelectionEvent()) {
-            Set<com.kalix.ide.flowviz.data.SeriesRef> visibleRefs = getVisibleSeriesKeys();
-            for (com.kalix.ide.flowviz.data.SeriesRef ref : currentTabSeries) {
-                if (!visibleRefs.contains(ref)) {
-                    newSelectedSeries.add(ref);
-                }
-            }
-        }
-
-        // Check if there's overlap between old and new selections for zoom decision
-        boolean hasOverlap = currentTabSeries.stream().anyMatch(newSelectedSeries::contains);
-        final boolean shouldResetZoom = currentTabSeries.isEmpty() || !hasOverlap;
-
-        // Determine which series need data fetched (not yet in the pool)
-        Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToFetch = new HashSet<>(newSelectedSeries);
-        seriesToFetch.removeIf(ref -> plotDataSet.getSeries(ref) != null);
-
-        // Capture the target PlotPanel for async callbacks
-        final PlotPanel targetPanel = tabManager.getTargetPlotPanel();
-
-        // Group new run series needing fetch by data source. Dataset series take their own
-        // path below.
-        Map<String, List<com.kalix.ide.flowviz.data.SeriesRef>> dataSourceToRefs = new LinkedHashMap<>();
-        Set<com.kalix.ide.flowviz.data.SeriesRef> datasetRefs = new HashSet<>();
-
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToFetch) {
-            OutputsTreeBuilder.SeriesLeafNode leaf = refToLeaf.get(ref);
-            if (leaf == null) continue;
-
-            // Assign a palette slot if not already assigned
-            seriesSlotManager.assignSlot(ref);
-
-            if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                datasetRefs.add(ref);
-            } else {
-                RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
-                SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
-                if (resolvedSession == null) continue;
-
-                String sessionKey = resolvedSession.getSessionKey();
-                String seriesName = leaf.seriesName;
-                String dataSourceKey = sessionKey + "|" + seriesName;
-
-                dataSourceToRefs.computeIfAbsent(dataSourceKey, k -> new ArrayList<>()).add(ref);
-            }
-        }
-
-        // Also assign palette slots for series new to this tab but already in pool
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : newSelectedSeries) {
-            if (!currentTabSeries.contains(ref)) {
-                seriesSlotManager.assignSlot(ref);
-            }
-        }
-
-        // Fetch run series data into the pool
-        for (Map.Entry<String, List<com.kalix.ide.flowviz.data.SeriesRef>> entry : dataSourceToRefs.entrySet()) {
-            String dataSourceKey = entry.getKey();
-            List<com.kalix.ide.flowviz.data.SeriesRef> refs = entry.getValue();
-
-            String[] parts = dataSourceKey.split("\\|", 2);
-            String sessionKey = parts[0];
-            String seriesName = parts[1];
-
-            TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
-            if (cachedData != null) {
-                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
-                    addSeriesToPool(ref, cachedData);
-                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
-                }
-            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
-                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
-                    tabManager.addLoadingSeriesInStatsTabs(ref);
-                }
-
-                final List<com.kalix.ide.flowviz.data.SeriesRef> capturedRefs = new ArrayList<>(refs);
-                final Set<com.kalix.ide.flowviz.data.SeriesRef> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
-                // Captured to detect whether "Last" has changed since this request was issued.
-                // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
-                // their own immutable identity and are not generation-dependent.
-                final long capturedGeneration = lastRunGeneration;
-
-                timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
-                    .thenAccept(timeSeriesData -> {
-                        SwingUtilities.invokeLater(() -> {
-                            final boolean lastIsStale = capturedGeneration != lastRunGeneration;
-                            for (com.kalix.ide.flowviz.data.SeriesRef capturedRef : capturedRefs) {
-                                // Drop LastSeries writes if Last has changed since this
-                                // request was issued — refreshLastSeries() for the new Last
-                                // will fetch the correct data.
-                                if (lastIsStale && capturedRef instanceof com.kalix.ide.flowviz.data.LastSeries) {
-                                    continue;
-                                }
-                                // Check if series is still selected on the target tab
-                                if (capturedNewSelection.contains(capturedRef)) {
-                                    addSeriesToPool(capturedRef, timeSeriesData);
-                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedRef, timeSeriesData);
-                                }
-                            }
-
-                            // Refresh the target tab (data now in pool)
-                            if (targetPanel != null) {
-                                tabManager.updateTab(targetPanel, shouldResetZoom);
-                            }
-                        });
-                    })
-                    .exceptionally(throwable -> {
-                        SwingUtilities.invokeLater(() -> {
-                            for (com.kalix.ide.flowviz.data.SeriesRef capturedRef : capturedRefs) {
-                                tabManager.addErrorSeriesInStatsTabs(capturedRef, throwable.getMessage());
-                            }
-                        });
-                        return null;
-                    });
-            } else {
-                for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
-                    tabManager.addLoadingSeriesInStatsTabs(ref);
-                }
-            }
-        }
-
-        // Fetch dataset series into the pool. The dataset cache is keyed by the
-        // DatasetSeries ref (absolutePath + baseName); we already have that ref.
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : datasetRefs) {
-            if (!(ref instanceof com.kalix.ide.flowviz.data.DatasetSeries datasetRef)) continue;
-
-            TimeSeriesData cachedData = datasetSeriesCache.get(datasetRef);
-            if (cachedData != null) {
-                addSeriesToPool(ref, cachedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
-            } else {
-                logger.warn("Dataset series not found in cache: {}", datasetRef);
-                tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
-            }
-        }
-
-        // Update the target tab's selected series (rebuilds legend, visible series, display)
-        tabManager.setTargetTabSelectedSeries(newSelectedSeries);
-
-        // Only reset zoom when the selection completely changed (no overlap with previous).
-        // Additive selection (Ctrl+click) intentionally preserves both X and Y zoom so the
-        // user can see how the new series looks in their current view window. Auto-Y is not
-        // triggered here — it only applies during pan/zoom interactions and setting changes.
-        if (shouldResetZoom && targetPanel != null) {
-            targetPanel.zoomToFit();
-        }
+        fetchCoordinator.onOutputsTreeSelectionChanged(e);
     }
-
-    /**
-     * Recursively collects all SeriesLeafNode objects from a tree node.
-     * Delegates to OutputsTreeBuilder.
-     */
-    private void collectLeafNodes(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
-        outputsTreeBuilder.collectLeafNodes(node, leaves);
-    }
-
-    /**
-     * Checks whether the event currently being dispatched is an additive selection gesture
-     * (Cmd/Ctrl/Shift held). Uses EventQueue.getCurrentEvent() so that this works correctly
-     * even when called from a TreeSelectionListener (which fires during the UI delegate's
-     * mouse handler, before any separately registered MouseListeners).
-     */
-    private boolean isAdditiveSelectionEvent() {
-        AWTEvent event = EventQueue.getCurrentEvent();
-        if (event instanceof InputEvent inputEvent) {
-            int modifiers = inputEvent.getModifiersEx()
-                    & (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK);
-            return modifiers != 0;
-        }
-        return false;
-    }
-
-    /**
-     * Collects all series keys visible in the current (possibly filtered) timeseries tree.
-     */
-    private Set<com.kalix.ide.flowviz.data.SeriesRef> getVisibleSeriesKeys() {
-        Set<com.kalix.ide.flowviz.data.SeriesRef> refs = new HashSet<>();
-        DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
-        List<OutputsTreeBuilder.SeriesLeafNode> allLeaves = new ArrayList<>();
-        collectAllLeafNodesRecursive(root, allLeaves);
-        for (OutputsTreeBuilder.SeriesLeafNode leaf : allLeaves) {
-            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
-            if (ref != null) {
-                refs.add(ref);
-            }
-        }
-        return refs;
-    }
-
-    /**
-     * Recursively collects all SeriesLeafNode objects from the entire tree (no depth guard).
-     */
-    private void collectAllLeafNodesRecursive(DefaultMutableTreeNode node, List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
-        Object userObject = node.getUserObject();
-        if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-            leaves.add(leaf);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            collectAllLeafNodesRecursive((DefaultMutableTreeNode) node.getChildAt(i), leaves);
-        }
-    }
-
-    /**
-     * Selects the run associated with the given sessionKey.
-     * This will expand the tree and select the run node if found.
-     */
-    private void selectRun(String sessionKey) {
-        SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode runNode = sessionToTreeNode.get(sessionKey);
-            if (runNode != null) {
-                TreePath pathToRun = new TreePath(runNode.getPath());
-
-                // Expand parent nodes to make the run visible
-                timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
-
-                // Select the run
-                isUpdatingSelection = true;
-                timeseriesSourceTree.setSelectionPath(pathToRun);
-                isUpdatingSelection = false;
-
-                // Scroll to make the selection visible
-                timeseriesSourceTree.scrollPathToVisible(pathToRun);
-
-                // Update timeseries tree
-                updateOutputsTree();
-            }
-        });
-    }
-
-
-
 
     /**
      * Adds a series to the shared data pool under the given {@link com.kalix.ide.flowviz.data.SeriesRef}.
      * The data's legacy name field is ignored — identity comes from the ref.
      * Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    private void addSeriesToPool(com.kalix.ide.flowviz.data.SeriesRef ref, TimeSeriesData timeSeriesData) {
+    void addSeriesToPool(com.kalix.ide.flowviz.data.SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
     }
 
@@ -1720,42 +972,6 @@ public class RunManager extends JFrame {
      *
      * <p>Wired as the {@code removeDatasetDelegate} of {@link RunContextMenuManager}.</p>
      */
-    /**
-     * Scrubs a removed run's data everywhere outside the source tree: the shared
-     * {@code plotDataSet} pool, slot assignments, every tab's selections, and both
-     * levels of the fetch cache. The runs-side counterpart of
-     * {@link #removeLoadedDataset} - without it a day of modelling retains every
-     * removed run's series (multi-decade double[]s) until application exit.
-     */
-    private void removeRunData(DefaultMutableTreeNode runNode) {
-        if (runNode == null || !(runNode.getUserObject() instanceof RunInfoImpl runInfo)) {
-            return;
-        }
-
-        long runId = runInfo.getRunId();
-        List<com.kalix.ide.flowviz.data.SeriesRef> refs = new ArrayList<>();
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : plotDataSet.getSeriesRefs()) {
-            if (ref instanceof com.kalix.ide.flowviz.data.RunSeries runSeries
-                    && runSeries.runId() == runId) {
-                refs.add(ref);
-            }
-        }
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
-            plotDataSet.removeSeries(ref);
-            seriesSlotManager.removeSlot(ref);
-        }
-        if (!refs.isEmpty()) {
-            tabManager.removeSeriesFromAllTabs(refs);
-        }
-
-        // Clear by UID, not session key: the session has already left the session
-        // manager, so key-based lookup cannot reach these entries any more.
-        String kalixcliUid = runInfo.getSession().getKalixcliUid();
-        if (kalixcliUid != null) {
-            timeSeriesRequestManager.clearCacheForKalixcliUid(kalixcliUid);
-        }
-    }
-
     public void removeLoadedDataset(DatasetLoaderManager.LoadedDatasetInfo info) {
         String absPath = info.file.getAbsolutePath();
 
@@ -1800,11 +1016,11 @@ public class RunManager extends JFrame {
         Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
         if (tabSeries == null) return;
 
-        isUpdatingSelection = true;
+        fetchCoordinator.setUpdatingSelection(true);
         try {
             restoreTreeSelectionForSeries(tabSeries);
         } finally {
-            isUpdatingSelection = false;
+            fetchCoordinator.setUpdatingSelection(false);
         }
     }
 

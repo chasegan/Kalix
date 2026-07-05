@@ -1,6 +1,5 @@
 package com.kalix.ide.managers.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
