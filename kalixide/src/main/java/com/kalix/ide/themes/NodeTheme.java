@@ -199,7 +199,7 @@ public class NodeTheme {
                   "5ab6d8", "57c6b0", "e2c26a", "91c072", "d59a68",
                   "b28bea", "f072a8", "f3a0c4", "918794", "e2856b"
               },
-              new TextStyle(10, new Color(0xd7cdd3), 15, new Color(0x16131a), 200)),
+              new TextStyle(10, new Color(0xd7cdd3), 15, new Color(0x100c18), 200)),
 
         KALIX_DARK("Kalix Dark",
                    new String[]{

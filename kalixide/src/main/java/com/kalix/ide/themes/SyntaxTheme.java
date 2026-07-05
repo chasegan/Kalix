@@ -102,7 +102,7 @@ public class SyntaxTheme {
             Color.decode("#d7cdd3"), // IDENTIFIER - warm gray
             Color.decode("#6fc7c0"), // OPERATOR - teal counterpoint
             Color.decode("#d8b06a"), // LITERAL_STRING_DOUBLE_QUOTE - amber
-            Color.decode("#f072a8"), // RESERVED_WORD - pink (section headers)
+            Color.decode("#ff5aa3"), // RESERVED_WORD - pink (section headers)
             Color.decode("#94899a"), // COMMENT_EOL - mauve gray
             Color.decode("#3a3342")  // WHITESPACE - near-invisible
         ),
