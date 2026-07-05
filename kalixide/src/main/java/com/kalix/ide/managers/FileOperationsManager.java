@@ -184,8 +184,9 @@ public class FileOperationsManager {
         }
         File currentFile = document.getFile();
         if (currentFile == null) {
-            // No current file, prompt for save as
-            saveAsModel();
+            // No current file, prompt for save as — for THIS document, not the
+            // active one (Save All iterates every untitled document through here).
+            saveAsModel(document);
             return;
         }
 
