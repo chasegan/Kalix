@@ -32,12 +32,15 @@ public class OptimisationSessionManager {
     private final Supplier<String> modelTextSupplier;
 
     // Session tracking
-    private final Map<String, String> sessionToOptName = new HashMap<>();
     /**
      * Per-session OptimisationInfo. Replaces an older `sessionToTreeNode` map that
      * held an orphan tree node never added to the tree model. The displayed tree node
      * lives in {@code OptimisationTreeManager}; this map exists only for callers that
      * need the OptimisationInfo by sessionKey (e.g. {@link #getOptimisationInfo}).
+     *
+     * <p>The display name lives on {@link OptimisationInfo} — the single source of
+     * truth. There is no parallel name map; {@link #renameOptimisation} updates the
+     * info once and every surface reads it from there.</p>
      */
     private final Map<String, OptimisationInfo> sessionToOptInfo = new HashMap<>();
     /**
@@ -181,7 +184,6 @@ public class OptimisationSessionManager {
                     optInfo.setResult(result);
 
                     // Add to tracking maps
-                    sessionToOptName.put(sessionKey, optName);
                     sessionToOptInfo.put(sessionKey, optInfo);
                     optimisationResults.put(sessionKey, result);
 
@@ -269,10 +271,7 @@ public class OptimisationSessionManager {
             // Update status
             optInfo.setHasStartedRunning(true);
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
-                if (optName != null) {
-                    statusUpdater.accept("Starting optimisation: " + optName);
-                }
+                statusUpdater.accept("Starting optimisation: " + optInfo.getName());
             }
 
             logger.info("Started optimisation: {}", sessionKey);
@@ -302,7 +301,7 @@ public class OptimisationSessionManager {
             stdioTaskManager.stopSession(sessionKey);
 
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
+                String optName = getOptimisationName(sessionKey);
                 if (optName != null) {
                     statusUpdater.accept("Stop requested: " + optName);
                 }
@@ -340,13 +339,12 @@ public class OptimisationSessionManager {
         }
 
         // Get name before removing
-        String optName = sessionToOptName.get(sessionKey);
+        String optName = getOptimisationName(sessionKey);
 
         // Remove from tracking maps - all of them. The shared bookkeeping's
         // single-shot remove clears node + status (the tree manager has already
         // detached the node from the displayed tree).
         sessions.remove(sessionKey);
-        sessionToOptName.remove(sessionKey);
         sessionToOptInfo.remove(sessionKey);
         optimisationResults.remove(sessionKey);
 
@@ -358,7 +356,9 @@ public class OptimisationSessionManager {
     }
 
     /**
-     * Updates the name of an optimisation.
+     * Updates the name of an optimisation. Writes the new name onto the
+     * {@link OptimisationInfo} — the single source of truth for the display name —
+     * so every surface (tree renderer, status messages, dialogs) picks it up.
      *
      * @param sessionKey The session key
      * @param newName The new name
@@ -375,16 +375,21 @@ public class OptimisationSessionManager {
         }
 
         // Check for duplicate names
-        boolean isDuplicate = sessionToOptName.values().stream()
-            .anyMatch(name -> name.equals(trimmedName));
+        boolean isDuplicate = sessionToOptInfo.values().stream()
+            .anyMatch(info -> trimmedName.equals(info.getName()));
 
         if (isDuplicate) {
             handleError("An optimisation with this name already exists");
             return false;
         }
 
-        String oldName = sessionToOptName.get(sessionKey);
-        sessionToOptName.put(sessionKey, trimmedName);
+        OptimisationInfo optInfo = sessionToOptInfo.get(sessionKey);
+        if (optInfo == null) {
+            return false;
+        }
+
+        String oldName = optInfo.getName();
+        optInfo.setName(trimmedName);
 
         if (statusUpdater != null) {
             statusUpdater.accept(String.format("Renamed '%s' to '%s'", oldName, trimmedName));
@@ -398,13 +403,15 @@ public class OptimisationSessionManager {
     // need the displayed node should ask OptimisationTreeManager.getNodeForSession.
 
     /**
-     * Gets the optimisation name for a session.
+     * Gets the optimisation name for a session (read from the
+     * {@link OptimisationInfo}, the single source of truth).
      *
      * @param sessionKey The session key
      * @return The optimisation name, or null if not found
      */
     public String getOptimisationName(String sessionKey) {
-        return sessionToOptName.get(sessionKey);
+        OptimisationInfo info = sessionToOptInfo.get(sessionKey);
+        return info != null ? info.getName() : null;
     }
 
     /**
@@ -456,7 +463,7 @@ public class OptimisationSessionManager {
      * @return true if the session exists, false otherwise
      */
     public boolean hasSession(String sessionKey) {
-        return sessionToOptName.containsKey(sessionKey);
+        return sessionToOptInfo.containsKey(sessionKey);
     }
 
     /**
@@ -465,7 +472,9 @@ public class OptimisationSessionManager {
      * @return Map of session keys to optimisation names
      */
     public Map<String, String> getAllSessions() {
-        return new HashMap<>(sessionToOptName);
+        Map<String, String> all = new HashMap<>();
+        sessionToOptInfo.forEach((key, info) -> all.put(key, info.getName()));
+        return all;
     }
 
     /**
@@ -477,11 +486,17 @@ public class OptimisationSessionManager {
         String baseName = "Opt " + optCounter++;
 
         // Check for duplicates and adjust if needed
-        while (sessionToOptName.containsValue(baseName)) {
+        while (isNameTaken(baseName)) {
             baseName = "Opt " + optCounter++;
         }
 
         return baseName;
+    }
+
+    /** Whether any tracked optimisation currently uses the given display name. */
+    private boolean isNameTaken(String name) {
+        return sessionToOptInfo.values().stream()
+            .anyMatch(info -> name.equals(info.getName()));
     }
 
     /**

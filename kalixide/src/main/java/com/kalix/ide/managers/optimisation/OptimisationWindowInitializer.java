@@ -147,19 +147,29 @@ public class OptimisationWindowInitializer {
     }
 
     /**
+     * Window-provided callbacks for manager wiring. A named interface (not ten
+     * positional Consumer/Runnable parameters) so that a transposed argument can
+     * no longer compile — per the July 2026 review, optimisation finding #15.
+     */
+    public interface WindowCallbacks {
+        /** Shows the "select an optimisation" message card. */
+        void showMessagePanel();
+
+        /** Displays the given optimisation in the right-hand panel. */
+        void displayOptimisation(OptimisationInfo optInfo);
+
+        /** Saves the currently displayed config back to its optimisation node. */
+        void saveCurrentConfig();
+    }
+
+    /**
      * Sets up all manager callbacks and interconnections.
      */
     public void setupManagerCallbacks(
             JFrame parentFrame,
             com.kalix.ide.managers.StdioTaskManager stdioTaskManager,
             Consumer<String> statusUpdater,
-            Runnable displayMessagePanel,
-            Consumer<OptimisationInfo> displayOptimisation,
-            Runnable saveCurrentConfig,
-            Consumer<String> updateTreeNode,
-            Consumer<String> updateDetailsIfSelected,
-            Consumer<String> updateConvergencePlot,
-            Consumer<String> updateModelDisplay) {
+            WindowCallbacks callbacks) {
 
         // Store stdioTaskManager for use in action callbacks
         this.stdioTaskManager = stdioTaskManager;
@@ -180,14 +190,14 @@ public class OptimisationWindowInitializer {
 
         sessionManager.setOnSessionCompleted(sessionKey -> {
             SwingUtilities.invokeLater(() -> {
-                updateTreeNode.accept(sessionKey);
+                eventHandlers.updateTreeNodeForSession(sessionKey);
                 // Refresh displays if this is the current optimisation
                 DefaultMutableTreeNode currentNode = getCurrentNode();
                 if (currentNode != null) {
                     Object userObject = currentNode.getUserObject();
                     if (userObject instanceof OptimisationInfo optInfo) {
                         if (optInfo.getSessionKey().equals(sessionKey)) {
-                            displayOptimisation.accept(optInfo);
+                            callbacks.displayOptimisation(optInfo);
                         }
                     }
                 }
@@ -203,17 +213,11 @@ public class OptimisationWindowInitializer {
         // Tree manager action callbacks
         setupTreeManagerActions(parentFrame, statusUpdater);
 
-        // Event handler callbacks
-        eventHandlers.setTreeNodeUpdater(updateTreeNode);
-        eventHandlers.setDetailsUpdater(updateDetailsIfSelected);
-        eventHandlers.setConvergencePlotUpdater(updateConvergencePlot);
-        eventHandlers.setModelDisplayUpdater(updateModelDisplay);
-
         // Tree selection callbacks
-        treeManager.setOnNoSelectionCallback(displayMessagePanel);
-        treeManager.setOnFolderSelectedCallback(displayMessagePanel);
-        treeManager.setSaveCurrentConfigCallback(saveCurrentConfig);
-        treeManager.setOnOptimisationSelectedCallback(displayOptimisation);
+        treeManager.setOnNoSelectionCallback(callbacks::showMessagePanel);
+        treeManager.setOnFolderSelectedCallback(callbacks::showMessagePanel);
+        treeManager.setSaveCurrentConfigCallback(callbacks::saveCurrentConfig);
+        treeManager.setOnOptimisationSelectedCallback(callbacks::displayOptimisation);
     }
 
     private void setupTreeManagerActions(JFrame parentFrame, Consumer<String> statusUpdater) {
@@ -249,9 +253,10 @@ public class OptimisationWindowInitializer {
         treeManager.setRenameAction(optInfo -> {
             String newName = JOptionPane.showInputDialog(parentFrame, "Enter new name:", optInfo.getName());
             if (newName != null && !newName.trim().isEmpty()) {
+                // renameOptimisation writes the new name onto the OptimisationInfo -
+                // the single source of truth for the display name.
                 boolean renamed = sessionManager.renameOptimisation(optInfo.getSessionKey(), newName);
                 if (renamed) {
-                    optInfo.setName(newName.trim());
                     treeManager.refreshNode(optInfo.getSessionKey());
                 }
             }
