@@ -50,18 +50,20 @@ public class NodeTheme {
     public static class ShapeTextStyle {
         private final int fontSize;
         private final boolean bold;
+        private final Font font;
 
         public ShapeTextStyle(int fontSize, boolean bold) {
             this.fontSize = fontSize;
             this.bold = bold;
+            this.font = new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, fontSize);
         }
 
         public int getFontSize() { return fontSize; }
         public boolean isBold() { return bold; }
 
-        public Font createFont() {
-            int style = bold ? Font.BOLD : Font.PLAIN;
-            return new Font(Font.SANS_SERIF, style, fontSize);
+        /** The style's font. Cached — this is called per node per frame. */
+        public Font getFont() {
+            return font;
         }
 
         /**
@@ -84,32 +86,38 @@ public class NodeTheme {
         private final int yOffset;
         private final Color backgroundColor;
         private final int backgroundAlpha;
-        
+        private final Font font;
+        private final Color backgroundColorWithAlpha;
+
         public TextStyle(int fontSize, Color textColor, int yOffset, Color backgroundColor, int backgroundAlpha) {
             this.fontSize = fontSize;
             this.textColor = textColor;
             this.yOffset = yOffset;
             this.backgroundColor = backgroundColor;
             this.backgroundAlpha = backgroundAlpha;
+            this.font = new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
+            this.backgroundColorWithAlpha = new Color(
+                backgroundColor.getRed(),
+                backgroundColor.getGreen(),
+                backgroundColor.getBlue(),
+                backgroundAlpha
+            );
         }
-        
+
         public int getFontSize() { return fontSize; }
         public Color getTextColor() { return textColor; }
         public int getYOffset() { return yOffset; }
         public Color getBackgroundColor() { return backgroundColor; }
         public int getBackgroundAlpha() { return backgroundAlpha; }
-        
-        public Font createFont() {
-            return new Font(Font.SANS_SERIF, Font.PLAIN, fontSize);
+
+        /** The style's font. Cached — this is called per node per frame. */
+        public Font getFont() {
+            return font;
         }
-        
-        public Color createBackgroundColorWithAlpha() {
-            return new Color(
-                backgroundColor.getRed(),
-                backgroundColor.getGreen(), 
-                backgroundColor.getBlue(),
-                backgroundAlpha
-            );
+
+        /** The background color with alpha applied. Cached — called per node per frame. */
+        public Color getBackgroundColorWithAlpha() {
+            return backgroundColorWithAlpha;
         }
     }
     
@@ -160,33 +168,45 @@ public class NodeTheme {
                   },
                   new TextStyle(11, new Color(34, 139, 34), 16, new Color(248, 248, 255), 200)),
 
+        // The dark palettes below are gleaned from the designer mocks in
+        // kalixide/docs/design_guides/ (the --node-* and --map-node-label-* roles).
+        // Array order is significant for these themes: storage, inflow, gauge, rr,
+        // routing, splitter, regulated_user, unregulated_user, blackhole,
+        // order_control — createNodeTypeColorMap() maps types by index.
         DRACULA("Dracula",
                 new String[]{
-                    "ff79c6", "bd93f9", "f1fa8c", "8be9fd", "ffb86c",
-                    "50fa7b", "ff5555", "6272a4", "44475a", "282a36"
+                    "8be9fd", "50fa7b", "f1fa8c", "ffb86c", "bd93f9",
+                    "ff79c6", "ff5555", "ffa07a", "6272a4", "5fd7c0"
                 },
-                new TextStyle(10, new Color(248, 248, 242), 15, new Color(68, 71, 90), 200)),
+                new TextStyle(10, new Color(0xd5d6e0), 15, new Color(0x21222c), 200)),
 
         ONE_DARK("One Dark",
                  new String[]{
-                     "56b6c2", "c678dd", "98c379", "e06c75", "d19a66",
-                     "61afef", "e5c07b", "abb2bf", "5c6370", "3e4451"
+                     "61afef", "56b6c2", "e5c07b", "98c379", "d19a66",
+                     "c678dd", "e06c75", "ef9aa0", "7f8896", "4bb8a8"
                  },
-                 new TextStyle(10, new Color(171, 178, 191), 15, new Color(62, 68, 81), 200)),
+                 new TextStyle(10, new Color(0xc8cdd6), 15, new Color(0x16191e), 200)),
 
         OBSIDIAN("Obsidian",
                  new String[]{
-                     "8b5cf6", "a855f7", "c084fc", "d8b4fe", "e9d5ff",
-                     "7c3aed", "6d28d9", "5b21b6", "4c1d95", "3730a3"
+                     "5eb8e8", "4fc9c0", "e0c56b", "86c46a", "d79a5e",
+                     "a78bfa", "e56d84", "ec9aa2", "8a8496", "c58bd8"
                  },
-                 new TextStyle(10, new Color(230, 230, 230), 15, new Color(55, 65, 81), 200)),
+                 new TextStyle(10, new Color(0xcbc7d6), 15, new Color(0x100e15), 200)),
 
         SANNE("Sanne",
               new String[]{
-                  "ff1493", "ff69b4", "ff6347", "ff4500", "dc143c",
-                  "c71585", "ba55d3", "9370db", "8a2be2", "7b68ee"
+                  "5ab6d8", "57c6b0", "e2c26a", "91c072", "d59a68",
+                  "b28bea", "f072a8", "f3a0c4", "918794", "e2856b"
               },
-              new TextStyle(10, Color.WHITE, 15, new Color(42, 42, 46), 200));
+              new TextStyle(10, new Color(0xd7cdd3), 15, new Color(0x100c18), 200)),
+
+        KALIX_DARK("Kalix Dark",
+                   new String[]{
+                       "3fa9d6", "45c6bf", "e0c168", "82c06a", "cf9a5e",
+                       "7f9ce0", "e56d84", "ef9a86", "8a919b", "b98be0"
+                   },
+                   new TextStyle(10, new Color(0xc4ccd4), 15, new Color(0x0d1217), 200));
         
         private final String displayName;
         private final String[] colors;
@@ -218,12 +238,6 @@ public class NodeTheme {
                     map.put("confluence", "8B4513");     // Saddle Brown - same as splitter
                     map.put("gauge", "228B22");          // Forest Green (index 0)
                     map.put("order_control", "CCCC00"); // Yellow-lime (index 7)
-                    // Unused colors from botanical palette
-                    map.put("unused_1", "556B2F");       // Dark Olive Green (index 4)
-                    map.put("unused_3", "1E90FF");       // Dodger Blue (index 8)
-                    map.put("unused_4", "CD853F");       // Peru (index 11)
-                    map.put("unused_5", "6495ED");       // Cornflower Blue (index 12)
-                    map.put("unused_6", "D2691E");       // Chocolate (index 13)
                     break;
                 case NEMO: // Nemo
                     // Map to similar concept colors in Nemo palette
@@ -272,6 +286,29 @@ public class NodeTheme {
                     map.put("confluence", "F8961E");     // Orange - same as splitter
                     map.put("gauge", "F94144");          // Red (index 0)
                     map.put("order_control", "43AA8B"); // Teal (index 6)
+                    break;
+                case DRACULA:
+                case ONE_DARK:
+                case OBSIDIAN:
+                case SANNE:
+                case KALIX_DARK:
+                    // Designer-mock palettes (docs/design_guides): the colours array
+                    // is role-ordered, so types map by index. Functional siblings
+                    // share a colour: sacramento/gr4j (--node-rr), routing/loss
+                    // (--node-routing), splitter/confluence (--node-splitter).
+                    map.put("storage", colors[0]);
+                    map.put("inflow", colors[1]);
+                    map.put("gauge", colors[2]);
+                    map.put("sacramento", colors[3]);
+                    map.put("gr4j", colors[3]);
+                    map.put("routing", colors[4]);
+                    map.put("loss", colors[4]);
+                    map.put("splitter", colors[5]);
+                    map.put("confluence", colors[5]);
+                    map.put("regulated_user", colors[6]);
+                    map.put("unregulated_user", colors[7]);
+                    map.put("blackhole", colors[8]);
+                    map.put("order_control", colors[9]);
                     break;
                 default:
                     // For other themes, use cycling assignment
@@ -340,23 +377,22 @@ public class NodeTheme {
     
     /**
      * Gets the color for a specific node type, using theme-specific mappings first,
-     * then falls back to sequential assignment from the palette.
+     * then falls back to sequential assignment from the palette. Decoded colors are
+     * cached per node type (this is called per node per frame); {@link #setTheme}
+     * clears the cache.
      * @param nodeType The type of the node
      * @return The color for this node type
      */
     public Color getColorForNodeType(String nodeType) {
-        // Check theme-specific color mapping first
-        Map<String, String> themeColorMap = currentTheme.getNodeTypeColorMap();
-        String themeSpecificColor = themeColorMap.get(nodeType);
-        if (themeSpecificColor != null) {
-            return Color.decode("#" + themeSpecificColor);
-        }
-
-        // Fall back to sequential assignment from palette
         return nodeTypeColors.computeIfAbsent(nodeType, type -> {
-            String[] palette = currentTheme.getColors();
-            String hexColor = palette[nextColorIndex % palette.length];
-            nextColorIndex++;
+            // Check theme-specific color mapping first
+            String hexColor = currentTheme.getNodeTypeColorMap().get(type);
+            if (hexColor == null) {
+                // Fall back to sequential assignment from palette
+                String[] palette = currentTheme.getColors();
+                hexColor = palette[nextColorIndex % palette.length];
+                nextColorIndex++;
+            }
             return Color.decode("#" + hexColor);
         });
     }

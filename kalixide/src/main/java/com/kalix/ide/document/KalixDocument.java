@@ -49,6 +49,23 @@ public class KalixDocument {
     /** Node count at the last model change, used to auto-zoom on the 0 -&gt; &gt;0 transition. */
     private int previousNodeCount = 0;
 
+    // --- Parse coalescing and memoization (all EDT-confined) ---
+
+    /** Whether a model parse is already queued on the EDT; further edits coalesce into it. */
+    private boolean parseQueued = false;
+
+    /** Whether the queued parse should zoom-to-fit (ORed across coalesced requests). */
+    private boolean queuedAutoZoom = false;
+
+    /** Bumped on every document edit; keys the memoized linter parse. */
+    private long modificationCount = 0;
+
+    /** {@link #modificationCount} at which {@link #cachedParsedModel} was computed, or -1. */
+    private long parsedModificationCount = -1;
+
+    /** Memoized linter parse of the editor text; {@code null} also caches a parse failure. */
+    private INIModelParser.ParsedModel cachedParsedModel;
+
     /**
      * Creates a document, constructing its own editor, map and model, and performs
      * all per-document wiring. Application-level features that depend on shared
@@ -58,8 +75,11 @@ public class KalixDocument {
      */
     public KalixDocument() {
         this.editor = new EnhancedTextEditor();
-        this.mapPanel = new MapPanel();
         this.model = new HydrologicalModel();
+        // The map panel is bound to its model and editor at construction; all
+        // map-side collaborators (text sync, clipboard, context menu, search)
+        // are wired inside, symmetrically and exactly once.
+        this.mapPanel = new MapPanel(model, editor);
 
         wire();
     }
@@ -68,30 +88,26 @@ public class KalixDocument {
      * Establishes the per-document connections between editor, model and map.
      */
     private void wire() {
-        // Connect map panel to this document's data model.
-        mapPanel.setModel(model);
-
-        // Set up bidirectional text synchronisation (map drags -> text coordinates).
-        mapPanel.setupTextSynchronization(editor);
-
         // Wire map panel to editor for "Show on Map" context menu action.
         editor.setMapPanel(mapPanel);
 
-        // Re-parse the model whenever the text changes.
+        // Re-parse the model whenever the text changes (coalesced; see
+        // parseModelFromText). The modification count keys the memoized
+        // linter parse handed out by getModelSupplier().
         editor.addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                parseModelFromText(false);
+                onDocumentEdit();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                parseModelFromText(false);
+                onDocumentEdit();
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                parseModelFromText(false);
+                onDocumentEdit();
             }
         });
 
@@ -99,18 +115,38 @@ public class KalixDocument {
         model.addChangeListener(this::onModelChanged);
     }
 
+    /** Reacts to a single document edit: invalidates the memoized parse, queues a re-parse. */
+    private void onDocumentEdit() {
+        modificationCount++;
+        parseModelFromText(false);
+    }
+
     /**
      * Parses the current editor text into the model using incremental parsing.
+     *
+     * <p>Coalesced: document events arrive per keystroke (and in bursts for
+     * multi-event operations like replace), but only one parse is ever queued on
+     * the EDT — further requests while one is pending are no-ops, with the
+     * zoom-to-fit flag ORed into the pending parse. EDT-confined, like every
+     * caller (document listeners and file-load paths).</p>
      *
      * @param autoZoomToFit if true, zoom the map to fit after parsing (used on file loads)
      */
     public void parseModelFromText(boolean autoZoomToFit) {
+        queuedAutoZoom |= autoZoomToFit;
+        if (parseQueued) {
+            return;
+        }
+        parseQueued = true;
         SwingUtilities.invokeLater(() -> {
+            boolean zoomToFit = queuedAutoZoom;
+            parseQueued = false;
+            queuedAutoZoom = false;
             try {
                 String text = editor.getText();
                 if (text != null) {
                     model.parseFromIniTextIncremental(text);
-                    if (autoZoomToFit) {
+                    if (zoomToFit) {
                         mapPanel.zoomToFit();
                     }
                 }
@@ -139,14 +175,23 @@ public class KalixDocument {
      * Returns a supplier that parses the current editor text into a linter
      * {@link INIModelParser.ParsedModel}, for context commands and auto-complete.
      * Returns {@code null} on parse failure.
+     *
+     * <p>Memoized on the document's modification count: several consumers (context
+     * menu, auto-complete, tooltips) call their supplier in the same EDT breath —
+     * e.g. a single right-click used to trigger three identical full parses. The
+     * parse now runs once per document revision. EDT-confined.</p>
      */
     public Supplier<INIModelParser.ParsedModel> getModelSupplier() {
         return () -> {
-            try {
-                return INIModelParser.parse(editor.getText());
-            } catch (Exception e) {
-                return null;
+            if (parsedModificationCount != modificationCount) {
+                try {
+                    cachedParsedModel = INIModelParser.parse(editor.getText());
+                } catch (Exception e) {
+                    cachedParsedModel = null;
+                }
+                parsedModificationCount = modificationCount;
             }
+            return cachedParsedModel;
         };
     }
 
@@ -235,5 +280,18 @@ public class KalixDocument {
         } catch (Exception e) {
             // Ignore: best-effort caret restore.
         }
+    }
+
+    // --- Lifecycle ---
+
+    /**
+     * Releases everything this document holds beyond its own object graph — most
+     * importantly the editor's global listeners and background executors (linter,
+     * auto-complete, input-data registry) via {@link EnhancedTextEditor#dispose()}.
+     * Called by {@code DocumentManager.closeDocument} for every close path; without
+     * it every closed tab leaked its entire editor graph. Idempotent.
+     */
+    public void dispose() {
+        editor.dispose();
     }
 }

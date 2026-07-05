@@ -40,7 +40,9 @@ public class DocumentManager {
     /**
      * Removes a document from the set, notifies closed-listeners, and — if it was the
      * active document — moves the active pointer to a neighbour (or {@code null} if none
-     * remain), notifying active-change listeners.
+     * remain), notifying active-change listeners. Finally disposes the document,
+     * releasing its editor graph (global listeners, linter/auto-complete executors);
+     * this is the single point every close path funnels through, so no close can leak.
      */
     public void closeDocument(KalixDocument document) {
         int index = documents.indexOf(document);
@@ -57,6 +59,9 @@ public class DocumentManager {
             activeDocument = next;
             notifyActiveDocumentChanged();
         }
+
+        // Dispose last, after all listeners have been told about the close.
+        document.dispose();
     }
 
     /**

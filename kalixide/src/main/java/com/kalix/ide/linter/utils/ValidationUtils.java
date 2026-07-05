@@ -17,24 +17,19 @@ public class ValidationUtils {
     // Patterns - single source of truth
     private static final Pattern OUTPUT_REFERENCE_PATTERN = Pattern.compile("^node\\.[\\w_]+\\.(dsflow|usflow|storage)$");
     private static final Pattern INI_VERSION_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
+    // node.<name>.<property> - used to pick apart output/node references
+    private static final Pattern NODE_PROPERTY_REFERENCE_PATTERN = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
+    // Downstream link parameters: ds_1, ds_2, ... - deliberately NOT ds_1_outlet,
+    // ds_1_order etc., whose values are not node names. Shared so every consumer
+    // (reference validation, ordering validation, parsing) agrees on the rule.
+    public static final Pattern DSNODE_PARAM_PATTERN = Pattern.compile("^ds_\\d+$");
 
     /**
-     * Validate output references using the standard pattern.
-     * @param outputRefs List of output references to validate
-     * @param model Parsed model for line number lookup
-     * @param result ValidationResult to add issues to
+     * True if the property key is a downstream link parameter (ds_1, ds_2, ...)
+     * whose value names a downstream node.
      */
-    public static void validateOutputReferences(List<String> outputRefs, INIModelParser.ParsedModel model, ValidationResult result) {
-        for (String outputRef : outputRefs) {
-            if (!OUTPUT_REFERENCE_PATTERN.matcher(outputRef).matches()) {
-                // Get the actual line number from the model
-                Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
-                int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
-                result.addIssue(reportLine,
-                              "Invalid output reference format: " + outputRef,
-                              ValidationRule.Severity.ERROR, "invalid_output_reference");
-            }
-        }
+    public static boolean isDsNodeParam(String propertyKey) {
+        return DSNODE_PARAM_PATTERN.matcher(propertyKey).matches();
     }
 
     /**
@@ -85,11 +80,8 @@ public class ValidationUtils {
      */
     private static void validateNodeSpecificOutputs(List<String> outputRefs, INIModelParser.ParsedModel model,
                                                    LinterSchema schema, ValidationResult result, ValidationRule rule) {
-        // Basic pattern to extract node name and output property
-        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
-
         for (String outputRef : outputRefs) {
-            java.util.regex.Matcher matcher = basicPattern.matcher(outputRef);
+            java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(outputRef);
             if (!matcher.matches()) {
                 Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
                 int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
@@ -180,20 +172,6 @@ public class ValidationUtils {
     }
 
     /**
-     * Get the standard output reference pattern.
-     */
-    public static Pattern getOutputReferencePattern() {
-        return OUTPUT_REFERENCE_PATTERN;
-    }
-
-    /**
-     * Get the standard INI version pattern.
-     */
-    public static Pattern getIniVersionPattern() {
-        return INI_VERSION_PATTERN;
-    }
-
-    /**
      * Validates a single node reference (e.g., "node.node13_inflow.ds_1").
      * Returns error message if invalid, null if valid.
      *
@@ -203,9 +181,7 @@ public class ValidationUtils {
      * @return Error message if invalid, null if valid
      */
     public static String validateNodeReference(String nodeRef, INIModelParser.ParsedModel model, LinterSchema schema) {
-        // Basic pattern to extract node name and output property
-        Pattern basicPattern = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
-        java.util.regex.Matcher matcher = basicPattern.matcher(nodeRef);
+        java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(nodeRef);
 
         if (!matcher.matches()) {
             return "Invalid node reference format: " + nodeRef + " (should be node.nodename.property)";

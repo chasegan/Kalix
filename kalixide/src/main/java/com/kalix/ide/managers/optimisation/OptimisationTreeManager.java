@@ -1,20 +1,15 @@
 package com.kalix.ide.managers.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.models.optimisation.OptimisationResult;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.tree.*;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.event.TreeSelectionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -29,7 +24,14 @@ public class OptimisationTreeManager {
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode rootNode;
     private final DefaultMutableTreeNode currentOptimisationsNode;
-    private final Map<String, DefaultMutableTreeNode> sessionToNodeMap = new HashMap<>();
+    /**
+     * Shared session-tree bookkeeping (owned by the window, shared with
+     * {@link OptimisationSessionManager}). This manager registers/reads the
+     * displayed tree node per session; the session manager's
+     * {@code removeOptimisation} performs the single-shot {@code remove} that
+     * clears every map for the key.
+     */
+    private final SessionTreeBookkeeping<OptimisationStatus> sessions;
 
     // Context menu actions
     private Consumer<OptimisationInfo> showModelAction;
@@ -49,8 +51,11 @@ public class OptimisationTreeManager {
 
     /**
      * Creates a new OptimisationTreeManager.
+     *
+     * @param sessions the session-tree bookkeeping shared with the session manager
      */
-    public OptimisationTreeManager() {
+    public OptimisationTreeManager(SessionTreeBookkeeping<OptimisationStatus> sessions) {
+        this.sessions = sessions;
         // Build tree structure
         this.rootNode = new DefaultMutableTreeNode("Optimisations");
         this.currentOptimisationsNode = new DefaultMutableTreeNode("Optimisation runs");
@@ -81,15 +86,6 @@ public class OptimisationTreeManager {
     }
 
     /**
-     * Adds a tree selection listener.
-     *
-     * @param listener The selection listener to add
-     */
-    public void addTreeSelectionListener(TreeSelectionListener listener) {
-        tree.addTreeSelectionListener(listener);
-    }
-
-    /**
      * Adds a new optimisation to the tree.
      *
      * @param sessionKey The session key
@@ -98,7 +94,7 @@ public class OptimisationTreeManager {
     public void addOptimisation(String sessionKey, OptimisationInfo info) {
         DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(info);
         currentOptimisationsNode.add(newNode);
-        sessionToNodeMap.put(sessionKey, newNode);
+        sessions.putNode(sessionKey, newNode);
 
         // Update tree model
         treeModel.nodeStructureChanged(currentOptimisationsNode);
@@ -113,70 +109,20 @@ public class OptimisationTreeManager {
     }
 
     /**
-     * Removes an optimisation from the tree.
+     * Detaches an optimisation's node from the displayed tree. Must run before
+     * {@link OptimisationSessionManager#removeOptimisation}, whose bookkeeping
+     * {@code remove} clears the sessionKey → node entry this method reads.
      *
      * @param sessionKey The session key
      */
     public void removeOptimisation(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
+        DefaultMutableTreeNode node = sessions.node(sessionKey);
         if (node != null) {
             DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
             parent.remove(node);
-            sessionToNodeMap.remove(sessionKey);
             treeModel.nodeStructureChanged(parent);
 
             logger.debug("Removed optimisation with session {}", sessionKey);
-        }
-    }
-
-    /**
-     * Updates the status of an optimisation in the tree.
-     *
-     * @param sessionKey The session key
-     * @param status The new status
-     */
-    public void updateOptimisationStatus(String sessionKey, OptimisationStatus status) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
-        if (node != null) {
-            Object userObject = node.getUserObject();
-            if (userObject instanceof OptimisationInfo) {
-                // Status is determined dynamically by OptimisationInfo.getStatus()
-                // Just trigger a repaint
-                treeModel.nodeChanged(node);
-                tree.repaint();
-            }
-        }
-    }
-
-    /**
-     * Updates the result for an optimisation.
-     *
-     * @param sessionKey The session key
-     * @param result The optimisation result
-     */
-    public void updateOptimisationResult(String sessionKey, OptimisationResult result) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
-        if (node != null) {
-            Object userObject = node.getUserObject();
-            if (userObject instanceof OptimisationInfo info) {
-                info.setResult(result);
-                treeModel.nodeChanged(node);
-                tree.repaint();
-            }
-        }
-    }
-
-    /**
-     * Selects an optimisation in the tree.
-     *
-     * @param sessionKey The session key
-     */
-    public void selectOptimisation(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
-        if (node != null) {
-            TreePath path = new TreePath(node.getPath());
-            tree.setSelectionPath(path);
-            tree.scrollPathToVisible(path);
         }
     }
 
@@ -204,7 +150,7 @@ public class OptimisationTreeManager {
      * @return The tree node, or null if not found
      */
     public DefaultMutableTreeNode getNodeForSession(String sessionKey) {
-        return sessionToNodeMap.get(sessionKey);
+        return sessions.node(sessionKey);
     }
 
     /**
@@ -213,7 +159,7 @@ public class OptimisationTreeManager {
      * @param sessionKey The session key
      */
     public void refreshNode(String sessionKey) {
-        DefaultMutableTreeNode node = sessionToNodeMap.get(sessionKey);
+        DefaultMutableTreeNode node = sessions.node(sessionKey);
         if (node != null) {
             treeModel.nodeChanged(node);
             tree.repaint();
@@ -221,16 +167,10 @@ public class OptimisationTreeManager {
     }
 
     /**
-     * Refreshes the entire tree.
+     * Sets up the context menu for the tree. Called once from the constructor;
+     * a second call would attach a duplicate mouse listener.
      */
-    public void refreshTree() {
-        treeModel.nodeStructureChanged(rootNode);
-    }
-
-    /**
-     * Sets up the context menu for the tree.
-     */
-    public void setupContextMenu() {
+    private void setupContextMenu() {
         // Skeleton order (manifestos/context-menu-style.md §1): view actions first, then export,
         // the run control, navigation, and finally modify + the destructive "Remove".
         JPopupMenu contextMenu = new JPopupMenu();

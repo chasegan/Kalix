@@ -847,10 +847,13 @@ impl Command for RunOptimisationCommand {
         // Run optimisation (callback already configured in optimizer)
         let result = optimiser.optimize(&mut problem, None);
 
-        // Check if interrupted
-        if session.check_interrupt() {
-            return Err(CommandError::Interrupted);
-        }
+        // A stop request (stp) makes the optimiser break between generations and
+        // return the best solution found so far. That best-so-far is real, valuable
+        // work - deliver it as a normal result (flagged "interrupted": true) instead
+        // of discarding it behind CommandError::Interrupted. The frontend therefore
+        // receives res + rdy(0) for a stopped optimisation, with the full best
+        // parameters and optimised model.
+        let interrupted = session.check_interrupt();
 
         // Get physical parameter values
         let params_physical = problem.config.evaluate(&result.best_params);
@@ -870,6 +873,7 @@ impl Command for RunOptimisationCommand {
             "params_physical": params_physical.into_iter().collect::<std::collections::HashMap<_, _>>(),
             "optimised_model_ini": optimised_model_ini,
             "success": result.success,
+            "interrupted": interrupted,
             "message": result.message
         });
 

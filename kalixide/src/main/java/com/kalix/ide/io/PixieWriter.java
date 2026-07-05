@@ -63,7 +63,7 @@ public class PixieWriter {
                 int codec = use64BitPrecision ? CODEC_GORILLA_DOUBLE : CODEC_GORILLA_FLOAT;
 
                 // Detect timestep
-                long timestepSeconds = detectTimestep(series);
+                long timestepSeconds = detectTimestepSeconds(series);
                 GorillaCompressor compressor = new GorillaCompressor(timestepSeconds);
 
                 // Compress data based on codec choice
@@ -86,13 +86,14 @@ public class PixieWriter {
                 // Update current offset
                 currentOffset += 2 + 4 + compressed.length;
 
-                // Store metadata
+                // Store metadata (epoch seconds, matching the binary stream and the
+                // reader's Instant.ofEpochSecond)
                 SeriesMetadata metadata = new SeriesMetadata();
                 metadata.index = i + 1; // Base-1 indexing
                 metadata.offset = offset;
-                metadata.startTime = series.getFirstTimestamp();
-                metadata.endTime = series.getLastTimestamp();
-                metadata.timestep = timestepSeconds; // Already in seconds
+                metadata.startTimeSeconds = series.getFirstTimestamp() / 1000L;
+                metadata.endTimeSeconds = series.getLastTimestamp() / 1000L;
+                metadata.timestepSeconds = timestepSeconds;
                 metadata.length = series.getPointCount();
                 metadata.seriesName = named.name();
                 metadataList.add(metadata);
@@ -103,13 +104,18 @@ public class PixieWriter {
         writeMetadataFile(metadataPath, metadataList);
     }
 
+    // The Pixie/Gorilla convention is epoch SECONDS (established by the Rust engine,
+    // pixie_io.rs), while TimeSeriesData holds epoch MILLISECONDS. Everything in this
+    // writer past the conversion methods below is in seconds; the /1000 here is the
+    // single ms->s boundary.
+
     private List<GorillaCompressor.TimeValueDouble> convertToGorillaDouble(TimeSeriesData series) {
         List<GorillaCompressor.TimeValueDouble> result = new ArrayList<>();
-        long[] timestamps = series.getTimestamps();
+        long[] timestampsMs = series.getTimestamps();
         double[] values = series.getValues();
 
         for (int i = 0; i < series.getPointCount(); i++) {
-            result.add(new GorillaCompressor.TimeValueDouble(timestamps[i], values[i]));
+            result.add(new GorillaCompressor.TimeValueDouble(timestampsMs[i] / 1000L, values[i]));
         }
 
         return result;
@@ -117,19 +123,20 @@ public class PixieWriter {
 
     private List<GorillaCompressor.TimeValueFloat> convertToGorillaFloat(TimeSeriesData series) {
         List<GorillaCompressor.TimeValueFloat> result = new ArrayList<>();
-        long[] timestamps = series.getTimestamps();
+        long[] timestampsMs = series.getTimestamps();
         double[] values = series.getValues();
 
         for (int i = 0; i < series.getPointCount(); i++) {
-            result.add(new GorillaCompressor.TimeValueFloat(timestamps[i], (float) values[i]));
+            result.add(new GorillaCompressor.TimeValueFloat(timestampsMs[i] / 1000L, (float) values[i]));
         }
 
         return result;
     }
 
-    private long detectTimestep(TimeSeriesData series) {
+    /** The series' timestep in epoch seconds (never zero — clamped for sub-second data). */
+    private long detectTimestepSeconds(TimeSeriesData series) {
         if (series.hasRegularInterval()) {
-            return series.getIntervalMillis() / 1000;
+            return Math.max(1, series.getIntervalMillis() / 1000);
         }
 
         // For irregular intervals, calculate average interval
@@ -137,8 +144,8 @@ public class PixieWriter {
             return 1; // Default 1 second
         }
 
-        long totalInterval = series.getLastTimestamp() - series.getFirstTimestamp();
-        return totalInterval / (series.getPointCount() - 1);
+        long totalIntervalMs = series.getLastTimestamp() - series.getFirstTimestamp();
+        return Math.max(1, totalIntervalMs / (series.getPointCount() - 1) / 1000);
     }
 
     private void writeMetadataFile(String metadataPath, List<SeriesMetadata> metadataList) throws IOException {
@@ -153,21 +160,22 @@ public class PixieWriter {
 
             // Write data rows
             for (SeriesMetadata meta : metadataList) {
-                String startTime = formatTimestamp(meta.startTime, meta.timestep);
-                String endTime = formatTimestamp(meta.endTime, meta.timestep);
+                String startTime = formatTimestamp(meta.startTimeSeconds, meta.timestepSeconds);
+                String endTime = formatTimestamp(meta.endTimeSeconds, meta.timestepSeconds);
 
                 pw.printf("%-" + widths.index + "s,%-" + widths.offset + "s,%-" + widths.startTime + "s,%-" + widths.endTime + "s,%-" + widths.timestep + "s,%-" + widths.length + "s,%s%n",
                     meta.index,
                     meta.offset,
                     startTime,
                     endTime,
-                    meta.timestep,
+                    meta.timestepSeconds,
                     meta.length,
                     meta.seriesName);
             }
         }
     }
 
+    /** Formats an epoch-seconds timestamp (TimeFormatUtil takes milliseconds). */
     private String formatTimestamp(long timestampSeconds, long stepSeconds) {
         return TimeFormatUtil.formatForStepSize(timestampSeconds * 1000L, stepSeconds);
     }
@@ -178,9 +186,9 @@ public class PixieWriter {
         for (SeriesMetadata meta : metadataList) {
             widths.index = Math.max(widths.index, String.valueOf(meta.index).length());
             widths.offset = Math.max(widths.offset, String.valueOf(meta.offset).length());
-            widths.startTime = Math.max(widths.startTime, formatTimestamp(meta.startTime, meta.timestep).length());
-            widths.endTime = Math.max(widths.endTime, formatTimestamp(meta.endTime, meta.timestep).length());
-            widths.timestep = Math.max(widths.timestep, String.valueOf(meta.timestep).length());
+            widths.startTime = Math.max(widths.startTime, formatTimestamp(meta.startTimeSeconds, meta.timestepSeconds).length());
+            widths.endTime = Math.max(widths.endTime, formatTimestamp(meta.endTimeSeconds, meta.timestepSeconds).length());
+            widths.timestep = Math.max(widths.timestep, String.valueOf(meta.timestepSeconds).length());
             widths.length = Math.max(widths.length, String.valueOf(meta.length).length());
         }
 
@@ -210,9 +218,9 @@ public class PixieWriter {
     private static class SeriesMetadata {
         int index;
         long offset;
-        long startTime;
-        long endTime;
-        long timestep;
+        long startTimeSeconds;
+        long endTimeSeconds;
+        long timestepSeconds;
         int length;
         String seriesName;
     }

@@ -1,6 +1,7 @@
 package com.kalix.ide.editor;
 
-import com.kalix.ide.utils.ErrorHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
@@ -11,7 +12,9 @@ import java.awt.*;
  * Extracted from EnhancedTextEditor to improve maintainability.
  */
 public class TextNavigationManager {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(TextNavigationManager.class);
+
     private final JTextComponent textComponent;
     private final Component parentComponent;
     
@@ -101,7 +104,7 @@ public class TextNavigationManager {
             
         } catch (Exception e) {
             // Log the error and provide fallback behavior
-            ErrorHandler.logWarning("Failed to navigate to line " + lineNumber + ", using fallback position", "text navigation");
+            logger.warn("Failed to navigate to line {}, using fallback position", lineNumber, e);
             textComponent.setCaretPosition(0);
         }
     }
@@ -143,7 +146,7 @@ public class TextNavigationManager {
             }
             return lines;
         } catch (Exception e) {
-            ErrorHandler.logWarning("Failed to get current line number", "text navigation");
+            logger.warn("Failed to get current line number", e);
             return 1;
         }
     }

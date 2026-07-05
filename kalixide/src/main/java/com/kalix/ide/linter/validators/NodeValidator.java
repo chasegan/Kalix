@@ -152,11 +152,19 @@ public class NodeValidator implements ValidationStrategy {
 
     // Helper validation methods extracted from ModelLinter
     private void validateCoordinates(INIModelParser.Property prop, LinterSchema schema, ValidationResult result) {
+        // Honour the schema's coordinate_format rule: skip when disabled, report
+        // with its configured severity (default ERROR if a custom schema omits it).
+        ValidationRule rule = schema.getValidationRule("coordinate_format");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+
         DataType coordType = schema.getDataType("coordinates");
         if (coordType != null && !coordType.matches(prop.getValue())) {
             result.addIssue(prop.getLineNumber(),
                           "Invalid coordinate format. Expected: 'X, Y' (two comma-separated numbers)",
-                          ValidationRule.Severity.ERROR, "invalid_coordinates");
+                          severity, "coordinate_format");
         }
     }
 

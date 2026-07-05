@@ -34,7 +34,6 @@ import java.awt.event.MouseAdapter;
 import java.util.List;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,7 +114,19 @@ public class PlotPanel extends JPanel {
     // displayDataSet is cached and only rebuilt when transform settings change.
     // Key format: "aggregationPeriod_aggregationMethod_plotType_referenceSeries"
     // Set to null to force rebuild (done by refreshData())
-    private String lastTransformKey = null;
+    private TransformKey lastTransformKey = null;
+
+    /**
+     * True once the user has zoomed/panned this plot. Live-updating owners (the
+     * optimisation convergence plot) use this to stop re-fitting the viewport on
+     * every data update the moment the user chooses their own view.
+     */
+    private boolean userViewportTouched = false;
+
+    /** Value-equality cache key for the transform pipeline (see rebuildDisplayDataSet). */
+    private record TransformKey(AggregationPeriod period, AggregationMethod method,
+                                PlotType plotType, Object referenceKey, MaskMode maskMode,
+                                List<SeriesRef> visibleSeries) {}
 
     // Managers
     private final CoordinateDisplayManager coordinateDisplayManager;
@@ -139,8 +150,9 @@ public class PlotPanel extends JPanel {
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
     public PlotPanel() {
-        setBackground(Color.WHITE);
-        
+        // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
+        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
+
         // Initialize data structures
         visibleSeries = new java.util.ArrayList<>();
         renderer = new TimeSeriesRenderer(visibleSeries);
@@ -168,6 +180,7 @@ public class PlotPanel extends JPanel {
                 currentViewport = viewport;
                 // Coalesce rapid viewport changes (zoom/pan) into one history entry
                 if (!restoringState) {
+                    userViewportTouched = true;
                     viewportCoalesceTimer.restart();
                 }
             },
@@ -182,6 +195,14 @@ public class PlotPanel extends JPanel {
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
 
         setupMouseListeners();
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        // Re-resolve the theme's plot background after a LaF/theme switch (ThemeManager
+        // runs SwingUtilities.updateComponentTreeUI over open FlowViz windows).
+        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
     }
 
     @Override
@@ -203,6 +224,7 @@ public class PlotPanel extends JPanel {
             registeredSlotManager = null;
         }
         viewportCoalesceTimer.stop();
+        coordinateDisplayManager.dispose();
         onHistoryChanged = null;
         super.removeNotify();
     }
@@ -258,6 +280,16 @@ public class PlotPanel extends JPanel {
         // Check if reference series changed for DIFFERENCE plot types
         checkReferenceSeriesChange();
 
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end and manages history itself
+        }
+
+        // Self-invalidating: displayDataSet must always cover the visible series. The
+        // transform key includes the series list, so this is a no-op when nothing
+        // changed - but a re-shown series that was absent from the last rebuild
+        // used to silently not render until some other setting forced a rebuild.
+        rebuildDisplayDataSet();
+
         pushState();
         repaint();
     }
@@ -293,7 +325,7 @@ public class PlotPanel extends JPanel {
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
+        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
         if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
             minValue = logScaleMin;
         }
@@ -488,7 +520,7 @@ public class PlotPanel extends JPanel {
             renderer.render(g2d, displayDataSet, currentViewport);
         } else {
             // Fallback to empty state
-            g2d.setColor(Color.LIGHT_GRAY);
+            g2d.setColor(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().emptyForeground);
             g2d.setFont(new Font("Arial", Font.PLAIN, 16));
 
             String message = "No data loaded";
@@ -751,6 +783,10 @@ public class PlotPanel extends JPanel {
         this.aggregationPeriod = period;
         this.aggregationMethod = method;
 
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end
+        }
+
         rebuildDisplayDataSet();
 
         // If Auto-Y mode is enabled, preserve X zoom and fit Y-axis to new data
@@ -784,6 +820,16 @@ public class PlotPanel extends JPanel {
      *
      * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
+    /** Whether the user has zoomed/panned since the last {@link #resetUserViewportTouched()}. */
+    public boolean isUserViewportTouched() {
+        return userViewportTouched;
+    }
+
+    /** Re-arms auto-fitting for live-updating owners (call when a new run's data begins). */
+    public void resetUserViewportTouched() {
+        userViewportTouched = false;
+    }
+
     public void refreshData(boolean resetZoom) {
         // Invalidate transform cache to force rebuild with new data
         lastTransformKey = null;
@@ -812,6 +858,10 @@ public class PlotPanel extends JPanel {
         // Update viewport with new scale
         if (currentViewport != null) {
             currentViewport = currentViewport.withYAxisScale(scale);
+        }
+
+        if (restoringState) {
+            return; // restoreState applies the snapshot viewport itself
         }
 
         // If Auto-Y mode is enabled, re-fit Y-axis to data in the new scale
@@ -843,6 +893,10 @@ public class PlotPanel extends JPanel {
         PlotType oldPlotType = this.plotType;
         this.plotType = type;
         lastReferenceSeries = null; // Reset reference tracking
+
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end
+        }
 
         rebuildDisplayDataSet();
 
@@ -881,6 +935,10 @@ public class PlotPanel extends JPanel {
             return;
         }
         this.maskMode = mode;
+
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end
+        }
 
         rebuildDisplayDataSet();
 
@@ -925,7 +983,11 @@ public class PlotPanel extends JPanel {
     }
 
     /**
-     * Restores plot state from a snapshot without pushing to history.
+     * Restores plot state from a snapshot without pushing to history. Runs the full
+     * transform pipeline exactly ONCE: while {@code restoringState} is set, the
+     * setters only assign fields (no rebuild, no zoom-to-fit, no history push) and
+     * the single {@code refreshData(false)} at the end rebuilds against the final
+     * settings. Undo on a large dataset used to pay up to five full aggregations.
      */
     private void restoreState(PlotState state) {
         restoringState = true;
@@ -1031,14 +1093,15 @@ public class PlotPanel extends JPanel {
             return;
         }
 
-        // Generate cache key from current transform settings. The hash of visibleSeries
-        // captures both ref content and order (record equals + List.hashCode); when the
-        // ref-typed list changes the key changes.
+        // Generate cache key from current transform settings. A record holding the
+        // actual values (including a frozen copy of the series list) gives true value
+        // equality - the previous string key folded the list to its hashCode, so two
+        // different selections with colliding hashes could falsely reuse a stale
+        // displayDataSet.
         Object referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
-        String transformKey = aggregationPeriod.name() + "_" + aggregationMethod.name()
-            + "_" + plotType.name() + "_" + referenceKey + "_" + maskMode.name()
-            + "_" + visibleSeries.hashCode();
+        TransformKey transformKey = new TransformKey(aggregationPeriod, aggregationMethod,
+            plotType, referenceKey, maskMode, List.copyOf(visibleSeries));
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {

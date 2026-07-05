@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  .ktm-root, .ktm-root * { box-sizing: border-box; }
+</style>
+</helmet>
+<div class="ktm-root" style="font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--text-primary); background: var(--surface-default); padding: 26px; line-height: 1.5;">
+
+  <!-- ===================== 1. SWATCH GRID ===================== -->
+  <div style="font: 700 15px sans-serif; letter-spacing:.02em; margin-bottom:16px; color: var(--text-content);">Colour roles</div>
+  <sc-for list="{{ groups }}" as="grp" hint-placeholder-count="4">
+    <div style="margin-bottom: 20px;">
+      <div style="font: 700 10px sans-serif; letter-spacing:.12em; text-transform:uppercase; color: var(--accent); margin-bottom:9px;">{{ grp.title }}</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(134px,1fr)); gap:7px;">
+        <sc-for list="{{ grp.items }}" as="sw" hint-placeholder-count="6">
+          <div style="border:1px solid var(--separator); border-radius:6px; overflow:hidden; background: var(--surface-content);">
+            <div style="height:38px; background: {{ sw.varRef }}; border-bottom:1px solid var(--separator);"></div>
+            <div style="padding:6px 8px;">
+              <div style="font:600 10.5px ui-monospace, Menlo, monospace; color: var(--text-content); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">--{{ sw.role }}</div>
+              <div style="font:10px ui-monospace, Menlo, monospace; color: var(--text-primary); opacity:.6; margin-top:1px;">{{ sw.hex }}{{ sw.note }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+
+  <!-- ===================== 2. EDITOR MOCK ===================== -->
+  <div style="font: 700 15px sans-serif; margin:28px 0 12px; color: var(--text-content);">Editor &amp; syntax</div>
+  <div style="background:var(--editor-bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; font:13px/1.62 ui-monospace, Menlo, Consolas, monospace; box-shadow: 0 1px 0 var(--separator);">
+    <sc-for list="{{ editorLines }}" as="ln" hint-placeholder-count="14">
+      <div style="display:flex; background: {{ ln.bg }};">
+        <div style="width:40px; flex:none; text-align:right; padding:0 10px; color:var(--text-primary); opacity:.35; user-select:none;">{{ ln.n }}</div>
+        <div style="flex:1; white-space:pre; color:var(--editor-fg); min-height:1.62em; padding-right:10px;">
+          <sc-for list="{{ ln.tokens }}" as="tk"><span style="color: {{ tk.color }};">{{ tk.text }}</span></sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- ===================== 3. MAP MOCK ===================== -->
+  <div style="font: 700 15px sans-serif; margin:28px 0 12px; color: var(--text-content);">Schematic map</div>
+  <div data-om-raster="true" style="background:var(--map-bg); border:1px solid var(--border); border-radius:8px; padding:6px;">
+    {{ mapSvg }}
+  </div>
+
+  <!-- ===================== 4. PLOT MOCK ===================== -->
+  <div style="font: 700 15px sans-serif; margin:28px 0 12px; color: var(--text-content);">Time-series plot</div>
+  <div data-om-raster="true" style="background:var(--plot-bg); border:1px solid var(--border); border-radius:8px; padding:10px;">
+    {{ plotSvg }}
+  </div>
+
+  <!-- ===================== 5. CHROME STRIP ===================== -->
+  <div style="font: 700 15px sans-serif; margin:28px 0 12px; color: var(--text-content);">Chrome</div>
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start;">
+
+    <!-- menu bar + open menu -->
+    <div style="width:210px;">
+      <div style="display:flex; gap:2px; background:var(--surface-default); border:1px solid var(--border); border-radius:6px 6px 0 0; padding:5px 6px; font-size:12.5px;">
+        <span style="padding:3px 9px; border-radius:4px;">File</span>
+        <span style="padding:3px 9px; border-radius:4px; background:var(--hover-bg); color:var(--text-content);">Edit</span>
+        <span style="padding:3px 9px; border-radius:4px;">View</span>
+        <span style="padding:3px 9px; border-radius:4px;">Run</span>
+      </div>
+      <div style="width:170px; background:var(--surface-popup); border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; padding:5px; font-size:12.5px; box-shadow:0 8px 22px rgba(0,0,0,.45);">
+        <div style="padding:5px 10px; border-radius:4px;">Undo</div>
+        <div style="padding:5px 10px; border-radius:4px; background:var(--hover-bg); color:var(--text-content);">Redo</div>
+        <div style="height:1px; background:var(--separator); margin:5px 6px;"></div>
+        <div style="padding:5px 10px; border-radius:4px; background:var(--selection-bg); color:var(--selection-fg);">Find in file…</div>
+        <div style="padding:5px 10px; border-radius:4px;">Replace…</div>
+      </div>
+    </div>
+
+    <!-- toolbar + buttons -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; gap:6px; align-items:center; background:var(--surface-default); border:1px solid var(--border); border-radius:6px; padding:6px 8px;">
+        <div style="width:26px; height:26px; border-radius:5px; background:var(--surface-content); border:1px solid var(--border);"></div>
+        <div style="width:26px; height:26px; border-radius:5px; background:var(--surface-content); border:1px solid var(--border);"></div>
+        <div style="width:1px; height:22px; background:var(--separator); margin:0 2px;"></div>
+        <div style="width:26px; height:26px; border-radius:5px; background:var(--accent);"></div>
+        <div style="flex:1;"></div>
+        <div style="height:8px; width:70px; border-radius:5px; background:var(--surface-content); overflow:hidden; border:1px solid var(--border);">
+          <div style="height:100%; width:62%; background:var(--accent);"></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button style="font:500 12px sans-serif; padding:6px 14px; border-radius:6px; border:1px solid var(--border); background:var(--surface-content); color:var(--text-primary); cursor:default;">Cancel</button>
+        <button style="font:600 12px sans-serif; padding:6px 14px; border-radius:6px; border:1px solid var(--accent-hover); background:var(--accent); color:var(--selection-fg); cursor:default;">Run model</button>
+        <button style="font:500 12px sans-serif; padding:6px 14px; border-radius:6px; border:1px solid var(--border); background:var(--hover-bg); color:var(--text-content); cursor:default;">Hover</button>
+        <button style="font:500 12px sans-serif; padding:6px 14px; border-radius:6px; border:1px solid var(--focus-ring); background:var(--surface-content); color:var(--text-primary); box-shadow:0 0 0 2px var(--focus-ring); cursor:default;">Focused</button>
+      </div>
+      <!-- tooltip -->
+      <div style="display:inline-flex; align-self:flex-start; font:12px sans-serif; padding:5px 10px; border-radius:5px; background:var(--tooltip-bg); color:var(--tooltip-fg); border:1px solid var(--border); box-shadow:0 6px 18px rgba(0,0,0,.4);">Run simulation (F5)</div>
+    </div>
+
+    <!-- table + scrollbar -->
+    <div style="display:flex; gap:8px; align-items:stretch;">
+      <div style="width:250px; border:1px solid var(--border); border-radius:6px; overflow:hidden; font-size:12px; background:var(--surface-content);">
+        <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; background:var(--surface-default); color:var(--text-content); font-weight:600;">
+          <div style="padding:6px 10px; border-bottom:1px solid var(--separator);">Node</div>
+          <div style="padding:6px 10px; border-bottom:1px solid var(--separator); border-left:1px solid var(--separator);">Type</div>
+          <div style="padding:6px 10px; border-bottom:1px solid var(--separator); border-left:1px solid var(--separator);">Area</div>
+        </div>
+        <sc-for list="{{ tableRows }}" as="r">
+          <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; background: {{ r.bg }}; color: {{ r.fg }};">
+            <div style="padding:6px 10px; border-bottom:1px solid var(--separator);">{{ r.a }}</div>
+            <div style="padding:6px 10px; border-bottom:1px solid var(--separator); border-left:1px solid var(--separator);">{{ r.b }}</div>
+            <div style="padding:6px 10px; border-bottom:1px solid var(--separator); border-left:1px solid var(--separator);">{{ r.c }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="width:12px; background:var(--scrollbar-track); border-radius:6px; border:1px solid var(--separator); position:relative;">
+        <div style="position:absolute; left:2px; right:2px; top:14px; height:56px; background:var(--scrollbar-thumb); border-radius:5px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { hex: {} };
+
+  schema() {
+    return [
+      { title: 'Application chrome', items: [
+        ['surface-default'], ['surface-content'], ['surface-popup'], ['surface-titlebar'],
+        ['text-primary'], ['text-content'], ['selection-bg'], ['selection-fg'],
+        ['focus-ring'], ['accent'], ['accent-hover'], ['hover-bg'],
+        ['border'], ['separator'], ['scrollbar-track'], ['scrollbar-thumb'],
+        ['scrollbar-thumb-hover'], ['tooltip-bg'], ['tooltip-fg'], ['tab-selected-bg'],
+      ]},
+      { title: 'Editor & syntax', items: [
+        ['editor-bg'], ['editor-fg'], ['editor-selection'], ['editor-current-line'],
+        ['syntax-section'], ['syntax-identifier'], ['syntax-string'],
+        ['syntax-operator'], ['syntax-comment'], ['syntax-whitespace'],
+      ]},
+      { title: 'Schematic map', items: [
+        ['map-bg'], ['map-gridline'], ['map-node-label-text'], ['map-node-label-halo', ' · 78%'],
+        ['node-storage'], ['node-inflow'], ['node-gauge'], ['node-rr'], ['node-routing'],
+        ['node-splitter'], ['node-user-regulated'], ['node-user-unregulated'],
+        ['node-blackhole'], ['node-order-control'],
+      ]},
+      { title: 'Time-series plots', items: [
+        ['plot-bg'], ['plot-grid'], ['plot-axis'], ['plot-label'],
+        ['plot-series-1'], ['plot-series-2'], ['plot-series-3'], ['plot-series-4'], ['plot-series-5'],
+        ['plot-series-6'], ['plot-series-7'], ['plot-series-8'], ['plot-series-9'], ['plot-series-10'],
+        ['plot-legend-bg', ' · 92%'], ['plot-legend-border'], ['plot-legend-fg'],
+        ['plot-hover-bg', ' · 92%'], ['plot-hover-fg'], ['plot-empty-fg'],
+      ]},
+    ];
+  }
+  allRoles() { const r = []; this.schema().forEach(g => g.items.forEach(i => r.push(i[0]))); return r; }
+
+  componentDidMount() {
+    const cs = getComputedStyle(document.documentElement);
+    const hex = {};
+    this.allRoles().forEach(n => { hex[n] = (cs.getPropertyValue('--' + n) || '').trim(); });
+    this.setState({ hex });
+  }
+
+  lum(hex) {
+    if (!hex || hex[0] !== '#') return 0.5;
+    let h = hex.slice(1);
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const p = i => parseInt(h.slice(i, i + 2), 16) / 255;
+    const f = c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    return 0.2126 * f(p(0)) + 0.7152 * f(p(2)) + 0.0722 * f(p(4));
+  }
+
+  buildEditor() {
+    const L = (tokens, opt) => ({
+      tokens: tokens.map(t => ({ text: t[0], color: 'var(--syntax-' + t[1] + ')' })),
+      bg: opt && opt.sel ? 'var(--editor-selection)' : (opt && opt.cur ? 'var(--editor-current-line)' : 'transparent'),
+    });
+    const raw = [
+      L([['# Upper catchment inflows', 'comment']]),
+      L([['[node.river_gauge_01]', 'section']]),
+      L([['type', 'identifier'], [' = ', 'operator'], ['gauge', 'string']]),
+      L([['loc', 'identifier'], [' = ', 'operator'], ['349.5, 214.0', 'string']], { sel: true }),
+      L([['observed', 'identifier'], [' = ', 'operator'], ['data/gauge01.csv', 'string']]),
+      L([[' ', 'identifier']]),
+      L([['[node.headwater_rr]', 'section']]),
+      L([['type', 'identifier'], [' = ', 'operator'], ['sacramento', 'string'], ['··········', 'whitespace'], [' ; rainfall-runoff model', 'comment']], { cur: true }),
+      L([['area', 'identifier'], [' = ', 'operator'], ['452.7', 'string']]),
+      L([['params', 'identifier'], [' = ', 'operator'], ['0.01, 40.0, 23.0, 0.009', 'string']]),
+      L([[' ', 'identifier']]),
+      L([['[outputs]', 'section']]),
+      L([['node.river_gauge_01.dsflow', 'identifier']]),
+      L([['node.headwater_rr.runoff_depth', 'identifier']]),
+    ];
+    return raw.map((r, i) => ({ ...r, n: i + 1 }));
+  }
+
+  buildMap(hex) {
+    const E = React.createElement;
+    const N = {
+      inflow:            { lab: 'In', cap: 'Headwater',  x: 62,  y: 54,  shape: 'tri' },
+      rr:                { lab: 'Rr', cap: 'Catchment',  x: 178, y: 54,  shape: 'rect' },
+      routing:           { lab: 'Ro', cap: 'Reach 3',    x: 292, y: 70,  shape: 'circle' },
+      splitter:          { lab: 'Sp', cap: 'Junction',   x: 406, y: 70,  shape: 'diamond' },
+      gauge:             { lab: 'Ga', cap: 'Gauge 01',   x: 520, y: 54,  shape: 'circle' },
+      storage:           { lab: 'St', cap: 'Burrendong', x: 178, y: 182, shape: 'rect' },
+      'order-control':   { lab: 'Oc', cap: 'Ops',        x: 300, y: 192, shape: 'diamond' },
+      'user-regulated':  { lab: 'Ur', cap: 'Irrigator',  x: 416, y: 192, shape: 'circle' },
+      'user-unregulated':{ lab: 'Uu', cap: 'Stock',      x: 520, y: 182, shape: 'circle' },
+      blackhole:         { lab: 'Bh', cap: 'Terminus',   x: 300, y: 262, shape: 'rect' },
+    };
+    const links = [
+      ['inflow', 'rr'], ['rr', 'routing'], ['routing', 'splitter'], ['splitter', 'gauge'],
+      ['routing', 'storage'], ['storage', 'order-control'], ['order-control', 'user-regulated'],
+      ['user-regulated', 'user-unregulated'], ['splitter', 'order-control'], ['order-control', 'blackhole'],
+    ];
+    const grid = [];
+    for (let x = 40; x < 580; x += 46) grid.push(E('line', { key: 'gv' + x, x1: x, y1: 8, x2: x, y2: 292, style: { stroke: 'var(--map-gridline)', strokeWidth: 1 } }));
+    for (let y = 20; y < 292; y += 46) grid.push(E('line', { key: 'gh' + y, x1: 8, y1: y, x2: 572, y2: y, style: { stroke: 'var(--map-gridline)', strokeWidth: 1 } }));
+
+    const linkEls = links.map((l, i) => {
+      const a = N[l[0]], b = N[l[1]];
+      return E('line', { key: 'lk' + i, x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: { stroke: 'var(--text-primary)', strokeOpacity: 0.32, strokeWidth: 1.6 } });
+    });
+
+    const nodeEls = Object.keys(N).map(role => {
+      const n = N[role];
+      const cvar = 'var(--node-' + role + ')';
+      const lc = this.lum(hex['node-' + role]) > 0.5 ? '#0d0d0d' : '#ffffff';
+      const st = { fill: cvar, stroke: 'rgba(0,0,0,.32)', strokeWidth: 1 };
+      let shape, ly = n.y + 4;
+      if (n.shape === 'circle') shape = E('circle', { cx: n.x, cy: n.y, r: 17, style: st });
+      else if (n.shape === 'rect') shape = E('rect', { x: n.x - 19, y: n.y - 15, width: 38, height: 30, rx: 5, style: st });
+      else if (n.shape === 'diamond') shape = E('polygon', { points: `${n.x},${n.y - 20} ${n.x + 20},${n.y} ${n.x},${n.y + 20} ${n.x - 20},${n.y}`, style: st });
+      else { shape = E('polygon', { points: `${n.x},${n.y - 19} ${n.x + 18},${n.y + 14} ${n.x - 18},${n.y + 14}`, style: st }); ly = n.y + 8; }
+      const cw = n.cap.length * 6.1 + 12;
+      return E('g', { key: role }, [
+        shape,
+        E('text', { key: 't', x: n.x, y: ly, textAnchor: 'middle', style: { fill: lc, font: 'bold 11px sans-serif' } }, n.lab),
+        E('rect', { key: 'h', x: n.x - cw / 2, y: n.y + 24, width: cw, height: 15, rx: 7, style: { fill: 'var(--map-node-label-halo)', opacity: 0.78 } }),
+        E('text', { key: 'c', x: n.x, y: n.y + 34.5, textAnchor: 'middle', style: { fill: 'var(--map-node-label-text)', font: '10px sans-serif' } }, n.cap),
+      ]);
+    });
+    return E('svg', { viewBox: '0 0 580 300', width: '100%', style: { display: 'block' } }, [
+      E('g', { key: 'g' }, grid), E('g', { key: 'l' }, linkEls), E('g', { key: 'n' }, nodeEls),
+    ]);
+  }
+
+  buildPlot(hex) {
+    const E = React.createElement;
+    const X0 = 46, X1 = 566, Y0 = 16, Y1 = 214, NP = 48;
+    const els = [];
+    for (let g = 0; g <= 5; g++) {
+      const y = Y0 + (Y1 - Y0) * g / 5;
+      els.push(E('line', { key: 'gy' + g, x1: X0, y1: y, x2: X1, y2: y, style: { stroke: 'var(--plot-grid)', strokeWidth: 0.5 } }));
+      els.push(E('text', { key: 'ty' + g, x: X0 - 7, y: y + 3, textAnchor: 'end', style: { fill: 'var(--plot-label)', font: '9px sans-serif' } }, 100 - g * 20));
+    }
+    for (let g = 0; g <= 6; g++) {
+      const x = X0 + (X1 - X0) * g / 6;
+      els.push(E('line', { key: 'gx' + g, x1: x, y1: Y0, x2: x, y2: Y1, style: { stroke: 'var(--plot-grid)', strokeWidth: 0.5 } }));
+      els.push(E('text', { key: 'tx' + g, x, y: Y1 + 14, textAnchor: 'middle', style: { fill: 'var(--plot-label)', font: '9px sans-serif' } }, g * 10));
+    }
+    // axes
+    els.push(E('line', { key: 'ax', x1: X0, y1: Y1, x2: X1, y2: Y1, style: { stroke: 'var(--plot-axis)', strokeWidth: 1 } }));
+    els.push(E('line', { key: 'ay', x1: X0, y1: Y0, x2: X0, y2: Y1, style: { stroke: 'var(--plot-axis)', strokeWidth: 1 } }));
+    // series
+    for (let s = 0; s < 10; s++) {
+      let pts = '';
+      for (let i = 0; i <= NP; i++) {
+        const t = i / NP, x = X0 + (X1 - X0) * t;
+        const base = 0.12 + 0.74 * (s / 9);
+        let v = base + 0.12 * Math.sin(t * 6 + s * 0.95) + 0.045 * Math.sin(t * 14 + s * 1.7);
+        v = Math.max(0.03, Math.min(0.97, v));
+        const y = Y1 - (Y1 - Y0) * v;
+        pts += (i ? ' ' : '') + x.toFixed(1) + ',' + y.toFixed(1);
+      }
+      els.push(E('polyline', { key: 'sr' + s, points: pts, style: { fill: 'none', stroke: 'var(--plot-series-' + (s + 1) + ')', strokeWidth: 1.3 } }));
+    }
+    // legend
+    const names = ['gauge01.dsflow', 'headwater.runoff', 'burrendong.vol', 'reach3.loss', 'order.control'];
+    const leg = [E('rect', { key: 'lb', x: 428, y: 16, width: 134, height: 80, rx: 5, style: { fill: 'var(--plot-legend-bg)', fillOpacity: 0.92, stroke: 'var(--plot-legend-border)' } })];
+    names.forEach((nm, k) => {
+      const y = 32 + k * 14;
+      leg.push(E('line', { key: 'll' + k, x1: 436, y1: y, x2: 454, y2: y, style: { stroke: 'var(--plot-series-' + (k + 1) + ')', strokeWidth: 2.2 } }));
+      leg.push(E('text', { key: 'lt' + k, x: 459, y: y + 3, style: { fill: 'var(--plot-legend-fg)', font: '9px sans-serif' } }, nm));
+    });
+    els.push(E('g', { key: 'leg' }, leg));
+    // hover crosshair + readout
+    const hx = 236;
+    const hov = [
+      E('line', { key: 'hl', x1: hx, y1: Y0, x2: hx, y2: Y1, style: { stroke: 'var(--plot-label)', strokeWidth: 0.6, strokeDasharray: '3 3' } }),
+      E('rect', { key: 'hb', x: hx + 8, y: 54, width: 92, height: 56, rx: 4, style: { fill: 'var(--plot-hover-bg)', fillOpacity: 0.92, stroke: 'var(--plot-legend-border)' } }),
+      E('text', { key: 'hh', x: hx + 16, y: 68, style: { fill: 'var(--plot-hover-fg)', font: 'bold 9px sans-serif' } }, 't = 200'),
+    ];
+    ['42.7', '18.3', '9.11'].forEach((val, k) => {
+      const y = 82 + k * 12;
+      hov.push(E('circle', { key: 'hd' + k, cx: hx + 17, cy: y - 3, r: 3, style: { fill: 'var(--plot-series-' + (k + 1) + ')' } }));
+      hov.push(E('text', { key: 'hv' + k, x: hx + 26, y, style: { fill: 'var(--plot-hover-fg)', font: '9px ui-monospace, monospace' } }, val));
+    });
+    els.push(E('g', { key: 'hov' }, hov));
+    return E('svg', { viewBox: '0 0 578 240', width: '100%', style: { display: 'block' } }, els);
+  }
+
+  renderVals() {
+    const hex = this.state.hex;
+    const groups = this.schema().map(g => ({
+      title: g.title,
+      items: g.items.map(i => ({ role: i[0], varRef: 'var(--' + i[0] + ')', hex: hex[i[0]] || '', note: i[1] || '' })),
+    }));
+    const tableRows = [
+      { a: 'river_gauge_01', b: 'gauge', c: '—', sel: false },
+      { a: 'headwater_rr', b: 'sacramento', c: '452.7', sel: true },
+      { a: 'burrendong', b: 'storage', c: '—', sel: false },
+      { a: 'junction_03', b: 'confluence', c: '—', sel: false },
+    ].map(r => ({ ...r, bg: r.sel ? 'var(--selection-bg)' : 'transparent', fg: r.sel ? 'var(--selection-fg)' : 'var(--text-content)' }));
+    return {
+      groups,
+      editorLines: this.buildEditor(),
+      tableRows,
+      mapSvg: this.buildMap(hex),
+      plotSvg: this.buildPlot(hex),
+    };
+  }
+}
+</script>
+</body>
+</html>

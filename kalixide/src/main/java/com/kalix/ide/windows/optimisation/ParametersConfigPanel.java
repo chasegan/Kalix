@@ -1,6 +1,6 @@
 package com.kalix.ide.windows.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
+import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -50,7 +50,10 @@ public class ParametersConfigPanel extends JPanel {
         paramsTable = new JTable(paramsTableModel);
         paramsTable.setRowHeight(25);
         paramsTable.setShowGrid(true);
-        paramsTable.setGridColor(new Color(220, 220, 220));
+        // Theme-supplied grid colour so the table reads correctly on dark themes
+        Color gridColor = UIManager.getColor("Table.gridColor");
+        paramsTable.setGridColor(gridColor != null
+            ? gridColor : com.kalix.ide.constants.UIConstants.TableView.FALLBACK_GRID_COLOR);
         paramsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
         JScrollPane tableScrollPane = new JScrollPane(paramsTable);
@@ -168,38 +171,6 @@ public class ParametersConfigPanel extends JPanel {
     }
 
     /**
-     * Automatically generates expressions for all parameters that currently have blank expressions.
-     * This is called when the Optimisation Window first opens to pre-populate the table.
-     * Silently skips any parameters with unrecognized types.
-     */
-    public void autoGenerateAllExpressions() {
-        // Get all currently used gene indices
-        Set<Integer> usedIndices = getUsedGeneIndices();
-
-        for (int row = 0; row < paramsTableModel.getRowCount(); row++) {
-            String currentExpression = paramsTableModel.getExpressionAt(row);
-            if (currentExpression.isEmpty()) {
-                String paramName = paramsTableModel.getParameterNameAt(row);
-
-                try {
-                    // Find next unused gene index
-                    int geneIndex = getNextUnusedGeneIndex(usedIndices);
-
-                    // Generate expression using the library
-                    String expression = ParameterExpressionLibrary.generateExpression(paramName, geneIndex);
-                    paramsTableModel.setExpressionAt(row, expression);
-
-                    // Mark this index as used
-                    usedIndices.add(geneIndex);
-                } catch (ParameterExpressionLibrary.UnrecognizedParameterTypeException e) {
-                    // Silently skip unrecognized parameters during auto-generation
-                    // Users can manually add expressions if needed
-                }
-            }
-        }
-    }
-
-    /**
      * Clears expressions for selected rows.
      */
     private void clearSelectedExpressions() {
@@ -239,9 +210,8 @@ public class ParametersConfigPanel extends JPanel {
      * parameters get a blank expression. Gene indices are assigned sequentially
      * starting from 1.
      *
-     * <p>This is the off-form equivalent of {@link #autoGenerateAllExpressions()}:
-     * it lets a node's config model be populated with optimisable parameters even
-     * when its GUI form is not the one currently on screen.</p>
+     * <p>Off-form: it lets a node's config model be populated with optimisable
+     * parameters even when its GUI form is not the one currently on screen.</p>
      *
      * @param parameterNames the parameter names reported by kalixcli
      * @return ordered list of (parameter name, expression) entries
@@ -339,31 +309,6 @@ public class ParametersConfigPanel extends JPanel {
             return result == JOptionPane.YES_OPTION;
         }
         return true;
-    }
-
-    /**
-     * Sets the list of optimisable parameters from kalixcli.
-     * Replaces the current table model with a new one containing the fetched parameters.
-     *
-     * @param parameters List of parameter names from get_optimisable_params
-     */
-    public void setOptimisableParameters(java.util.List<String> parameters) {
-        if (parameters == null || parameters.isEmpty()) {
-            return;
-        }
-
-        // Convert list to array
-        String[] paramArray = parameters.toArray(new String[0]);
-
-        // Create new table model with fetched parameters
-        paramsTableModel = new OptimizationParamsTableModel(paramArray);
-
-        // Set the new model on the table
-        paramsTable.setModel(paramsTableModel);
-
-        // Force the table to refresh
-        paramsTable.revalidate();
-        paramsTable.repaint();
     }
 
     /**

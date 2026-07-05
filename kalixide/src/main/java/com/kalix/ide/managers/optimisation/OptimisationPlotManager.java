@@ -9,7 +9,6 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
 import com.kalix.ide.flowviz.transform.YAxisScale;
-import com.kalix.ide.models.optimisation.OptimisationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,16 +76,54 @@ public class OptimisationPlotManager {
         return convergencePlot;
     }
 
+    /** Minimum interval between full plot rebuilds while progress streams in. */
+    private static final int PLOT_REBUILD_INTERVAL_MS = 250;
+
+    private OptimisationResult pendingResult;
+    /** Identity of the result whose data is currently plotted - a new run re-arms auto-fit. */
+    private OptimisationResult plottedResult;
+
+    private final javax.swing.Timer rebuildThrottle = new javax.swing.Timer(PLOT_REBUILD_INTERVAL_MS, e -> {
+        ((javax.swing.Timer) e.getSource()).stop();
+        OptimisationResult pending = pendingResult;
+        pendingResult = null;
+        if (pending != null) {
+            rebuildPlot(pending);
+        }
+    });
+
     /**
      * Updates the convergence plot with data from the given result.
      * Creates two series: best objective (blue line) and population samples (orange dots).
+     *
+     * <p>Rebuilds are throttled to one per {@value #PLOT_REBUILD_INTERVAL_MS} ms: progress
+     * messages arrive per generation, and rebuilding the whole dataset per message was
+     * O(n^2) over a run - a fast optimiser turned this into visible EDT jank. The timer
+     * always fires once more after the last request, so the final state is never lost.</p>
      *
      * @param result The optimisation result containing convergence history
      */
     public void updatePlot(OptimisationResult result) {
         if (result == null) {
+            rebuildThrottle.stop();
+            pendingResult = null;
+            plottedResult = null;
             clearPlot();
             return;
+        }
+        if (rebuildThrottle.isRunning()) {
+            pendingResult = result; // coalesce - the running timer will pick it up
+            return;
+        }
+        rebuildPlot(result);
+        rebuildThrottle.start();
+    }
+
+    private void rebuildPlot(OptimisationResult result) {
+        // A different result object means a different run: re-arm viewport auto-fit.
+        if (result != plottedResult) {
+            plottedResult = result;
+            convergencePlot.resetUserViewportTouched();
         }
 
         // Clear existing data
@@ -109,8 +146,9 @@ public class OptimisationPlotManager {
         // Configure colors and visibility
         configureSeriesAppearance();
 
-        // Refresh plot with zoom to fit
-        convergencePlot.refreshData(true);
+        // Auto-fit only while the user hasn't chosen their own view: re-zooming on
+        // every update made it impossible to inspect a region mid-run.
+        convergencePlot.refreshData(!convergencePlot.isUserViewportTouched());
 
         logger.debug("Updated convergence plot with {} data points", history.size());
     }

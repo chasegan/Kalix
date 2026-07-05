@@ -51,8 +51,8 @@ public class DiffWindow extends JFrame {
     private final String rightHeaderLabel;
 
     // Inline change ranges
-    private List<InlineChange> leftInlineChanges;
-    private List<InlineChange> rightInlineChanges;
+    private List<DiffEngine.InlineChange> leftInlineChanges;
+    private List<DiffEngine.InlineChange> rightInlineChanges;
 
     /**
      * Creates a diff window with default title and headers.
@@ -127,18 +127,11 @@ public class DiffWindow extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
 
-        // Register this instance for preference updates
+        // Register this instance for preference updates; cleanup is handled
+        // by the WeakReferences in updateAllFontSizes()
         synchronized (openWindows) {
             openWindows.add(new WeakReference<>(this));
         }
-
-        // Clean up when window is closed
-        addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosed(java.awt.event.WindowEvent e) {
-                // Cleanup is handled by WeakReferences and updateAllFontSizes()
-            }
-        });
     }
 
     private void initializeComponents(String referenceModel, String thisModel) {
@@ -323,14 +316,14 @@ public class DiffWindow extends JFrame {
 
             // Apply inline highlights to left text area
             javax.swing.text.Highlighter leftHighlighter = leftTextArea.getHighlighter();
-            for (InlineChange change : leftInlineChanges) {
-                leftHighlighter.addHighlight(change.startOffset, change.endOffset, painter);
+            for (DiffEngine.InlineChange change : leftInlineChanges) {
+                leftHighlighter.addHighlight(change.startOffset(), change.endOffset(), painter);
             }
 
             // Apply inline highlights to right text area
             javax.swing.text.Highlighter rightHighlighter = rightTextArea.getHighlighter();
-            for (InlineChange change : rightInlineChanges) {
-                rightHighlighter.addHighlight(change.startOffset, change.endOffset, painter);
+            for (DiffEngine.InlineChange change : rightInlineChanges) {
+                rightHighlighter.addHighlight(change.startOffset(), change.endOffset(), painter);
             }
 
         } catch (Exception e) {
@@ -428,13 +421,14 @@ public class DiffWindow extends JFrame {
     /**
      * Creates aligned text versions with blank lines inserted for proper visual alignment.
      * This ensures that matching content stays aligned even when there are insertions/deletions.
-     * Also parses inline change markers (~...~) and returns clean text with highlight ranges.
+     * Also strips the generator's inline change markers (see {@link DiffEngine}) and
+     * returns clean text with highlight ranges.
      */
     private AlignedTexts createAlignedTexts() {
         StringBuilder leftText = new StringBuilder();
         StringBuilder rightText = new StringBuilder();
-        List<InlineChange> leftInlineChanges = new ArrayList<>();
-        List<InlineChange> rightInlineChanges = new ArrayList<>();
+        List<DiffEngine.InlineChange> leftInlineChanges = new ArrayList<>();
+        List<DiffEngine.InlineChange> rightInlineChanges = new ArrayList<>();
 
         List<DiffRow> rows = diffResult.getRows();
 
@@ -447,14 +441,14 @@ public class DiffWindow extends JFrame {
             if (oldLine == null) oldLine = "";
             if (newLine == null) newLine = "";
 
-            // Parse and remove inline markers from left side, tracking ranges
+            // Strip inline markers from left side, tracking ranges
             int leftStartOffset = leftText.length();
-            String cleanedOldLine = parseInlineChanges(oldLine, leftStartOffset, leftInlineChanges);
+            String cleanedOldLine = DiffEngine.stripInlineMarkers(oldLine, leftStartOffset, leftInlineChanges);
             leftText.append(cleanedOldLine);
 
-            // Parse and remove inline markers from right side, tracking ranges
+            // Strip inline markers from right side, tracking ranges
             int rightStartOffset = rightText.length();
-            String cleanedNewLine = parseInlineChanges(newLine, rightStartOffset, rightInlineChanges);
+            String cleanedNewLine = DiffEngine.stripInlineMarkers(newLine, rightStartOffset, rightInlineChanges);
             rightText.append(cleanedNewLine);
 
             // Add newline if not the last line
@@ -469,76 +463,21 @@ public class DiffWindow extends JFrame {
     }
 
     /**
-     * Parses a line to find inline change markers (~...~), removes them,
-     * and records the character ranges that should be highlighted.
-     *
-     * @param line The line with potential ~...~ markers
-     * @param baseOffset The offset in the document where this line starts
-     * @param inlineChanges List to add discovered inline change ranges to
-     * @return The line with markers removed
-     */
-    private String parseInlineChanges(String line, int baseOffset, List<InlineChange> inlineChanges) {
-        StringBuilder cleaned = new StringBuilder();
-        int currentOffset = 0;
-        boolean inChange = false;
-        int changeStart = -1;
-
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-
-            if (c == '~') {
-                if (!inChange) {
-                    // Start of inline change
-                    inChange = true;
-                    changeStart = currentOffset;
-                } else {
-                    // End of inline change
-                    inChange = false;
-                    // Record the range (start to current position in cleaned text)
-                    inlineChanges.add(new InlineChange(
-                        baseOffset + changeStart,
-                        baseOffset + currentOffset
-                    ));
-                }
-                // Don't add ~ to cleaned text
-            } else {
-                cleaned.append(c);
-                currentOffset++;
-            }
-        }
-
-        return cleaned.toString();
-    }
-
-    /**
      * Container for aligned left and right text with inline change ranges.
      */
     private static class AlignedTexts {
         final String leftText;
         final String rightText;
-        final List<InlineChange> leftInlineChanges;
-        final List<InlineChange> rightInlineChanges;
+        final List<DiffEngine.InlineChange> leftInlineChanges;
+        final List<DiffEngine.InlineChange> rightInlineChanges;
 
         AlignedTexts(String leftText, String rightText,
-                     List<InlineChange> leftInlineChanges,
-                     List<InlineChange> rightInlineChanges) {
+                     List<DiffEngine.InlineChange> leftInlineChanges,
+                     List<DiffEngine.InlineChange> rightInlineChanges) {
             this.leftText = leftText;
             this.rightText = rightText;
             this.leftInlineChanges = leftInlineChanges;
             this.rightInlineChanges = rightInlineChanges;
-        }
-    }
-
-    /**
-     * Represents a character range that should be highlighted for inline changes.
-     */
-    private static class InlineChange {
-        final int startOffset;
-        final int endOffset;
-
-        InlineChange(int startOffset, int endOffset) {
-            this.startOffset = startOffset;
-            this.endOffset = endOffset;
         }
     }
 

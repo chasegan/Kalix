@@ -9,6 +9,7 @@ import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.components.AutoHidingProgressBar;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
+import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
@@ -25,8 +26,16 @@ import com.kalix.ide.managers.IconManager;
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.preferences.ui.DataVisualizationPreferencePage;
+import com.kalix.ide.preferences.ui.FontPreferencePage;
+import com.kalix.ide.preferences.ui.IntegrationsPreferencePage;
+import com.kalix.ide.preferences.ui.KalixCliPreferencePage;
+import com.kalix.ide.preferences.ui.LoadSavePreferencePage;
+import com.kalix.ide.preferences.ui.NodeDiagramPreferencePage;
+import com.kalix.ide.preferences.ui.PreferencePage;
+import com.kalix.ide.preferences.ui.SystemPreferencePage;
+import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
@@ -50,6 +59,7 @@ import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.KeyStroke;
 import java.io.File;
+import java.util.List;
 import java.util.prefs.Preferences;
 
 /**
@@ -78,7 +88,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private DocumentManager documentManager;
 
     // Cached views of the active document, refreshed when the active document changes.
-    // In Phase 1 there is exactly one document, so these are set once at startup.
     private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
     private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier;
@@ -178,7 +187,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         // Restore the last opened project folder, if any.
-        String savedFolder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        String savedFolder = PreferenceKeys.UI_WORKSPACE_FOLDER.get();
         if (!savedFolder.isEmpty()) {
             File folder = new File(savedFolder);
             if (folder.isDirectory()) {
@@ -206,7 +215,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void initializeManagers() {
         // Theme manager
-        themeManager = new ThemeManager(prefs, this);
+        themeManager = new ThemeManager(this);
         
         // Title bar manager
         titleBarManager = new TitleBarManager(this);
@@ -289,6 +298,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             fileOperations::getCurrentProjectDirectory
         );
 
+        // Kill resident kalixcli sessions on ANY JVM exit - exitApplication is only one
+        // exit path (clearAppData calls System.exit directly; the JVM can also be killed
+        // externally). Without this, orphaned engine processes survive holding full run
+        // results in memory. shutdown() is idempotent, so overlapping with the normal
+        // exit path is harmless.
+        Runtime.getRuntime().addShutdownHook(new Thread(
+            () -> stdioTaskManager.getSessionManager().shutdown(),
+            "kalixcli-session-shutdown"));
+
         // Suppliers for auxiliary windows always reflect the active document.
         RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
         RunManager.setEditorTextSupplier(() -> {
@@ -340,8 +358,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         String activePath = (active != null && active.getFile() != null)
             ? active.getFile().getAbsolutePath() : "";
 
-        PreferenceManager.setOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, entries.toString());
-        PreferenceManager.setOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, activePath);
+        PreferenceKeys.UI_OPEN_DOCUMENTS.set(entries.toString());
+        PreferenceKeys.UI_ACTIVE_DOCUMENT.set(activePath);
     }
 
     /**
@@ -351,11 +369,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @return true if at least one document was restored
      */
     private boolean restoreSession() {
-        String entriesStr = PreferenceManager.getOsString(PreferenceKeys.UI_OPEN_DOCUMENTS, "");
+        String entriesStr = PreferenceKeys.UI_OPEN_DOCUMENTS.get();
         if (entriesStr.isEmpty()) {
             return false;
         }
-        String activePath = PreferenceManager.getOsString(PreferenceKeys.UI_ACTIVE_DOCUMENT, "");
+        String activePath = PreferenceKeys.UI_ACTIVE_DOCUMENT.get();
 
         boolean restoredAny = false;
         restoringSession = true;
@@ -420,10 +438,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         EnhancedTextEditor editor = document.getEditor();
         MapPanel map = document.getMapPanel();
 
-        // Map appearance from saved preferences.
-        map.setNodeTheme(NodeTheme.themeFromString(
-            PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME)));
-        map.setShowGridlines(PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true));
+        // Map appearance from saved preferences (follow mode resolves to the
+        // application theme's linked node palette).
+        map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+        map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
 
         // Editor features, each bound to this document's own model and working directory.
         editor.initializeLinter(schemaManager);
@@ -656,20 +674,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
-        int treeWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_TREE_WIDTH, AppConstants.DEFAULT_TREE_WIDTH);
-        int mapWidth = PreferenceManager.getOsInt(PreferenceKeys.UI_MAP_WIDTH, AppConstants.DEFAULT_MAP_WIDTH);
+        int treeWidth = PreferenceKeys.UI_TREE_WIDTH.get();
+        int mapWidth = PreferenceKeys.UI_MAP_WIDTH.get();
         boolean treeCollapsed = computeInitialTreeCollapsed();
-        boolean mapCollapsed = PreferenceManager.getOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, false);
+        boolean mapCollapsed = PreferenceKeys.UI_MAP_COLLAPSED.get();
 
         workspacePanel = new WorkspacePanel(
             projectTreePanel, documentTabPane, contextViewPanel,
             treeWidth, mapWidth, treeCollapsed, mapCollapsed);
 
         workspacePanel.setLayoutChangeListener((tw, mw, tc, mc) -> {
-            PreferenceManager.setOsInt(PreferenceKeys.UI_TREE_WIDTH, tw);
-            PreferenceManager.setOsInt(PreferenceKeys.UI_MAP_WIDTH, mw);
-            PreferenceManager.setOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, tc);
-            PreferenceManager.setOsBoolean(PreferenceKeys.UI_MAP_COLLAPSED, mc);
+            PreferenceKeys.UI_TREE_WIDTH.set(tw);
+            PreferenceKeys.UI_MAP_WIDTH.set(mw);
+            PreferenceKeys.UI_TREE_COLLAPSED.set(tc);
+            PreferenceKeys.UI_MAP_COLLAPSED.set(mc);
         });
 
         return workspacePanel;
@@ -685,12 +703,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (!savedFolderIsValid()) {
             return true;
         }
-        return PreferenceManager.getOsBoolean(PreferenceKeys.UI_TREE_COLLAPSED, false);
+        return PreferenceKeys.UI_TREE_COLLAPSED.get();
     }
 
     /** @return true if the saved workspace folder preference points at an existing directory */
     private boolean savedFolderIsValid() {
-        String folder = PreferenceManager.getOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, "");
+        String folder = PreferenceKeys.UI_WORKSPACE_FOLDER.get();
         return !folder.isEmpty() && new File(folder).isDirectory();
     }
 
@@ -955,7 +973,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void loadModelFolder(String folderPath) {
         projectTreePanel.openFolder(folderPath);
-        PreferenceManager.setOsString(PreferenceKeys.UI_WORKSPACE_FOLDER, folderPath);
+        PreferenceKeys.UI_WORKSPACE_FOLDER.set(folderPath);
         // Always auto-expand the tree region on opening a folder, and sync the toolbar toggle.
         if (workspacePanel != null) {
             workspacePanel.setTreeCollapsed(false);
@@ -1099,7 +1117,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     private boolean checkUnsavedChanges(KalixDocument document, String messageFormat) {
-        boolean promptOnExit = PreferenceManager.getFileBoolean(PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT, true);
+        boolean promptOnExit = PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.get();
 
         if (!promptOnExit || !document.isDirty()) {
             return true; // No prompt needed or no unsaved changes
@@ -1404,10 +1422,36 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     
     @Override
     public void showPreferences() {
-        // Create callback to handle preference changes
-        PreferencesDialog.PreferenceChangeCallback callback = new PreferencesDialog.PreferenceChangeCallback() {
-            @Override
-            public void onAutoReloadChanged(boolean enabled) {
+        // Narrow callbacks for the preference pages; each page receives only what it uses.
+        Runnable onMapPreferencesChanged = () -> {
+            // Update map display with new preferences
+            boolean showGridlines = PreferenceKeys.MAP_SHOW_GRIDLINES.get();
+            toggleGridlines(showGridlines);
+
+            // Update node theme (follow mode resolves to the application theme's)
+            setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+
+            // Sync toolbar button state
+            syncToggleButtonStates();
+        };
+
+        Runnable onFlowVizPreferencesChanged = () -> {
+            // Update all open FlowViz windows with new preferences
+            for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
+                window.reloadPreferences();
+            }
+        };
+
+        LinterPreferencesPanel linterPage = new LinterPreferencesPanel(schemaManager, textEditor.getLinterManager());
+        // Sync the toolbar button state when linting is enabled/disabled
+        linterPage.setLintingChangeCallback(enabled -> syncToggleButtonStates());
+
+        ThemePreferencePage themePage = new ThemePreferencePage(themeManager, onMapPreferencesChanged);
+
+        // Tree order: the dialog derives both its navigation tree and its cards from this list.
+        List<PreferencePage> pages = List.of(
+            new SystemPreferencePage(this::clearAppData),
+            new LoadSavePreferencePage(enabled -> {
                 // Use the existing method to properly update file watching
                 toggleAutoReload(enabled);
 
@@ -1416,73 +1460,31 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
                 // Sync toolbar button state
                 syncToggleButtonStates();
-            }
+            }),
+            themePage,
+            new FontPreferencePage(textEditor, ThemeManager::notifyFontSizeChanged),
+            linterPage,
+            new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates()),
+            new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
+            new KalixCliPreferencePage(),
+            new IntegrationsPreferencePage()
+        );
 
-            @Override
-            public void onLintingChanged(boolean enabled) {
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onGridlinesChanged(boolean visible) {
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onFlowVizPreferencesChanged() {
-                // Update all open FlowViz windows with new preferences
-                for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
-                    window.reloadPreferences();
-                }
-            }
-
-            @Override
-            public void onMapPreferencesChanged() {
-                // Update map display with new preferences
-                boolean showGridlines = PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
-                toggleGridlines(showGridlines);
-
-                // Update node theme
-                String nodeThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_NODE_THEME, AppConstants.DEFAULT_NODE_THEME);
-                com.kalix.ide.themes.NodeTheme.Theme nodeTheme = com.kalix.ide.themes.NodeTheme.themeFromString(nodeThemeName);
-                setNodeTheme(nodeTheme);
-
-                // Sync toolbar button state
-                syncToggleButtonStates();
-            }
-
-            @Override
-            public void onSystemActionRequested(String action) {
-                if ("clearAppData".equals(action)) {
-                    clearAppData();
-                }
-            }
-
-            @Override
-            public void onFontSizeChanged(int fontSize) {
-                // Use centralized ThemeManager to update all components
-                ThemeManager.notifyFontSizeChanged(fontSize);
-            }
-        };
-
-        PreferencesDialog preferencesDialog = new PreferencesDialog(this, themeManager, textEditor, schemaManager, callback);
-        boolean preferencesChanged = preferencesDialog.showDialog();
-
-        if (preferencesChanged) {
-            updateStatus("Preferences updated");
-        }
+        // Preferences apply immediately, so the dialog has no result to report.
+        new PreferencesDialog(this, pages, themePage).showDialog();
     }
     
     @Override
     public void setNodeTheme(NodeTheme.Theme theme) {
         // Apply to every open document's map so background tabs stay consistent.
+        // Persistence is deliberately NOT done here: the preferences dialog stores
+        // the user's choice (a theme id or the "follow" sentinel) via
+        // ThemePreferences, and this method is also invoked with the *resolved*
+        // palette when following the application theme — persisting that would
+        // overwrite the sentinel with a concrete theme.
         for (KalixDocument document : documentManager.getDocuments()) {
             document.getMapPanel().setNodeTheme(theme);
         }
-        // Save the preference
-        PreferenceManager.setFileString(PreferenceKeys.UI_NODE_THEME, NodeTheme.themeToString(theme));
     }
     
     public void clearAppData() {
@@ -1625,14 +1627,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             document.getMapPanel().setShowGridlines(showGridlines);
         }
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, showGridlines);
+        PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
     }
     
     @Override
     public void toggleShowHiddenFiles(boolean show) {
         // Single source of truth: persist to the shareable file-based prefs, then apply to the tree.
         // Both the View-menu checkbox and the tree's right-click checkbox route here.
-        PreferenceManager.setFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, show);
+        PreferenceKeys.TREE_SHOW_HIDDEN_FILES.set(show);
         if (projectTreePanel != null) {
             projectTreePanel.setShowHidden(show);
         }
@@ -1640,7 +1642,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public boolean isShowHiddenFiles() {
-        return PreferenceManager.getFileBoolean(PreferenceKeys.TREE_SHOW_HIDDEN_FILES, true);
+        return PreferenceKeys.TREE_SHOW_HIDDEN_FILES.get();
     }
 
     @Override
@@ -1648,7 +1650,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Falls back to the saved preference before any document/map exists (toolbar build).
         return mapPanel != null
             ? mapPanel.isShowGridlines()
-            : PreferenceManager.getFileBoolean(PreferenceKeys.MAP_SHOW_GRIDLINES, true);
+            : PreferenceKeys.MAP_SHOW_GRIDLINES.get();
     }
 
     @Override
@@ -1861,10 +1863,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         // Get the external editor command from preferences
-        String commandTemplate = PreferenceManager.getFileString(
-            PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND,
-            "code <folder_path> <file_path>"
-        );
+        String commandTemplate = PreferenceKeys.FILE_EXTERNAL_EDITOR_COMMAND.get();
 
         if (commandTemplate.trim().isEmpty()) {
             updateStatus("External editor command not configured in preferences");
@@ -1941,6 +1940,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             ToolBarBuilder toolBarBuilder = new ToolBarBuilder(this);
             ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
             toolBar = components.toolBar;
+            fileTreeToggleButton = components.fileTreeToggleButton;
             lintingToggleButton = components.lintingToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;
@@ -1960,7 +1960,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * If the file doesn't exist or no preference is set, falls back to default behavior.
      */
     private void loadLastOpenedFile() {
-        String lastFilePath = PreferenceManager.getOsString(PreferenceKeys.LAST_OPENED_FILE, "");
+        String lastFilePath = PreferenceKeys.LAST_OPENED_FILE.get();
 
         if (!lastFilePath.isEmpty()) {
             File lastFile = new File(lastFilePath);
@@ -1981,6 +1981,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public static void main(String[] args) {
         String filePath = args.length > 0 ? args[0] : null;
+
+        // Kalix uses the same number/date conventions everywhere in the world:
+        // dot decimals, ISO-style dates. Pinning the FORMAT locale makes every
+        // String.format/printf in the app locale-independent (a comma-decimal OS
+        // locale would otherwise corrupt model files and CSV output). The DISPLAY
+        // locale (dialog button labels etc.) is deliberately left as the user's own.
+        java.util.Locale.setDefault(java.util.Locale.Category.FORMAT, java.util.Locale.ROOT);
+
         // Initialize Windows-specific integration (AppUserModelID for taskbar pinning)
         // Must be called early, before any UI is created
         WindowsIntegration.initialize();
@@ -1994,8 +2002,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         SwingUtilities.invokeLater(() -> {
             try {
                 // Initialize theme from preferences
-                Preferences prefs = Preferences.userNodeForPackage(KalixIDE.class);
-                ThemeManager tempThemeManager = new ThemeManager(prefs, null);
+                ThemeManager tempThemeManager = new ThemeManager(null);
                 tempThemeManager.initializeLookAndFeel();
 
             } catch (UnsupportedLookAndFeelException e) {

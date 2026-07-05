@@ -7,7 +7,6 @@ import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates function expressions used in model parameters.
@@ -24,13 +23,21 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class FunctionExpressionValidator {
 
-    // Cache validation results for performance
-    private static final Map<String, List<String>> validationCache =
-        new ConcurrentHashMap<>(100);
-    private static final int MAX_CACHE_SIZE = 500;
-
     // Known functions with their argument counts (-1 = variable args, must be >= 2)
     private static final Map<String, Integer> KNOWN_FUNCTIONS = createFunctionMap();
+
+    // Fast-path recognisers, compiled once: these run per expression per validation
+    // pass, and String.matches would recompile each pattern every call.
+    private static final java.util.regex.Pattern NUMBER_FAST_PATTERN =
+        java.util.regex.Pattern.compile("^-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?$");
+    private static final java.util.regex.Pattern DATA_REF_FAST_PATTERN =
+        java.util.regex.Pattern.compile("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*(\\[.*?\\])?$");
+    private static final java.util.regex.Pattern CONST_REF_FAST_PATTERN =
+        java.util.regex.Pattern.compile("^c\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
+    private static final java.util.regex.Pattern NODE_REF_FAST_PATTERN =
+        java.util.regex.Pattern.compile("^node\\.[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
+    private static final java.util.regex.Pattern THIS_REF_FAST_PATTERN =
+        java.util.regex.Pattern.compile("^this\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
 
     // Known simulation variables
     private static final Set<String> KNOWN_SIM_VARIABLES = Set.of(
@@ -77,34 +84,12 @@ public class FunctionExpressionValidator {
     }
 
     /**
-     * Validate a function expression and return a list of error messages.
-     * Returns empty list if expression is valid.
-     * Note: This method cannot validate node or 'this' references without context.
-     *
-     * @deprecated Use {@link #validate(String, ValidationContext)} instead
+     * Validate a function expression without model context. Convenience for callers
+     * (and tests) that only need syntax-level validation - node and 'this' references
+     * cannot be checked without a context.
      */
-    @Deprecated
     public List<String> validate(String expression) {
         return validate(expression, ValidationContext.empty());
-    }
-
-    /**
-     * Validate a function expression with model context for node reference validation.
-     * Returns empty list if expression is valid.
-     *
-     * @param expression The expression to validate
-     * @param model The parsed model (optional, for node reference validation)
-     * @param schema The linter schema (optional, for node reference validation)
-     * @return List of error messages, empty if valid
-     * @deprecated Use {@link #validate(String, ValidationContext)} instead
-     */
-    @Deprecated
-    public List<String> validate(String expression, INIModelParser.ParsedModel model, LinterSchema schema) {
-        ValidationContext context = ValidationContext.builder()
-            .model(model)
-            .schema(schema)
-            .build();
-        return validate(expression, context);
     }
 
     /**
@@ -129,28 +114,7 @@ public class FunctionExpressionValidator {
             context = ValidationContext.empty();
         }
 
-        String trimmed = expression.trim();
-
-        // Check cache first (only if no context, since validation may differ)
-        if (!context.hasModelAndSchema() && !context.hasCurrentNode() && validationCache.containsKey(trimmed)) {
-            return validationCache.get(trimmed);
-        }
-
-        List<String> errors = performValidation(trimmed, context);
-
-        // Cache result (with size limit, only if no context)
-        if (!context.hasModelAndSchema() && !context.hasCurrentNode() && validationCache.size() < MAX_CACHE_SIZE) {
-            validationCache.put(trimmed, errors);
-        }
-
-        return errors;
-    }
-
-    /**
-     * Clear the validation cache. Useful for testing or memory management.
-     */
-    public static void clearCache() {
-        validationCache.clear();
+        return performValidation(expression.trim(), context);
     }
 
     private List<String> performValidation(String expression, ValidationContext context) {
@@ -224,24 +188,24 @@ public class FunctionExpressionValidator {
 
     // Fast path checks using simple regex
     private static boolean isSimpleNumber(String s) {
-        return s.matches("^-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?$");
+        return NUMBER_FAST_PATTERN.matcher(s).matches();
     }
 
     private static boolean isSimpleDataReference(String s) {
         // Matches: data.xxx or data.xxx.yyy.zzz (dots and underscores allowed)
         // Optional square brackets at the end: data.xxx[anything]
-        return s.matches("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*(\\[.*?\\])?$");
+        return DATA_REF_FAST_PATTERN.matcher(s).matches();
     }
 
     private static boolean isSimpleConstantReference(String s) {
         // Matches: c.xxx or c.xxx.yyy.zzz (dots and underscores allowed)
-        return s.matches("^c\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
+        return CONST_REF_FAST_PATTERN.matcher(s).matches();
     }
 
     private static boolean isSimpleNodeReference(String s) {
         // Matches: node.xxx.yyy (node.nodename.property)
         // Optional square brackets at the end: node.xxx.yyy[anything]
-        return s.matches("^node\\.[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
+        return NODE_REF_FAST_PATTERN.matcher(s).matches();
     }
 
     private static boolean isSimpleSimReference(String s) {
@@ -251,7 +215,7 @@ public class FunctionExpressionValidator {
     private static boolean isSimpleThisReference(String s) {
         // Matches: this.xxx (this.property)
         // Optional square brackets at the end: this.xxx[anything]
-        return s.matches("^this\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
+        return THIS_REF_FAST_PATTERN.matcher(s).matches();
     }
 
     private void validateThisReference(String thisRef, ValidationContext context, List<String> errors) {
@@ -401,7 +365,7 @@ public class FunctionExpressionValidator {
             return new Token(TokenType.NUMBER, value, start);
         }
 
-        private Token readIdentOrDataRef() {
+        private Token readIdentOrDataRef() throws ParseException {
             int start = pos;
 
             // Read first segment (letters, digits, underscores)
@@ -441,7 +405,7 @@ public class FunctionExpressionValidator {
         }
 
         // Extract the common dotted reference reading logic
-        private Token readDottedReference(int start, String prefix, TokenType tokenType) {
+        private Token readDottedReference(int start, String prefix, TokenType tokenType) throws ParseException {
             StringBuilder sb = new StringBuilder(prefix);
 
             while (pos < input.length() && input.charAt(pos) == '.') {
@@ -474,8 +438,13 @@ public class FunctionExpressionValidator {
                 if (pos < input.length() && input.charAt(pos) == ']') {
                     pos++; // consume ']'
                     sb.append(input, bracketStart, pos);
+                } else {
+                    // No closing bracket: the scan consumed the rest of the input, so
+                    // "caught as error later" never happened - the next token was EOF
+                    // and expressions like data.rain[unclosed validated clean.
+                    throw new ParseException(
+                        "Unterminated '[' in reference at position " + bracketStart);
                 }
-                // If no closing bracket found, leave as-is (will be caught as error later)
             }
 
             return new Token(tokenType, sb.toString(), start);
@@ -588,16 +557,16 @@ public class FunctionExpressionValidator {
             parseOrExpression(errors);
         }
 
-        // OrExpression := AndExpression ( ('|' | '||') AndExpression )*
+        // OrExpression := AndExpression ( '||' AndExpression )*
         private void parseOrExpression(List<String> errors) throws ParseException {
             parseAndExpression(errors);
 
             while (current.type == TokenType.OPERATOR &&
-                   (current.value.equals("|") || current.value.equals("||"))) {
+                   (current.value.equals("||") || current.value.equals("|"))) {
 
-                // Check for C-style || operator
-                if (current.value.equals("||")) {
-                    errors.add("Invalid operator '||' - use '|' for logical OR");
+                // Logical OR is '||'; single '|' is invalid syntax
+                if (current.value.equals("|")) {
+                    errors.add("Invalid operator '|' - use '||' for logical OR");
                 }
 
                 advance();
@@ -605,16 +574,16 @@ public class FunctionExpressionValidator {
             }
         }
 
-        // AndExpression := ComparisonExpression ( ('&' | '&&') ComparisonExpression )*
+        // AndExpression := ComparisonExpression ( '&&' ComparisonExpression )*
         private void parseAndExpression(List<String> errors) throws ParseException {
             parseComparisonExpression(errors);
 
             while (current.type == TokenType.OPERATOR &&
-                   (current.value.equals("&") || current.value.equals("&&"))) {
+                   (current.value.equals("&&") || current.value.equals("&"))) {
 
-                // Check for C-style && operator
-                if (current.value.equals("&&")) {
-                    errors.add("Invalid operator '&&' - use '&' for logical AND");
+                // Logical AND is '&&'; single '&' is invalid syntax
+                if (current.value.equals("&")) {
+                    errors.add("Invalid operator '&' - use '&&' for logical AND");
                 }
 
                 advance();
@@ -668,8 +637,11 @@ public class FunctionExpressionValidator {
                 String op = current.value;
                 advance();
 
-                // Check for division by zero constant
-                if (op.equals("/") && current.type == TokenType.NUMBER && current.value.equals("0")) {
+                // Check for division by zero constant: compare the parsed value, not
+                // the literal spelling ("0.0" and "0e5" are zero too). Parenthesised
+                // zeros still escape - the divisor here must be a bare number token.
+                if (op.equals("/") && current.type == TokenType.NUMBER
+                        && Double.parseDouble(current.value) == 0.0) {
                     errors.add("Warning: Division by zero constant");
                 }
 

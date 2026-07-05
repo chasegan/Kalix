@@ -41,6 +41,8 @@ public class FlowVizDataManager {
     private Consumer<File> currentFileUpdater;
     private Runnable titleUpdater;
     private Runnable zoomToFitAction;
+    private Runnable beginPlotUpdateBatch;
+    private Runnable endPlotUpdateBatch;
     private java.util.function.Supplier<File> baseDirectorySupplier;
 
     /**
@@ -75,13 +77,38 @@ public class FlowVizDataManager {
      * @param currentFileUpdater Consumer function to update the current file reference for title display
      * @param titleUpdater Runnable to refresh the window title after data changes
      * @param zoomToFitAction Runnable to trigger zoom-to-fit operation after data import
+     * @param beginPlotUpdateBatch Runnable invoked before adding a file's series, suppressing
+     *                             per-series plot rebuilds (may be null)
+     * @param endPlotUpdateBatch Runnable invoked after a file's series are all added, performing
+     *                           the single deferred plot rebuild (may be null)
      */
     public void setupCallbacks(Consumer<File> currentFileUpdater,
                              Runnable titleUpdater,
-                             Runnable zoomToFitAction) {
+                             Runnable zoomToFitAction,
+                             Runnable beginPlotUpdateBatch,
+                             Runnable endPlotUpdateBatch) {
         this.currentFileUpdater = currentFileUpdater;
         this.titleUpdater = titleUpdater;
         this.zoomToFitAction = zoomToFitAction;
+        this.beginPlotUpdateBatch = beginPlotUpdateBatch;
+        this.endPlotUpdateBatch = endPlotUpdateBatch;
+    }
+
+    /**
+     * Adds every series of a just-imported file to the data set as one batched plot update:
+     * per-series rebuilds are suppressed for the duration and a single rebuild runs at the end.
+     */
+    private void addSeriesBatched(Runnable addAll) {
+        if (beginPlotUpdateBatch != null) {
+            beginPlotUpdateBatch.run();
+        }
+        try {
+            addAll.run();
+        } finally {
+            if (endPlotUpdateBatch != null) {
+                endPlotUpdateBatch.run();
+            }
+        }
     }
 
     /**
@@ -379,12 +406,14 @@ public class FlowVizDataManager {
 
         String fileName = resCsvFile.getName();
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Display label: "filename.res.csv: SeriesName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(resCsvFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : importResult.getSeries()) {
+                // Display label: "filename.res.csv: SeriesName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(resCsvFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(resCsvFile);
         titleUpdater.run();
@@ -501,15 +530,15 @@ public class FlowVizDataManager {
 
         // Add new data (don't clear existing data)
         String fileName = pixieFile.getName();
-        int addedCount = 0;
 
-        for (NamedSeries ns : seriesList) {
-            // Display label: "filename.pxt: SeriesName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(pixieFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-            addedCount++;
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : seriesList) {
+                // Display label: "filename.pxt: SeriesName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(pixieFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(pixieFile);
         titleUpdater.run();
@@ -518,102 +547,6 @@ public class FlowVizDataManager {
         if (zoomToFitAction != null) {
             zoomToFitAction.run();
         }
-    }
-
-    /**
-     * Loads multiple CSV files with batch progress dialog.
-     *
-     * @param csvFiles Array of CSV files to load
-     */
-    public void loadMultipleCsvFiles(File[] csvFiles) {
-        // Create progress dialog for multiple files
-        JProgressBar progressBar = new JProgressBar(0, csvFiles.length);
-        progressBar.setStringPainted(true);
-        progressBar.setString("Loading files: 0 of " + csvFiles.length);
-
-        JDialog progressDialog = new JDialog(parentFrame, "Loading Multiple Files", true);
-        progressDialog.setLayout(new BorderLayout());
-        progressDialog.add(new JLabel("Loading CSV files...", JLabel.CENTER), BorderLayout.NORTH);
-        progressDialog.add(progressBar, BorderLayout.CENTER);
-
-        JButton cancelButton = new JButton("Cancel");
-        progressDialog.add(cancelButton, BorderLayout.SOUTH);
-        progressDialog.setSize(400, 120);
-        progressDialog.setLocationRelativeTo(parentFrame);
-
-        // Load files sequentially in background thread
-        SwingWorker<Void, Integer> multiLoadTask = new SwingWorker<Void, Integer>() {
-            private volatile boolean cancelled = false;
-
-            @Override
-            protected Void doInBackground() throws Exception {
-                for (int i = 0; i < csvFiles.length && !cancelled && !isCancelled(); i++) {
-                    final int fileIndex = i;
-                    final File csvFile = csvFiles[i];
-
-                    publish(fileIndex);
-
-                    // Import file synchronously
-                    TimeSeriesCsvImporter.CsvImportTask importTask = new TimeSeriesCsvImporter.CsvImportTask(csvFile, new TimeSeriesCsvImporter.CsvImportOptions()) {
-                        @Override
-                        protected void done() {
-                            try {
-                                TimeSeriesCsvImporter.CsvImportResult result = get();
-                                SwingUtilities.invokeLater(() -> {
-                                    handleImportResult(csvFile, result);
-                                });
-                            } catch (Exception e) {
-                                SwingUtilities.invokeLater(() -> {
-                                    JOptionPane.showMessageDialog(parentFrame,
-                                        "Failed to load " + csvFile.getName() + ": " + e.getMessage(),
-                                        "Load Error", JOptionPane.ERROR_MESSAGE);
-                                });
-                            }
-                        }
-                    };
-
-                    try {
-                        // Execute and wait for completion
-                        importTask.execute();
-                        importTask.get(); // Wait for completion
-                    } catch (Exception e) {
-                        SwingUtilities.invokeLater(() -> {
-                            JOptionPane.showMessageDialog(parentFrame,
-                                "Failed to load " + csvFile.getName() + ": " + e.getMessage(),
-                                "Load Error", JOptionPane.ERROR_MESSAGE);
-                        });
-                    }
-                }
-                return null;
-            }
-
-            @Override
-            protected void process(java.util.List<Integer> chunks) {
-                if (!chunks.isEmpty()) {
-                    int fileIndex = chunks.get(chunks.size() - 1);
-                    progressBar.setValue(fileIndex);
-                    progressBar.setString("Loading files: " + (fileIndex + 1) + " of " + csvFiles.length);
-                }
-            }
-
-            @Override
-            protected void done() {
-                progressDialog.dispose();
-            }
-
-            public void cancel() {
-                cancelled = true;
-                cancel(true);
-            }
-        };
-
-        cancelButton.addActionListener(e -> {
-            multiLoadTask.cancel(true);
-            progressDialog.dispose();
-        });
-
-        multiLoadTask.execute();
-        progressDialog.setVisible(true);
     }
 
     /**
@@ -637,12 +570,14 @@ public class FlowVizDataManager {
         // Add new data (don't clear existing data)
         String fileName = csvFile.getName();
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Display label: "filename.csv: ColumnName"; identity is a DatasetSeries ref.
-            String displayName = fileName + ": " + ns.name();
-            SeriesRef ref = uniqueRefFor(csvFile, displayName);
-            dataSet.addSeries(ref, ns.data());
-        }
+        addSeriesBatched(() -> {
+            for (NamedSeries ns : importResult.getSeries()) {
+                // Display label: "filename.csv: ColumnName"; identity is a DatasetSeries ref.
+                String displayName = fileName + ": " + ns.name();
+                SeriesRef ref = uniqueRefFor(csvFile, displayName);
+                dataSet.addSeries(ref, ns.data());
+            }
+        });
 
         currentFileUpdater.accept(csvFile);
         titleUpdater.run();

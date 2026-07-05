@@ -1,6 +1,6 @@
 package com.kalix.ide.windows.optimisation;
 
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
+import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -231,25 +231,6 @@ public class OptimisationGuiBuilder extends JPanel {
      */
     public void updateSimulatedSeriesOptions(java.util.List<String> options) {
         objectivePanel.updateSimulatedSeriesOptions(options);
-    }
-
-    /**
-     * Automatically generates expressions for all parameters.
-     * Called when the Optimisation Window opens to pre-populate the parameters table.
-     * Delegates to ParametersConfigPanel.
-     */
-    public void autoGenerateParameterExpressions() {
-        parametersPanel.autoGenerateAllExpressions();
-    }
-
-    /**
-     * Sets the list of optimisable parameters from kalixcli.
-     * Delegates to ParametersConfigPanel.
-     *
-     * @param parameters List of parameter names from get_optimisable_params
-     */
-    public void setOptimisableParameters(java.util.List<String> parameters) {
-        parametersPanel.setOptimisableParameters(parameters);
     }
 
     /**

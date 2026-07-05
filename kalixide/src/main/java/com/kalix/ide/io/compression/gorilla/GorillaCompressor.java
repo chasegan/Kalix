@@ -80,17 +80,66 @@ public class GorillaCompressor {
     }
 
     /**
-     * Bit writer for efficient bit-level operations
+     * Primitive-array decode result for double series: parallel timestamp/value
+     * arrays with no per-point heap objects. This is the allocation-light path
+     * for large series ({@link #decompressDoubleArrays(byte[])});
+     * {@link #decompressDouble(byte[])} wraps it in the historical List API.
+     */
+    public static final class DoubleArraySeries {
+        public final long[] timestamps;
+        public final double[] values;
+
+        public DoubleArraySeries(long[] timestamps, double[] values) {
+            this.timestamps = timestamps;
+            this.values = values;
+        }
+
+        public int size() {
+            return timestamps.length;
+        }
+    }
+
+    /**
+     * Primitive-array decode result for float series (see {@link DoubleArraySeries}).
+     */
+    public static final class FloatArraySeries {
+        public final long[] timestamps;
+        public final float[] values;
+
+        public FloatArraySeries(long[] timestamps, float[] values) {
+            this.timestamps = timestamps;
+            this.values = values;
+        }
+
+        public int size() {
+            return timestamps.length;
+        }
+    }
+
+    /**
+     * Bit writer for efficient bit-level operations.
+     * Maintained in lockstep with BitWriter in gorilla.rs; the plain byte array
+     * mirrors the Rust Vec&lt;u8&gt; (and avoids ByteArrayOutputStream's
+     * synchronized per-byte writes).
      */
     private static class BitWriter {
-        private final ByteArrayOutputStream buffer;
+        private byte[] buffer;
+        private int length;
         private int currentByte;
         private int bitCount;
 
         public BitWriter() {
-            this.buffer = new ByteArrayOutputStream();
+            this.buffer = new byte[256];
+            this.length = 0;
             this.currentByte = 0;
             this.bitCount = 0;
+        }
+
+        private void push(int b) {
+            if (length == buffer.length) {
+                buffer = Arrays.copyOf(buffer, buffer.length * 2);
+            }
+            buffer[length++] = (byte) b;
         }
 
         public void writeBit(boolean bit) {
@@ -100,29 +149,53 @@ public class GorillaCompressor {
             bitCount++;
 
             if (bitCount == 8) {
-                buffer.write(currentByte);
+                push(currentByte);
                 currentByte = 0;
                 bitCount = 0;
             }
         }
 
+        /**
+         * Append the low {@code numBits} of {@code value}, most-significant bit first.
+         * Byte-at-a-time (up to 9 iterations for 64 bits) rather than the old
+         * bit-at-a-time loop (64); the produced bitstream is identical, and is
+         * pinned by the cross-language fixtures in GorillaCompressorTest.
+         * Mirrors BitWriter::write_bits in gorilla.rs.
+         */
         public void writeBits(long value, int numBits) {
-            for (int i = numBits - 1; i >= 0; i--) {
-                boolean bit = ((value >> i) & 1) == 1;
-                writeBit(bit);
+            int remaining = numBits;
+            while (remaining > 0) {
+                int free = 8 - bitCount;
+                int take = Math.min(free, remaining);
+                int shift = remaining - take;
+                int chunk = (int) ((value >>> shift) & ((1L << take) - 1));
+                currentByte |= chunk << (free - take);
+                bitCount += take;
+                remaining -= take;
+                if (bitCount == 8) {
+                    push(currentByte);
+                    currentByte = 0;
+                    bitCount = 0;
+                }
             }
         }
 
         public byte[] finish() {
             if (bitCount > 0) {
-                buffer.write(currentByte);
+                push(currentByte);
+                currentByte = 0;
+                bitCount = 0;
             }
-            return buffer.toByteArray();
+            return Arrays.copyOf(buffer, length);
         }
     }
 
     /**
-     * Bit reader for efficient bit-level operations
+     * Bit reader for efficient bit-level operations.
+     * Maintained in lockstep with BitReader in gorilla.rs. Where the Rust twin
+     * returns {@code Option::None} at end of input (mapped to an error by
+     * {@code ok_or_else} at each call site), these methods throw IOException
+     * directly — same control flow, no boxed Boolean/Long per read.
      */
     private static class BitReader {
         private final byte[] data;
@@ -135,9 +208,9 @@ public class GorillaCompressor {
             this.bitIndex = 0;
         }
 
-        public Boolean readBit() {
+        public boolean readBit() throws IOException {
             if (byteIndex >= data.length) {
-                return null;
+                throw new IOException("Unexpected end of data");
             }
 
             byte b = data[byteIndex];
@@ -152,14 +225,29 @@ public class GorillaCompressor {
             return bit;
         }
 
-        public Long readBits(int numBits) {
+        /**
+         * Read {@code numBits} (MSB first), byte-at-a-time rather than the old
+         * bit-at-a-time loop. Mirrors writeBits and BitReader::read_bits in
+         * gorilla.rs; the bitstream interpretation is unchanged and pinned by
+         * the cross-language fixtures in GorillaCompressorTest.
+         */
+        public long readBits(int numBits) throws IOException {
             long value = 0L;
-            for (int i = 0; i < numBits; i++) {
-                Boolean bit = readBit();
-                if (bit == null) {
-                    return null;
+            int remaining = numBits;
+            while (remaining > 0) {
+                if (byteIndex >= data.length) {
+                    throw new IOException("Unexpected end of data");
                 }
-                value = (value << 1) | (bit ? 1L : 0L);
+                int available = 8 - bitIndex;
+                int take = Math.min(available, remaining);
+                int chunk = ((data[byteIndex] & 0xFF) >>> (available - take)) & ((1 << take) - 1);
+                value = (value << take) | chunk;
+                bitIndex += take;
+                remaining -= take;
+                if (bitIndex == 8) {
+                    byteIndex++;
+                    bitIndex = 0;
+                }
             }
             return value;
         }
@@ -179,10 +267,13 @@ public class GorillaCompressor {
         writer.writeBits(timestep, 64);
         writer.writeBits(series.size(), 32);
         writer.writeBits(series.get(0).timestamp, 64);
-        writer.writeBits(Double.doubleToLongBits(series.get(0).value), 64);
+        // Raw bits throughout the codec: doubleToLongBits would canonicalize NaN
+        // payloads, desynchronizing the XOR chain against the Rust encoder, which
+        // uses to_bits() (raw) — see gorilla.rs.
+        writer.writeBits(Double.doubleToRawLongBits(series.get(0).value), 64);
 
         long prevTimestamp = series.get(0).timestamp;
-        long prevValueBits = Double.doubleToLongBits(series.get(0).value);
+        long prevValueBits = Double.doubleToRawLongBits(series.get(0).value);
         long prevDelta = 0;
 
         for (int i = 1; i < series.size(); i++) {
@@ -191,7 +282,7 @@ public class GorillaCompressor {
             compressValueDouble(writer, point.value, prevValueBits);
 
             prevTimestamp = point.timestamp;
-            prevValueBits = Double.doubleToLongBits(point.value);
+            prevValueBits = Double.doubleToRawLongBits(point.value);
         }
 
         return writer.finish();
@@ -211,10 +302,11 @@ public class GorillaCompressor {
         writer.writeBits(timestep, 64);
         writer.writeBits(series.size(), 32);
         writer.writeBits(series.get(0).timestamp, 64);
-        writer.writeBits(Float.floatToIntBits(series.get(0).value) & 0xFFFFFFFFL, 32);
+        // Raw bits throughout the codec (see compressDouble).
+        writer.writeBits(Float.floatToRawIntBits(series.get(0).value) & 0xFFFFFFFFL, 32);
 
         long prevTimestamp = series.get(0).timestamp;
-        int prevValueBits = Float.floatToIntBits(series.get(0).value);
+        int prevValueBits = Float.floatToRawIntBits(series.get(0).value);
         long prevDelta = 0;
 
         for (int i = 1; i < series.size(); i++) {
@@ -223,13 +315,14 @@ public class GorillaCompressor {
             compressValueFloat(writer, point.value, prevValueBits);
 
             prevTimestamp = point.timestamp;
-            prevValueBits = Float.floatToIntBits(point.value);
+            prevValueBits = Float.floatToRawIntBits(point.value);
         }
 
         return writer.finish();
     }
 
-    private long compressTimestamp(BitWriter writer, long timestamp, long prevTimestamp, long prevDelta) {
+    private long compressTimestamp(BitWriter writer, long timestamp, long prevTimestamp, long prevDelta)
+            throws IOException {
         long delta = timestamp - prevTimestamp;
 
         if (delta == timestep) {
@@ -256,9 +349,15 @@ public class GorillaCompressor {
             } else if (deltaOfDeltas >= -2047 && deltaOfDeltas <= 2048) {
                 writer.writeBits(2, 2); // 12-bit encoding
                 writer.writeBits(deltaOfDeltas + 2047, 12);
-            } else {
+            } else if (deltaOfDeltas >= Integer.MIN_VALUE && deltaOfDeltas <= Integer.MAX_VALUE) {
                 writer.writeBits(3, 2); // 32-bit encoding
                 writer.writeBits(deltaOfDeltas, 32);
+            } else {
+                // The largest escape is 32 bits; anything wider would be silently
+                // truncated on encode and mis-decoded as a wrong timestamp. The Rust
+                // encoder enforces the same limit (gorilla.rs) — keep them in lockstep.
+                throw new IOException(
+                    "Timestamp delta-of-deltas " + deltaOfDeltas + " exceeds the 32-bit encoding range");
             }
 
             return delta;
@@ -266,7 +365,7 @@ public class GorillaCompressor {
     }
 
     private void compressValueDouble(BitWriter writer, double value, long prevValueBits) {
-        long valueBits = Double.doubleToLongBits(value);
+        long valueBits = Double.doubleToRawLongBits(value);
 
         if (valueBits == prevValueBits) {
             // Same value
@@ -298,7 +397,7 @@ public class GorillaCompressor {
     }
 
     private void compressValueFloat(BitWriter writer, float value, int prevValueBits) {
-        int valueBits = Float.floatToIntBits(value);
+        int valueBits = Float.floatToRawIntBits(value);
 
         if (valueBits == prevValueBits) {
             // Same value
@@ -328,48 +427,62 @@ public class GorillaCompressor {
     }
 
     /**
-     * Decompress double timeseries data
+     * Decompress double timeseries data.
+     * Thin wrapper over {@link #decompressDoubleArrays(byte[])}, preserving the
+     * historical List API; prefer the array form on hot paths (it allocates two
+     * arrays total rather than two heap objects per point).
      */
     public List<TimeValueDouble> decompressDouble(byte[] compressed) throws IOException {
+        DoubleArraySeries series = decompressDoubleArrays(compressed);
+        int n = series.size();
+        List<TimeValueDouble> result = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            result.add(new TimeValueDouble(series.timestamps[i], series.values[i]));
+        }
+        return result;
+    }
+
+    /**
+     * Decompress double timeseries data into primitive parallel arrays.
+     * Control flow mirrors decompress_double in gorilla.rs — the two decoders
+     * are maintained in lockstep.
+     */
+    public DoubleArraySeries decompressDoubleArrays(byte[] compressed) throws IOException {
         if (compressed.length == 0) {
-            return new ArrayList<>();
+            return new DoubleArraySeries(new long[0], new double[0]);
         }
 
         BitReader reader = new BitReader(compressed);
-        List<TimeValueDouble> result = new ArrayList<>();
 
         // Read header
-        Long timestep = reader.readBits(64);
-        Long count = reader.readBits(32);
-        Long firstTimestamp = reader.readBits(64);
-        Long firstValueBits = reader.readBits(64);
+        long timestep = reader.readBits(64);
+        long count = reader.readBits(32);
+        long firstTimestamp = reader.readBits(64);
+        long firstValueBits = reader.readBits(64);
+        int n = checkedPointCount(count, compressed.length, 64);
 
-        if (timestep == null || count == null || firstTimestamp == null || firstValueBits == null) {
-            throw new IOException("Invalid header");
-        }
-
-        double firstValue = Double.longBitsToDouble(firstValueBits);
-        result.add(new TimeValueDouble(firstTimestamp, firstValue));
+        long[] timestamps = new long[n];
+        double[] values = new double[n];
+        timestamps[0] = firstTimestamp;
+        values[0] = Double.longBitsToDouble(firstValueBits);
 
         long prevTimestamp = firstTimestamp;
+        // The XOR chain state is carried as raw bits, never round-tripped through a
+        // double: doubleToLongBits canonicalizes NaN payloads, which would desync
+        // this decoder from the Rust encoder's raw-bits chain (gorilla.rs).
         long prevValueBits = firstValueBits;
         long prevDelta = 0;
 
         // Read remaining data points (count - 1 since we already have the first)
-        for (int i = 1; i < count; i++) {
-            Boolean controlBit = reader.readBit();
-            if (controlBit == null) {
-                throw new IOException("Unexpected end of data");
-            }
+        for (int i = 1; i < n; i++) {
+            boolean controlBit = reader.readBit();
+
             // Decompress timestamp
             long timestamp;
             if (!controlBit) {
                 timestamp = prevTimestamp + timestep;
             } else {
-                Boolean deltaControl = reader.readBit();
-                if (deltaControl == null) {
-                    throw new IOException("Unexpected end of data");
-                }
+                boolean deltaControl = reader.readBit();
                 if (!deltaControl) {
                     timestamp = prevTimestamp + prevDelta;
                 } else {
@@ -380,102 +493,93 @@ public class GorillaCompressor {
             }
 
             // Decompress value
-            Boolean valueControl = reader.readBit();
-            if (valueControl == null) {
-                throw new IOException("Unexpected end of data");
-            }
+            boolean valueControl = reader.readBit();
 
-            double value;
-            if (!valueControl) {
-                // Same value
-                value = Double.longBitsToDouble(prevValueBits);
-            } else {
-                Boolean encodingControl = reader.readBit();
-                if (encodingControl == null) {
-                    throw new IOException("Unexpected end of data");
-                }
+            if (valueControl) {
+                boolean encodingControl = reader.readBit();
 
                 if (!encodingControl) {
                     // Compressed XOR encoding
-                    Long leadingZeros = reader.readBits(5);
-                    Long meaningfulBits = reader.readBits(6);
+                    int leadingZeros = (int) reader.readBits(5);
+                    int meaningfulBits = (int) reader.readBits(6);
 
-                    if (leadingZeros == null || meaningfulBits == null) {
-                        throw new IOException("Invalid value encoding");
-                    }
-
-                    if (meaningfulBits == 0) {
-                        value = Double.longBitsToDouble(prevValueBits);
-                    } else {
-                        Long meaningfulValue = reader.readBits(meaningfulBits.intValue());
-                        if (meaningfulValue == null) {
-                            throw new IOException("Invalid value encoding");
+                    if (meaningfulBits != 0) {
+                        long meaningfulValue = reader.readBits(meaningfulBits);
+                        int trailingZeros = 64 - leadingZeros - meaningfulBits;
+                        if (trailingZeros < 0) {
+                            throw new IOException("Corrupt value encoding: leading + meaningful bits exceed 64");
                         }
-                        int trailingZeros = 64 - leadingZeros.intValue() - meaningfulBits.intValue();
-                        long xor = meaningfulValue << trailingZeros;
-                        value = Double.longBitsToDouble(prevValueBits ^ xor);
+                        prevValueBits ^= meaningfulValue << trailingZeros;
                     }
                 } else {
                     // Full 64-bit value
-                    Long valueBits = reader.readBits(64);
-                    if (valueBits == null) {
-                        throw new IOException("Invalid value encoding");
-                    }
-                    value = Double.longBitsToDouble(valueBits);
+                    prevValueBits = reader.readBits(64);
                 }
             }
+            // else: same value — bit state unchanged
 
-            result.add(new TimeValueDouble(timestamp, value));
+            timestamps[i] = timestamp;
+            values[i] = Double.longBitsToDouble(prevValueBits);
             prevTimestamp = timestamp;
-            prevValueBits = Double.doubleToLongBits(value);
         }
 
+        return new DoubleArraySeries(timestamps, values);
+    }
+
+    /**
+     * Decompress float timeseries data.
+     * Thin wrapper over {@link #decompressFloatArrays(byte[])}, preserving the
+     * historical List API; prefer the array form on hot paths.
+     */
+    public List<TimeValueFloat> decompressFloat(byte[] compressed) throws IOException {
+        FloatArraySeries series = decompressFloatArrays(compressed);
+        int n = series.size();
+        List<TimeValueFloat> result = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            result.add(new TimeValueFloat(series.timestamps[i], series.values[i]));
+        }
         return result;
     }
 
     /**
-     * Decompress float timeseries data
+     * Decompress float timeseries data into primitive parallel arrays.
+     * Control flow mirrors decompress_float in gorilla.rs — the two decoders
+     * are maintained in lockstep.
      */
-    public List<TimeValueFloat> decompressFloat(byte[] compressed) throws IOException {
+    public FloatArraySeries decompressFloatArrays(byte[] compressed) throws IOException {
         if (compressed.length == 0) {
-            return new ArrayList<>();
+            return new FloatArraySeries(new long[0], new float[0]);
         }
 
         BitReader reader = new BitReader(compressed);
-        List<TimeValueFloat> result = new ArrayList<>();
 
         // Read header
-        Long timestep = reader.readBits(64);
-        Long count = reader.readBits(32);
-        Long firstTimestamp = reader.readBits(64);
-        Long firstValueBits = reader.readBits(32);
+        long timestep = reader.readBits(64);
+        long count = reader.readBits(32);
+        long firstTimestamp = reader.readBits(64);
+        int firstValueBits = (int) reader.readBits(32);
+        int n = checkedPointCount(count, compressed.length, 32);
 
-        if (timestep == null || count == null || firstTimestamp == null || firstValueBits == null) {
-            throw new IOException("Invalid header");
-        }
-
-        float firstValue = Float.intBitsToFloat(firstValueBits.intValue());
-        result.add(new TimeValueFloat(firstTimestamp, firstValue));
+        long[] timestamps = new long[n];
+        float[] values = new float[n];
+        timestamps[0] = firstTimestamp;
+        values[0] = Float.intBitsToFloat(firstValueBits);
 
         long prevTimestamp = firstTimestamp;
-        int prevValueBits = firstValueBits.intValue();
+        // Raw-bits chain state, as in decompressDoubleArrays.
+        int prevValueBits = firstValueBits;
         long prevDelta = 0;
 
         // Read remaining data points (count - 1 since we already have the first)
-        for (int i = 1; i < count; i++) {
-            Boolean controlBit = reader.readBit();
-            if (controlBit == null) {
-                throw new IOException("Unexpected end of data");
-            }
+        for (int i = 1; i < n; i++) {
+            boolean controlBit = reader.readBit();
+
             // Decompress timestamp (same logic as double)
             long timestamp;
             if (!controlBit) {
                 timestamp = prevTimestamp + timestep;
             } else {
-                Boolean deltaControl = reader.readBit();
-                if (deltaControl == null) {
-                    throw new IOException("Unexpected end of data");
-                }
+                boolean deltaControl = reader.readBit();
                 if (!deltaControl) {
                     timestamp = prevTimestamp + prevDelta;
                 } else {
@@ -486,99 +590,73 @@ public class GorillaCompressor {
             }
 
             // Decompress value (adapted for float)
-            Boolean valueControl = reader.readBit();
-            if (valueControl == null) {
-                throw new IOException("Unexpected end of data");
-            }
+            boolean valueControl = reader.readBit();
 
-            float value;
-            if (!valueControl) {
-                // Same value
-                value = Float.intBitsToFloat(prevValueBits);
-            } else {
-                Boolean encodingControl = reader.readBit();
-                if (encodingControl == null) {
-                    throw new IOException("Unexpected end of data");
-                }
+            if (valueControl) {
+                boolean encodingControl = reader.readBit();
 
                 if (!encodingControl) {
                     // Compressed XOR encoding
-                    Long leadingZeros = reader.readBits(5);
-                    Long meaningfulBits = reader.readBits(6);
+                    int leadingZeros = (int) reader.readBits(5);
+                    int meaningfulBits = (int) reader.readBits(6);
 
-                    if (leadingZeros == null || meaningfulBits == null) {
-                        throw new IOException("Invalid value encoding");
-                    }
-
-                    if (meaningfulBits == 0) {
-                        value = Float.intBitsToFloat(prevValueBits);
-                    } else {
-                        Long meaningfulValue = reader.readBits(meaningfulBits.intValue());
-                        if (meaningfulValue == null) {
-                            throw new IOException("Invalid value encoding");
+                    if (meaningfulBits != 0) {
+                        long meaningfulValue = reader.readBits(meaningfulBits);
+                        int trailingZeros = 32 - leadingZeros - meaningfulBits;
+                        if (trailingZeros < 0) {
+                            throw new IOException("Corrupt value encoding: leading + meaningful bits exceed 32");
                         }
-                        int trailingZeros = 32 - leadingZeros.intValue() - meaningfulBits.intValue();
-                        int xor = (int)(meaningfulValue << trailingZeros);
-                        value = Float.intBitsToFloat(prevValueBits ^ xor);
+                        prevValueBits ^= (int) (meaningfulValue << trailingZeros);
                     }
                 } else {
                     // Full 32-bit value
-                    Long valueBits = reader.readBits(32);
-                    if (valueBits == null) {
-                        throw new IOException("Invalid value encoding");
-                    }
-                    value = Float.intBitsToFloat(valueBits.intValue());
+                    prevValueBits = (int) reader.readBits(32);
                 }
             }
+            // else: same value — bit state unchanged
 
-            result.add(new TimeValueFloat(timestamp, value));
+            timestamps[i] = timestamp;
+            values[i] = Float.intBitsToFloat(prevValueBits);
             prevTimestamp = timestamp;
-            prevValueBits = Float.floatToIntBits(value);
         }
 
-        return result;
+        return new FloatArraySeries(timestamps, values);
+    }
+
+    /**
+     * Validate the header's point count before preallocating the decode arrays:
+     * it must fit an int, be at least 1 (a non-empty stream always carries its
+     * first point in the header), and not exceed what the payload could possibly
+     * hold (each point after the first costs at least 2 bits) — so a corrupt
+     * header cannot force a huge allocation.
+     */
+    private static int checkedPointCount(long count, int compressedLength, int firstValueBitsWidth)
+            throws IOException {
+        long headerBits = 64 + 32 + 64 + (long) firstValueBitsWidth;
+        long maxPoints = 1 + (compressedLength * 8L - headerBits) / 2;
+        if (count < 1 || count > Integer.MAX_VALUE || count > maxPoints) {
+            throw new IOException("Invalid point count: " + count);
+        }
+        return (int) count;
     }
 
     private long readDeltaOfDeltas(BitReader reader) throws IOException {
-        Long encodingType = reader.readBits(2);
-        if (encodingType == null) {
-            throw new IOException("Invalid delta encoding");
-        }
+        int encodingType = (int) reader.readBits(2);
 
-        switch (encodingType.intValue()) {
-            case 0: {
+        switch (encodingType) {
+            case 0:
                 // 7-bit encoding
-                Long value = reader.readBits(7);
-                if (value == null) {
-                    throw new IOException("Invalid delta encoding");
-                }
-                return value - 63;
-            }
-            case 1: {
+                return reader.readBits(7) - 63;
+            case 1:
                 // 9-bit encoding
-                Long value = reader.readBits(9);
-                if (value == null) {
-                    throw new IOException("Invalid delta encoding");
-                }
-                return value - 255;
-            }
-            case 2: {
+                return reader.readBits(9) - 255;
+            case 2:
                 // 12-bit encoding
-                Long value = reader.readBits(12);
-                if (value == null) {
-                    throw new IOException("Invalid delta encoding");
-                }
-                return value - 2047;
-            }
-            case 3: {
+                return reader.readBits(12) - 2047;
+            case 3:
                 // 32-bit encoding. The encoder wrote the low 32 bits of a signed
                 // delta-of-deltas (two's complement), so sign-extend on the way back.
-                Long value = reader.readBits(32);
-                if (value == null) {
-                    throw new IOException("Invalid delta encoding");
-                }
-                return value.intValue(); // int cast truncates to 32 bits; widening back sign-extends
-            }
+                return (int) reader.readBits(32); // int cast truncates to 32 bits; widening back sign-extends
             default:
                 throw new IOException("Invalid encoding type");
         }
@@ -613,6 +691,19 @@ public class GorillaCompressor {
     }
 
     /**
+     * Decompress from base64 into primitive parallel arrays
+     * (see {@link #decompressDoubleArrays(byte[])}).
+     */
+    public DoubleArraySeries decompressDoubleArraysBase64(String base64Data) throws IOException {
+        try {
+            byte[] compressed = Base64.getDecoder().decode(base64Data);
+            return decompressDoubleArrays(compressed);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Base64 decode error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Decompress from base64
      */
     public List<TimeValueFloat> decompressFloatBase64(String base64Data) throws IOException {
@@ -631,153 +722,5 @@ public class GorillaCompressor {
 
     public static TimeValueFloat floatPoint(long timestamp, float value) {
         return new TimeValueFloat(timestamp, value);
-    }
-
-    // Unit tests
-    public static void main(String[] args) {
-        try {
-            testRegularSeriesDouble();
-            testRepeatedValuesDouble();
-            testSpecialValuesDouble();
-            testFloatCompression();
-            testBase64Encoding();
-            testEmptySeries();
-            System.out.println("All tests passed!");
-        } catch (Exception e) {
-            System.err.println("Test failed: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private static void testRegularSeriesDouble() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(1000);
-        List<TimeValueDouble> series = Arrays.asList(
-                doublePoint(1000, 1.0),
-                doublePoint(2000, 2.0),
-                doublePoint(3000, 3.0),
-                doublePoint(4000, 4.0),
-                doublePoint(5000, 5.0)
-        );
-
-        byte[] compressed = compressor.compressDouble(series);
-        List<TimeValueDouble> decompressed = compressor.decompressDouble(compressed);
-
-        if (!series.equals(decompressed)) {
-            throw new RuntimeException("Regular series test failed");
-        }
-    }
-
-    private static void testRepeatedValuesDouble() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(1000);
-        List<TimeValueDouble> series = Arrays.asList(
-                doublePoint(1000, 42.0),
-                doublePoint(2000, 42.0),
-                doublePoint(3000, 42.0),
-                doublePoint(4000, 43.0),
-                doublePoint(5000, 42.0)
-        );
-
-        byte[] compressed = compressor.compressDouble(series);
-        List<TimeValueDouble> decompressed = compressor.decompressDouble(compressed);
-
-        if (!series.equals(decompressed)) {
-            throw new RuntimeException("Repeated values test failed");
-        }
-    }
-
-    private static void testSpecialValuesDouble() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(1000);
-        List<TimeValueDouble> series = Arrays.asList(
-                doublePoint(1000, 0.0),
-                doublePoint(2000, Double.NaN),
-                doublePoint(3000, Double.POSITIVE_INFINITY),
-                doublePoint(4000, Double.NEGATIVE_INFINITY),
-                doublePoint(5000, -0.0)
-        );
-
-        byte[] compressed = compressor.compressDouble(series);
-        List<TimeValueDouble> decompressed = compressor.decompressDouble(compressed);
-
-        // NaN comparison requires special handling
-        if (decompressed.size() != series.size()) {
-            throw new RuntimeException("Special values test failed - size mismatch");
-        }
-        if (!decompressed.get(0).equals(doublePoint(1000, 0.0))) {
-            throw new RuntimeException("Special values test failed - first value");
-        }
-        if (!Double.isNaN(decompressed.get(1).value)) {
-            throw new RuntimeException("Special values test failed - NaN");
-        }
-        if (!decompressed.get(2).equals(doublePoint(3000, Double.POSITIVE_INFINITY))) {
-            throw new RuntimeException("Special values test failed - positive infinity");
-        }
-        if (!decompressed.get(3).equals(doublePoint(4000, Double.NEGATIVE_INFINITY))) {
-            throw new RuntimeException("Special values test failed - negative infinity");
-        }
-        if (!decompressed.get(4).equals(doublePoint(5000, -0.0))) {
-            throw new RuntimeException("Special values test failed - negative zero");
-        }
-    }
-
-    private static void testFloatCompression() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(500);
-        List<TimeValueFloat> series = Arrays.asList(
-                floatPoint(500, 1.5f),
-                floatPoint(1000, 2.5f),
-                floatPoint(1500, 2.5f), // repeated value
-                floatPoint(2000, Float.NaN),
-                floatPoint(2500, 0.0f)
-        );
-
-        byte[] compressed = compressor.compressFloat(series);
-        List<TimeValueFloat> decompressed = compressor.decompressFloat(compressed);
-
-        if (decompressed.size() != series.size()) {
-            throw new RuntimeException("Float compression test failed - size mismatch");
-        }
-        if (!decompressed.get(0).equals(floatPoint(500, 1.5f))) {
-            throw new RuntimeException("Float compression test failed - first value");
-        }
-        if (!decompressed.get(1).equals(floatPoint(1000, 2.5f))) {
-            throw new RuntimeException("Float compression test failed - second value");
-        }
-        if (!decompressed.get(2).equals(floatPoint(1500, 2.5f))) {
-            throw new RuntimeException("Float compression test failed - repeated value");
-        }
-        if (!Float.isNaN(decompressed.get(3).value)) {
-            throw new RuntimeException("Float compression test failed - NaN");
-        }
-        if (!decompressed.get(4).equals(floatPoint(2500, 0.0f))) {
-            throw new RuntimeException("Float compression test failed - zero value");
-        }
-    }
-
-    private static void testBase64Encoding() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(1000);
-        List<TimeValueDouble> series = Arrays.asList(
-                doublePoint(1000, 1.0),
-                doublePoint(2000, 2.0),
-                doublePoint(3000, 2.0), // repeated
-                doublePoint(4000, 4.0)
-        );
-
-        String base64Compressed = compressor.compressDoubleBase64(series);
-        List<TimeValueDouble> decompressed = compressor.decompressDoubleBase64(base64Compressed);
-
-        if (!series.equals(decompressed)) {
-            throw new RuntimeException("Base64 encoding test failed");
-        }
-    }
-
-    private static void testEmptySeries() throws IOException {
-        GorillaCompressor compressor = new GorillaCompressor(1000);
-        List<TimeValueDouble> series = new ArrayList<>();
-
-        byte[] compressed = compressor.compressDouble(series);
-        List<TimeValueDouble> decompressed = compressor.decompressDouble(compressed);
-
-        if (!series.equals(decompressed)) {
-            throw new RuntimeException("Empty series test failed");
-        }
     }
 }

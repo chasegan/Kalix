@@ -1,6 +1,5 @@
 package com.kalix.ide.editor.autocomplete;
 
-import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.io.DataSourceHeaderReader;
 import com.kalix.ide.linter.LinterSchema;
@@ -16,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +32,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     private final LinterSchema schema;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final InputDataRegistry inputDataRegistry;
-    private final Supplier<File> baseDirectorySupplier;
+    private final InputFileScanner inputFileScanner;
 
     private CompletionContext currentContext;
 
@@ -62,11 +60,11 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     public KalixCompletionProvider(LinterSchema schema,
                                    Supplier<INIModelParser.ParsedModel> modelSupplier,
                                    InputDataRegistry inputDataRegistry,
-                                   Supplier<File> baseDirectorySupplier) {
+                                   InputFileScanner inputFileScanner) {
         this.schema = schema;
         this.modelSupplier = modelSupplier;
         this.inputDataRegistry = inputDataRegistry;
-        this.baseDirectorySupplier = baseDirectorySupplier;
+        this.inputFileScanner = inputFileScanner;
     }
 
     @Override
@@ -349,46 +347,18 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     }
 
     private void addInputFileCompletions() {
-        File baseDir = baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
-        if (baseDir == null || !baseDir.isDirectory()) {
+        if (inputFileScanner == null) {
             return;
         }
-
-        List<File> csvFiles = new ArrayList<>();
-        collectCsvFiles(baseDir, 0, csvFiles);
-
-        for (File csvFile : csvFiles) {
-            String relativePath = baseDir.toPath().relativize(csvFile.toPath()).toString();
-            // Use forward slashes for consistency across platforms
-            relativePath = relativePath.replace('\\', '/');
-
+        // Cached listing with a coalesced background rescan — the recursive
+        // directory walk no longer runs on the EDT per popup.
+        for (String relativePath : inputFileScanner.getRelativePathsAndRefresh()) {
+            String fileName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
             BasicCompletion completion = new BasicCompletion(this, relativePath,
                     null,
-                    "<html><b>" + csvFile.getName() + "</b>"
+                    "<html><b>" + fileName + "</b>"
                             + "<br><br>Path: " + relativePath + "</html>");
             addCompletion(completion);
-        }
-    }
-
-    private void collectCsvFiles(File directory, int depth, List<File> results) {
-        if (depth > UIConstants.AutoComplete.MAX_INPUT_FILE_SCAN_DEPTH || results.size() >= UIConstants.AutoComplete.MAX_INPUT_FILE_COUNT) {
-            return;
-        }
-
-        File[] files = directory.listFiles();
-        if (files == null) {
-            return;
-        }
-
-        for (File file : files) {
-            if (results.size() >= UIConstants.AutoComplete.MAX_INPUT_FILE_COUNT) {
-                return;
-            }
-            if (file.isFile() && file.getName().toLowerCase().endsWith(".csv")) {
-                results.add(file);
-            } else if (file.isDirectory() && !file.getName().startsWith(".")) {
-                collectCsvFiles(file, depth + 1, results);
-            }
         }
     }
 

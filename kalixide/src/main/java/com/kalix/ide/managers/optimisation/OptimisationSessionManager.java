@@ -3,11 +3,8 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,18 +32,24 @@ public class OptimisationSessionManager {
     private final Supplier<String> modelTextSupplier;
 
     // Session tracking
-    private final Map<String, String> sessionToOptName = new HashMap<>();
     /**
      * Per-session OptimisationInfo. Replaces an older `sessionToTreeNode` map that
      * held an orphan tree node never added to the tree model. The displayed tree node
      * lives in {@code OptimisationTreeManager}; this map exists only for callers that
      * need the OptimisationInfo by sessionKey (e.g. {@link #getOptimisationInfo}).
+     *
+     * <p>The display name lives on {@link OptimisationInfo} — the single source of
+     * truth. There is no parallel name map; {@link #renameOptimisation} updates the
+     * info once and every surface reads it from there.</p>
      */
     private final Map<String, OptimisationInfo> sessionToOptInfo = new HashMap<>();
-    private final Map<String, OptimisationStatus> lastKnownStatus = new HashMap<>();
+    /**
+     * Shared session-tree bookkeeping (node + last-seen status), shared with
+     * {@link OptimisationTreeManager}. This manager owns the status entries and
+     * the single-shot removal; the tree manager owns the node entries.
+     */
+    private final SessionTreeBookkeeping<OptimisationStatus> sessions;
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
-    private final Map<String, String> sessionToModelText = new HashMap<>();
-    private final Map<String, String> sessionToConfigText = new HashMap<>();
 
     // Callbacks
     private Consumer<String> statusUpdater;
@@ -62,18 +65,43 @@ public class OptimisationSessionManager {
      * Creates a new OptimisationSessionManager.
      *
      * @param stdioTaskManager         The STDIO task manager
+     * @param sessions                 Session-tree bookkeeping shared with the tree manager
      * @param workingDirectorySupplier Supplier for the working directory
      * @param projectDirectorySupplier Supplier for the project directory
      * @param modelTextSupplier        Supplier for the model text
      */
     public OptimisationSessionManager(StdioTaskManager stdioTaskManager,
+                                      SessionTreeBookkeeping<OptimisationStatus> sessions,
                                       Supplier<File> workingDirectorySupplier,
                                       Supplier<File> projectDirectorySupplier,
                                       Supplier<String> modelTextSupplier) {
         this.stdioTaskManager = stdioTaskManager;
+        this.sessions = sessions;
         this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
         this.modelTextSupplier = modelTextSupplier;
+
+        // Track session death for our optimisations. Without this, a crashed or
+        // terminated kalixcli was invisible here: the tree kept rendering the frozen
+        // program state ("Optimising") forever. RunManager has always had the
+        // equivalent listener - this closes the gap on the optimisation side.
+        stdioTaskManager.getSessionManager().addSessionEventListener(event -> {
+            String sessionKey = event.getSessionKey();
+            if (!sessionToOptInfo.containsKey(sessionKey)) {
+                return;
+            }
+            SessionManager.SessionState state = event.getNewState();
+            if (state == SessionManager.SessionState.TERMINATED) {
+                sessions.putStatus(sessionKey, OptimisationStatus.STOPPED);
+            } else if (state == SessionManager.SessionState.ERROR) {
+                sessions.putStatus(sessionKey, OptimisationStatus.ERROR);
+            } else {
+                return;
+            }
+            if (onSessionCompleted != null) {
+                onSessionCompleted.accept(sessionKey);
+            }
+        });
     }
 
     /**
@@ -146,13 +174,6 @@ public class OptimisationSessionManager {
                         return;
                     }
 
-                    // Set the active program
-                    session.setActiveProgram(program);
-
-                    // Store model and config for later use
-                    sessionToModelText.put(sessionKey, modelText);
-                    sessionToConfigText.put(sessionKey, configText);
-
                     // Create optimisation info
                     OptimisationInfo optInfo = new OptimisationInfo(optName, session);
                     optInfo.setConfigSnapshot(configText);
@@ -163,7 +184,6 @@ public class OptimisationSessionManager {
                     optInfo.setResult(result);
 
                     // Add to tracking maps
-                    sessionToOptName.put(sessionKey, optName);
                     sessionToOptInfo.put(sessionKey, optInfo);
                     optimisationResults.put(sessionKey, result);
 
@@ -172,8 +192,12 @@ public class OptimisationSessionManager {
                         onOptimisationCreated.accept(optInfo);
                     }
 
-                    // Load the model
+                    // Load the model: initialize stores the model text, then
+                    // installProgram attaches the program and replays the initial
+                    // ready signal if the CLI's startup rdy already arrived (the
+                    // race that used to wedge sessions at "Waiting for CLI").
                     program.initialize(modelText);
+                    stdioTaskManager.getSessionManager().installProgram(sessionKey, program);
 
                     logger.info("Created optimisation: {} ({})", optName, sessionKey);
 
@@ -234,10 +258,9 @@ public class OptimisationSessionManager {
                 return false;
             }
 
-            // Update config snapshot and stored config
+            // Update config snapshot
             String sessionKey = session.getSessionKey();
             optInfo.setConfigSnapshot(configText);
-            sessionToConfigText.put(sessionKey, configText);
 
             // Start optimisation with config text (not file path!)
             // Note: runOptimisation is void and manages its own async operations
@@ -248,10 +271,7 @@ public class OptimisationSessionManager {
             // Update status
             optInfo.setHasStartedRunning(true);
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
-                if (optName != null) {
-                    statusUpdater.accept("Starting optimisation: " + optName);
-                }
+                statusUpdater.accept("Starting optimisation: " + optInfo.getName());
             }
 
             logger.info("Started optimisation: {}", sessionKey);
@@ -275,19 +295,19 @@ public class OptimisationSessionManager {
         }
 
         try {
-            stdioTaskManager.terminateSession(sessionKey);
-
-            // Update status
-            lastKnownStatus.put(sessionKey, OptimisationStatus.STOPPED);
+            // Cooperative stop (protocol stp), not a force-kill: the optimiser breaks at
+            // its next generation and returns the best solution found so far, which
+            // arrives as a normal result. The session stays alive.
+            stdioTaskManager.stopSession(sessionKey);
 
             if (statusUpdater != null) {
-                String optName = sessionToOptName.get(sessionKey);
+                String optName = getOptimisationName(sessionKey);
                 if (optName != null) {
-                    statusUpdater.accept("Stopped: " + optName);
+                    statusUpdater.accept("Stop requested: " + optName);
                 }
             }
 
-            logger.info("Stopped optimisation: {}", sessionKey);
+            logger.info("Stop requested for optimisation: {}", sessionKey);
         } catch (Exception e) {
             logger.error("Failed to stop optimisation: {}", sessionKey, e);
         }
@@ -299,23 +319,33 @@ public class OptimisationSessionManager {
      * @param sessionKey The session key
      * @param isActive Whether the session is currently active
      */
-    public void removeOptimisation(String sessionKey, boolean isActive) {
+    public void removeOptimisation(String sessionKey) {
         if (sessionKey == null) {
             return;
         }
 
-        // Terminate session if active
-        if (isActive) {
-            stopOptimisation(sessionKey);
+        // Always release the CLI process. Every "New" spawns a real kalixcli session
+        // immediately, so even a never-run (CONFIGURING) optimisation owns a live
+        // process - the old status==RUNNING guard leaked those until application exit.
+        SessionManager.KalixSession session =
+            stdioTaskManager.getSessionManager().getActiveSessions().get(sessionKey);
+        if (session != null) {
+            if (session.isActive()) {
+                stdioTaskManager.terminateSession(sessionKey)
+                    .thenCompose(v -> stdioTaskManager.removeSession(sessionKey));
+            } else {
+                stdioTaskManager.removeSession(sessionKey);
+            }
         }
 
         // Get name before removing
-        String optName = sessionToOptName.get(sessionKey);
+        String optName = getOptimisationName(sessionKey);
 
-        // Remove from tracking maps
-        sessionToOptName.remove(sessionKey);
+        // Remove from tracking maps - all of them. The shared bookkeeping's
+        // single-shot remove clears node + status (the tree manager has already
+        // detached the node from the displayed tree).
+        sessions.remove(sessionKey);
         sessionToOptInfo.remove(sessionKey);
-        lastKnownStatus.remove(sessionKey);
         optimisationResults.remove(sessionKey);
 
         if (statusUpdater != null && optName != null) {
@@ -326,7 +356,9 @@ public class OptimisationSessionManager {
     }
 
     /**
-     * Updates the name of an optimisation.
+     * Updates the name of an optimisation. Writes the new name onto the
+     * {@link OptimisationInfo} — the single source of truth for the display name —
+     * so every surface (tree renderer, status messages, dialogs) picks it up.
      *
      * @param sessionKey The session key
      * @param newName The new name
@@ -343,16 +375,21 @@ public class OptimisationSessionManager {
         }
 
         // Check for duplicate names
-        boolean isDuplicate = sessionToOptName.values().stream()
-            .anyMatch(name -> name.equals(trimmedName));
+        boolean isDuplicate = sessionToOptInfo.values().stream()
+            .anyMatch(info -> trimmedName.equals(info.getName()));
 
         if (isDuplicate) {
             handleError("An optimisation with this name already exists");
             return false;
         }
 
-        String oldName = sessionToOptName.get(sessionKey);
-        sessionToOptName.put(sessionKey, trimmedName);
+        OptimisationInfo optInfo = sessionToOptInfo.get(sessionKey);
+        if (optInfo == null) {
+            return false;
+        }
+
+        String oldName = optInfo.getName();
+        optInfo.setName(trimmedName);
 
         if (statusUpdater != null) {
             statusUpdater.accept(String.format("Renamed '%s' to '%s'", oldName, trimmedName));
@@ -366,13 +403,15 @@ public class OptimisationSessionManager {
     // need the displayed node should ask OptimisationTreeManager.getNodeForSession.
 
     /**
-     * Gets the optimisation name for a session.
+     * Gets the optimisation name for a session (read from the
+     * {@link OptimisationInfo}, the single source of truth).
      *
      * @param sessionKey The session key
      * @return The optimisation name, or null if not found
      */
     public String getOptimisationName(String sessionKey) {
-        return sessionToOptName.get(sessionKey);
+        OptimisationInfo info = sessionToOptInfo.get(sessionKey);
+        return info != null ? info.getName() : null;
     }
 
     /**
@@ -392,7 +431,7 @@ public class OptimisationSessionManager {
      * @return The status, or null if not found
      */
     public OptimisationStatus getLastKnownStatus(String sessionKey) {
-        return lastKnownStatus.get(sessionKey);
+        return sessions.status(sessionKey);
     }
 
     /**
@@ -403,7 +442,7 @@ public class OptimisationSessionManager {
      */
     public void updateStatus(String sessionKey, OptimisationStatus status) {
         if (sessionKey != null && status != null) {
-            lastKnownStatus.put(sessionKey, status);
+            sessions.putStatus(sessionKey, status);
         }
     }
 
@@ -424,7 +463,7 @@ public class OptimisationSessionManager {
      * @return true if the session exists, false otherwise
      */
     public boolean hasSession(String sessionKey) {
-        return sessionToOptName.containsKey(sessionKey);
+        return sessionToOptInfo.containsKey(sessionKey);
     }
 
     /**
@@ -433,7 +472,9 @@ public class OptimisationSessionManager {
      * @return Map of session keys to optimisation names
      */
     public Map<String, String> getAllSessions() {
-        return new HashMap<>(sessionToOptName);
+        Map<String, String> all = new HashMap<>();
+        sessionToOptInfo.forEach((key, info) -> all.put(key, info.getName()));
+        return all;
     }
 
     /**
@@ -445,11 +486,17 @@ public class OptimisationSessionManager {
         String baseName = "Opt " + optCounter++;
 
         // Check for duplicates and adjust if needed
-        while (sessionToOptName.containsValue(baseName)) {
+        while (isNameTaken(baseName)) {
             baseName = "Opt " + optCounter++;
         }
 
         return baseName;
+    }
+
+    /** Whether any tracked optimisation currently uses the given display name. */
+    private boolean isNameTaken(String name) {
+        return sessionToOptInfo.values().stream()
+            .anyMatch(info -> name.equals(info.getName()));
     }
 
     /**
@@ -490,17 +537,4 @@ public class OptimisationSessionManager {
         this.onErrorOccurred = callback;
     }
 
-    /**
-     * Updates the stored configuration text for a session.
-     * This should be called when the user modifies the config in the UI.
-     *
-     * @param sessionKey The session key
-     * @param configText The updated configuration text
-     */
-    public void updateOptimisationConfig(String sessionKey, String configText) {
-        if (sessionKey != null && configText != null) {
-            sessionToConfigText.put(sessionKey, configText);
-            logger.debug("Updated config for session: {}", sessionKey);
-        }
-    }
 }

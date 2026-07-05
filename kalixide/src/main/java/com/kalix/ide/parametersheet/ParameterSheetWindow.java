@@ -470,6 +470,7 @@ public class ParameterSheetWindow extends JDialog {
 
             replacements.add(new EnhancedTextEditor.LineReplacement(
                     change.originalLineNumber,
+                    0, // whole-line replacement
                     lines[lineIndex],
                     newLine
             ));
@@ -620,8 +621,9 @@ public class ParameterSheetWindow extends JDialog {
 
     private class DirtyCellRenderer extends DefaultTableCellRenderer {
 
-        private static final Color DIRTY_BACKGROUND = new Color(255, 255, 200);
-        private static final Color NAME_BACKGROUND = new Color(240, 240, 240);
+        // Historical light-theme tints, kept as the light fork of the accents
+        private static final Color DIRTY_LIGHT = new Color(255, 255, 200);
+        private static final Color DIRTY_DARK = new Color(92, 86, 38);
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value,
@@ -630,17 +632,34 @@ public class ParameterSheetWindow extends JDialog {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
             if (!isSelected) {
+                Color base = tableBackground();
+                boolean dark = com.kalix.ide.utils.ThemeUtils.isDark(base);
                 int modelRow = table.convertRowIndexToModel(row);
                 if (column == 0) {
-                    c.setBackground(NAME_BACKGROUND);
+                    // Name column: subtle contrast against the ordinary cells
+                    c.setBackground(shift(base, dark ? 15 : -15));
                 } else if (tableModel.isCellDirty(modelRow, column)) {
-                    c.setBackground(DIRTY_BACKGROUND);
+                    c.setBackground(dark ? DIRTY_DARK : DIRTY_LIGHT);
                 } else {
-                    c.setBackground(Color.WHITE);
+                    c.setBackground(base);
                 }
             }
 
             return c;
+        }
+
+        /** The theme's table background; the historical white as fallback. */
+        private static Color tableBackground() {
+            Color c = UIManager.getColor("Table.background");
+            return c != null ? c : Color.WHITE;
+        }
+
+        /** Shifts every channel by {@code amount}, clamped to 0-255. */
+        private static Color shift(Color color, int amount) {
+            return new Color(
+                Math.max(0, Math.min(255, color.getRed() + amount)),
+                Math.max(0, Math.min(255, color.getGreen() + amount)),
+                Math.max(0, Math.min(255, color.getBlue() + amount)));
         }
     }
 }

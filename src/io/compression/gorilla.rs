@@ -179,7 +179,7 @@ impl GorillaCompressor {
         let mut prev_delta = 0u64;
 
         for point in &series[1..] {
-            prev_delta = self.compress_timestamp(&mut writer, point.timestamp, prev_timestamp, prev_delta);
+            prev_delta = self.compress_timestamp(&mut writer, point.timestamp, prev_timestamp, prev_delta)?;
             self.compress_value_double(&mut writer, point.value, prev_value_bits);
 
             prev_timestamp = point.timestamp;
@@ -208,7 +208,7 @@ impl GorillaCompressor {
         let mut prev_delta = 0u64;
 
         for point in &series[1..] {
-            prev_delta = self.compress_timestamp(&mut writer, point.timestamp, prev_timestamp, prev_delta);
+            prev_delta = self.compress_timestamp(&mut writer, point.timestamp, prev_timestamp, prev_delta)?;
             self.compress_value_float(&mut writer, point.value, prev_value_bits);
 
             prev_timestamp = point.timestamp;
@@ -218,18 +218,24 @@ impl GorillaCompressor {
         Ok(writer.finish())
     }
 
-    fn compress_timestamp(&self, writer: &mut BitWriter, timestamp: u64, prev_timestamp: u64, prev_delta: u64) -> u64 {
+    fn compress_timestamp(
+        &self,
+        writer: &mut BitWriter,
+        timestamp: u64,
+        prev_timestamp: u64,
+        prev_delta: u64,
+    ) -> Result<u64, io::Error> {
         let delta = timestamp - prev_timestamp;
 
         if delta == self.timestep {
             // Common case: regular timestep
             writer.write_bit(false);
-            prev_delta
+            Ok(prev_delta)
         } else if delta == prev_delta {
             // Delta of deltas is 0
             writer.write_bit(true);
             writer.write_bit(false);
-            prev_delta
+            Ok(prev_delta)
         } else {
             // Need to encode delta of deltas
             let delta_of_deltas = (delta as i64) - (prev_delta as i64);
@@ -245,12 +251,24 @@ impl GorillaCompressor {
             } else if delta_of_deltas >= -2047 && delta_of_deltas <= 2048 {
                 writer.write_bits(2, 2); // 12-bit encoding
                 writer.write_bits((delta_of_deltas + 2047) as u64, 12);
-            } else {
+            } else if delta_of_deltas >= i32::MIN as i64 && delta_of_deltas <= i32::MAX as i64 {
                 writer.write_bits(3, 2); // 32-bit encoding
                 writer.write_bits(delta_of_deltas as u64, 32);
+            } else {
+                // The largest escape is 32 bits; a wider delta-of-deltas would be
+                // silently truncated on encode and mis-decoded as a wrong timestamp.
+                // The Java encoder enforces the same limit (GorillaCompressor.java) —
+                // keep them in lockstep.
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "timestamp delta-of-deltas {} exceeds the 32-bit encoding range",
+                        delta_of_deltas
+                    ),
+                ));
             }
 
-            delta
+            Ok(delta)
         }
     }
 
@@ -719,6 +737,41 @@ mod tests {
             "AAAAAAABUYAAAAAMAAAAAAAAAABAj0AAAAAAABIK4VK17mZmZmZmavwgAAAAFn9/Nbpujexc3/4AAAAAAAATAfgAehIEAz/9AQwEUSiOkA==",
             "encoder bitstream diverged from the committed cross-language fixture"
         );
+    }
+
+    /// Non-canonical NaN payloads (e.g. 0xFFF8… from `0.0/0.0` on x86) must pass
+    /// through the codec bit-exactly: a decoder that canonicalizes NaN mid-stream
+    /// desynchronizes the XOR chain and corrupts every subsequent value. Pinned as
+    /// a cross-language fixture (same series and base64 asserted by
+    /// GorillaCompressorTest.java) alongside the main bitstream fixture.
+    #[test]
+    fn test_nan_payload_fixture_matches_java() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+
+        let value_bits: [u64; 6] = [
+            0x3ff0000000000000, // 1.0
+            0xfff8000000000000, // negative quiet NaN (x86 0.0/0.0)
+            0x3ff8000000000000, // 1.5 — the value corrupted by a canonicalizing decoder
+            0x7ff800000000beef, // quiet NaN with payload bits
+            0x4004000000000000, // 2.5
+            0x7ff8000000000000, // canonical quiet NaN
+        ];
+        let series: Vec<TimeValueDouble> = value_bits.iter().enumerate()
+            .map(|(i, &b)| TimeValueDouble::new(86400 * i as u64, f64::from_bits(b)))
+            .collect();
+
+        let compressed = GorillaCompressor::new(86400).compress_double(&series).unwrap();
+        assert_eq!(
+            STANDARD.encode(&compressed),
+            "AAAAAAABUYAAAAAGAAAAAAAAAAA/8AAAAAAAAEA3ACgBbf/gAAAAAvu9oAIAAAAAAAAhGf/g",
+            "encoder bitstream diverged from the committed NaN-payload fixture"
+        );
+
+        let decompressed = GorillaCompressor::new(86400)
+            .decompress_double(&compressed).unwrap();
+        for (original, decompressed) in series.iter().zip(decompressed.iter()) {
+            assert_eq!(original.value.to_bits(), decompressed.value.to_bits());
+        }
     }
 
     /// Irregular timestamps whose delta-of-deltas goes negative beyond the 12-bit

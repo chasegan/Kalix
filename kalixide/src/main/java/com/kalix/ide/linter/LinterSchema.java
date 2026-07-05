@@ -33,6 +33,14 @@ public class LinterSchema {
     private final Map<String, SectionDefinition> sections = new HashMap<>();
     private String version;
 
+    // Unmodifiable views handed out by the getters. The maps are populated once
+    // at load and never mutated afterwards; per-call defensive copies were pure
+    // allocation churn on the validation hot path.
+    private final Map<String, ValidationRule> validationRulesView = Collections.unmodifiableMap(validationRules);
+    private final Map<String, NodeTypeDefinition> nodeTypesView = Collections.unmodifiableMap(nodeTypes);
+    private final Map<String, DataType> dataTypesView = Collections.unmodifiableMap(dataTypes);
+    private final Map<String, SectionDefinition> sectionsView = Collections.unmodifiableMap(sections);
+
     /**
      * Load schema from embedded resource.
      */
@@ -104,7 +112,6 @@ public class LinterSchema {
             SectionDefinition section = new SectionDefinition();
             section.name = sectionName;
             section.required = sectionNode.path("required").asBoolean(false);
-            section.validation = sectionNode.path("validation").asText(null);
 
             // Parse properties
             JsonNode propertiesNode = sectionNode.path("properties");
@@ -233,6 +240,7 @@ public class LinterSchema {
                 }
             }
 
+            nodeType.sealAllowedParams();
             nodeTypes.put(typeName, nodeType);
         }
     }
@@ -264,12 +272,12 @@ public class LinterSchema {
         }
     }
 
-    // Getters
+    // Getters (unmodifiable views; see field comment)
     public String getVersion() { return version; }
-    public Map<String, ValidationRule> getValidationRules() { return new HashMap<>(validationRules); }
-    public Map<String, NodeTypeDefinition> getNodeTypes() { return new HashMap<>(nodeTypes); }
-    public Map<String, DataType> getDataTypes() { return new HashMap<>(dataTypes); }
-    public Map<String, SectionDefinition> getSections() { return new HashMap<>(sections); }
+    public Map<String, ValidationRule> getValidationRules() { return validationRulesView; }
+    public Map<String, NodeTypeDefinition> getNodeTypes() { return nodeTypesView; }
+    public Map<String, DataType> getDataTypes() { return dataTypesView; }
+    public Map<String, SectionDefinition> getSections() { return sectionsView; }
 
     public ValidationRule getValidationRule(String name) { return validationRules.get(name); }
     public NodeTypeDefinition getNodeType(String name) { return nodeTypes.get(name); }

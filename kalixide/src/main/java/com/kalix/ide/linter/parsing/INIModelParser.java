@@ -107,7 +107,7 @@ public class INIModelParser {
         ParsedModel model = new ParsedModel();
 
         try {
-            String[] lines = content.split("\n");
+            String[] lines = splitLines(content);
             int lineNumber = 0;
             Section currentSection = null;
 
@@ -207,6 +207,24 @@ public class INIModelParser {
     }
 
     /**
+     * Split content into lines, stripping a trailing '\r' from each line so CRLF
+     * documents parse identically to LF documents. Without this, a "blank" line in
+     * a CRLF file survives as "\r", which {@link #collectContinuationLines} treats
+     * as a continuation line - gluing indented lines after a blank line onto the
+     * previous property, contrary to {@link IniContinuation}'s documented rule.
+     */
+    private static String[] splitLines(String content) {
+        String[] lines = content.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') {
+                lines[i] = line.substring(0, line.length() - 1);
+            }
+        }
+        return lines;
+    }
+
+    /**
      * Helper class to return both the combined value and the last processed line index.
      */
     private static class LineContinuationResult {
@@ -298,14 +316,15 @@ public class INIModelParser {
     }
 
     /**
-     * Get all node names referenced in downstream parameters.
+     * Get all node names referenced in downstream parameters (ds_1, ds_2, ...;
+     * per the shared rule, ds_1_outlet / ds_1_order values are not node names).
      */
     public static Set<String> getDownstreamReferences(ParsedModel model) {
         Set<String> references = new HashSet<>();
 
         for (NodeSection node : model.getNodes().values()) {
             for (Property prop : node.getProperties().values()) {
-                if (prop.getKey().startsWith("ds_")) {
+                if (com.kalix.ide.linter.utils.ValidationUtils.isDsNodeParam(prop.getKey())) {
                     references.add(prop.getValue());
                 }
             }

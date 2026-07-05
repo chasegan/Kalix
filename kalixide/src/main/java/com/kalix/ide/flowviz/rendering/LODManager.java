@@ -2,8 +2,8 @@ package com.kalix.ide.flowviz.rendering;
 
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Level-of-Detail manager for efficient rendering of large time series.
@@ -13,19 +13,19 @@ import java.util.Map;
  * rendering every point is wasteful and can cause visual artifacts. LOD rendering computes
  * min/max bands per pixel column, allowing accurate representation with fewer draw calls.
  *
- * <h2>Caching</h2>
- * LOD data is cached with key: {@code "seriesName_startTime_endTime_width_height"}.
- * <p>
- * <b>IMPORTANT:</b> The cache key does NOT include the actual data values! If the underlying
- * data changes but the series name and viewport remain the same, the cache returns stale data.
- * <p>
- * When data changes, callers MUST call {@link #clearCache()} to invalidate. This is handled
- * automatically by {@code PlotPanel.rebuildDisplayDataSet()} whenever the display data is rebuilt.
+ * <h2>How a frame is costed</h2>
+ * Bands are computed per frame from a per-series {@link MinMaxPyramid} (block min/max,
+ * built once per series in O(n)), so a pan/zoom frame costs roughly O(plot width) - not
+ * O(visible points). This replaced a viewport-keyed result cache that missed on every
+ * pan frame (the key contained the exact start/end times) and silently stopped caching
+ * for the session once it held 100 entries.
  *
- * <h2>Why Pan/Zoom "Fixes" Stale Data</h2>
- * Panning or zooming changes the viewport, which changes the cache key, causing a cache miss
- * and fresh LOD computation. This is why stale data may appear correct after pan/zoom even
- * without explicit cache invalidation - but relying on this is incorrect!
+ * <h2>Staleness is impossible by construction</h2>
+ * Pyramids are cached weakly, keyed by {@link TimeSeriesData} identity. Series data is
+ * immutable, so a cached pyramid can never disagree with its series; replacing the
+ * display data creates new TimeSeriesData instances, which simply key new pyramids
+ * (old ones fall out with the garbage collector). {@link #clearCache()} remains for
+ * callers that want to drop the memory eagerly.
  *
  * @see TimeSeriesRenderer
  * @see com.kalix.ide.flowviz.PlotPanel#refreshData
@@ -35,10 +35,9 @@ public class LODManager {
     // LOD threshold - switch to statistical bands when more than this many points per pixel
     private static final double POINTS_PER_PIXEL_THRESHOLD = 5.0;
 
-    // Cache for pre-computed LOD data
-    // Key: "seriesName_startTime_endTime_width_height" - NOTE: does NOT include data values!
-    // Must call clearCache() when underlying data changes
-    private final Map<String, LODData> lodCache = new ConcurrentHashMap<>();
+    // Per-series acceleration structures. EDT-confined (painting), so a plain
+    // WeakHashMap is safe; weak keys tie each pyramid's lifetime to its series.
+    private final Map<TimeSeriesData, MinMaxPyramid> pyramids = new WeakHashMap<>();
     
     public static class LODData {
         public final int pixelWidth;
@@ -93,96 +92,67 @@ public class LODManager {
             return new RenderStrategy(true, null, indexRange);
         }
 
-        // Use LOD rendering - compute or retrieve cached LOD data
-        String cacheKey = generateCacheKey(ref, viewport);
-        LODData lodData = lodCache.get(cacheKey);
-
-        if (lodData == null) {
-            lodData = computeLODData(series, viewport, indexRange);
-            // Cache with size limit to prevent memory issues
-            if (lodCache.size() < 100) {  // Limit cache size
-                lodCache.put(cacheKey, lodData);
-            }
-        }
-
+        // LOD rendering: bands computed per frame via the series' pyramid.
+        LODData lodData = computeLODData(series, viewport, indexRange);
         return new RenderStrategy(false, lodData, indexRange);
     }
 
-    private String generateCacheKey(SeriesRef ref, ViewPort viewport) {
-        // Refs have value equality (sealed records). Their .toString() is sufficient to
-        // produce a stable, collision-free cache key.
-        return String.format("%s_%d_%d_%d_%d",
-            ref,
-            viewport.getStartTimeMs(),
-            viewport.getEndTimeMs(),
-            viewport.getPlotWidth(),
-            viewport.getPlotHeight()
-        );
-    }
-    
-    private LODData computeLODData(TimeSeriesData series, ViewPort viewport, 
+    private LODData computeLODData(TimeSeriesData series, ViewPort viewport,
                                   TimeSeriesData.IndexRange indexRange) {
         int plotWidth = viewport.getPlotWidth();
-        
+
         double[][] minMaxBands = new double[plotWidth][2];
         boolean[] hasValidData = new boolean[plotWidth];
-        
-        long[] timestamps = series.getTimestamps();
-        double[] values = series.getValues();
-        boolean[] validPoints = series.getValidPoints();
-        
-        // Initialize bands
+
+        MinMaxPyramid pyramid = pyramids.computeIfAbsent(series, MinMaxPyramid::new);
+
+        // Partition the visible index range into per-column sub-ranges by asking the
+        // series for the first index at each column's start time (O(1) on regular
+        // grids, O(log n) otherwise), then fold each sub-range through the pyramid.
+        // No per-point work happens at frame time.
+        int plotX = viewport.getPlotX();
+        long viewEnd = viewport.getEndTimeMs();
+        double[] acc = new double[2];
+
+        int columnStartIdx = indexRange.startIndex;
         for (int pixel = 0; pixel < plotWidth; pixel++) {
-            minMaxBands[pixel][0] = Double.POSITIVE_INFINITY;  // min
-            minMaxBands[pixel][1] = Double.NEGATIVE_INFINITY;  // max
-            hasValidData[pixel] = false;
-        }
-        
-        // Map each data point to its pixel column and track min/max
-        for (int i = indexRange.startIndex; i < indexRange.endIndex; i++) {
-            if (!validPoints[i]) continue;  // Skip missing values
-            
-            long timestamp = timestamps[i];
-            double value = values[i];
-            
-            // Calculate which pixel column this point belongs to
-            int pixelX = viewport.timeToScreenX(timestamp) - viewport.getPlotX();
-            
-            // Clamp to valid pixel range
-            pixelX = Math.max(0, Math.min(pixelX, plotWidth - 1));
-            
-            // Update min/max for this pixel column
-            minMaxBands[pixelX][0] = Math.min(minMaxBands[pixelX][0], value);  // min
-            minMaxBands[pixelX][1] = Math.max(minMaxBands[pixelX][1], value);  // max
-            hasValidData[pixelX] = true;
-        }
-        
-        // Clean up pixels with no data
-        for (int pixel = 0; pixel < plotWidth; pixel++) {
-            if (!hasValidData[pixel]) {
+            int columnEndIdx;
+            if (pixel == plotWidth - 1) {
+                columnEndIdx = indexRange.endIndex;
+            } else {
+                long nextColumnTime = viewport.screenXToTime(plotX + pixel + 1);
+                columnEndIdx = series.getIndexRange(nextColumnTime, viewEnd).startIndex;
+                if (columnEndIdx < columnStartIdx) {
+                    columnEndIdx = columnStartIdx;
+                }
+                if (columnEndIdx > indexRange.endIndex) {
+                    columnEndIdx = indexRange.endIndex;
+                }
+            }
+
+            acc[0] = Double.POSITIVE_INFINITY;
+            acc[1] = Double.NEGATIVE_INFINITY;
+            pyramid.accumulate(columnStartIdx, columnEndIdx, acc);
+
+            if (acc[0] <= acc[1]) {
+                minMaxBands[pixel][0] = acc[0];
+                minMaxBands[pixel][1] = acc[1];
+                hasValidData[pixel] = true;
+            } else {
                 minMaxBands[pixel][0] = Double.NaN;
                 minMaxBands[pixel][1] = Double.NaN;
+                hasValidData[pixel] = false;
             }
+
+            columnStartIdx = columnEndIdx;
         }
-        
+
         return new LODData(plotWidth, minMaxBands, hasValidData,
                           viewport.getStartTimeMs(), viewport.getEndTimeMs());
     }
-    
-    // Clear cache when data changes
-    public void clearCache() {
-        lodCache.clear();
-    }
 
-    // Get cache statistics for debugging
-    public int getCacheSize() {
-        return lodCache.size();
-    }
-    
-    public void printCacheStats() {
-        System.out.println("LOD Cache size: " + lodCache.size());
-        for (String key : lodCache.keySet()) {
-            System.out.println("  " + key);
-        }
+    /** Drops the per-series pyramids eagerly (they also fall away with their series). */
+    public void clearCache() {
+        pyramids.clear();
     }
 }

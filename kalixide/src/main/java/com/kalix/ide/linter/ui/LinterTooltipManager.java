@@ -11,16 +11,18 @@ import javax.swing.text.BadLocationException;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages tooltip display for validation issues.
  * Handles mouse hover detection and shows custom tooltips with icons and formatting.
+ * A line can carry several issues; the tooltip stacks one row per issue.
  */
 public class LinterTooltipManager {
 
     private final RSyntaxTextArea textArea;
-    private final ConcurrentHashMap<Integer, ValidationIssue> issuesByLine;
+    private final ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine;
 
     // Delay before a tooltip appears once the pointer settles on an issue line. Transient
     // crossings (e.g. sweeping the mouse past several error lines) cancel the pending show
@@ -45,7 +47,12 @@ public class LinterTooltipManager {
     // Line number (1-based) of the issue whose tooltip is scheduled to appear, or -1 if none.
     private int pendingLine = -1;
 
-    public LinterTooltipManager(RSyntaxTextArea textArea, ConcurrentHashMap<Integer, ValidationIssue> issuesByLine) {
+    // Listeners added to the shared text area, retained so dispose() can detach them
+    // (the text area outlives this manager when the linter is re-initialised).
+    private MouseMotionAdapter mouseMotionListener;
+    private java.awt.event.MouseAdapter mouseListener;
+
+    public LinterTooltipManager(RSyntaxTextArea textArea, ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine) {
         this.textArea = textArea;
         this.issuesByLine = issuesByLine;
         setupTooltipComponents();
@@ -58,7 +65,7 @@ public class LinterTooltipManager {
         tooltipWindow.setFocusableWindowState(false);
 
         tooltipPanel = new JPanel();
-        tooltipPanel.setLayout(new BoxLayout(tooltipPanel, BoxLayout.X_AXIS));
+        tooltipPanel.setLayout(new BoxLayout(tooltipPanel, BoxLayout.Y_AXIS));
         tooltipPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(Color.GRAY),
             BorderFactory.createEmptyBorder(8, 10, 8, 10)
@@ -69,13 +76,13 @@ public class LinterTooltipManager {
     }
 
     private void setupMouseListeners() {
-        textArea.addMouseMotionListener(new MouseMotionAdapter() {
+        mouseMotionListener = new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                ValidationIssue issue = getValidationIssueForPosition(e.getPoint());
+                List<ValidationIssue> issues = getValidationIssuesForPosition(e.getPoint());
 
-                if (issue != null) {
-                    int line = issue.getLineNumber();
+                if (issues != null && !issues.isEmpty()) {
+                    int line = issues.get(0).getLineNumber();
 
                     // Pointer is still over the issue line whose tooltip is already showing:
                     // nothing to rebuild, just keep it visible.
@@ -96,7 +103,7 @@ public class LinterTooltipManager {
                     if (currentlyDisplayedLine != -1) {
                         hideCustomTooltip();
                     }
-                    scheduleShow(issue, e.getLocationOnScreen());
+                    scheduleShow(line, issues, e.getLocationOnScreen());
                 } else {
                     // Moved off an issue line: cancel any pending show, and hide after a short
                     // delay to prevent flickering. Guard against restarting on every event.
@@ -109,25 +116,27 @@ public class LinterTooltipManager {
                     }
                 }
             }
-        });
+        };
+        textArea.addMouseMotionListener(mouseMotionListener);
 
-        textArea.addMouseListener(new java.awt.event.MouseAdapter() {
+        mouseListener = new java.awt.event.MouseAdapter() {
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
                 hideCustomTooltip();
             }
-        });
+        };
+        textArea.addMouseListener(mouseListener);
     }
 
     /**
-     * Schedule the tooltip for the given issue to appear after the dwell delay.
+     * Schedule the tooltip for the given line's issues to appear after the dwell delay.
      * Cancels any previously scheduled show.
      */
-    private void scheduleShow(ValidationIssue issue, Point screenLocation) {
+    private void scheduleShow(int line, List<ValidationIssue> issues, Point screenLocation) {
         stopTimer(showTimer);
-        pendingLine = issue.getLineNumber();
+        pendingLine = line;
         showTimer = new Timer(SHOW_DELAY_MS, evt -> {
-            showCustomTooltip(issue, screenLocation);
+            showCustomTooltip(issues, screenLocation);
             currentlyDisplayedLine = pendingLine;
             pendingLine = -1;
         });
@@ -141,8 +150,8 @@ public class LinterTooltipManager {
         }
     }
 
-    private void showCustomTooltip(ValidationIssue issue, Point screenLocation) {
-        buildTooltipContent(issue);
+    private void showCustomTooltip(List<ValidationIssue> issues, Point screenLocation) {
+        buildTooltipContent(issues);
         tooltipWindow.pack();
 
         // Position tooltip slightly offset from mouse
@@ -171,7 +180,7 @@ public class LinterTooltipManager {
         currentlyDisplayedLine = -1;
     }
 
-    private ValidationIssue getValidationIssueForPosition(Point point) {
+    private List<ValidationIssue> getValidationIssuesForPosition(Point point) {
         try {
             int offset = textArea.viewToModel2D(point);
             int line = textArea.getLineOfOffset(offset) + 1; // Convert to 1-based line numbers
@@ -182,9 +191,19 @@ public class LinterTooltipManager {
         }
     }
 
-    private void buildTooltipContent(ValidationIssue issue) {
-        // Clear previous content
+    private void buildTooltipContent(List<ValidationIssue> issues) {
+        // Clear previous content, then stack one row per issue on the line
         tooltipPanel.removeAll();
+        for (ValidationIssue issue : issues) {
+            tooltipPanel.add(buildIssueRow(issue));
+        }
+    }
+
+    private JPanel buildIssueRow(ValidationIssue issue) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         // Create appropriate FontAwesome icon based on severity
         FontIcon icon;
@@ -200,29 +219,40 @@ public class LinterTooltipManager {
         // Add icon with proper spacing
         JLabel iconLabel = new JLabel(icon);
         iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
-        tooltipPanel.add(iconLabel);
+        row.add(iconLabel);
 
         // Create message label with proper formatting
         JLabel messageLabel = new JLabel(issue.getMessage());
         messageLabel.setForeground(Color.BLACK);
         messageLabel.setFont(messageLabel.getFont().deriveFont(12f));
-        tooltipPanel.add(messageLabel);
+        row.add(messageLabel);
 
         // Add severity indicator
         JLabel severityLabel = new JLabel(" [" + issue.getSeverity() + "]");
         severityLabel.setForeground(severityColor);
         severityLabel.setFont(severityLabel.getFont().deriveFont(Font.BOLD, 10f));
-        tooltipPanel.add(severityLabel);
+        row.add(severityLabel);
+
+        return row;
     }
 
     /**
-     * Clean up resources.
+     * Clean up resources: stop timers, close the tooltip window, and detach the
+     * mouse listeners added to the shared text area in the constructor.
      */
     public void dispose() {
         stopTimer(hideTimer);
         stopTimer(showTimer);
         if (tooltipWindow != null) {
             tooltipWindow.dispose();
+        }
+        if (mouseMotionListener != null) {
+            textArea.removeMouseMotionListener(mouseMotionListener);
+            mouseMotionListener = null;
+        }
+        if (mouseListener != null) {
+            textArea.removeMouseListener(mouseListener);
+            mouseListener = null;
         }
     }
 }

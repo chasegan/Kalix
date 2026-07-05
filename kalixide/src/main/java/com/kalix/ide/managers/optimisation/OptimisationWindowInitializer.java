@@ -3,9 +3,6 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.PlotPanel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -86,12 +83,9 @@ public class OptimisationWindowInitializer {
             currentOptimisationsNode = (DefaultMutableTreeNode) rootNode.getChildAt(0);
         }
 
-        // Set custom renderer and selection listener
-        optTree.setCellRenderer(new OptimisationTreeCellRenderer());
+        // Selection listener (renderer and context menu are installed by
+        // OptimisationTreeManager's constructor - do not repeat them here)
         optTree.addTreeSelectionListener(treeSelectionHandler::accept);
-
-        // Setup tree manager's popup menu
-        treeManager.setupContextMenu();
 
         // Expand "Optimisation runs" node by default
         optTree.expandRow(0);
@@ -153,19 +147,29 @@ public class OptimisationWindowInitializer {
     }
 
     /**
+     * Window-provided callbacks for manager wiring. A named interface (not ten
+     * positional Consumer/Runnable parameters) so that a transposed argument can
+     * no longer compile — per the July 2026 review, optimisation finding #15.
+     */
+    public interface WindowCallbacks {
+        /** Shows the "select an optimisation" message card. */
+        void showMessagePanel();
+
+        /** Displays the given optimisation in the right-hand panel. */
+        void displayOptimisation(OptimisationInfo optInfo);
+
+        /** Saves the currently displayed config back to its optimisation node. */
+        void saveCurrentConfig();
+    }
+
+    /**
      * Sets up all manager callbacks and interconnections.
      */
     public void setupManagerCallbacks(
             JFrame parentFrame,
             com.kalix.ide.managers.StdioTaskManager stdioTaskManager,
             Consumer<String> statusUpdater,
-            Runnable displayMessagePanel,
-            Consumer<OptimisationInfo> displayOptimisation,
-            Runnable saveCurrentConfig,
-            Consumer<String> updateTreeNode,
-            Consumer<String> updateDetailsIfSelected,
-            Consumer<String> updateConvergencePlot,
-            Consumer<String> updateModelDisplay) {
+            WindowCallbacks callbacks) {
 
         // Store stdioTaskManager for use in action callbacks
         this.stdioTaskManager = stdioTaskManager;
@@ -186,14 +190,14 @@ public class OptimisationWindowInitializer {
 
         sessionManager.setOnSessionCompleted(sessionKey -> {
             SwingUtilities.invokeLater(() -> {
-                updateTreeNode.accept(sessionKey);
+                eventHandlers.updateTreeNodeForSession(sessionKey);
                 // Refresh displays if this is the current optimisation
                 DefaultMutableTreeNode currentNode = getCurrentNode();
                 if (currentNode != null) {
                     Object userObject = currentNode.getUserObject();
                     if (userObject instanceof OptimisationInfo optInfo) {
                         if (optInfo.getSessionKey().equals(sessionKey)) {
-                            displayOptimisation.accept(optInfo);
+                            callbacks.displayOptimisation(optInfo);
                         }
                     }
                 }
@@ -209,17 +213,11 @@ public class OptimisationWindowInitializer {
         // Tree manager action callbacks
         setupTreeManagerActions(parentFrame, statusUpdater);
 
-        // Event handler callbacks
-        eventHandlers.setTreeNodeUpdater(updateTreeNode);
-        eventHandlers.setDetailsUpdater(updateDetailsIfSelected);
-        eventHandlers.setConvergencePlotUpdater(updateConvergencePlot);
-        eventHandlers.setModelDisplayUpdater(updateModelDisplay);
-
         // Tree selection callbacks
-        treeManager.setOnNoSelectionCallback(displayMessagePanel);
-        treeManager.setOnFolderSelectedCallback(displayMessagePanel);
-        treeManager.setSaveCurrentConfigCallback(saveCurrentConfig);
-        treeManager.setOnOptimisationSelectedCallback(displayOptimisation);
+        treeManager.setOnNoSelectionCallback(callbacks::showMessagePanel);
+        treeManager.setOnFolderSelectedCallback(callbacks::showMessagePanel);
+        treeManager.setSaveCurrentConfigCallback(callbacks::saveCurrentConfig);
+        treeManager.setOnOptimisationSelectedCallback(callbacks::displayOptimisation);
     }
 
     private void setupTreeManagerActions(JFrame parentFrame, Consumer<String> statusUpdater) {
@@ -255,9 +253,10 @@ public class OptimisationWindowInitializer {
         treeManager.setRenameAction(optInfo -> {
             String newName = JOptionPane.showInputDialog(parentFrame, "Enter new name:", optInfo.getName());
             if (newName != null && !newName.trim().isEmpty()) {
+                // renameOptimisation writes the new name onto the OptimisationInfo -
+                // the single source of truth for the display name.
                 boolean renamed = sessionManager.renameOptimisation(optInfo.getSessionKey(), newName);
                 if (renamed) {
-                    optInfo.setName(newName.trim());
                     treeManager.refreshNode(optInfo.getSessionKey());
                 }
             }
@@ -270,13 +269,12 @@ public class OptimisationWindowInitializer {
                 JOptionPane.YES_NO_OPTION);
 
             if (confirm == JOptionPane.YES_OPTION) {
-                sessionManager.removeOptimisation(
-                    optInfo.getSessionKey(),
-                    optInfo.getStatus() == OptimisationStatus.RUNNING
-                );
-                // sessionManager.getTreeNode(...) returns an orphan node never added to the tree model;
-                // the tree manager owns the node that's actually displayed, so remove via that path.
+                // Detach the displayed node first: the session manager's
+                // removeOptimisation performs the shared bookkeeping's single-shot
+                // remove, which clears the sessionKey -> node entry the tree
+                // manager needs to find the node.
                 treeManager.removeOptimisation(optInfo.getSessionKey());
+                sessionManager.removeOptimisation(optInfo.getSessionKey());
                 optTree.clearSelection();
             }
         });

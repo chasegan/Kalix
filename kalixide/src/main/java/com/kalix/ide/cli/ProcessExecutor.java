@@ -1,5 +1,8 @@
 package com.kalix.ide.cli;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -23,6 +26,8 @@ import java.util.function.Consumer;
  * Provides process lifecycle management, stream monitoring, and cancellation support.
  */
 public class ProcessExecutor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProcessExecutor.class);
     
     private final ExecutorService executorService;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -85,7 +90,6 @@ public class ProcessExecutor {
         private Map<String, String> environmentVariables;
         private Consumer<String> stdoutCallback;
         private Consumer<String> stderrCallback;
-        private Consumer<String> progressCallback;
         
         public ProcessConfig workingDirectory(Path workingDirectory) {
             this.workingDirectory = workingDirectory;
@@ -112,18 +116,12 @@ public class ProcessExecutor {
             return this;
         }
         
-        public ProcessConfig onProgress(Consumer<String> callback) {
-            this.progressCallback = callback;
-            return this;
-        }
-        
         // Getters
         public Path getWorkingDirectory() { return workingDirectory; }
         public long getTimeoutSeconds() { return timeoutSeconds; }
         public Map<String, String> getEnvironmentVariables() { return environmentVariables; }
         public Consumer<String> getStdoutCallback() { return stdoutCallback; }
         public Consumer<String> getStderrCallback() { return stderrCallback; }
-        public Consumer<String> getProgressCallback() { return progressCallback; }
     }
     
     /**
@@ -184,7 +182,7 @@ public class ProcessExecutor {
                         }
                     } catch (IOException e) {
                         // Log but don't fail cancellation
-                        System.err.println("Warning: Failed to close interactive streams: " + e.getMessage());
+                        logger.warn("Failed to close interactive streams", e);
                     }
                 }
                 
@@ -398,15 +396,13 @@ public class ProcessExecutor {
             try {
                 // Create stream monitors
                 StreamMonitor stdoutMonitor = new StreamMonitor(
-                    process.getInputStream(), 
-                    config.getStdoutCallback(),
-                    config.getProgressCallback()
+                    process.getInputStream(),
+                    config.getStdoutCallback()
                 );
-                
+
                 StreamMonitor stderrMonitor = new StreamMonitor(
                     process.getErrorStream(),
-                    config.getStderrCallback(),
-                    null // No progress parsing on stderr
+                    config.getStderrCallback()
                 );
                 
                 // Start monitoring streams

@@ -7,16 +7,11 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Validates output references and downstream node references.
  */
 public class ReferenceValidator implements ValidationStrategy {
-
-    // Pattern to match downstream node parameters: ds_1, ds_2, ds_3, etc. (but NOT ds_1_outlet, ds_2_order, etc.)
-    private static final Pattern DSNODE_PARAM_PATTERN = Pattern.compile("^ds_\\d+$");
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
@@ -30,29 +25,10 @@ public class ReferenceValidator implements ValidationStrategy {
     }
 
     private void validateOutputReferences(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
-        // Use shared validation logic
+        // Shared validation logic covers format checks and, in the schema's
+        // node_output_validation mode, node existence and allowed outputs.
+        // (A second node-existence loop here used to duplicate that diagnostic.)
         ValidationUtils.validateOutputReferencesWithSchema(model.getOutputReferences(), model, schema, result);
-
-        // Additional validation for node existence (beyond pattern matching)
-        ValidationRule rule = schema.getValidationRule("output_references");
-        if (rule == null || !rule.isEnabled()) return;
-
-        Pattern outputPattern = ValidationUtils.getOutputReferencePattern();
-        for (String outputRef : model.getOutputReferences()) {
-            if (outputPattern.matcher(outputRef).matches()) {
-                // Extract node name and check if it exists
-                String[] parts = outputRef.split("\\.");
-                if (parts.length >= 2) {
-                    String nodeName = parts[1];
-                    if (!model.getNodes().containsKey(nodeName)) {
-                        int lineNumber = findOutputRefLineNumber(model, outputRef);
-                        result.addIssue(lineNumber,
-                                      "Output reference points to non-existent node: " + nodeName,
-                                      rule.getSeverity(), "invalid_node_reference");
-                    }
-                }
-            }
-        }
     }
 
     private void validateDownstreamReferences(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
@@ -64,7 +40,7 @@ public class ReferenceValidator implements ValidationStrategy {
         for (INIModelParser.NodeSection node : model.getNodes().values()) {
             for (INIModelParser.Property prop : node.getProperties().values()) {
                 // Only match ds_1, ds_2, etc. - not ds_1_outlet, ds_1_order, etc.
-                if (DSNODE_PARAM_PATTERN.matcher(prop.getKey()).matches()) {
+                if (ValidationUtils.isDsNodeParam(prop.getKey())) {
                     String referencedNode = prop.getValue();
                     if (!nodeNames.contains(referencedNode)) {
                         result.addIssue(prop.getLineNumber(),
@@ -76,26 +52,4 @@ public class ReferenceValidator implements ValidationStrategy {
         }
     }
 
-    private int findOutputRefLineNumber(INIModelParser.ParsedModel model, String outputRef) {
-        // Get the actual line number where this output reference appears
-        Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
-        if (lineNumber != null) {
-            return lineNumber;
-        }
-
-        // If lookup failed, try to find a reasonable line number in the outputs section
-        INIModelParser.Section outputsSection = model.getSections().get("outputs");
-        if (outputsSection != null) {
-            // If we have any output references with line numbers, use the first one as approximation
-            if (!model.getOutputReferenceLineNumbers().isEmpty()) {
-                int firstOutputLine = model.getOutputReferenceLineNumbers().values().iterator().next();
-                return firstOutputLine;
-            }
-            // Otherwise use the section start line + 2
-            return Math.max(outputsSection.getStartLine() + 2, 1);
-        }
-
-        // Last resort fallback
-        return 1;
-    }
 }

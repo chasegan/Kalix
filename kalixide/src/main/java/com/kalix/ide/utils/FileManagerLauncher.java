@@ -40,16 +40,11 @@ public class FileManagerLauncher {
         }
 
         // Fall back to platform-specific commands
-        String osName = System.getProperty("os.name").toLowerCase();
-
         try {
-            if (osName.contains("mac")) {
-                openMacFinder(targetDir);
-            } else if (osName.contains("win")) {
-                openWindowsExplorer(targetDir);
-            } else {
-                // Assume Linux/Unix
-                openLinuxFileManager(targetDir);
+            switch (PlatformUtils.getCurrentPlatform()) {
+                case MACOS -> openMacFinder(targetDir);
+                case WINDOWS -> openWindowsExplorer(targetDir);
+                default -> openLinuxFileManager(targetDir); // Assume Linux/Unix
             }
 
         } catch (IOException e) {
@@ -78,13 +73,13 @@ public class FileManagerLauncher {
             return;
         }
 
-        String osName = System.getProperty("os.name").toLowerCase();
+        Platform platform = PlatformUtils.getCurrentPlatform();
         try {
-            if (osName.contains("mac")) {
+            if (platform == Platform.MACOS) {
                 new ProcessBuilder("open", "-R", file.getAbsolutePath()).start();
                 return;
             }
-            if (osName.contains("win")) {
+            if (platform == Platform.WINDOWS) {
                 revealWindows(file.getAbsolutePath());
                 return;
             }

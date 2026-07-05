@@ -3,8 +3,6 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -439,31 +437,20 @@ public class OptimisationConfigManager {
      * config model, and the INI editor text into the config snapshot.</p>
      *
      * @param optInfo The OptimisationInfo to save config to
-     * @param sessionKey The session key
-     * @param sessionManager The session manager to update config in
      */
-    public void saveCurrentConfigToOptimisation(OptimisationInfo optInfo, String sessionKey,
-                                                OptimisationSessionManager sessionManager) {
+    public void saveCurrentConfigToOptimisation(OptimisationInfo optInfo) {
         if (optInfo == null || optInfo.hasStartedRunning()) {
             return;
         }
 
-        String configText;
         if (optInfo.isIniLocked()) {
             // INI text is canonical — save the editor content verbatim.
-            configText = configEditor.getText();
-            optInfo.setConfigSnapshot(configText);
+            optInfo.setConfigSnapshot(configEditor.getText());
         } else {
             // GUI form is canonical — capture it and regenerate the INI from it.
             OptimisationConfigModel model = guiBuilder.captureToModel();
             optInfo.setConfigModel(model);
-            configText = guiBuilder.generateConfigText(model);
-            optInfo.setConfigSnapshot(configText);
-        }
-
-        // Also update the stored config in session manager
-        if (sessionManager != null && sessionKey != null) {
-            sessionManager.updateOptimisationConfig(sessionKey, configText);
+            optInfo.setConfigSnapshot(guiBuilder.generateConfigText(model));
         }
     }
 

@@ -163,17 +163,6 @@ public class ViewPort {
     }
 
     /**
-     * Pans the viewport by the specified deltas in data space.
-     * @deprecated Use panByPixels for correct behavior with non-linear scales
-     */
-    @Deprecated
-    public ViewPort pan(long deltaTimeMs, double deltaValue) {
-        return new ViewPort(startTimeMs + deltaTimeMs, endTimeMs + deltaTimeMs,
-                          minValue + deltaValue, maxValue + deltaValue,
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
-    }
-
-    /**
      * Pans the viewport by screen pixel distances.
      * Works correctly with non-linear Y-axis scales by computing deltas in transformed space.
      *

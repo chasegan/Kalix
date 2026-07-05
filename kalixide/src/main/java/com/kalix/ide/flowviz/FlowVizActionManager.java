@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz;
 
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -18,7 +17,6 @@ import java.util.function.Consumer;
  * The manager uses callback patterns to communicate with the parent window
  * and other components without creating tight coupling.
  *
- * @author Claude Code Assistant
  * @version 1.0
  */
 public class FlowVizActionManager {
@@ -138,7 +136,7 @@ public class FlowVizActionManager {
         plotPanel.setAutoYMode(autoYMode);
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, autoYMode);
+        PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYMode);
 
         menuManager.updateMenuStates();
     }
@@ -152,7 +150,7 @@ public class FlowVizActionManager {
         plotPanel.setShowCoordinates(newState);
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, newState);
+        PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(newState);
 
     }
 
@@ -163,7 +161,7 @@ public class FlowVizActionManager {
         precision64 = !precision64;
 
         // Save preference
-        PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, precision64);
+        PreferenceKeys.FLOWVIZ_PRECISION64.set(precision64);
 
         menuManager.updateMenuStates();
     }
@@ -194,10 +192,12 @@ public class FlowVizActionManager {
      */
     public void showAbout() {
         JOptionPane.showMessageDialog(plotPanel.getParent(),
-            "FlowViz - Time Series Visualization Tool\\n" +
-            "Version 1.0\\n\\n" +
-            "High-performance visualization for large datasets\\n" +
-            "Part of the Kalix Hydrologic Modeling Platform",
+            """
+            FlowViz - Time Series Visualization Tool
+            Version 1.0
+
+            High-performance visualization for large datasets
+            Part of the Kalix Hydrologic Modeling Platform""",
             "About FlowViz",
             JOptionPane.INFORMATION_MESSAGE);
     }
@@ -207,22 +207,26 @@ public class FlowVizActionManager {
      */
     public void showShortcuts() {
         JOptionPane.showMessageDialog(plotPanel.getParent(),
-            "FlowViz Keyboard & Mouse Shortcuts:\\n\\n" +
-            "Ctrl+N - New session (clear all data)\\n" +
-            "Ctrl+O - Add CSV file to current session\\n" +
-            "Ctrl+W - Close window\\n" +
-            "L - Toggle data panel\\n" +
-            "+ - Zoom in\\n" +
-            "- - Zoom out\\n" +
-            "Mouse wheel - Zoom at cursor\\n" +
-            "Mouse drag - Pan view\\n" +
-            "Double-click plot - Reset zoom to fit data\\n\\n" +
-            "Data Reordering:\\n" +
-            "Click data item - Select item\\n" +
-            "Cmd+↑/Ctrl+↑ - Move selected item up (toward background)\\n" +
-            "Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)\\n\\n" +
-            "File Loading:\\n" +
-            "Drag & drop CSV files onto window - Load multiple files at once",
+            """
+            FlowViz Keyboard & Mouse Shortcuts:
+
+            Ctrl+N - New session (clear all data)
+            Ctrl+O - Add CSV file to current session
+            Ctrl+W - Close window
+            L - Toggle data panel
+            + - Zoom in
+            - - Zoom out
+            Mouse wheel - Zoom at cursor
+            Mouse drag - Pan view
+            Double-click plot - Reset zoom to fit data
+
+            Data Reordering:
+            Click data item - Select item
+            Cmd+↑/Ctrl+↑ - Move selected item up (toward background)
+            Cmd+↓/Ctrl+↓ - Move selected item down (toward foreground)
+
+            File Loading:
+            Drag & drop CSV files onto window - Load multiple files at once""",
             "Keyboard & Mouse Shortcuts",
             JOptionPane.INFORMATION_MESSAGE);
     }
@@ -232,10 +236,10 @@ public class FlowVizActionManager {
      */
     private void loadPreferences() {
         // Load precision preference (default: true for 64-bit)
-        precision64 = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_PRECISION64, true);
+        precision64 = PreferenceKeys.FLOWVIZ_PRECISION64.get();
 
         // Load auto-Y mode preference (default: true)
-        autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
+        autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
         plotPanel.setAutoYMode(autoYMode);
     }
 

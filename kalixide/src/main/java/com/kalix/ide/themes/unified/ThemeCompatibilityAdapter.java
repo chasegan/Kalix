@@ -4,9 +4,8 @@ import com.formdev.flatlaf.FlatPropertiesLaf;
 import java.util.Properties;
 
 /**
- * Adapter to bridge between the unified theme system and the existing legacy theme system.
- * Allows gradual migration by providing compatibility methods that generate legacy theme objects
- * from unified theme definitions.
+ * Converts a {@link UnifiedThemeDefinition} into the FlatLaf look-and-feel
+ * object that {@code ThemeManager} installs.
  */
 public class ThemeCompatibilityAdapter {
 
@@ -17,10 +16,11 @@ public class ThemeCompatibilityAdapter {
     public static FlatPropertiesLaf createApplicationTheme(UnifiedThemeDefinition unifiedTheme) {
         Properties props = unifiedTheme.generateApplicationProperties();
 
-        // Set the @dark annotation if this is a dark theme
-        if (unifiedTheme.getColorPalette().isDark()) {
-            props.setProperty("@dark", "");
-        }
+        // FlatPropertiesLaf only reads "@baseTheme" to decide whether the FlatLaf
+        // dark or light defaults underpin the theme (and what isDark() reports).
+        // Dark themes must declare it, or they inherit LIGHT defaults for every
+        // key they don't explicitly override.
+        props.setProperty("@baseTheme", unifiedTheme.isDark() ? "dark" : "light");
 
         return new FlatPropertiesLaf(unifiedTheme.getName(), props);
     }

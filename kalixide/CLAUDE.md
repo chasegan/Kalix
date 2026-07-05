@@ -43,6 +43,10 @@ Key files: `TerminalLauncher.java`, `TerminalActions.java`; tests in `TerminalLa
 Custom binary format using Gorilla compression:
 - **Binary format (.pxb)**: Gorilla-compressed time series data
 - **Metadata format (.pxt)**: Human-readable CSV with series info
+- **Units: epoch SECONDS throughout** (timestamps, timestep, .pxt start/end) — the
+  convention is set by the Rust engine (`src/io/pixie_io.rs`). `TimeSeriesData` holds
+  epoch milliseconds, so writers/readers convert exactly once at the Pixie boundary
+  (see `PixieWriter.convertToGorilla*`, `PixieReader.convertToTimeSeriesData`).
 - **FlowViz integration**: Drag-and-drop support, format auto-detection
 - **Critical fix**: Fixed decompression bugs with proper data point counting
 
@@ -181,28 +185,27 @@ Key architectural pattern throughout the application:
 JSON-based STDIO protocol for communicating with Rust backend. For detailed protocol specifications, message formats, and examples, see `docs/kalixcli-stdio-spec.md`.
 
 ### Key Components
-- `SessionManager.java` - Core session lifecycle management
-- `JsonSessionManager.java` - JSON protocol implementation
+- `SessionManager.java` - Core session lifecycle management and JSON protocol
 - `ProcessExecutor.java` - Process spawning and management
 - `RunManager.java` - Multi-session IDE management
 
 ## Custom Themes
 
 ### Theme System
-Unified theme architecture using `UnifiedThemeDefinition` with exact color mappings:
+Themes live as `resources/themes/<id>.properties` files (see the README in that
+folder), registered with stable ids in `ThemeRegistry`:
 
 **Available Themes:**
-- **Light**: Light, Keylime (lime green), Lapland (nordic blue), Nemo (ocean blue/orange), Sunset Warmth
-- **Dark**: Dracula, One Dark, Obsidian (purple accents), Sanne, Botanical
+- **Light**: Light, Keylime (lime green), Lapland (nordic blue), Nemo (ocean blue/orange), Sunset Warmth, Botanical (green-accented but a light theme)
+- **Dark**: Dracula, One Dark, Obsidian (purple accents), Sanne, Kalix Dark
 
 ### Technical Implementation
-- **Unified architecture**: Java-based color definitions in `LightThemeDefinitions.java` and `DarkThemeDefinitions.java`
-- **Exact color mappings**: Migrated from algorithmic generation to precise color specifications
+- **Properties-based**: colours are data (`resources/themes/*.properties`), loaded into `UnifiedThemeDefinition` and handed to FlatLaf via `ThemeCompatibilityAdapter`/`FlatPropertiesLaf`
+- **Snapshot-pinned**: `ThemePropertiesSnapshotTest` compares every generated theme byte-for-byte against `src/test/resources/themes/snapshots/`
 - **Platform-aware**: Cross-platform title bar handling with `Platform` enum (macOS, Windows, Linux)
-- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background
-- **FlatPropertiesLaf integration**: Converted to properties via `ThemeCompatibilityAdapter`
+- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*
 
-Key files: `ThemeManager.java`, `UnifiedThemeDefinition.java`, `Platform.java`, `PlatformUtils.java`
+Key files: `ThemeManager.java`, `ThemeRegistry.java`, `KalixTheme.java`, `ThemeCompatibilityAdapter.java`
 
 ## Interactive Map Features
 

@@ -28,7 +28,7 @@ public class SessionManager {
     private final Map<String, KalixSession> activeSessions = new ConcurrentHashMap<>();
     private final Consumer<String> statusUpdater;
     private final Consumer<SessionEvent> eventCallback;
-    private Consumer<String> timeSeriesResponseHandler;
+    private Consumer<JsonMessage.SystemMessage> timeSeriesResponseHandler;
 
     // Multi-listener support for session events
     private final List<Consumer<SessionEvent>> sessionEventListeners = new CopyOnWriteArrayList<>();
@@ -178,8 +178,33 @@ public class SessionManager {
      *
      * @param handler callback to handle JSON responses containing time series data
      */
-    public void setTimeSeriesResponseHandler(Consumer<String> handler) {
+    public void setTimeSeriesResponseHandler(Consumer<JsonMessage.SystemMessage> handler) {
         this.timeSeriesResponseHandler = handler;
+    }
+
+    /**
+     * Attaches a program to a session, replaying the initial ready signal if it already
+     * arrived. Session monitoring starts before any program exists, so the CLI's startup
+     * {@code rdy} may have been consumed by the generic READY handler; a program that
+     * waits for it would then wedge forever. Always install programs through this method
+     * (not {@code KalixSession.setActiveProgram} directly).
+     *
+     * @param sessionKey the session to attach to
+     * @param program the program to install
+     * @throws IllegalArgumentException if the session does not exist
+     */
+    public void installProgram(String sessionKey, AbstractSessionProgram program) {
+        KalixSession session = activeSessions.get(sessionKey);
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found: " + sessionKey);
+        }
+        session.setActiveProgram(program);
+        // Replay-after-install: if the startup rdy already flipped the session to READY,
+        // tell the program. Programs guard this transition, so a concurrent live rdy
+        // cannot double-fire it.
+        if (session.isReady()) {
+            program.onSessionReady();
+        }
     }
     
     /**
@@ -239,8 +264,41 @@ public class SessionManager {
     }
     
     /**
-     * Terminates a session gracefully.
-     * 
+     * Requests a cooperative stop of the session's current task by sending the protocol's
+     * {@code stp} message. The CLI (since backend commit 920d187) reads stdin while busy
+     * and honours the interrupt at the next timestep (simulation) or generation
+     * (optimisation), then replies with its result/stp and {@code rdy}. The session stays
+     * alive and reusable - this cancels the task, not the session.
+     *
+     * @param sessionKey the session whose running task should stop
+     * @param reason human-readable reason, forwarded on the wire (may be null)
+     * @return CompletableFuture that completes when the stop request has been sent
+     */
+    public CompletableFuture<Void> stopSession(String sessionKey, String reason) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                KalixSession session = validateActiveSession(sessionKey);
+                String stopMessage = JsonStdioProtocol.createStopMessage(reason);
+                // Write directly (not sendCommand): stp is a control message, and
+                // sendCommand would misreport the session as "Executing command".
+                session.getCommunicationLog().logIdeToCli(stopMessage);
+                session.getProcess().sendCommand(stopMessage);
+                updateStatus("Stop requested for session " + sessionKey);
+            } catch (IOException e) {
+                handleSessionError(sessionKey, e, "Stop request");
+                throw new RuntimeException("Failed to send stop to session " + sessionKey, e);
+            }
+        }, processExecutor.getExecutorService());
+    }
+
+    /** How long a graceful terminate waits for the CLI to exit before force-killing. */
+    private static final long TERMINATE_GRACE_MILLIS = 2000;
+
+    /**
+     * Terminates a session: asks the CLI to exit via the protocol's {@code term} message
+     * (spec §4.10), then force-kills if it has not exited within
+     * {@link #TERMINATE_GRACE_MILLIS}.
+     *
      * @param sessionKey the session to terminate
      * @return CompletableFuture that completes when session is terminated
      */
@@ -250,13 +308,23 @@ public class SessionManager {
             if (session != null) {
                 SessionState oldState = session.getState();
                 session.setState(SessionState.TERMINATED, "Session terminated by user");
-                session.getProcess().close(true); // Force kill to ensure termination
+
+                boolean exited = false;
+                try {
+                    String termMessage = JsonStdioProtocol.createTerminateMessage();
+                    session.getCommunicationLog().logIdeToCli(termMessage);
+                    session.getProcess().sendCommand(termMessage);
+                    exited = session.getProcess().waitForExit(TERMINATE_GRACE_MILLIS);
+                } catch (IOException e) {
+                    // Pipe already broken - fall through to force kill.
+                }
+                session.getProcess().close(!exited); // release streams; force kill if still alive
                 // Keep session in activeSessions map for visibility, don't remove it
 
                 fireSessionEvent(sessionKey, oldState, SessionState.TERMINATED, "Session terminated");
                 updateStatus("Terminated session: " + sessionKey);
             }
-        });
+        }, processExecutor.getExecutorService());
     }
     
     /**
@@ -329,18 +397,20 @@ public class SessionManager {
         // Monitor stdout
         CompletableFuture<Void> stdoutMonitor = CompletableFuture.runAsync(() -> {
             try {
+                // readOutputLine blocks on the underlying BufferedReader, so this loop
+                // is naturally paced by the CLI's output. (A sleep here is not a poll
+                // interval - it is a per-line latency tax that caps protocol throughput.)
                 while (session.getProcess().isRunning() && session.isActive()) {
                     Optional<String> outputLine = session.getProcess().readOutputLine();
-                    
-                    if (outputLine.isPresent()) {
-                        String line = outputLine.get();
-                        // Log the raw message first
-                        session.getCommunicationLog().logCliToIdeStdout(line);
-                        processSessionOutput(session, line, config);
+                    if (outputLine.isEmpty()) {
+                        break; // EOF: stream closed
                     }
-                    Thread.sleep(16); // ~60 FPS polling rate for responsive progress updates
+                    String line = outputLine.get();
+                    // Log the raw message first
+                    session.getCommunicationLog().logCliToIdeStdout(line);
+                    processSessionOutput(session, line, config);
                 }
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 handleSessionError(sessionKey, e, "stdout monitoring");
             }
         }, processExecutor.getExecutorService());
@@ -350,26 +420,31 @@ public class SessionManager {
             try {
                 while (session.getProcess().isRunning() && session.isActive()) {
                     Optional<String> errorLine = session.getProcess().readErrorLine();
-                    
-                    if (errorLine.isPresent()) {
-                        String line = errorLine.get();
-                        // Log the raw message first
-                        session.getCommunicationLog().logCliToIdeStderr(line);
-                        processSessionError(session, line, config);
+                    if (errorLine.isEmpty()) {
+                        break; // EOF: stream closed
                     }
-                    Thread.sleep(16); // ~60 FPS polling rate for responsive progress updates
+                    String line = errorLine.get();
+                    // Log the raw message first
+                    session.getCommunicationLog().logCliToIdeStderr(line);
+                    processSessionError(session, line, config);
                 }
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 handleSessionError(sessionKey, e, "stderr monitoring");
             }
         }, processExecutor.getExecutorService());
         
-        // Combine both monitoring futures - session completes when both streams are done
+        // Combine both monitoring futures - session completes when both streams are done.
+        // Session failure is decided HERE, from the process exit code - never from
+        // stderr content (engine warnings on stderr are normal and must not kill the
+        // session, and marking a live process ERROR would stop draining its pipes and
+        // wedge it mid-write).
         CompletableFuture.allOf(stdoutMonitor, stderrMonitor)
             .whenComplete((result, throwable) -> {
                 if (throwable != null) {
                     handleSessionError(sessionKey, new RuntimeException(throwable), "session monitoring");
+                    return;
                 }
+                handleProcessExit(session);
             });
     }
     
@@ -392,36 +467,49 @@ public class SessionManager {
      */
     private void processSessionError(KalixSession session, String errorLine, SessionConfig config) {
         String sessionKey = session.getSessionKey();
-        
-        // Always log stderr as it contains important error information
+
+        // stderr is diagnostics, not a failure signal. The protocol is JSON on stdout;
+        // session failure is decided by the process exit code (handleProcessExit) or
+        // protocol err messages. A substring heuristic here used to mark sessions ERROR
+        // on benign engine warnings, which stopped pipe draining while leaving the
+        // process alive - the CLI then blocked forever on a full pipe.
         updateStatus("Session " + sessionKey + " stderr: " + errorLine);
-        
-        // Check if this is a critical error that should terminate the session
-        if (isCriticalError(errorLine)) {
-            SessionState oldState = session.getState();
-            session.setState(SessionState.ERROR, "Critical error: " + errorLine);
-            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, "Critical error from kalixcli: " + errorLine);
-            return;
-        }
-        
+
         // Check for JSON protocol messages on stderr (some CLIs send protocol info there)
         if (JsonStdioProtocol.looksLikeCompactJson(errorLine)) {
             Optional<JsonMessage.SystemMessage> jsonMsg = JsonStdioProtocol.parseSystemMessage(errorLine);
             jsonMsg.ifPresent(systemMessage -> handleJsonProtocolMessage(session, systemMessage, config));
         }
     }
-    
+
     /**
-     * Determines if an error line indicates a critical error that should terminate the session.
+     * Accounts for the process having exited (both stream monitors saw EOF). Decides the
+     * session's final state from the exit code, unless a user-initiated terminate already
+     * settled it.
      */
-    private boolean isCriticalError(String errorLine) {
-        String lowerError = errorLine.toLowerCase();
-        return lowerError.contains("fatal") || 
-               lowerError.contains("critical") ||
-               lowerError.contains("exception") ||
-               lowerError.contains("error:") ||
-               lowerError.contains("failed to") ||
-               lowerError.matches(".*error.*\\d+.*"); // Pattern like "Error 123"
+    private void handleProcessExit(KalixSession session) {
+        String sessionKey = session.getSessionKey();
+        SessionState oldState = session.getState();
+        if (oldState == SessionState.TERMINATED || oldState == SessionState.ERROR) {
+            return; // already settled (user terminate or reported error)
+        }
+
+        int exitCode;
+        try {
+            exitCode = session.getProcess().exitCode();
+        } catch (Exception e) {
+            exitCode = -1; // process handle unavailable; treat as abnormal
+        }
+
+        if (exitCode == 0) {
+            session.setState(SessionState.TERMINATED, "Process exited normally");
+            fireSessionEvent(sessionKey, oldState, SessionState.TERMINATED, "Process exited normally");
+        } else {
+            String msg = "Process exited unexpectedly (code " + exitCode + ")";
+            session.setState(SessionState.ERROR, msg);
+            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, msg);
+            updateStatus("Session " + sessionKey + ": " + msg);
+        }
     }
     
     /**
@@ -435,13 +523,14 @@ public class SessionManager {
             session.setKalixcliUid(message.getSessionId());
         }
 
-        // Check if this is a get_result response and route to TimeSeriesRequestManager
+        // Check if this is a get_result response and route to TimeSeriesRequestManager.
+        // The already-parsed message is handed over directly - these responses carry
+        // multi-MB base64 payloads, and the old parse -> re-serialize -> re-parse round
+        // trip tripled the JSON work on the hottest fetch path.
         if (isTimeSeriesResponse(message)) {
             if (timeSeriesResponseHandler != null) {
                 try {
-                    // Convert the message back to JSON string for the TimeSeriesRequestManager
-                    String jsonResponse = convertMessageToJsonString(message);
-                    timeSeriesResponseHandler.accept(jsonResponse);
+                    timeSeriesResponseHandler.accept(message);
                     return; // Message was handled by TimeSeriesRequestManager
                 } catch (Exception e) {
                     logger.error("Failed to handle timeseries response", e);
@@ -527,19 +616,6 @@ public class SessionManager {
     }
 
     /**
-     * Converts a JsonMessage.SystemMessage back to a JSON string for processing by TimeSeriesRequestManager.
-     */
-    private String convertMessageToJsonString(JsonMessage.SystemMessage message) {
-        try {
-            // Use Jackson ObjectMapper to convert the message back to JSON string
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.writeValueAsString(message);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to convert message to JSON string", e);
-        }
-    }
-
-    /**
      * Fires a session event to registered callbacks.
      */
     private void fireSessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
@@ -585,11 +661,18 @@ public class SessionManager {
      */
     private void handleSessionError(String sessionKey, Exception e, String operation) {
         KalixSession session = activeSessions.get(sessionKey);
-        if (session != null) {
-            SessionState oldState = session.getState();
-            session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
-            fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
+        if (session == null) {
+            return;
         }
+        SessionState oldState = session.getState();
+        if (oldState == SessionState.TERMINATED || oldState == SessionState.ERROR) {
+            // Already settled. In particular, a user terminate closes the readers, which
+            // makes the blocked monitor threads throw - that is teardown, not an error,
+            // and used to repaint a clean terminate as a red ERROR.
+            return;
+        }
+        session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
+        fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
         updateStatus("Session " + sessionKey + " error: " + operation + " failed");
     }
     

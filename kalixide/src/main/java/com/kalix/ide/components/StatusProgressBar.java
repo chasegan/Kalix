@@ -18,12 +18,6 @@ public class StatusProgressBar extends JComponent {
     private String progressText = "";
     private boolean visible = false;
 
-    // Simple colors without command-specific logic
-    private final Color backgroundColor = new Color(230, 230, 230);
-    private final Color progressColor = new Color(76, 175, 80);  // Simple green
-    private final Color borderColor = new Color(200, 200, 200);
-    private final Color textColor = Color.BLACK;
-
     // Animation support
     private final Timer animationTimer;
     private double targetProgress = 0.0;
@@ -99,17 +93,6 @@ public class StatusProgressBar extends JComponent {
      * @param text initial text to display
      */
     public void showProgress(double initialProgress, String text) {
-        showProgress(initialProgress, text, null);
-    }
-
-    /**
-     * Shows the progress bar with initial progress.
-     *
-     * @param initialProgress initial progress value (0.0-1.0)
-     * @param text initial text to display
-     * @param command the command (ignored)
-     */
-    public void showProgress(double initialProgress, String text, String command) {
         this.progress = initialProgress;
         this.targetProgress = initialProgress;
         this.progressText = text != null ? text : "";
@@ -159,9 +142,9 @@ public class StatusProgressBar extends JComponent {
         
         int width = getWidth();
         int height = getHeight();
-        
+
         // Draw background
-        g2d.setColor(backgroundColor);
+        g2d.setColor(uiColor("ProgressBar.background", new Color(230, 230, 230)));
         RoundRectangle2D background = new RoundRectangle2D.Float(
             0, 0, width - 1, height - 1, CORNER_RADIUS, CORNER_RADIUS);
         g2d.fill(background);
@@ -170,7 +153,8 @@ public class StatusProgressBar extends JComponent {
         if (progress > 0) {
             int progressWidth = (int) (progress * (width - 2));
             if (progressWidth > 0) {
-                g2d.setColor(progressColor);
+                // FlatLaf's theme-tuned green accent; historical green as fallback
+                g2d.setColor(uiColor("Actions.Green", new Color(76, 175, 80)));
                 RoundRectangle2D progressRect = new RoundRectangle2D.Float(
                     1, 1, progressWidth, height - 3, CORNER_RADIUS, CORNER_RADIUS);
                 g2d.fill(progressRect);
@@ -178,12 +162,12 @@ public class StatusProgressBar extends JComponent {
         }
 
         // Draw border
-        g2d.setColor(borderColor);
+        g2d.setColor(uiColor("Component.borderColor", new Color(200, 200, 200)));
         g2d.draw(background);
 
         // Draw text if present
         if (!progressText.isEmpty()) {
-            g2d.setColor(textColor);
+            g2d.setColor(uiColor("Label.foreground", Color.BLACK));
             FontMetrics fm = g2d.getFontMetrics();
             int textWidth = fm.stringWidth(progressText);
             int textHeight = fm.getAscent();
@@ -197,7 +181,17 @@ public class StatusProgressBar extends JComponent {
         
         g2d.dispose();
     }
-    
+
+    /**
+     * Resolves a colour role from the current theme, falling back to the
+     * historical light-theme constant. Read per paint (not cached) so the bar
+     * recolours with theme switches like other theme-aware components.
+     */
+    private static Color uiColor(String key, Color fallback) {
+        Color color = UIManager.getColor(key);
+        return color != null ? color : fallback;
+    }
+
     /**
      * Animates the progress bar towards the target progress.
      */

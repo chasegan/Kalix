@@ -290,17 +290,32 @@ public class TimeSeriesData {
         return new IndexRange(startIndex, endIndex);
     }
     
+    /**
+     * Binary search over the sorted timestamps, returning an index suitable for a half-open
+     * {@code [startIndex, endIndex)} range:
+     * <ul>
+     *   <li>{@code findFirst == true}: the first index whose timestamp is {@code >= targetTime}
+     *       (an inclusive start bound; {@code pointCount} if all timestamps are smaller).</li>
+     *   <li>{@code findFirst == false}: one past the last index whose timestamp is
+     *       {@code <= targetTime} (an EXCLUSIVE end bound; {@code 0} if all timestamps are
+     *       larger). A point lying exactly on the viewport end is therefore included, matching
+     *       the contiguous fast path's {@code +1} in {@link #getIndexRange}.</li>
+     * </ul>
+     */
     private int binarySearchTimestamp(long targetTime, boolean findFirst) {
         int left = 0;
         int right = pointCount - 1;
         int result = findFirst ? pointCount : 0;
-        
+
         while (left <= right) {
             int mid = left + (right - left) / 2;
             long midTime = timestamps[mid];
-            
+
             if (midTime == targetTime) {
-                result = mid;
+                // Exact hit. As a start bound the match itself is included (result = mid);
+                // as an exclusive end bound the match must sit INSIDE the range, so the
+                // returned index is one past it (result = mid + 1).
+                result = findFirst ? mid : mid + 1;
                 if (findFirst) {
                     right = mid - 1; // Continue searching left for first occurrence
                 } else {
@@ -314,7 +329,7 @@ public class TimeSeriesData {
                 right = mid - 1;
             }
         }
-        
+
         return Math.max(0, Math.min(result, pointCount));
     }
 

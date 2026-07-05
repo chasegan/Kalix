@@ -2,7 +2,6 @@ package com.kalix.ide.managers;
 
 import com.kalix.ide.io.FsWatcher;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -90,7 +89,7 @@ public class FileWatcherManager {
      * @return true if auto-reload is enabled
      */
     public boolean isAutoReloadEnabled() {
-        return PreferenceManager.getFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, false);
+        return PreferenceKeys.FILE_AUTO_RELOAD.get();
     }
 
     /**
@@ -100,7 +99,7 @@ public class FileWatcherManager {
      * @param enabled true to enable auto-reload
      */
     public void setAutoReloadEnabled(boolean enabled) {
-        PreferenceManager.setFileBoolean(PreferenceKeys.FILE_AUTO_RELOAD, enabled);
+        PreferenceKeys.FILE_AUTO_RELOAD.set(enabled);
         restartWatch();
     }
 

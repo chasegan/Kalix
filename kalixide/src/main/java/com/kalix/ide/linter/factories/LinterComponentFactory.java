@@ -22,8 +22,8 @@ public class LinterComponentFactory {
      * Create a fully configured LinterManager with all dependencies.
      */
     public static LinterManager createLinterManager(RSyntaxTextArea textArea, SchemaManager schemaManager) {
-        // Create shared issue tracking map
-        ConcurrentHashMap<Integer, ValidationIssue> issuesByLine = new ConcurrentHashMap<>();
+        // Create shared issue tracking map (a line can carry several issues)
+        ConcurrentHashMap<Integer, java.util.List<ValidationIssue>> issuesByLine = new ConcurrentHashMap<>();
 
         // Create components
         LinterOrchestrator orchestrator = new LinterOrchestrator(schemaManager);

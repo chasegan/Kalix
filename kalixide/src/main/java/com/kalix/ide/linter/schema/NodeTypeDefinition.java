@@ -1,5 +1,6 @@
 package com.kalix.ide.linter.schema;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -17,12 +18,29 @@ public class NodeTypeDefinition {
     public Set<String> allowedOutputs = new HashSet<>();
     public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
-    public Set<String> getAllowedParams() {
+    // Union of required/optional/dsnode params, computed once after the schema
+    // loads. getAllowedParams() sits on the per-property validation hot path;
+    // merging a fresh HashSet per call was pure allocation churn.
+    private Set<String> allowedParams;
+
+    /**
+     * Precompute the immutable allowed-parameter union. Called once by the
+     * schema loader after the param sets are populated; the getter falls back
+     * to computing it for instances built by hand (e.g. in tests).
+     */
+    public void sealAllowedParams() {
         Set<String> all = new HashSet<>();
         all.addAll(requiredParams);
         all.addAll(optionalParams);
         all.addAll(dsnodeParams);
-        return all;
+        allowedParams = Collections.unmodifiableSet(all);
+    }
+
+    public Set<String> getAllowedParams() {
+        if (allowedParams == null) {
+            sealAllowedParams();
+        }
+        return allowedParams;
     }
 
     public ParameterDefinition getParameterDefinition(String paramName) {

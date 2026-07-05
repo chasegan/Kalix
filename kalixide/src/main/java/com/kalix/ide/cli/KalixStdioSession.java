@@ -108,6 +108,31 @@ public class KalixStdioSession {
     }
 
     /**
+     * Gets the exit code of the terminated process.
+     *
+     * @return the exit code
+     * @throws IllegalThreadStateException if the process has not yet exited
+     */
+    public int exitCode() {
+        return runningProcess.getProcess().exitValue();
+    }
+
+    /**
+     * Waits up to the given time for the process to exit.
+     *
+     * @param millis maximum time to wait, in milliseconds
+     * @return true if the process exited within the wait
+     */
+    public boolean waitForExit(long millis) {
+        try {
+            return runningProcess.getProcess().waitFor(millis, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return !runningProcess.getProcess().isAlive();
+        }
+    }
+
+    /**
      * Closes the process and cleans up resources.
      *
      * @param forceKill if true, forcibly kills the process

@@ -244,7 +244,7 @@ End the session and exit.
 - Description: Retrieve timeseries result data
 - Parameters: `series_name` (string, required), `format` (string, default "pixie")
 - Supported formats:
-  - `"pixie"` (recommended): a compressed bitstream, base64-encoded into `r.data`. The bitstream carries timestep, count, and per-point timestamps, so no separate metadata is needed to decode. The codec is a custom delta/XOR scheme *inspired by* Facebook's Gorilla algorithm — it is not a literal Gorilla implementation. The wire `codec` identifier is `gorilla_double` for historical reasons.
+  - `"pixie"` (recommended): a compressed bitstream, base64-encoded into `r.data`. The bitstream carries timestep, count, and per-point timestamps, so no separate metadata is needed to decode. **All timestamps and the timestep in the bitstream are epoch SECONDS** (the Pixie convention, established by the Rust engine — the same units as `.pxb` files); consumers holding milliseconds must convert at this boundary. The codec is a custom delta/XOR scheme *inspired by* Facebook's Gorilla algorithm — it is not a literal Gorilla implementation. The wire `codec` identifier is `gorilla_double` for historical reasons.
   - `"csv"`: Comma-separated `start_timestamp,timestep_seconds,value1,value2,…` ASCII string in `r.data`. Retained for human inspection / external consumers.
 
 **save_results**
@@ -286,12 +286,15 @@ End the session and exit.
 ### 6.3 Interruption Handling
 - Frontend can send stop message during command execution
 - Only interruptible commands respond to stop messages
-- Stopped commands send stopped message with partial execution time
-  (a stopped command sends `stp` only — never `res` or `err` as well)
-- System returns to ready state after interruption (`rdy` with `rc: 2`)
 - Interruption is cooperative: simulations stop at the next timestep,
-  optimisations at the next generation/shuffle (returning the best
-  solution found so far)
+  optimisations at the next generation/shuffle
+- **Stopped simulations** send the `stp` message with partial execution time
+  (`stp` only — never `res` or `err` as well), then `rdy` with `rc: 2`
+- **Stopped optimisations return the best solution found so far as a normal
+  result**: a full `res` message (same shape as an uninterrupted run — best
+  objective, parameters, optimised model INI) with `"interrupted": true` in
+  `r`, followed by `rdy` with `rc: 0`. The work already done is delivered,
+  not discarded.
 
 ## 7. Implementation Notes
 

@@ -1,8 +1,8 @@
 package com.kalix.ide.renderers;
 
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
-import com.kalix.ide.models.optimisation.OptimisationResult;
+import com.kalix.ide.managers.optimisation.OptimisationInfo;
+import com.kalix.ide.managers.optimisation.OptimisationStatus;
+import com.kalix.ide.managers.optimisation.OptimisationResult;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 

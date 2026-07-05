@@ -86,6 +86,11 @@ public class EnhancedTextEditor extends JPanel {
     // Track line before mouse click for navigation history
     private int lineBeforeMouseClick = -1;
 
+    // Global (Toolkit-wide) mouse-press capture used for navigation history.
+    // Held so dispose() can remove it: a global listener would otherwise pin
+    // this editor's whole object graph after the document is closed.
+    private java.awt.event.AWTEventListener navigationMouseCaptureListener;
+
     public interface DirtyStateListener {
         void onDirtyStateChanged(boolean isDirty);
     }
@@ -155,15 +160,18 @@ public class EnhancedTextEditor extends JPanel {
      * since regular MouseListener is called after the text component processes the event.
      */
     private void setupNavigationMouseListener() {
-        // Use AWTEventListener to capture mouse events BEFORE they're processed
-        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+        // Use AWTEventListener to capture mouse events BEFORE they're processed.
+        // The listener is stored so dispose() can remove it from the Toolkit.
+        navigationMouseCaptureListener = event -> {
             if (event instanceof MouseEvent me && me.getID() == MouseEvent.MOUSE_PRESSED) {
                 if (me.getSource() == textArea) {
                     // Capture current caret position before the click moves it
                     lineBeforeMouseClick = getLineNumberForOffset(textArea.getCaretPosition());
                 }
             }
-        }, java.awt.AWTEvent.MOUSE_EVENT_MASK);
+        };
+        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(
+            navigationMouseCaptureListener, java.awt.AWTEvent.MOUSE_EVENT_MASK);
 
         // Regular mouse listener to check after the click is processed
         textArea.addMouseListener(new MouseAdapter() {
@@ -229,8 +237,8 @@ public class EnhancedTextEditor extends JPanel {
         }
         if (linterManager != null) {
             propertyHoverTooltipManager = new com.kalix.ide.linter.ui.PropertyHoverTooltipManager(
-                textArea, schemaManager.getCurrentSchema(), modelSupplier,
-                line -> linterManager.getIssueForLine(line) != null);
+                textArea, schemaManager, modelSupplier,
+                line -> !linterManager.getIssuesForLine(line).isEmpty());
         }
     }
 
@@ -246,38 +254,26 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Scrolls the editor to show the definition of the specified node.
-     * Uses the parsed model to find the section start line, then positions
+     * Locates the section via the shared INI-section grammar, then positions
      * the node at 1/4 from the top of the viewport for good context.
      *
      * @param nodeName The name of the node to scroll to
      * @return true if the node was found and scrolled to, false otherwise
      */
     public boolean scrollToNode(String nodeName) {
-        if (nodeName == null || nodeName.trim().isEmpty() || commandModelSupplier == null) {
+        if (nodeName == null || nodeName.trim().isEmpty()) {
             return false;
         }
 
         try {
-            // Use parsed model to find the node section
-            com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model = commandModelSupplier.get();
-            if (model == null) {
-                return false;
-            }
-
-            com.kalix.ide.linter.parsing.INIModelParser.Section section = model.getSections().get("node." + nodeName);
+            com.kalix.ide.model.NodeSectionLocator.NodeSection section =
+                com.kalix.ide.model.NodeSectionLocator.find(textArea.getText(), nodeName);
             if (section == null) {
                 return false;
             }
 
-            // Convert 1-based line number to document offset
-            int targetLine = section.getStartLine() - 1; // Convert to 0-based
-            int offset = 0;
-            String text = textArea.getText();
-            String[] lines = text.split("\n", -1);
-
-            for (int i = 0; i < targetLine && i < lines.length; i++) {
-                offset += lines[i].length() + 1; // +1 for newline
-            }
+            int offset = section.start();
+            int targetLine = getLineNumberForOffset(offset);
 
             // Record jump in navigation history
             NavigationHistory.Position currentPos = getCurrentPosition();
@@ -912,8 +908,13 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Toggles comments on the current line or all lines in the selection.
-     * Uses "#" as the comment character. If a line starts with "#" (after whitespace),
-     * it removes the comment. Otherwise, it adds a comment.
+     * Uses "#" as the comment character. If every non-blank line starts with "#"
+     * (after whitespace), comments are removed; otherwise they are added.
+     *
+     * <p>All line coordinates are snapshotted from the document <em>before</em> any
+     * edit and the edits are applied bottom-up, so the selection-restore arithmetic
+     * works in one consistent coordinate space regardless of how many lines are
+     * selected (the old per-line re-read drifted for selections spanning 3+ lines).
      */
     public void toggleComment() {
         try {
@@ -929,95 +930,129 @@ public class EnhancedTextEditor extends JPanel {
                 endLine--;
             }
 
-            // Check if all lines are commented (to decide whether to comment or uncomment)
-            boolean allCommented = true;
-            for (int line = startLine; line <= endLine; line++) {
+            // Snapshot pre-edit line starts and contents (without trailing newline)
+            int lineCount = endLine - startLine + 1;
+            int[] lineStarts = new int[lineCount];
+            String[] contents = new String[lineCount];
+            for (int i = 0; i < lineCount; i++) {
+                int line = startLine + i;
                 int lineStart = textArea.getLineStartOffset(line);
                 int lineEnd = textArea.getLineEndOffset(line);
                 String lineText = textArea.getText(lineStart, lineEnd - lineStart);
-                String trimmed = lineText.trim();
-                if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
-                    allCommented = false;
-                    break;
+                if (lineText.endsWith("\n")) {
+                    lineText = lineText.substring(0, lineText.length() - 1);
                 }
+                lineStarts[i] = lineStart;
+                contents[i] = lineText;
             }
 
-            // Now toggle comments on all lines
-            int newSelectionStart = selectionStart;
-            int newSelectionEnd = selectionEnd;
-            int offsetDelta = 0;
+            // Check if all lines are commented (to decide whether to comment or uncomment)
+            boolean allCommented = areAllCommented(contents);
+
+            // Compute the toggled lines purely, then apply
+            String[] newContents = new String[lineCount];
+            int[] deltas = new int[lineCount];
+            for (int i = 0; i < lineCount; i++) {
+                newContents[i] = toggleLineComment(contents[i], allCommented);
+                deltas[i] = newContents[i].length() - contents[i].length();
+            }
 
             // Group all line edits into a single undo step so one Cmd/Ctrl+Z
             // (un)comments the whole selection rather than one line at a time.
+            // Bottom-up, so the pre-edit offsets stay valid for the pending edits.
             textArea.beginAtomicEdit();
             try {
-            for (int line = startLine; line <= endLine; line++) {
-                int lineStart = textArea.getLineStartOffset(line);
-                int lineEnd = textArea.getLineEndOffset(line);
-                String lineText = textArea.getText(lineStart, lineEnd - lineStart);
-
-                String newLine;
-                int lineDelta = 0;
-
-                if (allCommented) {
-                    // Uncomment: remove "# " or "#" from the start (after whitespace)
-                    int firstNonWhitespace = 0;
-                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
-                        firstNonWhitespace++;
+                for (int i = lineCount - 1; i >= 0; i--) {
+                    if (!newContents[i].equals(contents[i])) {
+                        textArea.replaceRange(newContents[i], lineStarts[i], lineStarts[i] + contents[i].length());
                     }
-
-                    if (firstNonWhitespace < lineText.length() && lineText.charAt(firstNonWhitespace) == '#') {
-                        String before = lineText.substring(0, firstNonWhitespace);
-                        String after = lineText.substring(firstNonWhitespace + 1);
-
-                        // Also remove the space after # if present
-                        if (after.startsWith(" ")) {
-                            after = after.substring(1);
-                            lineDelta = -2;
-                        } else {
-                            lineDelta = -1;
-                        }
-                        newLine = before + after;
-                    } else {
-                        newLine = lineText;
-                    }
-                } else {
-                    // Comment: add "# " at the start (after whitespace)
-                    int firstNonWhitespace = 0;
-                    while (firstNonWhitespace < lineText.length() && Character.isWhitespace(lineText.charAt(firstNonWhitespace))) {
-                        firstNonWhitespace++;
-                    }
-
-                    String before = lineText.substring(0, firstNonWhitespace);
-                    String after = lineText.substring(firstNonWhitespace);
-                    newLine = before + "# " + after;
-                    lineDelta = 2;
                 }
-
-                // Replace the line
-                textArea.replaceRange(newLine, lineStart, lineEnd);
-
-                // Update selection offsets
-                if (lineStart <= selectionStart) {
-                    newSelectionStart += lineDelta;
-                }
-                if (lineStart < selectionEnd) {
-                    newSelectionEnd += lineDelta;
-                }
-
-                offsetDelta += lineDelta;
-            }
             } finally {
                 textArea.endAtomicEdit();
             }
 
-            // Restore selection
-            textArea.setSelectionStart(newSelectionStart);
-            textArea.setSelectionEnd(newSelectionEnd);
+            // Restore selection, shifted by the per-line length changes
+            int[] newSelection = shiftSelectionForLineDeltas(selectionStart, selectionEnd, lineStarts, deltas);
+            int documentLength = textArea.getDocument().getLength();
+            textArea.setSelectionStart(Math.min(newSelection[0], documentLength));
+            textArea.setSelectionEnd(Math.min(newSelection[1], documentLength));
 
         } catch (Exception ex) {
             logger.error("Error toggling comments", ex);
         }
+    }
+
+    /**
+     * @return true if every non-blank line starts with '#' after leading whitespace
+     *         (blank lines are ignored)
+     */
+    static boolean areAllCommented(String[] lineContents) {
+        for (String content : lineContents) {
+            String trimmed = content.trim();
+            if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Toggles the comment marker on one line's content (no trailing newline).
+     *
+     * @param content   the line content
+     * @param uncomment true to remove "#" (and one following space) after leading
+     *                  whitespace; false to insert "# " after leading whitespace
+     * @return the toggled line content (unchanged when uncommenting a line with no '#')
+     */
+    static String toggleLineComment(String content, boolean uncomment) {
+        int firstNonWhitespace = 0;
+        while (firstNonWhitespace < content.length() && Character.isWhitespace(content.charAt(firstNonWhitespace))) {
+            firstNonWhitespace++;
+        }
+        String before = content.substring(0, firstNonWhitespace);
+        String after = content.substring(firstNonWhitespace);
+
+        if (uncomment) {
+            if (!after.startsWith("#")) {
+                return content;
+            }
+            after = after.substring(1);
+            // Also remove the space after # if present
+            if (after.startsWith(" ")) {
+                after = after.substring(1);
+            }
+            return before + after;
+        }
+        return before + "# " + after;
+    }
+
+    /**
+     * Shifts a selection for per-line length changes, all expressed in pre-edit
+     * document coordinates: the start moves with the delta of its own line, the end
+     * with the deltas of every edited line that begins before it. The start is
+     * clamped to its line start (relevant when uncommenting with the caret inside
+     * the removed marker) and the end never precedes the start.
+     *
+     * @param selectionStart pre-edit selection start
+     * @param selectionEnd   pre-edit selection end
+     * @param lineStarts     pre-edit start offsets of the edited lines (ascending)
+     * @param deltas         length change of each edited line
+     * @return {newSelectionStart, newSelectionEnd}
+     */
+    static int[] shiftSelectionForLineDeltas(int selectionStart, int selectionEnd, int[] lineStarts, int[] deltas) {
+        int newStart = selectionStart;
+        int newEnd = selectionEnd;
+        for (int i = 0; i < lineStarts.length; i++) {
+            if (lineStarts[i] <= selectionStart) {
+                newStart += deltas[i];
+            }
+            if (lineStarts[i] < selectionEnd) {
+                newEnd += deltas[i];
+            }
+        }
+        newStart = Math.max(newStart, lineStarts.length > 0 ? lineStarts[0] : 0);
+        newEnd = Math.max(newEnd, newStart);
+        return new int[] {newStart, newEnd};
     }
 
     /**
@@ -1069,9 +1104,13 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Applies multiple text replacements as a single atomic undo operation.
-     * Each replacement specifies a line number and the old/new text.
+     * Each replacement names a line, an exact column range on that line
+     * (via {@link LineReplacement#startColumn}), the text expected there, and
+     * the replacement text. Ranges are exact: only the addressed occurrence is
+     * touched, so renaming node {@code s} on {@code ds_1 = s  # s} cannot
+     * rewrite the key or the comment.
      *
-     * @param replacements List of line-based text replacements
+     * @param replacements List of range-anchored line replacements
      */
     public void applyAtomicReplacements(java.util.List<LineReplacement> replacements) {
         if (replacements.isEmpty()) {
@@ -1086,27 +1125,38 @@ public class EnhancedTextEditor extends JPanel {
             textArea.beginAtomicEdit();
 
             try {
-                // Apply replacements in reverse order to maintain line positions
-                // Sort by line number descending
+                // Apply replacements bottom-up, right-to-left, so earlier edits
+                // cannot shift the positions of the ones still to apply.
                 java.util.List<LineReplacement> sortedReplacements = new java.util.ArrayList<>(replacements);
-                sortedReplacements.sort((a, b) -> Integer.compare(b.lineNumber, a.lineNumber));
+                sortedReplacements.sort(
+                    java.util.Comparator.comparingInt((LineReplacement r) -> r.lineNumber)
+                        .thenComparingInt(r -> r.startColumn)
+                        .reversed());
 
                 for (LineReplacement replacement : sortedReplacements) {
                     int lineIndex = replacement.lineNumber - 1; // Convert 1-based to 0-based
 
                     if (lineIndex >= 0 && lineIndex < lines.length) {
+                        String originalLine = lines[lineIndex];
+                        String newLine = spliceLine(originalLine, replacement);
+                        if (newLine == null) {
+                            // The addressed range no longer holds the expected text
+                            // (stale detection, or a duplicate replacement already
+                            // applied at this range). Skip rather than corrupt.
+                            logger.warn("Skipping stale replacement at line {} col {}: expected '{}'",
+                                replacement.lineNumber, replacement.startColumn, replacement.oldText);
+                            continue;
+                        }
+
                         // Find the start position of this line in the document
                         int startPos = 0;
                         for (int i = 0; i < lineIndex; i++) {
                             startPos += lines[i].length() + 1; // +1 for newline
                         }
 
-                        String originalLine = lines[lineIndex];
-                        String newLine = originalLine.replace(replacement.oldText, replacement.newText);
-
-                        // Replace the line content in the document
-                        doc.remove(startPos, originalLine.length());
-                        doc.insertString(startPos, newLine, null);
+                        // Replace only the addressed range in the document
+                        doc.remove(startPos + replacement.startColumn, replacement.oldText.length());
+                        doc.insertString(startPos + replacement.startColumn, replacement.newText, null);
 
                         // Update our lines array for subsequent replacements
                         lines[lineIndex] = newLine;
@@ -1126,15 +1176,37 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Represents a line-based text replacement.
+     * Applies one range-anchored replacement to a line's text, verifying that the
+     * addressed range actually holds the expected old text.
+     *
+     * @return the new line text, or {@code null} if the range is out of bounds or
+     *         does not match {@code replacement.oldText}
+     */
+    static String spliceLine(String line, LineReplacement replacement) {
+        int start = replacement.startColumn;
+        if (start < 0 || start + replacement.oldText.length() > line.length()
+                || !line.regionMatches(start, replacement.oldText, 0, replacement.oldText.length())) {
+            return null;
+        }
+        return line.substring(0, start) + replacement.newText
+            + line.substring(start + replacement.oldText.length());
+    }
+
+    /**
+     * Represents a range-anchored text replacement: on line {@code lineNumber},
+     * the text {@code oldText} beginning at column {@code startColumn} is
+     * replaced by {@code newText}.
      */
     public static class LineReplacement {
         public final int lineNumber; // 1-based
+        /** 0-based column of {@code oldText} within the line. */
+        public final int startColumn;
         public final String oldText;
         public final String newText;
 
-        public LineReplacement(int lineNumber, String oldText, String newText) {
+        public LineReplacement(int lineNumber, int startColumn, String oldText, String newText) {
             this.lineNumber = lineNumber;
+            this.startColumn = startColumn;
             this.oldText = oldText;
             this.newText = newText;
         }
@@ -1167,10 +1239,17 @@ public class EnhancedTextEditor extends JPanel {
     /**
      * Recomputes the dirty flag by comparing the current content against the clean
      * baseline. This clears the dirty flag when the user edits (or undoes) the buffer
-     * back to its last-saved content. {@code String.equals} short-circuits on length,
-     * so this is cheap unless the lengths happen to match.
+     * back to its last-saved content.
+     *
+     * <p>The document length is compared first: this runs per keystroke, and
+     * {@code getText()} materialises a copy of the whole buffer, so the copy (and
+     * the character comparison) is only paid when the lengths happen to match.</p>
      */
     private void updateDirtyFromContent() {
+        if (textArea.getDocument().getLength() != cleanText.length()) {
+            setDirty(true);
+            return;
+        }
         setDirty(!textArea.getText().equals(cleanText));
     }
     
@@ -1272,9 +1351,18 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Dispose of resources when the editor is no longer needed.
+     * Dispose of resources when the editor is no longer needed (document close).
+     * Detaches everything with a lifetime longer than this editor: the global
+     * Toolkit mouse listener, the auto-complete installation and its background
+     * reader executor (via {@link AutoCompleteManager#dispose}), and the linter
+     * stack's listeners and executor (via {@code LinterManager.dispose}).
+     * Idempotent.
      */
     public void dispose() {
+        if (navigationMouseCaptureListener != null) {
+            java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(navigationMouseCaptureListener);
+            navigationMouseCaptureListener = null;
+        }
         if (autoCompleteManager != null) {
             autoCompleteManager.dispose();
             autoCompleteManager = null;

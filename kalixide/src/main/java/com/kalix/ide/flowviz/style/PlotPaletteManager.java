@@ -20,10 +20,15 @@ import java.util.List;
  *
  * <h2>Built-in vs user palettes</h2>
  * Built-in palettes (currently just {@code Original}) are defined in code, always
- * present, read-only, and never persisted. User palettes are created by
- * {@link #duplicate}, are editable, and are saved to {@code kalix_prefs.json} via
- * the injected {@link PaletteStore}. Palette names are unique across both kinds
- * and act as the selection key.
+ * present, read-only, and never persisted. The built-in {@code Original} palette
+ * is <em>theme-reactive</em>: its colours are the current theme's
+ * {@code Kalix.plot.seriesN} UIManager values ({@link PlotPalette#builtInFromTheme()}),
+ * re-resolved via {@link #refreshBuiltInsFromTheme()} on every theme switch. User
+ * palettes are created by {@link #duplicate}, are editable, are saved to
+ * {@code kalix_prefs.json} via the injected {@link PaletteStore}, and are never
+ * touched by theme changes — a user's customised palette always wins while it is
+ * the active selection. Palette names are unique across both kinds and act as
+ * the selection key.
  *
  * <h2>Change notification</h2>
  * Every mutation — active switch, duplicate, rename, delete, edit — fires the
@@ -36,11 +41,15 @@ public class PlotPaletteManager {
 
     private static final Logger logger = LoggerFactory.getLogger(PlotPaletteManager.class);
 
-    /** Built-in, read-only palettes. Always present at the front of the list; never persisted. */
-    private static final List<PlotPalette> BUILT_INS = List.of(PlotPalette.builtInOriginal());
-
     /** Lazily-created process-wide instance; see {@link #getInstance()}. */
     private static PlotPaletteManager instance;
+
+    /**
+     * Built-in, read-only palettes. Always present at the front of the list; never
+     * persisted. Resolved from the current theme at construction and re-resolved by
+     * {@link #refreshBuiltInsFromTheme()}, so this is instance state, not a constant.
+     */
+    private List<PlotPalette> builtIns = List.of(PlotPalette.builtInFromTheme());
 
     private final PaletteStore store;
     private final List<PlotPalette> userPalettes = new ArrayList<>();
@@ -90,11 +99,39 @@ public class PlotPaletteManager {
         return instance;
     }
 
+    /**
+     * Re-resolves the built-in palettes against the current theme, notifying
+     * listeners (and thereby repainting every open plot) if their colours changed.
+     *
+     * <p>Called by {@code ThemeManager} after a look-and-feel switch. User palettes
+     * are deliberately untouched: only the theme-reactive built-ins recolour, so a
+     * user's customised palette keeps its exact colours across theme changes.</p>
+     */
+    public void refreshBuiltInsFromTheme() {
+        List<PlotPalette> refreshed = List.of(PlotPalette.builtInFromTheme());
+        if (!refreshed.equals(builtIns)) {
+            builtIns = refreshed;
+            fireChange();
+        }
+    }
+
+    /**
+     * Refreshes the process-wide instance's built-in palettes from the current
+     * theme, if the instance has been created. A no-op before first use — a
+     * manager created later resolves the (new) current theme in its constructor,
+     * so there is nothing stale to refresh.
+     */
+    public static synchronized void onThemeChanged() {
+        if (instance != null) {
+            instance.refreshBuiltInsFromTheme();
+        }
+    }
+
     // ==== Queries ====
 
     /** All palettes, built-ins first then user palettes in creation order. Unmodifiable. */
     public List<PlotPalette> getPalettes() {
-        List<PlotPalette> all = new ArrayList<>(BUILT_INS);
+        List<PlotPalette> all = new ArrayList<>(builtIns);
         all.addAll(userPalettes);
         return Collections.unmodifiableList(all);
     }
@@ -111,7 +148,7 @@ public class PlotPaletteManager {
 
     /** Whether the named palette is a read-only built-in. */
     public boolean isBuiltIn(String name) {
-        return BUILT_INS.stream().anyMatch(p -> p.name().equals(name));
+        return builtIns.stream().anyMatch(p -> p.name().equals(name));
     }
 
     /** The name of the globally active palette. */
@@ -122,7 +159,7 @@ public class PlotPaletteManager {
     /** The globally active palette; falls back to the built-in default if unresolved. */
     public PlotPalette getActivePalette() {
         PlotPalette active = findPalette(activePaletteName);
-        return active != null ? active : BUILT_INS.get(0);
+        return active != null ? active : builtIns.get(0);
     }
 
     // ==== Mutations ====
@@ -247,7 +284,7 @@ public class PlotPaletteManager {
     // ==== Internals ====
 
     private PlotPalette findPalette(String name) {
-        for (PlotPalette p : BUILT_INS) {
+        for (PlotPalette p : builtIns) {
             if (p.name().equals(name)) {
                 return p;
             }

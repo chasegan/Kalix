@@ -5,7 +5,6 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -93,6 +92,12 @@ public class TimeSeriesRequestManager {
         }
     }
 
+    /**
+     * How long a single get_result may stay pending before its future fails. Generous:
+     * a multi-decade hourly series is ~20MB of base64 over the pipe plus a decode.
+     */
+    private static final long REQUEST_TIMEOUT_SECONDS = 60;
+
     public TimeSeriesRequestManager(SessionManager sessionManager) {
         this.sessionManager = sessionManager;
         this.requestExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -104,8 +109,36 @@ public class TimeSeriesRequestManager {
         this.cache = new ConcurrentHashMap<>();
         this.completedCache = new ConcurrentHashMap<>();
 
+        // A dead session can never answer: fail its pending futures so consumers see
+        // an error instead of "Loading..." forever - and so the stuck cache entry
+        // doesn't block every retry of that series for the session's lifetime.
+        sessionManager.addSessionEventListener(event -> {
+            SessionManager.SessionState state = event.getNewState();
+            if (state == SessionManager.SessionState.TERMINATED
+                    || state == SessionManager.SessionState.ERROR) {
+                failPendingFuturesForSession(event.getSessionKey(),
+                    "Session " + state.name().toLowerCase() + " before responding");
+            }
+        });
+
         // Start the request processing loop
         startRequestProcessor();
+    }
+
+    /** Fails and removes every in-flight future belonging to the given session. */
+    private void failPendingFuturesForSession(String sessionKey, String reason) {
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid == null) {
+            return;
+        }
+        String prefix = kalixcliUid + ":";
+        cache.entrySet().removeIf(entry -> {
+            if (entry.getKey().startsWith(prefix)) {
+                entry.getValue().completeExceptionally(new RuntimeException(reason));
+                return true;
+            }
+            return false;
+        });
     }
 
     /**
@@ -138,8 +171,16 @@ public class TimeSeriesRequestManager {
             return CompletableFuture.completedFuture(cachedData);
         }
 
-        // Create new request
+        // Create new request. The timeout is a backstop for responses that never
+        // arrive (wedged CLI, message lost): without it the stuck entry makes the
+        // series permanently unfetchable for this session.
         CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
+        future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+              .whenComplete((data, throwable) -> {
+                  if (throwable != null) {
+                      cache.remove(cacheKey, future);
+                  }
+              });
         cache.put(cacheKey, future);
 
         TimeSeriesRequest request = new TimeSeriesRequest(sessionKey, seriesName, future);
@@ -192,7 +233,19 @@ public class TimeSeriesRequestManager {
     public void clearCacheForSession(String sessionKey) {
         String kalixcliUid = getKalixcliUid(sessionKey);
         if (kalixcliUid == null) return;
+        clearCacheForKalixcliUid(kalixcliUid);
+        logger.debug("Cleared cache for session {} (kalixcliUid: {})", sessionKey, kalixcliUid);
+    }
 
+    /**
+     * Clears all cached data for a kalixcli UID directly. Use this when the session has
+     * already left the session manager (run removal) - {@link #clearCacheForSession}
+     * cannot resolve the UID for a removed session, and its cache entries would
+     * otherwise be unreachable forever.
+     *
+     * @param kalixcliUid the CLI-assigned session UID whose entries should be dropped
+     */
+    public void clearCacheForKalixcliUid(String kalixcliUid) {
         String prefix = kalixcliUid + ":";
 
         // Remove from completed cache
@@ -206,8 +259,6 @@ public class TimeSeriesRequestManager {
             }
             return false;
         });
-
-        logger.debug("Cleared cache for session {} (kalixcliUid: {})", sessionKey, kalixcliUid);
     }
 
     /**
@@ -258,7 +309,7 @@ public class TimeSeriesRequestManager {
 
         try {
             // Wire format is user-configurable via Preferences > Data & Visualization.
-            String format = PreferenceManager.getFileString(PreferenceKeys.STDIO_DATA_FORMAT, "pixie");
+            String format = PreferenceKeys.STDIO_DATA_FORMAT.get();
             if (!"pixie".equals(format) && !"csv".equals(format)) {
                 format = "pixie"; // defensive: unknown saved value falls back to default
             }
@@ -284,41 +335,29 @@ public class TimeSeriesRequestManager {
      * Handle a JSON response from kalixcli and parse timeseries data if it's a get_result response
      * Call this method when you receive JSON responses from the session
      */
-    public void handleJsonResponse(String jsonResponse) {
-        JsonNode response;
-        try {
-            response = objectMapper.readTree(jsonResponse);
-        } catch (Exception e) {
-            logger.error("Failed to parse JSON response", e);
+    public void handleResultMessage(com.kalix.ide.cli.JsonMessage.SystemMessage message) {
+        // The message arrives already parsed by SessionManager - these responses carry
+        // multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
+        if (!"get_result".equals(message.getCommand())) {
             return;
         }
 
-        String messageType = response.path("m").asText();
-        if (!"res".equals(messageType)) {
-            return;
-        }
-
-        String command = response.path("cmd").asText();
-        if (!"get_result".equals(command)) {
-            return;
-        }
-
-        JsonNode result = response.path("r");
-        String seriesName = result.path("series_name").asText();
-        String kalixcliUid = response.path("uid").asText();
+        JsonNode result = message.getResult();
+        String seriesName = result != null ? result.path("series_name").asText() : "";
+        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
         String cacheKey = kalixcliUid + ":" + seriesName;
 
-        boolean success = response.path("ok").asBoolean(false);
-        if (!success) {
-            String errMsg = response.path("msg").asText("get_result command failed");
+        if (!Boolean.TRUE.equals(message.getSuccess())) {
+            String errMsg = message.getErrorMessage() != null
+                ? message.getErrorMessage() : "get_result command failed";
             logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
             failPendingFuture(cacheKey, new RuntimeException("get_result failed: " + errMsg));
             return;
         }
 
-        String dataString = result.path("data").asText();
+        String dataString = result != null ? result.path("data").asText() : "";
         // Format defaults to "pixie" if the field is absent (older responses or defensive fallback).
-        String format = result.path("format").asText("pixie");
+        String format = result != null ? result.path("format").asText("pixie") : "pixie";
         try {
             handleTimeSeriesResult(seriesName, dataString, kalixcliUid, format);
         } catch (Exception e) {
@@ -358,16 +397,18 @@ public class TimeSeriesRequestManager {
                 throw new IllegalArgumentException("Unsupported get_result format: '" + format + "'");
         }
 
-        // Update cache
+        // Only responses with a live request populate the cache. A response landing
+        // after clearCacheForSession (a new run just completed on the same session -
+        // kalixcliUid persists across runs) is the PREVIOUS run's data; caching it
+        // would serve stale results to the next fetch.
         String cacheKey = kalixcliUid + ":" + seriesName;
-        completedCache.put(cacheKey, timeSeriesData);
-
         CompletableFuture<TimeSeriesData> future = cache.remove(cacheKey);
-        if (future != null) {
-            future.complete(timeSeriesData);
-        } else {
-            logger.warn("No pending future found for cacheKey: '{}'", cacheKey);
+        if (future == null || future.isCancelled()) {
+            logger.debug("Dropping get_result response with no live request: '{}'", cacheKey);
+            return;
         }
+        completedCache.put(cacheKey, timeSeriesData);
+        future.complete(timeSeriesData);
     }
 
     /**
@@ -382,18 +423,18 @@ public class TimeSeriesRequestManager {
     static TimeSeriesData decodePixiePayload(String seriesName, String base64Data) throws java.io.IOException {
         // Constructor's timestep arg is only used by the encoder; decoder reads it from the bitstream.
         GorillaCompressor codec = new GorillaCompressor(0);
-        List<GorillaCompressor.TimeValueDouble> points = codec.decompressDoubleBase64(base64Data);
+        // Primitive-array decode: no per-point TimeValue/boxing on this hot path
+        // (multi-million-point series arrive here over STDIO after every run).
+        GorillaCompressor.DoubleArraySeries series = codec.decompressDoubleArraysBase64(base64Data);
 
-        int n = points.size();
+        int n = series.size();
         LocalDateTime[] dateTimes = new LocalDateTime[n];
-        double[] values = new double[n];
+        double[] values = series.values;
         for (int i = 0; i < n; i++) {
-            GorillaCompressor.TimeValueDouble p = points.get(i);
             // Kalix stores timestamps in offset-binary u64: signed = bits ^ 2^63
             // (mirrors Rust's wrap_to_i64 in src/tid/utils.rs).
-            long signedSeconds = p.timestamp ^ Long.MIN_VALUE;
+            long signedSeconds = series.timestamps[i] ^ Long.MIN_VALUE;
             dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
-            values[i] = p.value;
         }
         // If the stream omits missing timesteps, the decoded points have gaps. Materialise the
         // full grid (NaN at missing slots) so run series share one representation and keep the

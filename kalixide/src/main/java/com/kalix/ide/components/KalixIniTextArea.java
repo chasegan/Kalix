@@ -1,7 +1,5 @@
 package com.kalix.ide.components;
 
-import com.kalix.ide.preferences.PreferenceManager;
-import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
@@ -96,13 +94,12 @@ public class KalixIniTextArea extends KalixTextArea {
     }
 
     /**
-     * Applies the syntax theme from user preferences.
+     * Applies the syntax theme from user preferences (an explicit choice, or
+     * the application theme's linked palette when in follow mode).
      */
     private void applySavedSyntaxTheme() {
         try {
-            String savedThemeName = PreferenceManager.getFileString(PreferenceKeys.UI_SYNTAX_THEME, "LIGHT");
-            SyntaxTheme.Theme savedTheme = SyntaxTheme.getThemeByName(savedThemeName);
-            updateSyntaxTheme(savedTheme);
+            updateSyntaxTheme(com.kalix.ide.themes.ThemePreferences.effectiveSyntaxTheme());
         } catch (Exception e) {
             updateSyntaxTheme(SyntaxTheme.Theme.LIGHT);
         }

@@ -11,11 +11,11 @@ import com.kalix.ide.managers.optimisation.OptimisationProgressManager;
 import com.kalix.ide.managers.optimisation.OptimisationResultsManager;
 import com.kalix.ide.managers.optimisation.OptimisationSessionManager;
 import com.kalix.ide.managers.optimisation.OptimisationTreeManager;
-import com.kalix.ide.managers.optimisation.OptimisationUpdateCoordinator;
 import com.kalix.ide.managers.optimisation.OptimisationWindowInitializer;
-import com.kalix.ide.models.optimisation.OptimisationConfigModel;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
+import com.kalix.ide.managers.SessionTreeBookkeeping;
+import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
+import com.kalix.ide.managers.optimisation.OptimisationInfo;
+import com.kalix.ide.managers.optimisation.OptimisationStatus;
 import com.kalix.ide.windows.optimisation.ParametersConfigPanel;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.components.KalixIniTextArea;
@@ -80,7 +80,6 @@ public class OptimisationWindow extends JFrame {
     private OptimisationEventHandlers eventHandlers;
     private OptimisationModelManager modelManager;
     private OptimisationWindowInitializer windowInitializer;
-    private OptimisationUpdateCoordinator updateCoordinator;
 
     // Tree components
     private JTree optTree;
@@ -102,7 +101,6 @@ public class OptimisationWindow extends JFrame {
     private JLabel evaluationProgressLabel; // Label showing evaluation count and progress
     private JLabel startTimeLabel;         // Label showing optimization start time
     private JLabel elapsedTimeLabel;       // Label showing current/finish time and elapsed time
-    private javax.swing.Timer elapsedTimer; // Timer to update elapsed time display
     private JButton runButton;
     private JButton loadConfigButton;
     private JButton saveConfigButton;
@@ -150,16 +148,21 @@ public class OptimisationWindow extends JFrame {
      * Initializes all manager instances.
      */
     private void initializeManagers() {
+        // Session-tree bookkeeping shared by the session manager (status, removal)
+        // and the tree manager (displayed nodes).
+        SessionTreeBookkeeping<OptimisationStatus> sessionBookkeeping = new SessionTreeBookkeeping<>();
+
         // Initialize session manager first as others may depend on it
         this.sessionManager = new OptimisationSessionManager(
             stdioTaskManager,
+            sessionBookkeeping,
             workingDirectorySupplier,
             projectDirectorySupplier,
             modelTextSupplier
         );
 
         // Initialize other managers
-        this.treeManager = new OptimisationTreeManager();
+        this.treeManager = new OptimisationTreeManager(sessionBookkeeping);
         this.configManager = new OptimisationConfigManager(
             workingDirectorySupplier,
             modelTextSupplier
@@ -172,6 +175,8 @@ public class OptimisationWindow extends JFrame {
             sessionManager,
             treeManager,
             progressManager,
+            resultsManager,
+            plotManager,
             statusUpdater
         );
         this.modelManager = new OptimisationModelManager(
@@ -184,9 +189,6 @@ public class OptimisationWindow extends JFrame {
         this.windowInitializer = new OptimisationWindowInitializer(
             treeManager, configManager, progressManager, resultsManager,
             plotManager, sessionManager, panelBuilder, eventHandlers
-        );
-        this.updateCoordinator = new OptimisationUpdateCoordinator(
-            treeManager, progressManager, resultsManager, plotManager, sessionManager
         );
 
         // Set up basic dependencies
@@ -207,13 +209,22 @@ public class OptimisationWindow extends JFrame {
             this,
             stdioTaskManager,
             statusUpdater,
-            () -> rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE),
-            this::displayOptimisation,
-            this::saveCurrentConfigToNode,
-            updateCoordinator::updateTreeNodeForSession,
-            updateCoordinator::updateDetailsIfSelected,
-            updateCoordinator::updateConvergencePlotIfSelected,
-            updateCoordinator::updateModelDisplayIfSelected
+            new OptimisationWindowInitializer.WindowCallbacks() {
+                @Override
+                public void showMessagePanel() {
+                    rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
+                }
+
+                @Override
+                public void displayOptimisation(OptimisationInfo optInfo) {
+                    OptimisationWindow.this.displayOptimisation(optInfo);
+                }
+
+                @Override
+                public void saveCurrentConfig() {
+                    saveCurrentConfigToNode();
+                }
+            }
         );
 
         // A direct edit of the INI text locks the GUI form for that optimisation.
@@ -283,7 +294,8 @@ public class OptimisationWindow extends JFrame {
 
         // Switch to appropriate tab based on status
         if (optInfo.getStatus() == OptimisationStatus.DONE) {
-            mainTabbedPane.setSelectedIndex(2); // Results tab
+            mainTabbedPane.setSelectedIndex(
+                mainTabbedPane.indexOfTab(OptimisationUIConstants.TAB_RESULTS));
         }
     }
 
@@ -495,8 +507,8 @@ public class OptimisationWindow extends JFrame {
      */
     private void setupTabChangeListener() {
         mainTabbedPane.addChangeListener(e -> {
-            // Index 1 is the Config INI tab (after the Config GUI tab).
-            if (mainTabbedPane.getSelectedIndex() == 1) {
+            if (mainTabbedPane.getSelectedIndex()
+                    == mainTabbedPane.indexOfTab(OptimisationUIConstants.TAB_CONFIG_INI)) {
                 OptimisationInfo optInfo = getDisplayedOptimisation();
                 if (optInfo != null && !optInfo.isIniLocked() && !optInfo.hasStartedRunning()) {
                     configManager.regenerateIniFromGui();
@@ -514,10 +526,8 @@ public class OptimisationWindow extends JFrame {
 
         if (!(currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo optInfo)) return;
 
-        String sessionKey = optInfo.getSession() != null ? optInfo.getSession().getSessionKey() : null;
-
         // Use config manager to save
-        configManager.saveCurrentConfigToOptimisation(optInfo, sessionKey, sessionManager);
+        configManager.saveCurrentConfigToOptimisation(optInfo);
     }
 
 
@@ -571,7 +581,8 @@ public class OptimisationWindow extends JFrame {
 
         if (started) {
             // Switch to results tab
-            mainTabbedPane.setSelectedIndex(2); // Results tab
+            mainTabbedPane.setSelectedIndex(
+                mainTabbedPane.indexOfTab(OptimisationUIConstants.TAB_RESULTS));
             progressManager.startProgress(optInfo);
 
             // Update tree display

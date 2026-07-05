@@ -185,7 +185,8 @@ public class MapContextMenuManager {
             if (lastContextMenuLocation != null) {
                 double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
                 double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
-                String locationText = String.format("%.2f, %.2f", worldX, worldY);
+                // Locale.ROOT: the copied text is pasted into model files (dot decimals).
+                String locationText = String.format(java.util.Locale.ROOT, "%.2f, %.2f", worldX, worldY);
                 java.awt.datatransfer.StringSelection selection =
                     new java.awt.datatransfer.StringSelection(locationText);
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);

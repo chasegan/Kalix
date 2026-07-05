@@ -69,41 +69,51 @@ public class SyntaxTheme {
             Color.decode("#f0f4f0")  // WHITESPACE - soft green tint
         ),
 
-        // Dark Application Themes
+        // Dark Application Themes — token colours gleaned from the designer mocks
+        // in kalixide/docs/design_guides/ (the --syntax-* roles).
         DRACULA("Dracula",
-            Color.decode("#f8f8f2"), // IDENTIFIER - foreground
+            Color.decode("#d5d6e0"), // IDENTIFIER - soft foreground
             Color.decode("#ff79c6"), // OPERATOR - pink
             Color.decode("#f1fa8c"), // LITERAL_STRING_DOUBLE_QUOTE - yellow
             Color.decode("#bd93f9"), // RESERVED_WORD - purple
-            Color.decode("#6272a4"), // COMMENT_EOL - comment blue
-            Color.decode("#44475a")  // WHITESPACE - current line
+            Color.decode("#7d8ac0"), // COMMENT_EOL - comment blue
+            Color.decode("#3f4358")  // WHITESPACE - near-invisible
         ),
 
         ONE_DARK("One Dark",
-            Color.decode("#abb2bf"), // IDENTIFIER - light gray
+            Color.decode("#c8cdd6"), // IDENTIFIER - light gray
             Color.decode("#56b6c2"), // OPERATOR - cyan
             Color.decode("#98c379"), // LITERAL_STRING_DOUBLE_QUOTE - green
             Color.decode("#c678dd"), // RESERVED_WORD - purple
-            Color.decode("#5c6370"), // COMMENT_EOL - gray
-            Color.decode("#3e4451")  // WHITESPACE - dark gray
+            Color.decode("#7f8895"), // COMMENT_EOL - gray
+            Color.decode("#3a4048")  // WHITESPACE - near-invisible
         ),
 
         OBSIDIAN("Obsidian",
-            Color.decode("#e6e6e6"), // IDENTIFIER - light gray
-            Color.decode("#8b5cf6"), // OPERATOR - purple accent
-            Color.decode("#c084fc"), // LITERAL_STRING_DOUBLE_QUOTE - lighter purple (property values)
-            Color.decode("#a855f7"), // RESERVED_WORD - medium light purple (section headers)
-            Color.decode("#6b7280"), // COMMENT_EOL - muted gray
-            Color.decode("#374151")  // WHITESPACE - dark gray
+            Color.decode("#c9c5d4"), // IDENTIFIER - stone lavender-gray
+            Color.decode("#d98bc9"), // OPERATOR - orchid
+            Color.decode("#8fc9b9"), // LITERAL_STRING_DOUBLE_QUOTE - sage teal
+            Color.decode("#a78bfa"), // RESERVED_WORD - violet (section headers)
+            Color.decode("#8b8499"), // COMMENT_EOL - muted gray
+            Color.decode("#2e2a3a")  // WHITESPACE - near-invisible
         ),
 
         SANNE("Sanne",
-            Color.decode("#f0f0f0"), // IDENTIFIER - crisp white
-            Color.decode("#ff1493"), // OPERATOR - vibrant pink
-            Color.decode("#ff69b4"), // LITERAL_STRING_DOUBLE_QUOTE - hot pink
-            Color.decode("#ff1493"), // RESERVED_WORD - deep pink
-            Color.decode("#a0a0a0"), // COMMENT_EOL - light gray
-            Color.decode("#404040")  // WHITESPACE - dark gray
+            Color.decode("#d7cdd3"), // IDENTIFIER - warm gray
+            Color.decode("#6fc7c0"), // OPERATOR - teal counterpoint
+            Color.decode("#d8b06a"), // LITERAL_STRING_DOUBLE_QUOTE - amber
+            Color.decode("#ff5aa3"), // RESERVED_WORD - pink (section headers)
+            Color.decode("#94899a"), // COMMENT_EOL - mauve gray
+            Color.decode("#3a3342")  // WHITESPACE - near-invisible
+        ),
+
+        KALIX_DARK("Kalix Dark",
+            Color.decode("#c4ccd4"), // IDENTIFIER - cool gray
+            Color.decode("#d9a566"), // OPERATOR - warm amber
+            Color.decode("#7fbf8f"), // LITERAL_STRING_DOUBLE_QUOTE - river green
+            Color.decode("#4fc3d6"), // RESERVED_WORD - water cyan (section headers)
+            Color.decode("#7f909c"), // COMMENT_EOL - slate gray
+            Color.decode("#283039")  // WHITESPACE - near-invisible
         );
 
         private final String displayName;

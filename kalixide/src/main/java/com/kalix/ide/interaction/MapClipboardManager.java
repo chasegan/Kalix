@@ -2,6 +2,7 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -229,16 +230,12 @@ public class MapClipboardManager {
     }
 
     /**
-     * Find the text boundaries of a node section.
+     * Find the text boundaries of a node section via the shared INI-section grammar.
      */
     private int[] getNodeSectionBounds(String text, String nodeName) {
-        String escapedNodeName = Pattern.quote(nodeName);
-        String pattern = "\\[node\\." + escapedNodeName + "\\](?:\\r?\\n|$)(?:(?!\\[)[^\\r\\n]*(?:\\r?\\n|$))*";
-        Pattern nodePattern = Pattern.compile(pattern, Pattern.MULTILINE);
-
-        Matcher matcher = nodePattern.matcher(text);
-        if (matcher.find()) {
-            return new int[] { matcher.start(), matcher.end() };
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, nodeName);
+        if (section != null) {
+            return new int[] { section.start(), section.end() };
         }
         return null;
     }
@@ -348,7 +345,8 @@ public class MapClipboardManager {
                 double newX = oldX + offsetX;
                 double newY = oldY + offsetY;
 
-                String newLoc = String.format("loc = %.2f, %.2f", newX, newY);
+                // Locale.ROOT: model text always uses dot decimals (see TextCoordinateUpdater).
+                String newLoc = String.format(java.util.Locale.ROOT, "loc = %.2f, %.2f", newX, newY);
                 return sectionText.substring(0, matcher.start()) + newLoc + sectionText.substring(matcher.end());
             } catch (NumberFormatException e) {
                 logger.warn("Error translating coordinates: {}", e.getMessage());

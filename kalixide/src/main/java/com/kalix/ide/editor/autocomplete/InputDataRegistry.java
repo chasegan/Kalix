@@ -88,7 +88,11 @@ public class InputDataRegistry {
         List<String> current = List.copyOf(inputFiles);
 
         if (!current.equals(lastInputFiles)) {
-            // Input list changed: remove stale entries and submit reads for new files
+            // Input list changed: remove stale entries and submit reads for new
+            // files. The volatile list is published BEFORE the removal so a
+            // pending background read can never observe the old list after its
+            // entry has been removed (see the re-validation in submitRead).
+            lastInputFiles = current;
             cache.keySet().removeIf(key -> !current.contains(key));
 
             for (String filePath : current) {
@@ -96,9 +100,12 @@ public class InputDataRegistry {
                     submitRead(filePath);
                 }
             }
-            lastInputFiles = current;
         } else {
-            // Same list: check timestamps for already-cached files
+            // Same list: check timestamps for already-cached files. Negative
+            // entries participate too — their timestamp (0 for a missing file)
+            // changes when the file appears or is rewritten, triggering a
+            // re-read; until then they suppress the read that every popup used
+            // to resubmit for missing/unreadable files.
             for (String filePath : current) {
                 CachedDataSource cached = cache.get(filePath);
                 if (cached != null) {
@@ -107,7 +114,7 @@ public class InputDataRegistry {
                         submitRead(filePath);
                     }
                 } else {
-                    // Not yet cached (maybe still loading), resubmit
+                    // Not yet cached (still loading, or evicted), resubmit
                     submitRead(filePath);
                 }
             }
@@ -131,26 +138,61 @@ public class InputDataRegistry {
 
     private void submitRead(String filePath) {
         executor.submit(() -> {
-            try {
-                File resolved = resolveFile(filePath);
-                if (resolved == null || !resolved.exists()) {
-                    return;
-                }
+            // The file may have been removed from [inputs] while this read sat in
+            // the queue — don't do work for it, and above all don't re-insert it.
+            if (!lastInputFiles.contains(filePath)) {
+                return;
+            }
 
-                String fileName = resolved.getName();
-                for (DataSourceHeaderReader reader : readers) {
-                    if (reader.canRead(fileName)) {
-                        List<String> names = reader.readSeriesNames(resolved);
-                        String cleansedFileName = DataSourceHeaderReader.cleanseName(fileName);
-                        cache.put(filePath, new CachedDataSource(
-                                filePath, cleansedFileName, new ArrayList<>(names), resolved.lastModified()));
-                        break;
-                    }
-                }
-            } catch (Exception e) {
-                logger.debug("Failed to read headers from {}: {}", filePath, e.getMessage());
+            cache.put(filePath, readDataSource(filePath));
+
+            // Re-validate after the put: refresh() publishes the new list before
+            // pruning the cache, so if the file was removed concurrently, either
+            // the prune ran after our put (entry already gone) or we observe the
+            // new list here and remove our own stale entry.
+            if (!lastInputFiles.contains(filePath)) {
+                cache.remove(filePath);
             }
         });
+    }
+
+    /**
+     * Reads the series names for one input file. Never returns {@code null}:
+     * a missing, unresolvable, unreadable or unrecognised file yields a
+     * <em>negative</em> entry (empty series list) carrying the file's current
+     * timestamp, so {@link #refresh} stops resubmitting the read on every
+     * completion popup and retries only when the timestamp changes.
+     */
+    private CachedDataSource readDataSource(String filePath) {
+        long lastModified = 0L;
+        try {
+            File resolved = resolveFile(filePath);
+            if (resolved != null) {
+                lastModified = resolved.lastModified(); // 0 for a missing file
+                String fileName = resolved.getName();
+                if (resolved.exists()) {
+                    for (DataSourceHeaderReader reader : readers) {
+                        if (reader.canRead(fileName)) {
+                            List<String> names = reader.readSeriesNames(resolved);
+                            return new CachedDataSource(filePath,
+                                    DataSourceHeaderReader.cleanseName(fileName),
+                                    new ArrayList<>(names), lastModified);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to read headers from {}: {}", filePath, e.getMessage());
+        }
+        return new CachedDataSource(filePath,
+                DataSourceHeaderReader.cleanseName(fileNameOf(filePath)),
+                List.of(), lastModified);
+    }
+
+    /** The bare file name of a (possibly relative, possibly unresolvable) input path. */
+    private static String fileNameOf(String filePath) {
+        int lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        return lastSlash >= 0 ? filePath.substring(lastSlash + 1) : filePath;
     }
 
     private File resolveFile(String filePath) {

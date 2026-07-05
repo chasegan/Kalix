@@ -16,7 +16,6 @@ import com.kalix.ide.constants.UIConstants;
  * water drops, and podiums) with 2-character text labels inside each shape. All shapes are
  * rendered within a consistent bounding box for uniform appearance.
  *
- * @author Claude Code Assistant
  * @version 1.0
  */
 public class NodeShapeRenderer {
@@ -317,7 +316,7 @@ public class NodeShapeRenderer {
 
         // Set up font and color
         Font originalFont = g2d.getFont();
-        g2d.setFont(textStyle.createFont());
+        g2d.setFont(textStyle.getFont());
         g2d.setColor(textStyle.getContrastingColor(backgroundColor));
 
         // Calculate text positioning

@@ -1,8 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.StatusProgressBar;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -319,19 +317,6 @@ public class OptimisationProgressManager {
     }
 
     /**
-     * Formats a duration as HH:mm:ss.
-     *
-     * @param duration The duration to format
-     * @return Formatted string
-     */
-    private String formatDuration(Duration duration) {
-        long hours = duration.toHours();
-        long minutes = duration.toMinutesPart();
-        long seconds = duration.toSecondsPart();
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
-    }
-
-    /**
      * Updates the timing labels (start time and elapsed time) for an optimisation.
      *
      * @param optInfo The optimisation info
@@ -382,15 +367,18 @@ public class OptimisationProgressManager {
             return;
         }
 
+        // Only the newest point matters here; the old code materialised two full
+        // copy-lists per progress tick just to read their last elements.
+        OptimisationResult.ConvergencePoint last = result.lastConvergencePoint();
+
         // Update best objective label
-        if (!result.getConvergenceBestObjective().isEmpty()) {
-            double bestValue = result.getConvergenceBestObjective().get(result.getConvergenceBestObjective().size() - 1);
-            bestObjectiveLabel.setText(String.format("Best: %.6f", bestValue));
+        if (last != null) {
+            bestObjectiveLabel.setText(String.format("Best: %.6f", last.getBestObjective()));
         }
 
         // Update evaluation progress label
-        if (!result.getConvergenceEvaluations().isEmpty()) {
-            int currentEval = result.getConvergenceEvaluations().get(result.getConvergenceEvaluations().size() - 1);
+        if (last != null) {
+            int currentEval = last.getEvaluation();
 
             // Display count with percentage from backend if available
             String progressText;

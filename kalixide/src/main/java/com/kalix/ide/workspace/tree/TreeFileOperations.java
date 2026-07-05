@@ -112,9 +112,20 @@ class TreeFileOperations {
             return;
         }
         File target = new File(file.getParentFile(), name.trim());
-        if (!file.renameTo(target)) {
+        // Explicit existence check: POSIX rename(2) silently REPLACES an existing
+        // target (Windows fails instead), so without this a rename could destroy a
+        // sibling file. Same guard as duplicate() below.
+        if (target.exists()) {
             JOptionPane.showMessageDialog(parent,
-                "Could not rename \"" + file.getName() + "\".",
+                "A file or folder named \"" + name.trim() + "\" already exists.",
+                "Rename Failed", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            Files.move(file.toPath(), target.toPath());
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(parent,
+                "Could not rename \"" + file.getName() + "\": " + ex.getMessage(),
                 "Rename Failed", JOptionPane.WARNING_MESSAGE);
         }
         // The watcher reports delete + create; the tree re-syncs automatically.

@@ -21,7 +21,6 @@ import com.kalix.ide.constants.UIConstants;
  * The renderer is stateless and receives all necessary rendering context
  * through method parameters, making it thread-safe and easily testable.
  *
- * @author Claude Code Assistant
  * @version 1.1
  */
 public class MapRenderer {
@@ -49,6 +48,21 @@ public class MapRenderer {
     private static final BasicStroke LINK_STROKE = new BasicStroke(LINK_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
     private static final BasicStroke LINK_DASHED_STROKE = new BasicStroke(LINK_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
             10.0f, new float[]{5.0f, 5.0f}, 0.0f);
+    private static final BasicStroke SELECTED_LINK_STROKE = new BasicStroke(
+            UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    private static final BasicStroke SELECTED_LINK_DASHED_STROKE = new BasicStroke(
+            UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
+            10.0f, new float[]{5.0f, 5.0f}, 0.0f);
+
+    // Node border strokes (cached — allocated per node per frame before)
+    private static final BasicStroke SELECTED_NODE_STROKE =
+            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH);
+    private static final BasicStroke UNSELECTED_NODE_STROKE =
+            new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH);
+    private static final BasicStroke DEFAULT_STROKE = new BasicStroke(1.0f);
+    private static final BasicStroke SELECTION_RECTANGLE_STROKE = new BasicStroke(
+            1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+            SELECTION_DASH_MITER_LIMIT, SELECTION_DASH_PATTERN, 0.0f);
 
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
@@ -95,11 +109,10 @@ public class MapRenderer {
         g2d.translate(panX, panY);
         g2d.scale(zoomLevel, zoomLevel);
 
-        // Render world-space elements (grid, placeholder content)
+        // Render world-space elements (grid)
         if (showGridlines) {
             renderGrid(g2d, width, height, zoomLevel, panX, panY);
         }
-        renderPlaceholderContent(g2d);
 
         // Reset to screen space for screen-space elements
         g2d.setTransform(originalTransform);
@@ -198,16 +211,6 @@ public class MapRenderer {
     }
 
     /**
-     * Renders placeholder content in world space.
-     * Currently empty but reserved for future model visualization elements.
-     *
-     * @param g2d Graphics context (in world space)
-     */
-    private void renderPlaceholderContent(Graphics2D g2d) {
-        // Placeholder method for future model content
-    }
-
-    /**
      * Renders all model links in screen-space coordinates.
      * Links are drawn as solid lines from upstream to downstream node centers.
      *
@@ -226,7 +229,7 @@ public class MapRenderer {
         }
 
         // Reset stroke and color for subsequent rendering
-        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setStroke(DEFAULT_STROKE);
         g2d.setColor(Color.BLACK);
     }
 
@@ -258,12 +261,7 @@ public class MapRenderer {
         if (isSelected) {
             g2d.setColor(UIConstants.Selection.NODE_SELECTED_BORDER);
             // Use solid or dashed stroke based on link type, but with selected width
-            if (link.isPrimary()) {
-                g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            } else {
-                g2d.setStroke(new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
-                        10.0f, new float[]{5.0f, 5.0f}, 0.0f));
-            }
+            g2d.setStroke(link.isPrimary() ? SELECTED_LINK_STROKE : SELECTED_LINK_DASHED_STROKE);
         } else {
             g2d.setColor(LINK_COLOR);
             // Use solid stroke for primary links, dashed stroke for alternative links
@@ -384,9 +382,7 @@ public class MapRenderer {
         // Determine selection state and border styling
         boolean isSelected = model.isNodeSelected(node.getName());
         Color borderColor = isSelected ? UIConstants.Selection.NODE_SELECTED_BORDER : UIConstants.Selection.NODE_UNSELECTED_BORDER;
-        BasicStroke borderStroke = isSelected ?
-            new BasicStroke(UIConstants.Selection.NODE_SELECTED_STROKE_WIDTH) :
-            new BasicStroke(UIConstants.Selection.NODE_UNSELECTED_STROKE_WIDTH);
+        BasicStroke borderStroke = isSelected ? SELECTED_NODE_STROKE : UNSELECTED_NODE_STROKE;
 
         // Render node shape with border
         shapeRenderer.renderShape(g2d, nodeShape, screenX, screenY, nodeColor, borderColor, borderStroke);
@@ -395,7 +391,7 @@ public class MapRenderer {
         shapeRenderer.renderShapeText(g2d, shapeText, screenX, screenY, nodeShape, nodeColor, nodeTheme);
 
         // Reset stroke for next node
-        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setStroke(DEFAULT_STROKE);
 
         // Render node name text label below shape (unchanged)
         renderNodeText(g2d, node.getName(), screenX, screenY, nodeTheme);
@@ -420,10 +416,9 @@ public class MapRenderer {
         // Get theme text styling
         NodeTheme.TextStyle textStyle = nodeTheme.getCurrentTextStyle();
 
-        // Apply theme font
+        // Apply theme font (cached in the style)
         Font originalFont = g2d.getFont();
-        Font themeFont = textStyle.createFont();
-        g2d.setFont(themeFont);
+        g2d.setFont(textStyle.getFont());
 
         // Calculate text positioning
         FontMetrics fm = g2d.getFontMetrics();
@@ -434,8 +429,7 @@ public class MapRenderer {
         double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
 
         // Render text background
-        Color backgroundColor = textStyle.createBackgroundColorWithAlpha();
-        g2d.setColor(backgroundColor);
+        g2d.setColor(textStyle.getBackgroundColorWithAlpha());
         g2d.fillRect(
             (int)(textX - TEXT_BACKGROUND_PADDING),
             (int)(textY - fm.getAscent() - TEXT_BACKGROUND_PADDING),
@@ -477,12 +471,11 @@ public class MapRenderer {
 
         // Render dashed border
         g2d.setColor(SELECTION_BORDER_COLOR);
-        g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
-                                     SELECTION_DASH_MITER_LIMIT, SELECTION_DASH_PATTERN, 0.0f));
+        g2d.setStroke(SELECTION_RECTANGLE_STROKE);
         g2d.drawRect(rectX, rectY, rectWidth, rectHeight);
 
         // Reset stroke
-        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.setStroke(DEFAULT_STROKE);
     }
 
     /**
@@ -538,11 +531,6 @@ public class MapRenderer {
      * @return true if light theme, false if dark theme
      */
     private boolean isLightTheme() {
-        Color bg = UIManager.getColor("Panel.background");
-        if (bg == null) {
-            return true; // Default to light theme
-        }
-        // Consider theme light if the sum of RGB values exceeds threshold
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) >= UIConstants.Theme.LIGHT_THEME_RGB_THRESHOLD;
+        return !com.kalix.ide.utils.ThemeUtils.isDark(UIManager.getColor("Panel.background"));
     }
 }

@@ -5,7 +5,6 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.MapStyleResolver;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
@@ -31,6 +30,12 @@ public class FlowVizWindow extends JFrame {
     // Data management
     private DataSet dataSet;
     private File currentFile;
+
+    // Plot-update batching: while a file import is adding series one by one, the full plot
+    // rebuild is deferred and coalesced into a single update when the import completes
+    // (a 50-column CSV would otherwise rebuild the whole pipeline 50 times).
+    private int plotUpdateBatchDepth = 0;
+    private boolean plotUpdatePending = false;
 
     // Managers
     private final FlowVizMenuManager menuManager;
@@ -271,7 +276,7 @@ public class FlowVizWindow extends JFrame {
                 Color seriesColor = generateSeriesColor(dataSet.getSeriesCount() - 1);
 
                 dataPanel.addSeries(ref, seriesColor, data.getPointCount());
-                updatePlotPanel();
+                requestPlotPanelUpdate();
                 plotPanel.addLegendSeries(ref);
                 updateTitle();
             }
@@ -279,14 +284,14 @@ public class FlowVizWindow extends JFrame {
             @Override
             public void onSeriesRemoved(SeriesRef ref) {
                 dataPanel.removeSeries(ref);
-                updatePlotPanel();
+                requestPlotPanelUpdate();
                 plotPanel.removeLegendSeries(ref);
                 updateTitle();
             }
 
             @Override
             public void onDataChanged() {
-                updatePlotPanel();
+                requestPlotPanelUpdate();
             }
         });
     }
@@ -339,6 +344,38 @@ public class FlowVizWindow extends JFrame {
         setTitle("Kalix - " + title);
     }
     
+    /**
+     * Requests a full plot rebuild via {@link #updatePlotPanel()}. Outside a batch this runs
+     * immediately; inside a batch (a multi-series file import) it is deferred and coalesced
+     * into the single rebuild performed by {@link #endPlotUpdateBatch()}.
+     */
+    private void requestPlotPanelUpdate() {
+        if (plotUpdateBatchDepth > 0) {
+            plotUpdatePending = true;
+        } else {
+            updatePlotPanel();
+        }
+    }
+
+    /**
+     * Suppresses per-series plot rebuilds until the matching {@link #endPlotUpdateBatch()}.
+     * Batches nest; every begin must be paired with an end (use try/finally).
+     */
+    void beginPlotUpdateBatch() {
+        plotUpdateBatchDepth++;
+    }
+
+    /**
+     * Ends a plot-update batch. When the outermost batch closes, any rebuild deferred by
+     * {@link #requestPlotPanelUpdate()} during the batch is performed exactly once.
+     */
+    void endPlotUpdateBatch() {
+        if (plotUpdateBatchDepth > 0 && --plotUpdateBatchDepth == 0 && plotUpdatePending) {
+            plotUpdatePending = false;
+            updatePlotPanel();
+        }
+    }
+
     private void updatePlotPanel() {
         // Update plot panel with current data and colors
         plotPanel.setDataSet(dataSet);
@@ -375,7 +412,9 @@ public class FlowVizWindow extends JFrame {
         dataManager.setupCallbacks(
             file -> currentFile = file,
             this::updateTitle,
-            () -> actionManager.zoomToFit()
+            () -> actionManager.zoomToFit(),
+            this::beginPlotUpdateBatch,
+            this::endPlotUpdateBatch
         );
         dataManager.setupDragAndDrop();
     }
@@ -398,7 +437,7 @@ public class FlowVizWindow extends JFrame {
      */
     private void loadPreferences() {
         // Load coordinate display preference (default: false)
-        boolean showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
+        boolean showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
         plotPanel.setShowCoordinates(showCoordinates);
 
         // Other preferences are loaded by the action manager

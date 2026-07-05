@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.style;
 
+import javax.swing.UIManager;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,29 +77,57 @@ public record PlotPalette(String name, boolean builtIn, List<LineStyle> entries)
     }
 
     /**
-     * The built-in {@code Original} palette: the ten categorical "tab10" colours
-     * the IDE has always used, each at {@link StrokeStyle#DEFAULT}.
+     * The ten categorical "tab10" colours the IDE has always used — the per-slot
+     * fallback when the current theme doesn't define {@code Kalix.plot.seriesN}.
+     */
+    private static final int[] TAB10 = {
+        0x1f77b4,  // Blue
+        0xff7f0e,  // Orange
+        0x2ca02c,  // Green
+        0xd62728,  // Red
+        0x9467bd,  // Purple
+        0x8c564b,  // Brown
+        0xe377c2,  // Pink
+        0x7f7f7f,  // Gray
+        0xbcbd22,  // Yellow-green
+        0x17becf   // Cyan
+    };
+
+    /**
+     * The built-in {@code Original} palette with its historical colours: the ten
+     * categorical "tab10" colours, each at {@link StrokeStyle#DEFAULT}.
      *
-     * <p>Marked {@code builtIn} (read-only). Because its colours and stroke match
-     * the renderer's historical hard-coded behaviour, plots look identical to
-     * pre-palette builds whenever {@code Original} is the active palette.</p>
+     * <p>Marked {@code builtIn} (read-only). This is the theme-independent form —
+     * production code resolves the built-in through {@link #builtInFromTheme()}
+     * instead so the default palette follows the active theme.</p>
      */
     public static PlotPalette builtInOriginal() {
-        int[] rgb = {
-            0x1f77b4,  // Blue
-            0xff7f0e,  // Orange
-            0x2ca02c,  // Green
-            0xd62728,  // Red
-            0x9467bd,  // Purple
-            0x8c564b,  // Brown
-            0xe377c2,  // Pink
-            0x7f7f7f,  // Gray
-            0xbcbd22,  // Yellow-green
-            0x17becf   // Cyan
-        };
         List<LineStyle> styles = new ArrayList<>(SLOT_COUNT);
-        for (int hex : rgb) {
+        for (int hex : TAB10) {
             styles.add(new LineStyle(new Color(hex), StrokeStyle.DEFAULT));
+        }
+        return new PlotPalette(ORIGINAL_NAME, true, styles);
+    }
+
+    /**
+     * The built-in {@code Original} palette resolved against the current theme:
+     * slot {@code i} takes the UIManager colour {@code Kalix.plot.series(i+1)}
+     * (which every theme's properties file defines — light themes carry the
+     * historical tab10 values, dark themes their designed palettes), falling back
+     * per-slot to tab10 under a look and feel that doesn't define the keys.
+     *
+     * <p>Each colour is at {@link StrokeStyle#DEFAULT}; strokes are not themed.
+     * Called by {@code PlotPaletteManager} at construction and again on every
+     * theme switch, so the default palette recolours live with the theme.</p>
+     */
+    public static PlotPalette builtInFromTheme() {
+        List<LineStyle> styles = new ArrayList<>(SLOT_COUNT);
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            Color themed = UIManager.getColor("Kalix.plot.series" + (i + 1));
+            // Copy into a plain Color: UIManager returns UIResource instances,
+            // which Swing components may silently replace on LaF updates.
+            Color color = themed != null ? new Color(themed.getRGB(), true) : new Color(TAB10[i]);
+            styles.add(new LineStyle(color, StrokeStyle.DEFAULT));
         }
         return new PlotPalette(ORIGINAL_NAME, true, styles);
     }

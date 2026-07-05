@@ -1,23 +1,28 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.ProgressParser;
-import com.kalix.ide.models.optimisation.OptimisationInfo;
-import com.kalix.ide.models.optimisation.OptimisationResult;
-import com.kalix.ide.models.optimisation.OptimisationStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Consumer;
 
 /**
- * Handles various events and callbacks for optimisation operations.
- * Centralizes event handling logic for progress updates, results, and status changes.
+ * Handles optimisation events (progress updates, results) and fans the resulting
+ * UI updates out to the managers: tree node display, details/timing labels, the
+ * convergence plot, and the optimised-model editor.
+ *
+ * <p>This is the single event → managers layer. It used to be two classes — an
+ * event parser that forwarded through four positional {@code Consumer<String>}
+ * callbacks into an "update coordinator" that finally called the managers — one
+ * wrapping the other with no behaviour of its own. Merged per the July 2026
+ * review (optimisation finding #15).</p>
  */
 public class OptimisationEventHandlers {
 
@@ -26,53 +31,25 @@ public class OptimisationEventHandlers {
     private final OptimisationSessionManager sessionManager;
     private final OptimisationTreeManager treeManager;
     private final OptimisationProgressManager progressManager;
+    private final OptimisationResultsManager resultsManager;
+    private final OptimisationPlotManager plotManager;
     private final Consumer<String> statusUpdater;
-
-    // UI update callbacks
-    private Consumer<String> treeNodeUpdater;
-    private Consumer<String> detailsUpdater;
-    private Consumer<String> convergencePlotUpdater;
-    private Consumer<String> modelDisplayUpdater;
 
     /**
      * Creates a new OptimisationEventHandlers instance.
      */
     public OptimisationEventHandlers(OptimisationSessionManager sessionManager,
-                                    OptimisationTreeManager treeManager,
-                                    OptimisationProgressManager progressManager,
-                                    Consumer<String> statusUpdater) {
+                                     OptimisationTreeManager treeManager,
+                                     OptimisationProgressManager progressManager,
+                                     OptimisationResultsManager resultsManager,
+                                     OptimisationPlotManager plotManager,
+                                     Consumer<String> statusUpdater) {
         this.sessionManager = sessionManager;
         this.treeManager = treeManager;
         this.progressManager = progressManager;
+        this.resultsManager = resultsManager;
+        this.plotManager = plotManager;
         this.statusUpdater = statusUpdater;
-    }
-
-    /**
-     * Sets the callback for updating tree nodes.
-     */
-    public void setTreeNodeUpdater(Consumer<String> updater) {
-        this.treeNodeUpdater = updater;
-    }
-
-    /**
-     * Sets the callback for updating details panel.
-     */
-    public void setDetailsUpdater(Consumer<String> updater) {
-        this.detailsUpdater = updater;
-    }
-
-    /**
-     * Sets the callback for updating convergence plot.
-     */
-    public void setConvergencePlotUpdater(Consumer<String> updater) {
-        this.convergencePlotUpdater = updater;
-    }
-
-    /**
-     * Sets the callback for updating model display (optimised model text editor).
-     */
-    public void setModelDisplayUpdater(Consumer<String> updater) {
-        this.modelDisplayUpdater = updater;
     }
 
     /**
@@ -102,9 +79,7 @@ public class OptimisationEventHandlers {
                         result.setEvaluations(progressInfo.getEvaluationCount());
 
                         // Update convergence plot if selected
-                        if (convergencePlotUpdater != null) {
-                            convergencePlotUpdater.accept(sessionKey);
-                        }
+                        updateConvergencePlotIfSelected(sessionKey);
                     }
                 }
 
@@ -116,14 +91,10 @@ public class OptimisationEventHandlers {
             }
 
             // Update tree node to show progress
-            if (treeNodeUpdater != null) {
-                treeNodeUpdater.accept(sessionKey);
-            }
+            updateTreeNodeForSession(sessionKey);
 
             // Update details if selected
-            if (detailsUpdater != null) {
-                detailsUpdater.accept(sessionKey);
-            }
+            updateDetailsIfSelected(sessionKey);
         });
     }
 
@@ -133,14 +104,44 @@ public class OptimisationEventHandlers {
      * @param sessionKey The session key
      * @param resultJson The result JSON string
      */
+    /** Shared, thread-safe mapper - a fresh ObjectMapper per result is pure waste. */
+    private static final ObjectMapper RESULT_MAPPER = new ObjectMapper();
+
+    /**
+     * Sentinel prefix OptimisationProgram puts on the result callback when the backend
+     * reports an error instead of a result. Not JSON - must be handled before parsing.
+     */
+    private static final String ERROR_SENTINEL = "ERROR: ";
+
     public void handleOptimisationResult(String sessionKey, String resultJson) {
         SwingUtilities.invokeLater(() -> {
             OptimisationResult result = sessionManager.getOptimisationResult(sessionKey);
             if (result != null) {
+                // A backend error arrives as "ERROR: <message>", not JSON. Feeding it
+                // to the parser used to throw, skipping end-time/status/progress
+                // cleanup - the elapsed timer ticked forever and the real error text
+                // was lost behind "Failed to parse result".
+                if (resultJson != null && resultJson.startsWith(ERROR_SENTINEL)) {
+                    String errorText = resultJson.substring(ERROR_SENTINEL.length());
+                    result.setSuccess(false);
+                    result.setMessage(errorText);
+                    result.setEndTime(java.time.LocalDateTime.now());
+                    sessionManager.updateStatus(sessionKey, OptimisationStatus.ERROR);
+                    OptimisationInfo errInfo = sessionManager.getOptimisationInfo(sessionKey);
+                    if (errInfo != null) {
+                        progressManager.completeProgress(errInfo, result);
+                    }
+                    if (statusUpdater != null) {
+                        statusUpdater.accept("Optimisation failed: " + errorText);
+                    }
+                    updateTreeNodeForSession(sessionKey);
+                    updateDetailsIfSelected(sessionKey);
+                    return;
+                }
+
                 // Parse the result JSON to extract all fields
                 try {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode rootNode = mapper.readTree(resultJson);
+                    JsonNode rootNode = RESULT_MAPPER.readTree(resultJson);
 
                     // Extract fields from the result object
                     if (rootNode.has("best_objective")) {
@@ -164,10 +165,14 @@ public class OptimisationEventHandlers {
                         result.setOptimisedModelIni(rootNode.get("optimised_model_ini").asText());
                     }
 
-                    // Extract parameters
-                    if (rootNode.has("parameters_physical")) {
+                    // Extract parameters. The engine emits "params_physical"
+                    // (commands.rs); "parameters_physical" is kept as a fallback for
+                    // any older payloads.
+                    JsonNode paramsNode = rootNode.has("params_physical")
+                        ? rootNode.get("params_physical")
+                        : rootNode.get("parameters_physical");
+                    if (paramsNode != null && paramsNode.isObject()) {
                         Map<String, Double> paramsPhysical = new HashMap<>();
-                        JsonNode paramsNode = rootNode.get("parameters_physical");
                         paramsNode.fields().forEachRemaining(entry ->
                             paramsPhysical.put(entry.getKey(), entry.getValue().asDouble()));
                         result.setParametersPhysical(paramsPhysical);
@@ -203,23 +208,93 @@ public class OptimisationEventHandlers {
                 }
 
                 // Update tree and UI
-                if (treeNodeUpdater != null) {
-                    treeNodeUpdater.accept(sessionKey);
-                }
-
-                if (detailsUpdater != null) {
-                    detailsUpdater.accept(sessionKey);
-                }
-
-                if (convergencePlotUpdater != null) {
-                    convergencePlotUpdater.accept(sessionKey);
-                }
+                updateTreeNodeForSession(sessionKey);
+                updateDetailsIfSelected(sessionKey);
+                updateConvergencePlotIfSelected(sessionKey);
 
                 // Update model display (status changed to DONE or ERROR)
-                if (modelDisplayUpdater != null) {
-                    modelDisplayUpdater.accept(sessionKey);
-                }
+                updateModelDisplayIfSelected(sessionKey);
             }
         });
+    }
+
+    // === UI update fan-out (formerly OptimisationUpdateCoordinator) ===
+
+    /**
+     * Updates the tree node for a specific session (status, icon, display text).
+     *
+     * @param sessionKey The session key
+     */
+    public void updateTreeNodeForSession(String sessionKey) {
+        DefaultMutableTreeNode node = treeManager.getNodeForSession(sessionKey);
+        if (node != null) {
+            // Get current status
+            OptimisationInfo optInfo = (OptimisationInfo) node.getUserObject();
+            OptimisationStatus currentStatus = optInfo.getStatus();
+            OptimisationStatus previousStatus = sessionManager.getLastKnownStatus(sessionKey);
+
+            // Update last known status
+            sessionManager.updateStatus(sessionKey, currentStatus);
+
+            // Delegate to tree manager for display update
+            treeManager.updateTreeNodeForSession(node, currentStatus, previousStatus);
+        }
+    }
+
+    /**
+     * Gets the currently selected OptimisationInfo if it matches the given session key.
+     *
+     * @param sessionKey The session key to check
+     * @return The matching OptimisationInfo, or null if not selected or doesn't match
+     */
+    private OptimisationInfo getSelectedOptimisationIfMatches(String sessionKey) {
+        OptimisationInfo selectedInfo = treeManager.getSelectedOptimisation();
+        if (selectedInfo != null && selectedInfo.getSession().getSessionKey().equals(sessionKey)) {
+            return selectedInfo;
+        }
+        return null;
+    }
+
+    /**
+     * Updates the results display if the given session is currently selected.
+     *
+     * @param sessionKey The session key
+     */
+    public void updateDetailsIfSelected(String sessionKey) {
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null && selectedInfo.hasStartedRunning()) {
+            // Update timing labels (changes every update)
+            progressManager.updateTimingLabels(selectedInfo);
+            // Note: optimised model display is NOT updated here - it only changes on status changes
+            // (start, complete, error) which are handled separately
+        }
+    }
+
+    /**
+     * Updates the convergence plot and labels if the given session is currently selected.
+     *
+     * @param sessionKey The session key
+     */
+    public void updateConvergencePlotIfSelected(String sessionKey) {
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null && selectedInfo.getResult() != null) {
+            // Update the convergence plot with latest data
+            plotManager.updatePlot(selectedInfo.getResult());
+            // Also update labels in real-time
+            progressManager.updateConvergenceLabels(selectedInfo.getResult());
+        }
+    }
+
+    /**
+     * Updates the model display if the given session is currently selected.
+     * Called when status changes (e.g., optimization completes or errors).
+     *
+     * @param sessionKey The session key
+     */
+    public void updateModelDisplayIfSelected(String sessionKey) {
+        OptimisationInfo selectedInfo = getSelectedOptimisationIfMatches(sessionKey);
+        if (selectedInfo != null) {
+            resultsManager.updateOptimisedModelDisplay(selectedInfo);
+        }
     }
 }

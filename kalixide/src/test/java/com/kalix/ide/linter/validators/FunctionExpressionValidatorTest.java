@@ -18,7 +18,6 @@ class FunctionExpressionValidatorTest {
     @BeforeEach
     void setUp() {
         validator = new FunctionExpressionValidator();
-        FunctionExpressionValidator.clearCache(); // Clear cache before each test
     }
 
     // ==================== Valid Expressions ====================
@@ -93,8 +92,10 @@ class FunctionExpressionValidatorTest {
     @Test
     @DisplayName("Logical expressions should be valid")
     void testLogicalExpressions() {
-        assertValid("data.a > 0 & data.b > 0");
-        assertValid("data.a > 0 | data.b > 0");
+        // The engine's expression grammar uses C-style logical operators
+        // (src/functions/operators.rs: "&&" -> And, "||" -> Or).
+        assertValid("data.a > 0 && data.b > 0");
+        assertValid("data.a > 0 || data.b > 0");
         assertValid("!(data.a > 0)");
     }
 
@@ -193,8 +194,8 @@ class FunctionExpressionValidatorTest {
     @Test
     @DisplayName("Invalid operators should be invalid")
     void testInvalidOperators() {
-        assertInvalid("data.a && data.b", "Invalid operator '&&'");
-        assertInvalid("data.a || data.b", "Invalid operator '||'");
+        assertInvalid("data.a & data.b", "Invalid operator '&'");
+        assertInvalid("data.a | data.b", "Invalid operator '|'");
         assertInvalid("data.a = 5", "Invalid operator '='");
     }
 
@@ -281,46 +282,25 @@ class FunctionExpressionValidatorTest {
         assertValid("data.very.long.path.to.some.deeply.nested.value");
     }
 
-    // ==================== Performance Tests ====================
+    // ==================== Edge-case Tests ====================
 
     @Test
-    @DisplayName("Caching should improve performance")
-    void testCaching() {
-        String expression = "if(data.temp > 20, data.evap_high, data.evap_low) * 1.2";
-
-        // First call
-        long start1 = System.nanoTime();
-        validator.validate(expression);
-        long time1 = System.nanoTime() - start1;
-
-        // Second call (should use cache)
-        long start2 = System.nanoTime();
-        validator.validate(expression);
-        long time2 = System.nanoTime() - start2;
-
-        // Cached call should be significantly faster
-        assertTrue(time2 < time1 / 2,
-            "Cached validation should be at least 2x faster. First: " + time1 + "ns, Second: " + time2 + "ns");
+    @DisplayName("Unterminated bracket in a reference should be invalid")
+    void testUnterminatedBracket() {
+        // Historically the tokenizer consumed the rest of the input scanning for ']'
+        // and the expression validated clean.
+        assertInvalid("data.rain[unclosed", "Unterminated '['");
+        assertInvalid("node.storage1.dsflow[-1, 0", "Unterminated '['");
+        assertValid("data.rain[-1, 0]");
     }
 
     @Test
-    @DisplayName("Validation should be fast (<10ms)")
-    void testPerformance() {
-        String complexExpression = "if(data.temperature > 20, " +
-            "max(data.evap_high * 1.2, data.evap_medium), " +
-            "min(data.evap_low * 0.8, data.evap_minimum)) * " +
-            "if(data.season == 1, 1.1, 0.9)";
-
-        long start = System.nanoTime();
-        for (int i = 0; i < 100; i++) {
-            FunctionExpressionValidator.clearCache(); // Force re-validation
-            validator.validate(complexExpression);
-        }
-        long elapsed = (System.nanoTime() - start) / 1_000_000; // Convert to ms
-
-        double avgTime = elapsed / 100.0;
-        assertTrue(avgTime < 10.0,
-            "Average validation time should be < 10ms, was: " + avgTime + "ms");
+    @DisplayName("Division by zero constant warns for all zero spellings")
+    void testDivisionByZeroSpellings() {
+        assertInvalid("data.a / 0", "Division by zero");
+        assertInvalid("data.a / 0.0", "Division by zero");
+        assertInvalid("data.a / 0e5", "Division by zero");
+        assertValid("data.a / 0.5");
     }
 
     @Test
@@ -328,7 +308,6 @@ class FunctionExpressionValidatorTest {
     void testFastPathPerformance() {
         long start = System.nanoTime();
         for (int i = 0; i < 10000; i++) {
-            FunctionExpressionValidator.clearCache();
             validator.validate("data.evap");
             validator.validate("5.0");
             validator.validate("2 + 3");

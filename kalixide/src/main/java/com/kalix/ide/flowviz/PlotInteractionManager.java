@@ -36,7 +36,6 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 /**
@@ -189,7 +188,10 @@ public class PlotInteractionManager {
             @Override
             public void mousePressed(MouseEvent e) {
                 Rectangle plotArea = plotAreaSupplier.get();
-                if (SwingUtilities.isRightMouseButton(e) && plotArea.contains(e.getPoint())) {
+                // isPopupTrigger, checked on BOTH press and release: the trigger fires
+                // on press on macOS/Linux but on release on Windows, and macOS
+                // Ctrl+click is a popup gesture without being the right button.
+                if (e.isPopupTrigger() && plotArea.contains(e.getPoint())) {
                     contextMenu.show(parentComponent, e.getX(), e.getY());
                 } else if (SwingUtilities.isLeftMouseButton(e) && e.isShiftDown() && plotArea.contains(e.getPoint())) {
                     // Shift+click: start zoom rectangle selection
@@ -217,6 +219,10 @@ public class PlotInteractionManager {
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger() && plotAreaSupplier.get().contains(e.getPoint())) {
+                    contextMenu.show(parentComponent, e.getX(), e.getY());
+                    return;
+                }
                 if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
                     completeZoomRectSelection();
                     isZoomSelecting = false;
@@ -507,8 +513,9 @@ public class PlotInteractionManager {
         int rectWidth = Math.abs(zoomRectCurrentPoint.x - zoomRectStartPoint.x);
         int rectHeight = Math.abs(zoomRectCurrentPoint.y - zoomRectStartPoint.y);
 
-        // Must be at least 5x5 pixels (consistent with map panel)
-        if (rectWidth < 5 && rectHeight < 5) return;
+        // Must be at least 5x5 pixels in BOTH dimensions (a 200x1 sliver would zoom
+        // the Y axis to a ~1-pixel data range, leaving a broken view).
+        if (rectWidth < 5 || rectHeight < 5) return;
 
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
@@ -582,28 +589,30 @@ public class PlotInteractionManager {
         double maxValue = Double.NEGATIVE_INFINITY;
         boolean hasValidData = false;
 
-        // Check each visible series for data in the time range
+        // Check each visible series for data in the time range. This runs on EVERY
+        // mouse event while panning with auto-Y (the default mode), so the scan must
+        // be bounded by getIndexRange - O(1) on regular grids, O(log n) otherwise.
+        // A full-array scan here made pan cost proportional to TOTAL points, which is
+        // exactly where the "millions of points smoothly" promise died.
         for (com.kalix.ide.flowviz.data.SeriesRef ref : visibleSeries) {
             var series = dataSet.getSeries(ref);
             if (series == null) continue;
 
-            long[] timestamps = series.getTimestamps();
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
+            var range = series.getIndexRange(startTime, endTime);
 
-            // Find data points within the time range
-            for (int i = 0; i < timestamps.length; i++) {
-                if (timestamps[i] >= startTime && timestamps[i] <= endTime && validPoints[i]) {
-                    double value = values[i];
+            for (int i = range.startIndex; i < range.endIndex; i++) {
+                if (!validPoints[i]) continue;
+                double value = values[i];
 
-                    // Skip NaN and values invalid for current scale
-                    if (Double.isNaN(value)) continue;
-                    if (yAxisScale == YAxisScale.LOG && value <= 0) continue; // LOG requires positive values
+                // Skip NaN and values invalid for current scale
+                if (Double.isNaN(value)) continue;
+                if (yAxisScale == YAxisScale.LOG && value <= 0) continue; // LOG requires positive values
 
-                    minValue = Math.min(minValue, value);
-                    maxValue = Math.max(maxValue, value);
-                    hasValidData = true;
-                }
+                minValue = Math.min(minValue, value);
+                maxValue = Math.max(maxValue, value);
+                hasValidData = true;
             }
         }
 
@@ -614,7 +623,7 @@ public class PlotInteractionManager {
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceManager.getFileDouble(PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD, 1.0);
+        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
         if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
             minValue = logScaleMin;
         }

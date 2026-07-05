@@ -4,7 +4,6 @@ import com.kalix.ide.windows.RunManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -17,16 +16,20 @@ import java.util.function.Consumer;
 public class RunModelProgram extends AbstractSessionProgram {
 
     private enum ProgramState {
-        STARTING,           // Initial state
-        MODEL_LOADING,      // Sent load_model_string, waiting for ready
-        SIMULATION_RUNNING, // Sent run_simulation, simulation in progress
-        COMPLETED,          // Program completed successfully
-        FAILED              // Program failed with error
+        WAITING_FOR_INITIAL_READY, // Waiting for the CLI's startup "rdy" before sending anything
+        MODEL_LOADING,             // Sent load_model_string, waiting for its RESULT
+        AWAITING_RUN_READY,        // Model loaded, waiting for "rdy" before run_simulation
+        SIMULATION_RUNNING,        // Sent run_simulation, waiting for its RESULT
+        COMPLETED,                 // Program completed successfully
+        FAILED                     // Program failed with error
     }
 
-    private ProgramState currentState = ProgramState.STARTING;
-    private String modelText; //Keeping this here in case I later want to save the model back out.
-    private List<String> outputsGenerated;
+    // Written on monitor threads (handleMessage) and the installer thread
+    // (onSessionReady); read from the EDT (state descriptions, isActive).
+    // Transitions are guarded by synchronized methods; volatile covers the reads.
+    private volatile ProgramState currentState = ProgramState.WAITING_FOR_INITIAL_READY;
+    private volatile String modelText; //Keeping this here in case I later want to save the model back out.
+    private volatile List<String> outputsGenerated;
 
     /**
      * Creates a new Run Model program instance.
@@ -43,22 +46,50 @@ public class RunModelProgram extends AbstractSessionProgram {
     }
     
     /**
-     * Starts the Run Model program with the given model text.
-     * 
+     * Starts the Run Model program with the given model text. No command is sent yet:
+     * the program waits for the CLI's initial {@code rdy} (delivered either as a live
+     * message or via {@link #onSessionReady()} when the rdy arrived before installation),
+     * then drives load -> ready -> run, matching each RESULT to its command. Treating
+     * just any rdy/res as the awaited one used to mis-fire on slow starts: the run was
+     * marked complete with the load result and the real outputs were dropped.
+     *
      * @param modelText the model definition to load and run
      */
     public void start(String modelText) {
         this.modelText = modelText;
-        this.currentState = ProgramState.MODEL_LOADING;
-        
-        // Step 1: Send load_model_string command via SessionManager
-        // Get kalixcli_uid if available
-        String kalixcliUid = "";
-        Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
-        if (session.isPresent() && session.get().getKalixcliUid() != null) {
-            kalixcliUid = session.get().getKalixcliUid();
+    }
+
+    @Override
+    public void onSessionReady() {
+        handleInitialReady();
+    }
+
+    @Override
+    public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
+        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
+        if (msgType == null) {
+            return false;
         }
 
+        return switch (currentState) {
+            case WAITING_FOR_INITIAL_READY -> handleWaitingForInitialReady(msgType, message);
+            case MODEL_LOADING -> handleModelLoadingState(msgType, message);
+            case AWAITING_RUN_READY -> handleAwaitingRunReadyState(msgType, message);
+            case SIMULATION_RUNNING -> handleSimulationRunningState(msgType, message);
+            case COMPLETED, FAILED -> false; // Don't handle messages in these states
+        };
+    }
+
+    /**
+     * The initial-ready transition, callable from both the live message path and
+     * {@link #onSessionReady()}. Synchronized and state-guarded so the two paths
+     * cannot both fire it.
+     */
+    private synchronized void handleInitialReady() {
+        if (currentState != ProgramState.WAITING_FOR_INITIAL_READY || modelText == null) {
+            return;
+        }
+        currentState = ProgramState.MODEL_LOADING;
         String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         sessionManager.sendCommand(sessionKey, loadCommand)
             .exceptionally(throwable -> {
@@ -67,39 +98,62 @@ public class RunModelProgram extends AbstractSessionProgram {
                 return null;
             });
     }
-    
-    @Override
-    public boolean handleMessage(JsonMessage.SystemMessage message) {
-        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-        if (msgType == null) {
-            return false;
-        }
 
-        return switch (currentState) {
-            case MODEL_LOADING -> handleModelLoadingState(msgType, message);
-            case SIMULATION_RUNNING -> handleSimulationRunningState(msgType, message);
-            case STARTING, COMPLETED, FAILED -> false; // Don't handle messages in these states
-            default -> false;
-        };
-    }
-    
     /**
-     * Handles messages while waiting for model to load.
+     * Handles messages while waiting for the CLI's startup rdy.
      */
-    private boolean handleModelLoadingState(JsonStdioTypes.SystemMessageType msgType, 
-                                          JsonMessage.SystemMessage message) {
+    private boolean handleWaitingForInitialReady(JsonStdioTypes.SystemMessageType msgType,
+                                                 JsonMessage.SystemMessage message) {
         switch (msgType) {
             case READY:
-                // Model loaded successfully, now start simulation
-                currentState = ProgramState.SIMULATION_RUNNING;
+                handleInitialReady();
+                return true;
 
-                // Get kalixcli_uid if available
-                String kalixcliUid = "";
-                Optional<SessionManager.KalixSession> session = sessionManager.getSession(sessionKey);
-                if (session.isPresent() && session.get().getKalixcliUid() != null) {
-                    kalixcliUid = session.get().getKalixcliUid();
+            case ERROR:
+                currentState = ProgramState.FAILED;
+                statusUpdater.accept("Failed to start " + getDisplayName() + ": " + extractErrorMessage(message));
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Handles messages while waiting for load_model_string's RESULT.
+     */
+    private boolean handleModelLoadingState(JsonStdioTypes.SystemMessageType msgType,
+                                          JsonMessage.SystemMessage message) {
+        switch (msgType) {
+            case RESULT:
+                // Only the load command's own result advances the state machine.
+                if (!"load_model_string".equals(message.getCommand())) {
+                    return false;
                 }
+                currentState = ProgramState.AWAITING_RUN_READY;
+                return true;
 
+            case ERROR:
+                // Model loading failed
+                currentState = ProgramState.FAILED;
+                String errorMsg = extractErrorMessage(message);
+                statusUpdater.accept("Model loading failed in " + getDisplayName() + ": " + errorMsg);
+                return true;
+
+            default:
+                // Other message types not relevant during model loading
+                return false;
+        }
+    }
+
+    /**
+     * Handles messages after the model loaded, waiting for rdy to send run_simulation.
+     */
+    private boolean handleAwaitingRunReadyState(JsonStdioTypes.SystemMessageType msgType,
+                                                JsonMessage.SystemMessage message) {
+        switch (msgType) {
+            case READY:
+                currentState = ProgramState.SIMULATION_RUNNING;
                 String runCommand = JsonStdioProtocol.Commands.runSimulation();
                 sessionManager.sendCommand(sessionKey, runCommand)
                     .exceptionally(throwable -> {
@@ -108,20 +162,17 @@ public class RunModelProgram extends AbstractSessionProgram {
                         return null;
                     });
                 return true;
-                
+
             case ERROR:
-                // Model loading failed
                 currentState = ProgramState.FAILED;
-                String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Model loading failed in " + getDisplayName() + ": " + errorMsg);
+                statusUpdater.accept("Error before simulation start in " + getDisplayName() + ": " + extractErrorMessage(message));
                 return true;
-                
+
             default:
-                // Other message types not relevant during model loading
                 return false;
         }
     }
-    
+
     /**
      * Handles messages while simulation is running.
      */
@@ -154,7 +205,10 @@ public class RunModelProgram extends AbstractSessionProgram {
                 return true;
                 
             case RESULT:
-                // Simulation completed successfully
+                // Only run_simulation's own result completes the run.
+                if (!"run_simulation".equals(message.getCommand())) {
+                    return false;
+                }
                 currentState = ProgramState.COMPLETED;
 
                 // Extract outputs from compact protocol result message
@@ -312,8 +366,9 @@ public class RunModelProgram extends AbstractSessionProgram {
     @Override
     public String getStateDescription() {
         return switch (currentState) {
-            case STARTING -> "Starting";
+            case WAITING_FOR_INITIAL_READY -> "Starting";
             case MODEL_LOADING -> "Loading Model";
+            case AWAITING_RUN_READY -> "Loading Model";
             case SIMULATION_RUNNING -> "Running Simulation";
             case COMPLETED -> "Completed";
             case FAILED -> "Failed";

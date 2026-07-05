@@ -11,34 +11,25 @@ import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.YAxisScale;
-import com.kalix.ide.preferences.PreferenceManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import javax.swing.Box;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JComponent;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
-import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.Icon;
 import javax.swing.UIManager;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -97,46 +88,13 @@ public class VisualizationTabManager {
     private final TabDragReorderer tabReorderer;
 
     /**
-     * UI constants for consistent styling and sizing.
+     * UI constants for consistent styling and sizing. Toolbar sizing lives with
+     * {@link PlotToolbarBuilder}; these cover the tab strip itself.
      */
     private static class UIConstants {
         static final int TAB_ICON_SIZE = 14;
-        static final int BUTTON_ICON_SIZE = 14;
-        static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
-        static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
-        static final int HORIZONTAL_SPACING = 5;
         static final int TAB_PANEL_PADDING = 2;
     }
-
-    /**
-     * Aggregation period options for time series data.
-     */
-    private static final String[] AGGREGATION_OPTIONS = {
-        "Original",
-        "Daily",
-        "Monthly",
-        "Annual (Jan-Dec)",
-        "Annual (Feb-Jan)",
-        "Annual (Mar-Feb)",
-        "Annual (Apr-Mar)",
-        "Annual (May-Apr)",
-        "Annual (Jun-May)",
-        "Annual (Jul-Jun)",
-        "Annual (Aug-Jul)",
-        "Annual (Sep-Aug)",
-        "Annual (Oct-Sep)",
-        "Annual (Nov-Oct)",
-        "Annual (Dec-Nov)"
-    };
-
-    /** Aggregation method options. */
-    private static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
-
-    /** Plot type options. */
-    private static final String[] PLOT_TYPE_OPTIONS = {"Values", "Cumulative Values", "Difference", "Cumulative Difference", "Exceedance", "Double Mass", "Residual Mass"};
-
-    /** Y-axis scale options. */
-    private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
 
     /**
      * Settings that can be copied between tabs.
@@ -194,17 +152,18 @@ public class VisualizationTabManager {
          */
         public static TabSettings getDefaults() {
             TabSettings settings = new TabSettings();
-            settings.showCoordinates = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, false);
-            settings.autoYMode = PreferenceManager.getFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, true);
-            settings.legendCollapsed = PreferenceManager.getFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, false);
+            settings.showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
+            settings.autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
+            settings.legendCollapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
             return settings;
         }
     }
 
     /**
-     * Represents a visualization tab with its type and components.
+     * Represents a visualization tab with its type and components. Package-private:
+     * {@link StatsToolbarBuilder} reads/writes the stats aggregation fields.
      */
-    private static class TabInfo {
+    static class TabInfo {
         enum TabType { PLOT, STATS }
 
         final TabType type;
@@ -424,517 +383,6 @@ public class VisualizationTabManager {
             .addSeparator()
             .addMaskControls()
             .build();
-    }
-
-    /**
-     * Builder for creating plot toolbars with consistent styling.
-     */
-    /**
-     * Controller for updating toolbar controls from a PlotState without triggering listeners.
-     */
-    static class PlotToolbarController {
-        private final JComboBox<String> aggregationPeriodCombo;
-        private final JComboBox<String> aggregationMethodCombo;
-        private final JComboBox<String> plotTypeCombo;
-        private final JComboBox<String> ySpaceCombo;
-        private final JToggleButton maskToggle;
-        private final JToggleButton autoYToggle;
-
-        PlotToolbarController(JComboBox<String> aggregationPeriodCombo,
-                              JComboBox<String> aggregationMethodCombo,
-                              JComboBox<String> plotTypeCombo,
-                              JComboBox<String> ySpaceCombo,
-                              JToggleButton maskToggle,
-                              JToggleButton autoYToggle) {
-            this.aggregationPeriodCombo = aggregationPeriodCombo;
-            this.aggregationMethodCombo = aggregationMethodCombo;
-            this.plotTypeCombo = plotTypeCombo;
-            this.ySpaceCombo = ySpaceCombo;
-            this.maskToggle = maskToggle;
-            this.autoYToggle = autoYToggle;
-        }
-
-        /**
-         * Updates all toolbar controls to reflect the given state.
-         * Temporarily removes listeners to avoid triggering state pushes.
-         */
-        void updateFromState(com.kalix.ide.flowviz.PlotState state) {
-            setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
-            setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
-            setSilently(plotTypeCombo, state.getPlotType().getDisplayName());
-            setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
-            setSilently(maskToggle, state.getMaskMode() == com.kalix.ide.flowviz.stats.MaskMode.ALL);
-            setSilently(autoYToggle, state.isAutoYMode());
-        }
-
-        private static void setSilently(JComboBox<String> combo, String value) {
-            java.awt.event.ActionListener[] listeners = combo.getActionListeners();
-            for (var l : listeners) combo.removeActionListener(l);
-            combo.setSelectedItem(value);
-            for (var l : listeners) combo.addActionListener(l);
-        }
-
-        private static void setSilently(JToggleButton toggle, boolean selected) {
-            java.awt.event.ActionListener[] listeners = toggle.getActionListeners();
-            for (var l : listeners) toggle.removeActionListener(l);
-            toggle.setSelected(selected);
-            for (var l : listeners) toggle.addActionListener(l);
-        }
-    }
-
-    private static class PlotToolbarBuilder {
-        private final JToolBar toolbar;
-        private final PlotPanel plotPanel;
-        private java.util.function.Consumer<com.kalix.ide.flowviz.PlotState> onUndoRedo;
-
-        // Store references to all state-reflecting controls
-        private JComboBox<String> aggregationPeriodCombo;
-        private JComboBox<String> aggregationMethodCombo;
-        private JComboBox<String> plotTypeCombo;
-        private JComboBox<String> ySpaceCombo;
-        private JToggleButton maskToggle;
-        private JToggleButton autoYToggle;
-
-        PlotToolbarBuilder(PlotPanel plotPanel) {
-            this.plotPanel = plotPanel;
-            this.toolbar = new JToolBar();
-            this.toolbar.setFloatable(false);
-            this.toolbar.setRollover(true);
-        }
-
-        PlotToolbarBuilder setOnUndoRedo(java.util.function.Consumer<com.kalix.ide.flowviz.PlotState> callback) {
-            this.onUndoRedo = callback;
-            return this;
-        }
-
-        PlotToolbarBuilder addSaveButton() {
-            JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", plotPanel::saveData);
-            toolbar.add(button);
-            return this;
-        }
-
-        /** Adds the button that opens the global plot-palette editor window. */
-        PlotToolbarBuilder addPaletteButton() {
-            JButton button = createIconButton(FontAwesomeSolid.PALETTE,
-                "Plot Palettes…", PlotPaletteWindow::showWindow);
-            toolbar.add(button);
-            return this;
-        }
-
-        PlotToolbarBuilder addUndoRedoButtons() {
-            JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
-                com.kalix.ide.flowviz.PlotState state = plotPanel.undo();
-                if (state != null && onUndoRedo != null) {
-                    onUndoRedo.accept(state);
-                }
-            });
-            JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
-                com.kalix.ide.flowviz.PlotState state = plotPanel.redo();
-                if (state != null && onUndoRedo != null) {
-                    onUndoRedo.accept(state);
-                }
-            });
-
-            undoButton.setEnabled(false);
-            redoButton.setEnabled(false);
-
-            // Update button state whenever history changes
-            plotPanel.setOnHistoryChanged(() -> {
-                undoButton.setEnabled(plotPanel.canUndo());
-                redoButton.setEnabled(plotPanel.canRedo());
-            });
-
-            toolbar.add(undoButton);
-            toolbar.add(redoButton);
-            return this;
-        }
-
-        PlotToolbarBuilder addAggregationControls() {
-            // Resolution label
-            toolbar.add(new JLabel("Resolution:"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Aggregation period dropdown
-            aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
-                UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
-            // Set initial value from current PlotPanel state
-            aggregationPeriodCombo.setSelectedItem(plotPanel.getAggregationPeriod().getDisplayName());
-            aggregationPeriodCombo.addActionListener(e -> applyAggregation());
-            toolbar.add(aggregationPeriodCombo);
-
-            // "by" label
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-            toolbar.add(new JLabel("by"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Aggregation method dropdown
-            aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
-                UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
-            // Set initial value from current PlotPanel state
-            aggregationMethodCombo.setSelectedItem(plotPanel.getAggregationMethod().getDisplayName());
-            aggregationMethodCombo.addActionListener(e -> applyAggregation());
-            toolbar.add(aggregationMethodCombo);
-
-            return this;
-        }
-
-        /** Applies current aggregation settings to the plot panel. */
-        private void applyAggregation() {
-            if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
-                return;
-            }
-
-            String periodStr = (String) aggregationPeriodCombo.getSelectedItem();
-            String methodStr = (String) aggregationMethodCombo.getSelectedItem();
-
-            if (periodStr != null && methodStr != null) {
-                AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
-                AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-                plotPanel.setAggregation(period, method);
-            }
-        }
-
-        PlotToolbarBuilder addMaskToggle() {
-            maskToggle = createToggleButton(FontAwesomeSolid.MASK,
-                "Overlapping Data Mask", false);
-            maskToggle.addActionListener(e -> {
-                com.kalix.ide.flowviz.stats.MaskMode mode = maskToggle.isSelected()
-                    ? com.kalix.ide.flowviz.stats.MaskMode.ALL
-                    : com.kalix.ide.flowviz.stats.MaskMode.NONE;
-                plotPanel.setMaskMode(mode);
-            });
-            toolbar.add(maskToggle);
-            return this;
-        }
-
-        PlotToolbarBuilder addPlotTypeDropdown() {
-            // Plot Type label
-            toolbar.add(new JLabel("Plot Type:"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Plot type dropdown
-            plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
-                UIConstants.WIDE_DROPDOWN_SIZE, "Plot type");
-            // Set initial value from current PlotPanel state
-            plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
-            plotTypeCombo.addActionListener(e -> {
-                String selected = (String) plotTypeCombo.getSelectedItem();
-                if (selected != null) {
-                    com.kalix.ide.flowviz.transform.PlotType type =
-                        com.kalix.ide.flowviz.transform.PlotType.fromDisplayName(selected);
-                    plotPanel.setPlotType(type);
-                }
-            });
-            toolbar.add(plotTypeCombo);
-            return this;
-        }
-
-        PlotToolbarBuilder addYSpaceDropdown() {
-            ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
-                UIConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
-            // Set initial value from current PlotPanel state
-            ySpaceCombo.setSelectedItem(plotPanel.getYAxisScale().getDisplayName());
-            ySpaceCombo.addActionListener(e -> {
-                String selected = (String) ySpaceCombo.getSelectedItem();
-                if (selected != null) {
-                    YAxisScale scale = YAxisScale.fromDisplayName(selected);
-                    plotPanel.setYAxisScale(scale);
-                }
-            });
-            toolbar.add(ySpaceCombo);
-            return this;
-        }
-
-
-        PlotToolbarBuilder addAutoYToggle(boolean initialState) {
-            autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V,
-                "Auto-Y Mode", initialState);
-            autoYToggle.addActionListener(e -> {
-                boolean enabled = autoYToggle.isSelected();
-                plotPanel.setAutoYMode(enabled);
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE, enabled);
-                if (enabled) {
-                    // Fit Y-axis to visible data in current X range (don't change X zoom)
-                    plotPanel.fitYAxis();
-                }
-            });
-            toolbar.add(autoYToggle);
-            return this;
-        }
-
-        PlotToolbarBuilder addCoordinatesToggle(boolean initialState) {
-            JToggleButton button = createToggleButton(FontAwesomeSolid.CROSSHAIRS,
-                "Show Coordinates", initialState);
-            button.addActionListener(e -> {
-                plotPanel.setShowCoordinates(button.isSelected());
-                PreferenceManager.setFileBoolean(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES, button.isSelected());
-            });
-            toolbar.add(button);
-            return this;
-        }
-
-        PlotToolbarBuilder addLegendToggle(boolean initialState) {
-            JToggleButton button = createToggleButton(FontAwesomeSolid.KEY,
-                "Show Key", initialState);
-
-            // Update collapsed state when button is clicked
-            button.addActionListener(e -> {
-                plotPanel.setLegendCollapsed(!button.isSelected());
-                PreferenceManager.setFileBoolean(PreferenceKeys.PLOT_LEGEND_COLLAPSED, !button.isSelected());
-            });
-
-            // Set up callback to update button when collapsed state changes from other sources
-            plotPanel.getLegendManager().setOnCollapsedChanged(() -> {
-                boolean collapsed = plotPanel.isLegendCollapsed();
-                button.setSelected(!collapsed);
-            });
-
-            toolbar.add(button);
-            return this;
-        }
-
-        PlotToolbarBuilder addSeparator() {
-            toolbar.addSeparator();
-            return this;
-        }
-
-        private PlotToolbarController controller;
-
-        JToolBar build() {
-            controller = new PlotToolbarController(
-                aggregationPeriodCombo, aggregationMethodCombo,
-                plotTypeCombo, ySpaceCombo, maskToggle, autoYToggle);
-            return toolbar;
-        }
-
-        PlotToolbarController getController() {
-            return controller;
-        }
-
-        /** Creates a standard icon button. */
-        private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-            JButton button = new JButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
-            button.setToolTipText(tooltip);
-            button.setFocusable(false);
-            button.addActionListener(e -> action.run());
-            return button;
-        }
-
-        /** Creates a standard toggle button. */
-        private JToggleButton createToggleButton(FontAwesomeSolid icon, String tooltip, boolean initialState) {
-            JToggleButton button = new JToggleButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
-            button.setToolTipText(tooltip);
-            button.setFocusable(false);
-            button.setSelected(initialState);
-            return button;
-        }
-
-        /** Creates a standard dropdown. */
-        private JComboBox<String> createDropdown(String[] options, Dimension size, String tooltip) {
-            JComboBox<String> combo = new JComboBox<>(options);
-            combo.setMaximumSize(size);
-            combo.setToolTipText(tooltip);
-            return combo;
-        }
-    }
-
-    /**
-     * Builder for creating stats toolbars with consistent styling.
-     */
-    private static class StatsToolbarBuilder {
-        private final JToolBar toolbar;
-        private final TabInfo tabInfo;
-        private final JTable statsTable;
-        private final DataSet dataSet;
-
-        // Store dropdown references for coordinated updates
-        private JComboBox<String> aggregationPeriodCombo;
-        private JComboBox<String> aggregationMethodCombo;
-
-        StatsToolbarBuilder(TabInfo tabInfo, JTable statsTable, DataSet dataSet) {
-            this.tabInfo = tabInfo;
-            this.statsTable = statsTable;
-            this.dataSet = dataSet;
-            this.toolbar = new JToolBar();
-            this.toolbar.setFloatable(false);
-            this.toolbar.setRollover(true);
-        }
-
-        StatsToolbarBuilder addSaveButton() {
-            JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", this::saveStatsData);
-            toolbar.add(button);
-            return this;
-        }
-
-        StatsToolbarBuilder addAggregationControls() {
-            // Resolution label
-            toolbar.add(new JLabel("Resolution:"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Aggregation period dropdown
-            aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
-                UIConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
-            // Set initial selection from tab info
-            aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
-            aggregationPeriodCombo.addActionListener(e -> applyAggregation());
-            toolbar.add(aggregationPeriodCombo);
-
-            // "by" label
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-            toolbar.add(new JLabel("by"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Aggregation method dropdown
-            aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
-                UIConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
-            // Set initial selection from tab info
-            aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
-            aggregationMethodCombo.addActionListener(e -> applyAggregation());
-            toolbar.add(aggregationMethodCombo);
-
-            return this;
-        }
-
-        StatsToolbarBuilder addMaskControls() {
-            // Mask label
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-            toolbar.add(new JLabel("Mask:"));
-            toolbar.add(Box.createHorizontalStrut(UIConstants.HORIZONTAL_SPACING));
-
-            // Mask mode dropdown
-            String[] maskOptions = {"All", "Each", "None"};
-            JComboBox<String> maskCombo = createDropdown(maskOptions,
-                UIConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
-
-            // Set initial selection from stats model
-            if (tabInfo.statsModel != null) {
-                maskCombo.setSelectedItem(tabInfo.statsModel.getMaskMode().getDisplayName());
-            }
-
-            maskCombo.addActionListener(e -> {
-                String selected = (String) maskCombo.getSelectedItem();
-                if (selected != null && tabInfo.statsModel != null) {
-                    com.kalix.ide.flowviz.stats.MaskMode mode =
-                        com.kalix.ide.flowviz.stats.MaskMode.fromDisplayName(selected);
-                    tabInfo.statsModel.setMaskMode(mode);
-                }
-            });
-            toolbar.add(maskCombo);
-
-            return this;
-        }
-
-        /** Applies current aggregation settings to stats. */
-        private void applyAggregation() {
-            if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
-                return;
-            }
-
-            String periodStr = (String) aggregationPeriodCombo.getSelectedItem();
-            String methodStr = (String) aggregationMethodCombo.getSelectedItem();
-
-            if (periodStr != null && methodStr != null) {
-                AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
-                AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-
-                // Update tab info aggregation settings
-                tabInfo.statsPeriod = period;
-                tabInfo.statsMethod = method;
-
-                // Recompute stats with aggregated data
-                recomputeStats();
-            }
-        }
-
-        /** Recomputes stats with current aggregation settings, filtered to per-tab series. */
-        private void recomputeStats() {
-            if (tabInfo.statsModel == null || dataSet == null) {
-                return;
-            }
-
-            tabInfo.statsModel.clear();
-            for (SeriesRef ref : tabInfo.selectedSeries) {
-                TimeSeriesData originalSeries = dataSet.getSeries(ref);
-                if (originalSeries != null) {
-                    TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
-                        originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
-                    if (aggregatedSeries != null) {
-                        tabInfo.statsModel.addOrUpdateSeries(ref, aggregatedSeries);
-                    }
-                }
-            }
-        }
-
-        /** Saves stats data to CSV. */
-        private void saveStatsData() {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Save Statistics");
-            fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
-
-            int result = fileChooser.showSaveDialog(statsTable);
-            if (result == JFileChooser.APPROVE_OPTION) {
-                File file = fileChooser.getSelectedFile();
-                if (!file.getName().toLowerCase().endsWith(".csv")) {
-                    file = new File(file.getAbsolutePath() + ".csv");
-                }
-
-                try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
-                    // Write header (dynamic columns from table)
-                    for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                        if (col > 0) writer.write(",");
-                        writer.write(statsTable.getColumnName(col));
-                    }
-                    writer.write("\n");
-
-                    // Write data rows
-                    for (int row = 0; row < statsTable.getRowCount(); row++) {
-                        for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                            if (col > 0) writer.write(",");
-                            Object value = statsTable.getValueAt(row, col);
-                            writer.write(value != null ? value.toString() : "");
-                        }
-                        writer.write("\n");
-                    }
-
-                    JOptionPane.showMessageDialog(statsTable,
-                        "Statistics saved successfully to:\n" + file.getAbsolutePath(),
-                        "Save Complete",
-                        JOptionPane.INFORMATION_MESSAGE);
-
-                } catch (java.io.IOException ex) {
-                    JOptionPane.showMessageDialog(statsTable,
-                        "Error saving statistics: " + ex.getMessage(),
-                        "Save Error",
-                        JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        }
-
-        StatsToolbarBuilder addSeparator() {
-            toolbar.addSeparator();
-            return this;
-        }
-
-        JToolBar build() {
-            return toolbar;
-        }
-
-        /** Creates a standard icon button. */
-        private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-            JButton button = new JButton(FontIcon.of(icon, UIConstants.BUTTON_ICON_SIZE));
-            button.setToolTipText(tooltip);
-            button.setFocusable(false);
-            button.addActionListener(e -> action.run());
-            return button;
-        }
-
-        /** Creates a standard dropdown. */
-        private JComboBox<String> createDropdown(String[] options, Dimension size, String tooltip) {
-            JComboBox<String> combo = new JComboBox<>(options);
-            combo.setMaximumSize(size);
-            combo.setToolTipText(tooltip);
-            return combo;
-        }
     }
 
     /**
@@ -1529,7 +977,7 @@ public class VisualizationTabManager {
      * Updates a series in all stats tabs, applying aggregation settings.
      * This should be called instead of directly calling model.addOrUpdateSeries().
      *
-     * @param seriesName The name of the series
+     * @param ref The identity of the series
      * @param data The original (unaggregated) time series data
      */
     public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
