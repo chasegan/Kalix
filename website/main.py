@@ -55,3 +55,21 @@ def define_env(env):
     @env.macro
     def latest_version_str():
         return latest
+
+    # Remember the value for the post-build substitution below.
+    define_env._latest = latest
+
+
+def on_post_build(env):
+    """Substitute %%LATEST_VERSION%% in built pages that macros doesn't render.
+
+    Bespoke pass-through HTML (the landing page, etc.) isn't processed by the
+    macros/Jinja pipeline, so version references there use a plain placeholder
+    that we replace here, once, against the built output.
+    """
+    latest = getattr(define_env, "_latest", "0.0.0")
+    site_dir = Path(env.conf["site_dir"])
+    for html in site_dir.rglob("*.html"):
+        text = html.read_text(encoding="utf-8")
+        if "%%LATEST_VERSION%%" in text:
+            html.write_text(text.replace("%%LATEST_VERSION%%", latest), encoding="utf-8")

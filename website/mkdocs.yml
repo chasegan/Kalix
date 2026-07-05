@@ -33,8 +33,6 @@ theme:
     - navigation.indexes
     - navigation.top
     - navigation.tracking
-    - navigation.instant
-    - navigation.instant.progress
     - toc.follow
     - content.code.copy
     - content.code.annotate
@@ -102,7 +100,8 @@ exclude_docs: |
   developing/gory-details/python-api-brainstorm.md
 
 nav:
-  - Home: index.md
+  # Home is the bespoke pass-through landing page (docs/index.html), served at the
+  # site root and bypassing the Material theme — so it is not listed here.
   - Tutorials:
       - tutorials/index.md
       - 01 · Build your first model: tutorials/01-first-model.md
