@@ -174,4 +174,5 @@ nav:
       - Planned features: planned.md
   - Downloads: downloads.md
   - Code: code.md
-  - Contact: contact.md
+  # Contact is a bespoke pass-through page (docs/contact/index.html) served at
+  # /contact/, bypassing the Material theme — so it is not listed here.
