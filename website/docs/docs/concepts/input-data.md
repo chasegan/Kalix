@@ -14,7 +14,6 @@ Specify input data files in the `[inputs]` section of your model.
 
 [Declaring Input Data](input-data.md)[Supported Data Formats](input-data.md)
 
-
 ## Declaring Input Data
 
 Kalix models declare input data files by listing them in the `[inputs]` section of your model file:
@@ -121,7 +120,6 @@ If the target exists at more than one level, the **nearest one wins** — the fi
 - If Kalix can’t find the target, you’ll get a clear error message telling you what it was looking for and where it searched from.
 
 - Avoid having the same target path exist at multiple levels of your project tree. It’s not an error, but the nearest match may not be the one you intended.
-
 
 ## Supported Data Formats
 

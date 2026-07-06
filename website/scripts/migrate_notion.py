@@ -347,6 +347,7 @@ def write_page(dest_rel: str, sources: list[str]):
     out = DOCS / dest_rel
     out.parent.mkdir(parents=True, exist_ok=True)
     content = "\n".join(parts).strip()  # cross-links already rewritten in the soup
+    content = re.sub(r"\n{3,}", "\n\n", content)  # normalise blank runs at source joins
     if dest_rel in DROP_FIRST_HEADING:  # drop the first ## heading (echoes the title)
         content = re.sub(r"(?m)^##\s+.*\n+", "", content, count=1)
     title = TITLE_OVERRIDE.get(dest_rel, title)

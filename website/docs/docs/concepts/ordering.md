@@ -82,7 +82,6 @@ Regulated outlets on storage nodes are operated to satisfy orders.
 
 Splitters (TBD).
 
-
 ## How Orders Propagate
 
 Nodes send **orders** upstream to request flows from operational infrastructure. Orders propagate from downstream to upstream, and this is done every timestep in the **ordering phase**, which occurs entirely before the flow phase (when flows are calculated).
