@@ -13,6 +13,12 @@ copyright: © 2026 Kalix Project · MPL 2.0
 docs_dir: docs
 site_dir: site
 
+# `mkdocs serve` also watches these (they live outside docs_dir): the per-release
+# files the Downloads page is built from, and the macros module.
+watch:
+  - data
+  - main.py
+
 theme:
   name: material
   custom_dir: overrides

@@ -18,6 +18,7 @@ Jobs:
 
 import datetime
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -35,8 +36,6 @@ HEALTH_DATA = HERE / "data" / "health.json"
 ASSET_URL = ("https://github.com/chasegan/Kalix/releases/download/"
              "v{v}/KalixIDE-{plat}-{v}-Portable.zip")
 STUB_PLATFORMS = ("Windows", "Linux")
-DL_LABELS = (("windows", "Windows"), ("macos", "macOS"),
-             ("linux", "Linux"), ("docs", "Docs"))
 
 
 def _sync_tokens() -> None:
@@ -76,7 +75,7 @@ def _stub_release(version: str) -> bool:
         return False
     RELEASES_DIR.mkdir(parents=True, exist_ok=True)
     assets = "".join(
-        f'  {plat.lower()}: "{ASSET_URL.format(v=version, plat=plat)}"\n'
+        f'  {plat}: "{ASSET_URL.format(v=version, plat=plat)}"\n'
         for plat in STUB_PLATFORMS
     )
     dest.write_text(
@@ -94,7 +93,16 @@ def _stub_release(version: str) -> bool:
 
 
 def _version_key(v):
-    return tuple(int(p) if p.isdigit() else 0 for p in str(v).split("."))
+    """Sort key, newest first under reverse=True. Semver (0.2.9) ranks above the
+    older dated alpha builds (2025-11-25); each group orders within itself."""
+    v = str(v)
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", v)
+    if m:
+        return (2, tuple(int(g) for g in m.groups()), "")
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})([a-z]?)", v)
+    if m:
+        return (1, (int(m[1]), int(m[2]), int(m[3])), m[4])
+    return (0, (0,), v)
 
 
 def _load_release_files():
@@ -121,21 +129,20 @@ def _render_release(fm, body, is_latest) -> str:
     if fm.get("prerelease"):
         pills.append('<span class="kx-pill">Pre-release</span>')
     links = []
-    for key, label in DL_LABELS:
-        url = (fm.get("assets") or {}).get(key)
+    for label, url in (fm.get("assets") or {}).items():
         if not url:
             continue
-        fname = str(url).rsplit("/", 1)[-1]
+        fname = str(url).rsplit("/", 1)[-1].split("?", 1)[0]
         ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
-        links.append(f'<a href="{url}">{label}&nbsp;.{ext}</a>' if ext
-                     else f'<a href="{url}">{label}</a>')
-    parts = [
-        '<div class="kx-release" markdown>', "",
-        f"## v{ver}", "",
-        (f'<div class="kx-release-head">'
-         f'<span class="kx-release-date">{str(fm.get("date", ""))}</span>'
-         + "".join(pills) + "</div>"), "",
-    ]
+        if ext and len(ext) <= 5 and ext.isalnum():
+            links.append(f'<a href="{url}">{label}&nbsp;.{ext}</a>')
+        else:
+            links.append(f'<a href="{url}">{label}</a>')
+    date = str(fm.get("date", "")).strip()
+    parts = ['<div class="kx-release" markdown>', "", f"## v{ver}", ""]
+    if date or pills:
+        date_span = f'<span class="kx-release-date">{date}</span>' if date else ""
+        parts += [f'<div class="kx-release-head">{date_span}' + "".join(pills) + "</div>", ""]
     if body:
         parts += [body, ""]
     if links:
