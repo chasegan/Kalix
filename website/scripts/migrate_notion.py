@@ -37,7 +37,7 @@ EXPORT_ROOT = next((REPO_ROOT / "ignored" / "Notion_export").glob("ExportBlock-*
 # destination (relative to docs/) -> [source page name prefixes, in order].
 # A dest with multiple sources concatenates them (2nd+ demoted under an H2).
 MAP = {
-    "getting-started.md": ["Getting Started"],
+    "about-kalix.md": ["Getting Started"],
     "concepts/model-file-structure.md": ["Model File Structure"],
     "concepts/conventions.md": ["Conventions"],
     "concepts/ordering.md": ["Ordering", "How Orders Propagate"],
@@ -140,6 +140,7 @@ NOTION_LINKS = {
 # Title overrides: the "Components" nav pages are titled by their model-file
 # section marker rather than their Notion name.
 TITLE_OVERRIDE = {
+    "docs/about-kalix.md": "About Kalix",
     "docs/concepts/model-file-structure.md": "[kalix]",
     "docs/concepts/input-data.md": "[inputs]",
     "docs/concepts/dynamic-expressions/constants.md": "[constants]",
@@ -149,6 +150,7 @@ TITLE_OVERRIDE = {
 # Pages whose first body heading merely echoes the page title — drop just that
 # heading (its content stays and becomes the page intro).
 DROP_FIRST_HEADING = {
+    "docs/about-kalix.md",                   # '## About Kalix' is promoted to the title
     "code/design/dev-stack.md",              # code/ is exempt from the docs/ prefix
     "docs/concepts/model-file-structure.md",
 }

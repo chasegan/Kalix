@@ -124,7 +124,7 @@ nav:
       - 13 · Optimisation from Python: tutorials/13-optimisation-python.md
   - Docs:
       - docs/index.md
-      - Getting started: docs/getting-started.md
+      - About Kalix: docs/about-kalix.md
       - Components:
           - "[kalix]": docs/concepts/model-file-structure.md
           - "[inputs]": docs/concepts/input-data.md

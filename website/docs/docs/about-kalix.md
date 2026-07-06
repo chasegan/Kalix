@@ -1,10 +1,8 @@
 ---
-title: "Getting Started"
+title: "About Kalix"
 ---
 
-# Getting Started
-
-## About Kalix
+# About Kalix
 
 Kalix is a hydrologic modelling platform for catchment and river simulation. It is focussed on core performance and technical usability. It aims to empower modellers through:
 
@@ -82,4 +80,4 @@ node.reach2.storage
 node.reach2.dsflow
 ```
 
-![](../assets/docs-getting-started/image.png)
+![](../assets/docs-about-kalix/image.png)

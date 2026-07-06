@@ -36,6 +36,13 @@
 .md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link {
   font-weight: var(--kx-weight-bold);
 }
+/* The intro/landing sub-pages (About Kalix under Docs, Start developing under
+   Code) are subordinate to their section landing, not top-level categories, so
+   keep them at normal weight. Full path + href to outweigh the rule above. */
+.md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link[href$="about-kalix/"],
+.md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link[href$="start-developing/"] {
+  font-weight: var(--kx-weight-normal);
+}
 
 /* ---- Custom light top-nav (overrides/main.html), matching the landing ----- */
 .kx-header.md-header {
