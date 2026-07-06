@@ -108,7 +108,6 @@ extra:
 exclude_docs: |
   docs/optimisation/algorithms/sc-sahel.md
   docs/optimisation/reparameterizations.md
-  code/developing/gory-details/python-api-brainstorm.md
 
 nav:
   # Home is the bespoke pass-through landing page (docs/index.html), served at the
@@ -178,15 +177,13 @@ nav:
           - Sacramento: docs/reference/technical/sacramento.md
   - Downloads: downloads.md
   - Code:
-      - code.md
-      - Developing:
-          - Start developing: code/developing/start-developing.md
-          - The dev stack: code/developing/dev-stack.md
-          - Gory details:
-              - code/developing/gory-details/index.md
+      - code/index.md
+      - Start developing: code/start-developing.md
+      - The dev stack: code/dev-stack.md
       - Platform design:
           - Manifesto: code/design/manifesto.md
           - ADRs: code/design/adrs.md
           - Web design: code/design/web-design.md
+          - Todo: code/design/todo.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at
   # /contact/, bypassing the Material theme — so it is not listed here.

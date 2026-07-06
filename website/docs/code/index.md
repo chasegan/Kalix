@@ -22,7 +22,7 @@ Regression **models** checked in CI against pinned mass-balance baselines every 
 </div>
 
 <figure markdown>
-![Simulation time per test across benchmark runs](assets/speed-plot.png){ .glightbox }
+![Simulation time per test across benchmark runs](../assets/speed-plot.png){ .glightbox }
 <figcaption>Model network simulation time per (ms) — one line per dev machine.</figcaption>
 </figure>
 

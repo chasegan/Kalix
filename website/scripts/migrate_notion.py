@@ -78,11 +78,9 @@ MAP = {
     "optimisation/reparameterizations.md": ["Reparameterizations"],
     "reference/technical/gr4j.md": ["Technical Reference"],  # resolved specially below
     # Developer material lives under the Code section (/code/), not the user Docs.
-    "code/developing/start-developing.md": ["Start Developing"],
-    "code/developing/dev-stack.md": ["The Dev Stack"],
-    "code/developing/gory-details/index.md": ["Gory Details"],
+    "code/start-developing.md": ["Start Developing"],
+    "code/dev-stack.md": ["The Dev Stack"],
     "code/design/adrs.md": ["Architecture Decision Records"],
-    "code/developing/gory-details/python-api-brainstorm.md": ["Brainstorming the Python API"],
     # tutorials/index.md is a hand-built design page (timeline) — not migrated.
     "tutorials/01-first-model.md": ["Tutorial 1"],
     "tutorials/02-expressions.md": ["Tutorial 2"],
@@ -127,7 +125,6 @@ NAME_TO_DEST.update({
 EXCLUDED_DESTS = {
     "docs/optimisation/algorithms/sc-sahel.md",
     "docs/optimisation/reparameterizations.md",
-    "code/developing/gory-details/python-api-brainstorm.md",
 }
 
 # Title overrides: the "Components" nav pages are titled by their model-file
@@ -142,7 +139,7 @@ TITLE_OVERRIDE = {
 # Pages whose first body heading merely echoes the page title — drop just that
 # heading (its content stays and becomes the page intro).
 DROP_FIRST_HEADING = {
-    "code/developing/dev-stack.md",          # code/ is exempt from the docs/ prefix
+    "code/dev-stack.md",                     # code/ is exempt from the docs/ prefix
     "docs/concepts/model-file-structure.md",
 }
 
