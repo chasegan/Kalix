@@ -1,0 +1,72 @@
+name: Deploy website
+
+# Builds the MkDocs site in website/ and deploys it to GitHub Pages.
+#
+# Note: the Notion content migration (scripts/migrate_notion.py) is NOT run here —
+# its source lives under the gitignored ignored/ directory and is absent in CI.
+# The migrated Markdown is committed, so CI only regenerates the version-dependent
+# data (releases from the GitHub API, project-health and speed plot from the
+# committed regression data) and builds.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "regression_tests/simulations/verify_all_models_log.txt"
+      - "regression_tests/speed/speed_results.csv"
+      - ".github/workflows/deploy-website.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: website/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r website/requirements.txt
+
+      - name: Generate version-dependent data
+        working-directory: website
+        env:
+          # Authenticated GitHub API (high rate limit, reliable builds).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/fetch_releases.py
+          python scripts/gen_health.py
+          python scripts/gen_speed_plot.py
+
+      - name: Build site
+        working-directory: website
+        run: mkdocs build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
