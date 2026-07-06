@@ -18,7 +18,7 @@ theme:
   custom_dir: overrides
   language: en
   logo: assets/wordmark.png
-  favicon: assets/favicon.png
+  favicon: assets/favicon.svg  # adaptive (dark glyph on light tabs, light on dark)
   icon:
     repo: fontawesome/brands/github
   palette:
