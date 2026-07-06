@@ -66,7 +66,7 @@ MAP = {
     "nodes/blackhole.md": ["Blackhole"],
     "using/ide.md": ["Kalix IDE"],
     "using/cli.md": ["Commandline"],
-    "using/python.md": ["Python bindings"],
+    # using/python.md is hand-written (the Notion page was an empty placeholder).
     "using/run-manager.md": ["Run management"],
     "optimisation/index.md": ["Optimisation"],
     "optimisation/objective-functions.md": ["Objective functions"],
