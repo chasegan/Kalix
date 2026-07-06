@@ -6,3 +6,11 @@
 # would convert them to CRLF and break the comparison. Scoped narrowly to the
 # fixtures the tests read, so no other file's checkout behaviour changes.
 regression_tests/**/*.ini text eol=lf
+
+# Force LF for the theme snapshot baselines, for the same reason.
+#
+# ThemePropertiesSnapshotTest dumps each generated theme with a hard-coded '\n'
+# separator and compares it byte-for-byte against these baselines read as raw
+# bytes. Without this, a Windows checkout (core.autocrlf) rewrites them to CRLF
+# and every theme case fails on the line endings alone.
+kalixide/src/test/resources/themes/snapshots/*.properties text eol=lf
