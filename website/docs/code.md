@@ -32,15 +32,15 @@ Regression **models** checked in CI against pinned mass-balance baselines every 
 
 <div class="kx-cards" markdown>
 <div class="kx-card-item" markdown>
-#### Report a bug or feature
+#### Report a bug
 Tracked openly on [GitHub Issues](https://github.com/chasegan/Kalix/issues).
 </div>
 <div class="kx-card-item" markdown>
-#### Build from source
-Clone the repo and build the engine, IDE, or Python package (below).
+#### Request a feature
+Email the dev team — details on the [Contact](../contact/) page.
 </div>
 <div class="kx-card-item" markdown>
-#### Collaborate on development
+#### Collaborate
 Run a remote team on a fork, or join the core team — see [Contact](../contact/).
 </div>
 </div>
