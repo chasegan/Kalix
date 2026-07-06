@@ -16,10 +16,10 @@ title: Commandline
 :   Show help, or help for a given subcommand.
 
 `simulate` · alias `sim`
-:   Run a simulation — see [simulate](#simulate).
+:   Run a simulation — see [`kalix simulate`](#kalix-simulate).
 
 `optimise` · alias `opt`
-:   Run an optimisation — see [optimise](#optimise).
+:   Run an optimisation — see [`kalix optimise`](#kalix-optimise).
 
 `new-session`
 :   Open an interactive session; the engine communicates two-way over STDIO using a bespoke protocol (used internally by KalixIDE).
@@ -43,7 +43,7 @@ $ kalix get-api
 $ kalix new-session
 ```
 
-## simulate
+## kalix simulate
 
 Run a simulation. Alias: `sim`.
 
@@ -77,7 +77,7 @@ Run a simulation. Alias: `sim`.
 $ kalix simulate my_model.ini -o results.csv
 ```
 
-## optimise
+## kalix optimise
 
 Run an optimisation. Alias: `opt`.
 
