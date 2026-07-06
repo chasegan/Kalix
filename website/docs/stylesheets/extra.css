@@ -216,3 +216,36 @@
 }
 .kx-cards .kx-card-item h4 { margin: 0 0 6px; font-size: var(--kx-text-lg); }
 .kx-cards .kx-card-item p { margin: 0; font-size: var(--kx-text-sm); color: var(--kx-text-muted); }
+
+/* ---- Tutorials: numbered timeline ----------------------------------------- */
+.kx-timeline { max-width: 720px; }
+.kx-track-label {
+  font-family: var(--kx-font-mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--kx-primary-600); margin: 30px 0 14px;
+}
+.kx-track-label.kx-muted { color: var(--kx-text-subtle); }
+.kx-track { border-left: 2px solid var(--kx-border); padding-left: 32px; margin-left: 12px; }
+.kx-track.kx-dashed { border-left-style: dashed; border-left-color: var(--kx-border-strong); }
+.md-typeset a.kx-tl-item, .kx-tl-item {
+  display: flex; align-items: center; gap: 16px; text-decoration: none;
+  padding: 12px 0; position: relative; color: inherit;
+}
+.md-typeset a.kx-tl-item:hover { opacity: 0.72; }
+.kx-tl-num {
+  position: absolute; left: -41px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--kx-primary-600); color: #fff; font-family: var(--kx-font-mono);
+  font-size: 10px; font-weight: 600; display: flex; align-items: center;
+  justify-content: center; border: 3px solid var(--kx-bg); flex: none;
+}
+.kx-tl-dot {
+  position: absolute; left: -40px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--kx-bg); border: 2px dashed var(--kx-border-strong); flex: none;
+}
+.kx-tl-title { font-size: 16px; font-weight: 600; color: var(--kx-text); }
+.kx-tl-title.kx-muted { color: var(--kx-text-muted); }
+.kx-tl-desc { font-size: 13.5px; color: var(--kx-text-muted); }
+.kx-tl-desc.kx-muted { color: var(--kx-text-subtle); }
+.kx-tl-resources { border-top: 1px solid var(--kx-border); margin-top: 40px; padding-top: 28px; }
+.kx-tl-resources h2 { margin: 0 0 16px; font-size: 18px; }
+.kx-tl-resources .kx-res-links { display: flex; gap: 28px; flex-wrap: wrap; font-size: 14px; }
+.md-typeset .kx-tl-resources .kx-res-links a { color: var(--kx-primary-700); text-decoration: none; }

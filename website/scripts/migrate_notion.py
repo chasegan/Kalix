@@ -82,7 +82,7 @@ MAP = {
     "developing/gory-details/index.md": ["Gory Details"],
     "developing/gory-details/adrs.md": ["Architecture Decision Records"],
     "developing/gory-details/python-api-brainstorm.md": ["Brainstorming the Python API"],
-    "tutorials/index.md": ["Modelling Tutorials"],
+    # tutorials/index.md is a hand-built design page (timeline) — not migrated.
     "tutorials/01-first-model.md": ["Tutorial 1"],
     "tutorials/02-expressions.md": ["Tutorial 2"],
     "tutorials/03-paths.md": ["Tutorial 3"],
