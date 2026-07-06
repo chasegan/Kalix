@@ -110,6 +110,14 @@ NAME_TO_DEST.update({
     "kalix user guide": None,  # site root
 })
 
+# Pages kept in source but excluded from the built site — links to them are dead,
+# so unwrap them to plain text (mirrors mkdocs.yml exclude_docs).
+EXCLUDED_DESTS = {
+    "optimisation/algorithms/sc-sahel.md",
+    "optimisation/reparameterizations.md",
+    "developing/gory-details/python-api-brainstorm.md",
+}
+
 
 def _strip_hash_name(fname: str) -> str:
     n = unquote(fname).rsplit("/", 1)[-1]
@@ -215,11 +223,11 @@ def rewrite_anchors(body, src_dir: Path, slug: str, depth: int, source_dir: str)
         base, _, frag = raw.partition("#")
         if base.lower().endswith(".html"):
             target = _resolve_target(_strip_hash_name(base))
-            if target:
+            if target and target not in EXCLUDED_DESTS:
                 rel = posixpath.relpath(target, source_dir or ".")
                 a["href"] = rel + (("#" + frag) if frag else "")
             else:
-                a.unwrap()
+                a.unwrap()  # dropped, bespoke, or build-excluded page
             continue
         p = (src_dir / base).resolve()
         if p.exists() and p.is_file():

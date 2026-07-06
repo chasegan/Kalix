@@ -14,7 +14,7 @@ A range of optimisation algorithms are available. Each makes different trade-off
 | SCE-UA | [Shuffled Complex Evolution (SCE)](algorithms/sce.md) |
 | DE | [Differential Evolution (DE)](algorithms/differential-evolution.md) |
 |  | Not implemented yet (below) |
-| SC-SAHEL | [Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)](algorithms/sc-sahel.md) |
+| SC-SAHEL | Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL) |
 | DREAM | [Dream](algorithms/dream.md) |
 
 # Objective functions
@@ -23,4 +23,4 @@ Check them out at [Objective functions](objective-functions.md)
 
 # Pages
 
-[Reparameterizations](reparameterizations.md)[Objective functions](objective-functions.md)[Shuffled Complex Evolution (SCE)](algorithms/sce.md)[Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)](algorithms/sc-sahel.md)[Differential Evolution (DE)](algorithms/differential-evolution.md)[Dream](algorithms/dream.md)[Covariance Matrix Adaptation Evolution Strategy (CMA-ES)](algorithms/cma-es.md)
+Reparameterizations[Objective functions](objective-functions.md)[Shuffled Complex Evolution (SCE)](algorithms/sce.md)Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)[Differential Evolution (DE)](algorithms/differential-evolution.md)[Dream](algorithms/dream.md)[Covariance Matrix Adaptation Evolution Strategy (CMA-ES)](algorithms/cma-es.md)

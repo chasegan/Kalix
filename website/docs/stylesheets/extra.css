@@ -249,3 +249,11 @@
 .kx-tl-resources h2 { margin: 0 0 16px; font-size: 18px; }
 .kx-tl-resources .kx-res-links { display: flex; gap: 28px; flex-wrap: wrap; font-size: 14px; }
 .md-typeset .kx-tl-resources .kx-res-links a { color: var(--kx-primary-700); text-decoration: none; }
+
+/* ---- Docs hub: hover affordances for spine chips + node/using cards -------- */
+.kx-hover-card { transition: border-color .15s, box-shadow .15s; }
+.md-typeset a.kx-hover-card:hover { border-color: var(--kx-primary-400) !important; box-shadow: var(--kx-shadow-sm); }
+.kx-section-chip { transition: background-color .15s; }
+.md-typeset a.kx-section-chip:hover { background: var(--kx-primary-100) !important; }
+.md-typeset .kx-tree a { text-decoration: none; }
+.md-typeset .kx-tree a:hover { text-decoration: underline; }

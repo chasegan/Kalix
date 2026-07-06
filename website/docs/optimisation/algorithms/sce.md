@@ -71,7 +71,7 @@ Fors definitely isn’t the endgame here, for example I know it becomes very ine
 
   [Chu 2010 - Water Resources Research - Improving the shuffled complex evolution scheme for optimization of complex.pdf](../../assets/optimisation-algorithms-sce/Water_Resources_Research_-_2010_-_Chu_-_Improving_the_shuffled_complex_evolution_scheme_for_optimization_of_complex.pdf)
 
-- Sorooshian did SC-SAHEL in 2020. It involves combining multiple evolutionary algorithms within a SCE framework… which is a lot of work to code up 😄 [Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)](sc-sahel.md)
+- Sorooshian did SC-SAHEL in 2020. It involves combining multiple evolutionary algorithms within a SCE framework… which is a lot of work to code up 😄 Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)
 
 - Some guys at Victoria University have made some improvements that look good when benchmarked against basic test functions.
 

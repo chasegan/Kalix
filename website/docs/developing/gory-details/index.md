@@ -6,7 +6,7 @@ title: Gory Details
 
 # Topics
 
-[Brainstorming the Python API](python-api-brainstorm.md)
+Brainstorming the Python API
 
 # TODO:
 
