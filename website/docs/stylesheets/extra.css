@@ -164,8 +164,7 @@
   color: var(--kx-accent-700);
 }
 
-/* ---- Downloads: release timeline ------------------------------------------ */
-.kx-releases { margin-top: var(--kx-space-6); }
+/* ---- Downloads: release cards (rendered by render_releases in main.py) ----- */
 .kx-release {
   border: var(--kx-border-line);
   border-radius: var(--kx-radius-lg);
@@ -173,13 +172,16 @@
   margin-bottom: var(--kx-space-5);
   background: var(--kx-surface);
 }
-.kx-release-head { display: flex; align-items: baseline; gap: var(--kx-space-3); flex-wrap: wrap; }
-.kx-release-ver { font-size: var(--kx-text-2xl); font-weight: var(--kx-weight-semibold); }
+.md-typeset .kx-release h2 {
+  font-size: var(--kx-text-2xl);
+  margin: 0;
+  scroll-margin-top: var(--kx-space-8);
+}
+.kx-release-head { display: flex; align-items: baseline; gap: var(--kx-space-3); flex-wrap: wrap; margin: var(--kx-space-2) 0 var(--kx-space-4); }
 .kx-release-date {
   font-family: var(--kx-font-mono); font-size: var(--kx-text-caption);
-  color: var(--kx-text-subtle); margin-left: auto;
+  color: var(--kx-text-subtle);
 }
-.kx-release-log { margin: var(--kx-space-3) 0 var(--kx-space-4); color: var(--kx-text-muted); }
 .kx-release-dl { display: flex; flex-wrap: wrap; gap: var(--kx-space-2); margin-bottom: var(--kx-space-3); }
 .kx-release-dl a {
   font-family: var(--kx-font-mono); font-size: var(--kx-text-sm);
