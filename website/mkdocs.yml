@@ -165,11 +165,11 @@ nav:
               - CMA-ES: docs/optimisation/algorithms/cma-es.md
               - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
               - DREAM: docs/optimisation/algorithms/dream.md
-      - Reference:
-          - Glossary: docs/reference/glossary.md
-          - Technical reference:
-              - GR4J: docs/reference/technical/gr4j.md
-              - Sacramento: docs/reference/technical/sacramento.md
+      - Glossary:
+          - docs/reference/glossary.md
+      - Technical reference:
+          - GR4J: docs/reference/technical/gr4j.md
+          - Sacramento: docs/reference/technical/sacramento.md
   - Downloads: downloads.md
   - Code:
       - code.md
@@ -179,6 +179,5 @@ nav:
           - Gory details:
               - code/developing/gory-details/index.md
               - Architecture Decision Records: code/developing/gory-details/adrs.md
-      - Planned features: code/planned.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at
   # /contact/, bypassing the Material theme — so it is not listed here.

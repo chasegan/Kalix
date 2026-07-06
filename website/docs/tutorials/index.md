@@ -4,8 +4,6 @@ title: Tutorials
 
 # Tutorials
 
-A guided path through Kalix. Follow it in order, or jump to any live step.
-
 Each tutorial is self-contained, with sample data, model files and expected outputs.
 
 <div class="kx-timeline" markdown>
