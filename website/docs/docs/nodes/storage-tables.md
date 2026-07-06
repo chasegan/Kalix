@@ -1,5 +1,5 @@
 ---
-title: Inverted Pyramid Storage Tables
+title: "Inverted Pyramid Storage Tables"
 ---
 
 # Inverted Pyramid Storage Tables

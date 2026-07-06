@@ -1,5 +1,5 @@
 ---
-title: Shuffled Complex Evolution (SCE)
+title: "Shuffled Complex Evolution (SCE)"
 ---
 
 # Shuffled Complex Evolution (SCE)

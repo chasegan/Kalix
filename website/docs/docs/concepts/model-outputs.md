@@ -1,8 +1,8 @@
 ---
-title: Model outputs
+title: "[outputs]"
 ---
 
-# Model outputs
+# [outputs]
 
 Model outputs listed in the [outputs] section are recorded during the simulation, and available in the result window (KalixIDE) or written to file (Kalix CLI).
 

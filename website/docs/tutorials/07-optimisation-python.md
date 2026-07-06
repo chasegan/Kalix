@@ -1,5 +1,5 @@
 ---
-title: Tutorial 13 — Optimisation from Python
+title: "Tutorial 13 — Optimisation from Python"
 ---
 
 # Tutorial 13 — Optimisation from Python

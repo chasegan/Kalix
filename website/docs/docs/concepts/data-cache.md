@@ -1,5 +1,5 @@
 ---
-title: Data cache
+title: "Data cache"
 ---
 
 # Data cache

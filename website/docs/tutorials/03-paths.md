@@ -1,5 +1,5 @@
 ---
-title: Tutorial 3 — Relative paths and trailhead paths
+title: "Tutorial 3 — Relative paths and trailhead paths"
 ---
 
 # Tutorial 3 — Relative paths and trailhead paths

@@ -1,5 +1,5 @@
 ---
-title: Confluence
+title: "Confluence"
 ---
 
 # Confluence

@@ -1,5 +1,5 @@
 ---
-title: Kalix IDE
+title: "Kalix IDE"
 ---
 
 # Kalix IDE

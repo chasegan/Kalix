@@ -1,5 +1,5 @@
 ---
-title: Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)
+title: "Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)"
 ---
 
 # Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL)

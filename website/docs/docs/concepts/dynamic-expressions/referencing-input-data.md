@@ -1,5 +1,5 @@
 ---
-title: Referencing Input Data
+title: "Referencing Input Data"
 ---
 
 # Referencing Input Data

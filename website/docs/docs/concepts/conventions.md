@@ -1,5 +1,5 @@
 ---
-title: Conventions
+title: "Conventions"
 ---
 
 # Conventions

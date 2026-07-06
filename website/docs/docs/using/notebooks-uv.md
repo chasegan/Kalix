@@ -1,5 +1,5 @@
 ---
-title: Running Python Notebooks with UV
+title: "Running Python Notebooks with UV"
 ---
 
 # Running Python Notebooks with UV

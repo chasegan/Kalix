@@ -1,5 +1,5 @@
 ---
-title: Objective functions
+title: "Objective functions"
 ---
 
 # Objective functions

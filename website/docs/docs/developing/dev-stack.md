@@ -1,5 +1,5 @@
 ---
-title: The Dev Stack
+title: "The Dev Stack"
 ---
 
 # The Dev Stack

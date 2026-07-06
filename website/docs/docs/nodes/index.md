@@ -1,8 +1,8 @@
 ---
-title: Nodes
+title: "[node.*]"
 ---
 
-# Nodes
+# [node.*]
 
 Nodes are the active elements of a Kalix model — lumped river processes that modify flow. Links pass water between them.
 

@@ -1,5 +1,5 @@
 ---
-title: Brainstorming the Python API
+title: "Brainstorming the Python API"
 ---
 
 # Brainstorming the Python API

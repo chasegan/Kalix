@@ -1,5 +1,5 @@
 ---
-title: Tutorial 4 — Running Kalix from the commandline
+title: "Tutorial 4 — Running Kalix from the commandline"
 ---
 
 # Tutorial 4 — Running Kalix from the commandline

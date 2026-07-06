@@ -1,5 +1,5 @@
 ---
-title: Gory Details
+title: "Gory Details"
 ---
 
 # Gory Details

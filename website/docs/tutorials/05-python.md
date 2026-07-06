@@ -1,5 +1,5 @@
 ---
-title: Tutorial 5 — Running Kalix from Python
+title: "Tutorial 5 — Running Kalix from Python"
 ---
 
 # Tutorial 5 — Running Kalix from Python

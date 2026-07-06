@@ -1,5 +1,5 @@
 ---
-title: Tutorial 1 — Build your first model
+title: "Tutorial 1 — Build your first model"
 ---
 
 # Tutorial 1 — Build your first model

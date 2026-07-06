@@ -1,8 +1,8 @@
 ---
-title: Documentation
+title: Docs
 ---
 
-# Documentation
+# Docs
 
 Model components, top to bottom.
 

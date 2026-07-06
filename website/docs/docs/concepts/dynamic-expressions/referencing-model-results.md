@@ -1,5 +1,5 @@
 ---
-title: Referencing Model Results
+title: "Referencing Model Results"
 ---
 
 # Referencing Model Results

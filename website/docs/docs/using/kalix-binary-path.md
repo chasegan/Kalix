@@ -1,5 +1,5 @@
 ---
-title: Specifying the Kalix binary path in KalixIDE
+title: "Specifying the Kalix binary path in KalixIDE"
 ---
 
 # Specifying the Kalix binary path in KalixIDE

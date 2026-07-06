@@ -128,6 +128,15 @@ EXCLUDED_DESTS = {
     "docs/developing/gory-details/python-api-brainstorm.md",
 }
 
+# Title overrides: the "Components" nav pages are titled by their model-file
+# section marker rather than their Notion name.
+TITLE_OVERRIDE = {
+    "docs/concepts/model-file-structure.md": "[kalix]",
+    "docs/concepts/input-data.md": "[inputs]",
+    "docs/concepts/dynamic-expressions/constants.md": "[constants]",
+    "docs/concepts/model-outputs.md": "[outputs]",
+}
+
 
 def _strip_hash_name(fname: str) -> str:
     n = unquote(fname).rsplit("/", 1)[-1]
@@ -307,7 +316,9 @@ def write_page(dest_rel: str, sources: list[str]):
     out = DOCS / dest_rel
     out.parent.mkdir(parents=True, exist_ok=True)
     content = "\n".join(parts).strip()  # cross-links already rewritten in the soup
-    front = f"---\ntitle: {title}\n---\n\n# {title}\n\n"
+    title = TITLE_OVERRIDE.get(dest_rel, title)
+    # Quote the YAML title: some are "[kalix]" etc., and a leading [ is a YAML list.
+    front = f'---\ntitle: "{title}"\n---\n\n# {title}\n\n'
     out.write_text(front + content + "\n", encoding="utf-8")
     return True
 
@@ -336,7 +347,7 @@ def gen_nodes_index():
         "Unregulated_User": "unregulated-user", "Blackhole": "blackhole", "Routing": "routing",
         "Loss": "loss", "Gauge": "gauge", "Order_Control": "order-control",
     }
-    lines = ["---", "title: Nodes", "---", "", "# Nodes", "",
+    lines = ["---", 'title: "[node.*]"', "---", "", "# [node.*]", "",
              "Nodes are the active elements of a Kalix model — lumped river processes that "
              "modify flow. Links pass water between them.", "", "| Node | |", "| --- | --- |"]
     names = []

@@ -1,5 +1,5 @@
 ---
-title: Differential Evolution (DE)
+title: "Differential Evolution (DE)"
 ---
 
 # Differential Evolution (DE)

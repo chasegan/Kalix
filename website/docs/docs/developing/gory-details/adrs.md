@@ -1,5 +1,5 @@
 ---
-title: Architecture Decision Records
+title: "Architecture Decision Records"
 ---
 
 # Architecture Decision Records

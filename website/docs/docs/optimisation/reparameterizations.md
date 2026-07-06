@@ -1,5 +1,5 @@
 ---
-title: Reparameterizations
+title: "Reparameterizations"
 ---
 
 # Reparameterizations

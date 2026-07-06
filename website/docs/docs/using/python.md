@@ -1,5 +1,5 @@
 ---
-title: Python bindings
+title: "Python bindings"
 ---
 
 # Python bindings

@@ -1,5 +1,5 @@
 ---
-title: Covariance Matrix Adaptation Evolution Strategy (CMA-ES)
+title: "Covariance Matrix Adaptation Evolution Strategy (CMA-ES)"
 ---
 
 # Covariance Matrix Adaptation Evolution Strategy (CMA-ES)

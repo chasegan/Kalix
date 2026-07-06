@@ -1,5 +1,5 @@
 ---
-title: Regulated_User
+title: "Regulated_User"
 ---
 
 # Regulated_User

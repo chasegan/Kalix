@@ -1,5 +1,5 @@
 ---
-title: Tutorial 12 — Optimisation from the commandline
+title: "Tutorial 12 — Optimisation from the commandline"
 ---
 
 # Tutorial 12 — Optimisation from the commandline

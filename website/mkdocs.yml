@@ -119,8 +119,28 @@ nav:
   - Docs:
       - docs/index.md
       - Getting started: docs/getting-started.md
+      - Components:
+          - "[kalix]": docs/concepts/model-file-structure.md
+          - "[inputs]": docs/concepts/input-data.md
+          - "[constants]": docs/concepts/dynamic-expressions/constants.md
+          - "[node.*]":
+              - docs/nodes/index.md
+              - Inflow: docs/nodes/inflow.md
+              - GR4J: docs/nodes/gr4j.md
+              - Sacramento: docs/nodes/sacramento.md
+              - Storage: docs/nodes/storage.md
+              - Storage tables: docs/nodes/storage-tables.md
+              - Routing: docs/nodes/routing.md
+              - Confluence: docs/nodes/confluence.md
+              - Splitter: docs/nodes/splitter.md
+              - Loss: docs/nodes/loss.md
+              - Gauge: docs/nodes/gauge.md
+              - Regulated user: docs/nodes/regulated-user.md
+              - Unregulated user: docs/nodes/unregulated-user.md
+              - Order control: docs/nodes/order-control.md
+              - Blackhole: docs/nodes/blackhole.md
+          - "[outputs]": docs/concepts/model-outputs.md
       - Concepts:
-          - Model file structure: docs/concepts/model-file-structure.md
           - Conventions: docs/concepts/conventions.md
           - Ordering: docs/concepts/ordering.md
           - Dynamic expressions:
@@ -128,27 +148,8 @@ nav:
               - Referencing input data: docs/concepts/dynamic-expressions/referencing-input-data.md
               - Referencing model results: docs/concepts/dynamic-expressions/referencing-model-results.md
               - Simulation context variables: docs/concepts/dynamic-expressions/simulation-context-vars.md
-              - Constants: docs/concepts/dynamic-expressions/constants.md
           - Parameter types: docs/concepts/parameter-types.md
           - Data cache: docs/concepts/data-cache.md
-          - Input data: docs/concepts/input-data.md
-          - Model outputs: docs/concepts/model-outputs.md
-      - Nodes:
-          - docs/nodes/index.md
-          - Inflow: docs/nodes/inflow.md
-          - GR4J: docs/nodes/gr4j.md
-          - Sacramento: docs/nodes/sacramento.md
-          - Storage: docs/nodes/storage.md
-          - Storage tables: docs/nodes/storage-tables.md
-          - Routing: docs/nodes/routing.md
-          - Confluence: docs/nodes/confluence.md
-          - Splitter: docs/nodes/splitter.md
-          - Loss: docs/nodes/loss.md
-          - Gauge: docs/nodes/gauge.md
-          - Regulated user: docs/nodes/regulated-user.md
-          - Unregulated user: docs/nodes/unregulated-user.md
-          - Order control: docs/nodes/order-control.md
-          - Blackhole: docs/nodes/blackhole.md
       - Using Kalix:
           - KalixIDE: docs/using/ide.md
           - Kalix CLI: docs/using/cli.md

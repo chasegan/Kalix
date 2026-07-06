@@ -1,7 +1,7 @@
 ---
-title: Constants
+title: "[constants]"
 ---
 
-# Constants
+# [constants]
 
 To complete.

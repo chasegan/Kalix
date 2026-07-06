@@ -1,5 +1,5 @@
 ---
-title: Gauge
+title: "Gauge"
 ---
 
 # Gauge

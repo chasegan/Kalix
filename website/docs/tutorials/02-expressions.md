@@ -1,5 +1,5 @@
 ---
-title: Tutorial 2 — Expressions
+title: "Tutorial 2 — Expressions"
 ---
 
 # Tutorial 2 — Expressions

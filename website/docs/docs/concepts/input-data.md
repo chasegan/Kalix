@@ -1,8 +1,8 @@
 ---
-title: Input data
+title: "[inputs]"
 ---
 
-# Input data
+# [inputs]
 
 Specify input data files in the `[inputs]` section of your model.
 

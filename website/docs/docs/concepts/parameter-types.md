@@ -1,5 +1,5 @@
 ---
-title: Parameter types
+title: "Parameter types"
 ---
 
 # Parameter types
