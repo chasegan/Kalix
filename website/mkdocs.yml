@@ -125,20 +125,20 @@ nav:
           - "[constants]": docs/concepts/dynamic-expressions/constants.md
           - "[node.*]":
               - docs/nodes/index.md
-              - Inflow: docs/nodes/inflow.md
+              - Blackhole: docs/nodes/blackhole.md
+              - Confluence: docs/nodes/confluence.md
+              - Gauge: docs/nodes/gauge.md
               - GR4J: docs/nodes/gr4j.md
+              - Inflow: docs/nodes/inflow.md
+              - Loss: docs/nodes/loss.md
+              - Order control: docs/nodes/order-control.md
+              - Regulated user: docs/nodes/regulated-user.md
+              - Routing: docs/nodes/routing.md
               - Sacramento: docs/nodes/sacramento.md
+              - Splitter: docs/nodes/splitter.md
               - Storage: docs/nodes/storage.md
               - Storage tables: docs/nodes/storage-tables.md
-              - Routing: docs/nodes/routing.md
-              - Confluence: docs/nodes/confluence.md
-              - Splitter: docs/nodes/splitter.md
-              - Loss: docs/nodes/loss.md
-              - Gauge: docs/nodes/gauge.md
-              - Regulated user: docs/nodes/regulated-user.md
               - Unregulated user: docs/nodes/unregulated-user.md
-              - Order control: docs/nodes/order-control.md
-              - Blackhole: docs/nodes/blackhole.md
           - "[outputs]": docs/concepts/model-outputs.md
       - Concepts:
           - Conventions: docs/concepts/conventions.md
