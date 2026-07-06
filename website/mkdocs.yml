@@ -106,10 +106,6 @@ extra:
 
 # Kept in the source tree but excluded from the built site (owner decision:
 # rough research/internal notes that shouldn't publish yet).
-exclude_docs: |
-  docs/optimisation/algorithms/sc-sahel.md
-  docs/optimisation/reparameterizations.md
-
 nav:
   # Home is the bespoke pass-through landing page (docs/index.html), served at the
   # site root and bypassing the Material theme — so it is not listed here.

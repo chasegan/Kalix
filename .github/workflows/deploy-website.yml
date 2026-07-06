@@ -2,11 +2,9 @@ name: Deploy website
 
 # Builds the MkDocs site in website/ and deploys it to GitHub Pages.
 #
-# Note: the Notion content migration (scripts/migrate_notion.py) is NOT run here —
-# its source lives under the gitignored ignored/ directory and is absent in CI.
-# The migrated Markdown is committed, so CI only regenerates the version-dependent
-# data (releases from the GitHub API, project-health and speed plot from the
-# committed regression data) and builds.
+# All content is committed Markdown. CI only regenerates the version-dependent
+# data (project-health and speed plot from the committed regression data) and
+# builds. Releases come from the committed data/releases/*.md files.
 
 on:
   push:
@@ -45,11 +43,7 @@ jobs:
 
       - name: Generate version-dependent data
         working-directory: website
-        env:
-          # Authenticated GitHub API (high rate limit, reliable builds).
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python scripts/fetch_releases.py
           python scripts/gen_health.py
           python scripts/gen_speed_plot.py
 

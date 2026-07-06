@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { margin: 0; background: #ffffff; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+
+<div style="font-family: var(--kx-font-sans); color: var(--kx-text); background: #ffffff;">
+
+  <!-- NAV -->
+  <header style="position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--kx-border);">
+    <div style="max-width: 1120px; margin: 0 auto; padding: 18px 48px; display: flex; align-items: center; gap: 36px;">
+      <img src="assets/1000029736.png" alt="Kalix" style="height: 24px; width: auto;">
+      <nav style="display: flex; gap: 30px; font-size: 15px; font-weight: 500;">
+        <a href="#" style="color: var(--kx-text); text-decoration: none;">Tutorials</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Docs</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Code</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Contact</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 18px;">
+        <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-muted); text-decoration: none;">GitHub ↗</a>
+        <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-muted); text-decoration: none;">PyPI ↗</a>
+        <button style="font-family: var(--kx-font-sans); font-size: 14px; font-weight: 600; color: #fff; background: var(--kx-primary-600); border: none; border-radius: var(--kx-radius-sm); padding: 9px 18px; cursor: pointer;">Download</button>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1fr 210px; gap: 56px; padding: 48px 48px 64px;">
+    <!-- ARTICLE -->
+    <article style="max-width: 720px; min-width: 0;">
+      <div style="font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle); margin-bottom: 14px;"><a href="#" style="color: var(--kx-primary-600); text-decoration: none;">Tutorials</a> <span style="color: var(--kx-border-strong);">/</span> The fundamentals <span style="color: var(--kx-border-strong);">/</span> 01</div>
+      <h1 style="margin: 0 0 20px; font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.12;">Build your first model</h1>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 14px 0; border-top: 1px solid var(--kx-border); border-bottom: 1px solid var(--kx-border); margin-bottom: 28px; font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-text-muted);">
+        <span>◷ 20 min</span><span style="color: var(--kx-border-strong);">|</span><span>Beginner</span><span style="color: var(--kx-border-strong);">|</span><span>5 steps</span><span style="margin-left: auto;"><a href="#" style="color: var(--kx-primary-600); text-decoration: none;">Tutorial files ↗</a></span>
+      </div>
+
+      <div style="display: flex; gap: 14px; background: var(--kx-info-bg); border: 1px solid var(--kx-info-border); border-left: 3px solid var(--kx-info); border-radius: var(--kx-radius-md); padding: 16px 18px; margin-bottom: 30px;">
+        <span style="font-family: var(--kx-font-mono); font-weight: 600; font-size: 13px; color: var(--kx-info); flex-shrink: 0;">i</span>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: var(--kx-text);">Tutorial 1 of the series. You'll build a single-catchment rainfall-runoff model from scratch, run it, and look at the result.</p>
+      </div>
+
+      <h2 id="build" style="margin: 0 0 12px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;">What you'll build</h2>
+      <p style="margin: 0 0 20px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">A daily rainfall-runoff model for the fictional <strong>Stringybark Creek</strong> catchment — a Sacramento catchment node feeding a downstream gauge node, driven by ~30 years of daily rainfall and PET data. By the end you'll have a working model file, a simulation, and a chart of simulated vs. observed streamflow.</p>
+      <figure style="margin: 0 0 34px;">
+        <div style="height: 260px; border-radius: var(--kx-radius-md); border: 1px solid var(--kx-border-strong); background: repeating-linear-gradient(135deg, var(--kx-neutral-50), var(--kx-neutral-50) 11px, #fff 11px, #fff 22px); display: flex; align-items: center; justify-content: center;"><span style="font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle); background: #fff; border: 1px solid var(--kx-border); border-radius: var(--kx-radius-xs); padding: 5px 12px;">screenshot — simulated vs. observed streamflow</span></div>
+        <figcaption style="margin-top: 10px; font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle);">The finished result: modelled flow at Widebridge gauge against the observed record.</figcaption>
+      </figure>
+
+      <h2 style="margin: 0 0 12px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;">Build the model</h2>
+      <p style="margin: 0 0 26px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">We'll build <code style="font-family: var(--kx-font-mono); font-size: 0.86em; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); padding: 1px 5px; border-radius: var(--kx-radius-xs); color: var(--kx-primary-700);">stringybark_sacramento.ini</code> one section at a time.</p>
+
+      <h3 style="margin: 0 0 10px; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; font-weight: 600; color: var(--kx-primary-600); background: var(--kx-primary-50); border-radius: var(--kx-radius-sm); padding: 3px 8px;">1</span>The <code style="font-family: var(--kx-font-mono); font-size: 0.82em; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); padding: 1px 5px; border-radius: var(--kx-radius-xs); color: var(--kx-primary-700);">[kalix]</code> section</h3>
+      <p style="margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">Top-level model settings. We'll lock the simulation period to the 30 years our data covers.</p>
+      <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-md); overflow: hidden; margin-bottom: 26px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #eef1f4; padding: 8px 14px; border-bottom: 1px solid var(--kx-border-strong);"><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-text-muted);">stringybark_sacramento.ini</span><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-600); cursor: pointer;">copy</span></div>
+        <pre style="margin: 0; background: #f6f8fa; padding: 16px 18px; overflow-x: auto; font-family: var(--kx-font-mono); font-size: 13px; line-height: 1.7; color: var(--kx-text);"><span style="color: #2f6b4f; font-weight: 600;">[kalix]</span>
+<span style="color: #1c5480;">start</span> = <span style="color: #96631a;">1980-01-01</span>
+<span style="color: #1c5480;">end</span>   = <span style="color: #96631a;">2009-12-31</span></pre>
+      </div>
+
+      <h3 style="margin: 0 0 10px; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; font-weight: 600; color: var(--kx-primary-600); background: var(--kx-primary-50); border-radius: var(--kx-radius-sm); padding: 3px 8px;">2</span>The <code style="font-family: var(--kx-font-mono); font-size: 0.82em; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); padding: 1px 5px; border-radius: var(--kx-radius-xs); color: var(--kx-primary-700);">[inputs]</code> section</h3>
+      <p style="margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">The data files the model will load. Bare filenames resolve relative to the model file's folder. A single CSV can hold many value columns.</p>
+      <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-md); overflow: hidden; margin-bottom: 26px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #eef1f4; padding: 8px 14px; border-bottom: 1px solid var(--kx-border-strong);"><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-text-muted);">stringybark_sacramento.ini</span><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-600); cursor: pointer;">copy</span></div>
+        <pre style="margin: 0; background: #f6f8fa; padding: 16px 18px; overflow-x: auto; font-family: var(--kx-font-mono); font-size: 13px; line-height: 1.7; color: var(--kx-text);"><span style="color: #2f6b4f; font-weight: 600;">[inputs]</span>
+<span style="color: #96631a;">climate_data.csv</span>
+<span style="color: #96631a;">observed.csv</span></pre>
+      </div>
+
+      <h3 style="margin: 0 0 10px; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; font-weight: 600; color: var(--kx-primary-600); background: var(--kx-primary-50); border-radius: var(--kx-radius-sm); padding: 3px 8px;">3</span>A Sacramento catchment node</h3>
+      <p style="margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">The heart of the model. Sacramento takes daily rainfall and PET and produces streamflow at the catchment outlet. The <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">data.&lt;file&gt;_csv.by_name.&lt;column&gt;</code> syntax wires a node input to a named CSV column.</p>
+      <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-md); overflow: hidden; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #eef1f4; padding: 8px 14px; border-bottom: 1px solid var(--kx-border-strong);"><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-text-muted);">stringybark_sacramento.ini</span><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-600); cursor: pointer;">copy</span></div>
+        <pre style="margin: 0; background: #f6f8fa; padding: 16px 18px; overflow-x: auto; font-family: var(--kx-font-mono); font-size: 13px; line-height: 1.7; color: var(--kx-text);"><span style="color: #2f6b4f; font-weight: 600;">[node.0001_sc_stringybark]</span>
+<span style="color: #1c5480;">type</span>  = <span style="color: #96631a;">sacramento</span>
+<span style="color: #1c5480;">loc</span>   = <span style="color: #96631a;">0, 0</span>
+<span style="color: #1c5480;">area</span>  = <span style="color: #96631a;">228</span>
+<span style="color: #1c5480;">rain</span>  = <span style="color: #96631a;">data.climate_data_csv.by_name.rain_mm</span>
+<span style="color: #1c5480;">evap</span>  = <span style="color: #96631a;">data.climate_data_csv.by_name.pet_mm</span>
+<span style="color: #6f7d88;"># params = 17 pre-calibrated Sacramento parameters</span>
+<span style="color: #1c5480;">ds_1</span>  = <span style="color: #96631a;">0002_ga_widebridge</span></pre>
+      </div>
+      <p style="margin: 0 0 26px; font-size: 14px; line-height: 1.65; color: var(--kx-text-muted);"><code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">ds_1</code> connects this node's first downstream link to the gauge we'll define next.</p>
+
+      <h3 style="margin: 0 0 10px; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; font-weight: 600; color: var(--kx-primary-600); background: var(--kx-primary-50); border-radius: var(--kx-radius-sm); padding: 3px 8px;">4</span>A downstream gauge node</h3>
+      <p style="margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">A <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">gauge</code> is a passive node — it doesn't modify flow, it just gives you a named point in the network to inspect and record streamflow.</p>
+      <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-md); overflow: hidden; margin-bottom: 26px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #eef1f4; padding: 8px 14px; border-bottom: 1px solid var(--kx-border-strong);"><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-text-muted);">stringybark_sacramento.ini</span><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-600); cursor: pointer;">copy</span></div>
+        <pre style="margin: 0; background: #f6f8fa; padding: 16px 18px; overflow-x: auto; font-family: var(--kx-font-mono); font-size: 13px; line-height: 1.7; color: var(--kx-text);"><span style="color: #2f6b4f; font-weight: 600;">[node.0002_ga_widebridge]</span>
+<span style="color: #1c5480;">type</span> = <span style="color: #96631a;">gauge</span>
+<span style="color: #1c5480;">loc</span>  = <span style="color: #96631a;">0, 40</span></pre>
+      </div>
+
+      <h3 style="margin: 0 0 10px; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; font-weight: 600; color: var(--kx-primary-600); background: var(--kx-primary-50); border-radius: var(--kx-radius-sm); padding: 3px 8px;">5</span>The <code style="font-family: var(--kx-font-mono); font-size: 0.82em; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); padding: 1px 5px; border-radius: var(--kx-radius-xs); color: var(--kx-primary-700);">[outputs]</code> section</h3>
+      <p style="margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">The results to record — flow at both nodes plus the three Sacramento runoff components (<code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">flosf</code>, <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">flobf</code>, <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">floin</code>).</p>
+      <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-md); overflow: hidden; margin-bottom: 30px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #eef1f4; padding: 8px 14px; border-bottom: 1px solid var(--kx-border-strong);"><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-text-muted);">stringybark_sacramento.ini</span><span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-600); cursor: pointer;">copy</span></div>
+        <pre style="margin: 0; background: #f6f8fa; padding: 16px 18px; overflow-x: auto; font-family: var(--kx-font-mono); font-size: 13px; line-height: 1.7; color: var(--kx-text);"><span style="color: #2f6b4f; font-weight: 600;">[outputs]</span>
+<span style="color: #96631a;">node.0001_sc_stringybark.dsflow</span>
+<span style="color: #96631a;">node.0001_sc_stringybark.flosf</span>
+<span style="color: #96631a;">node.0001_sc_stringybark.flobf</span>
+<span style="color: #96631a;">node.0001_sc_stringybark.floin</span>
+<span style="color: #96631a;">node.0002_ga_widebridge.dsflow</span></pre>
+      </div>
+
+      <h2 id="run" style="margin: 0 0 12px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;">Run it</h2>
+      <p style="margin: 0 0 18px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">Save the file and hit <strong>Run</strong> in Kalix IDE. The simulation should finish in a fraction of a second.</p>
+      <div style="height: 150px; border-radius: var(--kx-radius-md); border: 1px solid var(--kx-border-strong); background: repeating-linear-gradient(135deg, var(--kx-neutral-50), var(--kx-neutral-50) 11px, #fff 11px, #fff 22px); display: flex; align-items: center; justify-content: center; margin-bottom: 32px;"><span style="font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle); background: #fff; border: 1px solid var(--kx-border); border-radius: var(--kx-radius-xs); padding: 5px 12px;">screenshot — Run button &amp; success message</span></div>
+
+      <h2 id="output" style="margin: 0 0 12px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;">Look at the output</h2>
+      <p style="margin: 0 0 18px; font-size: 15.5px; line-height: 1.7; color: var(--kx-text);">The Run Manager opens to a chart view. Drag <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">observed.csv</code> in, then plot <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">node.0002_ga_widebridge.dsflow</code> against the <code style="font-family: var(--kx-font-mono); font-size: 0.86em; color: var(--kx-primary-700);">obs</code> column.</p>
+      <div style="display: flex; gap: 14px; background: var(--kx-success-bg); border: 1px solid var(--kx-success-border); border-left: 3px solid var(--kx-success); border-radius: var(--kx-radius-md); padding: 16px 18px; margin-bottom: 30px;">
+        <span style="font-family: var(--kx-font-mono); font-weight: 600; font-size: 13px; color: var(--kx-success); flex-shrink: 0;">✓</span>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: var(--kx-text);">Try plotting the three runoff components together: baseflow is the steady background, surface flow the spiky storm response, interflow sits in between.</p>
+      </div>
+
+      <h2 style="margin: 0 0 14px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;">Where to go from here</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <a href="#" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; border: 1px solid var(--kx-border); border-radius: var(--kx-radius-md); padding: 14px 18px;" style-hover="border-color: var(--kx-primary-400); box-shadow: var(--kx-shadow-sm);"><div><div style="font-size: 14.5px; font-weight: 600; color: var(--kx-text);">Tutorial 2 — Expressions</div><div style="font-size: 12.5px; color: var(--kx-text-muted);">Dynamic formulas applied to your inputs</div></div><span style="color: var(--kx-primary-500);">→</span></a>
+        <a href="#" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; border: 1px solid var(--kx-border); border-radius: var(--kx-radius-md); padding: 14px 18px;" style-hover="border-color: var(--kx-primary-400); box-shadow: var(--kx-shadow-sm);"><div><div style="font-size: 14.5px; font-weight: 600; color: var(--kx-text);">Tutorial 3 — Relative &amp; trailhead paths</div><div style="font-size: 12.5px; color: var(--kx-text-muted);">Portable references to input data</div></div><span style="color: var(--kx-primary-500);">→</span></a>
+      </div>
+    </article>
+
+    <!-- TOC -->
+    <aside style="position: sticky; top: 88px; align-self: start;">
+      <p style="margin: 0 0 12px; font-family: var(--kx-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--kx-text-subtle);">On this page</p>
+      <div style="display: flex; flex-direction: column; gap: 9px; font-size: 13px; border-left: 1px solid var(--kx-border); padding-left: 14px;">
+        <a href="#build" style="color: var(--kx-primary-700); text-decoration: none; font-weight: 500; border-left: 2px solid var(--kx-primary-600); margin-left: -16px; padding-left: 14px;">What you'll build</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Build the model</a>
+        <a href="#" style="color: var(--kx-text-subtle); text-decoration: none; padding-left: 12px;">1 · [kalix]</a>
+        <a href="#" style="color: var(--kx-text-subtle); text-decoration: none; padding-left: 12px;">2 · [inputs]</a>
+        <a href="#" style="color: var(--kx-text-subtle); text-decoration: none; padding-left: 12px;">3 · Sacramento node</a>
+        <a href="#" style="color: var(--kx-text-subtle); text-decoration: none; padding-left: 12px;">4 · Gauge node</a>
+        <a href="#" style="color: var(--kx-text-subtle); text-decoration: none; padding-left: 12px;">5 · [outputs]</a>
+        <a href="#run" style="color: var(--kx-text-muted); text-decoration: none;">Run it</a>
+        <a href="#output" style="color: var(--kx-text-muted); text-decoration: none;">Look at the output</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Where to go from here</a>
+      </div>
+    </aside>
+  </div>
+
+  <!-- FOOTER -->
+  <footer style="border-top: 1px solid var(--kx-border);">
+    <div style="max-width: 1120px; margin: 0 auto; padding: 28px 48px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+      <img src="assets/1000029736.png" alt="Kalix" style="height: 18px; width: auto; opacity: 0.75;">
+      <span style="font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle);">Open source · MPL 2.0</span>
+      <span style="margin-left: auto; font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle);">kalixproject.org</span>
+    </div>
+  </footer>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { margin: 0; background: #ffffff; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+
+<div style="font-family: var(--kx-font-sans); color: var(--kx-text); background: #ffffff;">
+
+  <!-- NAV -->
+  <header style="position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--kx-border);">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 18px 48px; display: flex; align-items: center; gap: 36px;">
+      <img src="assets/1000029736.png" alt="Kalix" style="height: 24px; width: auto;">
+      <nav style="display: flex; gap: 30px; font-size: 15px; font-weight: 500;">
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Tutorials</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Docs</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Code</a>
+        <a href="#" style="color: var(--kx-text-muted); text-decoration: none;">Contact</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 18px;">
+        <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-muted); text-decoration: none;">GitHub ↗</a>
+        <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-muted); text-decoration: none;">PyPI ↗</a>
+        <button style="font-family: var(--kx-font-sans); font-size: 14px; font-weight: 600; color: #fff; background: var(--kx-primary-600); border: none; border-radius: var(--kx-radius-sm); padding: 9px 18px; cursor: pointer;">Download</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <main style="max-width: 900px; margin: 0 auto; padding: 64px 48px 40px;">
+    <h1 style="margin: 0 0 12px; font-size: var(--kx-text-4xl); font-weight: 600; letter-spacing: -0.02em;">Downloads</h1>
+    <p style="margin: 0 0 48px; font-size: var(--kx-text-lg); line-height: var(--kx-leading-normal); color: var(--kx-text-muted);">Every release, newest first.</p>
+
+    <!-- ============ v0.2.9 ============ -->
+    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 40px; padding-bottom: 44px; border-left: 2px solid var(--kx-border); padding-left: 32px; margin-left: 6px; position: relative;">
+      <span style="position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--kx-accent-600); border: 3px solid #fff;"></span>
+      <div>
+        <div style="font-size: 26px; font-weight: 600; letter-spacing: -0.01em;">v0.2.9</div>
+        <div style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-subtle); margin-top: 2px;">2026-06-09</div>
+        <span style="display: inline-block; margin-top: 10px; font-family: var(--kx-font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--kx-accent-700); background: var(--kx-accent-50); border-radius: var(--kx-radius-pill); padding: 3px 10px;">Latest</span>
+      </div>
+      <div>
+        <ul style="margin: 0 0 20px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; line-height: 1.5; color: var(--kx-text);">
+          <li>Optimisation now exposed to the Python API</li>
+          <li>File-tree enhancements</li>
+          <li>Changes to node outputs <span style="font-family: var(--kx-font-mono); font-size: 0.85em; color: var(--kx-text-subtle);">(#258)</span></li>
+          <li>Inflow: <span style="font-family: var(--kx-font-mono); font-size: 0.9em; color: var(--kx-primary-700);">recession_factor</span> → <span style="font-family: var(--kx-font-mono); font-size: 0.9em; color: var(--kx-primary-700);">expected_inflow</span> <span style="font-family: var(--kx-font-mono); font-size: 0.85em; color: var(--kx-text-subtle);">(#260)</span></li>
+        </ul>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Windows <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.exe</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">macOS <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.dmg</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Linux <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.AppImage</span></a>
+          <a href="#" style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-primary-600); text-decoration: none; padding: 8px 8px;">Docs .zip</a>
+        </div>
+        <div style="display: inline-flex; align-items: center; gap: 9px; margin-top: 12px; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); border-radius: var(--kx-radius-xs); padding: 6px 12px;"><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-text-subtle);">$</span><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-neutral-700);">pip install kalix==0.2.9</span></div>
+      </div>
+    </div>
+
+    <!-- ============ v0.2.8 ============ -->
+    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 40px; padding-bottom: 44px; border-left: 2px solid var(--kx-border); padding-left: 32px; margin-left: 6px; position: relative;">
+      <span style="position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--kx-neutral-400); border: 3px solid #fff;"></span>
+      <div>
+        <div style="font-size: 26px; font-weight: 600; letter-spacing: -0.01em;">v0.2.8</div>
+        <div style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-subtle); margin-top: 2px;">2026-06-04</div>
+      </div>
+      <div>
+        <ul style="margin: 0 0 20px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; line-height: 1.5; color: var(--kx-text);">
+          <li>File tree — compare, move, copy, delete; copy absolute / relative / trailhead paths</li>
+          <li>Multiple models open at once</li>
+          <li>Icons migrated to FA6 · tutorials published</li>
+        </ul>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Windows <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.exe</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">macOS <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.dmg</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Linux <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.AppImage</span></a>
+          <a href="#" style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-primary-600); text-decoration: none; padding: 8px 8px;">Docs .zip</a>
+        </div>
+        <div style="display: inline-flex; align-items: center; gap: 9px; margin-top: 12px; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); border-radius: var(--kx-radius-xs); padding: 6px 12px;"><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-text-subtle);">$</span><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-neutral-700);">pip install kalix==0.2.8</span></div>
+      </div>
+    </div>
+
+    <!-- ============ v0.2.6 ============ -->
+    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 40px; padding-bottom: 44px; border-left: 2px solid var(--kx-border); padding-left: 32px; margin-left: 6px; position: relative;">
+      <span style="position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--kx-neutral-400); border: 3px solid #fff;"></span>
+      <div>
+        <div style="font-size: 26px; font-weight: 600; letter-spacing: -0.01em;">v0.2.6</div>
+        <div style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-text-subtle); margin-top: 2px;">2026-06-02</div>
+      </div>
+      <div>
+        <ul style="margin: 0 0 20px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; line-height: 1.5; color: var(--kx-text);">
+          <li>Routing node now supports Nonlinear Muskingum (nlm)</li>
+          <li>Linting performance improvements</li>
+          <li>Custom line styles on exceedance / envelope plots</li>
+        </ul>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Windows <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.exe</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">macOS <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.dmg</span></a>
+          <a href="#" style="font-family: var(--kx-font-sans); font-size: 13.5px; font-weight: 600; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;" style-hover="border-color: var(--kx-primary-400); background: var(--kx-primary-100);">Linux <span style="font-family: var(--kx-font-mono); font-size: 11px; color: var(--kx-primary-400);">.AppImage</span></a>
+        </div>
+        <div style="display: inline-flex; align-items: center; gap: 9px; margin-top: 12px; background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); border-radius: var(--kx-radius-xs); padding: 6px 12px;"><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-text-subtle);">$</span><span style="font-family: var(--kx-font-mono); font-size: 12.5px; color: var(--kx-neutral-700);">pip install kalix==0.2.6</span></div>
+      </div>
+    </div>
+
+    <!-- older -->
+    <div style="border-left: 2px solid var(--kx-border); padding-left: 32px; margin-left: 6px; position: relative; padding-bottom: 4px;">
+      <span style="position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; background: var(--kx-neutral-300); border: 3px solid #fff;"></span>
+      <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;">Older releases on GitHub ↗</a>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="border-top: 1px solid var(--kx-border); margin-top: 40px;">
+    <div style="max-width: 900px; margin: 0 auto; padding: 28px 48px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+      <img src="assets/1000029736.png" alt="Kalix" style="height: 18px; width: auto; opacity: 0.75;">
+      <span style="font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle);">Open source · MPL 2.0</span>
+      <span style="margin-left: auto; font-family: var(--kx-font-mono); font-size: 12px; color: var(--kx-text-subtle);">kalixproject.org</span>
+    </div>
+  </footer>
+
+</div>
+</x-dc>
+</body>
+</html>

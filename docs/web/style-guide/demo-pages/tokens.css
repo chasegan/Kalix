@@ -1,0 +1,256 @@
+/* ============================================================================
+   KALIX — Design Tokens
+   kalixproject.org · light mode only
+   ----------------------------------------------------------------------------
+   A single source of truth for the Kalix web presence (bespoke landing page +
+   MkDocs Material documentation). Every token is a CSS custom property so a
+   developer can consume them directly, and a mapping block at the bottom wires
+   them into MkDocs Material's own --md-* variables via a custom stylesheet.
+
+   RATIONALE
+   - Palette is drawn from the two fixed brand assets: the pure-black KALIX
+     wordmark (thin, wide-tracked, geometric) and the alpine mountain-lake
+     banner. The banner gives us a deep lake/sky BLUE as the primary, PINE
+     GREEN as a sparing accent, and cool GRANITE-SLATE greys for neutrals.
+   - The result reads credible and scientific: restrained colour, hairline
+     dividers preferred over heavy shadow, small-to-moderate radii echoing the
+     precision of the wordmark.
+   - Type is the open-source IBM Plex superfamily — Plex Sans for UI/body,
+     Plex Mono for code and technical eyebrow labels. No licensing friction,
+     available on Google Fonts, and it sits comfortably on top of Material.
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------ *
+   * 1. COLOUR — PRIMARY  (alpine lake / sky blue)
+   *    Brand blue is --kx-primary-600. Scale runs tint→shade.
+   * ------------------------------------------------------------------ */
+  --kx-primary-50:  #eef4f9;
+  --kx-primary-100: #d6e5f0;
+  --kx-primary-200: #aecbe0;
+  --kx-primary-300: #7ba7c9;
+  --kx-primary-400: #4a80ac;
+  --kx-primary-500: #2a6a97;
+  --kx-primary-600: #1c5480;  /* ← primary brand blue (deep lake water) */
+  --kx-primary-700: #14405f;
+  --kx-primary-800: #0f3149;
+  --kx-primary-900: #0b2436;  /* near-navy, for dark bands & footer      */
+
+  --kx-primary:        var(--kx-primary-600);
+  --kx-primary-hover:  var(--kx-primary-700);
+  --kx-primary-active: var(--kx-primary-800);
+  --kx-primary-contrast: #ffffff;   /* text/icon colour on primary fills  */
+
+  /* ------------------------------------------------------------------ *
+   * 2. COLOUR — ACCENT  (pine / forest green — use SPARINGLY)
+   *    Reserved for a single highlight per view: a status dot, an active
+   *    tab underline, a "new" tag. Never a second primary.
+   * ------------------------------------------------------------------ */
+  --kx-accent-50:  #e9f1ec;
+  --kx-accent-100: #cfe1d6;
+  --kx-accent-300: #7fae93;
+  --kx-accent-500: #3d7d5c;
+  --kx-accent-600: #2f6b4f;  /* ← accent pine green                      */
+  --kx-accent-700: #245540;
+
+  --kx-accent:         var(--kx-accent-600);
+  --kx-accent-contrast: #ffffff;
+
+  /* ------------------------------------------------------------------ *
+   * 3. COLOUR — NEUTRALS  (cool granite slate, faint blue undertone)
+   * ------------------------------------------------------------------ */
+  --kx-neutral-0:   #ffffff;
+  --kx-neutral-50:  #f5f7f9;
+  --kx-neutral-100: #eaeef2;
+  --kx-neutral-200: #dce2e8;
+  --kx-neutral-300: #c3ccd4;
+  --kx-neutral-400: #9aa6b0;  /* granite */
+  --kx-neutral-500: #6f7d88;
+  --kx-neutral-600: #52606b;
+  --kx-neutral-700: #3a454e;
+  --kx-neutral-800: #262d34;
+  --kx-neutral-900: #151b21;  /* cool near-black */
+
+  /* ------------------------------------------------------------------ *
+   * 4. COLOUR — SURFACE, BACKGROUND, TEXT, BORDER
+   * ------------------------------------------------------------------ */
+  --kx-bg:            #ffffff;   /* page background — clean white "paper"  */
+  --kx-canvas:        #eceef1;   /* neutral surround behind the white page */
+  --kx-surface:       #ffffff;   /* cards, panels (separated by borders)   */
+  --kx-surface-sunken:#f4f6f9;   /* wells, table zebra, inline code, bands */
+  --kx-surface-raised:#ffffff;
+
+  --kx-text:          #1a232b;   /* primary body text                     */
+  --kx-text-muted:    #52606b;   /* secondary text, captions              */
+  --kx-text-subtle:   #6f7d88;   /* meta, disabled-ish, placeholders      */
+  --kx-text-inverse:  #f5f7f9;   /* text on dark bands                    */
+  --kx-link:          var(--kx-primary-600);
+  --kx-link-hover:    var(--kx-primary-700);
+
+  --kx-border:        #e4e9ee;   /* hairline divider / card border        */
+  --kx-border-strong: #cdd6de;   /* input borders, table outer rule       */
+  --kx-divider:       #eef1f4;   /* faint in-card rule                    */
+
+  /* ------------------------------------------------------------------ *
+   * 5. COLOUR — SEMANTIC  (muted, scientific; fg + soft tinted bg)
+   *    info=blue · success=pine · warning=amber · danger=brick
+   * ------------------------------------------------------------------ */
+  --kx-info:        #2a6a97;   --kx-info-bg:    #e9f1f7;   --kx-info-border:    #bcd6e8;
+  --kx-success:     #2f6b4f;   --kx-success-bg: #e7f0ea;   --kx-success-border: #bcd8c7;
+  --kx-warning:     #96631a;   --kx-warning-bg: #f7eeda;   --kx-warning-border: #e6d3a6;
+  --kx-danger:      #a63a30;   --kx-danger-bg:  #f6e7e5;   --kx-danger-border:  #e6c3bd;
+  --kx-note:        var(--kx-neutral-600); --kx-note-bg: var(--kx-neutral-50); --kx-note-border: var(--kx-border);
+
+  /* ------------------------------------------------------------------ *
+   * 6. TYPOGRAPHY
+   * ------------------------------------------------------------------ */
+  --kx-font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --kx-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --kx-font-display: var(--kx-font-sans);
+
+  /* type scale — 1rem = 16px base */
+  --kx-text-caption: 0.75rem;   /* 12px  captions, table meta            */
+  --kx-text-sm:      0.875rem;  /* 14px  small / UI labels               */
+  --kx-text-base:    1rem;      /* 16px  body                            */
+  --kx-text-lg:      1.125rem;  /* 18px  lead paragraph                  */
+  --kx-text-xl:      1.25rem;   /* 20px  h4 / small headings             */
+  --kx-text-2xl:     1.5rem;    /* 24px  h3                              */
+  --kx-text-3xl:     1.875rem;  /* 30px  h2                              */
+  --kx-text-4xl:     2.25rem;   /* 36px  h1 (docs page title)            */
+  --kx-text-5xl:     3rem;      /* 48px  landing section headers         */
+  --kx-text-display: 3.75rem;   /* 60px  landing hero headline           */
+
+  --kx-weight-regular:  400;
+  --kx-weight-medium:   500;
+  --kx-weight-semibold: 600;
+  --kx-weight-bold:     700;
+
+  --kx-leading-tight:   1.15;   /* display / hero                        */
+  --kx-leading-snug:    1.3;    /* headings                              */
+  --kx-leading-normal:  1.6;    /* body                                  */
+  --kx-leading-relaxed: 1.75;   /* long-form docs prose                  */
+
+  --kx-tracking-tight:  -0.02em;/* large display headings                */
+  --kx-tracking-normal: 0;
+  --kx-tracking-wide:   0.08em; /* mono eyebrow labels, wordmark echo    */
+  --kx-tracking-caps:   0.14em; /* all-caps micro labels                 */
+
+  /* ------------------------------------------------------------------ *
+   * 7. SPACING — 4px base, 8px rhythm
+   * ------------------------------------------------------------------ */
+  --kx-space-0:  0;
+  --kx-space-1:  0.25rem;  /*  4px */
+  --kx-space-2:  0.5rem;   /*  8px */
+  --kx-space-3:  0.75rem;  /* 12px */
+  --kx-space-4:  1rem;     /* 16px */
+  --kx-space-5:  1.5rem;   /* 24px */
+  --kx-space-6:  2rem;     /* 32px */
+  --kx-space-7:  2.5rem;   /* 40px */
+  --kx-space-8:  3rem;     /* 48px */
+  --kx-space-9:  4rem;     /* 64px */
+  --kx-space-10: 6rem;     /* 96px */
+
+  /* ------------------------------------------------------------------ *
+   * 8. RADIUS
+   * ------------------------------------------------------------------ */
+  --kx-radius-xs:   3px;   /* inline code, tags                         */
+  --kx-radius-sm:   5px;   /* buttons, inputs                          */
+  --kx-radius-md:   8px;   /* cards, callouts, code blocks             */
+  --kx-radius-lg:   12px;  /* large panels, image frames               */
+  --kx-radius-xl:   18px;  /* hero media frame                         */
+  --kx-radius-pill: 999px; /* pills, status dots                       */
+
+  /* ------------------------------------------------------------------ *
+   * 9. BORDERS & DIVIDERS
+   * ------------------------------------------------------------------ */
+  --kx-border-width: 1px;
+  --kx-border-line:  1px solid var(--kx-border);
+  --kx-border-line-strong: 1px solid var(--kx-border-strong);
+  --kx-focus-ring:   0 0 0 3px rgba(28, 84, 128, 0.28);  /* primary @ 28% */
+
+  /* ------------------------------------------------------------------ *
+   * 10. ELEVATION  (light, cool-tinted; used sparingly)
+   * ------------------------------------------------------------------ */
+  --kx-shadow-xs: 0 1px 2px rgba(21, 27, 33, 0.06);
+  --kx-shadow-sm: 0 1px 3px rgba(21, 27, 33, 0.08), 0 1px 2px rgba(21, 27, 33, 0.06);
+  --kx-shadow-md: 0 4px 12px rgba(21, 27, 33, 0.08), 0 1px 3px rgba(21, 27, 33, 0.06);
+  --kx-shadow-lg: 0 12px 32px rgba(21, 27, 33, 0.12), 0 3px 8px rgba(21, 27, 33, 0.06);
+
+  /* ------------------------------------------------------------------ *
+   * 11. LAYOUT
+   * ------------------------------------------------------------------ */
+  --kx-container:      1200px;  /* landing max content width             */
+  --kx-container-prose: 720px;  /* readable measure for docs prose       */
+  --kx-header-height:  64px;
+}
+
+/* ============================================================================
+   MkDocs Material bridge
+   ----------------------------------------------------------------------------
+   Drop this file into docs/stylesheets/ and reference it under
+   `extra_css:` in mkdocs.yml. The block below re-expresses the Kalix tokens
+   as Material's own custom properties so the docs inherit the palette and
+   type WITHOUT rebuilding the theme. Light scheme only.
+
+     theme:
+       palette:
+         scheme: default        # light mode only — no dark variant
+       font:
+         text: IBM Plex Sans
+         code: IBM Plex Mono
+   ========================================================================== */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:        var(--kx-primary-600);
+  --md-primary-fg-color--light: var(--kx-primary-400);
+  --md-primary-fg-color--dark:  var(--kx-primary-800);
+  --md-primary-bg-color:        var(--kx-primary-contrast);
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+
+  --md-accent-fg-color:         var(--kx-primary-700);
+  --md-accent-fg-color--transparent: rgba(28, 84, 128, 0.1);
+  --md-accent-bg-color:         #ffffff;
+
+  --md-default-bg-color:        var(--kx-bg);
+  --md-default-fg-color:        var(--kx-text);
+  --md-default-fg-color--light: var(--kx-text-muted);
+  --md-default-fg-color--lighter: var(--kx-text-subtle);
+  --md-default-fg-color--lightest: var(--kx-neutral-100);
+
+  --md-typeset-color:           var(--kx-text);
+  --md-typeset-a-color:         var(--kx-link);
+
+  /* code */
+  --md-code-fg-color:           var(--kx-neutral-800);
+  --md-code-bg-color:           var(--kx-surface-sunken);
+  --md-code-hl-color:           rgba(28, 84, 128, 0.15);
+
+  /* admonition accents — map the common types to Kalix semantics */
+  --md-admonition-fg-color:     var(--kx-text);
+  --md-admonition-bg-color:     var(--kx-surface);
+
+  /* footer & header sit on the deep brand navy */
+  --md-footer-bg-color:         var(--kx-primary-900);
+  --md-footer-bg-color--dark:   var(--kx-primary-900);
+  --md-footer-fg-color:         var(--kx-text-inverse);
+}
+
+/* Material admonition type → Kalix semantic colour (custom stylesheet) */
+[data-md-color-scheme="default"] .md-typeset .admonition.note,
+[data-md-color-scheme="default"] .md-typeset details.note {
+  border-color: var(--kx-note-border);
+}
+[data-md-color-scheme="default"] .md-typeset .admonition.tip,
+[data-md-color-scheme="default"] .md-typeset .admonition.success {
+  border-color: var(--kx-success-border);
+}
+[data-md-color-scheme="default"] .md-typeset .admonition.warning {
+  border-color: var(--kx-warning-border);
+}
+[data-md-color-scheme="default"] .md-typeset .admonition.danger,
+[data-md-color-scheme="default"] .md-typeset .admonition.bug {
+  border-color: var(--kx-danger-border);
+}
+[data-md-color-scheme="default"] .md-typeset .admonition.info,
+[data-md-color-scheme="default"] .md-typeset .admonition.abstract {
+  border-color: var(--kx-info-border);
+}
