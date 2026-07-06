@@ -9,4 +9,4 @@ title: Parameter types
 
 ## Table parameters
 
-![](../assets/concepts-parameter-types/image.png)
+![](../../assets/docs-concepts-parameter-types/image.png)

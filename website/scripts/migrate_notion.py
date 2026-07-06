@@ -95,6 +95,15 @@ MAP = {
 }
 
 
+# Documentation pages live under the /docs/ URL prefix (clean hub URL + plain
+# links); tutorials and the top-level pages stay where they are.
+def _phys(dest: str) -> str:
+    return dest if dest.startswith("tutorials/") else "docs/" + dest
+
+
+MAP = {_phys(k): v for k, v in MAP.items()}
+
+
 # Notion page name (lowercased) -> destination .md, for rewriting cross-links.
 # A value of None means "unwrap the link to plain text" (dropped/bespoke pages).
 NAME_TO_DEST = {}
@@ -102,8 +111,8 @@ for _dest, _sources in MAP.items():
     for _s in _sources:
         NAME_TO_DEST[_s.lower()] = _dest
 NAME_TO_DEST.update({
-    "glossary": "reference/glossary.md",
-    "nodes": "nodes/index.md",
+    "glossary": "docs/reference/glossary.md",
+    "nodes": "docs/nodes/index.md",
     "downloads": "downloads.md",
     "contact details": None,   # bespoke page — keep the text, drop the link
     "contact": None,
@@ -113,9 +122,9 @@ NAME_TO_DEST.update({
 # Pages kept in source but excluded from the built site — links to them are dead,
 # so unwrap them to plain text (mirrors mkdocs.yml exclude_docs).
 EXCLUDED_DESTS = {
-    "optimisation/algorithms/sc-sahel.md",
-    "optimisation/reparameterizations.md",
-    "developing/gory-details/python-api-brainstorm.md",
+    "docs/optimisation/algorithms/sc-sahel.md",
+    "docs/optimisation/reparameterizations.md",
+    "docs/developing/gory-details/python-api-brainstorm.md",
 }
 
 
@@ -275,10 +284,10 @@ def write_page(dest_rel: str, sources: list[str]):
     for i, name in enumerate(sources):
         subdir = None
         # Technical Reference GR4J/Sacramento live in their own folder
-        if dest_rel.startswith("reference/technical/"):
+        if dest_rel.startswith("docs/reference/technical/"):
             subdir = "Technical Reference"
-            name = {"reference/technical/gr4j.md": "GR4J",
-                    "reference/technical/sacramento.md": "Sacramento"}[dest_rel]
+            name = {"docs/reference/technical/gr4j.md": "GR4J",
+                    "docs/reference/technical/sacramento.md": "Sacramento"}[dest_rel]
         html_path = find_html(name, subdir)
         if not html_path:
             print(f"  ! source not found for '{name}' -> {dest_rel}")
@@ -314,7 +323,7 @@ def gen_glossary():
         desc = (r.get("Description") or "").strip().replace("\n", " ")
         if term:
             lines.append(f"| {term} | {desc} |")
-    (DOCS / "reference" / "glossary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (DOCS / "docs" / "reference" / "glossary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"  glossary: {len(rows)} terms")
 
 
@@ -339,7 +348,7 @@ def gen_nodes_index():
         slug = node_links.get(n)
         label = n.replace("_", " ")
         lines.append(f"| [{label}]({slug}/) | |" if slug else f"| {label} | |")
-    (DOCS / "nodes" / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (DOCS / "docs" / "nodes" / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"  nodes index: {len(names)} node types")
 
 
@@ -353,7 +362,7 @@ def main() -> int:
         if write_page(dest_rel, sources):
             ok += 1
     # Sacramento technical ref (second reference/technical page)
-    if write_page("reference/technical/sacramento.md", ["Sacramento"]):
+    if write_page("docs/reference/technical/sacramento.md", ["Sacramento"]):
         ok += 1
     print(f"converted {ok} pages")
     gen_glossary()

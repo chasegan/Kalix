@@ -100,9 +100,9 @@ extra:
 # Kept in the source tree but excluded from the built site (owner decision:
 # rough research/internal notes that shouldn't publish yet).
 exclude_docs: |
-  optimisation/algorithms/sc-sahel.md
-  optimisation/reparameterizations.md
-  developing/gory-details/python-api-brainstorm.md
+  docs/optimisation/algorithms/sc-sahel.md
+  docs/optimisation/reparameterizations.md
+  docs/developing/gory-details/python-api-brainstorm.md
 
 nav:
   # Home is the bespoke pass-through landing page (docs/index.html), served at the
@@ -120,63 +120,63 @@ nav:
           - Kalix binary path in KalixIDE: tutorials/resources/kalix-binary-path.md
           - Running notebooks with uv: tutorials/resources/notebooks-uv.md
   - Docs:
-      - docs_home.md
-      - Getting started: getting-started.md
+      - docs/index.md
+      - Getting started: docs/getting-started.md
       - Concepts:
-          - Model file structure: concepts/model-file-structure.md
-          - Conventions: concepts/conventions.md
-          - Ordering: concepts/ordering.md
+          - Model file structure: docs/concepts/model-file-structure.md
+          - Conventions: docs/concepts/conventions.md
+          - Ordering: docs/concepts/ordering.md
           - Dynamic expressions:
-              - concepts/dynamic-expressions/index.md
-              - Referencing input data: concepts/dynamic-expressions/referencing-input-data.md
-              - Referencing model results: concepts/dynamic-expressions/referencing-model-results.md
-              - Simulation context variables: concepts/dynamic-expressions/simulation-context-vars.md
-              - Constants: concepts/dynamic-expressions/constants.md
-          - Parameter types: concepts/parameter-types.md
-          - Data cache: concepts/data-cache.md
-          - Input data: concepts/input-data.md
-          - Model outputs: concepts/model-outputs.md
+              - docs/concepts/dynamic-expressions/index.md
+              - Referencing input data: docs/concepts/dynamic-expressions/referencing-input-data.md
+              - Referencing model results: docs/concepts/dynamic-expressions/referencing-model-results.md
+              - Simulation context variables: docs/concepts/dynamic-expressions/simulation-context-vars.md
+              - Constants: docs/concepts/dynamic-expressions/constants.md
+          - Parameter types: docs/concepts/parameter-types.md
+          - Data cache: docs/concepts/data-cache.md
+          - Input data: docs/concepts/input-data.md
+          - Model outputs: docs/concepts/model-outputs.md
       - Nodes:
-          - nodes/index.md
-          - Inflow: nodes/inflow.md
-          - GR4J: nodes/gr4j.md
-          - Sacramento: nodes/sacramento.md
-          - Storage: nodes/storage.md
-          - Storage tables: nodes/storage-tables.md
-          - Routing: nodes/routing.md
-          - Confluence: nodes/confluence.md
-          - Splitter: nodes/splitter.md
-          - Loss: nodes/loss.md
-          - Gauge: nodes/gauge.md
-          - Regulated user: nodes/regulated-user.md
-          - Unregulated user: nodes/unregulated-user.md
-          - Order control: nodes/order-control.md
-          - Blackhole: nodes/blackhole.md
+          - docs/nodes/index.md
+          - Inflow: docs/nodes/inflow.md
+          - GR4J: docs/nodes/gr4j.md
+          - Sacramento: docs/nodes/sacramento.md
+          - Storage: docs/nodes/storage.md
+          - Storage tables: docs/nodes/storage-tables.md
+          - Routing: docs/nodes/routing.md
+          - Confluence: docs/nodes/confluence.md
+          - Splitter: docs/nodes/splitter.md
+          - Loss: docs/nodes/loss.md
+          - Gauge: docs/nodes/gauge.md
+          - Regulated user: docs/nodes/regulated-user.md
+          - Unregulated user: docs/nodes/unregulated-user.md
+          - Order control: docs/nodes/order-control.md
+          - Blackhole: docs/nodes/blackhole.md
       - Using Kalix:
-          - KalixIDE: using/ide.md
-          - Kalix CLI: using/cli.md
-          - Kalix in Python: using/python.md
-          - Run Manager: using/run-manager.md
+          - KalixIDE: docs/using/ide.md
+          - Kalix CLI: docs/using/cli.md
+          - Kalix in Python: docs/using/python.md
+          - Run Manager: docs/using/run-manager.md
       - Optimisation:
-          - optimisation/index.md
-          - Objective functions: optimisation/objective-functions.md
+          - docs/optimisation/index.md
+          - Objective functions: docs/optimisation/objective-functions.md
           - Algorithms:
-              - Shuffled Complex Evolution (SCE): optimisation/algorithms/sce.md
-              - CMA-ES: optimisation/algorithms/cma-es.md
-              - Differential Evolution: optimisation/algorithms/differential-evolution.md
-              - DREAM: optimisation/algorithms/dream.md
+              - Shuffled Complex Evolution (SCE): docs/optimisation/algorithms/sce.md
+              - CMA-ES: docs/optimisation/algorithms/cma-es.md
+              - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
+              - DREAM: docs/optimisation/algorithms/dream.md
       - Reference:
-          - Glossary: reference/glossary.md
+          - Glossary: docs/reference/glossary.md
           - Technical reference:
-              - GR4J: reference/technical/gr4j.md
-              - Sacramento: reference/technical/sacramento.md
+              - GR4J: docs/reference/technical/gr4j.md
+              - Sacramento: docs/reference/technical/sacramento.md
       - Developing:
-          - Start developing: developing/start-developing.md
-          - The dev stack: developing/dev-stack.md
+          - Start developing: docs/developing/start-developing.md
+          - The dev stack: docs/developing/dev-stack.md
           - Gory details:
-              - developing/gory-details/index.md
-              - Architecture Decision Records: developing/gory-details/adrs.md
-      - Planned features: planned.md
+              - docs/developing/gory-details/index.md
+              - Architecture Decision Records: docs/developing/gory-details/adrs.md
+      - Planned features: docs/planned.md
   - Downloads: downloads.md
   - Code: code.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at

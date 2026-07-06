@@ -200,4 +200,4 @@ After the loop, you'll have six output files — each one a complete simulation 
 
 - **[Tutorial 5 — Running Kalix from Python](05-python.md)** — drive Kalix from a Jupyter notebook for analysis and post-processing. The complementary skill to the CLI: CLI for batch and automation, Python for analysis.
 
-For the full CLI reference (every command, every flag), see [Commandline](../using/cli.md).
+For the full CLI reference (every command, every flag), see [Commandline](../docs/using/cli.md).

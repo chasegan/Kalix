@@ -96,7 +96,7 @@ The default behaviour of storages is to NOT propagate any orders upstream. Howev
 
 A storage configured with a `target_level` will operate to satisfy downstream orders to the best of its ability (same as without a target level), but while doing so will also generate its own orders requesting water from upstream as needed to bring its level up to the specified target. In practice, operating targets help operators ensure that sufficient water is available where needed for smooth operation. Target\_level serves the same purpose in the model.
 
-![](../assets/nodes-storage/image.png)
+![](../../assets/docs-nodes-storage/image.png)
 
 Ordering to meet a `target_level` is imperfect. In the example above, ‘**kings\_weir**’ may not be able to precisely achieve a defined target level because:
 

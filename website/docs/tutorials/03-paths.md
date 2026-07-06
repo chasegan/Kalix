@@ -45,7 +45,7 @@ Kalix accepts three styles of path in `[inputs]`:
 | **Relative** | `../data/climate.csv` | Resolved against the folder the model file lives in. Travels as long as the folder structure around the model stays the same. |
 | **Trailhead** | `^/data/climate.csv` | Starts at the model's folder and searches *upward* through parent folders until the target is found. Travels gracefully when models move to different depths. |
 
-For the full reference on path syntax and resolution, see [Declaring Input Data](../concepts/input-data.md).
+For the full reference on path syntax and resolution, see [Declaring Input Data](../docs/concepts/input-data.md).
 
 # Step 1 — Run the baseline
 
