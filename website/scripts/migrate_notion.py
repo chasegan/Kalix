@@ -53,7 +53,7 @@ MAP = {
     "nodes/inflow.md": ["Inflow"],
     "nodes/gr4j.md": ["GR4J"],
     "nodes/sacramento.md": ["Sacramento"],
-    "nodes/storage.md": ["Storage"],
+    "nodes/storage/index.md": ["Storage"],
     "nodes/storage-tables.md": ["Inverted Pyramid Storage Tables"],
     "nodes/routing.md": ["Routing"],
     "nodes/confluence.md": ["Confluence"],

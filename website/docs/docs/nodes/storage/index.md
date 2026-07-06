@@ -37,7 +37,7 @@ ds_1 = my_other_node
 | order\_through (optional) | Optional boolean flag changing the ordering behaviour of the node such that downstream orders are propagated upstream verbatim. This functionality is explained in detail further down this page. Default is false. Example: `order_through = true` |
 | target\_level (optional) | Optional target level [m] which causes this storage node to generate orders to operate the storage near the target level. This functionality is explained in detail below. This feature cannot be used in combination with `order_through`.  Example: `target_level = if(sim.month>8, 8.0, 9.5)` |
 | pond\_demand (optional) | Optional on-pond demand [ML]. Example: `pond_demand = 15.0 * data.patterns_csv.by_name.amenities` |
-| dimensions (compulsory) | A tabulated list of values: level (m), volume (ML), area (km2), spill (ML/timestep). See [Table parameters](../concepts/parameter-types.md) to find out more about how table parameter types work in Kalix. Example: `dimensions = 90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8` |
+| dimensions (compulsory) | A tabulated list of values: level (m), volume (ML), area (km2), spill (ML/timestep). See [Table parameters](../../concepts/parameter-types.md) to find out more about how table parameter types work in Kalix. Example: `dimensions = 90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8` |
 | ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | This allows you to specify the properties of outlets on each of the corresponding links (ds\_1, ds\_2, etc). At the moment just one outlet property is supported, being the minimum operating level (MOL) of the outlet. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) If outlet properties are not defined the outlet on this link is assumed to be active and unlimited limit. Example: `ds_1_outlet = 81.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Additional link used to represent regulated flow pathways separate to the main downstream link. `ds_2 = tws_pipline` |
@@ -94,7 +94,7 @@ The default behaviour of storages is to NOT propagate any orders upstream. Howev
 
 A storage configured with a `target_level` will operate to satisfy downstream orders to the best of its ability (same as without a target level), but while doing so will also generate its own orders requesting water from upstream as needed to bring its level up to the specified target. In practice, operating targets help operators ensure that sufficient water is available where needed for smooth operation. Target\_level serves the same purpose in the model.
 
-![](../../assets/docs-nodes-storage/image.png)
+![](../../../assets/docs-nodes-storage-index/image.png)
 
 Ordering to meet a `target_level` is imperfect. In the example above, ‘**kings\_weir**’ may not be able to precisely achieve a defined target level because:
 
@@ -124,7 +124,7 @@ The storage with `order_through = true` operates to release orders for downstrea
 
 ## See also
 
-[Inverted Pyramid Storage Tables](storage-tables.md)
+[Inverted Pyramid Storage Tables](../storage-tables.md)
 
 ## References
 

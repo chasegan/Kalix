@@ -142,8 +142,9 @@ nav:
               - Routing: docs/nodes/routing.md
               - Sacramento: docs/nodes/sacramento.md
               - Splitter: docs/nodes/splitter.md
-              - Storage: docs/nodes/storage.md
-              - Storage tables: docs/nodes/storage-tables.md
+              - Storage:
+                  - docs/nodes/storage/index.md
+                  - Storage tables: docs/nodes/storage-tables.md
               - Unregulated user: docs/nodes/unregulated-user.md
           - "[outputs]": docs/concepts/model-outputs.md
       - KalixIDE: docs/using/ide.md
