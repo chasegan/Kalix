@@ -30,6 +30,13 @@
   font-weight: var(--kx-weight-semibold);
 }
 
+/* Top-level section items (the second nav level) read uniformly: leaf-page
+   links match the bold weight navigation.sections gives sibling section headers,
+   so e.g. "KalixIDE" and "Glossary" look like "Deep topics", not like children. */
+.md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link {
+  font-weight: var(--kx-weight-bold);
+}
+
 /* ---- Custom light top-nav (overrides/main.html), matching the landing ----- */
 .kx-header.md-header {
   position: sticky;
