@@ -10,9 +10,9 @@ title: "Tutorial 13 — Optimisation from Python"
 
 A Jupyter notebook that calibrates the Stringybark catchment model in one call, inspects the optimised parameters as a pandas object, and overlays the calibrated simulation against the observed record. This is the analysis-friendly counterpart to Tutorial 12's command-line workflow — same optimisation, same config file, driven from Python.
 
-![](../assets/tutorials-07-optimisation-python/image.png)
+![](../assets/tutorials-13-optimisation-python/image.png)
 
-![](../assets/tutorials-07-optimisation-python/image_1.png)
+![](../assets/tutorials-13-optimisation-python/image_1.png)
 
 ## Prerequisites
 
@@ -96,7 +96,7 @@ The arguments mirror the CLI:
 
 By default, `kalix.optimise()` prints a progress line while it runs — in a notebook it updates a single line in place (evaluations, best objective, elapsed time). The 60,000-evaluation run takes roughly **30 seconds**.
 
-![](../assets/tutorials-07-optimisation-python/image_2.png)
+![](../assets/tutorials-13-optimisation-python/image_2.png)
 
 If you want to handle progress callbacks yourself, pass `progress=<callable>` into the function. It is called once per generation with a dict (`n_evaluations`, `best_objective`, `elapsed_seconds`), and the built-in line is suppressed. Pass `progress=False` if you want to have no progress output.
 
@@ -142,7 +142,7 @@ params
 
 You'll get a tidy table of all 18 optimised values, indexed by target (e.g. `node.0001_sc_stringybark.lztwm`, `node.0001_sc_stringybark.rf_bias`). From here it's ordinary pandas — sort it, export it, or compare parameter sets across several calibrations.
 
-![](../assets/tutorials-07-optimisation-python/image_3.png)
+![](../assets/tutorials-13-optimisation-python/image_3.png)
 
 ## Step 6 — Simulate and plot the calibrated model
 
@@ -169,7 +169,7 @@ ax.legend();
 
 The calibrated simulation should track the observed hydrograph noticeably better than the starting model did.
 
-![](../assets/tutorials-07-optimisation-python/image_4.png)
+![](../assets/tutorials-13-optimisation-python/image_4.png)
 
 ## Step 7 (bonus) — The calibrated model as a string
 

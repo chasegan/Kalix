@@ -114,8 +114,8 @@ nav:
       - 03 · Relative & trailhead paths: tutorials/03-paths.md
       - 04 · Running from the commandline: tutorials/04-commandline.md
       - 05 · Running from Python: tutorials/05-python.md
-      - 06 · Optimisation from the commandline: tutorials/06-optimisation-cli.md
-      - 07 · Optimisation from Python: tutorials/07-optimisation-python.md
+      - 12 · Optimisation from the commandline: tutorials/12-optimisation-cli.md
+      - 13 · Optimisation from Python: tutorials/13-optimisation-python.md
   - Docs:
       - docs/index.md
       - Getting started: docs/getting-started.md

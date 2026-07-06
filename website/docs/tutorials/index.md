@@ -19,8 +19,8 @@ Each tutorial is self-contained, with sample data, model files and expected outp
 
 <div class="kx-track-label">Calibration &amp; analysis</div>
 <div class="kx-track">
-<a class="kx-tl-item" href="06-optimisation-cli/"><span class="kx-tl-num">6</span><span><span class="kx-tl-title">Optimisation from the commandline</span><br><span class="kx-tl-desc">Calibrate with the built-in optimiser</span></span></a>
-<a class="kx-tl-item" href="07-optimisation-python/"><span class="kx-tl-num">7</span><span><span class="kx-tl-title">Optimisation from Python</span><br><span class="kx-tl-desc">Run calibrations from a notebook</span></span></a>
+<a class="kx-tl-item" href="12-optimisation-cli/"><span class="kx-tl-num">12</span><span><span class="kx-tl-title">Optimisation from the commandline</span><br><span class="kx-tl-desc">Calibrate with the built-in optimiser</span></span></a>
+<a class="kx-tl-item" href="13-optimisation-python/"><span class="kx-tl-num">13</span><span><span class="kx-tl-title">Optimisation from Python</span><br><span class="kx-tl-desc">Run calibrations from a notebook</span></span></a>
 <div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">Single-catchment &amp; multi-objective calibration</span><br><span class="kx-tl-desc kx-muted">Coming soon · incl. split-sample validation</span></span></div>
 </div>
 

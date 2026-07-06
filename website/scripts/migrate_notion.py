@@ -89,8 +89,8 @@ MAP = {
     "tutorials/03-paths.md": ["Tutorial 3"],
     "tutorials/04-commandline.md": ["Tutorial 4"],
     "tutorials/05-python.md": ["Tutorial 5"],
-    "tutorials/06-optimisation-cli.md": ["Tutorial 12"],
-    "tutorials/07-optimisation-python.md": ["Tutorial 13"],
+    "tutorials/12-optimisation-cli.md": ["Tutorial 12"],
+    "tutorials/13-optimisation-python.md": ["Tutorial 13"],
     # Setup how-tos: live under Docs > Using Kalix (not Tutorials).
     "using/kalix-binary-path.md": ["Specifying the Kalix binary path"],
     "using/notebooks-uv.md": ["Running Python Notebooks"],
