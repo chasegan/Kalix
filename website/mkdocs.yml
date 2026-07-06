@@ -145,7 +145,10 @@ nav:
               - Storage tables: docs/nodes/storage-tables.md
               - Unregulated user: docs/nodes/unregulated-user.md
           - "[outputs]": docs/concepts/model-outputs.md
-      - Concepts:
+      - KalixIDE: docs/using/ide.md
+      - Kalix CLI: docs/using/cli.md
+      - Kalix in Python: docs/using/python.md
+      - Deep topics:
           - Conventions: docs/concepts/conventions.md
           - Ordering: docs/concepts/ordering.md
           - Dynamic expressions:
@@ -155,10 +158,6 @@ nav:
               - Simulation context variables: docs/concepts/dynamic-expressions/simulation-context-vars.md
           - Parameter types: docs/concepts/parameter-types.md
           - Data cache: docs/concepts/data-cache.md
-      - Using Kalix:
-          - KalixIDE: docs/using/ide.md
-          - Kalix CLI: docs/using/cli.md
-          - Kalix in Python: docs/using/python.md
           - Run Manager: docs/using/run-manager.md
           - Kalix binary path in KalixIDE: docs/using/kalix-binary-path.md
           - Running notebooks with uv: docs/using/notebooks-uv.md
