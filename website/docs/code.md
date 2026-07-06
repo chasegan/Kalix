@@ -6,7 +6,7 @@ title: Code
 
 Kalix is open source under the MPL 2.0. The engine is Rust, the IDE is Java, and a Python package wraps the Rust core.
 
-<span class="kx-pill">MPL 2.0</span> <span class="kx-pill">Rust · Java · Python</span> [<span class="kx-pill kx-pill--accent">github.com/chasegan/Kalix ↗</span>](https://github.com/chasegan/Kalix)
+[<span class="kx-pill kx-pill--accent">github.com/chasegan/Kalix ↗</span>](https://github.com/chasegan/Kalix)
 
 ## Latest stats
 
