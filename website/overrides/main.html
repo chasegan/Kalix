@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{#-
+  Custom light top-nav matching the bespoke landing page, applied to every
+  Material-themed page. Keeps Material's search dialog and the mobile drawer
+  toggle; replaces the default (themed) header bar and the tabs row.
+-#}
+{% block header %}
+<header class="md-header kx-header" data-md-component="header">
+  <nav class="kx-header-inner" aria-label="{{ lang.t('header') }}">
+
+    {# mobile drawer toggle (hidden on wide screens via CSS) #}
+    <label class="md-header__button md-icon kx-drawer-btn" for="__drawer">
+      {% include ".icons/material/menu.svg" %}
+    </label>
+
+    {# wordmark → bespoke landing page #}
+    <a href="{{ 'index.html' | url }}" class="kx-brand" title="{{ config.site_name }}">
+      <img src="{{ 'assets/wordmark.png' | url }}" alt="Kalix">
+    </a>
+
+    {# primary navigation #}
+    <nav class="kx-topnav">
+      <a href="{{ 'tutorials/' | url }}">Tutorials</a>
+      <a href="{{ 'docs_home/' | url }}">Docs</a>
+      <a href="{{ 'code/' | url }}">Code</a>
+      <a href="{{ 'contact/' | url }}">Contact</a>
+    </nav>
+
+    <div class="kx-header-spacer"></div>
+
+    {# search (keeps Material's search UI + JS) #}
+    {% if "material/search" in config.plugins %}
+      {% set search = config.plugins["material/search"] | attr("config") %}
+      {% if search.enabled %}
+        <label class="md-header__button md-icon" for="__search">
+          {% include ".icons/material/magnify.svg" %}
+        </label>
+        {% include "partials/search.html" %}
+      {% endif %}
+    {% endif %}
+
+    {# utility links + download #}
+    <div class="kx-topnav-util">
+      <a href="https://github.com/chasegan/Kalix">GitHub&nbsp;↗</a>
+      <a href="https://pypi.org/project/kalix/">PyPI&nbsp;↗</a>
+      <a href="{{ 'downloads/' | url }}" class="kx-download-btn">Download</a>
+    </div>
+
+  </nav>
+</header>
+{% endblock %}
+
+{#- The custom header supplies the primary nav, so drop Material's tabs row. -#}
+{% block tabs %}{% endblock %}

@@ -30,13 +30,52 @@
   font-weight: var(--kx-weight-semibold);
 }
 
-/* ---- Header: brand navy, matching the design's dark top-nav --------------- */
-.md-header {
-  background-color: var(--kx-primary-900);
-  box-shadow: var(--kx-shadow-sm);
+/* ---- Custom light top-nav (overrides/main.html), matching the landing ----- */
+.kx-header.md-header {
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--kx-border);
+  color: var(--kx-text);
+  box-shadow: none;
 }
-.md-tabs {
-  background-color: var(--kx-primary-900);
+.kx-header-inner {
+  max-width: var(--kx-container);
+  margin: 0 auto;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.kx-brand { display: inline-flex; align-items: center; }
+.kx-brand img { height: 24px; width: auto; display: block; }
+.kx-topnav { display: flex; gap: 28px; font-size: 15px; font-weight: var(--kx-weight-medium); }
+.kx-topnav a { color: var(--kx-text-muted); text-decoration: none; transition: color .15s; }
+.kx-topnav a:hover, .kx-topnav a.kx-active { color: var(--kx-text); }
+.kx-header-spacer { flex: 1 1 auto; }
+.kx-topnav-util { display: flex; align-items: center; gap: 16px; }
+.kx-topnav-util a {
+  font-family: var(--kx-font-mono); font-size: 13px;
+  color: var(--kx-text-muted); text-decoration: none; transition: color .15s;
+}
+.kx-topnav-util a:hover { color: var(--kx-text); }
+.kx-download-btn {
+  font-family: var(--kx-font-sans) !important; font-size: 14px; font-weight: var(--kx-weight-semibold);
+  color: #fff !important; background: var(--kx-primary-600);
+  border-radius: var(--kx-radius-sm); padding: 8px 16px; transition: background-color .15s;
+}
+.kx-download-btn:hover { background: var(--kx-primary-700); }
+/* Header icons (search, drawer) in ink, not white */
+.kx-header .md-header__button { color: var(--kx-text-muted); }
+.kx-header .md-search__form { background: var(--kx-surface-sunken); }
+/* Hide the mobile drawer toggle on wide screens; show the topnav */
+@media (max-width: 76.1875em) {
+  .kx-topnav, .kx-topnav-util { display: none; }
+}
+@media (min-width: 76.25em) {
+  .kx-drawer-btn { display: none; }
 }
 
 /* ---- Inline + block code -------------------------------------------------- */
