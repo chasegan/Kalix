@@ -151,17 +151,13 @@ nav:
       - Kalix in Python: docs/using/python.md
       - Deep topics:
           - Conventions: docs/concepts/conventions.md
-          - Ordering: docs/concepts/ordering.md
+          - Data cache: docs/concepts/data-cache.md
           - Dynamic expressions:
               - docs/concepts/dynamic-expressions/index.md
               - Referencing input data: docs/concepts/dynamic-expressions/referencing-input-data.md
               - Referencing model results: docs/concepts/dynamic-expressions/referencing-model-results.md
               - Simulation context variables: docs/concepts/dynamic-expressions/simulation-context-vars.md
-          - Parameter types: docs/concepts/parameter-types.md
-          - Data cache: docs/concepts/data-cache.md
-          - Run Manager: docs/using/run-manager.md
           - Kalix binary path in KalixIDE: docs/using/kalix-binary-path.md
-          - Running notebooks with uv: docs/using/notebooks-uv.md
           - Optimisation:
               - docs/optimisation/index.md
               - Objective functions: docs/optimisation/objective-functions.md
@@ -170,9 +166,13 @@ nav:
                   - CMA-ES: docs/optimisation/algorithms/cma-es.md
                   - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
                   - DREAM: docs/optimisation/algorithms/dream.md
+          - Ordering: docs/concepts/ordering.md
+          - Parameter types: docs/concepts/parameter-types.md
           - Rainfall-runoff models:
               - GR4J: docs/reference/technical/gr4j.md
               - Sacramento: docs/reference/technical/sacramento.md
+          - Run Manager: docs/using/run-manager.md
+          - Running notebooks with uv: docs/using/notebooks-uv.md
       - Glossary: docs/reference/glossary.md
   - Downloads: downloads.md
   - Code:
