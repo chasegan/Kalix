@@ -1,6 +1,6 @@
 [package]
 name = "kalix"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 
 # Keep the published crate / sdist lean. Without this, `cargo package` (and the
