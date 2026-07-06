@@ -1,11 +1,12 @@
 use std::any::Any;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use std::io::Write;
 use crate::apis::stdio::session::{Session, SessionControl, SessionError};
 use crate::apis::stdio::transport::{Transport, TransportError};
-use crate::apis::stdio::commands::{CommandRegistry, CommandError};
+use crate::apis::stdio::commands::{Command, CommandRegistry, CommandError};
 use crate::apis::stdio::messages::*;
 
 /// How long the busy loop waits on stdin before re-checking whether the
@@ -165,11 +166,22 @@ enum StartOutcome {
     Busy(BusyContext),
 }
 
-/// Validate and launch a command on a worker thread.
+/// Validate and launch a command.
 ///
-/// On success the session moves into the worker; the returned `BusyContext`
-/// holds the completion channel and the control handles the loop needs to
-/// service interrupts and queries in the meantime.
+/// Interruptible commands (simulation, optimisation) are handed to a worker
+/// thread so the session loop can keep servicing `stp`/`query`/`term` while they
+/// run; the returned `BusyContext` carries the completion channel and control
+/// handles for that.
+///
+/// Non-interruptible commands (`get_result`, `get_state`, `load_model`, …) cannot
+/// be stopped, so there is nothing to offload: they run *synchronously* on the
+/// session-loop thread and the session never leaves it. This is deliberate. It
+/// keeps the session resident between calls, so a burst of `get_result` fetches is
+/// drained one at a time from the ready branch — rather than a second fetch
+/// arriving while a worker still owns the session and being rejected by the
+/// busy-branch `other` arm ("Cannot process 'cmd' message while busy"). The wire
+/// sequence is identical either way (`bsy` → `res`/`err` → `rdy`); only the timing
+/// and the absence of a worker differ.
 fn start_command(
     transport: &Transport,
     registry: &CommandRegistry,
@@ -197,21 +209,74 @@ fn start_command(
         return Ok(StartOutcome::Ready(session));
     }
 
+    let progress_callback = make_progress_callback(transport, session_id);
+
+    if !is_interruptible {
+        // Synchronous path: run inline, report the result, hand the session back.
+        // finish_command sends `res`/`err` + `rdy` and calls set_ready, so the
+        // session is resident again before the loop reads the next message.
+        let completion = execute_to_completion(command_spec, session, command, parameters, progress_callback);
+        let session = finish_command(transport, completion)?;
+        return Ok(StartOutcome::Ready(session));
+    }
+
+    // Interruptible path: hand the session to a worker for the command's duration.
     let control = session.control();
     let state_snapshot = session.get_state_info();
+    let (done_tx, done_rx) = channel();
+    std::thread::spawn(move || {
+        // If the receiver is gone the session loop is already exiting.
+        let _ = done_tx.send(execute_to_completion(
+            command_spec, session, command, parameters, progress_callback));
+    });
 
-    // Progress messages are written by the worker thread directly to the
-    // shared, mutex-guarded stdout writer.
-    let progress_session_id = session_id.clone();
+    Ok(StartOutcome::Busy(BusyContext { done_rx, control, state_snapshot }))
+}
+
+/// Run a command to completion, catching panics so a misbehaving command fails
+/// its own request rather than tearing down the session loop. The session travels
+/// through by value and returns inside the `CommandCompletion`, so ownership can
+/// flow back to the loop whether the command ran inline or on a worker thread.
+fn execute_to_completion(
+    command_spec: Arc<dyn Command>,
+    mut session: Session,
+    command: String,
+    parameters: serde_json::Value,
+    progress_callback: Box<dyn Fn(ProgressInfo) + Send + Sync>,
+) -> CommandCompletion {
+    let start_time = Instant::now();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        command_spec.execute(&mut session, parameters, progress_callback)
+    }))
+    .unwrap_or_else(|panic_info| {
+        Err(CommandError::ExecutionError(
+            format!("Command panicked: {}", panic_message(&panic_info))
+        ))
+    });
+
+    CommandCompletion {
+        session,
+        command,
+        result,
+        execution_time_ms: duration_to_ms(start_time.elapsed()),
+    }
+}
+
+/// Build the progress callback a command uses to stream `prg` messages to the
+/// shared, mutex-guarded stdout writer.
+fn make_progress_callback(
+    transport: &Transport,
+    session_id: String,
+) -> Box<dyn Fn(ProgressInfo) + Send + Sync> {
     let stdout = transport.stdout.clone();
-    let progress_callback = Box::new(move |progress: ProgressInfo| {
+    Box::new(move |progress: ProgressInfo| {
         // Use override values if provided, otherwise use percent-based progress
         let current = progress.current.unwrap_or(progress.percent_complete as i64);
         let total = progress.total.unwrap_or(100);
         let task_type = progress.task_type.unwrap_or_else(|| "sim".to_string());
 
         let progress_msg = create_progress_message(
-            progress_session_id.clone(),
+            session_id.clone(),
             current,
             total,
             task_type,
@@ -224,31 +289,7 @@ fn start_command(
                 let _ = stdout.flush();
             }
         }
-    });
-
-    let (done_tx, done_rx) = channel();
-    let mut session = session;
-    std::thread::spawn(move || {
-        let start_time = Instant::now();
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            command_spec.execute(&mut session, parameters, progress_callback)
-        }))
-        .unwrap_or_else(|panic_info| {
-            Err(CommandError::ExecutionError(
-                format!("Command panicked: {}", panic_message(&panic_info))
-            ))
-        });
-
-        // If the receiver is gone the session loop is already exiting.
-        let _ = done_tx.send(CommandCompletion {
-            session,
-            command,
-            result,
-            execution_time_ms: duration_to_ms(start_time.elapsed()),
-        });
-    });
-
-    Ok(StartOutcome::Busy(BusyContext { done_rx, control, state_snapshot }))
+    })
 }
 
 /// Report a completed command per the protocol and return the session to the
@@ -414,5 +455,39 @@ mod tests {
 
         let query_type = extract_query_type(&msg).unwrap();
         assert_eq!(query_type, "get_state");
+    }
+
+    // Non-interruptible commands must execute synchronously in the session loop
+    // (StartOutcome::Ready), not on a worker (StartOutcome::Busy). This is the
+    // invariant that fixes the get_result busy-rejection bug: running inline keeps
+    // the session resident, so a burst of get_result commands is drained one at a
+    // time from the ready branch instead of a second fetch arriving while a worker
+    // still owns the session and being rejected ("Cannot process 'cmd' while busy").
+    #[test]
+    fn non_interruptible_command_runs_inline() {
+        let transport = Transport::new();
+        let registry = CommandRegistry::new();
+        // get_version is non-interruptible and needs no loaded model.
+        let outcome = start_command(&transport, &registry, Session::new(),
+            "get_version".to_string(), serde_json::json!({}))
+            .expect("start_command should not fail");
+        assert!(matches!(outcome, StartOutcome::Ready(_)),
+            "non-interruptible command must run inline and return Ready");
+    }
+
+    // Interruptible commands must still go to a worker so the loop can service
+    // stp/query/term while they run.
+    #[test]
+    fn interruptible_command_runs_on_worker() {
+        let transport = Transport::new();
+        let registry = CommandRegistry::new();
+        // run_simulation is interruptible; with no model it fails fast on the
+        // worker, but start_command returns Busy immediately regardless. Dropping
+        // the returned BusyContext drops done_rx; the worker's send then no-ops.
+        let outcome = start_command(&transport, &registry, Session::new(),
+            "run_simulation".to_string(), serde_json::json!({}))
+            .expect("start_command should not fail");
+        assert!(matches!(outcome, StartOutcome::Busy(_)),
+            "interruptible command must run on a worker and return Busy");
     }
 }

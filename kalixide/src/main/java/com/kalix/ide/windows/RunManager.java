@@ -1013,6 +1013,11 @@ public class RunManager extends JFrame {
      * to reflect the new active tab's selected series.
      */
     private void onTabChanged() {
+        // Adding the default tabs in createDetailsComponents() auto-selects the first tab,
+        // firing this callback before initializeManagers() has constructed fetchCoordinator.
+        // Nothing to sync during construction (the tree is empty), so bail out early.
+        if (fetchCoordinator == null) return;
+
         Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
         if (tabSeries == null) return;
 
