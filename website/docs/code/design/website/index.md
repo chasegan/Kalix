@@ -1,8 +1,8 @@
 ---
-title: Web design
+title: Website
 ---
 
-# Web design
+# Website
 
 The website's visual system is documented alongside the design assets in the repository.
 
