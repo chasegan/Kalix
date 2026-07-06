@@ -65,7 +65,7 @@ MAP = {
     "nodes/order-control.md": ["Order_Control"],
     "nodes/blackhole.md": ["Blackhole"],
     "using/ide.md": ["Kalix IDE"],
-    "using/cli.md": ["Commandline"],
+    # using/cli.md is hand-written (a bespoke CLI reference, not Notion tables).
     # using/python.md is hand-written (the Notion page was an empty placeholder).
     "using/run-manager.md": ["Run management"],
     "optimisation/index.md": ["Optimisation"],

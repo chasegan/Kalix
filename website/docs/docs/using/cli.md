@@ -1,72 +1,104 @@
 ---
-title: "Commandline"
+title: Commandline
 ---
 
 # Commandline
 
-The commandline executable, “kalix”, can be used to run models, calibrations, and do other modelling tasks from the commandline.
+`kalix` runs models, calibrations, and other modelling tasks from the terminal.
 
-|  |  |
-| --- | --- |
-| **Usage:** | kalix <COMMAND> |
-| **Commands:** |  |
-| help | Shows this help, or help for the given subcommand(s) |
-| simulate [alias: sim] | Run simulation (use “kalix help simulate” to see usage) |
-| optimise [alias: opt] | Run optimisation (use “kalix help optimise” to see usage) |
-| new-session | Open a new interactive session. In this “session” mode, the kalix engine engages in two-way communicating over STDIO using a bespoke protocol. This was primarily developed for background communication between the kalix engine and kalixide. |
-| get-api | Returns this commandline API specification as JSON |
-| **Options:** |  |
-| -h, --help | Print help |
-| -v, --version | Print the current kalix version |
+**Usage** — `kalix <COMMAND>`
 
-Examples:
+**Commands**
 
-|  |
-| --- |
-| > kalix help |
-| > kalix get-api |
-| > kalix new-session |
+`help`
+:   Show help, or help for a given subcommand.
 
-## Subcommands
+`simulate` · alias `sim`
+:   Run a simulation — see [simulate](#simulate).
 
-#### Simulate [alias: sim]
+`optimise` · alias `opt`
+:   Run an optimisation — see [optimise](#optimise).
 
-*(use “kalix help simulate” in a terminal to see this):*
+`new-session`
+:   Open an interactive session; the engine communicates two-way over STDIO using a bespoke protocol (used internally by KalixIDE).
 
-|  |  |
-| --- | --- |
-| **Usage:** | kalix simulate <MODEL\_FILE> [OPTIONS] |
-| **Arguments:** |  |
-| <MODEL\_FILE> | Path to the model file |
-| **Options:** |  |
-| -o, --output-file <OUTPUT\_FILE> | File where you want the model results to be saved |
-| -p, --profile | Performance profiling figures reported to the console |
-| -m, --mass-balance <MASS\_BALANCE> | File where you want the mass balance report to be saved |
-| -v, --verify-mass-balance <VERIFY\_MASS\_BALANCE> | File of existing mass balance report if you want to verify no change |
-| -h, --help | Print help |
+`get-api`
+:   Print this commandline API specification as JSON.
 
-Examples:
+**Options**
 
-|  |
-| --- |
-| > kalix simulate my\_model.ini -o results.csv |
+`-h`, `--help`
+:   Print help.
 
-#### Optimise [alias: opt]
+`-v`, `--version`
+:   Print the current kalix version.
 
-*(use “kalix help optimise” in a terminal to see this):*
+**Examples**
 
-|  |  |
-| --- | --- |
-| **Usage:** | kalix optimise <CONFIG\_FILE> [MODEL\_FILE] [OPTIONS] |
-| **Arguments:** |  |
-| <CONFIG\_FILE> | Path to the optimisation configuration file |
-| [MODEL\_FILE] | Path to the model file. It is also possible to specify the model file in the optimisation config, therefore this argument is optional. |
-| **Options:** |  |
-| -s, --save-model <SAVE\_MODEL> | Path to save the optimized model file (.ini) |
-| -h, --help | Print help |
+```console
+$ kalix help
+$ kalix get-api
+$ kalix new-session
+```
 
-Examples:
+## simulate
 
-|  |
-| --- |
-| > kalix optimise config.ini model.ini -s calibrated\_model.ini |
+Run a simulation. Alias: `sim`.
+
+**Usage** — `kalix simulate <MODEL_FILE> [OPTIONS]`
+
+**Arguments**
+
+`<MODEL_FILE>`
+:   Path to the model file.
+
+**Options**
+
+`-o`, `--output-file <OUTPUT_FILE>`
+:   File to save the model results to.
+
+`-p`, `--profile`
+:   Report performance-profiling figures to the console.
+
+`-m`, `--mass-balance <MASS_BALANCE>`
+:   File to save the mass-balance report to.
+
+`-v`, `--verify-mass-balance <VERIFY_MASS_BALANCE>`
+:   Existing mass-balance report to verify against — checks that nothing has changed.
+
+`-h`, `--help`
+:   Print help.
+
+**Example**
+
+```console
+$ kalix simulate my_model.ini -o results.csv
+```
+
+## optimise
+
+Run an optimisation. Alias: `opt`.
+
+**Usage** — `kalix optimise <CONFIG_FILE> [MODEL_FILE] [OPTIONS]`
+
+**Arguments**
+
+`<CONFIG_FILE>`
+:   Path to the optimisation configuration file.
+
+`[MODEL_FILE]`
+:   Path to the model file. Optional — the model file can also be set inside the optimisation config.
+
+**Options**
+
+`-s`, `--save-model <SAVE_MODEL>`
+:   Path to save the optimised model file (`.ini`).
+
+`-h`, `--help`
+:   Print help.
+
+**Example**
+
+```console
+$ kalix optimise config.ini model.ini -s calibrated_model.ini
+```

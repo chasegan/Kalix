@@ -196,6 +196,19 @@
   border-radius: var(--kx-radius-xs); padding: 4px 10px; color: var(--kx-neutral-800);
 }
 
+/* ---- Commandline: flag/description reference lists (def_list) -------------- */
+.md-typeset dl { margin: var(--kx-space-2) 0 var(--kx-space-5); }
+.md-typeset dl dt {
+  margin-top: var(--kx-space-3);
+  font-weight: var(--kx-weight-normal);
+}
+.md-typeset dl dt > code { font-size: var(--kx-text-sm); }
+.md-typeset dl dd {
+  margin: 1px 0 0 var(--kx-space-5);
+  color: var(--kx-text-muted);
+  font-size: var(--kx-text-sm);
+}
+
 /* ---- Code: latest-stats split + toolchain cards --------------------------- */
 .kx-stats-split {
   display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr);
