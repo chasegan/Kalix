@@ -21,6 +21,10 @@
   .kx-btn-primary:hover { background: var(--kx-primary-700) !important; }
   .kx-linkcard { transition: border-color .15s, box-shadow .15s; }
   .kx-linkcard:hover { border-color: var(--kx-primary-400) !important; box-shadow: var(--kx-shadow-sm); }
+  .kx-tag { font-family: var(--kx-font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border-radius: var(--kx-radius-pill); padding: 2px 8px; white-space: nowrap; }
+  .kx-tag-lead { color: var(--kx-accent-700); background: var(--kx-accent-50); border: 1px solid var(--kx-accent-100); }
+  .kx-tag-role { color: var(--kx-text-subtle); background: var(--kx-surface-sunken); border: 1px solid var(--kx-border); }
+  .kx-person-tags { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   @media (max-width: 720px) {
     .kx-two-col { grid-template-columns: 1fr !important; }
   }
@@ -56,10 +60,21 @@
       <div style="border: 1px solid var(--kx-border-strong); border-radius: var(--kx-radius-lg); padding: 26px;">
         <p style="margin: 0 0 18px; font-family: var(--kx-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--kx-text-subtle);">Team</p>
         <div style="display: flex; flex-direction: column; gap: 18px;">
-          <div><div style="display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;"><span style="font-size: 16px; font-weight: 600;">Chas Egan</span><span style="font-family: var(--kx-font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kx-accent-700); background: var(--kx-accent-50); border: 1px solid var(--kx-accent-100); border-radius: var(--kx-radius-pill); padding: 2px 8px;">Project lead</span></div><a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="2d4e454c5e6d42494554495f4241424a54034e4240">[email&#160;protected]</span></a></div>
-          <div><div style="font-size: 16px; font-weight: 600;">Sanne Voogt</div><a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="1063717e7e75507f74786974627f7c7f77693e737f7d">[email&#160;protected]</span></a></div>
-          <div><div style="font-size: 16px; font-weight: 600;">Matthew Gooda</div></div>
-          <div><div style="font-size: 16px; font-weight: 600;">Ciaran Komarakul-Greene</div><a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="6f0c060e1d0e012f000b07160b1d0003000816410c0002">[email&#160;protected]</span></a></div>
+          <div>
+            <div class="kx-person-tags"><span style="font-size: 16px; font-weight: 600;">Chas Egan</span><span class="kx-tag kx-tag-lead">Project lead</span><span class="kx-tag kx-tag-role">Senior hydrologist</span><span class="kx-tag kx-tag-role">Developer</span></div>
+            <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="2d4e454c5e6d42494554495f4241424a54034e4240">[email&#160;protected]</span></a>
+          </div>
+          <div>
+            <div class="kx-person-tags"><span style="font-size: 16px; font-weight: 600;">Sanne Voogt</span><span class="kx-tag kx-tag-role">Senior hydrologist</span><span class="kx-tag kx-tag-role">SME</span></div>
+            <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="1063717e7e75507f74786974627f7c7f77693e737f7d">[email&#160;protected]</span></a>
+          </div>
+          <div>
+            <div class="kx-person-tags"><span style="font-size: 16px; font-weight: 600;">Matthew Gooda</span><span class="kx-tag kx-tag-role">Senior hydrologist</span><span class="kx-tag kx-tag-role">SME</span></div>
+          </div>
+          <div>
+            <div class="kx-person-tags"><span style="font-size: 16px; font-weight: 600;">Ciaran Komarakul-Greene</span><span class="kx-tag kx-tag-role">Developer</span></div>
+            <a href="#" style="font-family: var(--kx-font-mono); font-size: 13px; color: var(--kx-primary-600); text-decoration: none;"><span class="__cf_email__" data-cfemail="6f0c060e1d0e012f000b07160b1d0003000816410c0002">[email&#160;protected]</span></a>
+          </div>
         </div>
       </div>
       <div style="border: 1px solid var(--kx-border); border-radius: var(--kx-radius-lg); padding: 26px;">
