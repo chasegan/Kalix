@@ -127,6 +127,16 @@ EXCLUDED_DESTS = {
     "docs/optimisation/reparameterizations.md",
 }
 
+# Absolute links to the old Notion site (www.notion.so/<32-hex-id>) that the
+# relative-.html resolver can't catch. Map each page id to a local dest, or None
+# to unwrap to plain text (page excluded / no equivalent). No notion.so link may
+# survive into the built site.
+NOTION_LINKS = {
+    "2883cd7417a2804cbba1c2023f7c8465": "docs/nodes/gr4j.md",        # GR4J node
+    "2883cd7417a2800b84d6e72bc5b39bf5": "docs/nodes/sacramento.md",  # Sacramento node
+    "13e3cd7417a2807da8a9d1a5d1d303b7": None,                        # Reparameterisations (excluded)
+}
+
 # Title overrides: the "Components" nav pages are titled by their model-file
 # section marker rather than their Notion name.
 TITLE_OVERRIDE = {
@@ -250,6 +260,14 @@ def rewrite_anchors(body, src_dir: Path, slug: str, depth: int, source_dir: str)
     dest_dir = ASSETS / slug
     for a in list(body.find_all("a")):
         href = a.get("href", "")
+        if "notion.so" in href:  # stray absolute links to the old Notion site
+            m = re.search(r"([0-9a-f]{32})", href.replace("-", ""))
+            dest = NOTION_LINKS.get(m.group(1)) if m else None
+            if dest and dest not in EXCLUDED_DESTS:
+                a["href"] = posixpath.relpath(dest, source_dir or ".")
+            else:
+                a.unwrap()  # excluded / unknown page -> plain text
+            continue
         if not href or href.startswith(("http://", "https://", "mailto:", "#")):
             continue
         raw = unquote(href)

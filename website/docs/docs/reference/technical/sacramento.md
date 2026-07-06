@@ -4,7 +4,7 @@ title: "Sacramento"
 
 # Sacramento
 
-This page is the technical reference for the Sacramento Soil Moisture Accounting (SAC-SMA) rainfall-runoff model used by the [Sacramento node](https://www.notion.so/2883cd7417a2800b84d6e72bc5b39bf5). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
+This page is the technical reference for the Sacramento Soil Moisture Accounting (SAC-SMA) rainfall-runoff model used by the [Sacramento node](../../nodes/sacramento.md). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
 
 ## Model overview
 
@@ -41,7 +41,7 @@ The runoff-generation processes are:
 
 - **Riparian ET** from the SARVA area.
 
-Generated runoff is routed through a unit hydrograph (parameterised in Kalix as LagUH — see the [Reparameterisations](https://www.notion.so/13e3cd7417a2807da8a9d1a5d1d303b7) page and the implementation notes below) to produce the final streamflow.
+Generated runoff is routed through a unit hydrograph (parameterised in Kalix as LagUH — see the Reparameterisations page and the implementation notes below) to produce the final streamflow.
 
 ## Mathematical formulation
 
@@ -194,7 +194,7 @@ LZSK > LZPK by definition: supplemental baseflow always drains faster than prima
 | --- | --- | --- | --- |
 | LagUH | Reparameterised unit-hydrograph shape | 0 – 5 | days |
 
-LagUH replaces the five original UH1–UH5 unit-hydrograph ordinates with a single shape-controlling parameter. See the [Reparameterisations](https://www.notion.so/13e3cd7417a2807da8a9d1a5d1d303b7) page for the mapping. The reparameterisation reduces dimensionality during calibration and constrains the unit hydrograph to physically plausible shapes.
+LagUH replaces the five original UH1–UH5 unit-hydrograph ordinates with a single shape-controlling parameter. See the Reparameterisations page for the mapping. The reparameterisation reduces dimensionality during calibration and constrains the unit hydrograph to physically plausible shapes.
 
 ## Internal flux outputs
 
@@ -247,7 +247,7 @@ The Sacramento node exposes the internal flux components separately from total r
 
 - The Kalix Sacramento node uses 17 parameters in alphabetical order (see Parameters above).
 
-- LagUH is a single-parameter reparameterisation of the original 5-ordinate unit hydrograph; see [Reparameterisations](https://www.notion.so/13e3cd7417a2807da8a9d1a5d1d303b7).
+- LagUH is a single-parameter reparameterisation of the original 5-ordinate unit hydrograph; see Reparameterisations.
 
 - All internal calculations are in mm; conversion to ML uses the configured catchment area.
 
