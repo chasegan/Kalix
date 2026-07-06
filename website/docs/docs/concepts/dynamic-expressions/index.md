@@ -12,14 +12,14 @@ The simplest dynamic expressions are constants, data references, model result re
 
 #### Constant expressions
 
-```toml
+```ini
 evap = 5.0
 rain = 2.5
 ```
 
 #### Data References
 
-```toml
+```ini
 evap = data.climate.by_name.evaporation
 rain = data.rainfall.by_name.value
 ```
@@ -28,7 +28,7 @@ Click [here](referencing-input-data.md) to find out more about data references.
 
 #### Model Result References
 
-```toml
+```ini
 evap = data.climate.by_name.evaporation
 rain = data.rainfall.by_name.value
 ```
@@ -39,7 +39,7 @@ Click [here](referencing-model-results.md) to find out more about model result r
 
 Dynamic expressions accept standard mathematical operators: `+`, `-`, `*`, `/`, `^`
 
-```toml
+```ini
 evap = 1.2 * data.climate.by_name.evaporation
 rain = 0.2 * data.rainfall.by_name.site_a + 0.8 * data.rainfall.by_name.site_b
 
@@ -50,7 +50,7 @@ observed = data.price_of_bananas.by_name.discounted ^ 2 + 10
 
 Use `if(condition, true_value, false_value)` for conditional expressions.
 
-```toml
+```ini
 # Summer evaporation is higher
 evap = if(data.month > 10, data.summer.by_index.1, data.winter.by_index.1)
 
@@ -67,7 +67,7 @@ Comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`
 
 You can also use common mathematical functions.
 
-```toml
+```ini
 # Take the greater of two values
 evap = max(data.evap.by_name.observed, data.evap.by_name.modelled)
 

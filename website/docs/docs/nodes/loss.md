@@ -8,7 +8,7 @@ title: "Loss"
 
 The loss node loses flow based on a provided flow-loss relationship.
 
-```toml
+```ini
 [node.high_flow_loss]
 type = loss
 loc = 20, 30

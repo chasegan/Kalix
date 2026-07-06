@@ -92,7 +92,7 @@ The model below has a **regulated\_user** node “0002\_user” which orders wat
 
 ![](../../assets/docs-concepts-ordering/image.png)
 
-```toml
+```ini
 [node.0001_dam]
 type = storage
 loc = 0, 0
@@ -129,7 +129,7 @@ The following model introduces a **loss** node between the user and storage. Thi
 
 ![](../../assets/docs-concepts-ordering/image_2.png)
 
-```toml
+```ini
 [node.0001_dam]
 type = storage
 loc = 0, 0
@@ -183,7 +183,7 @@ The model below has a **routing** node position between the user and storage. Th
 
 ![](../../assets/docs-concepts-ordering/image_4.png)
 
-```toml
+```ini
 [node.0001_dam]
 type = storage
 loc = 0, 0
@@ -237,7 +237,7 @@ Inflows may satisfy some or all of the order required for a r**egulated\_user.**
 
 ![](../../assets/docs-concepts-ordering/image_7.png)
 
-```toml
+```ini
 [node.0001_dam]
 type = storage
 loc = 0, 0
@@ -271,7 +271,7 @@ The regulated\_user node places the same orders (the same timeseries pattern). T
 
 We now consider a case where the expected inflow is defined as a proportion of the (previous day’s) inflow. Consider the following alternative definition of node 0006\_inflow, using the same timeseries pattern as the user node for demand.
 
-```toml
+```ini
 [node.0006_inflow]
 type = inflow 
 loc = 0, 40

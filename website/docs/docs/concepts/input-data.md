@@ -18,7 +18,7 @@ Specify input data files in the `[inputs]` section of your model.
 
 Kalix models declare input data files by listing them in the `[inputs]` section of your model file:
 
-```toml
+```ini
 [inputs]
 c:/data/climate_data.csv
 c:/data/streamflow_data.csv
@@ -59,7 +59,7 @@ Every model above needs a different number of `../` segments, and if you move a 
 
 The solution… Kalix’s **trailhead paths** tell Kalix to search upward through parent folders until it finds what you’re looking for. Use trailhead paths with the prefix `^/`:
 
-```toml
+```ini
 ^/data/climate/evaporation.csv
 ```
 

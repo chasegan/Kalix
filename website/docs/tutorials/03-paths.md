@@ -51,7 +51,7 @@ For the full reference on path syntax and resolution, see [Declaring Input Data]
 
 Open `models/baseline/stringybark.ini` in Kalix IDE. The `[inputs]` section uses **relative paths** — each one starts with `../../` to step up out of `baseline/` and `models/`, then into `data/`:
 
-```toml
+```ini
 [inputs]
 ../../data/climate_data.csv
 ../../data/observed.csv
@@ -84,7 +84,7 @@ Create a new folder `models/scenarios/wetter/`, then copy `baseline/stringybark.
 
 Open the new `models/scenarios/wetter/stringybark.ini` and change the rain line to scale the existing weighted sum by `1.2` (using the parentheses pattern from Tutorial 2's experiment #4):
 
-```toml
+```ini
 rain = 1.2 * (0.14 * data.rain_north_csv.by_name.rain_mm +
               0.51 * data.rain_central_csv.by_name.rain_mm +
               0.60 * data.rain_south_csv.by_name.rain_mm)
@@ -104,7 +104,7 @@ It fails. Kalix tells you it can't find the input files. Why? The new file lives
 
 You could change the wetter model's `[inputs]` from `../../data/...` to `../../../data/...` (one more `../` to climb the extra level):
 
-```toml
+```ini
 [inputs]
 ../../../data/climate_data.csv
 ../../../data/observed.csv
@@ -121,7 +121,7 @@ The `^/` prefix turns the path into a **trailhead path** — Kalix starts at the
 
 Replace `../../` (or `../../../`) with `^/`:
 
-```toml
+```ini
 [inputs]
 ^/data/climate_data.csv
 ^/data/observed.csv

@@ -8,7 +8,7 @@ title: "Blackhole"
 
 The blackhole node represents a total sink, whereby any incoming flows are lost and the downstream flow is always zero. This can be used to terminate the network’s end-of-system points, which will help the reported mass-balance → 0. (Using this node is totally optional).
 
-```toml
+```ini
 [node.my_blackhole]
 type = blackhole
 loc = 20, 30

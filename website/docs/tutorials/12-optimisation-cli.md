@@ -55,7 +55,7 @@ Open `optimisation_config.ini`. It has three parts.
 
 ### The `[optimisation]` section — the algorithm
 
-```toml
+```ini
 [optimisation]
 objective_expression = term1
 algorithm = DE
@@ -82,7 +82,7 @@ Line by line:
 
 ### The `[term.term1]` section — the objective
 
-```toml
+```ini
 [term.term1]
 simulated = node.0001_sc_stringybark.ds_1
 observed_file = ../data/observed.csv
@@ -113,7 +113,7 @@ A **term** pairs a simulated series with an observed one and scores the fit:
 
 ### The `[parameters]` section — what to tune
 
-```toml
+```ini
 [parameters]
 node.0001_sc_stringybark.adimp = log_range(g(1),1E-05,0.15)
 node.0001_sc_stringybark.lzfpm = log_range(g(2),1,300)

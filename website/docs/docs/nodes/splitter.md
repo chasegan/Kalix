@@ -8,7 +8,7 @@ title: "Splitter"
 
 The splitter node splits upstream flows between it’s two outlets “ds\_1” (the primary outlet) and “ds\_2” (the secondary outlet, i.e. effluent outlet).
 
-```toml
+```ini
 [node.high_flow_breakout]
 type = splitter
 loc = 20, 30

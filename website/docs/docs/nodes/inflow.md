@@ -8,7 +8,7 @@ title: "Inflow"
 
 The inflow node represents an inflow to the system. This can be time-varying and therefore can represent natural inflows (e.g. from a catchment) or an inflow from another system. Inflows must be positive.
 
-```toml
+```ini
 [node.my_inflow_node]
 type = inflow
 loc = 20, 30

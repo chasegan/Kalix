@@ -8,7 +8,7 @@ title: "Gauge"
 
 The gauge node is a reporting point. The node is otherwise passive.
 
-```toml
+```ini
 [node.gs120001]
 type = gauge
 loc = 20, 30

@@ -8,7 +8,7 @@ Kalix uses an INI format for model definitions. The main model file starts with 
 
 The [kalix] section provides a place to set the version (optional), simulation period (optional), and the execution\_order method (also optional).
 
-```toml
+```ini
 [kalix]
 version = 0.1.2
 start = 1889-07-01

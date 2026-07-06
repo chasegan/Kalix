@@ -28,7 +28,7 @@ Node names are defined as part of the node declaration. Node naming follows the 
 
 Tables in Kalix are typically embedded in the model file itself. Tables are represented by a list of elements, although you can format across multiple lines for readability. Here is a dimensions table for a simple 100ML waterhole:
 
-```toml
+```ini
 dimensions = Level, Volume, Area, Spill,
              90,    0,      0,    0, 
              91,    100,    1,    0, 
@@ -40,12 +40,12 @@ Notice the commas at the end of each row except for the last. It’s entirely up
 
 The table below will be interpreted exactly the same as the one above (scroll left-right):
 
-```toml
+```ini
 dimensions = Level,Volume,Area,Spill,90,0,0,0,91,100,1,0,91.1,101,1,1e8,92,102,1,1e8
 ```
 
 The column headers are entirely optional. If the first character is a non-numerical character (e.g. above “L”) then Kalix will expect a column name for each of the table columns. But you can launch straight into the values if you want:
 
-```toml
+```ini
 dimensions = 90,0,0,0,91,100,1,0,91.1,101,1,1e8,92,102,1,1e8
 ```

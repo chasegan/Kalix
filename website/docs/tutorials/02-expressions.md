@@ -63,7 +63,7 @@ Open Kalix IDE and create a new model file called `stringybark_expressions.ini` 
 
 ### Step 1 — Add the three station files to `[inputs]`
 
-```toml
+```ini
 [inputs]
 climate_data.csv
 observed.csv
@@ -78,7 +78,7 @@ We've kept `climate_data.csv` so we can still pull `pet_mm` from it, and we've a
 
 In the Sacramento node, replace the old single-source rain line with this:
 
-```toml
+```ini
 rain = 0.14 * data.rain_north_csv.by_name.rain_mm +
        0.51 * data.rain_central_csv.by_name.rain_mm +
        0.60 * data.rain_south_csv.by_name.rain_mm
@@ -102,7 +102,7 @@ Note the weights don't need to sum to 1 — they're whatever you decide reflects
 
 The rest of the file is unchanged from Tutorial 1. Putting it all together:
 
-```toml
+```ini
 [kalix]
 start = 1980-01-01
 end = 2009-12-31

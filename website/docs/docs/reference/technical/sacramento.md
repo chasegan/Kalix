@@ -141,7 +141,7 @@ In Kalix, Qch is then routed through the unit hydrograph (see Implementation not
 
 Sacramento has 17 parameters in Kalix (16 SAC-SMA parameters plus the LagUH routing parameter). They are passed to the node in alphabetical order:
 
-```toml
+```ini
 params = adimp, lzfpm, lzfsm, lzpk, lzsk, lztwm, pctim, pfree, rexp, sarva, side, ssout, uzfwm, uzk, uztwm, zperc, laguh
 ```
 

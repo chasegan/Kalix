@@ -36,7 +36,7 @@ We'll build `stringybark_sacramento.ini` one section at a time. Open Kalix IDE a
 
 The `[kalix]` section holds top-level model settings. We'll use it to lock the simulation period to the 30 years our data covers.
 
-```toml
+```ini
 [kalix]
 start = 1980-01-01
 end = 2009-12-31
@@ -48,7 +48,7 @@ If you leave `start` and `end` out, Kalix will infer the simulation period from 
 
 The `[inputs]` section lists the data files the model will load. Bare filenames are resolved relative to the model file's folder, which is what we want here.
 
-```toml
+```ini
 [inputs]
 climate_data.csv
 observed.csv
@@ -62,7 +62,7 @@ A single CSV can hold any number of value columns, so the count of files you lis
 
 Now the heart of the model: a Sacramento rainfall-runoff node. The Sacramento Soil Moisture Accounting model takes daily rainfall and potential evaporation and produces a streamflow time series at the catchment outlet.
 
-```toml
+```ini
 [node.0001_sc_stringybark]
 type = sacramento
 loc = 0, 0
@@ -97,14 +97,14 @@ Line by line:
 
 As of kalix v0.3.1, input file aliases have been added, e.g.
 
-```toml
+```ini
 [inputs]
 climate_alias = climate_data.csv
 ```
 
 Call on this alias by replacing the name of the file (`climate_data_csv`) with the alias, e.g.
 
-```toml
+```ini
 [node.0001_sc_stringybark]
 ...
 rain = data.climate_alias.by_name.rain_mm
@@ -114,7 +114,7 @@ rain = data.climate_alias.by_name.rain_mm
 
 A `gauge` node is a passive node: it doesn't modify the flow passing through, it just gives you a named point in the network where the streamflow can be inspected and recorded. Real-world gauges are physical streamflow measurement stations; gauge nodes are the modelling equivalent.
 
-```toml
+```ini
 [node.0002_ga_widebridge]
 type = gauge
 loc = 0, 40
@@ -134,7 +134,7 @@ Line by line:
 
 The `[outputs]` section lists the model results we want to record. We'll record flow at both nodes plus the three Sacramento runoff components.
 
-```toml
+```ini
 [outputs]
 node.0001_sc_stringybark.dsflow
 node.0001_sc_stringybark.ds_1
@@ -164,7 +164,7 @@ The Sacramento `dsflow` is the sum of the three runoff components (`flosf` + `fl
 
 Putting it all together, `stringybark_sacramento.ini` should look like this:
 
-```toml
+```ini
 [kalix]
 start = 1980-01-01
 end = 2009-12-31

@@ -8,7 +8,7 @@ title: "Unregulated_User"
 
 The unregulated\_user node represents a water user whose access is opportunistic. The user diverts water subject to licence conditions to satisfy their demands. If the demand cannot be fully satisfied, this is called a shortfall.
 
-```toml
+```ini
 [node.water_harvester]
 type = unregulated_user
 loc = 20, 30

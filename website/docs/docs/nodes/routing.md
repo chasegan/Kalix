@@ -8,7 +8,7 @@ title: "Routing"
 
 The routing node simulates streamflow routing. Each routing node incorporates a lag-routing component, and a storage routing component.
 
-```toml
+```ini
 [node.reach_4_routing]
 type = routing
 loc = 20, 30

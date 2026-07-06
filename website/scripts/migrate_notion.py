@@ -196,6 +196,8 @@ class NotionConverter(MarkdownConverter):
             for c in code["class"]:
                 if c.startswith("language-"):
                     lang = c[len("language-"):]
+        if lang == "toml":   # Kalix model files are INI-like, not TOML — the TOML
+            lang = "ini"     # lexer mis-highlights inf/nan and dotted bare values
         body = el.get_text()
         return f"\n\n```{lang}\n{body.rstrip()}\n```\n\n"
 

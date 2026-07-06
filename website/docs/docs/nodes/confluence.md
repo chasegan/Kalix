@@ -8,7 +8,7 @@ title: "Confluence"
 
 The confluence node can be used to merge flow pathways. The node is otherwise passive.
 
-```toml
+```ini
 [node.walker_confluence]
 type = confluence
 loc = 20, 30

@@ -8,7 +8,7 @@ title: "Order_Control"
 
 The order\_control node allows the modeller to manipulate orders at a point in the network. This includes setting the orders (replacing the values) or applying minimum or maximum values, using dynamic expressions.
 
-```toml
+```ini
 [node.fish_passage_demand]
 type = order_control
 loc = 20, 30

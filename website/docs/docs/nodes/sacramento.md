@@ -8,7 +8,7 @@ title: "Sacramento"
 
 This node uses a Sacramento rainfall-runoff model to represent catchment inflows from a catchment of a fixed area. The model takes rainfall and potential evapotranspiration data and determines inflows. The Sacramento model has 17 parameters (including laguh) representing catchment characteristics.
 
-```toml
+```ini
 [node.my_sacr_node]
 type = sacramento
 loc = 20, 30
