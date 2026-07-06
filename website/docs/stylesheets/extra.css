@@ -196,11 +196,14 @@
   border-radius: var(--kx-radius-xs); padding: 4px 10px; color: var(--kx-neutral-800);
 }
 
-/* ---- Code: project-health widgets + toolchain cards ----------------------- */
-.kx-health {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--kx-space-4); margin: var(--kx-space-5) 0;
+/* ---- Code: latest-stats split + toolchain cards --------------------------- */
+.kx-stats-split {
+  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr);
+  gap: var(--kx-space-6); align-items: center;
+  margin: var(--kx-space-4) 0 var(--kx-space-6);
 }
+.kx-stats-split > figure { margin: 0; }
+@media (max-width: 720px) { .kx-stats-split { grid-template-columns: 1fr; } }
 .kx-stat {
   border: var(--kx-border-line); border-radius: var(--kx-radius-md);
   padding: var(--kx-space-4) var(--kx-space-5); background: var(--kx-surface-sunken);

@@ -8,6 +8,28 @@ Kalix is open source under the MPL 2.0. The engine is Rust, the IDE is Java, and
 
 <span class="kx-pill">MPL 2.0</span> <span class="kx-pill">Rust · Java · Python</span> [<span class="kx-pill kx-pill--accent">github.com/chasegan/Kalix ↗</span>](https://github.com/chasegan/Kalix)
 
+## Latest stats
+
+Published automatically from CI on every release.
+
+<div class="kx-stats-split" markdown>
+
+<div markdown>
+<div class="kx-stat">
+  <div class="kx-stat-num {% if health.all_passed %}kx-ok{% endif %}">{{ health.models_passed | default(0) }}/{{ health.models_total | default(0) }}</div>
+  <div class="kx-stat-label">Regression models verified</div>
+</div>
+
+Regression **models** (not unit tests) checked against pinned mass-balance baselines.
+</div>
+
+<figure markdown>
+![Simulation time per test across benchmark runs](assets/speed-plot.png){ .glightbox }
+<figcaption>Simulation time per test (ms) — one line per machine, per benchmark run.</figcaption>
+</figure>
+
+</div>
+
 ## Ways to get involved
 
 <div class="kx-cards" markdown>
@@ -50,28 +72,6 @@ The package is built with `maturin` from `python/`.
 </div>
 
 CI runs the full suite on Linux, macOS and Windows via GitHub Actions.
-
-## Project health
-
-Published automatically from CI. Regression **models** (not unit tests) are verified against pinned mass-balance baselines every release.
-
-<div class="kx-health" markdown>
-<div class="kx-stat">
-  <div class="kx-stat-num {% if health.all_passed %}kx-ok{% endif %}">{{ health.models_passed | default(0) }}/{{ health.models_total | default(0) }}</div>
-  <div class="kx-stat-label">Models verified</div>
-</div>
-<div class="kx-stat">
-  <div class="kx-stat-num {% if health.models_failed == 0 %}kx-ok{% endif %}">{{ health.models_failed | default(0) }}</div>
-  <div class="kx-stat-label">Failing</div>
-</div>
-</div>
-
-Simulation time per regression test, across machines and releases (wired from the CI benchmark database):
-
-<figure markdown>
-![Simulation time per test across benchmark runs](assets/speed-plot.png){ .glightbox }
-<figcaption>Simulation time (min of repeats, ms) per test — one line per machine, per benchmark run.</figcaption>
-</figure>
 
 ## Design & brand
 
