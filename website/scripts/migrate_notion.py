@@ -77,11 +77,12 @@ MAP = {
     "optimisation/algorithms/sc-sahel.md": ["Shuffled Complex Self Adaptive"],
     "optimisation/reparameterizations.md": ["Reparameterizations"],
     "reference/technical/gr4j.md": ["Technical Reference"],  # resolved specially below
-    "developing/start-developing.md": ["Start Developing"],
-    "developing/dev-stack.md": ["The Dev Stack"],
-    "developing/gory-details/index.md": ["Gory Details"],
-    "developing/gory-details/adrs.md": ["Architecture Decision Records"],
-    "developing/gory-details/python-api-brainstorm.md": ["Brainstorming the Python API"],
+    # Developer material lives under the Code section (/code/), not the user Docs.
+    "code/developing/start-developing.md": ["Start Developing"],
+    "code/developing/dev-stack.md": ["The Dev Stack"],
+    "code/developing/gory-details/index.md": ["Gory Details"],
+    "code/developing/gory-details/adrs.md": ["Architecture Decision Records"],
+    "code/developing/gory-details/python-api-brainstorm.md": ["Brainstorming the Python API"],
     # tutorials/index.md is a hand-built design page (timeline) — not migrated.
     "tutorials/01-first-model.md": ["Tutorial 1"],
     "tutorials/02-expressions.md": ["Tutorial 2"],
@@ -99,7 +100,8 @@ MAP = {
 # Documentation pages live under the /docs/ URL prefix (clean hub URL + plain
 # links); tutorials and the top-level pages stay where they are.
 def _phys(dest: str) -> str:
-    return dest if dest.startswith("tutorials/") else "docs/" + dest
+    # tutorials/ and code/ are top-level sections; everything else is the user Docs.
+    return dest if dest.startswith(("tutorials/", "code/")) else "docs/" + dest
 
 
 MAP = {_phys(k): v for k, v in MAP.items()}
@@ -125,7 +127,7 @@ NAME_TO_DEST.update({
 EXCLUDED_DESTS = {
     "docs/optimisation/algorithms/sc-sahel.md",
     "docs/optimisation/reparameterizations.md",
-    "docs/developing/gory-details/python-api-brainstorm.md",
+    "code/developing/gory-details/python-api-brainstorm.md",
 }
 
 # Title overrides: the "Components" nav pages are titled by their model-file

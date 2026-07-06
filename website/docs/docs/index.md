@@ -90,13 +90,9 @@ Model components, top to bottom.
 <div><span style="color: var(--kx-neutral-500);">├─ </span><span style="color: #fff;">optimisation/</span></div>
 <div><span style="color: var(--kx-neutral-500);">│&nbsp;&nbsp;├─ </span><a href="optimisation/objective-functions/" style="color: var(--kx-primary-200);">Objective functions</a> &nbsp;<span style="color: var(--kx-neutral-500);">defining fitness terms</span></div>
 <div><span style="color: var(--kx-neutral-500);">│&nbsp;&nbsp;└─ </span><a href="optimisation/algorithms/sce/" style="color: var(--kx-primary-200);">Algorithms</a> &nbsp;<span style="color: var(--kx-neutral-500);">SCE, CMA-ES, DE, DREAM</span></div>
-<div><span style="color: var(--kx-neutral-500);">├─ </span><span style="color: #fff;">reference/</span></div>
-<div><span style="color: var(--kx-neutral-500);">│&nbsp;&nbsp;├─ </span><a href="reference/glossary/" style="color: var(--kx-primary-200);">Glossary</a> &nbsp;<span style="color: var(--kx-neutral-500);">terms and definitions</span></div>
-<div><span style="color: var(--kx-neutral-500);">│&nbsp;&nbsp;└─ </span><a href="reference/technical/gr4j/" style="color: var(--kx-primary-200);">Technical Reference</a> &nbsp;<span style="color: var(--kx-neutral-500);">GR4J, Sacramento, solvers</span></div>
-<div><span style="color: var(--kx-neutral-500);">└─ </span><span style="color: #fff;">developing/</span></div>
-<div><span style="color: var(--kx-neutral-500);">&nbsp;&nbsp;&nbsp;├─ </span><a href="developing/start-developing/" style="color: var(--kx-primary-200);">Start Developing</a> &nbsp;<span style="color: var(--kx-neutral-500);">build Kalix from source</span></div>
-<div><span style="color: var(--kx-neutral-500);">&nbsp;&nbsp;&nbsp;├─ </span><a href="developing/dev-stack/" style="color: var(--kx-primary-200);">The Dev Stack</a> &nbsp;<span style="color: var(--kx-neutral-500);">Rust core and tooling</span></div>
-<div><span style="color: var(--kx-neutral-500);">&nbsp;&nbsp;&nbsp;└─ </span><a href="developing/gory-details/" style="color: var(--kx-primary-200);">Gory Details</a> &nbsp;<span style="color: var(--kx-neutral-500);">architecture decision records</span></div>
+<div><span style="color: var(--kx-neutral-500);">└─ </span><span style="color: #fff;">reference/</span></div>
+<div><span style="color: var(--kx-neutral-500);">&nbsp;&nbsp;&nbsp;├─ </span><a href="reference/glossary/" style="color: var(--kx-primary-200);">Glossary</a> &nbsp;<span style="color: var(--kx-neutral-500);">terms and definitions</span></div>
+<div><span style="color: var(--kx-neutral-500);">&nbsp;&nbsp;&nbsp;└─ </span><a href="reference/technical/gr4j/" style="color: var(--kx-primary-200);">Technical Reference</a> &nbsp;<span style="color: var(--kx-neutral-500);">GR4J, Sacramento, solvers</span></div>
 </div>
 </div>
 

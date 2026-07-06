@@ -102,7 +102,7 @@ extra:
 exclude_docs: |
   docs/optimisation/algorithms/sc-sahel.md
   docs/optimisation/reparameterizations.md
-  docs/developing/gory-details/python-api-brainstorm.md
+  code/developing/gory-details/python-api-brainstorm.md
 
 nav:
   # Home is the bespoke pass-through landing page (docs/index.html), served at the
@@ -170,14 +170,15 @@ nav:
           - Technical reference:
               - GR4J: docs/reference/technical/gr4j.md
               - Sacramento: docs/reference/technical/sacramento.md
-      - Developing:
-          - Start developing: docs/developing/start-developing.md
-          - The dev stack: docs/developing/dev-stack.md
-          - Gory details:
-              - docs/developing/gory-details/index.md
-              - Architecture Decision Records: docs/developing/gory-details/adrs.md
-      - Planned features: docs/planned.md
   - Downloads: downloads.md
-  - Code: code.md
+  - Code:
+      - code.md
+      - Developing:
+          - Start developing: code/developing/start-developing.md
+          - The dev stack: code/developing/dev-stack.md
+          - Gory details:
+              - code/developing/gory-details/index.md
+              - Architecture Decision Records: code/developing/gory-details/adrs.md
+      - Planned features: code/planned.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at
   # /contact/, bypassing the Material theme — so it is not listed here.
