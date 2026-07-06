@@ -4,7 +4,7 @@ title: "Conventions"
 
 # Conventions
 
-# Node Names
+## Node Names
 
 Node names are defined as part of the node declaration. Node naming follows the conventions below:
 
@@ -24,7 +24,7 @@ Node names are defined as part of the node declaration. Node naming follows the 
   - mathematical symbols ‘+’, ‘-’, ‘\*’, ‘^’, ‘=’, ‘/’
   - brackets.
 
-# Tables
+## Tables
 
 Tables in Kalix are typically embedded in the model file itself. Tables are represented by a list of elements, although you can format across multiple lines for readability. Here is a dimensions table for a simple 100ML waterhole:
 

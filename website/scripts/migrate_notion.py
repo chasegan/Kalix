@@ -139,6 +139,13 @@ TITLE_OVERRIDE = {
     "docs/concepts/model-outputs.md": "[outputs]",
 }
 
+# Pages whose first body heading merely echoes the page title — drop just that
+# heading (its content stays and becomes the page intro).
+DROP_FIRST_HEADING = {
+    "code/developing/dev-stack.md",          # code/ is exempt from the docs/ prefix
+    "docs/concepts/model-file-structure.md",
+}
+
 
 def _strip_hash_name(fname: str) -> str:
     n = unquote(fname).rsplit("/", 1)[-1]
@@ -288,6 +295,27 @@ def dest_slug(dest_rel: str) -> str:
     return dest_rel.replace("/", "-").rsplit(".", 1)[0]
 
 
+def demote_headings(md: str, by: int) -> str:
+    """Increase every ATX heading level by `by` (cap H6), skipping code fences.
+
+    Notion exports body section headings as H1; the page title is a separate H1
+    added at write time. Demoting the body keeps the title as the sole H1 and
+    restores a proper hierarchy (H1 title > H2 sections > H3 subsections).
+    """
+    out, in_fence = [], False
+    for line in md.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        m = re.match(r"^(#{1,6})(\s.*)$", line) if not in_fence else None
+        if m:
+            out.append("#" * min(len(m.group(1)) + by, 6) + m.group(2))
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def write_page(dest_rel: str, sources: list[str]):
     depth = len(dest_rel.split("/")) - 1
     slug = dest_slug(dest_rel)
@@ -308,9 +336,9 @@ def write_page(dest_rel: str, sources: list[str]):
         t, md = convert_page(html_path, slug, depth, posixpath.dirname(dest_rel))
         if i == 0:
             title = t
-            parts.append(md)
+            parts.append(demote_headings(md, 1))  # body sits under the H1 title
         else:
-            parts.append(f"\n\n## {t}\n\n{md}")
+            parts.append(f"\n\n## {t}\n\n{demote_headings(md, 2)}")  # under the H2 subtitle
 
     if title is None:
         print(f"  ! no content for {dest_rel} (left as stub)")
@@ -319,6 +347,8 @@ def write_page(dest_rel: str, sources: list[str]):
     out = DOCS / dest_rel
     out.parent.mkdir(parents=True, exist_ok=True)
     content = "\n".join(parts).strip()  # cross-links already rewritten in the soup
+    if dest_rel in DROP_FIRST_HEADING:  # drop the first ## heading (echoes the title)
+        content = re.sub(r"(?m)^##\s+.*\n+", "", content, count=1)
     title = TITLE_OVERRIDE.get(dest_rel, title)
     # Quote the YAML title: some are "[kalix]" etc., and a leading [ is a YAML list.
     front = f'---\ntitle: "{title}"\n---\n\n# {title}\n\n'

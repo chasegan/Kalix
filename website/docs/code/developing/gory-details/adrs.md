@@ -6,7 +6,7 @@ title: "Architecture Decision Records"
 
 This page is the index for **Architecture Decision Records (ADRs)** for Kalix. ADRs capture *why* the codebase is the way it is — the significant decisions, the options that were considered, and the trade-offs accepted.
 
-# Where ADRs live
+## Where ADRs live
 
 ADRs are **canonical in the repository**, not in Notion. They live as markdown files under:
 
@@ -26,7 +26,7 @@ in the [Kalix GitHub repo](https://github.com/chasegan/Kalix). This means:
 
 This Notion page exists as a **discoverability layer** for non-developer readers (modellers, government collaborators, academic users) and a place to explain the convention.
 
-# Conventions
+## Conventions
 
 - **One file per decision.** Filename: `NNNN-short-kebab-case-title.md`, e.g. `0007-use-ini-format-for-model-files.md`.
 
@@ -38,7 +38,7 @@ This Notion page exists as a **discoverability layer** for non-developer readers
 
 - **Scope.** Write an ADR for decisions that are hard to reverse, affect multiple components, set a precedent, or that future contributors are likely to question. Don't write one for routine refactors or cosmetic choices.
 
-# Workflow
+## Workflow
 
 1. Open a pull request adding `docs/adr/NNNN-title.md` with status `Proposed`.
 
@@ -48,7 +48,7 @@ This Notion page exists as a **discoverability layer** for non-developer readers
 
 4. If a future ADR overrides this one, that future PR also updates this ADR's status to `Superseded by ADR-XXXX`.
 
-# Template
+## Template
 
 The canonical template is `docs/adr/0000-template.md` in the repo. Copy it, renumber, fill in the blanks. It captures:
 
@@ -153,7 +153,7 @@ satisfies the decision drivers, and why the trade-offs are acceptable].
 Open questions, follow-up actions, or context that didn't fit above.
 ```
 
-# Tooling (optional)
+## Tooling (optional)
 
 Lightweight tools that work well with this convention:
 
@@ -163,7 +163,7 @@ Lightweight tools that work well with this convention:
 
 Neither is required — plain markdown files in the repo work fine on their own.
 
-# Index of accepted ADRs
+## Index of accepted ADRs
 
 *(Maintain this list manually, or generate it from the repo. Newest at top.)*
 

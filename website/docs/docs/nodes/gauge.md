@@ -4,7 +4,7 @@ title: "Gauge"
 
 # Gauge
 
-# At a glance…
+## At a glance…
 
 The gauge node is a reporting point. The node is otherwise passive.
 
@@ -16,7 +16,7 @@ reference_flow = data.my_file_csv.by_index.0
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -27,7 +27,7 @@ ds_1 = my_other_node
 | force\_flow (optional) | An expression specifying flow values to be forced at the node. This is done after the reference flow comparison. Example `force_flow = data.file_csv.by_index.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -39,10 +39,10 @@ ds_1 = my_other_node
 | ds\_1\_order | Order on link ds\_1 [ML] |
 | force\_flow | Forced downstream flow [ML]. If this exists, it should equal dsflow. |
 
-# How the node works
+## How the node works
 
 If the “force\_flow” parameter is used, then the downstream flow will be set equal to these values. Otherwise, all inflows are passed to the downstream node.
 
-# References
+## References
 
 None.

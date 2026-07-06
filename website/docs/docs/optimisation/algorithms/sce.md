@@ -4,7 +4,7 @@ title: "Shuffled Complex Evolution (SCE)"
 
 # Shuffled Complex Evolution (SCE)
 
-# Implementation
+## Implementation
 
 There are some details that vary between different SCE implementations. These are small tweaks (automatic calculation of metaparameters, elitism, behaviour at the param bounds, etc) which can be important.
 
@@ -61,11 +61,11 @@ The implementation in Kalix follows that of Fors, which is as follows:
 
 2. After `b` breeding iterations, return the updated complex to the main algorithm.
 
-# Planned improvements
+## Planned improvements
 
 Fors definitely isn’t the endgame here, for example I know it becomes very inefficient late in the optimisation.
 
-# Modern variations
+## Modern variations
 
 - Chu Gao and Sorooshian did a paper in 2010. This is attached below. 
 
@@ -77,6 +77,6 @@ Fors definitely isn’t the endgame here, for example I know it becomes very ine
 
   [Muttil 2008 - Shuffled Complex Evolution Model Calibrating Algorithm.pdf](../../../assets/docs-optimisation-algorithms-sce/08_-_Shuffled_Complex_Evolution_Model_Calibrating_Algor_.pdf)
 
-# References
+## References
 
 <https://www.mathworks.com/matlabcentral/fileexchange/7671-shuffled-complex-evolution-sce-ua-method>

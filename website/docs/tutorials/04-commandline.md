@@ -6,13 +6,13 @@ title: "Tutorial 4 — Running Kalix from the commandline"
 
 **Tutorial 4 of the Kalix tutorial series.** You'll drive a Kalix simulation directly from a terminal using the `kalix` command-line tool, learn its main flags, and chain runs together in a small shell loop. Expected time: about 15 minutes.
 
-# What you'll build
+## What you'll build
 
 A working CLI workflow for the Stringybark catchment model: running simulations from a terminal, choosing output formats, producing mass-balance check, profiling performance, and finally chaining multiple runs in a single shell loop.
 
 ![](../assets/tutorials-04-commandline/image.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
 
@@ -25,7 +25,7 @@ A working CLI workflow for the Stringybark catchment model: running simulations 
 
 - **Tutorial files** — download the `004/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/004).
 
-# Project layout
+## Project layout
 
 ```
 004/
@@ -42,7 +42,7 @@ A working CLI workflow for the Stringybark catchment model: running simulations 
 
 Same layout as Tutorial 3 — just without the wetter scenario. All the commands below assume you've changed into `004/models/baseline/`.
 
-# Step 1 — Verify the install
+## Step 1 — Verify the install
 
 From any terminal, check that `kalix` is callable and the version is what you expect:
 
@@ -60,7 +60,7 @@ kalix --help
 
 You'll see the subcommands: `simulate` (alias `sim`), `optimise` (alias `opt`), `new-session`, `get-api`, `test`, `help`. We'll only need `simulate` in this tutorial.
 
-# Step 2 — Run a basic simulation
+## Step 2 — Run a basic simulation
 
 From the `004/models/baseline/` folder, run:
 
@@ -86,7 +86,7 @@ The arguments worth knowing:
 
 - `-o results.csv` — the output file. The format is inferred from the extension
 
-# Step 3 — Choose your output format
+## Step 3 — Choose your output format
 
 Kalix infers the output format from the file extension:
 
@@ -102,7 +102,7 @@ kalix sim stringybark.ini -o results.pxb
 
 For a tiny 30-year run like this one, the size difference is negligible, but for big simulations Pixie can be several times smaller and significantly faster to read back. See [Tutorial 5 — Running Kalix from Python](05-python.md) for an example of reading a Pixie file into pandas with `kalix.read_pixie()`.
 
-# Step 4 — Mass balance report
+## Step 4 — Mass balance report
 
 Add `-m mbal.txt` to write a mass-balance report alongside the output:
 
@@ -137,7 +137,7 @@ This is a sanity check on every node's flow accounting. Each node category lists
 
 In larger systems with storages, users, and links, the mass-balance report is one of your best diagnostic tools for detecting modelling errors.
 
-# Step 5 — Profile a run
+## Step 5 — Profile a run
 
 Add `-p` to see where time is spent during the run:
 
@@ -161,7 +161,7 @@ For a 30-year daily simulation, the simulation itself is a few milliseconds — 
 
 ![](../assets/tutorials-04-commandline/image_1.png)
 
-# Step 6 (bonus) — Batch runs with a `.bat` script
+## Step 6 (bonus) — Batch runs with a `.bat` script
 
 The real payoff of the CLI is automating runs. We don't have a flag for overriding `start`/`end`, so we patch a temporary copy of the model for each iteration. Here's a Windows `.bat` script that runs the model six times with progressively-longer simulation periods — ending in 1985, 1990, 1995, 2000, 2005, and 2009 — writing one output file per scenario:
 
@@ -186,7 +186,7 @@ What each line does:
 
 After the loop, you'll have six output files — each one a complete simulation clipped to a different end date. The pattern generalises: swap the PowerShell `-replace` for any text replacement to vary any model property across runs, and you have a batch processing pipeline.
 
-# What to try next
+## What to try next
 
 - **Explore the simulate flags** — `kalix help simulate` prints every option, including `--verify-mass-balance` (next bullet).
 
@@ -196,7 +196,7 @@ After the loop, you'll have six output files — each one a complete simulation 
 
 - **Optimisation** — once you have a calibration config file, `kalix opt config.ini stringybark.ini -s calibrated.ini` runs the built-in optimiser. We'll cover this in a future calibration tutorial.
 
-# Where to go from here
+## Where to go from here
 
 - **[Tutorial 5 — Running Kalix from Python](05-python.md)** — drive Kalix from a Jupyter notebook for analysis and post-processing. The complementary skill to the CLI: CLI for batch and automation, Python for analysis.
 

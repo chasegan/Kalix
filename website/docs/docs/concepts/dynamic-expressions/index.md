@@ -6,18 +6,18 @@ title: "Dynamic Expressions"
 
 Many model parameters accept “dynamic expressions” which are mathematical expressions that may include data references, constants, model results, inbuilt variables.
 
-## Basic Usage
+### Basic Usage
 
 The simplest dynamic expressions are constants, data references, model result references.
 
-### Constant expressions
+#### Constant expressions
 
 ```toml
 evap = 5.0
 rain = 2.5
 ```
 
-### Data References
+#### Data References
 
 ```toml
 evap = data.climate.by_name.evaporation
@@ -26,7 +26,7 @@ rain = data.rainfall.by_name.value
 
 Click [here](referencing-input-data.md) to find out more about data references.
 
-### Model Result References
+#### Model Result References
 
 ```toml
 evap = data.climate.by_name.evaporation
@@ -35,7 +35,7 @@ rain = data.rainfall.by_name.value
 
 Click [here](referencing-model-results.md) to find out more about model result references.
 
-## Arithmetic
+### Arithmetic
 
 Dynamic expressions accept standard mathematical operators: `+`, `-`, `*`, `/`, `^`
 
@@ -46,7 +46,7 @@ rain = 0.2 * data.rainfall.by_name.site_a + 0.8 * data.rainfall.by_name.site_b
 observed = data.price_of_bananas.by_name.discounted ^ 2 + 10
 ```
 
-## Conditional Logic
+### Conditional Logic
 
 Use `if(condition, true_value, false_value)` for conditional expressions.
 
@@ -63,7 +63,7 @@ inflow = if(data.raw_flows.by_index.0 < 0, 0, data.raw_flows.by_index.0)
 
 Comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`
 
-## Common Functions
+### Common Functions
 
 You can also use common mathematical functions.
 
@@ -117,7 +117,7 @@ Available functions:
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
 
-## Notes
+### Notes
 
 - Expressions are evaluated once per timestep
 

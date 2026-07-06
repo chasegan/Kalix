@@ -4,11 +4,11 @@ title: "Brainstorming the Python API"
 
 # Brainstorming the Python API
 
-# Summary of Outcomes
+## Summary of Outcomes
 
 > Distilled from the brainstorming notes below. These are the decisions we landed on, ready to be turned into GitHub issue specs.
 
-## General principles
+### General principles
 
 - **Chaining is preferred.** State-modifying functions return the model object itself so calls can be strung together (e.g. `my_model.run().get_outputs()`). Accessor functions are used to pull data out.
 
@@ -24,9 +24,9 @@ title: "Brainstorming the Python API"
 
 - **Note:** bulum will eventually need to be extended to accept sub-daily timesteps.
 
-## Agreed function signatures
+### Agreed function signatures
 
-### Loading & constructing models
+#### Loading & constructing models
 
 ```python
 import kalix
@@ -45,7 +45,7 @@ my_model.load_string(whole_model_string)
 my_model.load_string(snippet_string, snippet=True)
 ```
 
-### Running simulations
+#### Running simulations
 
 ```python
 # run() returns the model (to support chaining), NOT results directly
@@ -55,7 +55,7 @@ my_model.run()
 results_df = my_model.run().get_outputs()
 ```
 
-### Accessing outputs
+#### Accessing outputs
 
 ```python
 # All outputs -> pd.DataFrame
@@ -68,7 +68,7 @@ x = my_model.get_outputs("node.my_dam.volume")
 y = my_model.get_outputs(["node.my_dam.volume", "node.my_dam.level"])
 ```
 
-### Building & modifying models
+#### Building & modifying models
 
 Models are edited by applying an INI snippet via `patch()`. The snippet is merged into the DOM and the whole model is re-parsed and re-validated.
 
@@ -85,7 +85,7 @@ inflow=1
 """)  # mode="merge" -> sets/adds inflow on node.ABC, other properties untouched
 ```
 
-#### Patch semantics
+##### Patch semantics
 
 All modes are **section-scoped**: only sections named in the snippet are touched; any other section in the model is left alone. The mode controls what happens to a named section:
 
@@ -109,9 +109,9 @@ All modes are **section-scoped**: only sections named in the snippet are touched
 
 ---
 
-# Things we want to do with ….
+## Things we want to do with ….
 
-## Simultation
+### Simultation
 
 ```python
 import kalix
@@ -173,7 +173,7 @@ y = my_model.get_outputs(["node.my_dam.volume", "node.my_dam.level"]) # should t
 #.       So maybe not tooo bad.
 ```
 
-## Building and modifying models
+### Building and modifying models
 
 ```python
 import kalix

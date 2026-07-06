@@ -6,7 +6,7 @@ title: "Tutorial 13 — Optimisation from Python"
 
 **Tutorial 13 of the Kalix tutorial series.** You'll run the same Stringybark Creek calibration as Tutorial 12 — but driven from Python with `kalix.optimise()`, reading the result back as a dictionary, then simulating and plotting the calibrated model in a notebook. Expected time: about 20 minutes.
 
-# What you'll build
+## What you'll build
 
 A Jupyter notebook that calibrates the Stringybark catchment model in one call, inspects the optimised parameters as a pandas object, and overlays the calibrated simulation against the observed record. This is the analysis-friendly counterpart to Tutorial 12's command-line workflow — same optimisation, same config file, driven from Python.
 
@@ -14,7 +14,7 @@ A Jupyter notebook that calibrates the Stringybark catchment model in one call, 
 
 ![](../assets/tutorials-07-optimisation-python/image_1.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Tutorial 12 complete** — see [Tutorial 12 — Optimisation from the commandline](01-first-model.md). We reuse its exact optimisation config and model, so the concepts (terms, statistics, parameter ranges, algorithms) carry straight over. This tutorial only changes *how* you launch the run.
 
@@ -24,7 +24,7 @@ A Jupyter notebook that calibrates the Stringybark catchment model in one call, 
 
 - **Tutorial files** — download the `013/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/013). It also ships a fully-worked `analysis.ipynb` if you'd rather skim than type along.
 
-# Project layout
+## Project layout
 
 ```
 013/
@@ -39,7 +39,7 @@ A Jupyter notebook that calibrates the Stringybark catchment model in one call, 
 
 The notebook sits **next to the model and config files**, so the relative paths inside the config (`../data/observed.csv`) and the notebook resolve cleanly. Launch Jupyter from `013/models/`.
 
-# The CLI and Python, side by side
+## The CLI and Python, side by side
 
 The `kalix` Python package mirrors the CLI. Tutorial 12's command:
 
@@ -61,11 +61,11 @@ Same three pieces — the config, the model, and where to save the calibrated mo
 
 Everything from [Tutorial 12 — Optimisation from the commandline](01-first-model.md) still applies — the `[optimisation]`, `[term.*]`, and `[parameters]` sections of the config are read exactly the same way. If you want to change the algorithm, statistic, or parameter ranges, you edit `optimisation_config.ini`, not the Python.
 
-# Step 1 — Open a notebook in the model folder
+## Step 1 — Open a notebook in the model folder
 
 Open the `013/models` folder inside your favourite Jupyter Notebook editor (e.g. VSCode or Jupyter Lab). Create a new notebook called `analysis.ipynb`.
 
-# Step 2 — Import Kalix and check the version
+## Step 2 — Import Kalix and check the version
 
 ```python
 import kalix
@@ -76,7 +76,7 @@ print(f"kalix version: {kalix.__version__}")
 
 The optimiser runs in-process from the `kalix` package — **you don't need the Kalix CLI installed separately** for this tutorial.
 
-# Step 3 — Run the optimisation
+## Step 3 — Run the optimisation
 
 ```python
 result = kalix.optimise(
@@ -100,7 +100,7 @@ By default, `kalix.optimise()` prints a progress line while it runs — in a not
 
 If you want to handle progress callbacks yourself, pass `progress=<callable>` into the function. It is called once per generation with a dict (`n_evaluations`, `best_objective`, `elapsed_seconds`), and the built-in line is suppressed. Pass `progress=False` if you want to have no progress output.
 
-# Step 4 — Inspect the result
+## Step 4 — Inspect the result
 
 `kalix.optimise()` returns a dictionary summarising the run:
 
@@ -131,7 +131,7 @@ The full set of keys:
 
 Differential Evolution is **stochastic**, so your `best_objective` and parameters will differ slightly from the values shown here. To make a run reproducible, add `random_seed = 42` to the `[optimisation]` section of the config.
 
-# Step 5 — The parameters as a DataFrame
+## Step 5 — The parameters as a DataFrame
 
 Because `parameters` is a plain dict, it drops straight into pandas:
 
@@ -144,7 +144,7 @@ You'll get a tidy table of all 18 optimised values, indexed by target (e.g. `nod
 
 ![](../assets/tutorials-07-optimisation-python/image_3.png)
 
-# Step 6 — Simulate and plot the calibrated model
+## Step 6 — Simulate and plot the calibrated model
 
 `save_model=` already wrote `stringybark_calibrated.ini`. It's an ordinary model file, so simulate it with `kalix.simulate()` exactly as in Tutorial 5, then overlay it against the observed record:
 
@@ -171,7 +171,7 @@ The calibrated simulation should track the observed hydrograph noticeably better
 
 ![](../assets/tutorials-07-optimisation-python/image_4.png)
 
-# Step 7 (bonus) — The calibrated model as a string
+## Step 7 (bonus) — The calibrated model as a string
 
 The returned dict also carries the calibrated model as INI text under `optimised_model_ini` — the same content `save_model=` wrote to disk:
 
@@ -181,7 +181,7 @@ print(result["optimised_model_ini"])
 
 This is handy when you'd rather keep the calibrated model in memory — log it, diff it against the starting model, or feed it onward — without a round-trip through a file.
 
-# What to try next
+## What to try next
 
 - **Loop over scenarios** — wrap `kalix.optimise()` in a loop that varies something between runs (e.g. the objective `statistic`, or `termination_evaluations`), and stack each run's `parameters` into a single DataFrame for comparison.
 
@@ -189,7 +189,7 @@ This is handy when you'd rather keep the calibrated model in memory — log it, 
 
 - **Make it reproducible** — add `random_seed = 42` to the config's `[optimisation]` section and confirm two runs return identical `best_objective` values.
 
-# Where to go from here
+## Where to go from here
 
 - [Tutorial 12 — Optimisation from the commandline](01-first-model.md) — the command-line counterpart to this tutorial. CLI for batch and automation; Python for analysis — the same split you saw between Tutorials 4 and 5.
 

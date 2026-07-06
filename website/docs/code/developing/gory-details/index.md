@@ -4,11 +4,11 @@ title: "Gory Details"
 
 # Gory Details
 
-# Topics
+## Topics
 
 Brainstorming the Python API
 
-# TODO:
+## TODO:
 
 - Release process and versioning policy
 

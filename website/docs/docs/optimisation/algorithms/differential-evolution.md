@@ -4,13 +4,13 @@ title: "Differential Evolution (DE)"
 
 # Differential Evolution (DE)
 
-# Summary
+## Summary
 
 There is already a rust crate here:
 
 - <https://docs.rs/differential-evolution/latest/differential_evolution/>
 
-# Full description
+## Full description
 
 Differential Evolution (DE) is a powerful and versatile population-based optimization algorithm designed to solve complex, non-linear, and non-differentiable continuous optimization problems. Developed by Rainer Storn and Kenneth Price in 1995, DE has gained popularity due to its simplicity, efficiency, and robustness.
 

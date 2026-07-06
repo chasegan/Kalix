@@ -6,13 +6,13 @@ title: "Tutorial 2 — Expressions"
 
 **Tutorial 2 of the Kalix tutorial series.** You'll take the model from Tutorial 1 and rewrite its rainfall input as a weighted combination of three gauge stations, then compare runs side-by-side in the Run Manager. Expected time: about 15 minutes.
 
-# What you'll build
+## What you'll build
 
 The same Stringybark Creek catchment from Tutorial 1, but with the rainfall input rebuilt from three rain gauge stations instead of a single areal-rainfall series. The new rain is constructed inside the model file using a Kalix **expression** — a piece of arithmetic that combines data references and literal numbers.
 
 ![](../assets/tutorials-02-expressions/image.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
 
@@ -25,7 +25,7 @@ The same Stringybark Creek catchment from Tutorial 1, but with the rainfall inpu
 
 Put all five CSVs in the same folder. We'll build the new model file (`stringybark_expressions.ini`) alongside them.
 
-# About expressions
+## About expressions
 
 In Tutorial 1 you wrote `rain = data.climate_data_csv.by_name.rain_mm` — a direct reference to a single column. But that `=` is more powerful than it looks. **Most node properties that accept data actually accept a mathematical expression** rather than just a simple data reference.
 
@@ -57,11 +57,11 @@ This tutorial focuses on the most common case — building a single rainfall inp
 
 For the full expression language reference, see [Dynamic Expressions](../docs/concepts/dynamic-expressions/index.md).
 
-# Build the model
+## Build the model
 
 Open Kalix IDE and create a new model file called `stringybark_expressions.ini` in the same folder as the five CSVs. The fastest way is to copy your Tutorial 1 model file (`stringybark_sacramento.ini`) and rename the copy. The structure is identical except for two small changes below.
 
-## Step 1 — Add the three station files to `[inputs]`
+### Step 1 — Add the three station files to `[inputs]`
 
 ```toml
 [inputs]
@@ -74,7 +74,7 @@ rain_south.csv
 
 We've kept `climate_data.csv` so we can still pull `pet_mm` from it, and we've added the three new station files. The `rain_mm` column inside `climate_data.csv` is still loaded but we're about to stop referencing it.
 
-## Step 2 — Replace the rain line with a weighted expression
+### Step 2 — Replace the rain line with a weighted expression
 
 In the Sacramento node, replace the old single-source rain line with this:
 
@@ -98,7 +98,7 @@ Note the weights don't need to sum to 1 — they're whatever you decide reflects
 
 ![](../assets/tutorials-02-expressions/image_1.png)
 
-## The finished model file
+### The finished model file
 
 The rest of the file is unchanged from Tutorial 1. Putting it all together:
 
@@ -142,11 +142,11 @@ node.0001_sc_stringybark.floin
 node.0002_ga_widebridge.dsflow
 ```
 
-# Run it
+## Run it
 
 Save the file. Hit the **Run** button in Kalix IDE.
 
-# Compare with Tutorial 1 in the Run Manager
+## Compare with Tutorial 1 in the Run Manager
 
 Run both the Tutorial 1 and Tutorial 2 models in Kalix IDE, and open the **Run Manager**. Select both runs and use the Run Manager's plotting tool to overlay `node.0002_ga_widebridge.ds_1` from each. You should see two streamflow series that are visibly similar but not identical — the new rainfall (a weighted blend of three station series) produces a slightly different streamflow than the single areal-rainfall series in Tutorial 1.
 
@@ -174,7 +174,7 @@ The overlay above shows you *how* the simulated flow changed; "Show Model Change
 
 ![](../assets/tutorials-02-expressions/image_5.png)
 
-# What to try next
+## What to try next
 
 Small experiments. Each one only changes the rain or evap expression.
 
@@ -186,7 +186,7 @@ Small experiments. Each one only changes the rain or evap expression.
 
 4. **Use parentheses to group an expression** — wrap the weighted sum in parentheses and multiply by `1.1` to scale the combined rainfall up by 10%: `rain = 1.1 * (0.14 * data.rain_north_csv.by_name.rain_mm + 0.51 * data.rain_central_csv.by_name.rain_mm + 0.60 * data.rain_south_csv.by_name.rain_mm)`. Useful when you want to layer a climate-change factor over an existing combination of inputs.
 
-# Where to go from here
+## Where to go from here
 
 - **[Tutorial 3 — Relative paths and trailhead paths](03-paths.md)** — your input files live in a folder. What happens when you move the model? How do you build models that travel cleanly with their data?
 

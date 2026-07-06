@@ -6,13 +6,13 @@ title: "Tutorial 1 — Build your first model"
 
 **Tutorial 1 of the Kalix tutorial series.** You'll build a single-catchment rainfall-runoff model from scratch, run it, and look at the result. Expected time: about 20 minutes.
 
-# What you'll build
+## What you'll build
 
 A daily rainfall-runoff model for the (fictional) Stringybark Creek catchment — a Sacramento catchment node feeding a downstream gauge node, driven by ~30 years of daily rainfall and PET data. By the end you'll have a working model file, a simulation, and a chart of simulated vs. observed streamflow.
 
 ![](../assets/tutorials-01-first-model/image.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Kalix software** and the **Tutorial files** —
   1. Download Kalix from the [Downloads](../downloads.md) page. Unzip the bundled software to a suitable place on your computer and double click “KalixIDE.exe” to launch it.
@@ -24,15 +24,15 @@ A daily rainfall-runoff model for the (fictional) Stringybark Creek catchment �
   - `observed.csv` — observed streamflow at the gauge (ML/day)
   - Put both CSVs in the same folder. We'll build the model file (`stringybark_sacramento.ini`) from scratch in that same folder.
 
-# About the dataset
+## About the dataset
 
 The dataset is a daily time series covering 1980-01-01 to 2009-12-31 (30 years) for a fictional catchment we'll call **Stringybark Creek**, with a contributing area of **228 km²**. Each CSV has a `Date` column plus one or more value columns. Here, `climate_data.csv` carries two value columns (`rain_mm` and `pet_mm`) while `observed.csv` carries one (`obs`).
 
-# Build the model
+## Build the model
 
 We'll build `stringybark_sacramento.ini` one section at a time. Open Kalix IDE and create a new empty model file in the same folder as the two CSVs.
 
-## Step 1 — The `[kalix]` section
+### Step 1 — The `[kalix]` section
 
 The `[kalix]` section holds top-level model settings. We'll use it to lock the simulation period to the 30 years our data covers.
 
@@ -44,7 +44,7 @@ end = 2009-12-31
 
 If you leave `start` and `end` out, Kalix will infer the simulation period from the available input data. Setting them explicitly is good practice — it documents your intent and lets you simulate a sub-period without touching the data files.
 
-## Step 2 — The `[inputs]` section
+### Step 2 — The `[inputs]` section
 
 The `[inputs]` section lists the data files the model will load. Bare filenames are resolved relative to the model file's folder, which is what we want here.
 
@@ -58,7 +58,7 @@ A single CSV can hold any number of value columns, so the count of files you lis
 
 ![](../assets/tutorials-01-first-model/image_3.png)
 
-## Step 3 — A Sacramento catchment node
+### Step 3 — A Sacramento catchment node
 
 Now the heart of the model: a Sacramento rainfall-runoff node. The Sacramento Soil Moisture Accounting model takes daily rainfall and potential evaporation and produces a streamflow time series at the catchment outlet.
 
@@ -110,7 +110,7 @@ Call on this alias by replacing the name of the file (`climate_data_csv`) with t
 rain = data.climate_alias.by_name.rain_mm
 ```
 
-## Step 4 — A downstream gauge node
+### Step 4 — A downstream gauge node
 
 A `gauge` node is a passive node: it doesn't modify the flow passing through, it just gives you a named point in the network where the streamflow can be inspected and recorded. Real-world gauges are physical streamflow measurement stations; gauge nodes are the modelling equivalent.
 
@@ -130,7 +130,7 @@ Line by line:
 
 ![](../assets/tutorials-01-first-model/image_4.png)
 
-## Step 5 — The `[outputs]` section
+### Step 5 — The `[outputs]` section
 
 The `[outputs]` section lists the model results we want to record. We'll record flow at both nodes plus the three Sacramento runoff components.
 
@@ -160,7 +160,7 @@ These are:
 
 The Sacramento `dsflow` is the sum of the three runoff components (`flosf` + `flobf` + `floin`).
 
-## The finished model file
+### The finished model file
 
 Putting it all together, `stringybark_sacramento.ini` should look like this:
 
@@ -199,7 +199,7 @@ node.0001_sc_stringybark.floin
 node.0002_ga_widebridge.dsflow
 ```
 
-# Run it
+## Run it
 
 Save the file. Hit the **Run** button in Kalix IDE (or use the Run menu).
 
@@ -207,7 +207,7 @@ Save the file. Hit the **Run** button in Kalix IDE (or use the Run menu).
 
 The simulation should finish in a fraction of a second.
 
-# Look at the output
+## Look at the output
 
 The Run Manager window should open to a blank chart view. In order to plot `node.0002_ga_widebridge.dsflow` against the `obs` column of `observed.csv`, we must first load the data into the Run Manager. To load `observed.csv`, click and drag it from either your system file explorer or the KalixIDE file tree into the run manager window:
 
@@ -239,7 +239,7 @@ Try also plotting the three Sacramento flow components (`flosf`, `flobf`, `floin
 
 ![](../assets/tutorials-01-first-model/image_9.png)
 
-# What to try next
+## What to try next
 
 Small experiments to build intuition. Change one thing at a time and re-run.
 
@@ -251,7 +251,7 @@ Small experiments to build intuition. Change one thing at a time and re-run.
 
 4. **Inspect the link** — add `node.0002_ga_widebridge.usflow` to the outputs to record the flow arriving at the gauge from upstream. Plot it alongside `node.0001_sc_stringybark.dsflow` — the two series should overlay exactly, since the link between them doesn't modify flow.
 
-# Where to go from here
+## Where to go from here
 
 Once you're comfortable with this two-node setup, the next tutorials cover the rest of the foundations before we tackle bigger models:
 

@@ -4,7 +4,7 @@ title: "Loss"
 
 # Loss
 
-# At a glance…
+## At a glance…
 
 The loss node loses flow based on a provided flow-loss relationship.
 
@@ -19,7 +19,7 @@ table = 0, 0,
 ds_1 = node_below_loss
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -29,7 +29,7 @@ ds_1 = node_below_loss
 | table (optional) | Loss table defines the relationship between the upsteam flow and the loss. Refer to this page to read more about in Kalix. Example: `table = 0, 0, 1000, 0, 2000, 500, 1e8, 1e7` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -39,7 +39,7 @@ ds_1 = node_below_loss
 | ds\_1\_order | Orders on the link ds\_1 [ML] |
 | loss | Amount of water lost at this node [ML] |
 
-# How the node works
+## How the node works
 
 The flow on the secondary link is determine by interpolating the provided splitter table. This volume is sent to ds\_2, and the remainder of the flow is sent to ds\_1.
 
@@ -47,6 +47,6 @@ The flow on the secondary link is determine by interpolating the provided splitt
 
 `ds1=usflow−loss`
 
-# References
+## References
 
 None.

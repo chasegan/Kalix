@@ -4,7 +4,7 @@ title: "Routing"
 
 # Routing
 
-# At a glance…
+## At a glance…
 
 The routing node simulates streamflow routing. Each routing node incorporates a lag-routing component, and a storage routing component.
 
@@ -20,7 +20,7 @@ x = 0
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -34,7 +34,7 @@ ds_1 = my_other_node
 | x (optional) | Inflow bias. This sets the bias of the upstream flow (as opposed to the downstream flow) in the index flow term used in the pwl storage routing solver. Default value is 0. Example: `x = 0` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -44,7 +44,7 @@ ds_1 = my_other_node
 | ds\_1\_order | Orders on the link ds\_1 [ML] |
 | volume | Volume of water in the reach storage [ML] |
 
-# How the node works
+## How the node works
 
 The node includes two routing functions which may be used together or individually.
 
@@ -58,6 +58,6 @@ and mass balance requires that
 
 `Vi=Vi−1+qin,i−qout,i`
 
-# References
+## References
 
 None.

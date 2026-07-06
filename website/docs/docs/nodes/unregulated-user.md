@@ -4,7 +4,7 @@ title: "Unregulated_User"
 
 # Unregulated_User
 
-# At a glance…
+## At a glance…
 
 The unregulated\_user node represents a water user whose access is opportunistic. The user diverts water subject to licence conditions to satisfy their demands. If the demand cannot be fully satisfied, this is called a shortfall.
 
@@ -17,7 +17,7 @@ demand = data.extendeddataset.by_name.unrestricted_demand
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -32,7 +32,7 @@ ds_1 = my_other_node
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | account (...) |  |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -48,34 +48,34 @@ ds_1 = my_other_node
 | flow\_threshold | Flow threshold value [ML] which may vary due to functions |
 | demand\_carryover | Total demand carried over to the next timestep [ML]. |
 
-# How the node works
+## How the node works
 
 Demands and diversions must be positive. The user node extract flows to meet the demand as specified in the user node.
 
-### Pump capacity
+#### Pump capacity
 
 Flow available for diversion is limited by the specified pump capacity.
 
 `available=min(usflow,pump capacity)`
 
-### Flow threshold
+#### Flow threshold
 
 `available=max(usflow−threshold,0)`
 
-### Annual cap
+#### Annual cap
 
 Limits diversions on an annual basis. Diversion accounting starts on the first timestep of the specified month.
 
-### Demand carryover
+#### Demand carryover
 
 If demand carryover is allowed, then unmet demands will be carried forward with the hope of satisfying them in the next timestep. If a reset month is been specified, the carryover will be reset to 0 at the start of the first timestep on that calendar month each year.
 
-### Diversion
+#### Diversion
 
 `diversion=min(usflow,demand)`
 
 `dsflow=usflow−diversion`
 
-# References
+## References
 
 None.

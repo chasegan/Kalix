@@ -6,7 +6,7 @@ title: "Start Developing"
 
 Whether you're reporting a bug, building a new feature in KalixIDE, or working on the simulation engine, start here.
 
-# I want to report a bug or request a feature
+## I want to report a bug or request a feature
 
 If you want to report a bug or request a new feature, you can reach out to the development team using the contact details below. We track development tasks on github (<https://github.com/chasegan/Kalix/issues>), so you can see what is happening at all times.
 
@@ -14,7 +14,7 @@ If you want to report a bug or request a new feature, you can reach out to the d
 
 Kalix is open source and free but development costs time. If you are requesting development, please consider supporting the project.
 
-# I want to play with the code by myself
+## I want to play with the code by myself
 
 If you are curious about development, you can take a copy of the source code and tinker to your heart’s content. The [MPL2.0 licence](https://www.mozilla.org/en-US/MPL/2.0/) means you are free to use and modify the code, provided that any modifications are made available to the public under the same license.
 
@@ -51,7 +51,7 @@ The “build-portable-zip” scripts are the official distribution build scripts
 
 2. The output zip lands in dist/. This is the same script the official release workflow uses.
 
-# I want to set up a remote team to be part of Kalix development (⌐■\_■)
+## I want to set up a remote team to be part of Kalix development (⌐■\_■)
 
 If you are part of an organisation with an interest in Kalix, a some capacity and inclination to improve it, you may want to set up a remote Kalix dev team. Everyone stands to benefit from collaboration. This may include:
 
@@ -65,7 +65,7 @@ If you are part of an organisation with an interest in Kalix, a some capacity an
 
 Reach out to the core team (Contact details) to discuss how we might work together.
 
-# I am joining the core team (✿◠‿◠)!
+## I am joining the core team (✿◠‿◠)!
 
 If you are joining the core team it means you will be working directly inside the core repository, and will be responsible for:
 

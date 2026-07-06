@@ -4,11 +4,11 @@ title: "Referencing Model Results"
 
 # Referencing Model Results
 
-## Overview
+### Overview
 
 Model results (reflecting the system state) can be referenced within dynamic expressions in other parts of the model using the `node.*` namespace.
 
-## Reference Syntax
+### Reference Syntax
 
 Node outputs follow this pattern:
 
@@ -22,7 +22,7 @@ node.<node_name>.<output_variable>
 node.catchment.dsflow
 ```
 
-## ‘This’ Syntax
+### ‘This’ Syntax
 
 When referring to outputs of the current node, the ‘this’ syntax offers can be more convenient than giving the fully qualified name every time:
 
@@ -32,7 +32,7 @@ When referring to outputs of the current node, the ‘this’ syntax offers can 
 pump = if(this.usflow > 100, 10, 0)
 ```
 
-## Common Output Variables
+### Common Output Variables
 
 All node outputs are accessible in this way. Some common ones are:
 
@@ -45,7 +45,7 @@ All node outputs are accessible in this way. Some common ones are:
 | `volume` | Storage volume |
 | `loss` | Losses (e.g., seepage, evaporation) |
 
-## Using Node References
+### Using Node References
 
 Reference another node’s output in any dynamic expression:
 
@@ -67,7 +67,7 @@ type = user
 demand = 0.1 * node.other_catchment.inflow
 ```
 
-## Temporal Offset for Node Outputs
+### Temporal Offset for Node Outputs
 
 You can access previous timestep values using offset syntax:
 
@@ -93,7 +93,7 @@ node.reservoir.volume - node.reservoir.volume[-1, 0.0]
 if(node.catchment.dsflow > node.catchment.dsflow[-1, 0.0], 1, 0)
 ```
 
-## Name Handling
+### Name Handling
 
 Node names follow the same sanitisation rules as data references:
 

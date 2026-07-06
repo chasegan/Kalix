@@ -8,7 +8,7 @@ Model outputs listed in the [outputs] section are recorded during the simulation
 
 Refer to the node documentation ([Nodes](../nodes/index.md)) to see the available outputs.
 
-## Output file format
+### Output file format
 
 The CSV format has a single header row, and a single timestamp column.
 

@@ -4,13 +4,13 @@ title: "Ordering"
 
 # Ordering
 
-# Overview
+## Overview
 
 In regulated river systems, *river operators* use water infrastructure to control the flow of water. Irrigators, towns, and other water users submit orders specifying how much water they need. System operators then consider these requests to determine how to operate infrastructure — releasing water from storages, weirs, and managing pumps and channels — so that water arrives where it's needed, when it's needed. They must account for travel time through the system, potential tributary inflows, and transmission losses that may be incurred along the way.
 
 Kalix’s ordering system simulates this process, providing a way for models to represent the operation of infrastructure to meet user demands. The ordering system enables demand nodes (e.g. users and flow requirement nodes) to communicate their requirements to upstream infrastructure nodes (e.g. storages and offtakes) which then respond by making releases and modulating operations accordingly.
 
-## The Ordering System
+### The Ordering System
 
 Kalix’s ordering system follows a heuristic rules-based approach to ordering and operation (c.f. network-optimised approaches available in some platforms). Imperfect anticipation of future inflows, losses, and streamflow routing behaviour can lead to surpluses or shortfalls in water delivery, as occurs in real river systems.
 
@@ -40,19 +40,19 @@ This system is similar, but not identical, to the ordering system in other model
 
 The simple ordering system is explained in detail below.
 
-### Regulated Zones
+#### Regulated Zones
 
 Areas downstream of storage outlets are designated regulated zones. This storage node is the supply for the zone immediately below it. The zone extends downstream to (a) the next storage that can act as a supply, (b) the end of the system.
 
 When two regulated zones join at a confluence (confluence node or other node) the reach downstream can be considered part of both zones. Nodes below the confluence may be supplied by the storage of either zone. The section on ***directing orders*** describes how this works in more detail.
 
-### Travel Times
+#### Travel Times
 
 The travel time for each node in a regulated zone is an estimate of the streamflow routing lag between the supply storage and the node. The travel time is assumed to be constant throughout the whole simulation, and is based on the streamflow lag at a typical flow rate (specified by the modeller at the routing nodes, e.g. `typical_regulated_flow = 100`).
 
 For nodes in regulated zones below confluences, the travel time is based on the longest branch.
 
-### Adjusting Orders According to Expected Inflows and Losses
+#### Adjusting Orders According to Expected Inflows and Losses
 
 [How Orders Propagate](ordering.md)
 
@@ -66,7 +66,7 @@ Inflows represent opportunities for demands to be satisfied without releasing al
 
 Inflows on unregulated tributaries are not accounted for by the ordering system. While they may contribute flows to the system, they will not reduce the orders.
 
-### Directing Orders
+#### Directing Orders
 
 Orders propagate in an upstream direction, from users to the supply storage(s).
 
@@ -76,7 +76,7 @@ When a node, which is *not a confluence*, has multiple incoming links (branches)
 
 At confluence nodes, the orders are directed up regulated branches on the basis of the harmony rule expression. If the upstream branches have different travel times (T1 > T2), orders designated for the shorter branch are delayed (by an amount DT = T1-T2) such that the ordered water will arrive at the user node at the right time.
 
-### Simulating Operation
+#### Simulating Operation
 
 Regulated outlets on storage nodes are operated to satisfy orders.
 
@@ -87,7 +87,7 @@ Splitters (TBD).
 
 Nodes send **orders** upstream to request flows from operational infrastructure. Orders propagate from downstream to upstream, and this is done every timestep in the **ordering phase**, which occurs entirely before the flow phase (when flows are calculated).
 
-# A starting point
+### A starting point
 
 The model below has a **regulated\_user** node “0002\_user” which orders water according to a timeseries. There is a **storage** node “0001\_dam” which is upstream of the user and which tries to satisfy the order.
 
@@ -124,7 +124,7 @@ The plot below shows the order (solid green), the storage downstream flow (dotte
 
 ![](../../assets/docs-concepts-ordering/image_1.png)
 
-# How do orders propagate through losses?
+### How do orders propagate through losses?
 
 The following model introduces a **loss** node between the user and storage. This loss node has a known flow-loss relationship (the table), and this causes flows >200 ML/d to be partly lost. When orders propagate through loss nodes, they are automatically adjusted to cover the losses.
 
@@ -176,7 +176,7 @@ The presence of the loss node changes the results:
 | **Note about 100% losses** |  |
 | It is possible to construct loss relationships that lose 100% of additional flows above a certain point. The example on the right has no losses below 200ML/d, but then loses 100% of flow >200ML/d. The ordering system recognises this limitation and caps upstream orders at 200ML/d. | `table = Flow [ML], Loss [ML],   0 , 0,   200 , 0,   400 , 200,  1000 , 800` |
 
-# How do routing nodes affect orders?
+### How do routing nodes affect orders?
 
 Streamflow routing can cause flows, including flows intended to satisfy orders, to be delayed. **Regulated\_user** nodes who are separated from their supplying by routing will postpone their demands (that this their intention to divert water) to align with the estimated lag based on the properties of the streamflow routing.
 
@@ -226,7 +226,7 @@ The regulated\_user node places the same orders (the same timeseries pattern). T
 
 One way to overcome shortfalls due to nontrivial streamflow processes is to apply an overorder factor to the order. By scaling up all the orders, it is more likely that there will be enough water to meet the actual demand on any given day. Using an overorder factor comes at the cost of running the system less efficiently.
 
-# How do orders propagate through inflow nodes?
+### How do orders propagate through inflow nodes?
 
 Inflow nodes on regulated pathways
 
@@ -234,7 +234,7 @@ Inflow nodes on regulated pathways
 
 Inflows may satisfy some or all of the order required for a r**egulated\_user.** When orders propagate through inflow nodes with the parameter `expected_inflow` set, they are automatically adjusted (i.e. partially or wholly satisfied) by the expected inflow.
 
-## Case 1: Constant expected inflow
+#### Case 1: Constant expected inflow
 
 ![](../../assets/docs-concepts-ordering/image_7.png)
 
@@ -268,7 +268,7 @@ The regulated\_user node places the same orders (the same timeseries pattern). T
 
 ![](../../assets/docs-concepts-ordering/image_8.png)
 
-## Case 2: Recession factor
+#### Case 2: Recession factor
 
 We now consider a case where the expected inflow is defined as a proportion of the (previous day’s) inflow. Consider the following alternative definition of node 0006\_inflow, using the same timeseries pattern as the user node for demand.
 
@@ -291,7 +291,7 @@ The volume required to be released from the dam then takes on the following saw-
 
 ![](../../assets/docs-concepts-ordering/image_10.png)
 
-# TODO
+### TODO
 
 - Confluences
   - Expected inflow (sum of all unregulated paths?)

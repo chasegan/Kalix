@@ -4,7 +4,7 @@ title: "GR4J"
 
 # GR4J
 
-# At a glance…
+## At a glance…
 
 This node uses a GR4J rainfall-runoff model to represent catchment inflows from a catchment of a fixed area. The model takes rainfall and potential evapotranspiration data and determines inflows. The GR4J model has 4 parameters representing catchment characteristics.
 
@@ -19,7 +19,7 @@ params = 1500, 4, 65, 0.38
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -33,7 +33,7 @@ ds_1 = my_other_node
 | variant (optional) | Selects the model formulation: `gr4j` (classic daily model, used by default if omitted) or `gr4h` (suitable for sub-daily timesteps). Example: `variant = gr4h` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Gr4j nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -46,7 +46,7 @@ ds_1 = my_other_node
 | rain | Input rainfall [mm] |
 | evap | Input evapotranspiration [mm] |
 
-# How the node works
+## How the node works
 
 The GR4J node simply adds inflows from a GR4J model (Perrin et al., 2003) to the system. The downstream flow is
 
@@ -72,12 +72,12 @@ Considerations:
 
 - Calibration: These bounds are used during the model calibration process to help find the optimal parameter values for a given hydrological model application.
 
-# Daily (GR4J) and sub-daily (GR4H) formulations
+## Daily (GR4J) and sub-daily (GR4H) formulations
 
 By default the node uses the standard daily **GR4J** model. Setting `variant = gr4h` switches it to **GR4H**, the sub-daily formulation from the airGR package (INRAE). GR4H differs from GR4J only in two constants that were recalibrated for short timesteps: the unit-hydrograph shape exponent (2.5 in GR4J, 1.25 in GR4H), and the percolation coefficient (9/4 in GR4J, 21/4 in GR4H).
 
 GR4H is appropriate for sub-daily timesteps (e.g. 15-minute, 1-hour, etc). Time-related quantities are expressed per timestep rather than per day — i.e. X2 is in mm/timestep and X4 is a number of timesteps.
 
-# References
+## References
 
 Perrin, C., C. Michel, et al. (2003). "Improvement of a parsimonious model for streamflow simulation." *Journal of Hydrology* 279(1-4): 275-289

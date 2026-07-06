@@ -36,7 +36,7 @@ Kalix models declare input data using file paths. Each file path can be written 
 
 Once a file is listed here, you can reference its columns from dynamic expressions using the `data.*` namespace. See [Referencing Input Data](dynamic-expressions/referencing-input-data.md) for column lookup, name sanitisation, and temporal offset syntax.
 
-# Trailhead Paths
+### Trailhead Paths
 
 Relative paths work well when all your models sit at the same depth in your project folder, but they break when models are organised at different levels. In order to reference the same “evaporation.csv” dataset, each model would need a different relative path:
 
@@ -72,7 +72,7 @@ All three models in the example above can now use the exact same path, regardles
 ^/data/climate/evaporation.csv
 ```
 
-## Syntax
+#### Syntax
 
 ```
 ^/<target path>
@@ -84,7 +84,7 @@ All three models in the example above can now use the exact same path, regardles
 
 Use forward slashes `/` regardless of your operating system.
 
-## How resolution works
+#### How resolution works
 
 1. Kalix looks in the current folder (where your model file lives) for the target path.
 
@@ -96,7 +96,7 @@ Use forward slashes `/` regardless of your operating system.
 
 If the target exists at more than one level, the **nearest one wins** — the first match walking upward from your model file is used.
 
-## Examples
+#### Examples
 
 | Trailhead path | Resolves to |
 | --- | --- |
@@ -104,7 +104,7 @@ If the target exists at more than one level, the **nearest one wins** — the fi
 | `^/my_file.csv` | The nearest ancestor directory (starting from the current directory) where `my_file.csv` exists. |
 | `^/../my_file.csv` | The nearest ancestor directory (starting from the current directory) where `../my_file.csv` exists. Note that this version will always be looking up one level due to the `../`, and therefore will skip any copy of `my_file.csv` in the current directory. |
 
-## When to use trailhead paths
+#### When to use trailhead paths
 
 **Use them when** your project has a shared data folder and models at varying depths. They’re especially useful for scenario-based workflows where you duplicate and reorganise model files frequently.
 
@@ -112,7 +112,7 @@ If the target exists at more than one level, the **nearest one wins** — the fi
 
 **Stick with absolute paths when** your data lives outside the project tree entirely (e.g. on a network drive that is always mounted at the same location).
 
-## Tips
+#### Tips
 
 - The target can be a file or a folder.
 
@@ -132,7 +132,7 @@ Supported data formats are listed below.
 | .csv | Comma separated values. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
-# CSV files
+### CSV files
 
 Rules for CSV files are as follows:
 
@@ -147,7 +147,7 @@ Rules for CSV files are as follows:
 
 - Blank values (or whitespace) are taken to indicate missing data.
 
-# Pixie binary files (.pxt + .pxb)
+### Pixie binary files (.pxt + .pxb)
 
 The Pixie binary format stores one or more timeseries efficiently using a compression algorithm inspired by [Gorilla](https://www.vldb.org/pvldb/vol8/p1816-teller.pdf). It always uses **two paired files** that share the same base name. Both files are required.
 
@@ -179,7 +179,7 @@ The Pixie binary format stores one or more timeseries efficiently using a compre
 
 Both 64-bit double precision (recommended) and 32-bit float precision are supported.
 
-# How to think about timestamps and timeseries data
+### How to think about timestamps and timeseries data
 
 This is trickier than you might think!
 

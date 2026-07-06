@@ -6,7 +6,7 @@ title: "Kalix IDE"
 
 ![](../../assets/docs-using-ide/Screenshot_2025-10-10_at_12.16.40_pm.png)
 
-# Interactions
+## Interactions
 
 **Rename node** from the schematic map context menu
 
@@ -84,7 +84,7 @@ Look for the **Plot Palettes** button in the plotting tool create custom colour 
 
 ![](../../assets/docs-using-ide/image_18.png)![](../../assets/docs-using-ide/92a32e80-6483-4366-ad2c-563768393bbd.png)
 
-# Themes
+## Themes
 
 Themes can be independently set for the Editor Syntax, Node Palate and the Application Window.
 
@@ -96,16 +96,16 @@ Themes can be independently set for the Editor Syntax, Node Palate and the Appli
 
 ![](../../assets/docs-using-ide/Screenshot_2025-10-10_at_12.17.05_pm.png)
 
-# Run Manager
+## Run Manager
 
 It is a run manager. Yes.
 
 ![](../../assets/docs-using-ide/image_19.png)
 
-# Docking
+## Docking
 
 Fn+F9 reveals docking capabilities in the main window. Holding Fn+F9, look for the blue handles that appear in the top left of the schematic editor and text editors. This feature is in alpha. Good luck 😄.
 
-# KalixIDE Preferences
+## KalixIDE Preferences
 
 Preferences are automatically saved in the preference file, which lives in the `./app/kalix_prefs.json` file relative to your KalixIDE executable. Some of these are configurable at File > Preferences, while others are simply settings remembered from your last session.

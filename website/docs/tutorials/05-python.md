@@ -6,7 +6,7 @@ title: "Tutorial 5 — Running Kalix from Python"
 
 **Tutorial 5 of the Kalix tutorial series.** You'll drive a Kalix simulation directly from Python using the `kalix` package, read the outputs as pandas DataFrames, and plot them. Expected time: about 20 minutes.
 
-# What you'll build
+## What you'll build
 
 A Jupyter notebook that sits next to your model file and:
 
@@ -22,7 +22,7 @@ This is the foundation for any analysis, scripting, or notebook-driven workflow 
 
 ![](../assets/tutorials-05-python/image.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
 
@@ -32,7 +32,7 @@ This is the foundation for any analysis, scripting, or notebook-driven workflow 
 
 - **Tutorial files** — download the `005/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/005). The repo also ships a fully-worked `analysis.ipynb` if you'd rather skim than type along.
 
-# Project layout
+## Project layout
 
 ```
 005/
@@ -50,7 +50,7 @@ This is the foundation for any analysis, scripting, or notebook-driven workflow 
 
 The notebook sits **next to the model file**. That's deliberate — keep your scripts and analysis alongside the artefact they operate on so relative paths stay simple.
 
-# Step 1 — Install the `kalix` package
+## Step 1 — Install the `kalix` package
 
 ```bash
 pip install kalix
@@ -65,7 +65,7 @@ import kalix
 print(f"kalix version: {kalix.__version__}")
 ```
 
-# Step 2 — Open a notebook in the model folder
+## Step 2 — Open a notebook in the model folder
 
 ```bash
 cd models/baseline
@@ -76,7 +76,7 @@ This launches Jupyter Lab with `models/baseline/` as its working directory — s
 
 Create a new notebook and call it `analysis.ipynb`.
 
-# Step 3 — Run the model from Python
+## Step 3 — Run the model from Python
 
 Imports and a single call:
 
@@ -89,7 +89,7 @@ kalix.simulate("stringybark.ini", output_file="results.csv")
 
 That's it. `kalix.simulate()` runs the INI model in-process and writes the requested outputs to `results.csv`. The format is inferred from the file extension.
 
-# Step 4 — Read the output and plot it
+## Step 4 — Read the output and plot it
 
 The CSV that Kalix writes is just a normal time-indexed file. Pandas reads it directly:
 
@@ -118,7 +118,7 @@ ax.legend();
 
 ![](../assets/tutorials-05-python/image_1.png)
 
-# Step 5 (bonus) — Pixie format
+## Step 5 (bonus) — Pixie format
 
 Kalix's native output format is **Pixie** — Gorilla-compressed timeseries written as a `.pxt` / `.pxb` pair. It's much smaller and faster to read than CSV for big runs (think: many nodes over multi-decade simulations). For this little 30-year, 6-output example the win isn't visible, but the syntax is identical and worth knowing.
 
@@ -139,7 +139,7 @@ The DataFrame has the same shape as the CSV version, but the index is now a **tz
 
 ![](../assets/tutorials-05-python/image_2.png)
 
-# What to try next
+## What to try next
 
 - **Add a mass-balance report** — pass `mass_balance="mbal.txt"` to `kalix.simulate(...)` to write a plain-text report of inflows, outflows, and storage changes alongside the timeseries output.
 
@@ -147,7 +147,7 @@ The DataFrame has the same shape as the CSV version, but the index is now a **tz
 
 - **Round-trip your own data** — use `kalix.write_pixie(path, df)` to save any pandas DataFrame (with a UTC `DatetimeIndex`) into Pixie format. Useful for sharing pre-processed inputs across models.
 
-# Where to go from here
+## Where to go from here
 
 - **[Tutorial 4 — Running Kalix from the commandline](04-commandline.md)** — drive Kalix from a terminal instead of Python. Complementary skill for batch runs and CI pipelines.
 

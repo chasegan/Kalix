@@ -6,7 +6,7 @@ title: "Tutorial 3 — Relative paths and trailhead paths"
 
 **Tutorial 3 of the Kalix tutorial series.** You'll reorganise Tutorial 2's Stringybark model into a typical multi-folder project layout, add a wetter-climate scenario at a deeper folder, and switch from fragile relative paths to portable trailhead paths. Expected time: about 15 minutes.
 
-# What you'll build
+## What you'll build
 
 A small project with shared input data in one place and two model variants — a `baseline` and a `wetter` scenario — at different depths under a `models/` folder. Along the way you'll experience how relative paths break, and you’ll fix it once-and-for-all using Kalix's trailhead paths.
 
@@ -14,7 +14,7 @@ A small project with shared input data in one place and two model variants — a
 
 ![](../assets/tutorials-03-paths/image_1.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
 
@@ -35,7 +35,7 @@ A small project with shared input data in one place and two model variants — a
         └── stringybark.ini
 ```
 
-# The three path styles
+## The three path styles
 
 Kalix accepts three styles of path in `[inputs]`:
 
@@ -47,7 +47,7 @@ Kalix accepts three styles of path in `[inputs]`:
 
 For the full reference on path syntax and resolution, see [Declaring Input Data](../docs/concepts/input-data.md).
 
-# Step 1 — Run the baseline
+## Step 1 — Run the baseline
 
 Open `models/baseline/stringybark.ini` in Kalix IDE. The `[inputs]` section uses **relative paths** — each one starts with `../../` to step up out of `baseline/` and `models/`, then into `data/`:
 
@@ -64,7 +64,7 @@ Run the model. It works — the relative paths resolve correctly because `../../
 
 ![](../assets/tutorials-03-paths/image_2.png)
 
-# Step 2 — Add a wetter-climate scenario
+## Step 2 — Add a wetter-climate scenario
 
 Now imagine you want to explore what happens if rainfall is 20% higher. The clean way to manage variants is to put each scenario in its own folder so files don't collide.
 
@@ -90,7 +90,7 @@ rain = 1.2 * (0.14 * data.rain_north_csv.by_name.rain_mm +
               0.60 * data.rain_south_csv.by_name.rain_mm)
 ```
 
-# Step 3 — Watch the paths break
+## Step 3 — Watch the paths break
 
 Try to run the wetter model.
 
@@ -98,9 +98,9 @@ It fails. Kalix tells you it can't find the input files. Why? The new file lives
 
 ![](../assets/tutorials-03-paths/image_3.png)
 
-# Step 4 — Two ways to fix it
+## Step 4 — Two ways to fix it
 
-## Option A — Patch the relative paths
+### Option A — Patch the relative paths
 
 You could change the wetter model's `[inputs]` from `../../data/...` to `../../../data/...` (one more `../` to climb the extra level):
 
@@ -115,7 +115,7 @@ You could change the wetter model's `[inputs]` from `../../data/...` to `../../.
 
 This works. But every time you add a deeper scenario folder, or move a model around, you have to re-count `../` segments and edit every line in `[inputs]`. The number of `../` segments depends on *where each model lives*, which is fragile.
 
-## Option B — Switch to trailhead paths
+### Option B — Switch to trailhead paths
 
 The `^/` prefix turns the path into a **trailhead path** — Kalix starts at the model's folder and searches *upward* through parent folders until it finds the target. This means the same line works regardless of how deeply the model is nested.
 
@@ -132,11 +132,11 @@ Replace `../../` (or `../../../`) with `^/`:
 
 Whether your model is at `models/baseline/` or `models/scenarios/wetter/sensitivity/`, the trailhead expression resolves to the same `data/` folder. You write it once and forget it.
 
-# Step 5 — Apply trailhead paths to both models
+## Step 5 — Apply trailhead paths to both models
 
 Update the `[inputs]` section in **both** `models/baseline/stringybark.ini` *and* `models/scenarios/wetter/stringybark.ini` to use the trailhead form shown above. Save both files. Now both models share the same `[inputs]` block — literally the same five lines — even though they live at different depths.
 
-# Run both and compare
+## Run both and compare
 
 Run the baseline. Run the wetter scenario. Both work, from any depth.
 
@@ -144,7 +144,7 @@ Open the **Run Manager** and overlay `node.0002_ga_widebridge.ds_1` from each ru
 
 ![](../assets/tutorials-03-paths/image_4.png)
 
-# What to try next
+## What to try next
 
 1. **Go deeper** — create `models/scenarios/wetter/sensitivity/stringybark.ini` (another copy of wetter). Same trailhead paths; same result. The deeper the nesting, the bigger the win over relative paths.
 
@@ -154,7 +154,7 @@ Open the **Run Manager** and overlay `node.0002_ga_widebridge.ds_1` from each ru
 
 4. **Mix and match** — leave one input as an absolute path, the rest as trailhead. Kalix happily mixes styles within a single `[inputs]` block.
 
-# Where to go from here
+## Where to go from here
 
 - **[Tutorial 4 — Running Kalix from the commandline](04-commandline.md)** — drive Kalix from a terminal instead of the IDE. Foundation for scripting and batch runs.
 

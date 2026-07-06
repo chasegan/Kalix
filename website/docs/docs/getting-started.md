@@ -4,7 +4,7 @@ title: "Getting Started"
 
 # Getting Started
 
-# About Kalix
+## About Kalix
 
 Kalix is a hydrologic modelling platform for catchment and river simulation. It is focussed on core performance and technical usability. It aims to empower modellers through:
 
@@ -38,7 +38,7 @@ Kalix models conceptualise river systems as a network of node and links.
 
 The model operates on a constant timestep (typically a daily timestep, but this is configurable).
 
-# Where to get it
+## Where to get it
 
 |  |  |
 | --- | --- |
@@ -52,7 +52,7 @@ The model operates on a constant timestep (typically a daily timestep, but this 
 | Task management on github: | <https://github.com/users/chasegan/projects/1/views/2> |
 | Dev notes on github: | <https://github.com/chasegan/Kalix/wiki> |
 
-# Quick Example
+## Quick Example
 
 ```rust
 [kalix]

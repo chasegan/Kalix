@@ -6,7 +6,7 @@ title: "Simulation Context Vars"
 
 The `sim.*` namespace provides access to the current simulation date and timestep. These variables are useful for building time-dependent logic into your model.
 
-## Available Variables
+### Available Variables
 
 | Variable | Description | Example Value |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ The `sim.*` namespace provides access to the current simulation date and timeste
 | `sim.day_of_year` | Day of year (1-366) | `167` |
 | `sim.step` | Simulation timestep counter (from 0) | `42` |
 
-## Examples
+### Examples
 
 ```
 # Seasonal demand multiplier (higher in summer months)

@@ -4,7 +4,7 @@ title: "Sacramento"
 
 # Sacramento
 
-# At a glance…
+## At a glance…
 
 This node uses a Sacramento rainfall-runoff model to represent catchment inflows from a catchment of a fixed area. The model takes rainfall and potential evapotranspiration data and determines inflows. The Sacramento model has 17 parameters (including laguh) representing catchment characteristics.
 
@@ -19,7 +19,7 @@ params = 0,45,60,0.01,0.01,150,0,0.11,1.5,0,0.2,0.01,25,0.2,47,15,0.1
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -32,7 +32,7 @@ ds_1 = my_other_node
 | params (compulsory) | The Sacramento model parameters:   adimp, lzfpm, lzfsm, lzpk,  lzsk, lztwm, pctim, pfree,  rexp, sarva, side, ssout,   uzfwm, uzk, uztwm, zperc,   laguh Example: `params = 0, 45, 60, 0.01, 0.01, 150, 0, 0.11, 1.5, 0, 0.2, 0.01, 25, 0.2, 47, 15, 0.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Gr4j nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -49,7 +49,7 @@ ds_1 = my_other_node
 | flobf | Internal flux component - baseflow [ML] |
 | roimp | Internal flux component - impervious runoff [ML] |
 
-# How the node works
+## How the node works
 
 The sacramento node adds inflows from a Sacramento rainfall-runoff model (Burnash, 1973) to the system. The downstream flow is therefore
 
@@ -97,6 +97,6 @@ Parameters for Runoff Routing
 
 ![](../../assets/docs-nodes-sacramento/image.png)
 
-# References
+## References
 
 Burnash, R. J. (1973). *A generalized streamflow simulation system: Conceptual modeling for digital computers*. US Department of Commerce, National Weather Service, and State of California, Department of Water Resources.

@@ -4,7 +4,7 @@ title: "Order_Control"
 
 # Order_Control
 
-# At a glance…
+## At a glance…
 
 The order\_control node allows the modeller to manipulate orders at a point in the network. This includes setting the orders (replacing the values) or applying minimum or maximum values, using dynamic expressions.
 
@@ -16,7 +16,7 @@ min_order = if(sim.month >= 6 && sim.month <= 8, 50, 0)
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -29,7 +29,7 @@ ds_1 = my_other_node
 | delay\_order\_steps (optional) | This property allows the modeller to delay downstream orders by the specified number of timesteps. This is an advanced feature allowing the modeller to manually delay orders on regulated pathways if they would otherwise deliver too early. Example `delay_order_steps = 2` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -43,16 +43,16 @@ ds_1 = my_other_node
 | order | The order sent upstream [ML] |
 | order\_due | The order previously sent which is due this timestep [ML] |
 
-# How the node works
+## How the node works
 
 If the modeller has specified `set_order`, then this value is ordered this timestep regardless of the downstream orders. In this case, this is all the node does.
 
 Otherwise, if this modeller has specified `delay_order_steps`, then the downstream orders are lagged by this many steps. The downstream orders are subsequently subject to bounds specified by `min_order` and `max_order` . The min order functionality is useful for implementing environmental demands (or other non-consumptive demands). The max order functionality is useful for implementing operational constraints in the regulated network.
 
-# References
+## References
 
 None.
 
-# Changelog
+## Changelog
 
 Formerly known as “Order\_Constraint” up to Kalix v0.3.2.

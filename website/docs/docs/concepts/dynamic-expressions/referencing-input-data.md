@@ -20,17 +20,17 @@ Date,Rainfall,Evaporation
 2020-01-02,0.0,5.1
 ```
 
-## Referencing Data in Expressions
+### Referencing Data in Expressions
 
 Once imported, you can reference any column using the `data.*` namespace in dynamic expressions. Kalix provides two ways to reference columns:
 
-### By Column Name
+#### By Column Name
 
 ```
 data.<filename>.by_name.<column_name>
 ```
 
-### By Column Index
+#### By Column Index
 
 ```
 data.<filename>.by_index.<column_number>
@@ -43,7 +43,7 @@ Column indices start at 1 (the first data column after the date column).
 - `data.climate_csv.by_index.1` - also references the Rainfall column  
 - `data.climate_csv.by_index.2` - references the Evaporation column
 
-## Name Sanitisation
+### Name Sanitisation
 
 Kalix sanitises filenames and column names to ensure valid references:
 
@@ -59,7 +59,7 @@ Kalix sanitises filenames and column names to ensure valid references:
 
 This means references are **case-insensitive** - `data.climate_csv.by_name.Rainfall` and `data.climate_csv.by_name.rainfall` both work.
 
-## Temporal Offset Syntax
+### Temporal Offset Syntax
 
 You can access values from previous or future timesteps using offset syntax:
 
@@ -90,7 +90,7 @@ data.climate_csv.by_name.rainfall - data.climate_csv.by_name.rainfall[-1, 0.0]
 
 **Note:** Forward lookups (positive offsets) only work for `data.*` references where data is pre-loaded. They cannot be used with `node.*` references since future model outputs haven’t been computed yet.
 
-## Using Data in Node Parameters
+### Using Data in Node Parameters
 
 Reference data in any node parameter that accepts dynamic expressions:
 

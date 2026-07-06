@@ -8,13 +8,13 @@ Objective functions available in Kalix for hydrological model calibration. All o
 
 ---
 
-## NSE - Nash-Sutcliffe Efficiency
+### NSE - Nash-Sutcliffe Efficiency
 
-### Description
+#### Description
 
 The Nash-Sutcliffe Efficiency (NSE) is one of the most widely used statistics for assessing the goodness-of-fit of hydrological models. It compares the performance of the model against a simple baseline (the mean of observed values).
 
-### Formula
+#### Formula
 
 `NSE=1−∑i=1n(Qo[i]−Qo)2∑i=1n(Qo[i]−Qm[i])2`
 
@@ -24,7 +24,7 @@ Where:
 - $\overline{Q\_o}$ = mean of observed values  
 - *n* = number of timesteps
 
-### Optimisation
+#### Optimisation
 
 - **Original range**: (−∞, 1] where 1 = perfect fit
 
@@ -32,7 +32,7 @@ Where:
 
 - **Optimal value**: -1.0 (corresponds to NSE = 1.0)
 
-### When to Use
+#### When to Use
 
 - General-purpose calibration metric
 
@@ -46,19 +46,19 @@ Where:
 
 ---
 
-## LNSE - Log Nash-Sutcliffe Efficiency
+### LNSE - Log Nash-Sutcliffe Efficiency
 
-### Description
+#### Description
 
 Log-transformed version of NSE that applies logarithmic transformation to flows before calculating the Nash-Sutcliffe metric. This gives more weight to low flows compared to standard NSE.
 
-### Formula
+#### Formula
 
 `LNSE=1−∑i=1n(ln(Qo[i]+ϵ)−ln(Qo+ϵ))2∑i=1n(ln(Qo[i]+ϵ)−ln(Qm[i]+ϵ))2`
 
 Where *ϵ* = 0.01 is a small constant added to avoid ln (0)
 
-### Optimisation
+#### Optimisation
 
 - **Original range**: (−∞, 1] where 1 = perfect fit
 
@@ -66,7 +66,7 @@ Where *ϵ* = 0.01 is a small constant added to avoid ln (0)
 
 - **Optimal value**: -1.0 (corresponds to LNSE = 1.0)
 
-### When to Use
+#### When to Use
 
 - When accurate simulation of low flows is important
 
@@ -78,17 +78,17 @@ Where *ϵ* = 0.01 is a small constant added to avoid ln (0)
 
 ---
 
-## RMSE - Root Mean Square Error
+### RMSE - Root Mean Square Error
 
-### Description
+#### Description
 
 RMSE measures the average magnitude of errors between observed and simulated values. It gives more weight to larger errors due to squaring.
 
-### Formula
+#### Formula
 
 `RMSE=n1∑i=1n(Qo[i]−Qm[i])2`
 
-### Optimization
+#### Optimization
 
 - **Range**: [0, ∞) where 0 = perfect fit
 
@@ -96,7 +96,7 @@ RMSE measures the average magnitude of errors between observed and simulated val
 
 - **Optimal value**: 0.0
 
-### When to Use
+#### When to Use
 
 - When you want errors in the same units as your data
 
@@ -108,17 +108,17 @@ RMSE measures the average magnitude of errors between observed and simulated val
 
 ---
 
-## MAE - Mean Absolute Error
+### MAE - Mean Absolute Error
 
-### Description
+#### Description
 
 MAE measures the average absolute difference between observed and simulated values. Unlike RMSE, it treats all errors proportionally.
 
-### Formula
+#### Formula
 
 `MAE=n1∑i=1n∣Qo[i]−Qm[i]∣`
 
-### Optimization
+#### Optimization
 
 - **Range**: [0, ∞) where 0 = perfect fit
 
@@ -126,7 +126,7 @@ MAE measures the average absolute difference between observed and simulated valu
 
 - **Optimal value**: 0.0
 
-### When to Use
+#### When to Use
 
 - When outliers should not dominate the error metric
 
@@ -138,13 +138,13 @@ MAE measures the average absolute difference between observed and simulated valu
 
 ---
 
-## KGE - Kling-Gupta Efficiency
+### KGE - Kling-Gupta Efficiency
 
-### Description
+#### Description
 
 The Kling-Gupta Efficiency provides a decomposed analysis of model performance by separately evaluating correlation, variability bias, and mean bias. It was developed to address limitations in NSE.
 
-### Formula
+#### Formula
 
 `KGE=1−(r−1)2+(α−1)2+(β−1)2`
 
@@ -153,7 +153,7 @@ Where:
 - `α=σoσm` = ratio of simulated to observed standard deviations  
 - `β=μoμm` = ratio of simulated to observed means
 
-### Optimization
+#### Optimization
 
 - **Original range**: (−∞, 1] where 1 = perfect fit
 
@@ -161,7 +161,7 @@ Where:
 
 - **Optimal value**: -1.0 (corresponds to KGE = 1.0)
 
-### When to Use
+#### When to Use
 
 - Provides balanced assessment of three model aspects:
   - **Correlation** (timing and dynamics)
@@ -176,17 +176,17 @@ Where:
 
 ---
 
-## PBIAS - Percent Bias
+### PBIAS - Percent Bias
 
-### Description
+#### Description
 
 Percent Bias measures the average tendency of simulated values to be larger or smaller than observed values. Positive values indicate model overestimation, negative values indicate underestimation.
 
-### Formula
+#### Formula
 
 `PBIAS=100×∑i=1nQo[i]∑i=1n(Qm[i]−Qo[i])`
 
-### Optimization
+#### Optimization
 
 - **Range**: (−∞, ∞) where 0 = no bias
 
@@ -194,7 +194,7 @@ Percent Bias measures the average tendency of simulated values to be larger or s
 
 - **Optimal value**: 0.0
 
-### When to Use
+#### When to Use
 
 - Simple measure of volume balance
 
@@ -206,13 +206,13 @@ Percent Bias measures the average tendency of simulated values to be larger or s
 
 ---
 
-## SDEB - Sorted Data Error with Bias
+### SDEB - Sorted Data Error with Bias
 
-### Description
+#### Description
 
 SDEB is a specialized objective function that combines temporal error (SD), distributional error (SE), and volume bias (B). It uses square-root transformation to balance emphasis between high and low flows and compares both chronological sequences and flow duration curves.
 
-### Formula
+#### Formula
 
 `SDEB = (0.1 × SD + 0.9 × SE) × B`
 
@@ -229,7 +229,7 @@ Where *Ro* and *Rm* are observed and simulated values sorted in ascending order 
 **Bias Penalty (B)**:  
 `B=1+∑i=1nQo[i]∣∑i=1nQo[i]−∑i=1nQm[i]∣`
 
-### Optimization
+#### Optimization
 
 - **Range**: [0, ∞) where 0 = perfect fit
 
@@ -237,7 +237,7 @@ Where *Ro* and *Rm* are observed and simulated values sorted in ascending order 
 
 - **Optimal value**: 0.0
 
-### When to Use
+#### When to Use
 
 - Balanced emphasis on flow distribution (90%) and timing (10%)
 
@@ -249,7 +249,7 @@ Where *Ro* and *Rm* are observed and simulated values sorted in ascending order 
 
 - Good for applications where flow distribution matters (e.g., hydropower, ecology)
 
-### Special Features
+#### Special Features
 
 - Uses lazy caching for efficiency
 
@@ -257,19 +257,19 @@ Where *Ro* and *Rm* are observed and simulated values sorted in ascending order 
 
 ---
 
-## PEARS\_R - Pearson’s Correlation Coefficient
+### PEARS\_R - Pearson’s Correlation Coefficient
 
-### Description
+#### Description
 
 Pearson’s R measures the linear correlation between observed and simulated values. It assesses how well the model captures the dynamics and timing of the observed data, independent of bias or scale.
 
-### Formula `r=∑i=1n(Qo[i]−Qo)2×∑i=1n(Qm[i]−Qm)2∑i=1n(Qo[i]−Qo)(Qm[i]−Qm)`
+#### Formula `r=∑i=1n(Qo[i]−Qo)2×∑i=1n(Qm[i]−Qm)2∑i=1n(Qo[i]−Qo)(Qm[i]−Qm)`
 
 Where:  
 - $\overline{Q\_o}$ = mean of observed values  
 - $\overline{Q\_m}$ = mean of simulated values
 
-### Optimization
+#### Optimization
 
 - **Original range**: [−1, 1] where 1 = perfect positive correlation
 
@@ -277,7 +277,7 @@ Where:
 
 - **Optimal value**: -1.0 (corresponds to R = 1.0)
 
-### When to Use
+#### When to Use
 
 - Focus on timing and dynamics rather than volume
 
@@ -295,7 +295,7 @@ Where:
 
 - R > 0.5: moderate correlation
 
-### Limitations
+#### Limitations
 
 - Does not penalize bias or variability differences
 
@@ -305,7 +305,7 @@ Where:
 
 ---
 
-## Summary Table
+### Summary Table
 
 | Objective | Config Name | Optimal | Emphasizes |
 | --- | --- | --- | --- |
@@ -320,7 +320,7 @@ Where:
 
 ---
 
-## Configuration Example
+### Configuration Example
 
 To use an objective function in your calibration INI file:
 
@@ -332,9 +332,9 @@ Valid options: `NSE`, `LNSE`, `RMSE`, `MAE`, `KGE`, `PBIAS`, `SDEB`, `PEARS_R`
 
 ---
 
-## Recommendations
+### Recommendations
 
-### For General Hydrological Calibration
+#### For General Hydrological Calibration
 
 - **First choice**: `SDEB` - provides balanced assessment
 
@@ -342,21 +342,21 @@ Valid options: `NSE`, `LNSE`, `RMSE`, `MAE`, `KGE`, `PBIAS`, `SDEB`, `PEARS_R`
 
 - **Alternative**: `NSE` - widely used
 
-### For Low-Flow Focused Applications
+#### For Low-Flow Focused Applications
 
 - **First choice**: `LNSE` - emphasizes baseflow
 
 - **Alternative**: `SDEB` - balanced high/low flows
 
-### For Volume Balance
+#### For Volume Balance
 
 - Use `PBIAS` in combination with other metrics
 
-### For Timing Matching
+#### For Timing Matching
 
 - **First choice**: `PEARS_R` - focuses on timing
 
-### For Error Measurement
+#### For Error Measurement
 
 - `MAE` - less sensitive to outliers
 

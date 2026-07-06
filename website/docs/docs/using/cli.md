@@ -27,9 +27,9 @@ Examples:
 | > kalix get-api |
 | > kalix new-session |
 
-# Subcommands
+## Subcommands
 
-### Simulate [alias: sim]
+#### Simulate [alias: sim]
 
 *(use “kalix help simulate” in a terminal to see this):*
 
@@ -51,7 +51,7 @@ Examples:
 | --- |
 | > kalix simulate my\_model.ini -o results.csv |
 
-### Optimise [alias: opt]
+#### Optimise [alias: opt]
 
 *(use “kalix help optimise” in a terminal to see this):*
 

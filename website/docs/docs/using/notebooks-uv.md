@@ -6,7 +6,7 @@ title: "Running Python Notebooks with UV"
 
 This guide walks you through setting up and running Python notebooks (from the Kalix Tutorials) in VSCode on Windows, using [UV](https://docs.astral.sh/uv/) to manage the environment. Code autocomplete will work once you're done.
 
-## 1) Install UV and VSCode (once per machine)
+### 1) Install UV and VSCode (once per machine)
 
 - Install UV by running this in PowerShell, then close and reopen PowerShell so it's on your path:
 
@@ -16,7 +16,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 - Install VSCode, and in its Extensions panel (`Ctrl+Shift+X`) add the **Python** extension by Microsoft (this bundles the Jupyter extension too).
 
-## 2) Set up an environment for the KalixTutorials project
+### 2) Set up an environment for the KalixTutorials project
 
 - In VSCode, `File → Open Folder` and open the **top-level** Kalix Tutorials folder.
 
@@ -34,7 +34,7 @@ uv venv
 uv pip install --python .venv\Scripts\python.exe kalix ipykernel matplotlib
 ```
 
-## 3) Run a notebook
+### 3) Run a notebook
 
 - Open a notebook (`.ipynb`) and click the kernel selector in the top-right corner.
 
@@ -44,7 +44,7 @@ uv pip install --python .venv\Scripts\python.exe kalix ipykernel matplotlib
 
 - Run a cell with `Shift+Enter` — code execution and autocomplete will both work.
 
-## Troubleshooting
+### Troubleshooting
 
 - **"Running cells requires ipykernel"** — `ipykernel` isn't in the environment VSCode selected. Re-run the install command, making sure it targets your project's local `.venv` and not a `.venv` under `C:\Users\...`.
 

@@ -4,7 +4,7 @@ title: "Storage"
 
 # Storage
 
-# At a glance…
+## At a glance…
 
 Storage nodes represents lakes, weirs, dams, or other reservoirs. Upstream flows accumulate in the storage and flows are passed downstream either via a spillway or regulated outlet. Each storage has 1 spillway, which overflows according to a level-flow relationship when the level of water in the storage exceeds the spillway crest. Regulated outlets allow for regulated downstream releases. Water in storages may be subject to evaporation, rainfall, and seepage.
 
@@ -23,7 +23,7 @@ dimensions = Level [m], Volume [ML], Area [km2], Spill [ML],
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -42,7 +42,7 @@ ds_1 = my_other_node
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Additional link used to represent regulated flow pathways separate to the main downstream link. `ds_2 = tws_pipline` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -64,9 +64,9 @@ ds_1 = my_other_node
 | level | Level of water in the storage at the end of the timestep [m] |
 | area | Area of the water surface at the end of the timestep [km2] |
 
-# How the node works
+## How the node works
 
-## Solver
+### Solver
 
 Storages are simulated using the Backward Euler method. The defining characteristic of this method is that the rates-of-change during the timestep are functions of the end-of-timestep state. That is to say, the storage volume is determined such that the fluxes are consistent with the storage volume `vi` (and area `ai` and level `li`) at the end of the timestep:
 
@@ -86,7 +86,7 @@ Mass balance over the timestep is:
 
 `Vi=Vi−1−si−ei+ri+qin,i−qout,i`
 
-## Storages ordering upstream
+### Storages ordering upstream
 
 The default behaviour of storages is to NOT propagate any orders upstream. However, storages can be configured to order upstream in either of two ways: (1) using the `target_level`, or (2) using the `order_through` property.
 
@@ -122,10 +122,10 @@ The storage with `order_through = true` operates to release orders for downstrea
 
 ---
 
-# See also
+## See also
 
 [Inverted Pyramid Storage Tables](storage-tables.md)
 
-# References
+## References
 
 None.

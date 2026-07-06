@@ -4,7 +4,7 @@ title: "Reparameterizations"
 
 # Reparameterizations
 
-# Sacramento model
+## Sacramento model
 
 Kuzmin etal [25] suggests we can lock down 5-7 Sac params without losing any predictive power.  
 Is this really true?

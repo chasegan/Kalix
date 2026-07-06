@@ -4,7 +4,7 @@ title: "Inflow"
 
 # Inflow
 
-# At a glance…
+## At a glance…
 
 The inflow node represents an inflow to the system. This can be time-varying and therefore can represent natural inflows (e.g. from a catchment) or an inflow from another system. Inflows must be positive.
 
@@ -16,7 +16,7 @@ inflow = data.allflows_csv.by_name.little_river_inflow
 ds_1 = my_other_node
 ```
 
-# Node properties
+## Node properties
 
 | Property | Description |
 | --- | --- |
@@ -27,7 +27,7 @@ ds_1 = my_other_node
 | expected\_inflow (optional) | Expected inflow for purpose of adjusting orders [ML]. Example: `expected_inflow = 0.5 * this.inflow[-1,0]` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
-# Results associated with this node
+## Results associated with this node
 
 | Result | Description |
 | --- | --- |
@@ -38,12 +38,12 @@ ds_1 = my_other_node
 | inflow | Inflow at this node [ML]. This includes the lateral flow only, not including the component that came from any upstream nodes. |
 | expected\_inflow | The value of the expected\_inflow expression [ML] which is used to reduce required upstream flow when adjusting for orders. |
 
-# How the node works
+## How the node works
 
 The inflow node simply adds inflows to the system as specified by the “inflow” property. The downstream flow is therefore
 
 `dsflow=usflow+inflow`
 
-# References
+## References
 
 None.

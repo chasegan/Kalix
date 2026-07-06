@@ -6,7 +6,7 @@ title: "Tutorial 12 — Optimisation from the commandline"
 
 **Tutorial 12 of the Kalix tutorial series.** You'll calibrate the Stringybark Creek model from a terminal using `kalix optimise` — reading an optimisation config file, watching the live convergence plot, and saving a calibrated model ready to run. Expected time: about 20 minutes.
 
-# What you'll build
+## What you'll build
 
 A working command-line calibration of the Stringybark catchment model. You'll point `kalix optimise` at an optimisation **config file** and a **model file**, let the Differential Evolution optimiser tune 18 parameters against an observed flow record, watch it converge in the terminal, and write out a calibrated model file ready to simulate.
 
@@ -14,7 +14,7 @@ A working command-line calibration of the Stringybark catchment model. You'll po
 
 ![](../assets/tutorials-06-optimisation-cli/image_1.png)
 
-# Prerequisites
+## Prerequisites
 
 - **Optimisation in the GUI** — you should already have run a calibration inside Kalix IDE (covered in an earlier optimisation tutorial — *[mention-page placeholder once that tutorial is published]*). This tutorial assumes you understand the basic idea: parameters, an objective statistic, and an observed series to fit against. Here we just move that same workflow to the command line.
 
@@ -24,7 +24,7 @@ A working command-line calibration of the Stringybark catchment model. You'll po
 
 - **Tutorial files** — download the `012/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/012).
 
-# Project layout
+## Project layout
 
 ```
 012/
@@ -39,7 +39,7 @@ A working command-line calibration of the Stringybark catchment model. You'll po
 
 The model uses trailhead paths (`^/data/...`), so it runs from any depth — exactly as you set up in Tutorial 3. All commands below assume you've changed into `012/models/`.
 
-# The two ingredients
+## The two ingredients
 
 Calibration on the command line needs two files:
 
@@ -49,11 +49,11 @@ Calibration on the command line needs two files:
 
 This mirrors `kalix simulate` from Tutorial 4, which took a single model file. `kalix optimise` takes the config **and** the model.
 
-# Anatomy of the optimisation config
+## Anatomy of the optimisation config
 
 Open `optimisation_config.ini`. It has three parts.
 
-## The `[optimisation]` section — the algorithm
+### The `[optimisation]` section — the algorithm
 
 ```toml
 [optimisation]
@@ -80,7 +80,7 @@ Line by line:
 
 - `n_threads = 12` — evaluate candidates in parallel across this many threads. Set it near your CPU's core count.
 
-## The `[term.term1]` section — the objective
+### The `[term.term1]` section — the objective
 
 ```toml
 [term.term1]
@@ -111,7 +111,7 @@ A **term** pairs a simulated series with an observed one and scores the fit:
 | `MAE` | Mean absolute error. |
 | `ABS_PBIAS` | Absolute percent bias. |
 
-## The `[parameters]` section — what to tune
+### The `[parameters]` section — what to tune
 
 ```toml
 [parameters]
@@ -134,7 +134,7 @@ Each line maps a **model property** to a search range driven by a **gene** `g(n)
 
 For the full optimisation-config reference (every key, every statistic and algorithm), see the optimisation reference — *[mention-page placeholder]*.
 
-# Step 1 — Verify the command
+## Step 1 — Verify the command
 
 From `012/models/`, check the subcommand and its flags:
 
@@ -159,7 +159,7 @@ Options:
   -h, --help                        Print help
 ```
 
-# Step 2 — Run the optimisation
+## Step 2 — Run the optimisation
 
 ```bash
 kalix optimise optimisation_config.ini stringybark.ini -s stringybark_calibrated.ini
@@ -190,7 +190,7 @@ Term 'term1': loaded 10958 observed points from ../data/observed.csv
 === Starting Optimisation ===
 ```
 
-# Step 3 — Watch it converge
+## Step 3 — Watch it converge
 
 As it runs, Kalix draws a live convergence plot right in the terminal — best objective value (vertical axis) against evaluations (horizontal axis), with a progress bar and a running best score. You'll watch the curve drop steeply at first, then flatten as the search homes in.
 
@@ -200,7 +200,7 @@ As it runs, Kalix draws a live convergence plot right in the terminal — best o
 
 The whole 60,000-evaluation run finishes in roughly **30 seconds** on a 12-thread machine — each model run is only a few milliseconds, and `n_threads` evaluates many in parallel. Prefer a clean run with no plotting (e.g. for logging)? Add `-q`.
 
-# Step 4 — Read the results summary
+## Step 4 — Read the results summary
 
 When it finishes, Kalix prints a summary: the final objective value, the optimised genes (normalised `[0,1]`), and the same parameters as **physical values** — the numbers that actually go into the model.
 
@@ -226,7 +226,7 @@ Differential Evolution is **stochastic**, so your exact numbers will differ slig
 
 A quick read of the physical values is a useful gut-check: are any parameters pinned right at the edge of their `log_range`/`lin_range` bounds? If so, that bound may be too tight — widen it in the config and re-run.
 
-# Step 5 — Inspect the calibrated model
+## Step 5 — Inspect the calibrated model
 
 Open `stringybark_calibrated.ini`. It's a complete, runnable model — identical to `stringybark.ini` except for the tuned parameters:
 
@@ -236,7 +236,7 @@ Open `stringybark_calibrated.ini`. It's a complete, runnable model — identical
 
 ![](../assets/tutorials-06-optimisation-cli/image_2.png)
 
-# Step 6 — Simulate the calibrated model
+## Step 6 — Simulate the calibrated model
 
 The calibrated file is just a model, so run it the way you ran models in Tutorial 4:
 
@@ -248,7 +248,7 @@ Load `calibrated_results.csv` and `../data/observed.csv` and overlay them (in th
 
 ![](../assets/tutorials-06-optimisation-cli/image_3.png)
 
-# What to try next
+## What to try next
 
 Change one thing at a time and re-run.
 
@@ -262,7 +262,7 @@ Change one thing at a time and re-run.
 
 5. **Hold parameters fixed** — if you trust some parameters, remove their lines from `[parameters]` so the optimiser focuses on the rest.
 
-# Where to go from here
+## Where to go from here
 
 - **Optimisation from Python** — the same calibration driven from a notebook via the `kalix` package, so you can script multi-site calibrations and post-process the results in pandas. CLI for batch and automation; Python for analysis — the same split you saw between [Tutorial 4 — Running Kalix from the commandline](04-commandline.md) and [Tutorial 5 — Running Kalix from Python](05-python.md). *[mention-page placeholder once the Python optimisation tutorial is published]*
 
