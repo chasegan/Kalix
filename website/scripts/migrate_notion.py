@@ -79,7 +79,7 @@ MAP = {
     "reference/technical/gr4j.md": ["Technical Reference"],  # resolved specially below
     # Developer material lives under the Code section (/code/), not the user Docs.
     "code/start-developing.md": ["Start Developing"],
-    "code/dev-stack.md": ["The Dev Stack"],
+    "code/design/website/dev-stack.md": ["The Dev Stack"],
     "code/design/adrs.md": ["Architecture Decision Records"],
     # tutorials/index.md is a hand-built design page (timeline) — not migrated.
     "tutorials/01-first-model.md": ["Tutorial 1"],
@@ -139,7 +139,7 @@ TITLE_OVERRIDE = {
 # Pages whose first body heading merely echoes the page title — drop just that
 # heading (its content stays and becomes the page intro).
 DROP_FIRST_HEADING = {
-    "code/dev-stack.md",                     # code/ is exempt from the docs/ prefix
+    "code/design/website/dev-stack.md",      # code/ is exempt from the docs/ prefix
     "docs/concepts/model-file-structure.md",
 }
 

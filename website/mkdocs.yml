@@ -179,12 +179,12 @@ nav:
   - Code:
       - code/index.md
       - Start developing: code/start-developing.md
-      - The dev stack: code/dev-stack.md
       - Platform design:
           - Manifesto: code/design/manifesto.md
           - ADRs: code/design/adrs.md
           - Website:
               - code/design/website/index.md
+              - The dev stack: code/design/website/dev-stack.md
               - Todo: code/design/website/todo.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at
   # /contact/, bypassing the Material theme — so it is not listed here.

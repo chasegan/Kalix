@@ -20,7 +20,7 @@ If you are curious about development, you can take a copy of the source code and
 
 The best way to do this is:
 
-1. Read about [The Dev Stack](dev-stack.md) to get an overview of what is involved.
+1. Read about [The Dev Stack](design/website/dev-stack.md) to get an overview of what is involved.
 
 2. Get the code:
    1. Make a GitHub account for yourself (if you don’t already have one)
