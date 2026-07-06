@@ -10,8 +10,6 @@ Kalix is open source under the MPL 2.0. The engine is Rust, the IDE is Java, and
 
 ## Latest stats
 
-Published automatically from CI on every release.
-
 <div class="kx-stats-split" markdown>
 
 <div markdown>
@@ -20,7 +18,7 @@ Published automatically from CI on every release.
   <div class="kx-stat-label">Regression models verified</div>
 </div>
 
-Regression **models** (not unit tests) checked against pinned mass-balance baselines.
+Regression **models** checked in CI against pinned mass-balance baselines every release.
 </div>
 
 <figure markdown>
