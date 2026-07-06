@@ -6,6 +6,8 @@ title: Commandline
 
 `kalix` runs models, calibrations, and other modelling tasks from the terminal.
 
+## kalix
+
 **Usage** — `kalix <COMMAND>`
 
 **Commands**
