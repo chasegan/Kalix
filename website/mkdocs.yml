@@ -28,6 +28,11 @@ theme:
     text: IBM Plex Sans
     code: IBM Plex Mono
   features:
+    # navigation.tabs scopes the left sidebar to the current top-level section
+    # (Docs shows only Docs, Tutorials only Tutorials). The custom header
+    # (overrides/main.html) blanks the visual tabs row, so only the scoping
+    # behaviour is used, not the tabs bar.
+    - navigation.tabs
     - navigation.sections
     - navigation.indexes
     - navigation.top
