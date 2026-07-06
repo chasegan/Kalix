@@ -14,4 +14,4 @@ title: Specifying the Kalix binary path in KalixIDE
 
 4. If KalixIDE cannot find the CLI program, you can click the “Add” button to locate it yourself. After you have done this, press the “Test” button to confirm the connection. This will be saved in your user preferences file so you shouldn’t have to do it every time.
 
-![](../../assets/tutorials-resources-kalix-binary-path/image.png)
+![](../../assets/docs-using-kalix-binary-path/image.png)

@@ -33,12 +33,4 @@ Each tutorial is self-contained, with sample data, model files and expected outp
 <div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">River operation &amp; resource management</span><br><span class="kx-tl-desc kx-muted">Ordering · entitlements &amp; accounts · assessment scenarios</span></span></div>
 </div>
 
-<div class="kx-tl-resources" markdown>
-## Additional resources
-<div class="kx-res-links">
-<a href="resources/kalix-binary-path/">Setting the Kalix binary path in KalixIDE →</a>
-<a href="resources/notebooks-uv/">Running Python notebooks with uv →</a>
-</div>
-</div>
-
 </div>

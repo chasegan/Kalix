@@ -116,9 +116,6 @@ nav:
       - 05 · Running from Python: tutorials/05-python.md
       - 06 · Optimisation from the commandline: tutorials/06-optimisation-cli.md
       - 07 · Optimisation from Python: tutorials/07-optimisation-python.md
-      - Resources:
-          - Kalix binary path in KalixIDE: tutorials/resources/kalix-binary-path.md
-          - Running notebooks with uv: tutorials/resources/notebooks-uv.md
   - Docs:
       - docs/index.md
       - Getting started: docs/getting-started.md
@@ -157,6 +154,8 @@ nav:
           - Kalix CLI: docs/using/cli.md
           - Kalix in Python: docs/using/python.md
           - Run Manager: docs/using/run-manager.md
+          - Kalix binary path in KalixIDE: docs/using/kalix-binary-path.md
+          - Running notebooks with uv: docs/using/notebooks-uv.md
       - Optimisation:
           - docs/optimisation/index.md
           - Objective functions: docs/optimisation/objective-functions.md

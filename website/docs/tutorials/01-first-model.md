@@ -16,7 +16,7 @@ A daily rainfall-runoff model for the (fictional) Stringybark Creek catchment �
 
 - **Kalix software** and the **Tutorial files** —
   1. Download Kalix from the [Downloads](../downloads.md) page. Unzip the bundled software to a suitable place on your computer and double click “KalixIDE.exe” to launch it.
-  2. You may want to check/set the kalix engine by following the instructions on this page: [Specifying the Kalix binary path in KalixIDE](resources/kalix-binary-path.md).
+  2. You may want to check/set the kalix engine by following the instructions on this page: [Specifying the Kalix binary path in KalixIDE](../docs/using/kalix-binary-path.md).
   3. Next you will need the tutorial files. Go to the KalixTutorials repository on GitHub: <https://github.com/chasegan/KalixTutorials>. Click the green “Code” button and find the option that says “Download ZIP”. Unzip the tutorial material somewhere suitable. Open this folder in KalixIDE by clicking “File” > “Open Folder…”.![](../assets/tutorials-01-first-model/image_1.png)![](../assets/tutorials-01-first-model/image_2.png)
 
 - For this tutorial you will need the `001/` folder. You'll need:
