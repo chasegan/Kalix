@@ -9,3 +9,8 @@ pymdown-extensions>=10.7
 requests>=2.31
 pandas>=2.0
 matplotlib>=3.8
+
+# Content migration (one-off / regenerable): Notion HTML -> Markdown
+beautifulsoup4>=4.12
+markdownify>=0.11
+lxml>=5.0

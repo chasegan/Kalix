@@ -1,6 +1,7 @@
-# Kalix in Python
+---
+title: Python bindings
+---
 
-The Rust-backed Python package.
+# Python bindings
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+![](../assets/using-python/feature_coming_soon_square.jpg)

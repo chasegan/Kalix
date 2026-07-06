@@ -1,6 +1,33 @@
-# Gory details
+---
+title: Gory Details
+---
 
-Release process, numerical methods, and design rationale.
+# Gory Details
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+# Topics
+
+[Brainstorming the Python API](python-api-brainstorm.md)
+
+# TODO:
+
+- Release process and versioning policy
+
+- Changelog conventions
+
+- Issue triage and labels
+
+- Roadmap
+
+- Numerical methods — solvers, stability, timestep interactions
+
+- Concurrency and threading model
+
+- Performance profiling and tuning
+
+- Architecture Decision Records (ADRs) — why the code is the way it is
+
+- API/ABI stability policy
+
+- [GitHub Wiki (legacy dev notes)](https://github.com/chasegan/Kalix/wiki)
+
+[Architecture Decision Records](adrs.md)

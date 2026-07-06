@@ -1,6 +1,17 @@
-# The dev stack
+---
+title: The Dev Stack
+---
 
-Rust engine, Java IDE, Python bindings.
+# The Dev Stack
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+# Overview of the Kalix dev stack
+
+Kalix is built from three pieces that fit together: a **Rust simulation engine**(the kalix CLI) that does the heavy numerical work; a **Java IDE** (KalixIDE) that gives you a graphical way to author and run models; and a **Python package**(kalix on PyPI) that exposes Rust-backed I/O so users can mix Kalix into their existing Python data pipelines. Each component is written in whichever language fits its job best — Rust for raw speed and safety, Java for a rich GUI with cross-platform support, Python for scientific-computing — and the build pipeline glues them into a single coordinated release.
+
+To work on Kalix locally you need a few language toolchains installed up-front. **Rust** (installed via rustup) gives you rustc (the compiler) and cargo (Rust's package manager and build tool, all in one). **JDK 23** (Temurin is the recommended build) provides java and javac plus jpackage, a bundled tool that turns a Java app into a native installer on each OS. **Python** **3.12+** is needed by a small `bump-version.py` helper that keeps version numbers in sync across the Rust and Python package manifests, and is also implicit in the Python wheel build. There are no pure-Python dependencies to manage, and the wheel build is handled by Maturin (introduced below). Each language has its own build tool. **Cargo** builds and tests the Rust crate. **Gradle** (invoked via the checked-in gradlew script — you don't install Gradle separately) builds and runs the Java IDE. **Maturin** is a small PyO3-aware tool that builds the Python wheels by compiling the Rust extension module and packaging it together with the Python source. These three tools don't need to talk to each other directly — each component owns its own build — but their outputs converge into a `dist/` folder during a release.
+
+Editor-wise, you can use whatever you like, but the recommended pairing is **RustRover** for the Rust side and **IntelliJ IDEA Community Edition** for the Java side. Both are JetBrains tools with strong language support (refactoring, debugging, integrated test runners). They're project-scoped, so you open the repo root in RustRover and the kalixide/ subfolder in IntelliJ, and run both windows side-by-side. VS Code with the appropriate plugins also works if that’s your preference — the project doesn't depend on any IDE-specific config files.
+
+Source control lives in **Git** locally and on **GitHub** remotely; the canonical repository is at <https://github.com/chasegan/Kalix>. GitHub plays three roles beyond just hosting the code. **[Issues](https://github.com/users/chasegan/projects/1/views/2)** is where bugs and feature requests are tracked. **[Pull Requests](https://github.com/chasegan/Kalix/pulls)** are how contributions are reviewed and merged. **[GitHub](https://github.com/chasegan/Kalix/actions)****[Actions](https://github.com/chasegan/Kalix/actions)** is the CI/CD platform that runs the test suite on every push and builds release artifacts when a version tag is pushed. Two workflow files live in `.github/workflows/`: The first one `ci.yml` runs the Rust and Java test suites across Linux/macOS/Windows on every push and PR, and the second one `release.yml` triggers on a `v*` tag and runs the full release pipeline end-to-end. When you push a release tag (e.g. v1.0.0), the pipeline builds portable zips for Linux and Windows and publishes them as a **GitHub Release** with downloadable assets attached. In parallel, it builds three Python wheels (one per OS) plus a source distribution and uploads them to **[PyPI](https://pypi.org/project/kalix/)**, which allows `pip install kalix`.
+
+User-facing documentation lives here on **Notion** (see Kalix User Guide) — that's where modellers learn how to use Kalix. This documentation is linked from GitHub and PyPI.

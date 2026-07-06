@@ -1,6 +1,10 @@
+---
+title: Glossary
+---
+
 # Glossary
 
-Key terms used across Kalix. (Generated from the glossary table — Phase 3.)
+Key terms used across Kalix.
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+| Term | Description |
+| --- | --- |

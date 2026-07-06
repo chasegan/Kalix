@@ -1,6 +1,12 @@
-# DREAM
+---
+title: Dream
+---
 
-The DREAM sampler.
+# Dream
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+- DREAM(D) -
+  - <https://escholarship.org/uc/item/91m9t1h3>
+
+- Dream - we want to have because #badass.
+  - <https://dream.r-forge.r-project.org/>
+  - <https://escholarship.org/uc/item/91m9t1h3>

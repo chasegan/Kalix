@@ -1,6 +1,12 @@
+---
+title: Parameter types
+---
+
 # Parameter types
 
-Scalar, table, and other parameter types.
+[Table parameters](parameter-types.md)
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+
+## Table parameters
+
+![](../assets/concepts-parameter-types/image.png)

@@ -1,6 +1,7 @@
-# Run Manager
+---
+title: Run management
+---
 
-Managing and comparing model runs in the IDE.
+# Run management
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+![](../assets/using-run-manager/feature_coming_soon_square.jpg)

@@ -1,6 +1,9 @@
-# CMA-ES
+---
+title: Covariance Matrix Adaptation Evolution Strategy (CMA-ES)
+---
 
-Covariance Matrix Adaptation Evolution Strategy.
+# Covariance Matrix Adaptation Evolution Strategy (CMA-ES)
 
-!!! note "Migrating"
-    This page's content is being migrated from the existing documentation.
+- Paper here:
+
+  [CMAES - 1604.00772v2.pdf](../../assets/optimisation-algorithms-cma-es/CMAES_-_1604.00772v2.pdf)
