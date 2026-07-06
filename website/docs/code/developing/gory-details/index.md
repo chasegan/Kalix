@@ -30,4 +30,4 @@ Brainstorming the Python API
 
 - [GitHub Wiki (legacy dev notes)](https://github.com/chasegan/Kalix/wiki)
 
-[Architecture Decision Records](adrs.md)
+[Architecture Decision Records](../../design/adrs.md)

@@ -184,6 +184,9 @@ nav:
           - The dev stack: code/developing/dev-stack.md
           - Gory details:
               - code/developing/gory-details/index.md
-              - Architecture Decision Records: code/developing/gory-details/adrs.md
+      - Platform design:
+          - Manifesto: code/design/manifesto.md
+          - ADRs: code/design/adrs.md
+          - Web design: code/design/web-design.md
   # Contact is a bespoke pass-through page (docs/contact/index.html) served at
   # /contact/, bypassing the Material theme — so it is not listed here.
