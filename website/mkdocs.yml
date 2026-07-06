@@ -126,6 +126,7 @@ nav:
       - docs/index.md
       - About Kalix: docs/about-kalix.md
       - Components:
+          - docs/index.md   # make the 'Components' header link back to the Docs page
           - "[kalix]": docs/concepts/model-file-structure.md
           - "[inputs]": docs/concepts/input-data.md
           - "[constants]": docs/concepts/dynamic-expressions/constants.md
