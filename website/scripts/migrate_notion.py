@@ -146,6 +146,7 @@ DROP_FIRST_HEADING = {
 # Global text renames applied to every page's title and body (e.g. cross-links).
 RENAMES = {
     "Build your first model": "Your first model",
+    "exposes Rust-backed I/O so users": "exposes the Rust engine over a Python API so users",
 }
 
 
