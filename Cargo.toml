@@ -3,6 +3,27 @@ name = "kalix"
 version = "0.3.4"
 edition = "2021"
 
+# Keep the published crate / sdist lean. Without this, `cargo package` (and the
+# maturin sdist, which vendors this crate as a path dependency of python/) sweeps
+# in the whole repo tree — ~90 MB of committed test outputs under
+# src/tests/example_data, plus regression_tests/ and examples/ data — pushing the
+# sdist over PyPI's 100 MB per-file limit. None of it is needed to build the crate
+# (only src/**/*.rs + build.rs + VERSION are), so exclude the heavy non-source
+# trees. Excludes affect packaging only; local builds and tests still see everything.
+exclude = [
+    "/.github",
+    "/benchmarks",
+    "/docs",
+    "/examples",
+    "/graphics",
+    "/kalixide",
+    "/regression_tests",
+    "/utils_for_troubleshooting",
+    "/website",
+    "src/tests/example_data",
+    "src/tests/example_models",
+]
+
 [lib]
 crate-type = ["lib"]
 
