@@ -69,8 +69,6 @@ The package is built with `maturin` from `python/`.
 </div>
 </div>
 
-CI runs the full suite on Linux, macOS and Windows via GitHub Actions.
-
 ## Design & brand
 
 The site's visual system is documented alongside the design assets in the repository:
