@@ -161,14 +161,14 @@ nav:
           - Run Manager: docs/using/run-manager.md
           - Kalix binary path in KalixIDE: docs/using/kalix-binary-path.md
           - Running notebooks with uv: docs/using/notebooks-uv.md
-      - Optimisation:
-          - docs/optimisation/index.md
-          - Objective functions: docs/optimisation/objective-functions.md
-          - Algorithms:
-              - Shuffled Complex Evolution (SCE): docs/optimisation/algorithms/sce.md
-              - CMA-ES: docs/optimisation/algorithms/cma-es.md
-              - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
-              - DREAM: docs/optimisation/algorithms/dream.md
+          - Optimisation:
+              - docs/optimisation/index.md
+              - Objective functions: docs/optimisation/objective-functions.md
+              - Algorithms:
+                  - Shuffled Complex Evolution (SCE): docs/optimisation/algorithms/sce.md
+                  - CMA-ES: docs/optimisation/algorithms/cma-es.md
+                  - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
+                  - DREAM: docs/optimisation/algorithms/dream.md
       - Glossary:
           - docs/reference/glossary.md
       - Technical reference:
