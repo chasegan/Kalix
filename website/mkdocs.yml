@@ -109,7 +109,7 @@ nav:
   # site root and bypassing the Material theme — so it is not listed here.
   - Tutorials:
       - tutorials/index.md
-      - 01 · Build your first model: tutorials/01-first-model.md
+      - 01 · Your first model: tutorials/01-first-model.md
       - 02 · Expressions: tutorials/02-expressions.md
       - 03 · Relative & trailhead paths: tutorials/03-paths.md
       - 04 · Running from the commandline: tutorials/04-commandline.md

@@ -14,9 +14,9 @@ The same Stringybark Creek catchment from Tutorial 1, but with the rainfall inpu
 
 ## Prerequisites
 
-- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
+- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Your first model](01-first-model.md).
 
-- **Tutorial 1 complete** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
+- **Tutorial 1 complete** — refer to [Tutorial 1 — Your first model](01-first-model.md).
 
 - **Tutorial files** — download the `002/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/002). You'll need:
   - `rain_north.csv`, `rain_central.csv`, `rain_south.csv` — daily rainfall at three stations around the catchment (mm/day)

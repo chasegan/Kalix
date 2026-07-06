@@ -38,9 +38,9 @@ data.<filename>.by_index.<column_number>
 
 Column indices start at 1 (the first data column after the date column).
 
-**Example:** For `climate.csv` with columns `Date, Rainfall, Evaporation`:  
-- `data.climate_csv.by_name.rainfall` - references the Rainfall column  
-- `data.climate_csv.by_index.1` - also references the Rainfall column  
+**Example:** For `climate.csv` with columns `Date, Rainfall, Evaporation`:
+- `data.climate_csv.by_name.rainfall` - references the Rainfall column
+- `data.climate_csv.by_index.1` - also references the Rainfall column
 - `data.climate_csv.by_index.2` - references the Evaporation column
 
 ### Name Sanitisation

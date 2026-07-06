@@ -10,7 +10,7 @@ Each tutorial is self-contained, with sample data, model files and expected outp
 
 <div class="kx-track-label">The fundamentals</div>
 <div class="kx-track">
-<a class="kx-tl-item" href="01-first-model/"><span class="kx-tl-num">1</span><span><span class="kx-tl-title">Build your first model</span><br><span class="kx-tl-desc">From a single node to a running model</span></span></a>
+<a class="kx-tl-item" href="01-first-model/"><span class="kx-tl-num">1</span><span><span class="kx-tl-title">Your first model</span><br><span class="kx-tl-desc">From a single node to a running model</span></span></a>
 <a class="kx-tl-item" href="02-expressions/"><span class="kx-tl-num">2</span><span><span class="kx-tl-title">Expressions</span><br><span class="kx-tl-desc">Dynamic formulas in model properties</span></span></a>
 <a class="kx-tl-item" href="03-paths/"><span class="kx-tl-num">3</span><span><span class="kx-tl-title">Relative &amp; trailhead paths</span><br><span class="kx-tl-desc">Portable references to input data</span></span></a>
 <a class="kx-tl-item" href="04-commandline/"><span class="kx-tl-num">4</span><span><span class="kx-tl-title">Running from the commandline</span><br><span class="kx-tl-desc">Run models headless with the CLI</span></span></a>

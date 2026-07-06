@@ -67,7 +67,7 @@ Fors definitely isn’t the endgame here, for example I know it becomes very ine
 
 ## Modern variations
 
-- Chu Gao and Sorooshian did a paper in 2010. This is attached below. 
+- Chu Gao and Sorooshian did a paper in 2010. This is attached below.
 
   [Chu 2010 - Water Resources Research - Improving the shuffled complex evolution scheme for optimization of complex.pdf](../../../assets/docs-optimisation-algorithms-sce/Water_Resources_Research_-_2010_-_Chu_-_Improving_the_shuffled_complex_evolution_scheme_for_optimization_of_complex.pdf)
 

@@ -16,9 +16,9 @@ A small project with shared input data in one place and two model variants — a
 
 ## Prerequisites
 
-- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
+- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Your first model](01-first-model.md).
 
-- **Tutorials 1 & 2 complete** — see [Tutorial 1 — Build your first model](01-first-model.md) and [Tutorial 2 — Expressions](02-expressions.md). We'll build on Tutorial 2's model.
+- **Tutorials 1 & 2 complete** — see [Tutorial 1 — Your first model](01-first-model.md) and [Tutorial 2 — Expressions](02-expressions.md). We'll build on Tutorial 2's model.
 
 - **Tutorial files** — download the `003/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/003). It ships with this layout:
 

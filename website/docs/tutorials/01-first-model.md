@@ -1,8 +1,8 @@
 ---
-title: "Tutorial 1 — Build your first model"
+title: "Tutorial 1 — Your first model"
 ---
 
-# Tutorial 1 — Build your first model
+# Tutorial 1 — Your first model
 
 **Tutorial 1 of the Kalix tutorial series.** You'll build a single-catchment rainfall-runoff model from scratch, run it, and look at the result. Expected time: about 20 minutes.
 

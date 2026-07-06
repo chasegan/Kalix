@@ -146,6 +146,11 @@ DROP_FIRST_HEADING = {
     "docs/concepts/model-file-structure.md",
 }
 
+# Global text renames applied to every page's title and body (e.g. cross-links).
+RENAMES = {
+    "Build your first model": "Your first model",
+}
+
 
 def _strip_hash_name(fname: str) -> str:
     n = unquote(fname).rsplit("/", 1)[-1]
@@ -295,6 +300,18 @@ def dest_slug(dest_rel: str) -> str:
     return dest_rel.replace("/", "-").rsplit(".", 1)[0]
 
 
+def strip_trailing_ws(md: str) -> str:
+    """Strip trailing whitespace on each line, but preserve it inside code fences."""
+    out, in_fence = [], False
+    for line in md.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+        else:
+            out.append(line if in_fence else line.rstrip())
+    return "\n".join(out)
+
+
 def demote_headings(md: str, by: int) -> str:
     """Increase every ATX heading level by `by` (cap H6), skipping code fences.
 
@@ -348,9 +365,13 @@ def write_page(dest_rel: str, sources: list[str]):
     out.parent.mkdir(parents=True, exist_ok=True)
     content = "\n".join(parts).strip()  # cross-links already rewritten in the soup
     content = re.sub(r"\n{3,}", "\n\n", content)  # normalise blank runs at source joins
+    content = strip_trailing_ws(content)
     if dest_rel in DROP_FIRST_HEADING:  # drop the first ## heading (echoes the title)
         content = re.sub(r"(?m)^##\s+.*\n+", "", content, count=1)
     title = TITLE_OVERRIDE.get(dest_rel, title)
+    for _old, _new in RENAMES.items():  # global renames on title + body
+        title = title.replace(_old, _new)
+        content = content.replace(_old, _new)
     # Quote the YAML title: some are "[kalix]" etc., and a leading [ is a YAML list.
     front = f'---\ntitle: "{title}"\n---\n\n# {title}\n\n'
     out.write_text(front + content + "\n", encoding="utf-8")

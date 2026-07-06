@@ -24,7 +24,7 @@ This is the foundation for any analysis, scripting, or notebook-driven workflow 
 
 ## Prerequisites
 
-- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
+- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Your first model](01-first-model.md).
 
 - **Tutorial 3 complete** (or its concepts) — see [Tutorial 3 — Relative paths and trailhead paths](03-paths.md). We start from a project laid out the same way: shared `data/` with a model in `models/baseline/`.
 

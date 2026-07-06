@@ -18,10 +18,10 @@ The Nash-Sutcliffe Efficiency (NSE) is one of the most widely used statistics fo
 
 `NSE=1−∑i=1n(Qo[i]−Qo)2∑i=1n(Qo[i]−Qm[i])2`
 
-Where:  
-- *Qo*[*i*] = observed value at timestep *i*  
-- *Qm*[*i*] = modeled/simulated value at timestep *i*  
-- $\overline{Q\_o}$ = mean of observed values  
+Where:
+- *Qo*[*i*] = observed value at timestep *i*
+- *Qm*[*i*] = modeled/simulated value at timestep *i*
+- $\overline{Q\_o}$ = mean of observed values
 - *n* = number of timesteps
 
 #### Optimisation
@@ -148,9 +148,9 @@ The Kling-Gupta Efficiency provides a decomposed analysis of model performance b
 
 `KGE=1−(r−1)2+(α−1)2+(β−1)2`
 
-Where:  
-- *r* = Pearson correlation coefficient between observed and simulated  
-- `α=σoσm` = ratio of simulated to observed standard deviations  
+Where:
+- *r* = Pearson correlation coefficient between observed and simulated
+- `α=σoσm` = ratio of simulated to observed standard deviations
 - `β=μoμm` = ratio of simulated to observed means
 
 #### Optimization
@@ -218,15 +218,15 @@ SDEB is a specialized objective function that combines temporal error (SD), dist
 
 Where:
 
-**Temporal Error (SD)**:  
+**Temporal Error (SD)**:
 `SD=∑i=1n(Qo[i]−Qm[i])2`
 
-**Distributional Error (SE)**:  
+**Distributional Error (SE)**:
 `SE=∑i=1n(Ro[i]−Rm[i])2`
 
 Where *Ro* and *Rm* are observed and simulated values sorted in ascending order (exceedance).
 
-**Bias Penalty (B)**:  
+**Bias Penalty (B)**:
 `B=1+∑i=1nQo[i]∣∑i=1nQo[i]−∑i=1nQm[i]∣`
 
 #### Optimization
@@ -265,8 +265,8 @@ Pearson’s R measures the linear correlation between observed and simulated val
 
 #### Formula `r=∑i=1n(Qo[i]−Qo)2×∑i=1n(Qm[i]−Qm)2∑i=1n(Qo[i]−Qo)(Qm[i]−Qm)`
 
-Where:  
-- $\overline{Q\_o}$ = mean of observed values  
+Where:
+- $\overline{Q\_o}$ = mean of observed values
 - $\overline{Q\_m}$ = mean of simulated values
 
 #### Optimization

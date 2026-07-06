@@ -14,7 +14,7 @@ A working CLI workflow for the Stringybark catchment model: running simulations 
 
 ## Prerequisites
 
-- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Build your first model](01-first-model.md).
+- **Kalix software** and the **Tutorial files** — refer to [Tutorial 1 — Your first model](01-first-model.md).
 
 - **Tutorial 3 complete** — see [Tutorial 3 — Relative paths and trailhead paths](03-paths.md). We use the same project layout.
 
