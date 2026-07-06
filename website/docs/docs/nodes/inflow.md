@@ -4,8 +4,6 @@ title: "Inflow"
 
 # Inflow
 
-*Page status:* ✅
-
 # At a glance…
 
 The inflow node represents an inflow to the system. This can be time-varying and therefore can represent natural inflows (e.g. from a catchment) or an inflow from another system. Inflows must be positive.

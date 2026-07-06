@@ -4,8 +4,6 @@ title: "Regulated_User"
 
 # Regulated_User
 
-*Page status:* ✅
-
 # At a glance…
 
 The regulated\_user node represents a water user with the ability to place orders. The user orders in anticipation of demands, and subsequently diverts water from the network to satisfy those demands. If the demand cannot be fully satisfied, this is called a shortfall.

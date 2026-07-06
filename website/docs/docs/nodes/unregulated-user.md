@@ -4,8 +4,6 @@ title: "Unregulated_User"
 
 # Unregulated_User
 
-*Page status:* ✅
-
 # At a glance…
 
 The unregulated\_user node represents a water user whose access is opportunistic. The user diverts water subject to licence conditions to satisfy their demands. If the demand cannot be fully satisfied, this is called a shortfall.

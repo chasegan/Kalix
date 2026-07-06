@@ -4,8 +4,6 @@ title: "Splitter"
 
 # Splitter
 
-*Page status:* ✅
-
 # At a glance…
 
 The splitter node splits upstream flows between it’s two outlets “ds\_1” (the primary outlet) and “ds\_2” (the secondary outlet, i.e. effluent outlet).

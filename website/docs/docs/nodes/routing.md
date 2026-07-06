@@ -4,8 +4,6 @@ title: "Routing"
 
 # Routing
 
-*Page status:* ✅
-
 # At a glance…
 
 The routing node simulates streamflow routing. Each routing node incorporates a lag-routing component, and a storage routing component.

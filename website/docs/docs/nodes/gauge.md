@@ -4,8 +4,6 @@ title: "Gauge"
 
 # Gauge
 
-*Page status:* ✅
-
 # At a glance…
 
 The gauge node is a reporting point. The node is otherwise passive.

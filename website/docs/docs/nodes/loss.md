@@ -4,8 +4,6 @@ title: "Loss"
 
 # Loss
 
-*Page status:* ✅
-
 # At a glance…
 
 The loss node loses flow based on a provided flow-loss relationship.

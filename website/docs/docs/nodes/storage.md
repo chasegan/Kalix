@@ -4,8 +4,6 @@ title: "Storage"
 
 # Storage
 
-*Page status:* ✅
-
 # At a glance…
 
 Storage nodes represents lakes, weirs, dams, or other reservoirs. Upstream flows accumulate in the storage and flows are passed downstream either via a spillway or regulated outlet. Each storage has 1 spillway, which overflows according to a level-flow relationship when the level of water in the storage exceeds the spillway crest. Regulated outlets allow for regulated downstream releases. Water in storages may be subject to evaporation, rainfall, and seepage.

@@ -4,8 +4,6 @@ title: "GR4J"
 
 # GR4J
 
-*Page status:* ✅
-
 # At a glance…
 
 This node uses a GR4J rainfall-runoff model to represent catchment inflows from a catchment of a fixed area. The model takes rainfall and potential evapotranspiration data and determines inflows. The GR4J model has 4 parameters representing catchment characteristics.

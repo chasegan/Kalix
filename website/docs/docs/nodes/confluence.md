@@ -4,8 +4,6 @@ title: "Confluence"
 
 # Confluence
 
-*Page status:* ✅
-
 # At a glance…
 
 The confluence node can be used to merge flow pathways. The node is otherwise passive.

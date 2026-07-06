@@ -4,8 +4,6 @@ title: "Order_Control"
 
 # Order_Control
 
-*Page status:* ✅
-
 # At a glance…
 
 The order\_control node allows the modeller to manipulate orders at a point in the network. This includes setting the orders (replacing the values) or applying minimum or maximum values, using dynamic expressions.

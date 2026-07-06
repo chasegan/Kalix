@@ -279,6 +279,7 @@ def convert_page(html_path: Path, slug: str, depth: int, source_dir: str):
     rewrite_anchors(body, html_path.parent, slug, depth, source_dir)
 
     md = NotionConverter(heading_style="ATX", bullets="-").convert_soup(body)
+    md = re.sub(r"(?m)^\*?Page status:\*?.*\n?", "", md)  # drop dev-only status markers
     md = re.sub(r"\n{3,}", "\n\n", md).strip()
     return title, md
 
