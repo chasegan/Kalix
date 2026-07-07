@@ -242,7 +242,10 @@ class RunTreeController {
             if (!removedIndices.isEmpty()) {
                 // Remove nodes from tree
                 for (Object child : removedChildren) {
-                    currentRunsNode.remove((DefaultMutableTreeNode) child);
+                    var node = (DefaultMutableTreeNode) child;
+                    var path = node.getPath();
+                    timeseriesSourceTree.removePath(new TreePath(path));
+                    currentRunsNode.remove(node);
                 }
 
                 // Clean up tracking maps (single-shot removal via the bookkeeping)

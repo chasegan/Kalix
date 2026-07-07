@@ -988,7 +988,9 @@ public class RunManager extends JFrame {
         // Remove the tree node — selection changes (if any) refresh the outputs tree.
         for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
+            var path = child.getPath();
             if (child.getUserObject() == info) {
+                timeseriesSourceTree.removePath(new TreePath(path));
                 loadedDatasetsNode.remove(i);
                 treeModel.nodesWereRemoved(loadedDatasetsNode, new int[]{i}, new Object[]{child});
                 break;

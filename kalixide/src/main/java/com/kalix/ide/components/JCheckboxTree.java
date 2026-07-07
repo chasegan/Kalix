@@ -40,7 +40,9 @@ public class JCheckboxTree extends JTree {
         }
     }
 
+    ///  Map from node path to metadata
     HashMap<TreePath, CheckedNodeMetadata> nodeCheckedStateMap;
+    ///  Set of all nodes currently ticked
     HashSet<TreePath> checkedPaths;
 
     /// Notified whenever the checked-path set changes, whether from a user click or a
@@ -276,13 +278,14 @@ public class JCheckboxTree extends JTree {
         repaint();
     }
 
-    /// Unchecks a single path, leaving the rest of the checked set alone. Fires a check
-    /// change event. Used to drop a stale entry (e.g. a node about to be removed from the
-    /// model) before it becomes unreachable via the tree structure.
-    public void uncheckPath(TreePath path) {
-        untickPath(path);
-        fireCheckChangeEvent();
-        repaint();
+    /// Unchecks a path, and removes it from the checked set.
+    /// Removing the children is the responsibility of the caller.
+    public void removePath(TreePath path) {
+       untickPath(path);
+       this.checkedPaths.remove(path);
+       this.nodeCheckedStateMap.remove(path);
+       fireCheckChangeEvent();
+       repaint();
     }
 
     /// Replaces the entire checked set with exactly the given paths. Fires a single check

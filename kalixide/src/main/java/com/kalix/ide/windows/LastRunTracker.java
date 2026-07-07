@@ -180,11 +180,11 @@ class LastRunTracker {
         );
 
         if (oldChildNode != null) {
-            // Old node is leaving the tree - drop its checked entry so it doesn't linger as
-            // a dangling, unreachable "checked" path.
-            if (wasLastChecked) {
-                timeseriesSourceTree.uncheckPath(oldLastPath);
-            }
+            // Old node is leaving the tree - forget its checked-state entry entirely (not
+            // just uncheck it) so it doesn't dangle in nodeCheckedStateMap, unreachable via
+            // the tree, for the life of the app. Matches RunTreeController's run-removal and
+            // RunManager's dataset-removal handling.
+            timeseriesSourceTree.removePath(oldLastPath);
 
             // Replacing existing child - remove old, add new
             lastRunNode.remove(oldChildNode);
