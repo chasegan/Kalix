@@ -1,9 +1,9 @@
 package com.kalix.ide.renderers;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.components.JTristateCheckBox;
 
 import javax.swing.Icon;
-import javax.swing.JCheckBox;
 import javax.swing.JPanel;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -14,12 +14,12 @@ import java.awt.Color;
 import java.awt.Component;
 
 public class CheckboxTreeCellRenderer extends JPanel implements TreeCellRenderer {
-    private final JCheckBox checkbox;
+    private final JTristateCheckBox checkbox;
     private final DefaultTreeCellRenderer label;
 
     public CheckboxTreeCellRenderer() {
         setLayout(new BorderLayout());
-        checkbox = new JCheckBox();
+        checkbox = new JTristateCheckBox();
         // Make checkbox display-only (tree handles interaction logic)
         checkbox.setFocusable(false);
         checkbox.setRequestFocusEnabled(false);
@@ -49,33 +49,29 @@ public class CheckboxTreeCellRenderer extends JPanel implements TreeCellRenderer
     }
 
     /**
-     * Renders the checkbox for a tri-state {@link JCheckboxTree.CheckState}. PARTIAL uses
-     * the button-model pressed+armed trick (no native tri-state JCheckBox exists in Swing):
-     * https://stackoverflow.com/a/11067422 - Posted by Daniel, modified by community,
-     * retrieved 2026-07-07, license CC BY-SA 3.0.
-     *
-     * <p>{@code checkbox} is a single instance reused for every row, so a PARTIAL render
-     * leaves its model armed+pressed behind for whichever row renders next.
-     * {@code DefaultButtonModel.setPressed(false)} treats a pressed-to-unpressed transition
-     * while still armed as a mouse-release and toggles {@code selected} - exactly like a
-     * real click - which would silently flip the *next* rendered row's checkbox back on
-     * after we just set it unselected. Dropping {@code armed} before {@code pressed} on
-     * every reset means that toggle's guard ({@code !pressed && armed}) can never be true
-     * during cleanup.</p>
+     * Renders the checkbox for a tri-state {@link JCheckboxTree.CheckState}, delegating the
+     * PARTIAL indicator to {@link JTristateCheckBox#setPartial}. An earlier version of this
+     * faked PARTIAL via the classic checkbox {@code ButtonModel} pressed+armed trick, but
+     * that turned out to be fragile on a checkbox instance reused across every row: resetting
+     * {@code pressed} before {@code armed} silently toggled {@code selected} back on for
+     * whichever row rendered next, via {@code DefaultButtonModel}'s click-simulation side
+     * effect. Painting the indicator directly (see {@link JTristateCheckBox}) sidesteps that
+     * whole class of bug by never touching button-model state.
      */
     private void applyCheckState(JCheckboxTree.CheckState state) {
-        var model = checkbox.getModel();
-        model.setArmed(false);
-        model.setPressed(false);
         switch (state) {
-            case CHECKED -> checkbox.setSelected(true);
+            case CHECKED -> {
+                checkbox.setSelected(true);
+                checkbox.setPartial(false);
+            }
             case PARTIAL -> {
                 checkbox.setSelected(false);
-                model.setArmed(true);
-                model.setPressed(true);
+                checkbox.setPartial(true);
             }
-            case UNCHECKED -> checkbox.setSelected(false);
-            default -> throw new IllegalStateException("Unexpected value: " + state);
+            case UNCHECKED -> {
+                checkbox.setSelected(false);
+                checkbox.setPartial(false);
+            }
         }
     }
 

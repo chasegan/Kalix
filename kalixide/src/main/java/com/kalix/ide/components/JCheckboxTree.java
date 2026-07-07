@@ -40,9 +40,6 @@ public class JCheckboxTree extends JTree {
         }
     }
 
-    public static class JTristateCheckBox extends JCheckBox {
-    }
-
     HashMap<TreePath, CheckedNodeMetadata> nodeCheckedStateMap;
     HashSet<TreePath> checkedPaths;
 
