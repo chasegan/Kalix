@@ -1,6 +1,10 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.LastSeries;
+import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
@@ -146,7 +150,7 @@ public class RunManager extends JFrame {
     // named series from different files distinct. Keying by ref preserves that separation.
     // Value: TimeSeriesData
     // Mirrors how runs store data in TimeSeriesRequestManager's cache.
-    private final Map<com.kalix.ide.flowviz.data.DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
+    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
 
     // Manager instances
     private OutputsTreeBuilder outputsTreeBuilder;
@@ -170,7 +174,7 @@ public class RunManager extends JFrame {
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
     // string for a run-derived series tracks the current run name automatically.
-    private final com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+    private final LabelResolver labelResolver =
         new com.kalix.ide.flowviz.data.DefaultLabelResolver(this::runNameForId);
 
     /**
@@ -378,7 +382,7 @@ public class RunManager extends JFrame {
         plotDataSet.setLastSeriesResolver(last -> {
             RunInfoImpl lastRunInfo = lastRunTracker != null ? lastRunTracker.getLastRunInfo() : null;
             return lastRunInfo != null
-                ? new com.kalix.ide.flowviz.data.RunSeries(lastRunInfo.getRunId(), last.baseName())
+                ? new RunSeries(lastRunInfo.getRunId(), last.baseName())
                 : null;
         });
 
@@ -564,7 +568,7 @@ public class RunManager extends JFrame {
         // Get series from cache (NOT plotDataSet) - mirrors how runs work
         return datasetSeriesCache.keySet().stream()
             .filter(ref -> ref.datasetId().equals(datasetId))
-            .map(com.kalix.ide.flowviz.data.DatasetSeries::baseName)
+            .map(DatasetSeries::baseName)
             .sorted(NaturalSortUtils::naturalCompare)
             .collect(java.util.stream.Collectors.toList());
     }
@@ -777,12 +781,12 @@ public class RunManager extends JFrame {
     private SeriesRef refForSource(String seriesName, Object source) {
         if (source instanceof RunInfoImpl runInfo) {
             if (runInfo.isLastAlias()) {
-                return new com.kalix.ide.flowviz.data.LastSeries(seriesName);
+                return new LastSeries(seriesName);
             }
-            return new com.kalix.ide.flowviz.data.RunSeries(runInfo.getRunId(), seriesName);
+            return new RunSeries(runInfo.getRunId(), seriesName);
         }
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
-            return new com.kalix.ide.flowviz.data.DatasetSeries(info.file.getAbsolutePath(), seriesName);
+            return new DatasetSeries(info.file.getAbsolutePath(), seriesName);
         }
         return null;
     }
@@ -858,17 +862,14 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Returns the {@link com.kalix.ide.flowviz.data.LabelResolver} bound to this
+     * Returns the {@link LabelResolver} bound to this
      * RunManager's state. Components that need to render series labels — stats tables,
      * plot legends, the outputs tree — should obtain the resolver here rather than
      * constructing label strings themselves.
      */
-    public com.kalix.ide.flowviz.data.LabelResolver getLabelResolver() {
+    public LabelResolver getLabelResolver() {
         return labelResolver;
     }
-
-    // extractSeriesName removed — there are no series-key strings to parse anymore.
-    // Identity is the typed SeriesRef; baseName comes from ref.baseName().
 
     /**
      * Handles data-source-tree checked-state changes to update the timeseries tree.
@@ -969,7 +970,7 @@ public class RunManager extends JFrame {
 
         // Collect all DatasetSeries refs that belong to this dataset.
         List<SeriesRef> refs = new ArrayList<>();
-        for (com.kalix.ide.flowviz.data.DatasetSeries dsRef : datasetSeriesCache.keySet()) {
+        for (DatasetSeries dsRef : datasetSeriesCache.keySet()) {
             if (dsRef.datasetId().equals(absPath)) {
                 refs.add(dsRef);
             }
@@ -1022,5 +1023,4 @@ public class RunManager extends JFrame {
             fetchCoordinator.setUpdatingSelection(false);
         }
     }
-
 }
