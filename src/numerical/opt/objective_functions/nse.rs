@@ -1,5 +1,5 @@
 use std::sync::{Arc, OnceLock};
-use super::{seed_validity_mask, masked_observed, masked_simulated};
+use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// NSE objective with lazy-initialized cache for parallel processing
 #[derive(Clone, Debug)]
@@ -21,23 +21,6 @@ impl NseObjective {
         }
     }
 
-    pub(crate) fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
-
-        let masked_sim = masked_simulated(simulated, &cache.mask)?;
-
-        // Calculate sum of squared residuals
-        let ss_res: f64 = cache.masked_observed.iter()
-            .zip(&masked_sim)
-            .map(|(o, s)| (o - s).powi(2))
-            .sum();
-
-        let nse = 1.0 - (ss_res / cache.ss_tot);
-
-        // Convert to loss form: 0 = perfect, increases as fit worsens
-        Ok(1.0 - nse)
-    }
-
     fn initialize_cache(observed: &[f64], simulated: &[f64]) -> NseCache {
         let mask = seed_validity_mask(observed, simulated);
         let masked_obs = masked_observed(observed, &mask);
@@ -57,5 +40,29 @@ impl NseObjective {
             masked_observed: masked_obs,
             ss_tot,
         }
+    }
+}
+
+impl Objective for NseObjective {
+    /// Calculate NSE objective (loss form 1 - NSE for minimization)
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
+
+        let masked_sim = masked_simulated(simulated, &cache.mask)?;
+
+        // Calculate sum of squared residuals
+        let ss_res: f64 = cache.masked_observed.iter()
+            .zip(&masked_sim)
+            .map(|(o, s)| (o - s).powi(2))
+            .sum();
+
+        let nse = 1.0 - (ss_res / cache.ss_tot);
+
+        // Convert to loss form: 0 = perfect, increases as fit worsens
+        Ok(1.0 - nse)
+    }
+
+    fn name(&self) -> &'static str {
+        "ONE_MINUS_NSE"
     }
 }

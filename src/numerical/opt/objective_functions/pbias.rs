@@ -1,5 +1,5 @@
 use std::sync::{Arc, OnceLock};
-use super::{seed_validity_mask, masked_observed, masked_simulated};
+use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// PBIAS objective with lazy-initialized cache for parallel processing
 #[derive(Clone, Debug)]
@@ -21,7 +21,22 @@ impl PbiasObjective {
         }
     }
 
-    pub(crate) fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PbiasCache {
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
+        let sum_observed: f64 = masked_obs.iter().sum();
+
+        PbiasCache {
+            mask,
+            masked_observed: masked_obs,
+            sum_observed,
+        }
+    }
+}
+
+impl Objective for PbiasObjective {
+    /// Calculate PBIAS objective (absolute value for minimization)
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         let masked_sim = masked_simulated(simulated, &cache.mask)?;
@@ -41,15 +56,7 @@ impl PbiasObjective {
         Ok(pbias.abs())
     }
 
-    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PbiasCache {
-        let mask = seed_validity_mask(observed, simulated);
-        let masked_obs = masked_observed(observed, &mask);
-        let sum_observed: f64 = masked_obs.iter().sum();
-
-        PbiasCache {
-            mask,
-            masked_observed: masked_obs,
-            sum_observed,
-        }
+    fn name(&self) -> &'static str {
+        "ABS_PBIAS"
     }
 }

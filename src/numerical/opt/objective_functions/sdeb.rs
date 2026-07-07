@@ -1,7 +1,9 @@
 use std::sync::{Arc, OnceLock};
-use super::{seed_validity_mask, masked_observed, masked_simulated};
+use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// SDEB objective with lazy-initialized cache for parallel processing
+/// SDEB — Sorted Data Error with Bias. Combines temporal error (SD), distributional
+/// error (SE), and a bias penalty. Range: [0, ∞), 0 = perfect.
 ///
 /// SDEB combines:
 /// - SD: Temporal error between observed and simulated sqrt-transformed flows
@@ -38,8 +40,27 @@ impl SdebObjective {
         }
     }
 
+    /// Initialize cache on first evaluation
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> SdebCache {
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
+
+        // Create sorted version (RO)
+        let mut sorted_masked_obs = masked_obs.clone();
+        sorted_masked_obs.sort_by(|a, b| a.total_cmp(b));
+
+        SdebCache {
+            mask,
+            sqrt_masked_observed: masked_obs.iter().map(|x| x.sqrt()).collect(),
+            sqrt_sorted_masked_observed: sorted_masked_obs.iter().map(|x| x.sqrt()).collect(),
+            sum_observed: masked_obs.iter().sum(),
+        }
+    }
+}
+
+impl Objective for SdebObjective {
     /// Calculate SDEB objective
-    pub(crate) fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         // Get or initialize cache (happens once, thread-safe)
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
@@ -77,20 +98,7 @@ impl SdebObjective {
         Ok((0.1 * sd + 0.9 * se) * b)
     }
 
-    /// Initialize cache on first evaluation
-    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> SdebCache {
-        let mask = seed_validity_mask(observed, simulated);
-        let masked_obs = masked_observed(observed, &mask);
-
-        // Create sorted version (RO)
-        let mut sorted_masked_obs = masked_obs.clone();
-        sorted_masked_obs.sort_by(|a, b| a.total_cmp(b));
-
-        SdebCache {
-            mask,
-            sqrt_masked_observed: masked_obs.iter().map(|x| x.sqrt()).collect(),
-            sqrt_sorted_masked_observed: sorted_masked_obs.iter().map(|x| x.sqrt()).collect(),
-            sum_observed: masked_obs.iter().sum(),
-        }
+    fn name(&self) -> &'static str {
+        "SDEB"
     }
 }

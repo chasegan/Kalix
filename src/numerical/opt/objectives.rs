@@ -44,6 +44,20 @@ pub enum ObjectiveFunction {
 }
 
 impl ObjectiveFunction {
+    /// The underlying objective, viewed through the shared trait.
+    fn inner(&self) -> &dyn Objective {
+        match self {
+            Self::OneMinusNse(o) => o,
+            Self::OneMinusLnse(o) => o,
+            Self::RMSE(o) => o,
+            Self::MAE(o) => o,
+            Self::OneMinusKge(o) => o,
+            Self::AbsPbias(o) => o,
+            Self::SDEB(o) => o,
+            Self::OneMinusPearsR(o) => o,
+        }
+    }
+
     /// Calculate objective (LOWER IS BETTER - minimization)
     ///
     /// # Arguments
@@ -65,47 +79,32 @@ impl ObjectiveFunction {
             return Err("Cannot calculate objective for empty data".to_string());
         }
 
-        match self {
-            ObjectiveFunction::OneMinusNse(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::OneMinusLnse(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::RMSE(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::MAE(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::OneMinusKge(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::AbsPbias(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::SDEB(obj) => obj.calculate(observed, simulated),
-            ObjectiveFunction::OneMinusPearsR(obj) => obj.calculate(observed, simulated),
-        }
+        self.inner().calculate(observed, simulated)
     }
 
     /// Get name of objective function (matches the INI statistic name, uppercase)
-    pub fn name(&self) -> &str {
-        match self {
-            ObjectiveFunction::OneMinusNse(_) => "ONE_MINUS_NSE",
-            ObjectiveFunction::OneMinusLnse(_) => "ONE_MINUS_LNSE",
-            ObjectiveFunction::RMSE(_) => "RMSE",
-            ObjectiveFunction::MAE(_) => "MAE",
-            ObjectiveFunction::OneMinusKge(_) => "ONE_MINUS_KGE",
-            ObjectiveFunction::AbsPbias(_) => "ABS_PBIAS",
-            ObjectiveFunction::SDEB(_) => "SDEB",
-            ObjectiveFunction::OneMinusPearsR(_) => "ONE_MINUS_PEARS_R",
-        }
+    pub fn name(&self) -> &'static str {
+        self.inner().name()
+    }
+}
+
+/// The composite satisfies the same contract as the individual objectives, so
+/// code taking an `impl Objective` accepts either. Routed through the inherent
+/// methods to keep the length/empty preconditions.
+impl Objective for ObjectiveFunction {
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        ObjectiveFunction::calculate(self, observed, simulated)
+    }
+
+    fn name(&self) -> &'static str {
+        ObjectiveFunction::name(self)
     }
 }
 
 impl PartialEq for ObjectiveFunction {
     fn eq(&self, other: &Self) -> bool {
         // All stateful objectives - we can't compare cache contents, so just check type
-        match (self, other) {
-            (Self::OneMinusNse(_), Self::OneMinusNse(_)) => true,
-            (Self::OneMinusLnse(_), Self::OneMinusLnse(_)) => true,
-            (Self::RMSE(_), Self::RMSE(_)) => true,
-            (Self::MAE(_), Self::MAE(_)) => true,
-            (Self::OneMinusKge(_), Self::OneMinusKge(_)) => true,
-            (Self::AbsPbias(_), Self::AbsPbias(_)) => true,
-            (Self::SDEB(_), Self::SDEB(_)) => true,
-            (Self::OneMinusPearsR(_), Self::OneMinusPearsR(_)) => true,
-            _ => false,
-        }
+        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }
 

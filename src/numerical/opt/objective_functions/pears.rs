@@ -1,5 +1,5 @@
 use std::sync::{Arc, OnceLock};
-use super::{seed_validity_mask, masked_observed, masked_simulated};
+use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// Pearson's R objective with lazy-initialized cache for parallel processing
 ///
@@ -30,8 +30,33 @@ impl PearsObjective {
         }
     }
 
+    /// Initialize cache on first evaluation
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PearsCache {
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
+
+        let mean_observed: f64 = if masked_obs.is_empty() {
+            0.0
+        } else {
+            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
+        };
+
+        let ss_observed: f64 = masked_obs.iter()
+            .map(|&qo| (qo - mean_observed).powi(2))
+            .sum();
+
+        PearsCache {
+            mask,
+            masked_observed: masked_obs,
+            mean_observed,
+            ss_observed,
+        }
+    }
+}
+
+impl Objective for PearsObjective {
     /// Calculate Pearson's R objective (loss form 1 - r for minimization)
-    pub(crate) fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         let masked_sim = masked_simulated(simulated, &cache.mask)?;
@@ -63,26 +88,7 @@ impl PearsObjective {
         Ok(1.0 - r)
     }
 
-    /// Initialize cache on first evaluation
-    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> PearsCache {
-        let mask = seed_validity_mask(observed, simulated);
-        let masked_obs = masked_observed(observed, &mask);
-
-        let mean_observed: f64 = if masked_obs.is_empty() {
-            0.0
-        } else {
-            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
-        };
-
-        let ss_observed: f64 = masked_obs.iter()
-            .map(|&qo| (qo - mean_observed).powi(2))
-            .sum();
-
-        PearsCache {
-            mask,
-            masked_observed: masked_obs,
-            mean_observed,
-            ss_observed,
-        }
+    fn name(&self) -> &'static str {
+        "ONE_MINUS_PEARS_R"
     }
 }

@@ -1,5 +1,5 @@
 use std::sync::{Arc, OnceLock};
-use super::{seed_validity_mask, masked_observed, masked_simulated};
+use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// KGE objective with lazy-initialized cache for parallel processing
 #[derive(Clone, Debug)]
@@ -22,7 +22,37 @@ impl KgeObjective {
         }
     }
 
-    pub(crate) fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> KgeCache {
+        let mask = seed_validity_mask(observed, simulated);
+        let masked_obs = masked_observed(observed, &mask);
+
+        let mean_observed: f64 = if masked_obs.is_empty() {
+            0.0
+        } else {
+            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
+        };
+
+        let std_observed: f64 = if masked_obs.is_empty() {
+            0.0
+        } else {
+            let variance: f64 = masked_obs.iter()
+                .map(|x| (x - mean_observed).powi(2))
+                .sum::<f64>() / masked_obs.len() as f64;
+            variance.sqrt()
+        };
+
+        KgeCache {
+            mask,
+            masked_observed: masked_obs,
+            mean_observed,
+            std_observed,
+        }
+    }
+}
+
+impl Objective for KgeObjective {
+    /// Calculate KGE objective (loss form 1 - KGE for minimization)
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         // KGE's alpha and beta terms are undefined for degenerate observed data;
@@ -66,30 +96,7 @@ impl KgeObjective {
         Ok(1.0 - kge)
     }
 
-    fn initialize_cache(observed: &[f64], simulated: &[f64]) -> KgeCache {
-        let mask = seed_validity_mask(observed, simulated);
-        let masked_obs = masked_observed(observed, &mask);
-
-        let mean_observed: f64 = if masked_obs.is_empty() {
-            0.0
-        } else {
-            masked_obs.iter().sum::<f64>() / masked_obs.len() as f64
-        };
-
-        let std_observed: f64 = if masked_obs.is_empty() {
-            0.0
-        } else {
-            let variance: f64 = masked_obs.iter()
-                .map(|x| (x - mean_observed).powi(2))
-                .sum::<f64>() / masked_obs.len() as f64;
-            variance.sqrt()
-        };
-
-        KgeCache {
-            mask,
-            masked_observed: masked_obs,
-            mean_observed,
-            std_observed,
-        }
+    fn name(&self) -> &'static str {
+        "ONE_MINUS_KGE"
     }
 }

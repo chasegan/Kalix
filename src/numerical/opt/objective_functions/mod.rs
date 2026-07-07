@@ -40,6 +40,15 @@ pub use pbias::PbiasObjective;
 pub use sdeb::SdebObjective;
 pub use pears::PearsObjective;
 
+/// Objective function trait for model optimisation
+pub trait Objective {
+    /// Calculate the objective function value given observed and simulated data
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String>;
+
+    /// Name of the objective function (matches the INI statistic name, uppercase)
+    fn name(&self) -> &'static str;
+}
+
 /// Build the fixed assessment window from the observed series and the FIRST
 /// candidate's simulated series: true where both are finite. Called once per
 /// optimisation run (cache seeding); see the module docs for the rationale.
