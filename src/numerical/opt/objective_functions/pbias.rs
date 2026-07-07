@@ -60,3 +60,9 @@ impl Objective for PbiasObjective {
         "ABS_PBIAS"
     }
 }
+
+impl Default for PbiasObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -51,3 +51,9 @@ impl Objective for MaeObjective {
         "MAE"
     }
 }
+
+impl Default for MaeObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

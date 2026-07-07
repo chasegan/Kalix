@@ -51,3 +51,9 @@ impl Objective for RmseObjective {
         "RMSE"
     }
 }
+
+impl Default for RmseObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

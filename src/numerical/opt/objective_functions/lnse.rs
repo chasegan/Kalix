@@ -80,3 +80,9 @@ impl Objective for LnseObjective {
         "ONE_MINUS_LNSE"
     }
 }
+
+impl Default for LnseObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

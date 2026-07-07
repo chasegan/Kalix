@@ -100,3 +100,9 @@ impl Objective for KgeObjective {
         "ONE_MINUS_KGE"
     }
 }
+
+impl Default for KgeObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

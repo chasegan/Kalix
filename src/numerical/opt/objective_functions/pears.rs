@@ -92,3 +92,9 @@ impl Objective for PearsObjective {
         "ONE_MINUS_PEARS_R"
     }
 }
+
+impl Default for PearsObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

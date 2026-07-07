@@ -66,3 +66,9 @@ impl Objective for NseObjective {
         "ONE_MINUS_NSE"
     }
 }
+
+impl Default for NseObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}

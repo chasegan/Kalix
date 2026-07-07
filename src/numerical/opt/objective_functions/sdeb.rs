@@ -102,3 +102,9 @@ impl Objective for SdebObjective {
         "SDEB"
     }
 }
+
+impl Default for SdebObjective {
+    fn default() -> Self {
+        Self::new()
+    }
+}
