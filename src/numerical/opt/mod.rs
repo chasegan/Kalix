@@ -7,6 +7,7 @@ pub mod optimisable;
 pub mod optimisable_component;
 pub mod parameter_mapping;
 pub mod genes;
+pub mod objective_functions;
 pub mod objectives;
 pub mod optimisation;
 pub mod optimizer_trait;
