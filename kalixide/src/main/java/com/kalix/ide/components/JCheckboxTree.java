@@ -290,9 +290,16 @@ public class JCheckboxTree extends JTree {
     /// checked state via {@link #attachStructureListener}) from a caller's own record of
     /// what should be checked (e.g. by stable ref, not by the now-stale TreePath).
     public void setCheckedPaths(Collection<TreePath> paths) {
+        // Untick all current paths
         for (TreePath path : new ArrayList<>(checkedPaths)) {
             untickPath(path);
         }
+        addCheckedPaths(paths);
+    }
+
+    ///  Convenience method to add the given paths to the checked set.
+    /// Fires a single check change event.
+    public void addCheckedPaths(Collection<TreePath> paths) {
         for (TreePath path : paths) {
             tickPath(path);
         }

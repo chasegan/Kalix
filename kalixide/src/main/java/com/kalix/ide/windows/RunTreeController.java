@@ -378,7 +378,7 @@ class RunTreeController {
                 // Select and check the run
                 fetchCoordinator.setUpdatingSelection(true);
                 timeseriesSourceTree.setSelectionPath(pathToRun);
-                timeseriesSourceTree.setCheckedPaths(java.util.List.of(pathToRun));
+                timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
                 fetchCoordinator.setUpdatingSelection(false);
 
                 // Scroll to make the selection visible
