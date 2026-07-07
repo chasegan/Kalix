@@ -123,6 +123,7 @@ class LastRunTracker {
             if (lastRunChildNode != null) {
                 int childIndex = lastRunNode.getIndex(lastRunChildNode);
                 Object[] removedChild = new Object[]{lastRunChildNode};
+                timeseriesSourceTree.removePath(new TreePath(lastRunChildNode.getPath()));
                 lastRunNode.removeAllChildren();
                 treeModel.nodesWereRemoved(lastRunNode, new int[]{childIndex}, removedChild);
                 lastRunChildNode = null;
