@@ -85,7 +85,7 @@ import java.util.function.Consumer;
  *   <li>{@link SeriesFetchCoordinator#isUpdatingSelection()} - Guard to prevent listener
  *       feedback loops during programmatic updates</li>
  *   <li>Checked state (what's plotted) is separate from plain tree selection (row highlight);
- *       checked state is restored after rebuilds via {@link #restoreTreeSelectionForSeries}</li>
+ *       checked state is restored after rebuilds via {@link #restoreTreeChecksForSeries}</li>
  * </ul>
  *
  * <h2>Window collaborators</h2>
@@ -795,7 +795,7 @@ public class RunManager extends JFrame {
      *
      * @param seriesToRestore The set of series keys to check in the tree
      */
-    Set<SeriesRef> restoreTreeSelectionForSeries(
+    Set<SeriesRef> restoreTreeChecksForSeries(
             Set<SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
             timeseriesTree.setCheckedPaths(Collections.emptyList());
@@ -826,8 +826,8 @@ public class RunManager extends JFrame {
      * Reconciles the target tab's selected series with what's actually available in the tree.
      * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
      */
-    void reconcileSelectedSeriesWithTree(Set<SeriesRef> restoredSeries,
-                                                  Set<SeriesRef> tabSeries) {
+    void reconcileCheckedSeriesWithTree(Set<SeriesRef> restoredSeries,
+                                        Set<SeriesRef> tabSeries) {
         // Find series that need to be removed from the tab
         Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
         seriesToRemove.removeAll(restoredSeries);
@@ -885,8 +885,8 @@ public class RunManager extends JFrame {
 
         // Restore checked state to match what's currently plotted on active tab
         Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-        Set<SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
-        reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
+        Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
+        reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
 
         fetchCoordinator.setUpdatingSelection(false);
     }
@@ -900,7 +900,7 @@ public class RunManager extends JFrame {
         try {
             outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
             updateOutputsTree();
-            restoreTreeSelectionForSeries(tabManager.getTargetTabSelectedSeries());
+            restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
             fetchCoordinator.setUpdatingSelection(false);
         }
@@ -1015,7 +1015,7 @@ public class RunManager extends JFrame {
 
         fetchCoordinator.setUpdatingSelection(true);
         try {
-            restoreTreeSelectionForSeries(tabSeries);
+            restoreTreeChecksForSeries(tabSeries);
         } finally {
             fetchCoordinator.setUpdatingSelection(false);
         }

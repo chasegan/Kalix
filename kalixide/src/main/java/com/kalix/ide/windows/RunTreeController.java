@@ -17,7 +17,6 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -349,7 +348,7 @@ class RunTreeController {
         try {
             window.updateOutputsTree();
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            window.restoreTreeSelectionForSeries(tabSeries);
+            window.restoreTreeChecksForSeries(tabSeries);
         } finally {
             fetchCoordinator.setUpdatingSelection(false);
         }

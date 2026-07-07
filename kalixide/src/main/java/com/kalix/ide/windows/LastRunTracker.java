@@ -141,7 +141,7 @@ class LastRunTracker {
      *     <ul>
      *       <li>Rebuilds timeseries tree to show outputs from new run (may have new/removed outputs)</li>
      *       <li>Restores selection for series that still exist</li>
-     *       <li>Removes stale series from plot via {@link RunManager#reconcileSelectedSeriesWithTree}</li>
+     *       <li>Removes stale series from plot via {@link RunManager#reconcileCheckedSeriesWithTree}</li>
      *     </ul>
      *   </li>
      *   <li>Calls {@link #refreshLastSeries} to update plotted "[Last]" data with new values</li>
@@ -211,10 +211,10 @@ class LastRunTracker {
 
             // Restore checked state for series that still exist in the new tree
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<SeriesRef> restoredSeries = window.restoreTreeSelectionForSeries(tabSeries);
+            Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
 
             // Remove from tab any series that no longer exist (e.g., outputs that were removed)
-            window.reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
+            window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
 
             fetchCoordinator.setUpdatingSelection(false);
         }
