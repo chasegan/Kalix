@@ -718,7 +718,7 @@ public class CommandExecutor {
     private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
         editor.beginAtomicEdit();
         try {
-            editor.getDocument().insertString(offset, templateText + "\n\n", null);
+            editor.getDocument().insertString(offset, "\n" + templateText + "\n", null);
         } finally {
             editor.endAtomicEdit();
         }
