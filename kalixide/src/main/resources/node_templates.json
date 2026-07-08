@@ -1,0 +1,85 @@
+{
+  "version": "1.0",
+
+  "node_types":{
+    "inflow": [
+      "[node.template_inflow]",
+      "type=inflow",
+      "loc=%%X%%,%%Y%%",
+      "inflow=0"
+    ],
+    "gr4j": [
+      "[node.template_gr4j]",
+      "type=gr4j",
+      "loc=%%X%%,%%Y%%",
+      "area=0",
+      "rain=0",
+      "evap=0",
+      "params=0,0,0,0"
+    ],
+    "sacramento": [
+      "[node.template_sacramento]",
+      "type=sacramento",
+      "loc=%%X%%,%%Y%%",
+      "area=0",
+      "rain=0",
+      "evap=0",
+      "params=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17"
+    ],
+    "unregulated_user": [
+      "[node.template_unregulated_user]",
+      "type=unregulated_user",
+      "loc=%%X%%,%%Y%%",
+      "demand=0"
+    ],
+    "regulated_user": [
+      "[node.template_unregulated_user]",
+      "type=regulated_user",
+      "loc=%%X%%,%%Y%%",
+      "order=0"
+    ],
+    "storage": [
+      "[node.template_unregulated_user]",
+      "type=storage",
+      "loc=%%X%%,%%Y%%",
+      "dimensions=0, 0, 0, 0 // Ctrl+T to edit in table viewer"
+    ],
+    "blackhole": [
+      "[node.template_unregulated_user]",
+      "type=blackhole",
+      "loc=%%X%%,%%Y%%"
+    ],
+    "routing": [
+      "[node.template_unregulated_user]",
+      "type=routing",
+      "loc=%%X%%,%%Y%%"
+    ],
+    "confluence": [
+      "[node.template_unregulated_user]",
+      "type=confluence",
+      "loc=%%X%%,%%Y%%"
+    ],
+    "loss": [
+      "[node.template_unregulated_user]",
+      "type=loss",
+      "loc=%%X%%,%%Y%%",
+      "table=0, 0 // Ctrl+T to edit in table viewer"
+    ],
+    "splitter": [
+      "[node.template_unregulated_user]",
+      "type=splitter",
+      "loc=%%X%%,%%Y%%",
+      "table=0, 0 // Ctrl+T to edit in table viewer"
+    ],
+    "gauge": [
+      "[node.template_unregulated_user]",
+      "type=gauge",
+      "loc=%%X%%,%%Y%%"
+    ],
+    "order_control": [
+      "[node.template_unregulated_user]",
+      "type=order_control",
+      "loc=%%X%%,%%Y%%"
+    ]
+  }
+}
