@@ -31,9 +31,9 @@ public class InsertNodeTemplateCommand implements EditorCommand {
         this.parentFrame = parentFrame;
         this.metadata = new CommandMetadata.Builder()
             .id("insert_node_template_" + nodeType)
-            .displayName(NodeTemplateCatalog.humanise(nodeType))
-            .description("Insert a default " + NodeTemplateCatalog.humanise(nodeType) + " node template here")
-            .category("Insert node template")
+            .displayName(nodeType.toString())
+            .description("Insert a default " + nodeType.toString() + " node template here")
+            .category("Node template")
             .build();
     }
 
@@ -45,7 +45,10 @@ public class InsertNodeTemplateCommand implements EditorCommand {
     @Override
     public boolean isApplicable(EditorContext context) {
         EditorContext.ContextType contextType = context.getType();
-        return !( contextType == EditorContext.ContextType.OUTPUT_REFERENCE );
+        return contextType == EditorContext.ContextType.NODE_HEADER
+                || contextType == EditorContext.ContextType.NODE_SECTION
+                || contextType == EditorContext.ContextType.PROPERTY
+                || contextType == EditorContext.ContextType.UNKNOWN;
     }
 
     @Override
