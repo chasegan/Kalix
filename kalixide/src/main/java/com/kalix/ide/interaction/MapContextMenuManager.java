@@ -221,8 +221,9 @@ public class MapContextMenuManager {
                 if (textEditor != null && lastContextMenuLocation != null) {
                     double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
                     double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
-                    textEditor.insertNodeTemplate(nodeType, worldX, worldY);
-                    mapPanel.repaint();
+                    if (textEditor.insertNodeTemplate(nodeType, worldX, worldY)) {
+                        mapPanel.repaint();
+                    }
                 }
             });
             insertNodeTemplateMenu.add(templateItem);

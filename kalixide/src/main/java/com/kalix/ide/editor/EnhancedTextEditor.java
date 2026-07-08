@@ -721,6 +721,12 @@ public class EnhancedTextEditor extends JPanel {
     public boolean insertNodeTemplate(String nodeType, double worldX, double worldY) {
         if (commandParentFrame == null || commandModelSupplier == null) {
             logger.warn("Context commands not initialized - cannot insert node template");
+            javax.swing.JOptionPane.showMessageDialog(
+                commandParentFrame,
+                "Failed to insert node template: editor not ready yet",
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
             return false;
         }
 
