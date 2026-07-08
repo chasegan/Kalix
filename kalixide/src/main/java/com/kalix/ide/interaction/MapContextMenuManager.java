@@ -6,6 +6,9 @@ import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.icons.MenuIcons;
 
+import com.kalix.ide.editor.commands.NodeTemplateCatalog;
+
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
@@ -209,6 +212,22 @@ public class MapContextMenuManager {
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+
+        JMenu insertNodeTemplateMenu = new JMenu("Insert node template");
+        insertNodeTemplateMenu.setEnabled(textEditor != null);
+        for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
+            JMenuItem templateItem = new JMenuItem(NodeTemplateCatalog.humanise(nodeType));
+            templateItem.addActionListener(e -> {
+                if (textEditor != null && lastContextMenuLocation != null) {
+                    double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
+                    double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                    textEditor.insertNodeTemplate(nodeType, worldX, worldY);
+                    mapPanel.repaint();
+                }
+            });
+            insertNodeTemplateMenu.add(templateItem);
+        }
+        menu.add(insertNodeTemplateMenu);
     }
 
     /**

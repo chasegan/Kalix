@@ -71,6 +71,7 @@ public class ContextCommandManager {
      * Registers all available commands.
      */
     private void registerCommands() {
+        // ----- INPUT FILE COMMANDS -----
         // Register plot command (appears at root level, before refactoring commands)
         registry.register(new PlotInputFileCommand(modelFileSupplier, parentFrame));
 
@@ -88,6 +89,11 @@ public class ContextCommandManager {
 
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
+
+        // ----- Ini editing commands -----
+        for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
+            registry.register(new InsertNodeTemplateCommand(nodeType, modelSupplier, parentFrame));
+        }
 
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));

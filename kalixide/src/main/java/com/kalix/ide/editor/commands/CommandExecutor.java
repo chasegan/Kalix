@@ -551,6 +551,176 @@ public class CommandExecutor {
     }
 
     /**
+     * Inserts a new node template at the given world location (from a map
+     * right-click), after the last existing node section in the document.
+     *
+     * @param nodeType    The template key (e.g. "gr4j", "storage")
+     * @param worldX      The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY      The map y-coordinate to insert into the template's {@code loc}
+     * @param parsedModel The parsed model, used to pick a unique node name and find the insertion point
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplateAtLocation(String nodeType, double worldX, double worldY,
+                                                 INIModelParser.ParsedModel parsedModel) {
+        try {
+            String uniqueName = generateUniqueNodeName(nodeType, parsedModel);
+            String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
+            String text = editor.getText();
+            int offset = findInsertionOffsetAfterLastNodeSection(text, parsedModel);
+            insertTemplateAt(offset, templateText);
+            logger.info("Inserted node template '{}' as '{}' at ({}, {})", nodeType, uniqueName, worldX, worldY);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error inserting node template", e);
+            showError("Failed to insert node template: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Inserts a new node template after the node section containing the
+     * cursor (from the text-editor context menu). No map location is known,
+     * so {@code loc} is left at the origin.
+     *
+     * @param nodeType    The template key (e.g. "gr4j", "storage")
+     * @param parsedModel The parsed model, used to pick a unique node name
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplateNearCursor(String nodeType, INIModelParser.ParsedModel parsedModel) {
+        try {
+            String uniqueName = generateUniqueNodeName(nodeType, parsedModel);
+            String templateText = buildTemplateText(nodeType, uniqueName, 0, 0);
+            String text = editor.getText();
+            int offset = findInsertionOffsetAfterCurrentSection(text, editor.getCaretPosition());
+            insertTemplateAt(offset, templateText);
+            logger.info("Inserted node template '{}' as '{}'", nodeType, uniqueName);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error inserting node template", e);
+            showError("Failed to insert node template: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Picks a unique node name for a newly-inserted template: {@code nodeType},
+     * or {@code nodeType_2}, {@code nodeType_3}, ... if that's already taken.
+     */
+    private String generateUniqueNodeName(String nodeType, INIModelParser.ParsedModel parsedModel) {
+        String candidate = nodeType;
+        int suffix = 2;
+        while (parsedModel.getSections().containsKey("node." + candidate)) {
+            candidate = nodeType + "_" + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    /**
+     * Builds the INI text for a node template: joins its lines, replaces the
+     * header with {@code [node.<uniqueName>]}, and substitutes the
+     * {@code %%X%%}/{@code %%Y%%} coordinate placeholders.
+     */
+    private String buildTemplateText(String nodeType, String uniqueName, double x, double y) {
+        List<String> lines = NodeTemplateCatalog.getNodeTypes().get(nodeType);
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("Unknown node type: " + nodeType);
+        }
+        String joined = String.join("\n", lines);
+        joined = joined.replaceFirst("\\[node\\.[^\\]]+\\]", "[node." + uniqueName + "]");
+        String xText = String.format(java.util.Locale.ROOT, "%.2f", x);
+        String yText = String.format(java.util.Locale.ROOT, "%.2f", y);
+        joined = joined.replace("%%X%%", xText).replace("%%Y%%", yText);
+        return joined;
+    }
+
+    /**
+     * Finds the document offset just after the node section with the
+     * greatest end line, or the end of the document if there are no node
+     * sections.
+     */
+    private int findInsertionOffsetAfterLastNodeSection(String text, INIModelParser.ParsedModel parsedModel) {
+        int lastEndLine = -1;
+        for (INIModelParser.NodeSection nodeSection : parsedModel.getAllNodeSections()) {
+            if (nodeSection.getEndLine() > lastEndLine) {
+                lastEndLine = nodeSection.getEndLine();
+            }
+        }
+        if (lastEndLine < 0) {
+            return text.length();
+        }
+        String[] lines = text.split("\n", -1);
+        int offset = 0;
+        for (int i = 0; i < lastEndLine && i < lines.length; i++) {
+            offset += lines[i].length() + 1;
+        }
+        return Math.min(offset, text.length());
+    }
+
+    /**
+     * Finds the document offset just before the section header following the
+     * one containing {@code caretPos}, mirroring
+     * {@code MapClipboardManager.findInsertionPointAfterCursor} (kept as a
+     * separate, small copy here rather than shared, since that method is
+     * private and instance-bound to a different manager).
+     */
+    private int findInsertionOffsetAfterCurrentSection(String text, int caretPos) {
+        if (text.isEmpty()) {
+            return 0;
+        }
+
+        Matcher matcher = Pattern.compile("(?m)^\\[.+\\]\\s*$").matcher(text);
+        List<Integer> sectionStarts = new ArrayList<>();
+        while (matcher.find()) {
+            sectionStarts.add(matcher.start());
+        }
+
+        if (sectionStarts.isEmpty()) {
+            return text.length();
+        }
+
+        int nextSectionStart = -1;
+        for (int i = 0; i < sectionStarts.size(); i++) {
+            int sectionStart = sectionStarts.get(i);
+            if (sectionStart <= caretPos) {
+                if (i + 1 < sectionStarts.size()) {
+                    nextSectionStart = sectionStarts.get(i + 1);
+                } else {
+                    nextSectionStart = -1;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if (nextSectionStart == -1) {
+            return text.length();
+        }
+
+        int insertPoint = nextSectionStart;
+        while (insertPoint > 0 && text.charAt(insertPoint - 1) == '\n') {
+            insertPoint--;
+        }
+        if (insertPoint < nextSectionStart) {
+            insertPoint++;
+        }
+        return insertPoint;
+    }
+
+    /**
+     * Inserts template text at a document offset as a single atomic edit,
+     * followed by a blank line to separate it from whatever follows.
+     */
+    private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
+        editor.beginAtomicEdit();
+        try {
+            editor.getDocument().insertString(offset, templateText + "\n\n", null);
+        } finally {
+            editor.endAtomicEdit();
+        }
+    }
+
+    /**
      * Replaces a property value in the document, handling multi-line values.
      * The property format is: key = value (possibly with continuation lines)
      *

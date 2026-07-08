@@ -709,6 +709,38 @@ public class EnhancedTextEditor extends JPanel {
         return success;
     }
 
+    /**
+     * Inserts a node template programmatically (e.g., from the map context
+     * menu), placed at the given world location.
+     *
+     * @param nodeType The template key (e.g. "gr4j", "storage")
+     * @param worldX   The map x-coordinate for the new node's {@code loc}
+     * @param worldY   The map y-coordinate for the new node's {@code loc}
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplate(String nodeType, double worldX, double worldY) {
+        if (commandParentFrame == null || commandModelSupplier == null) {
+            logger.warn("Context commands not initialized - cannot insert node template");
+            return false;
+        }
+
+        ParsedModel parsedModel = commandModelSupplier.get();
+        if (parsedModel == null) {
+            logger.error("Failed to parse model for node template insertion");
+            javax.swing.JOptionPane.showMessageDialog(
+                commandParentFrame,
+                "Failed to parse model",
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+
+        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, parsedModel);
+    }
+
     private void setupKeyBindings() {
         InputMap inputMap = textArea.getInputMap();
         ActionMap actionMap = textArea.getActionMap();
