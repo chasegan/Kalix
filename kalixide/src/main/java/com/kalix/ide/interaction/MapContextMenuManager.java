@@ -156,7 +156,7 @@ public class MapContextMenuManager {
         JMenu insertNodeTemplateMenu = new JMenu("Node template");
         insertNodeTemplateMenu.setEnabled(textEditor != null);
         for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
-            JMenuItem templateItem = new JMenuItem(NodeTemplateCatalog.humanise(nodeType));
+            JMenuItem templateItem = new JMenuItem(nodeType.toString());
             templateItem.addActionListener(e -> {
                 if (textEditor != null && lastContextMenuLocation != null) {
                     double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();

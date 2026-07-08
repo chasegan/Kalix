@@ -47,29 +47,7 @@ public final class NodeTemplateCatalog {
         return nodeTypes;
     }
 
-    /**
-     * Turns a template id into a display label, e.g. {@code "routing_node"} ->
-     * {@code "Routing Node"}. Special-cases {@code "gr4j"} -> {@code "GR4J"}.
-     */
-    public static String humanise(String nodeType) {
-        if ("gr4j".equals(nodeType)) {
-            return "GR4J";
-        }
-        String[] words = nodeType.split("_");
-        StringBuilder label = new StringBuilder();
-        for (String word : words) {
-            if (word.isEmpty()) {
-                continue;
-            }
-            if (!label.isEmpty()) {
-                label.append(' ');
-            }
-            label.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return label.toString();
-    }
-
-    /**
+   /**
      * @return the parsed templates, or {@code null} if loading failed (logged
      *         at error level - the caller decides how to degrade)
      */
