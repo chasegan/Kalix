@@ -707,12 +707,35 @@ public class CommandExecutor {
 
     /**
      * Inserts template text at a document offset as a single atomic edit,
-     * followed by a blank line to separate it from whatever follows.
+     * normalizing the blank-line gap between {@code offset} and whatever
+     * follows to exactly one blank line on each side of the inserted
+     * template - regardless of how many blank lines (if any) already
+     * separated {@code offset} from the next content, so repeated insertions
+     * at the same seam don't keep growing the gap.
      */
     private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
+        String text = editor.getText();
+
+        int gapEnd = offset;
+        while (gapEnd < text.length() && Character.isWhitespace(text.charAt(gapEnd))) {
+            gapEnd++;
+        }
+
+        boolean atDocumentStart = (offset == 0);
+        boolean atDocumentEnd = (gapEnd == text.length());
+
+        StringBuilder replacement = new StringBuilder();
+        if (!atDocumentStart) {
+            replacement.append('\n');
+        }
+        replacement.append(templateText);
+        replacement.append(atDocumentEnd ? "\n" : "\n\n");
+
         editor.beginAtomicEdit();
         try {
-            editor.getDocument().insertString(offset, "\n" + templateText + "\n", null);
+            javax.swing.text.Document doc = editor.getDocument();
+            doc.remove(offset, gapEnd - offset);
+            doc.insertString(offset, replacement.toString(), null);
         } finally {
             editor.endAtomicEdit();
         }
