@@ -684,15 +684,9 @@ public class CommandExecutor {
         }
 
         int nextSectionStart = -1;
-        for (int i = 0; i < sectionStarts.size(); i++) {
-            int sectionStart = sectionStarts.get(i);
-            if (sectionStart <= caretPos) {
-                if (i + 1 < sectionStarts.size()) {
-                    nextSectionStart = sectionStarts.get(i + 1);
-                } else {
-                    nextSectionStart = -1;
-                }
-            } else {
+        for (int sectionStart : sectionStarts) {
+            if (sectionStart > caretPos) {
+                nextSectionStart = sectionStart;
                 break;
             }
         }
