@@ -30,10 +30,19 @@ public final class NodeTemplateCatalog {
      * Returns the node type templates, keyed by template id (e.g. "gr4j",
      * "storage") in the order they're declared in the JSON, each mapped to
      * its raw INI lines.
+     *
+     * <p>A load failure is never cached: it returns an empty map for that
+     * call (so menus built from it simply have no template items) but
+     * retries the load on the next call, rather than permanently disabling
+     * the feature after one transient failure.</p>
      */
     public static synchronized LinkedHashMap<String, List<String>> getNodeTypes() {
         if (nodeTypes == null) {
-            nodeTypes = loadNodeTypes();
+            LinkedHashMap<String, List<String>> loaded = loadNodeTypes();
+            if (loaded == null) {
+                return new LinkedHashMap<>();
+            }
+            nodeTypes = loaded;
         }
         return nodeTypes;
     }
@@ -60,6 +69,10 @@ public final class NodeTemplateCatalog {
         return label.toString();
     }
 
+    /**
+     * @return the parsed templates, or {@code null} if loading failed (logged
+     *         at error level - the caller decides how to degrade)
+     */
     private static LinkedHashMap<String, List<String>> loadNodeTypes() {
         LinkedHashMap<String, List<String>> result = new LinkedHashMap<>();
         try (InputStream stream = NodeTemplateCatalog.class.getResourceAsStream(RESOURCE_PATH)) {
@@ -80,7 +93,9 @@ public final class NodeTemplateCatalog {
                 result.put(entry.getKey(), lines);
             }
         } catch (Exception e) {
-            logger.error("Failed to load node templates from {}", RESOURCE_PATH, e);
+            logger.error("Failed to load node templates from {} - " +
+                    "\"Insert node template\" will be unavailable until this is fixed", RESOURCE_PATH, e);
+            return null;
         }
         return result;
     }
