@@ -151,8 +151,9 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Insert node template (Create block, per manifesto/context-menu-style.md §1 block ④)
-        JMenu insertNodeTemplateMenu = new JMenu("Insert node template");
+        // Node template (Create block, per manifesto/context-menu-style.md §1 block ④;
+        // submenu title is a noun per §6)
+        JMenu insertNodeTemplateMenu = new JMenu("Node template");
         insertNodeTemplateMenu.setEnabled(textEditor != null);
         for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
             JMenuItem templateItem = new JMenuItem(NodeTemplateCatalog.humanise(nodeType));

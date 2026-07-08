@@ -33,7 +33,7 @@ public class InsertNodeTemplateCommand implements EditorCommand {
             .id("insert_node_template_" + nodeType)
             .displayName(NodeTemplateCatalog.humanise(nodeType))
             .description("Insert a default " + NodeTemplateCatalog.humanise(nodeType) + " node template here")
-            .category("Insert node template")
+            .category("Node template")
             .build();
     }
 
