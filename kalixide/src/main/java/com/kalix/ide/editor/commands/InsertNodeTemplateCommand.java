@@ -45,7 +45,10 @@ public class InsertNodeTemplateCommand implements EditorCommand {
     @Override
     public boolean isApplicable(EditorContext context) {
         EditorContext.ContextType contextType = context.getType();
-        return !( contextType == EditorContext.ContextType.OUTPUT_REFERENCE );
+        return contextType == EditorContext.ContextType.NODE_HEADER
+                || contextType == EditorContext.ContextType.NODE_SECTION
+                || contextType == EditorContext.ContextType.PROPERTY
+                || contextType == EditorContext.ContextType.UNKNOWN;
     }
 
     @Override
