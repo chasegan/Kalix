@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -29,6 +30,7 @@ public class ContextCommandManager {
     private final JFrame parentFrame;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final Supplier<File> modelFileSupplier;
+    private final Supplier<MapPanel> mapPanelSupplier;
     private final Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier;
 
     private final CommandRegistry registry;
@@ -42,16 +44,19 @@ public class ContextCommandManager {
      * @param parentFrame        Parent frame for dialogs
      * @param modelSupplier      Supplier for the parsed model (may return null if parsing failed)
      * @param modelFileSupplier  Supplier for the current model file (may return null if no file loaded)
+     * @param mapPanelSupplier   Supplier for the map panel (may return null before it's wired up)
      * @param replacementApplier Callback for applying atomic text replacements
      */
     public ContextCommandManager(RSyntaxTextArea editor, JFrame parentFrame,
                                   Supplier<INIModelParser.ParsedModel> modelSupplier,
                                   Supplier<File> modelFileSupplier,
+                                  Supplier<MapPanel> mapPanelSupplier,
                                   Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;
         this.modelFileSupplier = modelFileSupplier;
+        this.mapPanelSupplier = mapPanelSupplier;
         this.replacementApplier = replacementApplier;
 
         this.registry = new CommandRegistry();
@@ -92,7 +97,7 @@ public class ContextCommandManager {
 
         // ----- Ini editing commands -----
         for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
-            registry.register(new InsertNodeTemplateCommand(nodeType, modelSupplier, parentFrame));
+            registry.register(new InsertNodeTemplateCommand(nodeType, modelSupplier, mapPanelSupplier, parentFrame));
         }
 
         // Future commands will be registered here:

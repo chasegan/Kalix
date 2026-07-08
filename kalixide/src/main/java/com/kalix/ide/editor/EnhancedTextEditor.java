@@ -407,7 +407,7 @@ public class EnhancedTextEditor extends JPanel {
         this.modelFileSupplier = modelFileSupplier;
 
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
-            textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
+            textArea, parentFrame, modelSupplier, modelFileSupplier, () -> this.mapPanel, this::applyAtomicReplacements);
         contextCommandManager.initialize();
 
         // Install key bindings for every command whose metadata declares a

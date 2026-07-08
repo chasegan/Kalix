@@ -785,6 +785,15 @@ public class MapPanel extends JPanel {
     }
 
     /**
+     * Returns the world-space coordinate at the centre of the visible map viewport.
+     */
+    public java.awt.geom.Point2D.Double getCenterWorldPoint() {
+        double worldX = (getWidth() / 2.0 - panX) / zoomLevel;
+        double worldY = (getHeight() / 2.0 - panY) / zoomLevel;
+        return new java.awt.geom.Point2D.Double(worldX, worldY);
+    }
+
+    /**
      * Shows the Find Node dialog for searching nodes on the map.
      */
     public void showFindNodeDialog() {

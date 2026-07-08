@@ -579,17 +579,21 @@ public class CommandExecutor {
 
     /**
      * Inserts a new node template after the node section containing the
-     * cursor (from the text-editor context menu). No map location is known,
-     * so {@code loc} is left at the origin.
+     * cursor (from the text-editor context menu), placed at the given world
+     * location (typically the centre of the map view, since no click
+     * location is known from a text-editor invocation).
      *
      * @param nodeType    The template key (e.g. "gr4j", "storage")
+     * @param worldX      The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY      The map y-coordinate to insert into the template's {@code loc}
      * @param parsedModel The parsed model, used to pick a unique node name
      * @return true if the template was inserted, false on failure
      */
-    public boolean insertNodeTemplateNearCursor(String nodeType, INIModelParser.ParsedModel parsedModel) {
+    public boolean insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY,
+                                                 INIModelParser.ParsedModel parsedModel) {
         try {
             String uniqueName = generateUniqueNodeName(nodeType, parsedModel);
-            String templateText = buildTemplateText(nodeType, uniqueName, 0, 0);
+            String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
             String text = editor.getText();
             int offset = findInsertionOffsetAfterCurrentSection(text, editor.getCaretPosition());
             insertTemplateAt(offset, templateText);

@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.MapPanel;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,12 +20,14 @@ public class InsertNodeTemplateCommand implements EditorCommand {
     private final String nodeType;
     private final CommandMetadata metadata;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
+    private final Supplier<MapPanel> mapPanelSupplier;
     private final JFrame parentFrame;
 
     public InsertNodeTemplateCommand(String nodeType, Supplier<INIModelParser.ParsedModel> modelSupplier,
-                                      JFrame parentFrame) {
+                                      Supplier<MapPanel> mapPanelSupplier, JFrame parentFrame) {
         this.nodeType = nodeType;
         this.modelSupplier = modelSupplier;
+        this.mapPanelSupplier = mapPanelSupplier;
         this.parentFrame = parentFrame;
         this.metadata = new CommandMetadata.Builder()
             .id("insert_node_template_" + nodeType)
@@ -59,6 +62,15 @@ public class InsertNodeTemplateCommand implements EditorCommand {
             return;
         }
 
-        executor.insertNodeTemplateNearCursor(nodeType, parsedModel);
+        double worldX = 0;
+        double worldY = 0;
+        MapPanel mapPanel = mapPanelSupplier != null ? mapPanelSupplier.get() : null;
+        if (mapPanel != null) {
+            java.awt.geom.Point2D.Double center = mapPanel.getCenterWorldPoint();
+            worldX = center.x;
+            worldY = center.y;
+        }
+
+        executor.insertNodeTemplateNearCursor(nodeType, worldX, worldY, parsedModel);
     }
 }
