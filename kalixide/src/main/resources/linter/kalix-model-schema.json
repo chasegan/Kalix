@@ -235,7 +235,7 @@
         },
         "dimensions": {
           "type": "string",
-          "description": "Storage dimensions (no validation on value)"
+          "description": "Storage dimensions: Level m, Volume ML, Area km2, Spill ML (no validation on value)"
         },
         "rain": {
           "type": "function_expression",
