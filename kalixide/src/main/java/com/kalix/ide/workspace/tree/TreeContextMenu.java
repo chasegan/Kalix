@@ -53,7 +53,7 @@ class TreeContextMenu {
         for (List<Entry> group : groups) {
             List<Entry> visible = group.stream()
                 .filter(e -> e.visible.test(selection))
-                .collect(Collectors.toList());
+                .toList();
             if (visible.isEmpty()) {
                 continue;
             }
@@ -87,22 +87,26 @@ class TreeContextMenu {
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(
+            // Primary
             List.of(
                 item("Open", TreeContextMenu::isSingleFile,
                     sel -> host.openFile(file(sel)))
             ),
+            // Context-specific
             List.of(
                 item("Compare with active editor", TreeContextMenu::isSingleFile,
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1)))
             ),
+            // External handoff
             List.of(
                 item(revealLabel(), TreeContextMenu::isSingle,
                     sel -> fileOps.reveal(file(sel))),
                 item("Launch Terminal", TreeContextMenu::isSingle,
                     sel -> fileOps.openTerminal(file(sel)))
             ),
+            // Clipboard
             List.of(
                 item("Copy relative path", TreeContextMenu::any,
                     sel -> fileOps.copyRelativePaths(files(sel))),
@@ -111,22 +115,26 @@ class TreeContextMenu {
                 item("Copy trailhead path", TreeContextMenu::any,
                     sel -> fileOps.copyTrailheadPaths(files(sel)))
             ),
+            // Create
             List.of(
                 item("New file…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), false)),
                 item("New folder…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), true))
             ),
+            // Modify
             List.of(
                 item("Rename…", TreeContextMenu::isSingle,
                     sel -> fileOps.rename(file(sel))),
                 item("Duplicate…", TreeContextMenu::isSingle,
                     sel -> fileOps.duplicate(file(sel)))
             ),
+            // Destructive (isolated)
             List.of(
                 item("Delete", TreeContextMenu::any,
                     sel -> fileOps.delete(files(sel)), MenuIcons::delete)
             ),
+            // View
             List.of(
                 item("Expand children", TreeContextMenu::hasDirectory,
                     sel -> directories(sel).forEach(tree::expandSubtree)),
@@ -181,7 +189,7 @@ class TreeContextMenu {
     // --- Selection accessors ---
 
     private static File file(List<FileTreeNode> sel) {
-        return sel.get(0).getFile();
+        return sel.getFirst().getFile();
     }
 
     private static File file(List<FileTreeNode> sel, int index) {
