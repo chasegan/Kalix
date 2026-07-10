@@ -113,6 +113,10 @@ public class VisualizationTabManager {
         public boolean autoYMode = true;
         public boolean showCoordinates = false;
         public boolean legendCollapsed = false;
+        // Missing-data handling (context menu > Missing data). Mutually exclusive; both
+        // false = default "break at gaps".
+        public boolean connectAcrossGaps = false;
+        public boolean showOrphanMarkers = false;
 
         // Series selection from source tab (null = inherit from active tab)
         public Set<SeriesRef> selectedSeries = null;
@@ -136,6 +140,8 @@ public class VisualizationTabManager {
             settings.autoYMode = plotPanel.isAutoYMode();
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
+            settings.connectAcrossGaps = plotPanel.isConnectAcrossGaps();
+            settings.showOrphanMarkers = plotPanel.isShowOrphanMarkers();
             settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
             settings.checkedSources = new LinkedHashSet<>(tabInfo.checkedSources);
             settings.sourcePlotPanel = plotPanel;
@@ -315,6 +321,11 @@ public class VisualizationTabManager {
         plotPanel.setYAxisScale(settings.yAxisScale);
         plotPanel.setAutoYMode(settings.autoYMode);
         plotPanel.setShowCoordinates(settings.showCoordinates);
+        // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
+        // so apply connect first — for every valid (mutually exclusive) combination the
+        // net result matches the source tab.
+        plotPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
+        plotPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
         if (settings.legendCollapsed) {
             plotPanel.setLegendCollapsed(true);
         }
