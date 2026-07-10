@@ -22,7 +22,10 @@ public final class NodeTemplateCatalog {
     private static final Logger logger = LoggerFactory.getLogger(NodeTemplateCatalog.class);
     private static final String RESOURCE_PATH = "/node_templates.json";
 
-    private static List<NodeTemplate> templates;
+    /** Initialization-on-demand holder: loads exactly once, thread-safely, without locking. */
+    private static final class Holder {
+        private static final List<NodeTemplate> TEMPLATES = loadTemplates();
+    }
 
     /**
      * One template.
@@ -43,22 +46,20 @@ public final class NodeTemplateCatalog {
     }
 
     /**
-     * Returns the node templates in the order they are declared in the JSON.
+     * Returns the node templates in the order they are declared in the JSON, or an
+     * empty list if the resource could not be loaded.
      *
-     * <p>A load failure is never cached: it returns an empty list for that call (so
-     * menus built from it simply have no template items) but retries the load on the
-     * next call, rather than permanently disabling the feature after one transient
-     * failure.</p>
+     * <p>The load happens once and its outcome is final — including failure. There is
+     * nothing to retry: the resource is on the classpath, so the only ways to fail are
+     * an absent resource (a packaging bug) or malformed JSON (a source bug), and
+     * neither heals between calls. Retrying would re-log the same error on every
+     * right-click and, worse, make the two menus disagree — the map rebuilds its
+     * submenu per click and would recover, while the editor registers its commands once
+     * at construction and never would. One outcome, both menus, no lifecycle to get
+     * wrong. A broken resource is caught by NodeTemplateCatalogTest, not at runtime.</p>
      */
-    public static synchronized List<NodeTemplate> templates() {
-        if (templates == null) {
-            List<NodeTemplate> loaded = loadTemplates();
-            if (loaded == null) {
-                return List.of();
-            }
-            templates = loaded;
-        }
-        return templates;
+    public static List<NodeTemplate> templates() {
+        return Holder.TEMPLATES;
     }
 
     /**
@@ -74,8 +75,8 @@ public final class NodeTemplateCatalog {
     }
 
     /**
-     * @return the parsed templates as an unmodifiable list, or {@code null} if loading
-     *         failed (logged at error level — the caller decides how to degrade)
+     * @return the parsed templates as an unmodifiable list, or an empty list if loading
+     *         failed (logged once, at error level)
      */
     private static List<NodeTemplate> loadTemplates() {
         List<NodeTemplate> result = new ArrayList<>();
@@ -104,8 +105,8 @@ public final class NodeTemplateCatalog {
             }
         } catch (Exception e) {
             logger.error("Failed to load node templates from {} - " +
-                    "\"Insert node template\" will be unavailable until this is fixed", RESOURCE_PATH, e);
-            return null;
+                    "\"Insert node\" will have no items for this session", RESOURCE_PATH, e);
+            return List.of();
         }
         // Unmodifiable: this is a process-wide singleton, and callers were previously
         // handed the live collections.

@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -20,9 +21,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class NodeTemplateCatalogTest {
 
+    /**
+     * The runtime has no fallback if the shipped resource is broken — the load happens
+     * once and its outcome is final. This test is that guarantee.
+     */
     @Test
     void catalogLoads() {
         assertFalse(NodeTemplateCatalog.templates().isEmpty(), "the shipped catalog must parse");
+    }
+
+    /** Loaded exactly once: both menus must see the same outcome, always. */
+    @Test
+    void templatesAreLoadedOnce() {
+        assertSame(NodeTemplateCatalog.templates(), NodeTemplateCatalog.templates());
     }
 
     /**
