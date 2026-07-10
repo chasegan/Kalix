@@ -1,15 +1,30 @@
-//! The `ObjectiveFunction` enum: dispatch over the objective functions for model
-//! optimisation.
+//! Objective functions for model optimisation, and the `ObjectiveFunction` enum
+//! that dispatches over them.
 //!
-//! The individual objectives (and the shared missing-data/masking machinery,
-//! whose intentional design is documented there) live in
-//! [`crate::numerical::opt::objective_functions`]; they are re-exported here so
-//! existing `objectives::*` paths keep working.
+//! Each objective is implemented in its own submodule of the private
+//! `objective_functions` module, alongside the shared missing-data masking
+//! machinery; all of them are re-exported here, so this is the one path to each
+//! type.
 //!
 //! All objective functions return values in `[0, ∞)` where **LOWER IS BETTER**
 //! (0 = perfect). Goodness-of-fit metrics whose natural form is "higher better"
 //! (NSE, KGE, Pearson r) are re-expressed as `1 - x` so that every statistic
 //! obeys the same convention with no sign flips.
+//!
+//! # Missing-data handling (intentional design)
+//!
+//! Each objective caches observed-side statistics on first evaluation (thread-safe via
+//! `Arc<OnceLock>`, shared across parallel clones). The validity mask — the fixed
+//! assessment window — is seeded once from the FIRST evaluation: a timestep is in the
+//! window when both the observed value and the first candidate's simulated value are
+//! finite. This lets structurally-missing simulated values (e.g. from gaps in
+//! non-critical input data, identical for every candidate) define the window alongside
+//! observed gaps, and avoids re-deriving the window on every evaluation.
+//!
+//! Every subsequent candidate is scored over that same window and is VALIDATED against
+//! it: a candidate that produces a non-finite value inside the window is rejected with
+//! an error, which the optimisers treat as an infeasible candidate (objective = ∞).
+//! All feasible candidates are therefore always compared over identical data.
 
 pub use crate::numerical::opt::objective_functions::*;
 
@@ -44,7 +59,9 @@ pub enum ObjectiveFunction {
 }
 
 impl ObjectiveFunction {
-    /// The underlying objective, viewed through the shared trait.
+    /// The underlying objective, viewed through the shared trait. Dispatches
+    /// dynamically, so it is for the cold path only — scoring goes through the
+    /// `match` in [`Objective::evaluate`] instead (`performance §6`).
     fn inner(&self) -> &dyn Objective {
         match self {
             Self::OneMinusNse(o) => o,
@@ -67,37 +84,37 @@ impl ObjectiveFunction {
     /// # Returns
     /// Objective function value to be minimized (lower is better)
     pub fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        if observed.len() != simulated.len() {
-            return Err(format!(
-                "Observed and simulated must have same length ({} vs {})",
-                observed.len(),
-                simulated.len()
-            ));
-        }
-
-        if observed.is_empty() {
-            return Err("Cannot calculate objective for empty data".to_string());
-        }
-
-        self.inner().calculate(observed, simulated)
+        <Self as Objective>::calculate(self, observed, simulated)
     }
 
     /// Get name of objective function (matches the INI statistic name, uppercase)
     pub fn name(&self) -> &'static str {
-        self.inner().name()
+        <Self as Objective>::name(self)
     }
 }
 
 /// The composite satisfies the same contract as the individual objectives, so
-/// code taking an `impl Objective` accepts either. Routed through the inherent
-/// methods to keep the length/empty preconditions.
+/// code taking an `impl Objective` accepts either. The preconditions come free
+/// with the trait's provided `calculate`.
 impl Objective for ObjectiveFunction {
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
-        ObjectiveFunction::calculate(self, observed, simulated)
+    /// Dispatched with a `match` rather than through `Self::inner`: each arm
+    /// is a static call the compiler can inline, where a `&dyn Objective` would
+    /// cost a vtable indirection per candidate for nothing.
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        match self {
+            Self::OneMinusNse(o) => o.evaluate(observed, simulated),
+            Self::OneMinusLnse(o) => o.evaluate(observed, simulated),
+            Self::RMSE(o) => o.evaluate(observed, simulated),
+            Self::MAE(o) => o.evaluate(observed, simulated),
+            Self::OneMinusKge(o) => o.evaluate(observed, simulated),
+            Self::AbsPbias(o) => o.evaluate(observed, simulated),
+            Self::SDEB(o) => o.evaluate(observed, simulated),
+            Self::OneMinusPearsR(o) => o.evaluate(observed, simulated),
+        }
     }
 
     fn name(&self) -> &'static str {
-        ObjectiveFunction::name(self)
+        self.inner().name()
     }
 }
 
@@ -111,6 +128,47 @@ impl PartialEq for ObjectiveFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The length/empty preconditions must hold on EVERY route to an objective,
+    /// not just through `ObjectiveFunction`. Reaching a bare objective through
+    /// the `Objective` trait once skipped them: a shorter simulated series
+    /// silently truncated the assessment window (`seed_validity_mask` zips) and
+    /// the candidate scored a perfect 0.0 on the overlapping prefix — a wrong
+    /// number with no signal (`performance §6.2`).
+    #[test]
+    fn test_bare_objective_enforces_length_precondition() {
+        let obs = [1.0, 2.0, 3.0, 4.0];
+        let sim = [1.0, 2.0]; // shorter: would perfectly fit the truncated window
+
+        let result = Objective::calculate(&NseObjective::new(), &obs, &sim);
+        match result {
+            Err(e) => assert!(e.contains("same length"),
+                "expected a length error, got '{}'", e),
+            Ok(v) => panic!("mismatched lengths scored Ok({}) instead of erroring", v),
+        }
+    }
+
+    #[test]
+    fn test_bare_objective_rejects_empty_data() {
+        let result = Objective::calculate(&NseObjective::new(), &[], &[]);
+        assert!(result.is_err(), "empty data must error, got {:?}", result);
+    }
+
+    /// `ObjectiveFunction`'s inherent methods and its `Objective` impl must
+    /// agree, and neither may recurse into the other.
+    #[test]
+    fn test_enum_trait_impl_matches_inherent_and_terminates() {
+        let obj = ObjectiveFunction::RMSE(RmseObjective::new());
+        let obs = [1.0, 2.0, 3.0];
+        let sim = [1.1, 2.1, 3.1];
+
+        let via_trait = <ObjectiveFunction as Objective>::calculate(&obj, &obs, &sim).unwrap();
+        assert!((via_trait - 0.1).abs() < 1e-10, "got {}", via_trait);
+        assert_eq!(<ObjectiveFunction as Objective>::name(&obj), "RMSE");
+
+        // Reached through the trait, the composite still enforces preconditions.
+        assert!(<ObjectiveFunction as Objective>::calculate(&obj, &obs, &[1.0]).is_err());
+    }
 
     #[test]
     fn test_nse_perfect() {

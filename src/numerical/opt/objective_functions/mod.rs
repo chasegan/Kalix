@@ -1,26 +1,9 @@
-//! Objective functions for model optimisation
+//! Objective functions for model optimisation — one per submodule.
 //!
-//! All objective functions return values in `[0, ∞)` where **LOWER IS BETTER** (0 = perfect).
-//! Goodness-of-fit metrics whose natural form is "higher better" (NSE, KGE, Pearson r) are
-//! re-expressed as `1 - x` so that every statistic obeys the same convention with no sign flips.
-//!
-//! Each objective lives in its own submodule; the `ObjectiveFunction` enum that
-//! dispatches over them lives in [`crate::numerical::opt::objectives`].
-//!
-//! # Missing-data handling (intentional design)
-//!
-//! Each objective caches observed-side statistics on first evaluation (thread-safe via
-//! `Arc<OnceLock>`, shared across parallel clones). The validity mask — the fixed
-//! assessment window — is seeded once from the FIRST evaluation: a timestep is in the
-//! window when both the observed value and the first candidate's simulated value are
-//! finite. This lets structurally-missing simulated values (e.g. from gaps in
-//! non-critical input data, identical for every candidate) define the window alongside
-//! observed gaps, and avoids re-deriving the window on every evaluation.
-//!
-//! Every subsequent candidate is scored over that same window and is VALIDATED against
-//! it: a candidate that produces a non-finite value inside the window is rejected with
-//! an error, which the optimisers treat as an infeasible candidate (objective = ∞).
-//! All feasible candidates are therefore always compared over identical data.
+//! Private: everything here is re-exported from
+//! [`crate::numerical::opt::objectives`], which is the public facade and where
+//! the conventions (lower is better) and the intentional missing-data design
+//! are documented. Read that first — the masking helpers below implement it.
 
 mod nse;
 mod lnse;
@@ -42,11 +25,36 @@ pub use pears::PearsObjective;
 
 /// Objective function trait for model optimisation
 pub trait Objective {
-    /// Calculate the objective function value given observed and simulated data
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String>;
-
     /// Name of the objective function (matches the INI statistic name, uppercase)
     fn name(&self) -> &'static str;
+
+    /// Score a candidate, assuming the preconditions `calculate` has already
+    /// checked. Implement this; call [`Objective::calculate`].
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String>;
+
+    /// Calculate the objective function value given observed and simulated data.
+    ///
+    /// The preconditions live here, not in the implementations, so that every
+    /// objective enforces them however it is reached. Skipping them is not a
+    /// speed win worth having: mismatched lengths silently truncate the
+    /// assessment window (`seed_validity_mask` zips), scoring the candidate over
+    /// whatever prefix overlaps — a wrong number with no signal, which
+    /// `performance §6.2` forbids.
+    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+        if observed.len() != simulated.len() {
+            return Err(format!(
+                "Observed and simulated must have same length ({} vs {})",
+                observed.len(),
+                simulated.len()
+            ));
+        }
+
+        if observed.is_empty() {
+            return Err("Cannot calculate objective for empty data".to_string());
+        }
+
+        self.evaluate(observed, simulated)
+    }
 }
 
 /// Build the fixed assessment window from the observed series and the FIRST

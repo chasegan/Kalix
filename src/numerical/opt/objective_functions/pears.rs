@@ -56,7 +56,7 @@ impl PearsObjective {
 
 impl Objective for PearsObjective {
     /// Calculate Pearson's R objective (loss form 1 - r for minimization)
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         let masked_sim = masked_simulated(simulated, &cache.mask)?;

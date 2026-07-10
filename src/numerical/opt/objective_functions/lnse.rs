@@ -52,7 +52,7 @@ impl LnseObjective {
 
 impl Objective for LnseObjective {
     /// Calculate LNSE objective (loss form 1 - LNSE for minimization)
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         const EPSILON: f64 = 0.01;
 
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));

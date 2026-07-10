@@ -52,7 +52,7 @@ impl KgeObjective {
 
 impl Objective for KgeObjective {
     /// Calculate KGE objective (loss form 1 - KGE for minimization)
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
         // KGE's alpha and beta terms are undefined for degenerate observed data;

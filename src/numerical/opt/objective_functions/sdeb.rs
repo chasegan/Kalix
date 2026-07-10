@@ -2,6 +2,7 @@ use std::sync::{Arc, OnceLock};
 use super::{Objective, seed_validity_mask, masked_observed, masked_simulated};
 
 /// SDEB objective with lazy-initialized cache for parallel processing
+///
 /// SDEB — Sorted Data Error with Bias. Combines temporal error (SD), distributional
 /// error (SE), and a bias penalty. Range: [0, ∞), 0 = perfect.
 ///
@@ -60,7 +61,7 @@ impl SdebObjective {
 
 impl Objective for SdebObjective {
     /// Calculate SDEB objective
-    fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
+    fn evaluate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         // Get or initialize cache (happens once, thread-safe)
         let cache = self.cache.get_or_init(|| Self::initialize_cache(observed, simulated));
 
