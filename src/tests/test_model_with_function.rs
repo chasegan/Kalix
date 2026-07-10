@@ -69,6 +69,9 @@ fn test_model_with_function() {
 
 
 #[test]
+// The constants here stand in for whatever a modeller would type; 3.14 is a
+// number the model carries around, not an approximation of PI that wants tightening.
+#[allow(clippy::approx_constant)]
 fn test_model_with_changing_constant() {
 
     //Create model
