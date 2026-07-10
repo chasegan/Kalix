@@ -4,6 +4,9 @@ use crate::misc::misc_functions::is_valid_variable_name;
 Test basic functionality: add constants, set values, and retrieve them.
  */
 #[test]
+// The constants here stand in for whatever a modeller would type; 3.14159 is a
+// number the cache round-trips, not an approximation of PI that wants tightening.
+#[allow(clippy::approx_constant)]
 fn test_constants_cache_basic_operations() {
     println!("========== STARTING TEST ==========");
     let mut cache = ConstantsCache::new();

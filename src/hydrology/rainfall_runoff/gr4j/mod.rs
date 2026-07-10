@@ -189,7 +189,8 @@ impl Gr4j {
  */
 fn s_curves1(t: usize, x4: f64, exp: f64) -> f64 {
     let t_f64 = t as f64;
-    if t <= 0 {
+    // Guards 0/0 -> NaN when x4 is zero; `t` is unsigned, so t == 0 is the whole case.
+    if t == 0 {
         0.0
     } else if t_f64 < x4 {
         (t_f64 / x4).powf(exp)
@@ -204,7 +205,8 @@ fn s_curves1(t: usize, x4: f64, exp: f64) -> f64 {
  */
 fn s_curves2(t: usize, x4: f64, exp: f64) -> f64 {
     let t_f64 = t as f64;
-    if t <= 0 {
+    // Guards 0/0 -> NaN when x4 is zero; `t` is unsigned, so t == 0 is the whole case.
+    if t == 0 {
         0.0
     } else if t_f64 < x4 {
         0.5 * (t_f64 / x4).powf(exp)
