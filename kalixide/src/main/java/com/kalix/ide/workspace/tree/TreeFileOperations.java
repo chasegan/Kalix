@@ -18,6 +18,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.model.FileHeader;
 
 /**
  * The side-effecting file operations behind the project tree's context menu and keyboard
@@ -521,14 +522,43 @@ class TreeFileOperations {
     // TODO double click zip folder to unzip
 
     /**
-     * Unzip the selected zip folder into the same directory.
+     * Unzip the selected zip folder into the same directory. Zip4j extracts by overwriting any
+     * existing file of the same name without warning, so entries that would collide with
+     * existing files are surfaced in a confirmation prompt first.
      */
     void unzipFile(File file) {
-        try (ZipFile zipFile = new ZipFile(file);) {
-            String targetPath = file.getParentFile().getAbsolutePath();
-            zipFile.extractAll(targetPath);
+        File targetDir = file.getParentFile();
+        try (ZipFile zipFile = new ZipFile(file)) {
+            List<String> collisions = collidingEntries(zipFile, targetDir);
+            if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
+                return;
+            }
+            zipFile.extractAll(targetDir.getAbsolutePath());
         } catch (IllegalStateException | IOException ex) {
             showPathError(ex.getMessage());
         }
+    }
+
+    /** The zip entry names that would overwrite a file already present in {@code targetDir}. */
+    private static List<String> collidingEntries(ZipFile zipFile, File targetDir) throws IOException {
+        List<String> collisions = new ArrayList<>();
+        for (FileHeader header : zipFile.getFileHeaders()) {
+            if (new File(targetDir, header.getFileName()).exists()) {
+                collisions.add(header.getFileName());
+            }
+        }
+        return collisions;
+    }
+
+    private boolean confirmOverwrite(List<String> collisions) {
+        String message = (collisions.size() == 1
+            ? "\"" + collisions.get(0) + "\" already exists and will be overwritten."
+            : collisions.size() + " items already exist and will be overwritten:\n\n"
+                + String.join("\n", collisions.subList(0, Math.min(collisions.size(), 10)))
+                + (collisions.size() > 10 ? "\n..." : ""))
+            + "\n\nContinue?";
+        int choice = JOptionPane.showConfirmDialog(parent, message,
+            "Unzip", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        return choice == JOptionPane.YES_OPTION;
     }
 }
