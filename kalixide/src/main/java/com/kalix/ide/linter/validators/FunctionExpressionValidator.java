@@ -634,16 +634,10 @@ public class FunctionExpressionValidator {
             while (current.type == TokenType.OPERATOR &&
                    (current.value.equals("*") || current.value.equals("/") || current.value.equals("%"))) {
 
-                String op = current.value;
+                // Division by a zero constant is intentionally not flagged: writing "x / 0" to
+                // manufacture a NaN (e.g. to mark values for omission in later statistical analysis)
+                // is a legitimate modelling idiom, not a mistake.
                 advance();
-
-                // Check for division by zero constant: compare the parsed value, not
-                // the literal spelling ("0.0" and "0e5" are zero too). Parenthesised
-                // zeros still escape - the divisor here must be a bare number token.
-                if (op.equals("/") && current.type == TokenType.NUMBER
-                        && Double.parseDouble(current.value) == 0.0) {
-                    errors.add("Warning: Division by zero constant");
-                }
 
                 parsePowerExpression(errors);
             }

@@ -223,10 +223,10 @@ class FunctionExpressionValidatorTest {
     }
 
     @Test
-    @DisplayName("Division by zero constant should warn")
+    @DisplayName("Division by a zero constant is allowed (a valid NaN-manufacturing idiom)")
     void testDivisionByZeroConstant() {
-        assertInvalid("5 / 0", "Division by zero");
-        assertInvalid("data.x / 0", "Division by zero");
+        assertValid("5 / 0");
+        assertValid("data.x / 0");
     }
 
     @Test
@@ -295,11 +295,11 @@ class FunctionExpressionValidatorTest {
     }
 
     @Test
-    @DisplayName("Division by zero constant warns for all zero spellings")
+    @DisplayName("Division by a zero constant is allowed for every zero spelling")
     void testDivisionByZeroSpellings() {
-        assertInvalid("data.a / 0", "Division by zero");
-        assertInvalid("data.a / 0.0", "Division by zero");
-        assertInvalid("data.a / 0e5", "Division by zero");
+        assertValid("data.a / 0");
+        assertValid("data.a / 0.0");
+        assertValid("data.a / 0e5");
         assertValid("data.a / 0.5");
     }
 

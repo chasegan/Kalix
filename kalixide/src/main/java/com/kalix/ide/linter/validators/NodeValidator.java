@@ -141,7 +141,9 @@ public class NodeValidator implements ValidationStrategy {
         List<String> errors = functionValidator.validate(prop.getValue(), context);
 
         for (String error : errors) {
-            // Determine severity - warnings for division by zero, errors for everything else
+            // Severity by convention: a message the validator prefixes with "Warning:" is surfaced
+            // as a warning, everything else as an error. (No function-expression warnings are emitted
+            // at present, but the convention stays so future ones need no plumbing here.)
             ValidationRule.Severity severity = error.toLowerCase().startsWith("warning")
                 ? ValidationRule.Severity.WARNING
                 : ValidationRule.Severity.ERROR;
