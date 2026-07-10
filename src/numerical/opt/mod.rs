@@ -7,6 +7,9 @@ pub mod optimisable;
 pub mod optimisable_component;
 pub mod parameter_mapping;
 pub mod genes;
+/// The individual objectives. Private: `objectives` is the single public facade,
+/// re-exporting them so there is one path to each type.
+mod objective_functions;
 pub mod objectives;
 pub mod optimisation;
 pub mod optimizer_trait;
