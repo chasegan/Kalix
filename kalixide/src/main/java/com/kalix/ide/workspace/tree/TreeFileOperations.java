@@ -447,11 +447,10 @@ class TreeFileOperations {
      */
     void zipFiles(List<File> files, File rootFile) {
         if (files == null || files.isEmpty()) { return; }
-
-        String zipFileName = getZipFileName(files, rootFile);
-
+        List<File> targets = withoutDescendants(files);
+        String zipFileName = getZipFileName(targets, rootFile);
         try (ZipFile zipFile = new ZipFile(zipFileName);) {
-            for (File file : files) {
+            for (File file : targets) {
                 if (file.isDirectory()) {
                     zipFile.addFolder(file);
                 } else {
