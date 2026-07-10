@@ -40,8 +40,10 @@ import java.awt.image.BufferedImage;
  * <p>The actual reorder is delegated to a {@link TabMover} so each host can keep its own backing
  * model (document order, tab list, …) as the single source of truth; this class never assumes how a
  * move is realised beyond computing the source and destination indices. A press that never crosses
- * the drag threshold is treated as a plain click and simply selects the pressed tab — which a pane
- * with custom tab components does not do natively, and which is a harmless no-op for standard tabs.
+ * the drag threshold is treated as a plain click; for {@link #attachToHandle(Component)} it selects
+ * the pressed tab (custom tab components do not select natively), while for {@link #attachToStrip()}
+ * it does nothing, because a standard strip already selects on click — and re-selecting there could
+ * fire against a tab a native close button removed mid-click.
  */
 public final class TabDragReorderer {
 
@@ -58,6 +60,16 @@ public final class TabDragReorderer {
     private final JTabbedPane tabbedPane;
     private final TabMover mover;
     private final DragGhostGlassPane ghostGlassPane = new DragGhostGlassPane();
+
+    /**
+     * Whether a plain (non-drag) click should explicitly select the pressed tab on release. Only
+     * custom tab components need this — they swallow the strip's mouse events, so the pane never
+     * selects natively. A standard tab strip already selects on click, and a redundant reselect
+     * there is not merely pointless but unsafe: a left-click on a native close button records a
+     * dragged index that the close then removes, so the reselect would fire against a stale (or
+     * out-of-range) index. Enabled only by {@link #attachToHandle(Component)}.
+     */
+    private boolean selectPressedTabOnClick = false;
 
     private int draggedTabIndex = -1;
     private Point dragStartPoint = null;        // in tabbedPane coordinates
@@ -89,6 +101,7 @@ public final class TabDragReorderer {
      * components swallow the strip's mouse events, so the handle is where the drag must originate.
      */
     public void attachToHandle(Component dragHandle) {
+        selectPressedTabOnClick = true;
         attachTo(dragHandle);
     }
 
@@ -164,8 +177,11 @@ public final class TabDragReorderer {
             if (dest >= 0) {
                 mover.moveTab(draggedTabIndex, dest);
             }
-        } else {
-            // A plain click: select the pressed tab (custom tab components don't do this natively).
+        } else if (selectPressedTabOnClick && draggedTabIndex < tabbedPane.getTabCount()) {
+            // A plain click on a custom tab component, which doesn't select natively. Standard tab
+            // strips are left alone here (they select on click already). The bounds check guards a
+            // stale index: the tab set can shrink between press and release (e.g. a native close
+            // button removing the pressed tab), which would otherwise throw here.
             tabbedPane.setSelectedIndex(draggedTabIndex);
         }
         draggedTabIndex = -1;
