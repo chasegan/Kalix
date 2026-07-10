@@ -75,9 +75,19 @@ class NodeTemplateCatalogTest {
     void everyTemplateDeclaresATypeAndCoordinatePlaceholders() {
         for (NodeTemplate template : NodeTemplateCatalog.templates()) {
             String body = String.join("\n", template.lines());
-            assertTrue(body.contains("type="), "template '" + template.id() + "' has no type");
+            assertTrue(body.matches("(?s).*\\btype\\s*=.*"), "template '" + template.id() + "' has no type");
+            assertTrue(body.matches("(?s).*\\bloc\\s*=.*"), "template '" + template.id() + "' has no loc");
             assertTrue(body.contains("%%X%%") && body.contains("%%Y%%"),
                 "template '" + template.id() + "' has no coordinate placeholders");
+        }
+    }
+
+    /** The declared type must match the id — an easy copy-paste slip in the JSON. */
+    @Test
+    void declaredTypeMatchesTheTemplateId() {
+        for (NodeTemplate template : NodeTemplateCatalog.templates()) {
+            assertEquals(template.id(), valueOf(template.id(), "type"),
+                "template '" + template.id() + "' declares a different node type");
         }
     }
 
@@ -93,6 +103,83 @@ class NodeTemplateCatalogTest {
                     "template '" + template.id() + "' uses // as a comment: " + line);
             }
         }
+    }
+
+    /**
+     * A template exists so a modeller can check a model steps through before
+     * calibrating. GR4J with params=0,0,0,0 does not: x4=0 gives a zero-length unit
+     * hydrograph and the engine indexes out of bounds.
+     */
+    @Test
+    void gr4jParametersAreRunnable() {
+        String params = valueOf("gr4j", "params");
+        String[] xs = params.split(",");
+        assertEquals(4, xs.length, "GR4J takes four parameters");
+        assertTrue(Double.parseDouble(xs[0].trim()) > 0, "x1 (production store) must be positive");
+        assertTrue(Double.parseDouble(xs[3].trim()) > 0, "x4 (unit hydrograph base) must be positive");
+    }
+
+    @Test
+    void sacramentoTakesSeventeenParameters() {
+        assertEquals(17, valueOf("sacramento", "params").split(",").length);
+    }
+
+    /**
+     * Interpolation tables need at least two rows. One row crashed the storage node
+     * ("must have at least 2 rows") and the splitter (index out of bounds).
+     */
+    @Test
+    void tableValuedTemplatesCarryAtLeastTwoRows() {
+        assertTrue(rowCount("storage", "dimensions") >= 2, "storage dimensions needs >= 2 rows");
+        assertTrue(rowCount("loss", "table") >= 2, "loss table needs >= 2 rows");
+        assertTrue(rowCount("splitter", "table") >= 2, "splitter table needs >= 2 rows");
+    }
+
+    /** Continuation lines must start with whitespace, or the parser ends the value. */
+    @Test
+    void continuationLinesAreIndented() {
+        for (NodeTemplate template : NodeTemplateCatalog.templates()) {
+            for (String line : template.lines()) {
+                if (!line.contains("=")) {
+                    assertTrue(Character.isWhitespace(line.charAt(0)),
+                        "template '" + template.id() + "' has an unindented continuation line: " + line);
+                }
+            }
+        }
+    }
+
+    /** The first line of a key's value, with any inline comment stripped. */
+    private static String valueOf(String templateId, String key) {
+        NodeTemplate template = NodeTemplateCatalog.byId(templateId);
+        assertNotNull(template, "no template: " + templateId);
+        for (String line : template.lines()) {
+            if (line.trim().startsWith(key + " ") || line.trim().startsWith(key + "=")) {
+                String value = line.substring(line.indexOf('=') + 1);
+                int comment = value.indexOf('#');
+                return (comment == -1 ? value : value.substring(0, comment)).trim();
+            }
+        }
+        throw new AssertionError("template '" + templateId + "' has no '" + key + "'");
+    }
+
+    /** A table row per line: the key's own line, plus its indented continuation lines. */
+    private static int rowCount(String templateId, String key) {
+        NodeTemplate template = NodeTemplateCatalog.byId(templateId);
+        assertNotNull(template, "no template: " + templateId);
+        int rows = 0;
+        boolean inValue = false;
+        for (String line : template.lines()) {
+            boolean isContinuation = !line.contains("=");
+            if (line.trim().startsWith(key)) {
+                inValue = true;
+                rows = 1;
+            } else if (inValue && isContinuation) {
+                rows++;
+            } else if (inValue) {
+                break;
+            }
+        }
+        return rows;
     }
 
     @Test
