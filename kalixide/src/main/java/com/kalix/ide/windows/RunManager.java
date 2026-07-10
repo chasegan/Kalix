@@ -912,7 +912,7 @@ public class RunManager extends JFrame {
      */
     void updateOutputsTree() {
         TreePath[] checkedPaths = timeseriesSourceTree.getCheckedPaths();
-        if (checkedPaths == null || checkedPaths.length == 0) {
+        if (checkedPaths.length == 0) {
             outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
             return;
         }

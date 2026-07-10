@@ -378,17 +378,26 @@ class RunTreeController {
                 // Expand parent nodes to make the run visible
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
-                // Select and check the run
+                // Select and check the run, then rebuild the outputs tree. The rebuild
+                // (reload) wipes the outputs tree's checked state, and checked state is
+                // the source of truth for what's plotted - so restore checks for the
+                // target tab's series and reconcile, exactly as onSourceTreeCheckedChanged
+                // does. Without the restore, the next user check-click would silently
+                // replace the tab's series with only the visibly-checked ones.
                 fetchCoordinator.setUpdatingSelection(true);
-                timeseriesSourceTree.setSelectionPath(pathToRun);
-                timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
-                fetchCoordinator.setUpdatingSelection(false);
+                try {
+                    timeseriesSourceTree.setSelectionPath(pathToRun);
+                    timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
+                    window.updateOutputsTree();
+                    Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+                    Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
+                    window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+                } finally {
+                    fetchCoordinator.setUpdatingSelection(false);
+                }
 
                 // Scroll to make the selection visible
                 timeseriesSourceTree.scrollPathToVisible(pathToRun);
-
-                // Update timeseries tree
-                window.updateOutputsTree();
             }
         });
     }

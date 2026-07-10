@@ -117,7 +117,7 @@ class SeriesFetchCoordinator {
 
         TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
 
-        if (checkedPaths == null || checkedPaths.length == 0) {
+        if (checkedPaths.length == 0) {
             // Clear the target tab's series when nothing is checked
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
