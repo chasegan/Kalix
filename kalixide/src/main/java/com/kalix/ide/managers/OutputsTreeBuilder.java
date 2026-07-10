@@ -38,7 +38,8 @@ import java.util.stream.Collectors;
  * <h2>Rebuild Behavior</h2>
  * {@link #updateTree} does a full rebuild via {@code timeseriesTreeModel.reload()}.
  * Expansion state is preserved by recording expanded paths before rebuild and restoring after.
- * Tree selection is handled separately by RunManager via {@code restoreTreeSelectionForSeries()}.
+ * Checked state (what's plotted) is handled separately by RunManager via
+ * {@code restoreTreeChecksForSeries()}, since a reload invalidates the old TreePaths.
  *
  * <h2>Data Source</h2>
  * Series names come from {@code getSeriesNamesCallback} which calls:
@@ -47,8 +48,8 @@ import java.util.stream.Collectors;
  *   <li>For datasets: The loaded CSV/Pixie column names</li>
  * </ul>
  *
- * @see com.kalix.ide.windows.RunManager#onRunTreeSelectionChanged
- * @see com.kalix.ide.windows.RunManager#restoreTreeSelectionForSeries
+ * @see com.kalix.ide.windows.RunManager#onSourceTreeCheckedChanged
+ * @see com.kalix.ide.windows.RunManager#restoreTreeChecksForSeries(Set)
  */
 public class OutputsTreeBuilder {
 

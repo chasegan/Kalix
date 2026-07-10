@@ -257,6 +257,44 @@ class TimeSeriesDataTest {
     }
 
     /**
+     * The phantom-segment regression: a query window entirely OUTSIDE the series (before the
+     * first sample or after the last) must be empty on both index paths. The contiguous fast
+     * path used to clamp startIndex to pointCount-1, handing the last sample to any
+     * beyond-the-end query — the LOD column partition then dropped the last point into the
+     * final pixel column, and "Draw across gaps" bridged it to the right-hand plot edge as a
+     * phantom segment (auto-Y similarly picked up an out-of-view point).
+     */
+    @Test
+    void viewportEntirelyOutsideSeriesIsEmptyOnBothPaths() {
+        int n = 10;
+        long[] gridTs = new long[n];
+        double[] gridV = new double[n];
+        for (int i = 0; i < n; i++) {
+            gridTs[i] = i * DAY_MS;
+            gridV[i] = i;
+        }
+        TimeSeriesData grid = new TimeSeriesData(gridTs, gridV);
+        assertTrue(grid.isContiguous(), "precondition: series must take the fast path");
+
+        for (TimeSeriesData series : new TimeSeriesData[]{grid, adHocSeries()}) {
+            long[] ts = series.getTimestamps();
+            long first = ts[0];
+            long last = ts[ts.length - 1];
+            String path = series.isContiguous() ? "fast path" : "binary-search path";
+
+            // Just past the end (the LOD trailing-column query) and far past it.
+            assertTrue(series.getIndexRange(last + 1, last + DAY_MS).isEmpty(),
+                "window just past the series end must be empty on " + path);
+            assertTrue(series.getIndexRange(last + 365 * DAY_MS, last + 730 * DAY_MS).isEmpty(),
+                "window far past the series end must be empty on " + path);
+
+            // Entirely before the first sample, including just before it.
+            assertTrue(series.getIndexRange(first - DAY_MS, first - 1).isEmpty(),
+                "window ending just before the first sample must be empty on " + path);
+        }
+    }
+
+    /**
      * Both index paths — the contiguous O(1) arithmetic fast path and the binary-search path —
      * must implement the same half-open, end-inclusive-in-time semantics. Each is checked
      * against the same reference oracle: end bounds everywhere (exactly on a point, between
@@ -289,10 +327,10 @@ class TimeSeriesDataTest {
             java.util.List<Long> ends = new java.util.ArrayList<>();
             for (long t : ts) ends.add(t);
             for (int i = 0; i + 1 < ts.length; i++) ends.add((ts[i] + ts[i + 1]) / 2);
-            // At least one full step before the series: the fast path's integer division
-            // truncates toward zero, so ends within (first - step, first) are a pre-existing
-            // fast-path quirk outside this comparison's scope.
+            // Any end before the first sample is empty on both paths (the fast path
+            // short-circuits before its truncating integer division can misfire).
             ends.add(first - 2 * DAY_MS);
+            ends.add(first - 1);
             ends.add(last + 1);
             ends.add(last + 365 * DAY_MS);
 

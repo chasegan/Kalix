@@ -2,8 +2,10 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
+import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.managers.RunContextMenuManager;
@@ -11,13 +13,11 @@ import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +36,7 @@ class RunTreeController {
 
     private final RunManager window;
     private final StdioTaskManager stdioTaskManager;
-    private final JTree timeseriesSourceTree;
+    private final JCheckboxTree timeseriesSourceTree;
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode currentRunsNode;
     private final VisualizationTabManager tabManager;
@@ -54,7 +54,7 @@ class RunTreeController {
 
     RunTreeController(RunManager window,
                       StdioTaskManager stdioTaskManager,
-                      JTree timeseriesSourceTree,
+                      JCheckboxTree timeseriesSourceTree,
                       DefaultTreeModel treeModel,
                       DefaultMutableTreeNode currentRunsNode,
                       VisualizationTabManager tabManager,
@@ -202,9 +202,9 @@ class RunTreeController {
                             lastRunTracker.onRunCompleted(runInfo, completionTime);
                         }
 
-                        // Update outputs if this run is currently selected
-                        TreePath selectedPath = timeseriesSourceTree.getSelectionPath();
-                        if (selectedPath != null && selectedPath.getLastPathComponent() == existingNode) {
+                        // Update outputs if this run is currently checked
+                        TreePath existingPath = new TreePath(existingNode.getPath());
+                        if (timeseriesSourceTree.isPathChecked(existingPath)) {
                             window.updateOutputsTree();
                         }
                     }
@@ -243,7 +243,10 @@ class RunTreeController {
             if (!removedIndices.isEmpty()) {
                 // Remove nodes from tree
                 for (Object child : removedChildren) {
-                    currentRunsNode.remove((DefaultMutableTreeNode) child);
+                    var node = (DefaultMutableTreeNode) child;
+                    var path = node.getPath();
+                    timeseriesSourceTree.removePath(new TreePath(path));
+                    currentRunsNode.remove(node);
                 }
 
                 // Clean up tracking maps (single-shot removal via the bookkeeping)
@@ -345,13 +348,13 @@ class RunTreeController {
         // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
         // and (b) trigger a repaint so any text surfaces that aren't actively reading the
         // resolver see the update.
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
             window.updateOutputsTree();
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            window.restoreTreeSelectionForSeries(tabSeries);
+            window.restoreTreeChecksForSeries(tabSeries);
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
 
         // Cheap repaint to pick up the new label in plot legends / stats column headers
@@ -362,8 +365,12 @@ class RunTreeController {
     }
 
     /**
-     * Selects the run associated with the given sessionKey.
-     * This will expand the tree and select the run node if found.
+     * Selects and checks the run associated with the given sessionKey, so its outputs are
+     * shown. Expands the tree, selects the run node (visual focus only — selection drives
+     * nothing), and checks it. The check goes through the normal check-change event, so
+     * {@code RunManager.onSourceTreeCheckedChanged} does everything a user click would:
+     * snapshot the tab's source context, rebuild the outputs tree, restore and reconcile
+     * the tab's series checks. One code path, deliberately not mirrored here.
      */
     void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
@@ -374,16 +381,11 @@ class RunTreeController {
                 // Expand parent nodes to make the run visible
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
-                // Select the run
-                fetchCoordinator.setUpdatingSelection(true);
                 timeseriesSourceTree.setSelectionPath(pathToRun);
-                fetchCoordinator.setUpdatingSelection(false);
+                timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
 
                 // Scroll to make the selection visible
                 timeseriesSourceTree.scrollPathToVisible(pathToRun);
-
-                // Update timeseries tree
-                window.updateOutputsTree();
             }
         });
     }
@@ -415,6 +417,10 @@ class RunTreeController {
         if (!refs.isEmpty()) {
             tabManager.removeSeriesFromAllTabs(refs);
         }
+
+        // Forget the run from every tab's recorded source context — runIds are never
+        // reused, so no tab should try to restore this source again.
+        tabManager.removeSourceFromAllTabs(new RunSource(runId));
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.

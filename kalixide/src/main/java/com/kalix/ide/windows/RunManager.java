@@ -1,5 +1,15 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.DatasetSource;
+import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.LastSeries;
+import com.kalix.ide.flowviz.data.LastSource;
+import com.kalix.ide.flowviz.data.RunSeries;
+import com.kalix.ide.flowviz.data.RunSource;
+import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.OutputsTreeBuilder;
@@ -14,7 +24,6 @@ import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.utils.NaturalSortUtils;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
-import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
 
@@ -26,10 +35,8 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -72,9 +79,9 @@ import java.util.function.Consumer;
  *
  * <h2>Data Flow</h2>
  * <ol>
- *   <li>User selects source(s) in data source tree → {@link #onRunTreeSelectionChanged}</li>
+ *   <li>User checks source(s) in data source tree → {@link #onSourceTreeCheckedChanged}</li>
  *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
- *   <li>User selects series in timeseries tree → {@link SeriesFetchCoordinator#onOutputsTreeSelectionChanged}</li>
+ *   <li>User checks series in timeseries tree → {@link SeriesFetchCoordinator#onOutputsTreeCheckedChanged}</li>
  *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
  *   <li>Data is added to shared {@link DataSet} pool → {@link #addSeriesToPool}</li>
  *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
@@ -82,10 +89,13 @@ import java.util.function.Consumer;
  *
  * <h2>Selection Tracking</h2>
  * <ul>
- *   <li>Per-tab selected series stored in {@link VisualizationTabManager} TabInfo</li>
- *   <li>{@link SeriesFetchCoordinator#isUpdatingSelection()} - Guard to prevent listener
+ *   <li>Per-tab selected series AND per-tab checked sources stored in
+ *       {@link VisualizationTabManager} TabInfo — a tab is a complete view (sources +
+ *       series + plot settings), restored as a whole by {@link #onTabChanged}</li>
+ *   <li>{@link SeriesFetchCoordinator#isProgrammaticUpdate()} - Guard to prevent listener
  *       feedback loops during programmatic updates</li>
- *   <li>Tree selection is restored after rebuilds via {@link #restoreTreeSelectionForSeries}</li>
+ *   <li>Checked state (what's plotted) is separate from plain tree selection (row highlight);
+ *       checked state is restored after rebuilds via {@link #restoreTreeChecksForSeries}</li>
  * </ul>
  *
  * <h2>Window collaborators</h2>
@@ -118,7 +128,7 @@ public class RunManager extends JFrame {
     // === DATA SOURCE TREE (left-top) ===
     // Shows: Last run, Current runs, Run library, Loaded datasets
     // Selection triggers rebuild of timeseries tree
-    private JTree timeseriesSourceTree;
+    private JCheckboxTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private DefaultMutableTreeNode lastRunNode;
@@ -129,7 +139,7 @@ public class RunManager extends JFrame {
     // === TIMESERIES TREE (left-bottom) ===
     // Shows hierarchical output series from selected sources
     // Selection triggers data fetching and plotting
-    private JTree timeseriesTree;
+    private JCheckboxTree timeseriesTree;
     private DefaultTreeModel timeseriesTreeModel;
     private JScrollPane timeseriesScrollPane;
 
@@ -146,7 +156,7 @@ public class RunManager extends JFrame {
     // named series from different files distinct. Keying by ref preserves that separation.
     // Value: TimeSeriesData
     // Mirrors how runs store data in TimeSeriesRequestManager's cache.
-    private final Map<com.kalix.ide.flowviz.data.DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
+    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
 
     // Manager instances
     private OutputsTreeBuilder outputsTreeBuilder;
@@ -170,7 +180,7 @@ public class RunManager extends JFrame {
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
     // string for a run-derived series tracks the current run name automatically.
-    private final com.kalix.ide.flowviz.data.LabelResolver labelResolver =
+    private final LabelResolver labelResolver =
         new com.kalix.ide.flowviz.data.DefaultLabelResolver(this::runNameForId);
 
     /**
@@ -304,7 +314,7 @@ public class RunManager extends JFrame {
         rootNode.add(loadedDatasetsNode);
 
         treeModel = new DefaultTreeModel(rootNode);
-        timeseriesSourceTree = new JTree(treeModel) {
+        timeseriesSourceTree = new JCheckboxTree(treeModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
                 if (getRowForLocation(evt.getX(), evt.getY()) == -1) {
@@ -343,8 +353,9 @@ public class RunManager extends JFrame {
         timeseriesSourceTree.expandPath(new TreePath(libraryNode.getPath()));
         timeseriesSourceTree.expandPath(new TreePath(loadedDatasetsNode.getPath()));
 
-        // Add tree selection listener to update details panel with outputs
-        timeseriesSourceTree.addTreeSelectionListener(this::onRunTreeSelectionChanged);
+        // Add checked-state listener to update details panel with outputs. Plain tree
+        // selection (mouse focus / right-click target) is deliberately left alone here.
+        timeseriesSourceTree.addCheckChangeListener(this::onSourceTreeCheckedChanged);
 
         // Initialize visualization components
         createDetailsComponents();
@@ -354,7 +365,7 @@ public class RunManager extends JFrame {
         // Create timeseries tree
         DefaultMutableTreeNode outputsRootNode = new DefaultMutableTreeNode("Outputs");
         timeseriesTreeModel = new DefaultTreeModel(outputsRootNode);
-        timeseriesTree = new JTree(timeseriesTreeModel);
+        timeseriesTree = new JCheckboxTree(timeseriesTreeModel);
         timeseriesTree.setRootVisible(false);
         timeseriesTree.setShowsRootHandles(true);
         timeseriesTree.setCellRenderer(new OutputsTreeCellRenderer());
@@ -362,8 +373,8 @@ public class RunManager extends JFrame {
         // Enable multiple selection for the timeseries tree to allow plotting multiple series
         timeseriesTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
 
-        // Add selection listener to fetch timeseries data for leaf nodes and update plot
-        timeseriesTree.addTreeSelectionListener(this::onOutputsTreeSelectionChanged);
+        // Add checked-state listener to fetch timeseries data for leaf nodes and update plot
+        timeseriesTree.addCheckChangeListener(this::onOutputsTreeCheckedChanged);
 
         timeseriesScrollPane = new JScrollPane(timeseriesTree);
 
@@ -377,7 +388,7 @@ public class RunManager extends JFrame {
         plotDataSet.setLastSeriesResolver(last -> {
             RunInfoImpl lastRunInfo = lastRunTracker != null ? lastRunTracker.getLastRunInfo() : null;
             return lastRunInfo != null
-                ? new com.kalix.ide.flowviz.data.RunSeries(lastRunInfo.getRunId(), last.baseName())
+                ? new RunSeries(lastRunInfo.getRunId(), last.baseName())
                 : null;
         });
 
@@ -563,7 +574,7 @@ public class RunManager extends JFrame {
         // Get series from cache (NOT plotDataSet) - mirrors how runs work
         return datasetSeriesCache.keySet().stream()
             .filter(ref -> ref.datasetId().equals(datasetId))
-            .map(com.kalix.ide.flowviz.data.DatasetSeries::baseName)
+            .map(DatasetSeries::baseName)
             .sorted(NaturalSortUtils::naturalCompare)
             .collect(java.util.stream.Collectors.toList());
     }
@@ -735,7 +746,7 @@ public class RunManager extends JFrame {
      * Recursively searches tree nodes for matching series keys and collects their paths.
      */
     private void searchAndCollectPaths(DefaultMutableTreeNode node,
-                                        Set<com.kalix.ide.flowviz.data.SeriesRef> targetRefs,
+                                        Set<SeriesRef> targetRefs,
                                         List<TreePath> results) {
         if (node == null) return;
 
@@ -743,7 +754,7 @@ public class RunManager extends JFrame {
 
         // Check if this is a SeriesLeafNode that maps to one of our target refs
         if (userObject instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-            com.kalix.ide.flowviz.data.SeriesRef ref = seriesRefForLeaf(leaf);
+            SeriesRef ref = seriesRefForLeaf(leaf);
             if (ref != null && targetRefs.contains(ref)) {
                 TreePath path = new TreePath(node.getPath());
                 results.add(path);
@@ -758,69 +769,65 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Constructs the {@link com.kalix.ide.flowviz.data.SeriesRef} that identifies the
+     * Constructs the {@link SeriesRef} that identifies the
      * data behind a {@link OutputsTreeBuilder.SeriesLeafNode}. The leaf still carries
      * the legacy {@code source} object (RunInfoImpl or LoadedDatasetInfo) plus
      * {@code seriesName} — this helper produces the typed ref from that pair.
      * Will move onto the leaf itself when OutputsTreeBuilder is migrated.
      */
-    private com.kalix.ide.flowviz.data.SeriesRef seriesRefForLeaf(OutputsTreeBuilder.SeriesLeafNode leaf) {
+    private SeriesRef seriesRefForLeaf(OutputsTreeBuilder.SeriesLeafNode leaf) {
         return leaf.ref;
     }
 
     /**
-     * Constructs the {@link com.kalix.ide.flowviz.data.SeriesRef} for a (seriesName, source)
+     * Constructs the {@link SeriesRef} for a (seriesName, source)
      * pair. Used by {@link OutputsTreeBuilder} when building leaves and parents — the
      * resulting ref is cached on the leaf so subsequent lookups don't re-project.
      */
-    private com.kalix.ide.flowviz.data.SeriesRef refForSource(String seriesName, Object source) {
+    private SeriesRef refForSource(String seriesName, Object source) {
         if (source instanceof RunInfoImpl runInfo) {
             if (runInfo.isLastAlias()) {
-                return new com.kalix.ide.flowviz.data.LastSeries(seriesName);
+                return new LastSeries(seriesName);
             }
-            return new com.kalix.ide.flowviz.data.RunSeries(runInfo.getRunId(), seriesName);
+            return new RunSeries(runInfo.getRunId(), seriesName);
         }
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
-            return new com.kalix.ide.flowviz.data.DatasetSeries(info.file.getAbsolutePath(), seriesName);
+            return new DatasetSeries(info.file.getAbsolutePath(), seriesName);
         }
         return null;
     }
 
     /**
-     * Restores tree selection to match the given series set.
-     * This ensures the tree visually reflects what's plotted, even after tree rebuilds.
+     * Restores checked state to match the given series set.
+     * This ensures the tree visually reflects what's plotted, even after tree rebuilds
+     * (rebuilds reset checked state, since old TreePaths reference discarded nodes).
      * Returns the set of series that were successfully restored (found in the tree).
      *
-     * @param seriesToRestore The set of series keys to select in the tree
+     * @param seriesToRestore The set of series keys to check in the tree
      */
-    Set<com.kalix.ide.flowviz.data.SeriesRef> restoreTreeSelectionForSeries(
-            Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRestore) {
+    Set<SeriesRef> restoreTreeChecksForSeries(
+            Set<SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
-            timeseriesTree.clearSelection();
+            timeseriesTree.setCheckedPaths(Collections.emptyList());
             return Collections.emptySet();
         }
 
-        List<TreePath> pathsToSelect = new ArrayList<>();
-        Set<com.kalix.ide.flowviz.data.SeriesRef> restoredRefs = new HashSet<>();
+        List<TreePath> pathsToCheck = new ArrayList<>();
+        Set<SeriesRef> restoredRefs = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
         // Search tree for nodes matching the ref set, collect which ones we found
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToRestore) {
+        for (SeriesRef ref : seriesToRestore) {
             List<TreePath> foundPaths = new ArrayList<>();
             searchAndCollectPaths(root, Collections.singleton(ref), foundPaths);
             if (!foundPaths.isEmpty()) {
-                pathsToSelect.addAll(foundPaths);
+                pathsToCheck.addAll(foundPaths);
                 restoredRefs.add(ref);
             }
         }
 
-        if (!pathsToSelect.isEmpty()) {
-            // Note: Caller should have isUpdatingSelection set to block events
-            TreePath[] pathsArray = pathsToSelect.toArray(new TreePath[0]);
-            timeseriesTree.setSelectionPaths(pathsArray);
-        } else {
-            timeseriesTree.clearSelection();
-        }
+        // Note: Callers run inside a programmatic-update section to block events
+        timeseriesTree.setCheckedPaths(pathsToCheck);
 
         return restoredRefs;
     }
@@ -829,10 +836,10 @@ public class RunManager extends JFrame {
      * Reconciles the target tab's selected series with what's actually available in the tree.
      * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
      */
-    void reconcileSelectedSeriesWithTree(Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries,
-                                                  Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries) {
+    void reconcileCheckedSeriesWithTree(Set<SeriesRef> restoredSeries,
+                                        Set<SeriesRef> tabSeries) {
         // Find series that need to be removed from the tab
-        Set<com.kalix.ide.flowviz.data.SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
+        Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
         seriesToRemove.removeAll(restoredSeries);
 
         if (seriesToRemove.isEmpty()) {
@@ -840,12 +847,12 @@ public class RunManager extends JFrame {
         }
 
         // Update the target tab's series (remove unrestorable ones)
-        Set<com.kalix.ide.flowviz.data.SeriesRef> updatedSeries = new LinkedHashSet<>(tabSeries);
+        Set<SeriesRef> updatedSeries = new LinkedHashSet<>(tabSeries);
         updatedSeries.removeAll(seriesToRemove);
         tabManager.setTargetTabSelectedSeries(updatedSeries);
 
         // Remove from stats tables
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : seriesToRemove) {
+        for (SeriesRef ref : seriesToRemove) {
             tabManager.removeSeriesFromStatsTabs(ref);
         }
     }
@@ -861,37 +868,40 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Returns the {@link com.kalix.ide.flowviz.data.LabelResolver} bound to this
+     * Returns the {@link LabelResolver} bound to this
      * RunManager's state. Components that need to render series labels — stats tables,
      * plot legends, the outputs tree — should obtain the resolver here rather than
      * constructing label strings themselves.
      */
-    public com.kalix.ide.flowviz.data.LabelResolver getLabelResolver() {
+    public LabelResolver getLabelResolver() {
         return labelResolver;
     }
 
-    // extractSeriesName removed — there are no series-key strings to parse anymore.
-    // Identity is the typed SeriesRef; baseName comes from ref.baseName().
-
     /**
-     * Handles tree selection changes to update the timeseries tree.
+     * Handles data-source-tree checked-state changes to update the timeseries tree.
      */
-    private void onRunTreeSelectionChanged(TreeSelectionEvent e) {
-        // Ignore selection changes during programmatic updates
-        if (fetchCoordinator.isUpdatingSelection()) {
+    private void onSourceTreeCheckedChanged() {
+        // Ignore checked-state changes during programmatic updates
+        if (fetchCoordinator.isProgrammaticUpdate()) {
             return;
         }
 
-        // Block timeseries tree selection events during rebuild and restoration
-        fetchCoordinator.setUpdatingSelection(true);
-        updateOutputsTree();
+        // Record the new source context on the target tab, so switching back to this
+        // tab later restores it (sources and series are both per-tab state).
+        snapshotSourceChecksToTargetTab();
 
-        // Restore visual selection to match what's currently plotted on active tab
-        Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-        Set<com.kalix.ide.flowviz.data.SeriesRef> restoredSeries = restoreTreeSelectionForSeries(tabSeries);
-        reconcileSelectedSeriesWithTree(restoredSeries, tabSeries);
+        // Block timeseries tree checked-state events during rebuild and restoration
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            updateOutputsTree();
 
-        fetchCoordinator.setUpdatingSelection(false);
+            // Restore checked state to match what's currently plotted on active tab
+            Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+            Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
+            reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
     }
 
     /**
@@ -899,13 +909,13 @@ public class RunManager extends JFrame {
      * applied. Purely visual - does NOT change selection or affect plots.
      */
     private void onFilterTextChanged() {
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
             outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
             updateOutputsTree();
-            restoreTreeSelectionForSeries(tabManager.getTargetTabSelectedSeries());
+            restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
     }
 
@@ -913,53 +923,48 @@ public class RunManager extends JFrame {
      * Updates the timeseries tree based on current run tree selection.
      */
     void updateOutputsTree() {
-        TreePath[] selectedPaths = timeseriesSourceTree.getSelectionPaths();
-        if (selectedPaths == null || selectedPaths.length == 0) {
+        TreePath[] checkedPaths = timeseriesSourceTree.getCheckedPaths();
+        if (checkedPaths.length == 0) {
             outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
             return;
         }
 
         // Collect all selected RunInfo and LoadedDatasetInfo objects
-        List<Object> selectedRuns = new ArrayList<>();
-        List<Object> selectedDatasets = new ArrayList<>();
+        List<Object> checkedRuns = new ArrayList<>();
+        List<Object> checkedDatasets = new ArrayList<>();
 
-        for (TreePath path : selectedPaths) {
+        for (TreePath path : checkedPaths) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             Object userObject = node.getUserObject();
 
             if (userObject instanceof RunContextMenuManager.RunInfo) {
-                selectedRuns.add(userObject);
+                checkedRuns.add(userObject);
             } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                selectedDatasets.add(userObject);
+                checkedDatasets.add(userObject);
             }
         }
 
-        if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
+        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
             outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
         } else {
-            outputsTreeBuilder.updateTree(selectedRuns, selectedDatasets);
+            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
         }
     }
 
-
-    // renameTimeSeriesData removed — TimeSeriesData no longer carries identity, so
-    // there's no rename operation. The pool stores (ref, data) pairs and the same
-    // TimeSeriesData instance can sit under any ref.
-
     /**
-     * Handles selection changes in the timeseries tree. Delegates to
-     * {@link SeriesFetchCoordinator#onOutputsTreeSelectionChanged}.
+     * Handles checked-state changes in the timeseries tree. Delegates to
+     * {@link SeriesFetchCoordinator#onOutputsTreeCheckedChanged}.
      */
-    private void onOutputsTreeSelectionChanged(TreeSelectionEvent e) {
-        fetchCoordinator.onOutputsTreeSelectionChanged(e);
+    private void onOutputsTreeCheckedChanged() {
+        fetchCoordinator.onOutputsTreeCheckedChanged();
     }
 
     /**
-     * Adds a series to the shared data pool under the given {@link com.kalix.ide.flowviz.data.SeriesRef}.
+     * Adds a series to the shared data pool under the given {@link SeriesRef}.
      * The data's legacy name field is ignored — identity comes from the ref.
      * Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    void addSeriesToPool(com.kalix.ide.flowviz.data.SeriesRef ref, TimeSeriesData timeSeriesData) {
+    void addSeriesToPool(SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
     }
 
@@ -976,27 +981,31 @@ public class RunManager extends JFrame {
         String absPath = info.file.getAbsolutePath();
 
         // Collect all DatasetSeries refs that belong to this dataset.
-        List<com.kalix.ide.flowviz.data.SeriesRef> refs = new ArrayList<>();
-        for (com.kalix.ide.flowviz.data.DatasetSeries dsRef : datasetSeriesCache.keySet()) {
+        List<SeriesRef> refs = new ArrayList<>();
+        for (DatasetSeries dsRef : datasetSeriesCache.keySet()) {
             if (dsRef.datasetId().equals(absPath)) {
                 refs.add(dsRef);
             }
         }
 
         // Drop them from the shared pool, the per-context cache, and slot assignment.
-        for (com.kalix.ide.flowviz.data.SeriesRef ref : refs) {
+        for (SeriesRef ref : refs) {
             plotDataSet.removeSeries(ref);
             seriesSlotManager.removeSlot(ref);
         }
         datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Strip them from every tab's selection, legend, visible-series, and stats.
+        // Strip them from every tab's selection, legend, visible-series, and stats,
+        // and forget the dataset from every tab's recorded source context.
         tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
 
         // Remove the tree node — selection changes (if any) refresh the outputs tree.
         for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
+            var path = child.getPath();
             if (child.getUserObject() == info) {
+                timeseriesSourceTree.removePath(new TreePath(path));
                 loadedDatasetsNode.remove(i);
                 treeModel.nodesWereRemoved(loadedDatasetsNode, new int[]{i}, new Object[]{child});
                 break;
@@ -1009,8 +1018,89 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Called when the user switches tabs. Syncs the timeseries tree selection
-     * to reflect the new active tab's selected series.
+     * Projects a source-tree node's user object to its stable {@link SourceRef}
+     * identity, or {@code null} for anything that isn't a data source (category
+     * headers, the root).
+     */
+    private SourceRef sourceRefForNode(Object userObject) {
+        if (userObject instanceof RunInfoImpl runInfo) {
+            return runInfo.isLastAlias() ? new LastSource() : new RunSource(runInfo.getRunId());
+        }
+        if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
+            return new DatasetSource(info.file.getAbsolutePath());
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link SourceRef}s of the sources currently checked in the data
+     * source tree, in check order. Category paths (auto-checked parents) project to
+     * {@code null} and are skipped.
+     */
+    private Set<SourceRef> currentCheckedSourceRefs() {
+        Set<SourceRef> refs = new LinkedHashSet<>();
+        for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            SourceRef ref = sourceRefForNode(node.getUserObject());
+            if (ref != null) {
+                refs.add(ref);
+            }
+        }
+        return refs;
+    }
+
+    /**
+     * Records the currently checked sources on the target tab. Called from
+     * {@link #onSourceTreeCheckedChanged} — i.e. whenever the checked set genuinely
+     * changes — and nowhere else: recording must stay tied to check <em>changes</em>,
+     * never to restore paths like {@link #onTabChanged}.
+     */
+    private void snapshotSourceChecksToTargetTab() {
+        tabManager.setTargetTabCheckedSources(currentCheckedSourceRefs());
+    }
+
+    /**
+     * Resolves a {@link SourceRef} back to its current tree path, or {@code null} if
+     * the source no longer exists (run removed, dataset unloaded, no Last yet).
+     */
+    private TreePath pathForSourceRef(SourceRef ref) {
+        DefaultMutableTreeNode parent = switch (ref) {
+            case LastSource ignored -> lastRunNode;
+            case RunSource ignored -> currentRunsNode;
+            case DatasetSource ignored -> loadedDatasetsNode;
+        };
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (ref.equals(sourceRefForNode(child.getUserObject()))) {
+                return new TreePath(child.getPath());
+            }
+        }
+        return null;
+    }
+
+    private List<TreePath> pathsForSourceRefs(Set<SourceRef> refs) {
+        List<TreePath> paths = new ArrayList<>();
+        for (SourceRef ref : refs) {
+            TreePath path = pathForSourceRef(ref);
+            if (path != null) {
+                paths.add(path);
+            }
+        }
+        return paths;
+    }
+
+    /**
+     * Called when the user switches tabs. Restores the new active tab's recorded context
+     * verbatim: first the data-source checks (rebuilding the outputs tree for that
+     * context), then the series checks. A tab is a complete view — sources + series +
+     * plot settings — so switching tabs swaps the whole left panel to match; an empty
+     * tab restores an empty panel.
+     *
+     * <p>This is strictly a <em>read</em> of tab state — it must never write any tab's
+     * recorded context. (An earlier "unconfigured tabs adopt the current context"
+     * heuristic wrote to the incoming tab here, which silently copied one tab's sources
+     * onto another on every switch. Restore paths that also record state are how tabs
+     * cross-contaminate; don't reintroduce one.)</p>
      */
     private void onTabChanged() {
         // Adding the default tabs in createDetailsComponents() auto-selects the first tab,
@@ -1018,15 +1108,20 @@ public class RunManager extends JFrame {
         // Nothing to sync during construction (the tree is empty), so bail out early.
         if (fetchCoordinator == null) return;
 
-        Set<com.kalix.ide.flowviz.data.SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-        if (tabSeries == null) return;
+        Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+        Set<SourceRef> tabSources = tabManager.getTargetTabCheckedSources();
 
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
-            restoreTreeSelectionForSeries(tabSeries);
+            // Skip the rebuild when the contexts are identical: no outputs-tree churn
+            // when flicking between tabs that look at the same sources.
+            if (!tabSources.equals(currentCheckedSourceRefs())) {
+                timeseriesSourceTree.setCheckedPaths(pathsForSourceRefs(tabSources));
+                updateOutputsTree();
+            }
+            restoreTreeChecksForSeries(tabSeries);
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
     }
-
 }
