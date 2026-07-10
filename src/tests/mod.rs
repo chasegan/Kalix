@@ -23,6 +23,9 @@ mod test_node_inflow;
 mod test_node_storage;
 
 #[cfg(test)]
+mod test_storage_exists;
+
+#[cfg(test)]
 mod test_model;
 
 #[cfg(test)]

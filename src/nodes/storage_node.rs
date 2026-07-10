@@ -681,6 +681,10 @@ impl Node for StorageNode {
             self.rain_vol = 0.0;
             self.evap_vol = 0.0;
             self.seep_vol = 0.0;
+            // Only solve_backward_euler writes ds_release_due, and it does not run this
+            // step; without this the ds_N_force_release recorders would keep reporting
+            // the last step on which the storage existed.
+            self.ds_release_due = [0.0; MAX_DS_LINKS];
             self.dsflow = self.ds_flows.iter().sum();
         } else {
             // Add upstream inflows
