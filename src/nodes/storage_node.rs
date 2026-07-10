@@ -52,8 +52,6 @@ pub struct StorageNode {
     pond_diversion: f64, //pond diversion
     spill: f64,
     exists_configured: bool,
-    /// Timestep-specific flag that indicates whether `exists_bool` has been calculated this step.
-    storage_existence_calced_in_order_phase: bool,
     exists_bool: bool,
 
     // Cached state for search optimization
@@ -484,13 +482,18 @@ impl StorageNode {
         best
     }
 
-    /// Checks if the storage node exists - sets the `self.exists_bool` flag for the timestep.
-    /// Note this will run at most once per time step - either order phase or flow phase 
-    /// (guarded by `self.storage_existence_calced_in_order_phase`)
-    fn check_if_exists(&mut self, data_cache: &mut DataCache) { 
-        // Default behaviour: storage exists
+    /// Sets `self.exists_bool` for this timestep, and records the driving value.
+    ///
+    /// Called once per timestep, from the flow phase. `exists` deliberately does not
+    /// reach the order phase: `order_through` is baked into the ordering solution at
+    /// setup (it sizes the order buffers), so a storage cannot switch between
+    /// supplying and ordering-through part-way through a run. A storage that does not
+    /// exist still orders exactly as it would otherwise; it simply cannot operate in
+    /// any controlled way, because the flow phase passes everything straight through.
+    fn check_if_exists(&mut self, data_cache: &mut DataCache) {
+        // Not configured => the storage always exists.
         let exists_val = if self.exists_configured { self.exists.get_value(data_cache) } else { 1.0 };
-        self.exists_bool = !self.exists_configured || !(exists_val.is_nan() || exists_val == 0.0);
+        self.exists_bool = !(exists_val.is_nan() || exists_val == 0.0);
         if let Some(idx) = self.recorder_idx_exists {
             data_cache.add_value_at_index(idx, exists_val);
         }
@@ -513,6 +516,7 @@ impl Node for StorageNode {
         self.pond_diversion = 0.0;
         self.spill = 0.0;
         self.previous_istop = 0;
+        self.exists_bool = true;
 
         // Checks
         if self.dimensions.nrows() < 2 {
@@ -603,17 +607,11 @@ impl Node for StorageNode {
             }
         }
 
-        // Default behaviour: storage exists
-        self.check_if_exists(data_cache);
-        self.storage_existence_calced_in_order_phase = true;
-
-        // Calculate orders
-        if self.order_through || !self.exists_bool {
+        // Calculate orders. Note `exists` plays no part here: see `check_if_exists`.
+        if self.order_through {
             //
             // 'Order through' means (1) the ordering system does not consider this storage
             // to be a supply, (2) total orders are propagated upstream without adjustment.
-            // 
-            // If the storage doesn't exist then it is treated as ordered through. 
             self.us_orders = self.ds_orders.iter().sum();
             //
         } else if self.has_target_level {
@@ -666,13 +664,7 @@ impl Node for StorageNode {
 
         let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
-        // No guarantee that order phase is run before flow phase, e.g. non-regulated reach.
-        if self.storage_existence_calced_in_order_phase {
-            // Reset for next timestep
-            self.storage_existence_calced_in_order_phase = false;
-        } else {
-            self.check_if_exists(data_cache);
-        }
+        self.check_if_exists(data_cache);
         if !self.exists_bool {
             // Storage does not exist this timestep - skip calculations and empty storage,
             // draining everything through ds_1. Reset all other derived state so it doesn't
@@ -681,6 +673,9 @@ impl Node for StorageNode {
             self.ds_flows[0] = self.volume + self.usflow;
             self.volume = 0.0;
             self.level = self.dimensions.get_value(0, LEVL);
+            // The storage is empty, so the solver's next warm start belongs at the
+            // bottom of the table; a stale hint only costs it search iterations.
+            self.previous_istop = 0;
             self.spill = 0.0;
             self.pond_diversion = 0.0;
             self.rain_vol = 0.0;
