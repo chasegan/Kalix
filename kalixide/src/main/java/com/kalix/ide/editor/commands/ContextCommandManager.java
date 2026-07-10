@@ -97,7 +97,7 @@ public class ContextCommandManager {
 
         // ----- Ini editing commands -----
         for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
-            registry.register(new InsertNodeTemplateCommand(nodeType, modelSupplier, mapPanelSupplier, parentFrame));
+            registry.register(new InsertNodeTemplateCommand(nodeType, mapPanelSupplier));
         }
 
         // Future commands will be registered here:

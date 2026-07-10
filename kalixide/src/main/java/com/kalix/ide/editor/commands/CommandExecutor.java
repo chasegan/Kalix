@@ -1,6 +1,8 @@
 package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.model.NodeInsertionPoint;
+import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
@@ -551,22 +553,45 @@ public class CommandExecutor {
     }
 
     /**
-     * Inserts a new node template at the given world location (from a map
-     * right-click), after the last existing node section in the document.
+     * Inserts a new node template from a map right-click: the node's {@code loc} is the
+     * clicked world location, while its <em>section</em> goes below the last selected
+     * node (or at the bottom when nothing is selected). Text position is the logical
+     * calculation sequence, not a geographic statement, so the two are independent.
      *
-     * @param nodeType    The template key (e.g. "gr4j", "storage")
-     * @param worldX      The map x-coordinate to insert into the template's {@code loc}
-     * @param worldY      The map y-coordinate to insert into the template's {@code loc}
-     * @param parsedModel The parsed model, used to pick a unique node name and find the insertion point
+     * @param nodeType          The template key (e.g. "gr4j", "storage")
+     * @param worldX            The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY            The map y-coordinate to insert into the template's {@code loc}
+     * @param selectedNodeNames The currently selected nodes (may be empty or null)
      * @return true if the template was inserted, false on failure
      */
     public boolean insertNodeTemplateAtLocation(String nodeType, double worldX, double worldY,
-                                                 INIModelParser.ParsedModel parsedModel) {
+                                                 java.util.Collection<String> selectedNodeNames) {
+        String text = editor.getText();
+        return insertNodeTemplate(nodeType, worldX, worldY, text,
+            NodeInsertionPoint.forSelection(text, selectedNodeNames));
+    }
+
+    /**
+     * Inserts a new node template from the text-editor context menu: the section goes
+     * relative to the caret (see {@link NodeInsertionPoint}), at the given world
+     * location — typically the centre of the map view, since a text-editor invocation
+     * knows no click location.
+     *
+     * @param nodeType The template key (e.g. "gr4j", "storage")
+     * @param worldX   The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY   The map y-coordinate to insert into the template's {@code loc}
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY) {
+        String text = editor.getText();
+        return insertNodeTemplate(nodeType, worldX, worldY, text,
+            NodeInsertionPoint.forAnchor(text, editor.getCaretPosition()));
+    }
+
+    private boolean insertNodeTemplate(String nodeType, double worldX, double worldY, String text, int offset) {
         try {
-            String uniqueName = generateUniqueNodeName(nodeType, parsedModel);
+            String uniqueName = generateUniqueNodeName(nodeType, text);
             String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
-            String text = editor.getText();
-            int offset = findInsertionOffsetAfterLastNodeSection(text, parsedModel);
             insertTemplateAt(offset, templateText);
             logger.info("Inserted node template '{}' as '{}' at ({}, {})", nodeType, uniqueName, worldX, worldY);
             return true;
@@ -578,42 +603,21 @@ public class CommandExecutor {
     }
 
     /**
-     * Inserts a new node template after the node section containing the
-     * cursor (from the text-editor context menu), placed at the given world
-     * location (typically the centre of the map view, since no click
-     * location is known from a text-editor invocation).
-     *
-     * @param nodeType    The template key (e.g. "gr4j", "storage")
-     * @param worldX      The map x-coordinate to insert into the template's {@code loc}
-     * @param worldY      The map y-coordinate to insert into the template's {@code loc}
-     * @param parsedModel The parsed model, used to pick a unique node name
-     * @return true if the template was inserted, false on failure
-     */
-    public boolean insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY,
-                                                 INIModelParser.ParsedModel parsedModel) {
-        try {
-            String uniqueName = generateUniqueNodeName(nodeType, parsedModel);
-            String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
-            String text = editor.getText();
-            int offset = findInsertionOffsetAfterCurrentSection(text, editor.getCaretPosition());
-            insertTemplateAt(offset, templateText);
-            logger.info("Inserted node template '{}' as '{}'", nodeType, uniqueName);
-            return true;
-        } catch (Exception e) {
-            logger.error("Error inserting node template", e);
-            showError("Failed to insert node template: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /**
      * Picks a unique node name for a newly-inserted template: {@code nodeType},
      * or {@code nodeType_2}, {@code nodeType_3}, ... if that's already taken.
+     *
+     * <p>Existing names come from the shared section grammar, not from the linter's
+     * parser: this is text surgery, and the text is the only thing that is definitely
+     * up to date.</p>
      */
-    private String generateUniqueNodeName(String nodeType, INIModelParser.ParsedModel parsedModel) {
+    private String generateUniqueNodeName(String nodeType, String text) {
+        java.util.Set<String> taken = new java.util.HashSet<>();
+        for (NodeSectionLocator.NodeSection section : NodeSectionLocator.findAll(text)) {
+            taken.add(section.nodeName());
+        }
         String candidate = nodeType;
         int suffix = 2;
-        while (parsedModel.getSections().containsKey("node." + candidate)) {
+        while (taken.contains(candidate)) {
             candidate = nodeType + "_" + suffix;
             suffix++;
         }
@@ -639,103 +643,17 @@ public class CommandExecutor {
     }
 
     /**
-     * Finds the document offset just after the node section with the
-     * greatest end line, or the end of the document if there are no node
-     * sections.
-     */
-    private int findInsertionOffsetAfterLastNodeSection(String text, INIModelParser.ParsedModel parsedModel) {
-        int lastEndLine = -1;
-        for (INIModelParser.NodeSection nodeSection : parsedModel.getAllNodeSections()) {
-            if (nodeSection.getEndLine() > lastEndLine) {
-                lastEndLine = nodeSection.getEndLine();
-            }
-        }
-        if (lastEndLine < 0) {
-            return text.length();
-        }
-        String[] lines = text.split("\n", -1);
-        int offset = 0;
-        for (int i = 0; i < lastEndLine && i < lines.length; i++) {
-            offset += lines[i].length() + 1;
-        }
-        return Math.min(offset, text.length());
-    }
-
-    /**
-     * Finds the document offset just before the section header following the
-     * one containing {@code caretPos}, mirroring
-     * {@code MapClipboardManager.findInsertionPointAfterCursor} (kept as a
-     * separate, small copy here rather than shared, since that method is
-     * private and instance-bound to a different manager).
-     */
-    private int findInsertionOffsetAfterCurrentSection(String text, int caretPos) {
-        if (text.isEmpty()) {
-            return 0;
-        }
-
-        Matcher matcher = Pattern.compile("(?m)^\\[.+\\]\\s*$").matcher(text);
-        List<Integer> sectionStarts = new ArrayList<>();
-        while (matcher.find()) {
-            sectionStarts.add(matcher.start());
-        }
-
-        if (sectionStarts.isEmpty()) {
-            return text.length();
-        }
-
-        int nextSectionStart = -1;
-        for (int sectionStart : sectionStarts) {
-            if (sectionStart > caretPos) {
-                nextSectionStart = sectionStart;
-                break;
-            }
-        }
-
-        if (nextSectionStart == -1) {
-            return text.length();
-        }
-
-        int insertPoint = nextSectionStart;
-        while (insertPoint > 0 && text.charAt(insertPoint - 1) == '\n') {
-            insertPoint--;
-        }
-        if (insertPoint < nextSectionStart) {
-            insertPoint++;
-        }
-        return insertPoint;
-    }
-
-    /**
-     * Inserts template text at a document offset as a single atomic edit,
-     * normalizing the blank-line gap between {@code offset} and whatever
-     * follows to exactly one blank line on each side of the inserted
-     * template - regardless of how many blank lines (if any) already
-     * separated {@code offset} from the next content, so repeated insertions
-     * at the same seam don't keep growing the gap.
+     * Applies {@link TemplateSplice} to the document as a single atomic edit, so the
+     * insertion undoes in one step.
      */
     private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
-        String text = editor.getText();
-
-        int gapEnd = offset;
-        while (gapEnd < text.length() && Character.isWhitespace(text.charAt(gapEnd))) {
-            gapEnd++;
-        }
-
-        boolean atDocumentStart = (offset == 0);
-        boolean atDocumentEnd = (gapEnd == text.length());
-
-        StringBuilder replacement = new StringBuilder();
-        if (!atDocumentStart) {
-            replacement.append('\n');
-        }
-        replacement.append(templateText);
-        replacement.append(atDocumentEnd ? "\n" : "\n\n");
+        TemplateSplice.Splice splice = TemplateSplice.compute(editor.getText(), offset, templateText);
 
         editor.beginAtomicEdit();
         try {
             javax.swing.text.Document doc = editor.getDocument();
-            doc.remove(offset, gapEnd - offset);
-            doc.insertString(offset, replacement.toString(), null);
+            doc.remove(splice.start(), splice.end() - splice.start());
+            doc.insertString(splice.start(), splice.text(), null);
         } finally {
             editor.endAtomicEdit();
         }

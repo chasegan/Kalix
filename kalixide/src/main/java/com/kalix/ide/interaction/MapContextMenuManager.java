@@ -159,9 +159,11 @@ public class MapContextMenuManager {
             JMenuItem templateItem = new JMenuItem(nodeType.toString());
             templateItem.addActionListener(e -> {
                 if (textEditor != null && lastContextMenuLocation != null) {
+                    // The click sets where the node sits on the map; the selection sets
+                    // where its section lands in the text. They are independent.
                     double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
                     double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
-                    if (textEditor.insertNodeTemplate(nodeType, worldX, worldY)) {
+                    if (textEditor.insertNodeTemplate(nodeType, worldX, worldY, model.getSelectedNodes())) {
                         mapPanel.repaint();
                     }
                 }

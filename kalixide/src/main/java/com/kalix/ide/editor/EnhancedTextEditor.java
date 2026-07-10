@@ -710,41 +710,26 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Inserts a node template programmatically (e.g., from the map context
-     * menu), placed at the given world location.
+     * Inserts a node template programmatically (e.g., from the map context menu). The
+     * new node's {@code loc} is the given world location; its section goes below the
+     * last selected node, or at the bottom when nothing is selected.
      *
-     * @param nodeType The template key (e.g. "gr4j", "storage")
-     * @param worldX   The map x-coordinate for the new node's {@code loc}
-     * @param worldY   The map y-coordinate for the new node's {@code loc}
+     * @param nodeType          The template key (e.g. "gr4j", "storage")
+     * @param worldX            The map x-coordinate for the new node's {@code loc}
+     * @param worldY            The map y-coordinate for the new node's {@code loc}
+     * @param selectedNodeNames The currently selected nodes (may be empty or null)
      * @return true if the template was inserted, false on failure
      */
-    public boolean insertNodeTemplate(String nodeType, double worldX, double worldY) {
-        if (commandParentFrame == null || commandModelSupplier == null) {
+    public boolean insertNodeTemplate(String nodeType, double worldX, double worldY,
+                                      java.util.Collection<String> selectedNodeNames) {
+        if (commandParentFrame == null) {
             logger.warn("Context commands not initialized - cannot insert node template");
-            javax.swing.JOptionPane.showMessageDialog(
-                commandParentFrame,
-                "Failed to insert node template: editor not ready yet",
-                "Error",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return false;
-        }
-
-        ParsedModel parsedModel = commandModelSupplier.get();
-        if (parsedModel == null) {
-            logger.error("Failed to parse model for node template insertion");
-            javax.swing.JOptionPane.showMessageDialog(
-                commandParentFrame,
-                "Failed to parse model",
-                "Error",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
             return false;
         }
 
         CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
-        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, parsedModel);
+        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames);
     }
 
     private void setupKeyBindings() {
