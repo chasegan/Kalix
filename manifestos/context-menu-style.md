@@ -158,6 +158,10 @@ radio/checkbox options are **values** (`Linear`, `Log`, `Sqrt`). Parallelism
 applies *within* each class — do not try to verb them. Sentence case still
 applies.
 
+Where the children are instead the **objects of a verb**, the title is an item,
+not a category, and §2.2 applies — it begins with a verb. Read title and child
+aloud: "Y-axis scale: log" is a setting; "Insert node: GR4J" is a command.
+
 ---
 
 ## 7. Worked re-cuts (the three main panels)
