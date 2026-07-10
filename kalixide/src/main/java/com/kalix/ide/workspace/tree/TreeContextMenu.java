@@ -97,7 +97,12 @@ class TreeContextMenu {
                 item("Compare with active editor", TreeContextMenu::isSingleFile,
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
-                    sel -> host.compareFiles(file(sel, 0), file(sel, 1)))
+                    sel -> host.compareFiles(file(sel, 0), file(sel, 1))),
+                item("Zip", TreeContextMenu::isNotSingleZip,
+                        sel -> fileOps.zipFiles(files(sel), tree.getRootFile())),
+                item("Unzip", TreeContextMenu::isSingleZip,
+                        sel -> fileOps.unzipFile(file(sel)))
+
             ),
             // External handoff
             List.of(
@@ -120,8 +125,7 @@ class TreeContextMenu {
                 item("New file…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), false)),
                 item("New folder…", TreeContextMenu::isSingle,
-                    sel -> fileOps.createChild(file(sel), true))
-            ),
+                    sel -> fileOps.createChild(file(sel), true))),
             // Modify
             List.of(
                 item("Rename…", TreeContextMenu::isSingle,
@@ -184,6 +188,21 @@ class TreeContextMenu {
 
     private static boolean hasDirectory(List<FileTreeNode> sel) {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
+    }
+
+    private static boolean isSingleZip(List<FileTreeNode> sel) {
+        return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
+    }
+
+    private static boolean isNotSingleZip(List<FileTreeNode> sel) {
+        return any(sel) && isNotZip(sel);
+    }
+
+    /**
+     * Return true if none of {@code sel} are zip files
+     */
+    private static boolean isNotZip(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
     }
 
     // --- Selection accessors ---

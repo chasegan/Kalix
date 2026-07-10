@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import net.lingala.zip4j.ZipFile;
 
 /**
  * The side-effecting file operations behind the project tree's context menu and keyboard
@@ -439,5 +440,72 @@ class TreeFileOperations {
 
     private void showPathError(String message) {
         JOptionPane.showMessageDialog(parent, message, "Copy Path", JOptionPane.WARNING_MESSAGE);
+    }
+
+    /**
+     * Zip the chosen file(s) in the file tree.
+     */
+    void zipFiles(List<File> files, File rootFile) {
+        if (files == null || files.isEmpty()) { return; }
+
+        String zipFileName = getZipFileName(files, rootFile);
+
+        try (ZipFile zipFile = new ZipFile(zipFileName);) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    zipFile.addFolder(file);
+                } else {
+                    zipFile.addFile(file);
+                }
+            }
+        } catch (IllegalStateException | IOException ex) {
+            showPathError(ex.getMessage());
+        }
+    }
+
+    /**
+     * Determine the zip file name to be used in {@link TreeFileOperations#zipFiles(List, File)}
+     * <br><br>
+     * If {@code files} is length 1, returns the file/folder name with .zip in that directory.
+     * Else it creates a files.zip in the common ancestor directory of all selected files
+     * (bounded below by {@code rootFile}'s parent, in case the selection has no closer
+     * common ancestor within the workspace).
+     * If there is a name collision, it will append {@code (n)} where {@code n} is incremented
+     * until there is no name collision.
+     */
+    private static String getZipFileName(List<File> selFiles, File rootFile) {
+        String baseZFName;
+        if (selFiles.size() == 1) { baseZFName = selFiles.getFirst().getAbsolutePath(); }
+        else {
+            // TODO Multiple files 
+        }
+        // Ensure no name collision
+        String zipFileName = baseZFName + ".zip";
+        int i = 0;
+        while (new File(zipFileName).exists()) {
+            zipFileName = baseZFName + " (" + i + ").zip";
+            i++;
+        }
+        return zipFileName;
+    }
+
+    /**
+     * Detect if {@code file} is a zip file.
+     */
+    static boolean isZip(File file) {
+        return file.toString().endsWith(".zip");
+    }
+
+
+    /**
+     * Unzip the selected zip folder into the same directory.
+     */
+    void unzipFile(File file) {
+        try (ZipFile zipFile = new ZipFile(file);) {
+            String targetPath = file.getParentFile().getAbsolutePath();
+            zipFile.extractAll(targetPath);
+        } catch (IllegalStateException | IOException ex) {
+            showPathError(ex.getMessage());
+        }
     }
 }
