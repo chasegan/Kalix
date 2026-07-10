@@ -348,13 +348,13 @@ class RunTreeController {
         // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
         // and (b) trigger a repaint so any text surfaces that aren't actively reading the
         // resolver see the update.
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
             window.updateOutputsTree();
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
             window.restoreTreeChecksForSeries(tabSeries);
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
 
         // Cheap repaint to pick up the new label in plot legends / stats column headers
@@ -366,9 +366,11 @@ class RunTreeController {
 
     /**
      * Selects and checks the run associated with the given sessionKey, so its outputs are
-     * shown. This will expand the tree, select the run node (for visual focus), and check
-     * it (so {@link RunManager#updateOutputsTree} - which reads checked, not selected,
-     * paths - picks it up) if found.
+     * shown. Expands the tree, selects the run node (visual focus only — selection drives
+     * nothing), and checks it. The check goes through the normal check-change event, so
+     * {@code RunManager.onSourceTreeCheckedChanged} does everything a user click would:
+     * snapshot the tab's source context, rebuild the outputs tree, restore and reconcile
+     * the tab's series checks. One code path, deliberately not mirrored here.
      */
     void selectRun(String sessionKey) {
         SwingUtilities.invokeLater(() -> {
@@ -379,26 +381,8 @@ class RunTreeController {
                 // Expand parent nodes to make the run visible
                 timeseriesSourceTree.expandPath(new TreePath(currentRunsNode.getPath()));
 
-                // Select and check the run, then rebuild the outputs tree. The rebuild
-                // (reload) wipes the outputs tree's checked state, and checked state is
-                // the source of truth for what's plotted - so restore checks for the
-                // target tab's series and reconcile, exactly as onSourceTreeCheckedChanged
-                // does. Without the restore, the next user check-click would silently
-                // replace the tab's series with only the visibly-checked ones.
-                fetchCoordinator.setUpdatingSelection(true);
-                try {
-                    timeseriesSourceTree.setSelectionPath(pathToRun);
-                    timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
-                    // The guard suppresses onSourceTreeCheckedChanged, so record the new
-                    // source context on the target tab explicitly.
-                    window.snapshotSourceChecksToTargetTab();
-                    window.updateOutputsTree();
-                    Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-                    Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
-                    window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
-                } finally {
-                    fetchCoordinator.setUpdatingSelection(false);
-                }
+                timeseriesSourceTree.setSelectionPath(pathToRun);
+                timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
 
                 // Scroll to make the selection visible
                 timeseriesSourceTree.scrollPathToVisible(pathToRun);

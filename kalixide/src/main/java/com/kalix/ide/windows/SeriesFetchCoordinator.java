@@ -37,10 +37,12 @@ import java.util.function.Supplier;
  * new selection against the target tab, probing caches, issuing async fetches, writing
  * results into the shared pool, and assigning palette slots.
  *
- * <p>Also owns the {@code isUpdatingSelection} guard used across the window to prevent
- * selection-listener feedback loops during programmatic tree updates: collaborators set
- * it to {@code true} before modifying tree selection and {@code false} after, and both
- * tree listeners consult it before reacting.</p>
+ * <p>Also owns the programmatic-update guard used across the window to prevent
+ * listener feedback loops during programmatic tree updates: collaborators bracket their
+ * tree mutations with {@link #beginProgrammaticUpdate()} / {@link #endProgrammaticUpdate()}
+ * (always in try/finally), and both tree listeners consult {@link #isProgrammaticUpdate()}
+ * before reacting. The guard is a depth counter, so nested programmatic sections are
+ * safe: an inner end cannot prematurely unblock the outer section.</p>
  */
 class SeriesFetchCoordinator {
 
@@ -64,9 +66,9 @@ class SeriesFetchCoordinator {
     /** Defers to {@link LastRunTracker#getLastRunInfo()} for resolving the Last alias. */
     private final Supplier<RunInfoImpl> lastRunInfoSupplier;
 
-    // Flag to prevent selection listener feedback loops during programmatic tree updates
-    // Set to true before modifying tree selection, false after
-    private boolean isUpdatingSelection = false;
+    // Depth of nested programmatic tree-update sections. Listeners stay suppressed while
+    // any section is open. A counter rather than a boolean so that nesting is safe.
+    private int programmaticUpdateDepth = 0;
 
     SeriesFetchCoordinator(RunManager window,
                            JCheckboxTree timeseriesTree,
@@ -95,13 +97,22 @@ class SeriesFetchCoordinator {
     }
 
     /** Returns whether a programmatic tree update is in progress. */
-    boolean isUpdatingSelection() {
-        return isUpdatingSelection;
+    boolean isProgrammaticUpdate() {
+        return programmaticUpdateDepth > 0;
     }
 
-    /** Sets the programmatic-update guard. Callers must clear it when done (try/finally). */
-    void setUpdatingSelection(boolean updating) {
-        this.isUpdatingSelection = updating;
+    /** Opens a programmatic-update section. Pair with {@link #endProgrammaticUpdate()} in a finally block. */
+    void beginProgrammaticUpdate() {
+        programmaticUpdateDepth++;
+    }
+
+    /** Closes a programmatic-update section opened by {@link #beginProgrammaticUpdate()}. */
+    void endProgrammaticUpdate() {
+        if (programmaticUpdateDepth <= 0) {
+            logger.warn("endProgrammaticUpdate() without matching begin — guard call sites are unbalanced");
+            return;
+        }
+        programmaticUpdateDepth--;
     }
 
     /**
@@ -111,7 +122,7 @@ class SeriesFetchCoordinator {
      */
     void onOutputsTreeCheckedChanged() {
         // Ignore checked-state changes during programmatic updates
-        if (isUpdatingSelection) {
+        if (isProgrammaticUpdate()) {
             return;
         }
 

@@ -183,9 +183,8 @@ public class VisualizationTabManager {
         final Set<SeriesRef> selectedSeries = new LinkedHashSet<>();
 
         // Per-tab checked data sources — the source-tree context this tab was built in.
-        // Restored (with the series checks) when the tab becomes active, so a tab is a
-        // complete view: sources + series + plot settings. Empty on a fresh tab means
-        // "unconfigured": the tab adopts the current source context instead of clearing it.
+        // Restored verbatim (with the series checks) when the tab becomes active, so a
+        // tab is a complete view: sources + series + plot settings. Empty restores empty.
         final Set<SourceRef> checkedSources = new LinkedHashSet<>();
 
         // Aggregation settings for stats tabs
@@ -822,7 +821,7 @@ public class VisualizationTabManager {
     /**
      * Resolves the source context a new tab should start with: from the settings if
      * recorded there (duplication), otherwise the active tab's (fresh tab created while
-     * another is showing), otherwise empty (startup default tabs — "unconfigured").
+     * another is showing), otherwise empty (startup default tabs).
      */
     private Set<SourceRef> inheritedSources(TabSettings settings) {
         if (settings.checkedSources != null) {

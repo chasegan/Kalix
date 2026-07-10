@@ -170,54 +170,57 @@ class LastRunTracker {
 
         // If Last was checked, block all checked-state events during the entire update
         if (wasLastChecked) {
-            fetchCoordinator.setUpdatingSelection(true);
+            fetchCoordinator.beginProgrammaticUpdate();
         }
+        try {
+            // Create new child node. The Last subtree's wrapper carries the structural
+            // "is last alias" marker via RunInfoImpl.lastAlias — seriesRefForLeaf consults
+            // that marker (not the runName string) to mint LastSeries refs.
+            lastRunChildNode = new DefaultMutableTreeNode(
+                RunInfoImpl.lastAlias(newLastRun.getSession())
+            );
 
-        // Create new child node. The Last subtree's wrapper carries the structural
-        // "is last alias" marker via RunInfoImpl.lastAlias — seriesRefForLeaf consults
-        // that marker (not the runName string) to mint LastSeries refs.
-        lastRunChildNode = new DefaultMutableTreeNode(
-            RunInfoImpl.lastAlias(newLastRun.getSession())
-        );
+            if (oldChildNode != null) {
+                // Old node is leaving the tree - forget its checked-state entry entirely (not
+                // just uncheck it) so it doesn't dangle in nodeCheckedStateMap, unreachable via
+                // the tree, for the life of the app. Matches RunTreeController's run-removal and
+                // RunManager's dataset-removal handling.
+                timeseriesSourceTree.removePath(oldLastPath);
 
-        if (oldChildNode != null) {
-            // Old node is leaving the tree - forget its checked-state entry entirely (not
-            // just uncheck it) so it doesn't dangle in nodeCheckedStateMap, unreachable via
-            // the tree, for the life of the app. Matches RunTreeController's run-removal and
-            // RunManager's dataset-removal handling.
-            timeseriesSourceTree.removePath(oldLastPath);
+                // Replacing existing child - remove old, add new
+                lastRunNode.remove(oldChildNode);
+                treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
 
-            // Replacing existing child - remove old, add new
-            lastRunNode.remove(oldChildNode);
-            treeModel.nodesWereRemoved(lastRunNode, new int[]{oldChildIndex}, new Object[]{oldChildNode});
+                lastRunNode.add(lastRunChildNode);
+                treeModel.nodesWereInserted(lastRunNode, new int[]{0});
+            } else {
+                // First time - just add
+                lastRunNode.add(lastRunChildNode);
+                treeModel.nodesWereInserted(lastRunNode, new int[]{0});
+            }
 
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        } else {
-            // First time - just add
-            lastRunNode.add(lastRunChildNode);
-            treeModel.nodesWereInserted(lastRunNode, new int[]{0});
-        }
+            // If Last was previously checked, rebuild the timeseries tree to show new outputs
+            if (wasLastChecked) {
+                TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
 
-        // If Last was previously checked, rebuild the timeseries tree to show new outputs
-        if (wasLastChecked) {
-            TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
+                // Check the new Last node so its outputs are picked up below
+                timeseriesSourceTree.checkPath(newLastPath);
 
-            // Check the new Last node so its outputs are picked up below
-            timeseriesSourceTree.checkPath(newLastPath);
+                // Rebuild the timeseries tree to include any new outputs from the new run
+                // This is necessary because the new run may have different outputs than the old one
+                window.updateOutputsTree();
 
-            // Rebuild the timeseries tree to include any new outputs from the new run
-            // This is necessary because the new run may have different outputs than the old one
-            window.updateOutputsTree();
+                // Restore checked state for series that still exist in the new tree
+                Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+                Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
 
-            // Restore checked state for series that still exist in the new tree
-            Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
-
-            // Remove from tab any series that no longer exist (e.g., outputs that were removed)
-            window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
-
-            fetchCoordinator.setUpdatingSelection(false);
+                // Remove from tab any series that no longer exist (e.g., outputs that were removed)
+                window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+            }
+        } finally {
+            if (wasLastChecked) {
+                fetchCoordinator.endProgrammaticUpdate();
+            }
         }
 
         // Expand the Last run node to show the new child

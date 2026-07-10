@@ -345,8 +345,8 @@ public class JCheckboxTree extends JTree {
     public void setCheckedPaths(Collection<TreePath> paths) {
         boolean changed = false;
         // Untick all current paths, then tick the new set. A call that re-supplies the
-        // current leaves still reports a change (untick + retick); callers run under the
-        // isUpdatingSelection guard, so the extra event is inert.
+        // current leaves still reports a change (untick + retick); callers run inside a
+        // programmatic-update section, so the extra event is inert.
         for (TreePath path : new ArrayList<>(checkedPaths)) {
             changed |= untickPath(path);
         }

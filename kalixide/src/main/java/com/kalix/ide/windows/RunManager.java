@@ -92,7 +92,7 @@ import java.util.function.Consumer;
  *   <li>Per-tab selected series AND per-tab checked sources stored in
  *       {@link VisualizationTabManager} TabInfo — a tab is a complete view (sources +
  *       series + plot settings), restored as a whole by {@link #onTabChanged}</li>
- *   <li>{@link SeriesFetchCoordinator#isUpdatingSelection()} - Guard to prevent listener
+ *   <li>{@link SeriesFetchCoordinator#isProgrammaticUpdate()} - Guard to prevent listener
  *       feedback loops during programmatic updates</li>
  *   <li>Checked state (what's plotted) is separate from plain tree selection (row highlight);
  *       checked state is restored after rebuilds via {@link #restoreTreeChecksForSeries}</li>
@@ -826,7 +826,7 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Note: Caller should have isUpdatingSelection set to block events
+        // Note: Callers run inside a programmatic-update section to block events
         timeseriesTree.setCheckedPaths(pathsToCheck);
 
         return restoredRefs;
@@ -882,7 +882,7 @@ public class RunManager extends JFrame {
      */
     private void onSourceTreeCheckedChanged() {
         // Ignore checked-state changes during programmatic updates
-        if (fetchCoordinator.isUpdatingSelection()) {
+        if (fetchCoordinator.isProgrammaticUpdate()) {
             return;
         }
 
@@ -891,15 +891,17 @@ public class RunManager extends JFrame {
         snapshotSourceChecksToTargetTab();
 
         // Block timeseries tree checked-state events during rebuild and restoration
-        fetchCoordinator.setUpdatingSelection(true);
-        updateOutputsTree();
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            updateOutputsTree();
 
-        // Restore checked state to match what's currently plotted on active tab
-        Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-        Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
-        reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
-
-        fetchCoordinator.setUpdatingSelection(false);
+            // Restore checked state to match what's currently plotted on active tab
+            Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
+            Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
+            reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
     }
 
     /**
@@ -907,13 +909,13 @@ public class RunManager extends JFrame {
      * applied. Purely visual - does NOT change selection or affect plots.
      */
     private void onFilterTextChanged() {
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
             outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
             updateOutputsTree();
             restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
     }
 
@@ -1048,12 +1050,12 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Records the currently checked sources on the target tab. Called whenever the
-     * user changes the source checks, and from programmatic check changes that run
-     * under the isUpdatingSelection guard (e.g. {@link RunTreeController#selectRun})
-     * where {@link #onSourceTreeCheckedChanged} won't fire.
+     * Records the currently checked sources on the target tab. Called from
+     * {@link #onSourceTreeCheckedChanged} — i.e. whenever the checked set genuinely
+     * changes — and nowhere else: recording must stay tied to check <em>changes</em>,
+     * never to restore paths like {@link #onTabChanged}.
      */
-    void snapshotSourceChecksToTargetTab() {
+    private void snapshotSourceChecksToTargetTab() {
         tabManager.setTargetTabCheckedSources(currentCheckedSourceRefs());
     }
 
@@ -1088,10 +1090,17 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Called when the user switches tabs. Restores the new active tab's full context:
-     * first the data-source checks (rebuilding the outputs tree for that context),
-     * then the series checks. A tab is a complete view — sources + series + plot
-     * settings — so switching tabs swaps the whole left panel to match.
+     * Called when the user switches tabs. Restores the new active tab's recorded context
+     * verbatim: first the data-source checks (rebuilding the outputs tree for that
+     * context), then the series checks. A tab is a complete view — sources + series +
+     * plot settings — so switching tabs swaps the whole left panel to match; an empty
+     * tab restores an empty panel.
+     *
+     * <p>This is strictly a <em>read</em> of tab state — it must never write any tab's
+     * recorded context. (An earlier "unconfigured tabs adopt the current context"
+     * heuristic wrote to the incoming tab here, which silently copied one tab's sources
+     * onto another on every switch. Restore paths that also record state are how tabs
+     * cross-contaminate; don't reintroduce one.)</p>
      */
     private void onTabChanged() {
         // Adding the default tabs in createDetailsComponents() auto-selects the first tab,
@@ -1102,22 +1111,17 @@ public class RunManager extends JFrame {
         Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
         Set<SourceRef> tabSources = tabManager.getTargetTabCheckedSources();
 
-        fetchCoordinator.setUpdatingSelection(true);
+        fetchCoordinator.beginProgrammaticUpdate();
         try {
-            if (tabSources.isEmpty() && tabSeries.isEmpty()) {
-                // Unconfigured tab (e.g. a startup default tab the user hasn't touched):
-                // adopt the current source context rather than clearing it, so a fresh
-                // tab starts where the user is.
-                snapshotSourceChecksToTargetTab();
-            } else if (!tabSources.equals(currentCheckedSourceRefs())) {
-                // Same context → skip the rebuild: no outputs-tree churn when flicking
-                // between tabs that look at the same sources.
+            // Skip the rebuild when the contexts are identical: no outputs-tree churn
+            // when flicking between tabs that look at the same sources.
+            if (!tabSources.equals(currentCheckedSourceRefs())) {
                 timeseriesSourceTree.setCheckedPaths(pathsForSourceRefs(tabSources));
                 updateOutputsTree();
             }
             restoreTreeChecksForSeries(tabSeries);
         } finally {
-            fetchCoordinator.setUpdatingSelection(false);
+            fetchCoordinator.endProgrammaticUpdate();
         }
     }
 }
