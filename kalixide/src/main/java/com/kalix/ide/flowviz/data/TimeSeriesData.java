@@ -272,12 +272,26 @@ public class TimeSeriesData {
         }
         
         int startIndex, endIndex;
-        
+
         if (contiguous) {
+            // Honour the half-open contract at the extremes, exactly like the binary-search
+            // path below: a query window entirely after the last sample (or entirely before
+            // the first) is EMPTY. The old clamp to pointCount-1 instead shunted the last
+            // sample into any beyond-the-end query — the LOD column partition then dropped
+            // the last point into the final pixel column, and "draw across gaps" bridged it
+            // to the right plot edge as a phantom segment (auto-Y similarly picked up an
+            // out-of-view point).
+            if (startTimeMs > timestamps[pointCount - 1]) {
+                return new IndexRange(pointCount, pointCount);
+            }
+            if (endTimeMs < timestamps[0]) {
+                return new IndexRange(0, 0);
+            }
+
             // Fast calculation: on a gap-free grid the array index is exactly (t - first) / step
             startIndex = (int) Math.max(0, (startTimeMs - firstTimestamp) / nominalIntervalMillis);
             endIndex = (int) Math.min(pointCount, (endTimeMs - firstTimestamp) / nominalIntervalMillis + 1);
-            
+
             // Clamp to actual bounds
             startIndex = Math.max(0, Math.min(startIndex, pointCount - 1));
             endIndex = Math.max(startIndex, Math.min(endIndex, pointCount));
