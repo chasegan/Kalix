@@ -66,8 +66,16 @@ public final class NodeSectionLocator {
      * header line through the last line before the next section header (or end of
      * text), and the section's {@code loc} value span, or {@code null} if the section
      * has no parseable {@code loc} line.
+     *
+     * <p>{@code end} deliberately swallows the blank and comment lines that trail the
+     * section — that is what removal wants, so cutting a section takes its trailing
+     * gap with it. {@code contentEnd} is the offset just past the section's last
+     * <em>content</em> line (the last line that is neither blank nor a comment), which
+     * is what <em>insertion</em> wants: a comment block sitting between two nodes
+     * conventionally introduces the node below it, so new text belongs before that
+     * block, not after it. The two coincide when nothing trails the section.</p>
      */
-    public record NodeSection(String nodeName, int start, int end, LocValueSpan locValue) {
+    public record NodeSection(String nodeName, int start, int end, int contentEnd, LocValueSpan locValue) {
         public int length() {
             return end - start;
         }
@@ -94,37 +102,70 @@ public final class NodeSectionLocator {
             return null;
         }
 
+        // Last wins: scan forward and keep overwriting, rather than returning the
+        // first match. Expressed over findAll so there is exactly one grammar.
         NodeSection result = null;
-        boolean inTarget = false;
-        int sectionStart = -1;
-        LocValueSpan locValue = null;
+        for (NodeSection section : findAll(text)) {
+            if (section.nodeName().equals(nodeName)) {
+                result = section;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Lists every node section in the text, in document order.
+     *
+     * <p>Duplicate node names are all returned — unlike {@link #find}, which collapses
+     * them to the last. Callers that care about the model's view of a name should
+     * resolve last-wins themselves; callers that care about the <em>text</em> (where to
+     * insert, what to renumber) usually want every occurrence.</p>
+     *
+     * @param text full model text
+     * @return all node sections, in document order; empty if there are none
+     */
+    public static List<NodeSection> findAll(String text) {
+        List<NodeSection> sections = new ArrayList<>();
+        if (text == null) {
+            return sections;
+        }
+
+        String openName = null;
+        int openStart = -1;
+        int openContentEnd = -1;
+        LocValueSpan openLoc = null;
 
         LineScanner scanner = new LineScanner(text);
         while (scanner.next()) {
             String trimmed = scanner.trimmed();
             if (isBlankOrComment(trimmed)) {
+                // Inert: never opens or closes a section, and never extends its content.
                 continue;
             }
 
             if (trimmed.charAt(0) == '[') {
-                // Any section header closes the current section.
-                if (inTarget) {
-                    result = new NodeSection(nodeName, sectionStart, scanner.lineStart, locValue);
+                // Any section header closes the open section, at this line's start.
+                if (openName != null) {
+                    sections.add(new NodeSection(openName, openStart, scanner.lineStart, openContentEnd, openLoc));
                 }
                 Matcher header = NODE_HEADER_PATTERN.matcher(trimmed);
-                inTarget = header.matches() && header.group(1).equals(nodeName);
-                if (inTarget) {
-                    sectionStart = scanner.lineStart;
-                    locValue = null;
+                if (header.matches()) {
+                    openName = header.group(1);
+                    openStart = scanner.lineStart;
+                    openContentEnd = scanner.nextLineStart; // the header is itself content
+                    openLoc = null;
+                } else {
+                    openName = null;
                 }
                 continue;
             }
 
-            if (inTarget) {
+            if (openName != null) {
+                openContentEnd = scanner.nextLineStart;
                 Matcher loc = LOC_LINE_PATTERN.matcher(scanner.raw());
                 if (loc.matches()) {
                     // Last loc line wins, matching the parser's overwrite behaviour.
-                    locValue = new LocValueSpan(
+                    openLoc = new LocValueSpan(
                         scanner.lineStart + loc.start(1),
                         scanner.lineStart + loc.end(3),
                         loc.group(2));
@@ -132,10 +173,10 @@ public final class NodeSectionLocator {
             }
         }
 
-        if (inTarget) {
-            result = new NodeSection(nodeName, sectionStart, text.length(), locValue);
+        if (openName != null) {
+            sections.add(new NodeSection(openName, openStart, text.length(), openContentEnd, openLoc));
         }
-        return result;
+        return sections;
     }
 
     /**

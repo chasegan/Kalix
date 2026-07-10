@@ -1,0 +1,130 @@
+{
+  "version": "2.0",
+
+  "_comment": [
+    "Each entry is keyed by its id, which names the inserted node (id_1, id_2, ...).",
+    "'label' is the menu text. Keep the two separate: renaming a menu entry must not",
+    "rename anyone's nodes. 'lines' are the INI body; the [node.<name>] header is",
+    "generated from the id, not stored here. %%X%% and %%Y%% become map coordinates.",
+    "",
+    "Templates must insert a node the engine can actually RUN, so a modeller can",
+    "check a model steps through before calibrating anything. Rainfall-runoff params",
+    "are plausible starting values, not zeros. Tables carry enough rows to interpolate.",
+    "Comments are '#' or ';' -- never '//', which the engine parses as part of the value.",
+    "Parameters that take an expression are marked '#expression' so it is clear they",
+    "are not plain numbers."
+  ],
+
+  "node_types": {
+    "inflow": {
+      "label": "Inflow",
+      "lines": [
+        "type = inflow",
+        "loc = %%X%%,%%Y%%",
+        "inflow = 0 #expression"
+      ]
+    },
+    "gr4j": {
+      "label": "GR4J",
+      "lines": [
+        "type = gr4j",
+        "loc = %%X%%,%%Y%%",
+        "area = 200 #km2",
+        "rain = 0 #expression",
+        "evap = 0 #expression",
+        "params = 1500, 4, 65, 0.38 #x1 mm, x2 mm, x3 mm, x4 days"
+      ]
+    },
+    "sacramento": {
+      "label": "Sacramento",
+      "lines": [
+        "type = sacramento",
+        "loc = %%X%%,%%Y%%",
+        "area = 200 #km2",
+        "rain = 0 #expression",
+        "evap = 0 #expression",
+        "params = 0,45,60,0.01,0.01,150,0,0.11,1.5,0,0.2,0.01,25,0.2,47,15,0.1"
+      ]
+    },
+    "unregulated_user": {
+      "label": "Unregulated user",
+      "lines": [
+        "type = unregulated_user",
+        "loc = %%X%%,%%Y%%",
+        "demand = 0 #expression"
+      ]
+    },
+    "regulated_user": {
+      "label": "Regulated user",
+      "lines": [
+        "type = regulated_user",
+        "loc = %%X%%,%%Y%%",
+        "order = 0 #expression"
+      ]
+    },
+    "storage": {
+      "label": "Storage",
+      "lines": [
+        "type = storage",
+        "loc = %%X%%,%%Y%%",
+        "dimensions = 0,  0,    0,  0,    # Level m, Volume ML, Area km2, Spill ML (Ctrl+T for table viewer)",
+        "             10, 2000, 10, 0,",
+        "             11, 2100, 10, 1000,"
+      ]
+    },
+    "blackhole": {
+      "label": "Blackhole",
+      "lines": [
+        "type = blackhole",
+        "loc = %%X%%,%%Y%%"
+      ]
+    },
+    "routing": {
+      "label": "Routing",
+      "lines": [
+        "type = routing",
+        "loc = %%X%%,%%Y%%",
+        "lag = 0 #timesteps"
+      ]
+    },
+    "confluence": {
+      "label": "Confluence",
+      "lines": [
+        "type = confluence",
+        "loc = %%X%%,%%Y%%"
+      ]
+    },
+    "loss": {
+      "label": "Loss",
+      "lines": [
+        "type = loss",
+        "loc = %%X%%,%%Y%%",
+        "table = 0,   0,   # Inflow ML, Loss ML (Ctrl+T for table viewer)",
+        "        100, 0,"
+      ]
+    },
+    "splitter": {
+      "label": "Splitter",
+      "lines": [
+        "type = splitter",
+        "loc = %%X%%,%%Y%%",
+        "table = 0,   0,   # Inflow ML, ds_2 flow ML (Ctrl+T for table viewer)",
+        "        100, 0,"
+      ]
+    },
+    "gauge": {
+      "label": "Gauge",
+      "lines": [
+        "type = gauge",
+        "loc = %%X%%,%%Y%%"
+      ]
+    },
+    "order_control": {
+      "label": "Order control",
+      "lines": [
+        "type = order_control",
+        "loc = %%X%%,%%Y%%"
+      ]
+    }
+  }
+}

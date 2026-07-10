@@ -1,5 +1,7 @@
 package com.kalix.ide.editor;
 
+import com.kalix.ide.editor.commands.CommandExecutor;
+import com.kalix.ide.linter.parsing.INIModelParser.ParsedModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,7 +80,7 @@ public class EnhancedTextEditor extends JPanel {
 
     // Context command dependencies (stored for programmatic rename access)
     private JFrame commandParentFrame;
-    private java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> commandModelSupplier;
+    private java.util.function.Supplier<ParsedModel> commandModelSupplier;
 
     // Map panel reference for "Show on Map" context menu action
     private com.kalix.ide.MapPanel mapPanel;
@@ -214,7 +216,7 @@ public class EnhancedTextEditor extends JPanel {
      * @param baseDirectorySupplier   Supplier for the base directory to resolve relative input file paths
      */
     public void initializeAutoComplete(SchemaManager schemaManager,
-                                       java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier,
+                                       java.util.function.Supplier<ParsedModel> modelSupplier,
                                        java.util.function.Supplier<java.io.File> baseDirectorySupplier) {
         if (autoCompleteManager != null) {
             autoCompleteManager.dispose();
@@ -231,7 +233,7 @@ public class EnhancedTextEditor extends JPanel {
      * @param modelSupplier Supplier for the current parsed model
      */
     public void initializePropertyTooltips(SchemaManager schemaManager,
-                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier) {
+                                          java.util.function.Supplier<ParsedModel> modelSupplier) {
         if (propertyHoverTooltipManager != null) {
             propertyHoverTooltipManager.dispose();
         }
@@ -397,7 +399,7 @@ public class EnhancedTextEditor extends JPanel {
      * @param modelFileSupplier Supplier for the current model file
      */
     public void initializeContextCommands(JFrame parentFrame,
-                                          java.util.function.Supplier<com.kalix.ide.linter.parsing.INIModelParser.ParsedModel> modelSupplier,
+                                          java.util.function.Supplier<ParsedModel> modelSupplier,
                                           java.util.function.Supplier<java.io.File> modelFileSupplier) {
         // Store for programmatic access (e.g., rename from map context menu)
         this.commandParentFrame = parentFrame;
@@ -405,7 +407,7 @@ public class EnhancedTextEditor extends JPanel {
         this.modelFileSupplier = modelFileSupplier;
 
         contextCommandManager = new com.kalix.ide.editor.commands.ContextCommandManager(
-            textArea, parentFrame, modelSupplier, modelFileSupplier, this::applyAtomicReplacements);
+            textArea, parentFrame, modelSupplier, modelFileSupplier, () -> this.mapPanel, this::applyAtomicReplacements);
         contextCommandManager.initialize();
 
         // Install key bindings for every command whose metadata declares a
@@ -675,7 +677,7 @@ public class EnhancedTextEditor extends JPanel {
         final String trimmedNewName = newName.trim();
 
         // Get fresh parsed model
-        com.kalix.ide.linter.parsing.INIModelParser.ParsedModel parsedModel = commandModelSupplier.get();
+        ParsedModel parsedModel = commandModelSupplier.get();
         if (parsedModel == null) {
             logger.error("Failed to parse model for rename");
             javax.swing.JOptionPane.showMessageDialog(
@@ -688,8 +690,8 @@ public class EnhancedTextEditor extends JPanel {
         }
 
         // Create executor and perform rename
-        com.kalix.ide.editor.commands.CommandExecutor executor =
-            new com.kalix.ide.editor.commands.CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+        CommandExecutor executor =
+            new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
         boolean success = executor.renameNode(nodeName, trimmedNewName, parsedModel);
 
@@ -705,6 +707,29 @@ public class EnhancedTextEditor extends JPanel {
         }
 
         return success;
+    }
+
+    /**
+     * Inserts a node template programmatically (e.g., from the map context menu). The
+     * new node's {@code loc} is the given world location; its section goes below the
+     * last selected node, or at the bottom when nothing is selected.
+     *
+     * @param nodeType          The template key (e.g. "gr4j", "storage")
+     * @param worldX            The map x-coordinate for the new node's {@code loc}
+     * @param worldY            The map y-coordinate for the new node's {@code loc}
+     * @param selectedNodeNames The currently selected nodes (may be empty or null)
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplate(String nodeType, double worldX, double worldY,
+                                      java.util.Collection<String> selectedNodeNames) {
+        if (commandParentFrame == null) {
+            logger.warn("Context commands not initialized - cannot insert node template");
+            return false;
+        }
+
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+
+        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames);
     }
 
     private void setupKeyBindings() {

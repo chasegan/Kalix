@@ -2,7 +2,9 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.model.NodeInsertionPoint;
 import com.kalix.ide.model.NodeSectionLocator;
+import com.kalix.ide.model.SectionSplice;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +14,6 @@ import javax.swing.text.Document;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Manages clipboard operations for map nodes including cut, copy, and paste.
@@ -22,14 +22,6 @@ import java.util.regex.Pattern;
  */
 public class MapClipboardManager {
     private static final Logger logger = LoggerFactory.getLogger(MapClipboardManager.class);
-
-    // Patterns for parsing node sections
-    private static final Pattern LOC_PATTERN =
-        Pattern.compile("loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)");
-    private static final Pattern DS_PATTERN =
-        Pattern.compile("^(ds_\\d+)\\s*=\\s*(.+?)\\s*$", Pattern.MULTILINE);
-    private static final Pattern SECTION_HEADER_PATTERN =
-        Pattern.compile("^\\s*\\[([^\\]]+)\\]", Pattern.MULTILINE);
 
     private final HydrologicalModel model;
     private final EnhancedTextEditor textEditor;
@@ -117,50 +109,13 @@ public class MapClipboardManager {
         double offsetX = pasteLocationX - clipboard.anchorX();
         double offsetY = pasteLocationY - clipboard.anchorY();
 
-        // Prepare text to insert
-        List<String> sectionTexts;
+        // A cut keeps the original names; a copy needs fresh ones.
+        String suffix = clipboard.isCut() ? null : ClipboardBlock.copySuffix(existingNodeNames(), copiedNames(sections));
 
-        if (clipboard.isCut()) {
-            // Cut: use original names, just translate coordinates
-            sectionTexts = new ArrayList<>();
-            for (ClipboardEntry.NodeSectionData section : sections) {
-                String translated = translateCoordinates(section.sectionText(), offsetX, offsetY);
-                sectionTexts.add(translated);
-            }
-        } else {
-            // Copy: apply suffix and translate coordinates
-            String suffix = generateCopySuffix();
-            sectionTexts = applyNameSuffix(sections, suffix);
-
-            // Translate coordinates for each section
-            for (int i = 0; i < sectionTexts.size(); i++) {
-                sectionTexts.set(i, translateCoordinates(sectionTexts.get(i), offsetX, offsetY));
-            }
-        }
-
-        // Build the insert text
-        StringBuilder insertText = new StringBuilder();
-        for (String sectionText : sectionTexts) {
-            if (!insertText.isEmpty()) {
-                insertText.append("\n\n");
-            }
-            // Strip trailing whitespace - the regex capture includes trailing blank lines,
-            // and we use "\n\n" as the join separator to get exactly one blank line between sections
-            insertText.append(sectionText.stripTrailing());
-        }
-
-        // Ensure proper formatting - add newline before if needed
-        String textToInsert = insertText.toString();
-        if (!textToInsert.startsWith("\n")) {
-            textToInsert = "\n" + textToInsert;
-        }
-        if (!textToInsert.endsWith("\n")) {
-            textToInsert = textToInsert + "\n";
-        }
-
-        // Find insertion point and insert
-        int insertionPoint = findInsertionPointAfterCursor();
-        insertTextAtPosition(textToInsert, insertionPoint);
+        // What the block says is ClipboardBlock's decision; where it goes and how it is
+        // written there belong to NodeInsertionPoint and SectionSplice, exactly as for
+        // template insertion.
+        insertSectionBlock(ClipboardBlock.build(sections, suffix, offsetX, offsetY));
 
         // Clear clipboard after cut paste (can only paste once)
         if (clipboard.isCut()) {
@@ -244,195 +199,61 @@ public class MapClipboardManager {
      * Parse a node section to extract its properties.
      */
     private ClipboardEntry.NodeSectionData parseNodeSection(String nodeName, String sectionText, int textOrder) {
-        // Extract coordinates
-        double x = 0, y = 0;
-        Matcher locMatcher = LOC_PATTERN.matcher(sectionText);
-        if (locMatcher.find()) {
-            try {
-                x = Double.parseDouble(locMatcher.group(1));
-                y = Double.parseDouble(locMatcher.group(2));
-            } catch (NumberFormatException e) {
-                logger.warn("Invalid coordinates for node {}: {}", nodeName, e.getMessage());
-            }
+        double[] loc = ClipboardBlock.coordinatesOf(sectionText, nodeName);
+        if (loc == null) {
+            logger.warn("Node section has no parseable loc property: {}", nodeName);
+            loc = new double[]{0, 0};
         }
-
-        return new ClipboardEntry.NodeSectionData(nodeName, sectionText, x, y, textOrder);
+        return new ClipboardEntry.NodeSectionData(nodeName, sectionText, loc[0], loc[1], textOrder);
     }
 
-    /**
-     * Generate a unique suffix for copied nodes.
-     * Checks existing names and increments until finding unused suffix.
-     */
-    private String generateCopySuffix() {
-        // Get all existing node names
-        Set<String> existingNames = new HashSet<>();
+    /** Every node name currently in the model. */
+    private Collection<String> existingNodeNames() {
+        List<String> names = new ArrayList<>();
         for (ModelNode node : model.getAllNodes()) {
-            existingNames.add(node.getName());
+            names.add(node.getName());
         }
-
-        // Find the next available suffix
-        int suffixNum = 1;
-        while (true) {
-            String suffix = "_copy" + suffixNum;
-            boolean anyConflict = false;
-
-            // Check if any clipboard node would conflict with existing names
-            for (ClipboardEntry.NodeSectionData section : clipboard.nodeSections()) {
-                String newName = section.originalName() + suffix;
-                if (existingNames.contains(newName)) {
-                    anyConflict = true;
-                    break;
-                }
-            }
-
-            if (!anyConflict) {
-                return suffix;
-            }
-            suffixNum++;
-        }
+        return names;
     }
 
-    /**
-     * Apply a name suffix to all nodes and update internal references.
-     * Returns the modified section texts with new names.
-     */
-    private List<String> applyNameSuffix(List<ClipboardEntry.NodeSectionData> sections, String suffix) {
-        // Build a mapping from old names to new names
-        Map<String, String> nameMapping = new HashMap<>();
+    /** The names of the sections being pasted. */
+    private static Collection<String> copiedNames(List<ClipboardEntry.NodeSectionData> sections) {
+        List<String> names = new ArrayList<>();
         for (ClipboardEntry.NodeSectionData section : sections) {
-            nameMapping.put(section.originalName(), section.originalName() + suffix);
+            names.add(section.originalName());
         }
-
-        List<String> modifiedSections = new ArrayList<>();
-
-        for (ClipboardEntry.NodeSectionData section : sections) {
-            String text = section.sectionText();
-            String oldName = section.originalName();
-            String newName = nameMapping.get(oldName);
-
-            // Replace the section header [node.oldName] -> [node.newName]
-            text = text.replaceFirst(
-                "\\[node\\." + Pattern.quote(oldName) + "\\]",
-                "[node." + newName + "]"
-            );
-
-            // Replace internal ds_X references if they point to nodes being copied
-            for (Map.Entry<String, String> mapping : nameMapping.entrySet()) {
-                String oldTarget = mapping.getKey();
-                String newTarget = mapping.getValue();
-                // Pattern: ds_N = oldTarget (whole line match)
-                text = text.replaceAll(
-                    "(?m)^(ds_\\d+\\s*=\\s*)" + Pattern.quote(oldTarget) + "(\\s*)$",
-                    "$1" + newTarget + "$2"
-                );
-            }
-
-            modifiedSections.add(text);
-        }
-
-        return modifiedSections;
+        return names;
     }
 
-    /**
-     * Translate coordinates in a section text by the given offset.
-     */
-    private String translateCoordinates(String sectionText, double offsetX, double offsetY) {
-        Matcher matcher = LOC_PATTERN.matcher(sectionText);
-        if (matcher.find()) {
-            try {
-                double oldX = Double.parseDouble(matcher.group(1));
-                double oldY = Double.parseDouble(matcher.group(2));
-                double newX = oldX + offsetX;
-                double newY = oldY + offsetY;
 
-                // Locale.ROOT: model text always uses dot decimals (see TextCoordinateUpdater).
-                String newLoc = String.format(java.util.Locale.ROOT, "loc = %.2f, %.2f", newX, newY);
-                return sectionText.substring(0, matcher.start()) + newLoc + sectionText.substring(matcher.end());
-            } catch (NumberFormatException e) {
-                logger.warn("Error translating coordinates: {}", e.getMessage());
-            }
-        }
-        return sectionText;
-    }
+
 
     /**
-     * Find the insertion point after the section containing the cursor.
+     * Inserts a block of one or more node sections relative to the caret, as a single
+     * atomic edit.
+     *
+     * <p>Where it goes is {@link NodeInsertionPoint}'s decision and how it is written
+     * there is {@link SectionSplice}'s — the same two policies template insertion uses,
+     * so paste and insert cannot drift apart, and neither can hold its own idea of what
+     * an INI section header looks like.</p>
      */
-    private int findInsertionPointAfterCursor() {
+    private void insertSectionBlock(String block) {
         try {
-            int cursorPos = textEditor.getTextArea().getCaretPosition();
             Document doc = textEditor.getTextArea().getDocument();
             String text = doc.getText(0, doc.getLength());
+            int caret = textEditor.getTextArea().getCaretPosition();
 
-            // Handle empty document
-            if (text.isEmpty()) {
-                return 0;
-            }
+            SectionSplice.Splice splice = SectionSplice.compute(text, NodeInsertionPoint.forAnchor(text, caret), block);
 
-            // Find all section headers and their positions
-            Matcher matcher = SECTION_HEADER_PATTERN.matcher(text);
-            List<Integer> sectionStarts = new ArrayList<>();
-            while (matcher.find()) {
-                sectionStarts.add(matcher.start());
-            }
-
-            if (sectionStarts.isEmpty()) {
-                // No sections found, append at end
-                return text.length();
-            }
-
-            // Find which section contains the cursor
-            int currentSectionStart = -1;
-            int nextSectionStart = -1;
-
-            for (int i = 0; i < sectionStarts.size(); i++) {
-                int sectionStart = sectionStarts.get(i);
-                if (sectionStart <= cursorPos) {
-                    currentSectionStart = sectionStart;
-                    if (i + 1 < sectionStarts.size()) {
-                        nextSectionStart = sectionStarts.get(i + 1);
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            if (nextSectionStart != -1) {
-                // Insert just before the next section
-                // But leave any blank line before the next section
-                int insertPoint = nextSectionStart;
-                while (insertPoint > 0 && text.charAt(insertPoint - 1) == '\n') {
-                    insertPoint--;
-                }
-                // Keep one newline
-                if (insertPoint < nextSectionStart) {
-                    insertPoint++;
-                }
-                return insertPoint;
-            } else {
-                // No next section - insert at end
-                return text.length();
-            }
-        } catch (BadLocationException e) {
-            logger.error("Error finding insertion point: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    /**
-     * Insert text at the given position using atomic edit operations.
-     */
-    private void insertTextAtPosition(String textToInsert, int position) {
-        try {
             textEditor.getTextArea().beginAtomicEdit();
             try {
-                Document doc = textEditor.getTextArea().getDocument();
-                doc.insertString(position, textToInsert, null);
+                doc.remove(splice.start(), splice.end() - splice.start());
+                doc.insertString(splice.start(), splice.text(), null);
             } finally {
                 textEditor.getTextArea().endAtomicEdit();
             }
         } catch (BadLocationException e) {
-            logger.error("Error inserting text: {}", e.getMessage());
+            logger.error("Error inserting node sections: {}", e.getMessage());
         }
     }
 

@@ -281,4 +281,158 @@ class NodeSectionLocatorTest {
         assertEquals(1, result.getNodes().size());
         assertEquals(1.0, result.getNodes().get(0).getX());
     }
+
+    // --- findAll: enumeration ---
+
+    @Test
+    void findAllReturnsSectionsInDocumentOrder() {
+        String text = "[node.a]\nloc = 1, 1\n\n[node.b]\nloc = 2, 2\n\n[node.c]\nloc = 3, 3\n";
+        List<NodeSection> sections = NodeSectionLocator.findAll(text);
+        assertEquals(List.of("a", "b", "c"), sections.stream().map(NodeSection::nodeName).toList());
+        assertEquals(text.indexOf("[node.a]"), sections.get(0).start());
+        assertEquals(text.indexOf("[node.b]"), sections.get(1).start());
+        assertEquals(text.indexOf("[node.c]"), sections.get(2).start());
+    }
+
+    @Test
+    void findAllSkipsNonNodeSections() {
+        String text = "[kalix]\nstart = 2000-01-01\n\n[node.a]\nloc = 1, 1\n\n[inputs]\nx = y.csv\n\n[node.b]\nloc = 2, 2\n";
+        List<NodeSection> sections = NodeSectionLocator.findAll(text);
+        assertEquals(List.of("a", "b"), sections.stream().map(NodeSection::nodeName).toList());
+        // [node.a] is closed by [inputs], not carried across it
+        assertEquals(text.indexOf("[inputs]"), sections.get(0).end());
+    }
+
+    @Test
+    void findAllIsEmptyWhenThereAreNoNodeSections() {
+        assertTrue(NodeSectionLocator.findAll("[kalix]\n[outputs]\nnode.a.dsflow\n").isEmpty());
+        assertTrue(NodeSectionLocator.findAll("").isEmpty());
+        assertTrue(NodeSectionLocator.findAll(null).isEmpty());
+    }
+
+    /**
+     * findAll reports every occurrence; find collapses duplicates to the last. The
+     * difference is deliberate — text surgery wants all of them, the model wants one.
+     */
+    @Test
+    void findAllKeepsDuplicateNamesThatFindCollapses() {
+        String text = "[node.a]\nloc = 1, 1\n\n[node.a]\nloc = 2, 2\n";
+        List<NodeSection> sections = NodeSectionLocator.findAll(text);
+        assertEquals(2, sections.size());
+        assertEquals(text.indexOf("[node.a]"), sections.get(0).start());
+        assertEquals(text.lastIndexOf("[node.a]"), sections.get(1).start());
+        assertEquals(text.lastIndexOf("[node.a]"), NodeSectionLocator.find(text, "a").start());
+    }
+
+    @Test
+    void findAllRecognisesIndentedHeaders() {
+        String text = "  [node.a]\n  loc = 1, 1\n\n[node.b]\nloc = 2, 2\n";
+        List<NodeSection> sections = NodeSectionLocator.findAll(text);
+        assertEquals(List.of("a", "b"), sections.stream().map(NodeSection::nodeName).toList());
+        assertEquals(0, sections.get(0).start());
+    }
+
+    /** find() is defined over findAll(); they must never disagree about a section. */
+    @Test
+    void findAgreesWithFindAll() {
+        String text = "[node.a]\nloc = 1, 1\n\n# note\n[node.b]\nloc = 2, 2\n\n[outputs]\nnode.a.dsflow\n";
+        for (NodeSection section : NodeSectionLocator.findAll(text)) {
+            assertEquals(section, NodeSectionLocator.find(text, section.nodeName()));
+        }
+    }
+
+    // --- contentEnd: the insertion boundary ---
+
+    /**
+     * The footgun this exists to prevent: a comment block between two nodes
+     * conventionally introduces the node below it. {@code end} swallows it (right for
+     * removal); {@code contentEnd} stops before it (right for insertion), so a new
+     * node lands above the comment rather than between it and the node it describes.
+     */
+    @Test
+    void contentEndStopsBeforeTrailingBlankAndCommentLines() {
+        String text = "[node.a]\nloc = 1, 2\n\n# introduces b\n[node.b]\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.indexOf("[node.b]"), a.end());
+        assertEquals(text.indexOf("\n\n") + 1, a.contentEnd());
+        assertEquals("\n# introduces b\n", text.substring(a.contentEnd(), a.end()));
+    }
+
+    @Test
+    void contentEndEqualsEndWhenNothingTrails() {
+        String text = "[node.a]\nloc = 1, 2\n[node.b]\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(a.end(), a.contentEnd());
+        assertEquals(text.indexOf("[node.b]"), a.contentEnd());
+    }
+
+    @Test
+    void contentEndCoversAHeaderOnlySection() {
+        // The header is itself content, so contentEnd sits just past it.
+        String text = "[node.a]\n\n\n[node.b]\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals("[node.a]\n".length(), a.contentEnd());
+        assertEquals(text.indexOf("[node.b]"), a.end());
+    }
+
+    @Test
+    void contentEndIncludesPropertiesAfterAnInteriorComment() {
+        // An interior comment is inert, but the property after it is content.
+        String text = "[node.a]\n# note\nloc = 1, 2\n\n[node.b]\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.indexOf("\n\n") + 1, a.contentEnd());
+        assertEquals("loc = 1, 2\n", text.substring(text.indexOf("loc"), a.contentEnd()));
+    }
+
+    @Test
+    void contentEndAtEndOfFileWithoutTrailingNewline() {
+        String text = "[node.a]\nloc = 1, 2";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.length(), a.contentEnd());
+        assertEquals(text.length(), a.end());
+    }
+
+    @Test
+    void contentEndAtEndOfFileWithTrailingBlankLines() {
+        String text = "[node.a]\nloc = 1, 2\n\n\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.length(), a.end());
+        assertEquals(text.indexOf("\n\n") + 1, a.contentEnd());
+    }
+
+    @Test
+    void contentEndAtEndOfFileWithTrailingComment() {
+        // Closing at EOF is a different code path from closing at a header; the
+        // trailing comment must be excluded there too.
+        String text = "[node.a]\nloc = 1, 2\n# tail note\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.length(), a.end());
+        assertEquals(text.indexOf("# tail note"), a.contentEnd());
+    }
+
+    @Test
+    void contentEndHandlesCrlfLineEndings() {
+        String text = "[node.a]\r\nloc = 1, 2\r\n\r\n[node.b]\r\nloc = 3, 4\r\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.indexOf("[node.b]"), a.end());
+        // just past the CRLF that terminates the loc line
+        assertEquals(text.indexOf("\r\n\r\n") + 2, a.contentEnd());
+    }
+
+    @Test
+    void contentEndStopsAtANonNodeHeader() {
+        String text = "[node.a]\nloc = 1, 2\n\n[outputs]\nnode.a.dsflow\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.indexOf("[outputs]"), a.end());
+        assertEquals(text.indexOf("\n\n") + 1, a.contentEnd());
+    }
 }

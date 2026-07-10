@@ -1,6 +1,9 @@
 package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.model.NodeInsertionPoint;
+import com.kalix.ide.model.SectionSplice;
+import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
@@ -10,7 +13,10 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -547,6 +553,116 @@ public class CommandExecutor {
         } catch (Exception e) {
             logger.error("Error inserting text at cursor", e);
             showError("Failed to insert text: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Inserts a new node template from a map right-click: the node's {@code loc} is the
+     * clicked world location, while its <em>section</em> goes below the last selected
+     * node (or at the bottom when nothing is selected). Text position is the logical
+     * calculation sequence, not a geographic statement, so the two are independent.
+     *
+     * @param nodeType          The template key (e.g. "gr4j", "storage")
+     * @param worldX            The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY            The map y-coordinate to insert into the template's {@code loc}
+     * @param selectedNodeNames The currently selected nodes (may be empty or null)
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplateAtLocation(String nodeType, double worldX, double worldY,
+                                                 java.util.Collection<String> selectedNodeNames) {
+        String text = editor.getText();
+        return insertNodeTemplate(nodeType, worldX, worldY, text,
+            NodeInsertionPoint.forSelection(text, selectedNodeNames));
+    }
+
+    /**
+     * Inserts a new node template from the text-editor context menu: the section goes
+     * relative to the caret (see {@link NodeInsertionPoint}), at the given world
+     * location — typically the centre of the map view, since a text-editor invocation
+     * knows no click location.
+     *
+     * @param nodeType The template key (e.g. "gr4j", "storage")
+     * @param worldX   The map x-coordinate to insert into the template's {@code loc}
+     * @param worldY   The map y-coordinate to insert into the template's {@code loc}
+     * @return true if the template was inserted, false on failure
+     */
+    public boolean insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY) {
+        String text = editor.getText();
+        return insertNodeTemplate(nodeType, worldX, worldY, text,
+            NodeInsertionPoint.forAnchor(text, editor.getCaretPosition()));
+    }
+
+    private boolean insertNodeTemplate(String nodeType, double worldX, double worldY, String text, int offset) {
+        try {
+            String uniqueName = uniqueNodeName(nodeType, text);
+            String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
+            insertTemplateAt(offset, templateText);
+            logger.info("Inserted node template '{}' as '{}' at ({}, {})", nodeType, uniqueName, worldX, worldY);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error inserting node template", e);
+            showError("Failed to insert node template: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Picks a unique node name for a newly-inserted template: {@code <id>_1}, or the
+     * next free {@code <id>_N}. The numeral is always present, so the first node of a
+     * type looks like its siblings rather than being the odd one out.
+     *
+     * <p>Existing names come from the shared section grammar, not from the linter's
+     * parser: this is text surgery, and the text is the only thing that is definitely
+     * up to date.</p>
+     */
+    static String uniqueNodeName(String templateId, String text) {
+        Set<String> taken = new HashSet<>();
+        for (NodeSectionLocator.NodeSection section : NodeSectionLocator.findAll(text)) {
+            taken.add(section.nodeName());
+        }
+        int suffix = 1;
+        String candidate = templateId + "_" + suffix;
+        while (taken.contains(candidate)) {
+            suffix++;
+            candidate = templateId + "_" + suffix;
+        }
+        return candidate;
+    }
+
+    /**
+     * Builds the INI text for a node template: a generated {@code [node.<uniqueName>]}
+     * header followed by the template's body lines, with the {@code %%X%%}/{@code %%Y%%}
+     * coordinate placeholders substituted.
+     *
+     * <p>The header is generated rather than rewritten, so no template carries a
+     * placeholder header line that can drift, and no regex replacement string can trip
+     * over a {@code $} or {@code \} in a node name.</p>
+     */
+    private String buildTemplateText(String templateId, String uniqueName, double x, double y) {
+        NodeTemplateCatalog.NodeTemplate template = NodeTemplateCatalog.byId(templateId);
+        if (template == null || template.lines().isEmpty()) {
+            throw new IllegalArgumentException("Unknown node template: " + templateId);
+        }
+        String body = String.join("\n", template.lines())
+            .replace("%%X%%", String.format(Locale.ROOT, "%.2f", x))
+            .replace("%%Y%%", String.format(Locale.ROOT, "%.2f", y));
+        return "[node." + uniqueName + "]\n" + body;
+    }
+
+    /**
+     * Applies {@link SectionSplice} to the document as a single atomic edit, so the
+     * insertion undoes in one step.
+     */
+    private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
+        SectionSplice.Splice splice = SectionSplice.compute(editor.getText(), offset, templateText);
+
+        editor.beginAtomicEdit();
+        try {
+            javax.swing.text.Document doc = editor.getDocument();
+            doc.remove(splice.start(), splice.end() - splice.start());
+            doc.insertString(splice.start(), splice.text(), null);
+        } finally {
+            editor.endAtomicEdit();
         }
     }
 

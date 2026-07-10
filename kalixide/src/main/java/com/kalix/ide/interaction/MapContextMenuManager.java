@@ -6,6 +6,9 @@ import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.icons.MenuIcons;
 
+import com.kalix.ide.editor.commands.NodeTemplateCatalog;
+
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
@@ -145,6 +148,30 @@ public class MapContextMenuManager {
             }
         });
         menu.add(pasteItem);
+
+        menu.addSeparator();
+
+        // Create block, per context-menu-style §1 block ④. Verb-first per §2.2: the
+        // children are the objects of the verb, not values to pick among, so this is a
+        // menu item that happens to have a submenu — not a category title under §6.
+        JMenu insertNodeTemplateMenu = new JMenu("Insert node");
+        insertNodeTemplateMenu.setEnabled(textEditor != null);
+        for (NodeTemplateCatalog.NodeTemplate template : NodeTemplateCatalog.templates()) {
+            JMenuItem templateItem = new JMenuItem(template.label());
+            templateItem.addActionListener(e -> {
+                if (textEditor != null && lastContextMenuLocation != null) {
+                    // The click sets where the node sits on the map; the selection sets
+                    // where its section lands in the text. They are independent.
+                    double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
+                    double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                    if (textEditor.insertNodeTemplate(template.id(), worldX, worldY, model.getSelectedNodes())) {
+                        mapPanel.repaint();
+                    }
+                }
+            });
+            insertNodeTemplateMenu.add(templateItem);
+        }
+        menu.add(insertNodeTemplateMenu);
 
         menu.addSeparator();
 

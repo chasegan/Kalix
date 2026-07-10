@@ -55,7 +55,9 @@ public class INIModelParser {
         }
 
         public String getName() { return name; }
+        ///  startLine is the line number of the start of the section
         public int getStartLine() { return startLine; }
+        ///  endLine is the line number of the end of the section
         public int getEndLine() { return endLine; }
         public Map<String, Property> getProperties() { return properties; }
         public List<Property> getAllProperties() { return allProperties; }

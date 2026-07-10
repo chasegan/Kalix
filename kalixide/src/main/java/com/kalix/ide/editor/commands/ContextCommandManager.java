@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -29,6 +30,7 @@ public class ContextCommandManager {
     private final JFrame parentFrame;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
     private final Supplier<File> modelFileSupplier;
+    private final Supplier<MapPanel> mapPanelSupplier;
     private final Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier;
 
     private final CommandRegistry registry;
@@ -42,16 +44,19 @@ public class ContextCommandManager {
      * @param parentFrame        Parent frame for dialogs
      * @param modelSupplier      Supplier for the parsed model (may return null if parsing failed)
      * @param modelFileSupplier  Supplier for the current model file (may return null if no file loaded)
+     * @param mapPanelSupplier   Supplier for the map panel (may return null before it's wired up)
      * @param replacementApplier Callback for applying atomic text replacements
      */
     public ContextCommandManager(RSyntaxTextArea editor, JFrame parentFrame,
                                   Supplier<INIModelParser.ParsedModel> modelSupplier,
                                   Supplier<File> modelFileSupplier,
+                                  Supplier<MapPanel> mapPanelSupplier,
                                   Consumer<List<EnhancedTextEditor.LineReplacement>> replacementApplier) {
         this.editor = editor;
         this.parentFrame = parentFrame;
         this.modelSupplier = modelSupplier;
         this.modelFileSupplier = modelFileSupplier;
+        this.mapPanelSupplier = mapPanelSupplier;
         this.replacementApplier = replacementApplier;
 
         this.registry = new CommandRegistry();
@@ -71,6 +76,7 @@ public class ContextCommandManager {
      * Registers all available commands.
      */
     private void registerCommands() {
+        // ----- INPUT FILE COMMANDS -----
         // Register plot command (appears at root level, before refactoring commands)
         registry.register(new PlotInputFileCommand(modelFileSupplier, parentFrame));
 
@@ -88,6 +94,11 @@ public class ContextCommandManager {
 
         // Register table view command for editing params/dimensions
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
+
+        // ----- Ini editing commands -----
+        for (NodeTemplateCatalog.NodeTemplate template : NodeTemplateCatalog.templates()) {
+            registry.register(new InsertNodeTemplateCommand(template, mapPanelSupplier));
+        }
 
         // Future commands will be registered here:
         // registry.register(new DeleteNodeCommand(...));
