@@ -477,7 +477,16 @@ class TreeFileOperations {
         String baseZFName;
         if (selFiles.size() == 1) { baseZFName = selFiles.getFirst().getAbsolutePath(); }
         else {
-            // TODO Multiple files 
+            Path rootDirPath = Path.of(rootFile.getParent()).toAbsolutePath().normalize();
+            Path commonAncestor = null;
+            for (File file : selFiles) {
+                Path parent = file.toPath().toAbsolutePath().normalize().getParent();
+                commonAncestor = (commonAncestor == null) ? parent : commonAncestor(commonAncestor, parent);
+            }
+            if (commonAncestor == null || !commonAncestor.startsWith(rootDirPath)) {
+                commonAncestor = rootDirPath;
+            }
+            baseZFName = commonAncestor.resolve("files").toString();
         }
         // Ensure no name collision
         String zipFileName = baseZFName + ".zip";
@@ -490,12 +499,27 @@ class TreeFileOperations {
     }
 
     /**
+     * The deepest shared ancestor directory of two absolute, normalized paths, or {@code null}
+     * if they share no path components (e.g. different filesystem roots).
+     */
+    private static Path commonAncestor(Path a, Path b) {
+        if (!a.getRoot().equals(b.getRoot())) { return null; }
+        Path result = a.getRoot();
+        int count = Math.min(a.getNameCount(), b.getNameCount());
+        for (int i = 0; i < count && a.getName(i).equals(b.getName(i)); i++) {
+            result = result.resolve(a.getName(i));
+        }
+        return result;
+    }
+
+    /**
      * Detect if {@code file} is a zip file.
      */
     static boolean isZip(File file) {
         return file.toString().endsWith(".zip");
     }
 
+    // TODO double click zip folder to unzip
 
     /**
      * Unzip the selected zip folder into the same directory.
