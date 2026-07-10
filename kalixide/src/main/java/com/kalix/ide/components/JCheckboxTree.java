@@ -399,10 +399,18 @@ public class JCheckboxTree extends JTree {
         // double-register it, so resetCheckedState() would run twice per reload().
         this.addMouseListener(new MouseInputAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                // Every left click on the glyph toggles - no clickCount filter, or a quick
-                // check-then-uncheck would have its second click swallowed as a double-click.
-                if (!SwingUtilities.isLeftMouseButton(e)) {
+            public void mousePressed(MouseEvent e) {
+                // Toggle on press, not on mouseClicked: Swing only synthesizes a "clicked"
+                // event when the mouse doesn't move a single pixel between press and
+                // release, so click-based toggling silently drops the ~10-20% of clicks
+                // that drift slightly - the checkbox feels unreliable. Press-based
+                // toggling registers every time and shows the tick on finger-down, like a
+                // native checkbox. No clickCount filter for the same reason: a quick
+                // check-then-uncheck must not have its second press swallowed.
+                //
+                // isPopupTrigger is excluded explicitly because macOS Ctrl+left-click is a
+                // popup trigger that still passes the isLeftMouseButton test.
+                if (e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e)) {
                     return;
                 }
                 TreePath path = getPathForLocation(e.getX(), e.getY());
