@@ -21,8 +21,8 @@ public class InsertNodeTemplateCommand implements EditorCommand {
         this.metadata = new CommandMetadata.Builder()
             .id("insert_node_template_" + template.id())
             .displayName(template.label())
-            .description("Insert a default " + template.label() + " node template here")
-            .category("Node template")
+            .description("Insert a default " + template.label() + " node here")
+            .category("Insert node")
             .build();
     }
 
