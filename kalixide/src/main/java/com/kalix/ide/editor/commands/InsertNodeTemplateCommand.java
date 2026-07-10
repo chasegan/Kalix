@@ -11,17 +11,17 @@ import java.util.function.Supplier;
  */
 public class InsertNodeTemplateCommand implements EditorCommand {
 
-    private final String nodeType;
+    private final String templateId;
     private final CommandMetadata metadata;
     private final Supplier<MapPanel> mapPanelSupplier;
 
-    public InsertNodeTemplateCommand(String nodeType, Supplier<MapPanel> mapPanelSupplier) {
-        this.nodeType = nodeType;
+    public InsertNodeTemplateCommand(NodeTemplateCatalog.NodeTemplate template, Supplier<MapPanel> mapPanelSupplier) {
+        this.templateId = template.id();
         this.mapPanelSupplier = mapPanelSupplier;
         this.metadata = new CommandMetadata.Builder()
-            .id("insert_node_template_" + nodeType)
-            .displayName(nodeType)
-            .description("Insert a default " + nodeType + " node template here")
+            .id("insert_node_template_" + template.id())
+            .displayName(template.label())
+            .description("Insert a default " + template.label() + " node template here")
             .category("Node template")
             .build();
     }
@@ -53,6 +53,6 @@ public class InsertNodeTemplateCommand implements EditorCommand {
             worldY = center.y;
         }
 
-        executor.insertNodeTemplateNearCursor(nodeType, worldX, worldY);
+        executor.insertNodeTemplateNearCursor(templateId, worldX, worldY);
     }
 }

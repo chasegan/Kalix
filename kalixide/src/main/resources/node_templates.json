@@ -1,85 +1,118 @@
 {
-  "version": "1.0",
+  "version": "2.0",
 
-  "node_types":{
-    "Inflow": [
-      "[node.template_inflow]",
-      "type=inflow",
-      "loc=%%X%%,%%Y%%",
-      "inflow=0"
-    ],
-    "GR4J": [
-      "[node.template_gr4j]",
-      "type=gr4j",
-      "loc=%%X%%,%%Y%%",
-      "area=0",
-      "rain=0",
-      "evap=0",
-      "params=0,0,0,0"
-    ],
-    "Sacramento": [
-      "[node.template_sacramento]",
-      "type=sacramento",
-      "loc=%%X%%,%%Y%%",
-      "area=0",
-      "rain=0",
-      "evap=0",
-      "params=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17"
-    ],
-    "Unregulated user": [
-      "[node.template_unregulated_user]",
-      "type=unregulated_user",
-      "loc=%%X%%,%%Y%%",
-      "demand=0"
-    ],
-    "Regulated user": [
-      "[node.template_unregulated_user]",
-      "type=regulated_user",
-      "loc=%%X%%,%%Y%%",
-      "order=0"
-    ],
-    "Storage": [
-      "[node.template_unregulated_user]",
-      "type=storage",
-      "loc=%%X%%,%%Y%%",
-      "dimensions=0, 0, 0, 0 // Ctrl+T to edit in table viewer"
-    ],
-    "Blackhole": [
-      "[node.template_unregulated_user]",
-      "type=blackhole",
-      "loc=%%X%%,%%Y%%"
-    ],
-    "Routing": [
-      "[node.template_unregulated_user]",
-      "type=routing",
-      "loc=%%X%%,%%Y%%"
-    ],
-    "Confluence": [
-      "[node.template_unregulated_user]",
-      "type=confluence",
-      "loc=%%X%%,%%Y%%"
-    ],
-    "Loss": [
-      "[node.template_unregulated_user]",
-      "type=loss",
-      "loc=%%X%%,%%Y%%",
-      "table=0, 0 // Ctrl+T to edit in table viewer"
-    ],
-    "Splitter": [
-      "[node.template_unregulated_user]",
-      "type=splitter",
-      "loc=%%X%%,%%Y%%",
-      "table=0, 0 // Ctrl+T to edit in table viewer"
-    ],
-    "Gauge": [
-      "[node.template_unregulated_user]",
-      "type=gauge",
-      "loc=%%X%%,%%Y%%"
-    ],
-    "Order control": [
-      "[node.template_unregulated_user]",
-      "type=order_control",
-      "loc=%%X%%,%%Y%%"
-    ]
+  "_comment": [
+    "Each entry is keyed by its id, which names the inserted node (id_1, id_2, ...).",
+    "'label' is the menu text. Keep the two separate: renaming a menu entry must not",
+    "rename anyone's nodes. 'lines' are the INI body; the [node.<name>] header is",
+    "generated from the id, not stored here. %%X%% and %%Y%% become map coordinates."
+  ],
+
+  "node_types": {
+    "inflow": {
+      "label": "Inflow",
+      "lines": [
+        "type=inflow",
+        "loc=%%X%%,%%Y%%",
+        "inflow=0"
+      ]
+    },
+    "gr4j": {
+      "label": "GR4J",
+      "lines": [
+        "type=gr4j",
+        "loc=%%X%%,%%Y%%",
+        "area=0",
+        "rain=0",
+        "evap=0",
+        "params=0,0,0,0"
+      ]
+    },
+    "sacramento": {
+      "label": "Sacramento",
+      "lines": [
+        "type=sacramento",
+        "loc=%%X%%,%%Y%%",
+        "area=0",
+        "rain=0",
+        "evap=0",
+        "params=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17"
+      ]
+    },
+    "unregulated_user": {
+      "label": "Unregulated user",
+      "lines": [
+        "type=unregulated_user",
+        "loc=%%X%%,%%Y%%",
+        "demand=0"
+      ]
+    },
+    "regulated_user": {
+      "label": "Regulated user",
+      "lines": [
+        "type=regulated_user",
+        "loc=%%X%%,%%Y%%",
+        "order=0"
+      ]
+    },
+    "storage": {
+      "label": "Storage",
+      "lines": [
+        "type=storage",
+        "loc=%%X%%,%%Y%%",
+        "dimensions=0, 0, 0, 0 # Ctrl+T to edit in table viewer"
+      ]
+    },
+    "blackhole": {
+      "label": "Blackhole",
+      "lines": [
+        "type=blackhole",
+        "loc=%%X%%,%%Y%%"
+      ]
+    },
+    "routing": {
+      "label": "Routing",
+      "lines": [
+        "type=routing",
+        "loc=%%X%%,%%Y%%"
+      ]
+    },
+    "confluence": {
+      "label": "Confluence",
+      "lines": [
+        "type=confluence",
+        "loc=%%X%%,%%Y%%"
+      ]
+    },
+    "loss": {
+      "label": "Loss",
+      "lines": [
+        "type=loss",
+        "loc=%%X%%,%%Y%%",
+        "table=0, 0 # Ctrl+T to edit in table viewer"
+      ]
+    },
+    "splitter": {
+      "label": "Splitter",
+      "lines": [
+        "type=splitter",
+        "loc=%%X%%,%%Y%%",
+        "table=0, 0 # Ctrl+T to edit in table viewer"
+      ]
+    },
+    "gauge": {
+      "label": "Gauge",
+      "lines": [
+        "type=gauge",
+        "loc=%%X%%,%%Y%%"
+      ]
+    },
+    "order_control": {
+      "label": "Order control",
+      "lines": [
+        "type=order_control",
+        "loc=%%X%%,%%Y%%"
+      ]
+    }
   }
 }

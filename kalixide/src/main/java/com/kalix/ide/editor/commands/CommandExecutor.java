@@ -12,7 +12,10 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -590,7 +593,7 @@ public class CommandExecutor {
 
     private boolean insertNodeTemplate(String nodeType, double worldX, double worldY, String text, int offset) {
         try {
-            String uniqueName = generateUniqueNodeName(nodeType, text);
+            String uniqueName = uniqueNodeName(nodeType, text);
             String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
             insertTemplateAt(offset, templateText);
             logger.info("Inserted node template '{}' as '{}' at ({}, {})", nodeType, uniqueName, worldX, worldY);
@@ -603,43 +606,46 @@ public class CommandExecutor {
     }
 
     /**
-     * Picks a unique node name for a newly-inserted template: {@code nodeType},
-     * or {@code nodeType_2}, {@code nodeType_3}, ... if that's already taken.
+     * Picks a unique node name for a newly-inserted template: {@code <id>_1}, or the
+     * next free {@code <id>_N}. The numeral is always present, so the first node of a
+     * type looks like its siblings rather than being the odd one out.
      *
      * <p>Existing names come from the shared section grammar, not from the linter's
      * parser: this is text surgery, and the text is the only thing that is definitely
      * up to date.</p>
      */
-    private String generateUniqueNodeName(String nodeType, String text) {
-        java.util.Set<String> taken = new java.util.HashSet<>();
+    static String uniqueNodeName(String templateId, String text) {
+        Set<String> taken = new HashSet<>();
         for (NodeSectionLocator.NodeSection section : NodeSectionLocator.findAll(text)) {
             taken.add(section.nodeName());
         }
-        String candidate = nodeType;
-        int suffix = 2;
+        int suffix = 1;
+        String candidate = templateId + "_" + suffix;
         while (taken.contains(candidate)) {
-            candidate = nodeType + "_" + suffix;
             suffix++;
+            candidate = templateId + "_" + suffix;
         }
         return candidate;
     }
 
     /**
-     * Builds the INI text for a node template: joins its lines, replaces the
-     * header with {@code [node.<uniqueName>]}, and substitutes the
-     * {@code %%X%%}/{@code %%Y%%} coordinate placeholders.
+     * Builds the INI text for a node template: a generated {@code [node.<uniqueName>]}
+     * header followed by the template's body lines, with the {@code %%X%%}/{@code %%Y%%}
+     * coordinate placeholders substituted.
+     *
+     * <p>The header is generated rather than rewritten, so no template carries a
+     * placeholder header line that can drift, and no regex replacement string can trip
+     * over a {@code $} or {@code \} in a node name.</p>
      */
-    private String buildTemplateText(String nodeType, String uniqueName, double x, double y) {
-        List<String> lines = NodeTemplateCatalog.getNodeTypes().get(nodeType);
-        if (lines == null || lines.isEmpty()) {
-            throw new IllegalArgumentException("Unknown node type: " + nodeType);
+    private String buildTemplateText(String templateId, String uniqueName, double x, double y) {
+        NodeTemplateCatalog.NodeTemplate template = NodeTemplateCatalog.byId(templateId);
+        if (template == null || template.lines().isEmpty()) {
+            throw new IllegalArgumentException("Unknown node template: " + templateId);
         }
-        String joined = String.join("\n", lines);
-        joined = joined.replaceFirst("\\[node\\.[^\\]]+\\]", "[node." + uniqueName + "]");
-        String xText = String.format(java.util.Locale.ROOT, "%.2f", x);
-        String yText = String.format(java.util.Locale.ROOT, "%.2f", y);
-        joined = joined.replace("%%X%%", xText).replace("%%Y%%", yText);
-        return joined;
+        String body = String.join("\n", template.lines())
+            .replace("%%X%%", String.format(Locale.ROOT, "%.2f", x))
+            .replace("%%Y%%", String.format(Locale.ROOT, "%.2f", y));
+        return "[node." + uniqueName + "]\n" + body;
     }
 
     /**

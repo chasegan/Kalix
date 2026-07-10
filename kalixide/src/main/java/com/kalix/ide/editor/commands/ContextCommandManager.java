@@ -96,8 +96,8 @@ public class ContextCommandManager {
         registry.register(new OpenTableViewCommand(parentFrame, modelSupplier));
 
         // ----- Ini editing commands -----
-        for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
-            registry.register(new InsertNodeTemplateCommand(nodeType, mapPanelSupplier));
+        for (NodeTemplateCatalog.NodeTemplate template : NodeTemplateCatalog.templates()) {
+            registry.register(new InsertNodeTemplateCommand(template, mapPanelSupplier));
         }
 
         // Future commands will be registered here:

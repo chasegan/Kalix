@@ -155,15 +155,15 @@ public class MapContextMenuManager {
         // submenu title is a noun per §6)
         JMenu insertNodeTemplateMenu = new JMenu("Node template");
         insertNodeTemplateMenu.setEnabled(textEditor != null);
-        for (String nodeType : NodeTemplateCatalog.getNodeTypes().keySet()) {
-            JMenuItem templateItem = new JMenuItem(nodeType.toString());
+        for (NodeTemplateCatalog.NodeTemplate template : NodeTemplateCatalog.templates()) {
+            JMenuItem templateItem = new JMenuItem(template.label());
             templateItem.addActionListener(e -> {
                 if (textEditor != null && lastContextMenuLocation != null) {
                     // The click sets where the node sits on the map; the selection sets
                     // where its section lands in the text. They are independent.
                     double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
                     double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
-                    if (textEditor.insertNodeTemplate(nodeType, worldX, worldY, model.getSelectedNodes())) {
+                    if (textEditor.insertNodeTemplate(template.id(), worldX, worldY, model.getSelectedNodes())) {
                         mapPanel.repaint();
                     }
                 }
