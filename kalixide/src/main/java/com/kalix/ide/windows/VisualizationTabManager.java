@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
@@ -64,8 +65,9 @@ import java.util.Set;
  * from another plot tab also inherit the full undo/redo state history.
  *
  * <h2>Tab Change Sync</h2>
- * When the user switches tabs, a callback notifies RunManager to update the timeseries
- * tree selection to match the new tab's selected series.
+ * When the user switches tabs, a callback notifies RunManager to restore the new tab's
+ * full context: its checked data sources (each tab remembers the source-tree context it
+ * was built in, as stable {@link SourceRef}s) and then its series checks.
  *
  * @see PlotPanel
  * @see com.kalix.ide.windows.RunManager#addSeriesToPool
@@ -115,6 +117,9 @@ public class VisualizationTabManager {
         // Series selection from source tab (null = inherit from active tab)
         public Set<SeriesRef> selectedSeries = null;
 
+        // Checked data sources from source tab (null = inherit from active tab)
+        public Set<SourceRef> checkedSources = null;
+
         // Source plot panel for history duplication (null = no history to copy)
         public PlotPanel sourcePlotPanel = null;
 
@@ -132,6 +137,7 @@ public class VisualizationTabManager {
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
             settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
+            settings.checkedSources = new LinkedHashSet<>(tabInfo.checkedSources);
             settings.sourcePlotPanel = plotPanel;
             return settings;
         }
@@ -144,6 +150,7 @@ public class VisualizationTabManager {
             settings.aggregationPeriod = statsTabInfo.statsPeriod;
             settings.aggregationMethod = statsTabInfo.statsMethod;
             settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
+            settings.checkedSources = new LinkedHashSet<>(statsTabInfo.checkedSources);
             return settings;
         }
 
@@ -174,6 +181,12 @@ public class VisualizationTabManager {
 
         // Per-tab selected series (plot tabs only). Preserves insertion order for legend consistency.
         final Set<SeriesRef> selectedSeries = new LinkedHashSet<>();
+
+        // Per-tab checked data sources — the source-tree context this tab was built in.
+        // Restored (with the series checks) when the tab becomes active, so a tab is a
+        // complete view: sources + series + plot settings. Empty on a fresh tab means
+        // "unconfigured": the tab adopts the current source context instead of clearing it.
+        final Set<SourceRef> checkedSources = new LinkedHashSet<>();
 
         // Aggregation settings for stats tabs
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
@@ -318,9 +331,10 @@ public class VisualizationTabManager {
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
-        // Add tab with inherited series selection
+        // Add tab with inherited series selection and source context
         TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
+        tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
@@ -495,6 +509,7 @@ public class VisualizationTabManager {
                 tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesRefs());
             }
         }
+        tabInfo.checkedSources.addAll(inheritedSources(settings));
 
         tabs.add(tabInfo);
 
@@ -802,6 +817,51 @@ public class VisualizationTabManager {
     public Set<SeriesRef> getTargetTabSelectedSeries() {
         TabInfo tab = getTargetTab();
         return tab != null ? Collections.unmodifiableSet(tab.selectedSeries) : Collections.emptySet();
+    }
+
+    /**
+     * Resolves the source context a new tab should start with: from the settings if
+     * recorded there (duplication), otherwise the active tab's (fresh tab created while
+     * another is showing), otherwise empty (startup default tabs — "unconfigured").
+     */
+    private Set<SourceRef> inheritedSources(TabSettings settings) {
+        if (settings.checkedSources != null) {
+            return settings.checkedSources;
+        }
+        TabInfo activeTab = getActiveTab();
+        return activeTab != null ? activeTab.checkedSources : Collections.emptySet();
+    }
+
+    /**
+     * Returns the checked data sources recorded for the target tab, or empty set.
+     */
+    public Set<SourceRef> getTargetTabCheckedSources() {
+        TabInfo tab = getTargetTab();
+        return tab != null ? Collections.unmodifiableSet(tab.checkedSources) : Collections.emptySet();
+    }
+
+    /**
+     * Records the checked data sources on the target tab (in the given order).
+     * Pure bookkeeping — no visual side effects; the source tree itself is the
+     * caller's responsibility.
+     */
+    public void setTargetTabCheckedSources(Set<SourceRef> sources) {
+        TabInfo tab = getTargetTab();
+        if (tab == null) return;
+        tab.checkedSources.clear();
+        tab.checkedSources.addAll(sources);
+    }
+
+    /**
+     * Removes a source from every tab's recorded context. Called when the source is
+     * removed for good (a run removed, a dataset unloaded) so no tab tries to restore
+     * it later. The "Last" alias is deliberately never scrubbed — see
+     * {@link com.kalix.ide.flowviz.data.LastSource}.
+     */
+    public void removeSourceFromAllTabs(SourceRef ref) {
+        for (TabInfo tab : tabs) {
+            tab.checkedSources.remove(ref);
+        }
     }
 
     /**

@@ -2,10 +2,14 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.DatasetSource;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSeries;
+import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.RunSeries;
+import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.OutputsTreeBuilder;
@@ -85,7 +89,9 @@ import java.util.function.Consumer;
  *
  * <h2>Selection Tracking</h2>
  * <ul>
- *   <li>Per-tab selected series stored in {@link VisualizationTabManager} TabInfo</li>
+ *   <li>Per-tab selected series AND per-tab checked sources stored in
+ *       {@link VisualizationTabManager} TabInfo — a tab is a complete view (sources +
+ *       series + plot settings), restored as a whole by {@link #onTabChanged}</li>
  *   <li>{@link SeriesFetchCoordinator#isUpdatingSelection()} - Guard to prevent listener
  *       feedback loops during programmatic updates</li>
  *   <li>Checked state (what's plotted) is separate from plain tree selection (row highlight);
@@ -880,6 +886,10 @@ public class RunManager extends JFrame {
             return;
         }
 
+        // Record the new source context on the target tab, so switching back to this
+        // tab later restores it (sources and series are both per-tab state).
+        snapshotSourceChecksToTargetTab();
+
         // Block timeseries tree checked-state events during rebuild and restoration
         fetchCoordinator.setUpdatingSelection(true);
         updateOutputsTree();
@@ -983,8 +993,10 @@ public class RunManager extends JFrame {
         }
         datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Strip them from every tab's selection, legend, visible-series, and stats.
+        // Strip them from every tab's selection, legend, visible-series, and stats,
+        // and forget the dataset from every tab's recorded source context.
         tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
 
         // Remove the tree node — selection changes (if any) refresh the outputs tree.
         for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
@@ -1004,8 +1016,82 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Called when the user switches tabs. Syncs the timeseries tree selection
-     * to reflect the new active tab's selected series.
+     * Projects a source-tree node's user object to its stable {@link SourceRef}
+     * identity, or {@code null} for anything that isn't a data source (category
+     * headers, the root).
+     */
+    private SourceRef sourceRefForNode(Object userObject) {
+        if (userObject instanceof RunInfoImpl runInfo) {
+            return runInfo.isLastAlias() ? new LastSource() : new RunSource(runInfo.getRunId());
+        }
+        if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
+            return new DatasetSource(info.file.getAbsolutePath());
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link SourceRef}s of the sources currently checked in the data
+     * source tree, in check order. Category paths (auto-checked parents) project to
+     * {@code null} and are skipped.
+     */
+    private Set<SourceRef> currentCheckedSourceRefs() {
+        Set<SourceRef> refs = new LinkedHashSet<>();
+        for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            SourceRef ref = sourceRefForNode(node.getUserObject());
+            if (ref != null) {
+                refs.add(ref);
+            }
+        }
+        return refs;
+    }
+
+    /**
+     * Records the currently checked sources on the target tab. Called whenever the
+     * user changes the source checks, and from programmatic check changes that run
+     * under the isUpdatingSelection guard (e.g. {@link RunTreeController#selectRun})
+     * where {@link #onSourceTreeCheckedChanged} won't fire.
+     */
+    void snapshotSourceChecksToTargetTab() {
+        tabManager.setTargetTabCheckedSources(currentCheckedSourceRefs());
+    }
+
+    /**
+     * Resolves a {@link SourceRef} back to its current tree path, or {@code null} if
+     * the source no longer exists (run removed, dataset unloaded, no Last yet).
+     */
+    private TreePath pathForSourceRef(SourceRef ref) {
+        DefaultMutableTreeNode parent = switch (ref) {
+            case LastSource ignored -> lastRunNode;
+            case RunSource ignored -> currentRunsNode;
+            case DatasetSource ignored -> loadedDatasetsNode;
+        };
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (ref.equals(sourceRefForNode(child.getUserObject()))) {
+                return new TreePath(child.getPath());
+            }
+        }
+        return null;
+    }
+
+    private List<TreePath> pathsForSourceRefs(Set<SourceRef> refs) {
+        List<TreePath> paths = new ArrayList<>();
+        for (SourceRef ref : refs) {
+            TreePath path = pathForSourceRef(ref);
+            if (path != null) {
+                paths.add(path);
+            }
+        }
+        return paths;
+    }
+
+    /**
+     * Called when the user switches tabs. Restores the new active tab's full context:
+     * first the data-source checks (rebuilding the outputs tree for that context),
+     * then the series checks. A tab is a complete view — sources + series + plot
+     * settings — so switching tabs swaps the whole left panel to match.
      */
     private void onTabChanged() {
         // Adding the default tabs in createDetailsComponents() auto-selects the first tab,
@@ -1014,10 +1100,21 @@ public class RunManager extends JFrame {
         if (fetchCoordinator == null) return;
 
         Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-        if (tabSeries == null) return;
+        Set<SourceRef> tabSources = tabManager.getTargetTabCheckedSources();
 
         fetchCoordinator.setUpdatingSelection(true);
         try {
+            if (tabSources.isEmpty() && tabSeries.isEmpty()) {
+                // Unconfigured tab (e.g. a startup default tab the user hasn't touched):
+                // adopt the current source context rather than clearing it, so a fresh
+                // tab starts where the user is.
+                snapshotSourceChecksToTargetTab();
+            } else if (!tabSources.equals(currentCheckedSourceRefs())) {
+                // Same context → skip the rebuild: no outputs-tree churn when flicking
+                // between tabs that look at the same sources.
+                timeseriesSourceTree.setCheckedPaths(pathsForSourceRefs(tabSources));
+                updateOutputsTree();
+            }
             restoreTreeChecksForSeries(tabSeries);
         } finally {
             fetchCoordinator.setUpdatingSelection(false);

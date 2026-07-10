@@ -5,6 +5,7 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
+import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.managers.RunContextMenuManager;
@@ -388,6 +389,9 @@ class RunTreeController {
                 try {
                     timeseriesSourceTree.setSelectionPath(pathToRun);
                     timeseriesSourceTree.addCheckedPaths(java.util.List.of(pathToRun));
+                    // The guard suppresses onSourceTreeCheckedChanged, so record the new
+                    // source context on the target tab explicitly.
+                    window.snapshotSourceChecksToTargetTab();
                     window.updateOutputsTree();
                     Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
                     Set<SeriesRef> restoredSeries = window.restoreTreeChecksForSeries(tabSeries);
@@ -429,6 +433,10 @@ class RunTreeController {
         if (!refs.isEmpty()) {
             tabManager.removeSeriesFromAllTabs(refs);
         }
+
+        // Forget the run from every tab's recorded source context — runIds are never
+        // reused, so no tab should try to restore this source again.
+        tabManager.removeSourceFromAllTabs(new RunSource(runId));
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.
