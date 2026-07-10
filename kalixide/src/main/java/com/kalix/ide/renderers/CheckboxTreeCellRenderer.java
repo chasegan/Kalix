@@ -13,9 +13,19 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 
-public class CheckboxTreeCellRenderer extends JPanel implements TreeCellRenderer {
+public class CheckboxTreeCellRenderer extends JPanel
+        implements TreeCellRenderer, JCheckboxTree.CheckboxRowRenderer {
     private final JTristateCheckBox checkbox;
     private final DefaultTreeCellRenderer label;
+
+    /**
+     * Width of the checkbox glyph region at the leading edge of the row. The tree uses
+     * this to hit-test clicks: only clicks inside this strip toggle the checkbox.
+     */
+    @Override
+    public int getCheckboxWidth() {
+        return checkbox.getPreferredSize().width;
+    }
 
     public CheckboxTreeCellRenderer() {
         setLayout(new BorderLayout());

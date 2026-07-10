@@ -7,12 +7,14 @@ import javax.swing.event.TreeModelListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 // Reference - https://stackoverflow.com/a/21851201
@@ -20,13 +22,21 @@ import java.util.List;
 
 /// Note that rendering of individual entries is the purview of the chosen TreeCellRenderer implementation.
 ///
-///  Checked state is to be treated as the user's "chosen set", as opposed to {@link JTree}'s selection model.
+/// Checked state is to be treated as the user's "chosen set", as opposed to {@link JTree}'s
+/// selection model. The two are deliberately independent: only a left-click on the checkbox
+/// glyph itself (or Space on the focused row) toggles checked state. Clicks anywhere else on
+/// a row - including right-clicks that open context menus - select/focus the node without
+/// touching the chosen set.
 public class JCheckboxTree extends JTree {
-    // Used for defining inner classes
-    private final JCheckboxTree thisTree = this;
 
     public enum CheckState {
         UNCHECKED, CHECKED, PARTIAL
+    }
+
+    /// Implemented by cell renderers that draw a checkbox at the leading edge of each row,
+    /// so the tree can hit-test clicks against the checkbox glyph.
+    public interface CheckboxRowRenderer {
+        int getCheckboxWidth();
     }
 
     ///  {@link CheckedNodeMetadata} tracks metadata i.e. checked state, and whether the node has children
@@ -42,13 +52,20 @@ public class JCheckboxTree extends JTree {
 
     ///  Map from node path to metadata
     HashMap<TreePath, CheckedNodeMetadata> nodeCheckedStateMap;
-    ///  Set of all nodes currently ticked
-    HashSet<TreePath> checkedPaths;
+    /// All currently ticked paths, in the order they were ticked. Order matters: consumers
+    /// build the plotted-series list from this, and the first series acts as the reference
+    /// for difference-style plot types - so iteration must be deterministic and reflect the
+    /// order the user checked things, not hash order.
+    LinkedHashSet<TreePath> checkedPaths;
+
+    /// Fallback glyph width when the installed renderer is not a {@link CheckboxRowRenderer}.
+    private int fallbackCheckboxWidth = 0;
 
     /// Notified whenever the checked-path set changes, whether from a user click or a
     /// programmatic call to {@link #checkPath} / {@link #setCheckedPaths}.
-    /// This fires exactly once per logical change and is never fired incidentally
-    /// by selection changes.
+    /// Fires only when the checked set actually changed - a no-op call
+    /// (e.g. checking an already-checked path) is silent, and it is never fired
+    /// incidentally by selection changes.
     public interface CheckChangeListener {
         void checkStateChanged();
     }
@@ -96,7 +113,7 @@ public class JCheckboxTree extends JTree {
     /// Rebuilds node metadata map from root. Clears all checked state.
     /// All nodes start unchecked until explicitly ticked by user interaction.
     private void resetCheckedState() {
-        checkedPaths = new HashSet<>();
+        checkedPaths = new LinkedHashSet<>();
         nodeCheckedStateMap = new HashMap<>();
         var rootNode = getModel().getRoot();
         if (rootNode == null) {
@@ -121,36 +138,60 @@ public class JCheckboxTree extends JTree {
         return node;
     }
 
-    private void tickPath(TreePath nodePath) {
-        CheckedNodeMetadata node = getOrCreateMetadata(nodePath);
-        node.state = CheckState.CHECKED;
-        this.checkedPaths.add(nodePath);
-        if (node.hasChildren) {
-            Object lastComponent = nodePath.getLastPathComponent();
-            if (lastComponent instanceof DefaultMutableTreeNode treeNode) {
-                for (var child : Collections.list(treeNode.children())) {
-                    TreePath childPath = nodePath.pathByAddingChild(child);
-                    tickPath(childPath);
-                }
-            }
+    /// Ticks a path and all of its descendants, then recomputes the ancestor chain once.
+    /// Returns whether the checked set actually changed.
+    private boolean tickPath(TreePath nodePath) {
+        boolean changed = tickRecursive(nodePath);
+        if (changed) {
+            updateAncestorStates(nodePath);
         }
-        updateAncestorStates(nodePath);
+        return changed;
     }
 
-    private void untickPath(TreePath nodePath) {
+    /// Ticks the subtree only. Ancestor recomputation is done once by the caller
+    /// ({@link #tickPath}) rather than once per descendant, which would be quadratic in
+    /// wide subtrees. Does not short-circuit on an already-CHECKED node: children inserted
+    /// since the parent was ticked still need picking up.
+    private boolean tickRecursive(TreePath nodePath) {
         CheckedNodeMetadata node = getOrCreateMetadata(nodePath);
-        node.state = CheckState.UNCHECKED;
-        this.checkedPaths.remove(nodePath);
+        boolean changed = checkedPaths.add(nodePath);
+        node.state = CheckState.CHECKED;
         if (node.hasChildren) {
             Object lastComponent = nodePath.getLastPathComponent();
             if (lastComponent instanceof DefaultMutableTreeNode treeNode) {
                 for (var child : Collections.list(treeNode.children())) {
-                    TreePath childPath = nodePath.pathByAddingChild(child);
-                    untickPath(childPath);
+                    changed |= tickRecursive(nodePath.pathByAddingChild(child));
                 }
             }
         }
-        updateAncestorStates(nodePath);
+        return changed;
+    }
+
+    /// Unticks a path and all of its descendants, then recomputes the ancestor chain once.
+    /// Returns whether the checked set actually changed.
+    private boolean untickPath(TreePath nodePath) {
+        boolean changed = untickRecursive(nodePath);
+        if (changed) {
+            updateAncestorStates(nodePath);
+        }
+        return changed;
+    }
+
+    /// Unticks the subtree only - see {@link #tickRecursive} for why ancestors are handled
+    /// by the caller instead.
+    private boolean untickRecursive(TreePath nodePath) {
+        CheckedNodeMetadata node = getOrCreateMetadata(nodePath);
+        boolean changed = checkedPaths.remove(nodePath);
+        node.state = CheckState.UNCHECKED;
+        if (node.hasChildren) {
+            Object lastComponent = nodePath.getLastPathComponent();
+            if (lastComponent instanceof DefaultMutableTreeNode treeNode) {
+                for (var child : Collections.list(treeNode.children())) {
+                    changed |= untickRecursive(nodePath.pathByAddingChild(child));
+                }
+            }
+        }
+        return changed;
     }
 
     /// Recomputes checked state for every ancestor of {@code nodePath}, climbing from its
@@ -218,6 +259,7 @@ public class JCheckboxTree extends JTree {
             tickPath(nodePath); // If unchecked or partial, check it
         }
         fireCheckChangeEvent();
+        repaint(); // Repaint to show updated checkbox state
     }
 
     // Override adds resetCheckedState() call
@@ -252,6 +294,7 @@ public class JCheckboxTree extends JTree {
         });
     }
 
+    /// Returns the checked paths in the order they were ticked (see {@link #checkedPaths}).
     public TreePath[] getCheckedPaths() {
         return this.checkedPaths.toArray(new TreePath[0]);
     }
@@ -269,45 +312,83 @@ public class JCheckboxTree extends JTree {
         return node != null ? node.state : CheckState.UNCHECKED;
     }
 
-    /// Checks a single path, in addition to whatever is already checked. Fires a check
-    /// change event. Used for programmatic single-path updates (e.g. auto-checking a
-    /// newly-launched run) where wiping out the rest of the checked set is not wanted.
+    /// Checks a single path, in addition to whatever is already checked. Used for
+    /// programmatic single-path updates (e.g. auto-checking a newly-launched run) where
+    /// wiping out the rest of the checked set is not wanted. Fires a check change event
+    /// only if the path (or a descendant) wasn't already checked.
     public void checkPath(TreePath path) {
-        tickPath(path);
-        fireCheckChangeEvent();
-        repaint();
+        if (tickPath(path)) {
+            fireCheckChangeEvent();
+            repaint();
+        }
     }
 
-    /// Unchecks a path, and removes it from the checked set.
-    /// Removing the children is the responsibility of the caller.
+    /// Unchecks {@code path} and forgets it and all of its descendants entirely - metadata
+    /// included. For nodes being removed from the model, where the paths can never be
+    /// reached again and keeping their entries would leak for the life of the tree.
+    /// Fires a check change event only if the checked set actually changed (removing a
+    /// node that was never checked is silent).
     public void removePath(TreePath path) {
-       untickPath(path);
-       this.checkedPaths.remove(path);
-       this.nodeCheckedStateMap.remove(path);
-       fireCheckChangeEvent();
-       repaint();
+        boolean changed = untickPath(path);
+        nodeCheckedStateMap.keySet().removeIf(path::isDescendant);
+        if (changed) {
+            fireCheckChangeEvent();
+            repaint();
+        }
     }
 
-    /// Replaces the entire checked set with exactly the given paths. Fires a single check
-    /// change event. Used to restore checked state after a structural rebuild (which clears
-    /// checked state via {@link #attachStructureListener}) from a caller's own record of
-    /// what should be checked (e.g. by stable ref, not by the now-stale TreePath).
+    /// Replaces the entire checked set with exactly the given paths (in the given order).
+    /// Fires at most a single check change event. Used to restore checked state after a
+    /// structural rebuild (which clears checked state via {@link #attachStructureListener})
+    /// from a caller's own record of what should be checked (e.g. by stable ref, not by the
+    /// now-stale TreePath).
     public void setCheckedPaths(Collection<TreePath> paths) {
-        // Untick all current paths
+        boolean changed = false;
+        // Untick all current paths, then tick the new set. A call that re-supplies the
+        // current leaves still reports a change (untick + retick); callers run under the
+        // isUpdatingSelection guard, so the extra event is inert.
         for (TreePath path : new ArrayList<>(checkedPaths)) {
-            untickPath(path);
+            changed |= untickPath(path);
         }
-        addCheckedPaths(paths);
+        for (TreePath path : paths) {
+            changed |= tickPath(path);
+        }
+        if (changed) {
+            fireCheckChangeEvent();
+            repaint();
+        }
     }
 
-    ///  Convenience method to add the given paths to the checked set.
-    /// Fires a single check change event.
+    /// Convenience method to add the given paths to the checked set (in the given order).
+    /// Fires at most a single check change event, and none if all were already checked.
     public void addCheckedPaths(Collection<TreePath> paths) {
+        boolean changed = false;
         for (TreePath path : paths) {
-            tickPath(path);
+            changed |= tickPath(path);
         }
-        fireCheckChangeEvent();
-        repaint();
+        if (changed) {
+            fireCheckChangeEvent();
+            repaint();
+        }
+    }
+
+    /// True when {@code x} falls on the checkbox glyph at the leading edge of the row's
+    /// cell bounds. Clicks on the rest of the row (icon, label) must NOT toggle - the whole
+    /// point of the checkbox tree is that focusing, expanding, or right-clicking a node
+    /// never changes what's plotted.
+    private boolean isOverCheckbox(int x, TreePath path) {
+        Rectangle bounds = getPathBounds(path);
+        return bounds != null && x >= bounds.x && x < bounds.x + checkboxWidth();
+    }
+
+    private int checkboxWidth() {
+        if (getCellRenderer() instanceof CheckboxRowRenderer renderer) {
+            return renderer.getCheckboxWidth();
+        }
+        if (fallbackCheckboxWidth == 0) {
+            fallbackCheckboxWidth = new JTristateCheckBox().getPreferredSize().width;
+        }
+        return fallbackCheckboxWidth;
     }
 
     public JCheckboxTree(TreeModel treeModel) {
@@ -319,11 +400,24 @@ public class JCheckboxTree extends JTree {
         this.addMouseListener(new MouseInputAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                TreePath selPath = thisTree.getPathForLocation(e.getX(), e.getY());
-                if (selPath != null) {
-                    thisTree.togglePath(selPath);
-                    thisTree.repaint(); // Repaint to show updated checkbox state
+                // Every left click on the glyph toggles - no clickCount filter, or a quick
+                // check-then-uncheck would have its second click swallowed as a double-click.
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
                 }
+                TreePath path = getPathForLocation(e.getX(), e.getY());
+                if (path != null && isOverCheckbox(e.getX(), path)) {
+                    togglePath(path);
+                }
+            }
+        });
+
+        // Keyboard equivalent: Space toggles the focused row's checkbox.
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("SPACE"), "toggleCheck");
+        getActionMap().put("toggleCheck", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                togglePath(getLeadSelectionPath());
             }
         });
     }
