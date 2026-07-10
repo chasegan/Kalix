@@ -1,6 +1,5 @@
-package com.kalix.ide.editor.commands;
+package com.kalix.ide.model;
 
-import com.kalix.ide.model.NodeInsertionPoint;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -8,22 +7,23 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for the blank-line normalisation around an inserted node template. These pin
- * the bugs the insertion logic has already had once: templates landing at EOF, and
- * blank lines accumulating on repeated insertion at the same seam.
+ * Tests for the blank-line normalisation around an inserted block of node sections.
+ * These pin the bugs the insertion logic has already had once: sections landing at EOF,
+ * and blank lines accumulating on repeated insertion at the same seam. Both template
+ * insertion and paste go through this, so both are covered here.
  */
-class TemplateSpliceTest {
+class SectionSpliceTest {
 
     private static final String TEMPLATE = "[node.gauge]\ntype=gauge\nloc=1.00,2.00";
 
     /** Splice the template in at the offset the real code would choose for this caret. */
     private static String insertAtCaret(String text, int caret) {
         int offset = NodeInsertionPoint.forAnchor(text, caret);
-        return TemplateSplice.applyTo(text, TemplateSplice.compute(text, offset, TEMPLATE));
+        return SectionSplice.applyTo(text, SectionSplice.compute(text, offset, TEMPLATE));
     }
 
     private static String insertAt(String text, int offset) {
-        return TemplateSplice.applyTo(text, TemplateSplice.compute(text, offset, TEMPLATE));
+        return SectionSplice.applyTo(text, SectionSplice.compute(text, offset, TEMPLATE));
     }
 
     // --- Blank lines around the seam ---
@@ -183,5 +183,53 @@ class TemplateSpliceTest {
         assertEquals(
             "[node.a]\nloc = 1, 1\n\n[node.b]\nloc = 2, 2\n\n" + TEMPLATE + "\n\n[outputs]\nnode.a.dsflow\n",
             insertAt(text, offset));
+    }
+
+    // --- Paste: the same machinery, with a block of several sections ---
+
+    /** Paste hands over a block already joined by one blank line; the seams are ours. */
+    @Test
+    void aBlockOfSeveralSectionsKeepsItsInternalBlankLines() {
+        String block = "[node.x]\nloc = 9, 9\n\n[node.y]\nloc = 8, 8";
+        String text = "[node.a]\nloc = 1, 1\n\n[node.b]\nloc = 2, 2\n";
+        int offset = NodeInsertionPoint.forAnchor(text, text.indexOf("loc = 1, 1"));
+        assertEquals(
+            "[node.a]\nloc = 1, 1\n\n" + block + "\n\n[node.b]\nloc = 2, 2\n",
+            SectionSplice.applyTo(text, SectionSplice.compute(text, offset, block)));
+    }
+
+    /**
+     * Paste with the caret in [outputs] now lands below the last node section rather
+     * than at end-of-file, so pasted nodes stay among the nodes.
+     */
+    @Test
+    void pasteWithCaretInOutputsLandsBelowTheLastNode() {
+        String block = "[node.x]\nloc = 9, 9";
+        String text = "[node.a]\nloc = 1, 1\n\n[outputs]\nnode.a.dsflow\n";
+        int offset = NodeInsertionPoint.forAnchor(text, text.indexOf("node.a.dsflow"));
+        assertEquals(
+            "[node.a]\nloc = 1, 1\n\n" + block + "\n\n[outputs]\nnode.a.dsflow\n",
+            SectionSplice.applyTo(text, SectionSplice.compute(text, offset, block)));
+    }
+
+    /** Paste into an empty document. */
+    @Test
+    void pasteIntoAnEmptyDocument() {
+        String block = "[node.x]\nloc = 9, 9";
+        assertEquals(block + "\n", SectionSplice.applyTo("", SectionSplice.compute("", 0, block)));
+    }
+
+    /** Repeated paste at the same caret does not grow the gap. */
+    @Test
+    void repeatedPasteIsIdempotentInGapSize() {
+        String block = "[node.x]\nloc = 9, 9";
+        String text = "[node.a]\nloc = 1, 1\n\n[node.b]\nloc = 2, 2\n";
+        String once = SectionSplice.applyTo(text,
+            SectionSplice.compute(text, NodeInsertionPoint.forAnchor(text, text.indexOf("loc = 1, 1")), block));
+        String twice = SectionSplice.applyTo(once,
+            SectionSplice.compute(once, NodeInsertionPoint.forAnchor(once, once.indexOf("loc = 1, 1")), block));
+        assertEquals(
+            "[node.a]\nloc = 1, 1\n\n" + block + "\n\n" + block + "\n\n[node.b]\nloc = 2, 2\n",
+            twice);
     }
 }

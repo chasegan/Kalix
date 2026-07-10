@@ -2,6 +2,7 @@ package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.NodeInsertionPoint;
+import com.kalix.ide.model.SectionSplice;
 import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -649,11 +650,11 @@ public class CommandExecutor {
     }
 
     /**
-     * Applies {@link TemplateSplice} to the document as a single atomic edit, so the
+     * Applies {@link SectionSplice} to the document as a single atomic edit, so the
      * insertion undoes in one step.
      */
     private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
-        TemplateSplice.Splice splice = TemplateSplice.compute(editor.getText(), offset, templateText);
+        SectionSplice.Splice splice = SectionSplice.compute(editor.getText(), offset, templateText);
 
         editor.beginAtomicEdit();
         try {

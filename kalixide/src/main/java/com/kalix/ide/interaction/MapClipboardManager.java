@@ -2,7 +2,9 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.model.NodeInsertionPoint;
 import com.kalix.ide.model.NodeSectionLocator;
+import com.kalix.ide.model.SectionSplice;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +30,6 @@ public class MapClipboardManager {
         Pattern.compile("loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)");
     private static final Pattern DS_PATTERN =
         Pattern.compile("^(ds_\\d+)\\s*=\\s*(.+?)\\s*$", Pattern.MULTILINE);
-    private static final Pattern SECTION_HEADER_PATTERN =
-        Pattern.compile("^\\s*\\[([^\\]]+)\\]", Pattern.MULTILINE);
 
     private final HydrologicalModel model;
     private final EnhancedTextEditor textEditor;
@@ -149,18 +149,10 @@ public class MapClipboardManager {
             insertText.append(sectionText.stripTrailing());
         }
 
-        // Ensure proper formatting - add newline before if needed
-        String textToInsert = insertText.toString();
-        if (!textToInsert.startsWith("\n")) {
-            textToInsert = "\n" + textToInsert;
-        }
-        if (!textToInsert.endsWith("\n")) {
-            textToInsert = textToInsert + "\n";
-        }
-
-        // Find insertion point and insert
-        int insertionPoint = findInsertionPointAfterCursor();
-        insertTextAtPosition(textToInsert, insertionPoint);
+        // Where it goes, and how it is written there: the same two policies template
+        // insertion uses. SectionSplice owns the blank lines around the seam, so no
+        // newline fiddling is needed here.
+        insertSectionBlock(insertText.toString());
 
         // Clear clipboard after cut paste (can only paste once)
         if (clipboard.isCut()) {
@@ -356,83 +348,31 @@ public class MapClipboardManager {
     }
 
     /**
-     * Find the insertion point after the section containing the cursor.
+     * Inserts a block of one or more node sections relative to the caret, as a single
+     * atomic edit.
+     *
+     * <p>Where it goes is {@link NodeInsertionPoint}'s decision and how it is written
+     * there is {@link SectionSplice}'s — the same two policies template insertion uses,
+     * so paste and insert cannot drift apart, and neither can hold its own idea of what
+     * an INI section header looks like.</p>
      */
-    private int findInsertionPointAfterCursor() {
+    private void insertSectionBlock(String block) {
         try {
-            int cursorPos = textEditor.getTextArea().getCaretPosition();
             Document doc = textEditor.getTextArea().getDocument();
             String text = doc.getText(0, doc.getLength());
+            int caret = textEditor.getTextArea().getCaretPosition();
 
-            // Handle empty document
-            if (text.isEmpty()) {
-                return 0;
-            }
+            SectionSplice.Splice splice = SectionSplice.compute(text, NodeInsertionPoint.forAnchor(text, caret), block);
 
-            // Find all section headers and their positions
-            Matcher matcher = SECTION_HEADER_PATTERN.matcher(text);
-            List<Integer> sectionStarts = new ArrayList<>();
-            while (matcher.find()) {
-                sectionStarts.add(matcher.start());
-            }
-
-            if (sectionStarts.isEmpty()) {
-                // No sections found, append at end
-                return text.length();
-            }
-
-            // Find which section contains the cursor
-            int currentSectionStart = -1;
-            int nextSectionStart = -1;
-
-            for (int i = 0; i < sectionStarts.size(); i++) {
-                int sectionStart = sectionStarts.get(i);
-                if (sectionStart <= cursorPos) {
-                    currentSectionStart = sectionStart;
-                    if (i + 1 < sectionStarts.size()) {
-                        nextSectionStart = sectionStarts.get(i + 1);
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            if (nextSectionStart != -1) {
-                // Insert just before the next section
-                // But leave any blank line before the next section
-                int insertPoint = nextSectionStart;
-                while (insertPoint > 0 && text.charAt(insertPoint - 1) == '\n') {
-                    insertPoint--;
-                }
-                // Keep one newline
-                if (insertPoint < nextSectionStart) {
-                    insertPoint++;
-                }
-                return insertPoint;
-            } else {
-                // No next section - insert at end
-                return text.length();
-            }
-        } catch (BadLocationException e) {
-            logger.error("Error finding insertion point: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    /**
-     * Insert text at the given position using atomic edit operations.
-     */
-    private void insertTextAtPosition(String textToInsert, int position) {
-        try {
             textEditor.getTextArea().beginAtomicEdit();
             try {
-                Document doc = textEditor.getTextArea().getDocument();
-                doc.insertString(position, textToInsert, null);
+                doc.remove(splice.start(), splice.end() - splice.start());
+                doc.insertString(splice.start(), splice.text(), null);
             } finally {
                 textEditor.getTextArea().endAtomicEdit();
             }
         } catch (BadLocationException e) {
-            logger.error("Error inserting text: {}", e.getMessage());
+            logger.error("Error inserting node sections: {}", e.getMessage());
         }
     }
 

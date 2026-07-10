@@ -1,12 +1,18 @@
-package com.kalix.ide.editor.commands;
+package com.kalix.ide.model;
 
 /**
- * The document edit that splices a node template into model text: which span to
- * remove, and what to put in its place.
+ * The document edit that splices a block of INI text — one node section or several —
+ * into model text at a given offset: which span to remove, and what to put in its place.
+ *
+ * <p>The third of three collaborators, each with one job. {@link NodeSectionLocator}
+ * says where the sections <em>are</em>; {@link NodeInsertionPoint} says where a new one
+ * <em>goes</em>; this says how to <em>write</em> it there. Every feature that adds a
+ * node section to the text — template insertion, paste — goes through all three, so a
+ * fix to any one of them reaches every call site.
  *
  * <p>Separated from the {@code Document} mutation so the fiddly part — how many blank
  * lines end up on each side of the seam — is a pure function of {@code (text, offset,
- * template)} and can be tested without a Swing text component.
+ * block)} and can be tested without a Swing text component.
  *
  * <p>The whitespace run is normalised on <em>both</em> sides of the offset. Insertion
  * offsets land at a section header (inserting above the first node) as readily as at
@@ -20,17 +26,17 @@ package com.kalix.ide.editor.commands;
  * leading spaces. For the same reason it never eats back past the newline that
  * terminates the preceding content line, leaving that line's own trailing spaces alone.
  */
-final class TemplateSplice {
+public final class SectionSplice {
 
     /** Remove {@code [start, end)} from the document, then insert {@code text} at {@code start}. */
-    record Splice(int start, int end, String text) {
+    public record Splice(int start, int end, String text) {
     }
 
-    private TemplateSplice() {
+    private SectionSplice() {
         throw new UnsupportedOperationException("Utility class should not be instantiated");
     }
 
-    static Splice compute(String text, int offset, String templateText) {
+    public static Splice compute(String text, int offset, String block) {
         int anchor = Math.max(0, Math.min(offset, text.length()));
 
         // Walk back over whitespace to the preceding content character.
@@ -66,14 +72,14 @@ final class TemplateSplice {
 
         // Leading "\n\n" terminates the preceding content line and leaves one blank line.
         String replacement = (atDocumentStart ? "" : "\n\n")
-            + templateText
+            + block
             + (atDocumentEnd ? "\n" : "\n\n");
 
         return new Splice(gapStart, gapEnd, replacement);
     }
 
     /** Applies a splice to a string. The editor applies it to a {@code Document} instead. */
-    static String applyTo(String text, Splice splice) {
+    public static String applyTo(String text, Splice splice) {
         return text.substring(0, splice.start()) + splice.text() + text.substring(splice.end());
     }
 }
