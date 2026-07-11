@@ -99,23 +99,43 @@ Available functions:
 | `if` | 3 | Conditional: if(condition, true\_val, false\_val) |
 | `max` | 2+ | Maximum of values |
 | `min` | 2+ | Minimum of values |
+| `sum` | 1+ | Sum of values |
+| `mean` | 1+ | Arithmetic mean of values |
 | `abs` | 1 | Absolute value |
 | `sqrt` | 1 | Square root |
 | `pow` | 2 | Power: pow(base, exponent) |
 | `exp` | 1 | Exponential (e^x) |
-| `log` | 1 | Natural logarithm |
-| `ln` | 1 | Natural logarithm (alias) |
+| `ln` | 1 | Natural logarithm |
 | `log10` | 1 | Base-10 logarithm |
+| `log2` | 1 | Base-2 logarithm |
 | `sin` | 1 | Sine |
 | `cos` | 1 | Cosine |
 | `tan` | 1 | Tangent |
 | `asin` | 1 | Arcsine |
 | `acos` | 1 | Arccosine |
 | `atan` | 1 | Arctangent |
+| `atan2` | 2 | Two-argument arctangent: atan2(y, x) |
 | `floor` | 1 | Round down |
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+
+Two names are deliberately absent. There is no `log`: write the explicit `ln`
+or `log10`. And there is no `avg` or `average`: the function is `mean`, named
+for the specific statistic ("average" is the family that also contains the
+median and mode).
+
+### Lookup Tables
+
+Named tables defined in `[table.*]` sections can be called like functions —
+`table.my_table(x)` for 1D interpolation, `table.my_table(x, y)` for 2D.
+
+```ini
+flow = table.rating(node.reach_5.dsflow)
+release = table.pump_rating(sim.month, node.dam.volume)
+```
+
+Click [here](tables.md) to find out more about lookup tables.
 
 ### Notes
 
@@ -127,4 +147,4 @@ Available functions:
 
 - Function names are not case sensitive
 
-[Referencing Input Data](referencing-input-data.md)[Referencing Model Results](referencing-model-results.md)[Simulation Context Vars](simulation-context-vars.md)[Constants](constants.md)
+[Referencing Input Data](referencing-input-data.md)[Referencing Model Results](referencing-model-results.md)[Simulation Context Vars](simulation-context-vars.md)[Constants](constants.md)[Tables](tables.md)

@@ -143,6 +143,7 @@ nav:
                   - docs/nodes/storage/index.md
                   - Storage tables: docs/nodes/storage-tables.md
               - Unregulated user: docs/nodes/unregulated-user.md
+          - "[table.*]": docs/concepts/dynamic-expressions/tables.md
           - "[outputs]": docs/concepts/model-outputs.md
       - KalixIDE: docs/using/ide.md
       - Kalix CLI: docs/using/cli.md
