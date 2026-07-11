@@ -20,7 +20,7 @@ pub enum BuiltinFunction {
     // Single argument
     Abs, Sqrt, Sin, Cos, Tan, Asin, Acos, Atan,
     Exp, Ln, Log10, Log2,
-    Ceil, Floor, Round,
+    Ceil, Floor, Round, Sign,
 
     // Two argument
     Pow, Atan2,
@@ -56,6 +56,7 @@ impl BuiltinFunction {
             "ceil"   => BuiltinFunction::Ceil,
             "floor"  => BuiltinFunction::Floor,
             "round"  => BuiltinFunction::Round,
+            "sign"   => BuiltinFunction::Sign,
             "pow"    => BuiltinFunction::Pow,
             "atan2"  => BuiltinFunction::Atan2,
             "min"    => BuiltinFunction::Min,
@@ -85,6 +86,7 @@ impl BuiltinFunction {
             BuiltinFunction::Ceil => "ceil",
             BuiltinFunction::Floor => "floor",
             BuiltinFunction::Round => "round",
+            BuiltinFunction::Sign => "sign",
             BuiltinFunction::Pow => "pow",
             BuiltinFunction::Atan2 => "atan2",
             BuiltinFunction::Min => "min",
@@ -118,6 +120,7 @@ impl BuiltinFunction {
             BuiltinFunction::Ceil   => Self::single(self.name(), args, |x| x.ceil()),
             BuiltinFunction::Floor  => Self::single(self.name(), args, |x| x.floor()),
             BuiltinFunction::Round  => Self::single(self.name(), args, |x| x.round()),
+            BuiltinFunction::Sign   => Self::single(self.name(), args, sign),
 
             // Two argument
             BuiltinFunction::Pow => {
@@ -174,6 +177,19 @@ impl BuiltinFunction {
             expected,
             found,
         })
+    }
+}
+
+/// Sign of a value: -1, 0, or +1 (NaN propagates). Deliberately NOT
+/// `f64::signum`, which maps ±0.0 to ±1.0 — a modeller reading `sign(0)`
+/// expects 0.
+pub fn sign(x: f64) -> f64 {
+    if x > 0.0 {
+        1.0
+    } else if x < 0.0 {
+        -1.0
+    } else {
+        x // 0.0, -0.0, or NaN: all map to themselves
     }
 }
 

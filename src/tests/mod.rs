@@ -72,6 +72,9 @@ mod test_ini_with_functions;
 mod test_constants_cache;
 
 #[cfg(test)]
+mod test_lookup_tables;
+
+#[cfg(test)]
 mod test_model_constant_optimisation;
 
 #[cfg(test)]

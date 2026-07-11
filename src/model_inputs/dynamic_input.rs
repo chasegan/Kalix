@@ -27,6 +27,7 @@
 /// issues clearly visible in the output. Check for NaN/∞ in results to detect problems.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use crate::data_management::data_cache::DataCache;
 use crate::functions::{parse_function, EvaluationConfig, VariableContext};
 use crate::functions::ast::{ExpressionNode, FunctionRef, evaluate_binary_op, evaluate_unary_op};
@@ -34,6 +35,7 @@ use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
 use crate::model_inputs::linear_combination::detect_linear_combination;
 use crate::misc::misc_functions::format_f64;
+use crate::numerical::lookup_table::{LookupTable, LookupTable1D, LookupTable2D, TableRegistry};
 
 /// Expand `this.` references in an expression to the full node reference.
 ///
@@ -175,6 +177,24 @@ pub enum OptimizedExpressionNode {
     SimContext {
         field: SimField,
     },
+
+    /// Named 1D lookup table (`table.<name>(x)`): clamped linear interpolation.
+    /// The concrete table is resolved and embedded at lowering, so evaluation
+    /// is a deref + binary search with no name or dimensionality dispatch.
+    Lookup1D {
+        table: Arc<LookupTable1D>,
+        arg: Box<OptimizedExpressionNode>,
+    },
+
+    /// Named 2D lookup table (`table.<name>(col_key, row_key)`): exact-match
+    /// column selection, then clamped linear interpolation down the column.
+    /// A missed column match panics with the table name and offending key —
+    /// see LookupTable2D::lookup.
+    Lookup2D {
+        table: Arc<LookupTable2D>,
+        col_key: Box<OptimizedExpressionNode>,
+        row_key: Box<OptimizedExpressionNode>,
+    },
 }
 
 /// Accumulator operation for the variadic built-ins.
@@ -263,6 +283,14 @@ impl OptimizedExpressionNode {
                 SimField::DayOfYear => data_cache.get_day_of_year() as f64,
                 SimField::Step => data_cache.current_step as f64,
             },
+
+            OptimizedExpressionNode::Lookup1D { table, arg } => {
+                table.lookup(arg.evaluate(data_cache))
+            }
+
+            OptimizedExpressionNode::Lookup2D { table, col_key, row_key } => {
+                table.lookup(col_key.evaluate(data_cache), row_key.evaluate(data_cache))
+            }
         }
     }
 
@@ -315,6 +343,11 @@ impl OptimizedExpressionNode {
                     arg.validate_reads(data_cache);
                 }
             }
+            OptimizedExpressionNode::Lookup1D { arg, .. } => arg.validate_reads(data_cache),
+            OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
+                col_key.validate_reads(data_cache);
+                row_key.validate_reads(data_cache);
+            }
         }
     }
 
@@ -322,7 +355,8 @@ impl OptimizedExpressionNode {
     fn from_expression_node(
         node: &ExpressionNode,
         data_variable_map: &HashMap<String, usize>,
-        constant_variable_map: &HashMap<String, usize>
+        constant_variable_map: &HashMap<String, usize>,
+        tables: &TableRegistry
     ) -> Result<Self, String> {
         match node {
             ExpressionNode::Constant { value } => {
@@ -390,8 +424,8 @@ impl OptimizedExpressionNode {
                     .downcast_ref::<ExpressionNode>()
                     .ok_or("Failed to downcast right operand")?;
 
-                let left_opt = Self::from_expression_node(left_expr, data_variable_map, constant_variable_map)?;
-                let right_opt = Self::from_expression_node(right_expr, data_variable_map, constant_variable_map)?;
+                let left_opt = Self::from_expression_node(left_expr, data_variable_map, constant_variable_map, tables)?;
+                let right_opt = Self::from_expression_node(right_expr, data_variable_map, constant_variable_map, tables)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -404,7 +438,7 @@ impl OptimizedExpressionNode {
                     .downcast_ref::<ExpressionNode>()
                     .ok_or("Failed to downcast operand")?;
 
-                let operand_opt = Self::from_expression_node(operand_expr, data_variable_map, constant_variable_map)?;
+                let operand_opt = Self::from_expression_node(operand_expr, data_variable_map, constant_variable_map, tables)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -418,11 +452,11 @@ impl OptimizedExpressionNode {
                         let arg_expr = (arg.as_ref() as &dyn std::any::Any)
                             .downcast_ref::<ExpressionNode>()
                             .ok_or("Failed to downcast function argument")?;
-                        Self::from_expression_node(arg_expr, data_variable_map, constant_variable_map)
+                        Self::from_expression_node(arg_expr, data_variable_map, constant_variable_map, tables)
                     })
                     .collect();
 
-                lower_function_call(func, args_opt?)
+                lower_function_call(func, args_opt?, tables)
             }
         }
     }
@@ -617,20 +651,23 @@ impl DynamicInput {
 
         // Optimize based on expression type
         if variables.is_empty() {
-            // No variables -> constant expression
-            // Evaluate once and store the value
+            // No variables -> try to fold to a constant by evaluating once now.
+            // This fails for expressions the generic evaluator cannot run —
+            // notably table.* lookups with constant arguments — which fall
+            // through to the optimised lowering below (where a genuinely bad
+            // expression also gets its more specific error message).
             let config = EvaluationConfig::default();
             let empty_vars = HashMap::new();
             let context = VariableContext::new(&empty_vars, &config);
-            let value = parsed.evaluate(&context)
-                .map_err(|e| format!("Failed to evaluate constant expression: {}", e))?;
+            if let Ok(value) = parsed.evaluate(&context) {
+                return Ok(DynamicInput::Constant {
+                    value,
+                    original: trimmed.to_string()
+                });
+            }
+        }
 
-            Ok(DynamicInput::Constant {
-                value,
-                original: trimmed.to_string()
-            })
-
-        } else if let Some((var_name, offset, default_value)) = parsed.is_single_variable_with_offset() {
+        if let Some((var_name, offset, default_value)) = parsed.is_single_variable_with_offset() {
             // It's a direct reference to a single variable with offset syntax (e.g., node.x.ds_1[1, 0.0])
             let lower_var = var_name.to_lowercase();
 
@@ -674,7 +711,7 @@ impl DynamicInput {
 
             // sim.* variables need to go through the Function path
             if lower_var.starts_with("sim.") {
-                let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map)?;
+                let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map, &data_cache.tables)?;
                 Ok(DynamicInput::Function {
                     expression: trimmed.to_string(),
                     optimised_ast
@@ -694,7 +731,7 @@ impl DynamicInput {
             }
         } else {
             // Multiple variables or complex expression -> function expression
-            let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map)?;
+            let optimised_ast = transform_to_optimised_ast(&parsed, &data_variable_map, &constant_variable_map, &data_cache.tables)?;
             Ok(DynamicInput::Function {
                 expression: trimmed.to_string(),
                 optimised_ast
@@ -807,13 +844,14 @@ impl DynamicInput {
 fn transform_to_optimised_ast(
     parsed: &crate::functions::parser::ParsedFunction,
     data_variable_map: &HashMap<String, usize>,
-    constant_variable_map: &HashMap<String, usize>
+    constant_variable_map: &HashMap<String, usize>,
+    tables: &TableRegistry
 ) -> Result<OptimizedExpressionNode, String> {
     let ast = parsed.get_ast();
 
     // Downcast to ExpressionNode
     if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-        OptimizedExpressionNode::from_expression_node(expr_node, data_variable_map, constant_variable_map)
+        OptimizedExpressionNode::from_expression_node(expr_node, data_variable_map, constant_variable_map, tables)
     } else {
         Err("Failed to downcast AST node".to_string())
     }
@@ -825,18 +863,24 @@ fn transform_to_optimised_ast(
 /// by the time an expression is evaluated, no unknown-function or wrong-arity
 /// condition can exist.
 ///
-/// Named (non-built-in) references are rejected here: model evaluation has no
-/// FunctionRegistry — context functions like `lin_range`/`log_range`/`g` are
-/// only meaningful inside the optimisation parameter path.
+/// Named (non-built-in) references resolve against the model's lookup tables
+/// when they carry the `table.` prefix; anything else is rejected here: model
+/// evaluation has no FunctionRegistry — context functions like
+/// `lin_range`/`log_range`/`g` are only meaningful inside the optimisation
+/// parameter path.
 fn lower_function_call(
     func: &FunctionRef,
     mut args: Vec<OptimizedExpressionNode>,
+    tables: &TableRegistry,
 ) -> Result<OptimizedExpressionNode, String> {
     use BuiltinFunction as B;
 
     let builtin = match func {
         FunctionRef::Builtin(b) => *b,
         FunctionRef::Named(name) => {
+            if let Some(bare_name) = name.strip_prefix("table.") {
+                return lower_table_call(bare_name, args, tables);
+            }
             return Err(format!(
                 "Unknown function '{}' (context functions like lin_range/log_range/g \
                  are only available in optimisation parameter expressions)",
@@ -869,6 +913,7 @@ fn lower_function_call(
         B::Ceil => Some(f64::ceil),
         B::Floor => Some(f64::floor),
         B::Round => Some(f64::round),
+        B::Sign => Some(crate::functions::functions::sign),
         _ => None,
     };
     if let Some(f) = f1 {
@@ -917,6 +962,53 @@ fn lower_function_call(
         }
         // All single-argument built-ins were handled above.
         _ => unreachable!("built-in '{}' not handled in lowering", builtin.name()),
+    }
+}
+
+/// Lower a `table.<name>(...)` call by resolving the name against the model's
+/// table registry. Dimensionality and argument count are checked once, here;
+/// the resulting node embeds an Arc of the concrete table, so evaluation does
+/// no lookup or dispatch.
+fn lower_table_call(
+    bare_name: &str,
+    mut args: Vec<OptimizedExpressionNode>,
+    tables: &TableRegistry,
+) -> Result<OptimizedExpressionNode, String> {
+    let Some(table) = tables.get(bare_name) else {
+        return Err(format!(
+            "Unknown table 'table.{}' (no [table.{}] section is defined in the model)",
+            bare_name, bare_name
+        ));
+    };
+
+    match table {
+        LookupTable::OneD(t) => {
+            if args.len() != 1 {
+                return Err(format!(
+                    "1D lookup table 'table.{}' expects 1 argument, got {}",
+                    bare_name, args.len()
+                ));
+            }
+            Ok(OptimizedExpressionNode::Lookup1D {
+                table: t.clone(),
+                arg: Box::new(args.remove(0)),
+            })
+        }
+        LookupTable::TwoD(t) => {
+            if args.len() != 2 {
+                return Err(format!(
+                    "2D lookup table 'table.{}' expects 2 arguments (column key, row key), got {}",
+                    bare_name, args.len()
+                ));
+            }
+            let row_key = args.pop().unwrap();
+            let col_key = args.pop().unwrap();
+            Ok(OptimizedExpressionNode::Lookup2D {
+                table: t.clone(),
+                col_key: Box::new(col_key),
+                row_key: Box::new(row_key),
+            })
+        }
     }
 }
 

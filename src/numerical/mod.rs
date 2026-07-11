@@ -1,3 +1,4 @@
+pub mod lookup_table;
 pub mod table;
 pub mod mathfn;
 pub mod opt;

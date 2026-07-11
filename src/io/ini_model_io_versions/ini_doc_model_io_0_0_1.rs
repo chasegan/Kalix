@@ -3,6 +3,7 @@ use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
+use crate::numerical::lookup_table::LookupTable;
 use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
@@ -45,6 +46,45 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // after all the nodes are done. The function model.add_link(...) accepts node and outlet
     // indices rather than names. So I'll need to know those indices.
     let mut vec_link_defs: Vec<LinkHelper> = Vec::new();
+
+    // -------------------------------------------------------------------------------------
+    // Parsing lookup tables (pre-pass)
+    // -------------------------------------------------------------------------------------
+    // Tables are parsed before everything else so that node expressions can resolve
+    // table.* references regardless of where the [table.*] section sits in the file.
+    for (section_name, ini_section) in &ini_doc.sections {
+        if let Some(table_name) = section_name.strip_prefix("table.") {
+            // Table names follow the same rules as constants, and additionally must not
+            // contain '.' so that table.<name>(...) call syntax stays unambiguous.
+            if !is_valid_variable_name(table_name) || table_name.contains('.') {
+                return Err(format!("Error on line {}: Invalid table name '{}'", ini_section.line_number, table_name));
+            }
+
+            let mut ncols: usize = 2;
+            let mut data: Option<&str> = None;
+            for (key, ini_property) in &ini_section.properties {
+                match key.to_lowercase().as_str() {
+                    "n_cols" => {
+                        ncols = ini_property.value.trim().parse::<usize>()
+                            .map_err(|_| format!("Error on line {}: n_cols for table '{}' must be an integer, got '{}'",
+                                                 ini_property.line_number, table_name, ini_property.value))?;
+                    }
+                    "data" => data = Some(ini_property.value.as_str()),
+                    other => {
+                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'",
+                                           ini_property.line_number, other, section_name));
+                    }
+                }
+            }
+            let data = data.ok_or(format!("Error on line {}: Table '{}' has no 'data' property",
+                                          ini_section.line_number, table_name))?;
+
+            let table = LookupTable::from_ini_data(table_name, data, ncols)
+                .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+            model.data_cache.tables.insert(table)
+                .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+        }
+    }
 
     // Iterate over the sections of the ini_doc and construct the model as we go
     for (section_name, ini_section) in ini_doc.sections {
@@ -618,6 +658,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // Each property is a model result we want to record
                 model.outputs.push(name);
             }
+        } else if section_name.starts_with("table.") {
+            // -------------------------------------------------------------------------------------
+            // Lookup tables — already parsed in the pre-pass above
+            // -------------------------------------------------------------------------------------
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
@@ -692,6 +736,15 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     // List all constants
     for (name, value) in model.data_cache.constants.get_name_value_pairs() {
         ini_doc.set_property("constants", name.as_str(), value.to_string().as_str());
+    }
+
+    // List all lookup tables (sorted by name so the canonical render is deterministic)
+    for (name, table) in model.data_cache.tables.iter_sorted() {
+        let section_name = format!("table.{}", name);
+        if table.ncols() > 2 {
+            ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
+        }
+        ini_doc.set_property(section_name.as_str(), "data", table.format_data(4).as_str());
     }
 
     // List all nodes

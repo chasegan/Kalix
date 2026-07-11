@@ -1,5 +1,6 @@
 ﻿use rustc_hash::FxHashMap;
 use crate::data_management::constants_cache::ConstantsCache;
+use crate::numerical::lookup_table::TableRegistry;
 use crate::tid::utils::{u64_to_iso_datetime_string, u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
@@ -22,6 +23,10 @@ pub struct DataCache {
 
     // Constants cache
     pub constants: ConstantsCache,
+
+    // Named lookup tables ([table.*] sections), resolved by expressions at
+    // model load. Arc-shared, so cloning the cache is cheap.
+    pub tables: TableRegistry,
 
     // These vars for model components (incl nodes) to use if they need to know the date
     timestamp_year: i32,
