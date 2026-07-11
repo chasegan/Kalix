@@ -1503,13 +1503,13 @@ fn test_lowered_builtin_values() {
     assert!((eval_x("atan2(data.x, 1)", 1.0) - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
 }
 
-/// Variadic min/max/sum/avg fold correctly (including with >2 args).
+/// Variadic min/max/sum/mean fold correctly (including with >2 args).
 #[test]
 fn test_fold_builtin_values() {
     assert_eq!(eval_x("min(data.x, 3, 7)", 5.0), 3.0);
     assert_eq!(eval_x("max(data.x, 3, 7)", 5.0), 7.0);
     assert_eq!(eval_x("sum(data.x, 1, 2)", 5.0), 8.0);
-    assert_eq!(eval_x("avg(data.x, 3)", 5.0), 4.0);
+    assert_eq!(eval_x("mean(data.x, 3)", 5.0), 4.0);
     // NaN handling matches f64::min/max (the non-NaN operand wins), as before.
     assert_eq!(eval_x("min(data.x, 2)", f64::NAN), 2.0);
 }

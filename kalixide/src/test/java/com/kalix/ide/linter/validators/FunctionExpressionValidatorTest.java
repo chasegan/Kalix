@@ -127,10 +127,10 @@ class FunctionExpressionValidatorTest {
         // Aggregation
         assertValid("max(1, 2, 3)");
         assertValid("min(data.a, data.b)");
-        assertValid("avg(data.x, data.y, data.z)");
+        assertValid("mean(data.x, data.y, data.z)");
         assertValid("sum(1, 2, 3, 4, 5)");
-        assertValid("sum(data.x)"); // sum and avg accept a single argument
-        assertValid("avg(data.x)");
+        assertValid("sum(data.x)"); // sum and mean accept a single argument
+        assertValid("mean(data.x)");
 
         // Two argument
         assertValid("pow(2, 8)");
@@ -142,8 +142,8 @@ class FunctionExpressionValidatorTest {
     void testEngineDriftFunctions() {
         // These were historically accepted by the linter but never existed in
         // the engine's BuiltinFunction set - keep the two in sync.
-        assertInvalid("log(data.x)", "Unknown function"); // deliberately removed: use ln or log10
-        assertInvalid("mean(data.x, data.y)", "Unknown function"); // engine spelling is avg
+        assertInvalid("log(data.x)", "Unknown function"); // deliberate: use ln or log10
+        assertInvalid("avg(data.x, data.y)", "Unknown function"); // deliberate: the statistic is mean
         assertInvalid("sinh(data.x)", "Unknown function");
         assertInvalid("cosh(data.x)", "Unknown function");
         assertInvalid("tanh(data.x)", "Unknown function");

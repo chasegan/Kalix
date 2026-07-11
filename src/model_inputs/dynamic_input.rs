@@ -13,7 +13,7 @@
 /// - `Function`: Minimal overhead — a tree walk of pure arithmetic. Evaluation is
 ///   infallible and allocation-free: unknown functions and wrong argument counts are
 ///   rejected when the expression is parsed (at model load), `if`/`&&`/`||`
-///   short-circuit, and variadic min/max/sum/avg fold an accumulator instead of
+///   short-circuit, and variadic min/max/sum/mean fold an accumulator instead of
 ///   building an argument buffer.
 ///
 /// # Error Handling - IEEE 754 Standard
@@ -165,7 +165,7 @@ pub enum OptimizedExpressionNode {
         else_branch: Box<OptimizedExpressionNode>,
     },
 
-    /// Variadic built-in (min, max, sum, avg) evaluated by folding an
+    /// Variadic built-in (min, max, sum, mean) evaluated by folding an
     /// accumulator over the children — no argument buffer is ever built.
     Fold {
         op: FoldOp,
@@ -203,7 +203,7 @@ pub enum FoldOp {
     Min,
     Max,
     Sum,
-    Avg,
+    Mean,
 }
 
 impl OptimizedExpressionNode {
@@ -271,9 +271,9 @@ impl OptimizedExpressionNode {
                 match op {
                     FoldOp::Min => for a in iter { acc = acc.min(a.evaluate(data_cache)); },
                     FoldOp::Max => for a in iter { acc = acc.max(a.evaluate(data_cache)); },
-                    FoldOp::Sum | FoldOp::Avg => for a in iter { acc += a.evaluate(data_cache); },
+                    FoldOp::Sum | FoldOp::Mean => for a in iter { acc += a.evaluate(data_cache); },
                 }
-                if matches!(op, FoldOp::Avg) { acc / args.len() as f64 } else { acc }
+                if matches!(op, FoldOp::Mean) { acc / args.len() as f64 } else { acc }
             }
 
             OptimizedExpressionNode::SimContext { field } => match field {
@@ -966,11 +966,11 @@ fn lower_function_call(
             let op = if builtin == B::Min { FoldOp::Min } else { FoldOp::Max };
             Ok(OptimizedExpressionNode::Fold { op, args })
         }
-        B::Sum | B::Avg => {
+        B::Sum | B::Mean => {
             if args.is_empty() {
                 return arity_err("at least 1", args.len());
             }
-            let op = if builtin == B::Sum { FoldOp::Sum } else { FoldOp::Avg };
+            let op = if builtin == B::Sum { FoldOp::Sum } else { FoldOp::Mean };
             Ok(OptimizedExpressionNode::Fold { op, args })
         }
         // All single-argument built-ins were handled above.

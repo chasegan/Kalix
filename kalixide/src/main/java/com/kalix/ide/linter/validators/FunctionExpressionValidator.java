@@ -59,7 +59,7 @@ public class FunctionExpressionValidator {
         map.put("max", -2);
         map.put("min", -2);
         map.put("sum", -1);
-        map.put("avg", -1);
+        map.put("mean", -1);
 
         // Single argument math
         map.put("abs", 1);
@@ -925,13 +925,14 @@ public class FunctionExpressionValidator {
         }
 
         private String suggestFunction(String funcName) {
-            // Common typos and suggestions ('log' and 'mean' were never engine
-            // functions - point users at the explicit spellings)
+            // Common typos and suggestions. 'avg' and 'log' are deliberately
+            // not functions - the engine's spellings are 'mean' (the specific
+            // statistic, not the family) and the explicit 'ln'/'log10'.
             Map<String, String> suggestions = Map.of(
                 "maximum", "max",
                 "minimum", "min",
-                "average", "avg",
-                "mean", "avg",
+                "average", "mean",
+                "avg", "mean",
                 "square_root", "sqrt",
                 "logarithm", "ln",
                 "log", "ln",

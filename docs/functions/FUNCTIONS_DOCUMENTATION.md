@@ -128,7 +128,7 @@ net_flow = min(
 | `max` | 2+ | Maximum of values |
 | `min` | 2+ | Minimum of values |
 | `sum` | 1+ | Sum of values |
-| `avg` | 1+ | Average of values |
+| `mean` | 1+ | Arithmetic mean of values |
 | `abs` | 1 | Absolute value |
 | `sqrt` | 1 | Square root |
 | `pow` | 2 | Power: pow(base, exponent) |
@@ -148,7 +148,10 @@ net_flow = min(
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
 
-There is deliberately no `log` function: write the explicit `ln` or `log10`.
+Two names are deliberately absent. There is no `log`: write the explicit
+`ln` or `log10`. And there is no `avg` or `average`: the function is `mean`,
+named for the specific statistic ("average" is the family that also contains
+the median and mode).
 
 ## Notes
 

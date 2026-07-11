@@ -60,7 +60,7 @@ Custom functions allow users to define mathematical expressions as strings that:
 - **Comparison**: `>`, `<`, `>=`, `<=`, `==`, `!=`
 - **Logical**: `&&` (and), `||` (or), `!` (not)
 - **Conditional**: `if(condition, true_value, false_value)`
-- **Aggregation**: `min()`, `max()`, `sum()`, `avg()`
+- **Aggregation**: `min()`, `max()`, `sum()`, `mean()`
 
 #### Operator Precedence (High to Low)
 1. **Parentheses**: `()`

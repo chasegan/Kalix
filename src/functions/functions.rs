@@ -29,7 +29,7 @@ pub enum BuiltinFunction {
     Min, Max,
 
     // Variadic (>= 1)
-    Sum, Avg,
+    Sum, Mean,
 
     // Three argument (special)
     If,
@@ -62,7 +62,7 @@ impl BuiltinFunction {
             "min"    => BuiltinFunction::Min,
             "max"    => BuiltinFunction::Max,
             "sum"    => BuiltinFunction::Sum,
-            "avg"    => BuiltinFunction::Avg,
+            "mean"   => BuiltinFunction::Mean,
             "if"     => BuiltinFunction::If,
             _ => return None,
         })
@@ -92,7 +92,7 @@ impl BuiltinFunction {
             BuiltinFunction::Min => "min",
             BuiltinFunction::Max => "max",
             BuiltinFunction::Sum => "sum",
-            BuiltinFunction::Avg => "avg",
+            BuiltinFunction::Mean => "mean",
             BuiltinFunction::If => "if",
         }
     }
@@ -147,7 +147,7 @@ impl BuiltinFunction {
                 if args.is_empty() { return Self::arity_err(self.name(), 1, 0); }
                 Ok(args.iter().sum())
             }
-            BuiltinFunction::Avg => {
+            BuiltinFunction::Mean => {
                 if args.is_empty() { return Self::arity_err(self.name(), 1, 0); }
                 Ok(args.iter().sum::<f64>() / args.len() as f64)
             }
