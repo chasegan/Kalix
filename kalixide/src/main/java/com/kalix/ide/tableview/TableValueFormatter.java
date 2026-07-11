@@ -218,9 +218,12 @@ public class TableValueFormatter {
             sb.append("\n");
         }
 
-        // Format each data row
+        // Format each data row. The first line needs no indent when there is
+        // no header: it sits directly after "key = " in the document.
         for (int rowIdx = 0; rowIdx < values.length; rowIdx++) {
-            sb.append(indent);
+            if (rowIdx > 0 || headerColumns != null) {
+                sb.append(indent);
+            }
             String[] row = values[rowIdx];
 
             for (int col = 0; col < row.length; col++) {

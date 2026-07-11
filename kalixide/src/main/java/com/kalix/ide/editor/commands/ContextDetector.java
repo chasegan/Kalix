@@ -22,6 +22,7 @@ public class ContextDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(ContextDetector.class);
     private static final String NODE_SECTION_PREFIX = "node.";
+    private static final String TABLE_SECTION_PREFIX = "table.";
 
     // Copied from INIModelParser
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([^=]+?)\\s*=\\s*(.*)\\s*$");
@@ -53,6 +54,13 @@ public class ContextDetector {
             // Node sections get their own header / property / body context types.
             if (sectionName != null && sectionName.startsWith(NODE_SECTION_PREFIX)) {
                 return classifyNodeSection(builder, position, parsedModel);
+            }
+
+            // Lookup table sections get property context (no node name/type) so
+            // property-scoped commands like Table View can target [table.*] data.
+            if (sectionName != null && sectionName.startsWith(TABLE_SECTION_PREFIX)
+                    && !position.isOnSectionHeader() && position.isInProperty()) {
+                return classifyProperty(builder, position, parsedModel, sectionName);
             }
 
             // Other section types only get content-context on non-header lines.
@@ -88,24 +96,34 @@ public class ContextDetector {
         }
 
         if (position.isInProperty()) {
-            String key = position.getPropertyKey();
-            builder.propertyKey(key).type(EditorContext.ContextType.PROPERTY);
-            // Use the parser's joined, comment-stripped value if we can find
-            // it. (The cursor may sit on a continuation line; the key was
-            // resolved from the owning header inside EditorPosition.)
-            if (parsedModel != null) {
-                INIModelParser.Section section = parsedModel.getSections().get(sectionName);
-                if (section != null) {
-                    INIModelParser.Property prop = section.getProperties().get(key);
-                    if (prop != null) {
-                        builder.propertyValue(prop.getValue());
-                    }
-                }
-            }
-            return builder.build();
+            return classifyProperty(builder, position, parsedModel, sectionName);
         }
 
         return builder.type(EditorContext.ContextType.NODE_SECTION).build();
+    }
+
+    /**
+     * Builds a PROPERTY context for the caret's property, resolving the
+     * parser's joined, comment-stripped value when available. (The cursor may
+     * sit on a continuation line; the key was resolved from the owning header
+     * inside EditorPosition.) Shared by node and table section classification.
+     */
+    private EditorContext classifyProperty(EditorContext.Builder builder,
+                                           EditorPosition position,
+                                           INIModelParser.ParsedModel parsedModel,
+                                           String sectionName) {
+        String key = position.getPropertyKey();
+        builder.propertyKey(key).type(EditorContext.ContextType.PROPERTY);
+        if (parsedModel != null) {
+            INIModelParser.Section section = parsedModel.getSections().get(sectionName);
+            if (section != null) {
+                INIModelParser.Property prop = section.getProperties().get(key);
+                if (prop != null) {
+                    builder.propertyValue(prop.getValue());
+                }
+            }
+        }
+        return builder.build();
     }
 
     private EditorContext classifySectionBody(EditorContext.Builder builder,

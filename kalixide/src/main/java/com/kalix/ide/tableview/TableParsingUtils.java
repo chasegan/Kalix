@@ -56,4 +56,29 @@ public final class TableParsingUtils {
     public static boolean isValidNumber(String value) {
         return NUMBER_PATTERN.matcher(value).matches();
     }
+
+    /**
+     * Splits an INI property value into raw comma-separated cells, preserving
+     * non-numeric cells (unlike {@link #parseNumericValues}, which drops them).
+     * Needed for lookup tables, whose grammar includes meaningful text cells:
+     * the 2D corner marker and the optional 1D header labels. A trailing comma
+     * yields no empty cell.
+     *
+     * @param iniValue The raw INI property value string
+     * @return Array of trimmed cell strings
+     */
+    public static String[] splitRawCells(String iniValue) {
+        if (iniValue == null || iniValue.trim().isEmpty()) {
+            return new String[0];
+        }
+        String[] parts = iniValue.split(",");
+        List<String> cells = new ArrayList<>();
+        for (String part : parts) {
+            String trimmed = part.replaceAll("\\s+", " ").trim();
+            if (!trimmed.isEmpty()) {
+                cells.add(trimmed);
+            }
+        }
+        return cells.toArray(new String[0]);
+    }
 }
