@@ -37,11 +37,11 @@ Tracked openly on [GitHub Issues](https://github.com/chasegan/Kalix/issues).
 </div>
 <div class="kx-card-item" markdown>
 #### Request a feature
-Email the dev team — details on the [Contact](../contact/) page.
+Email the dev team — details on the [Contact](../contact.md) page.
 </div>
 <div class="kx-card-item" markdown>
 #### Collaborate
-Run a remote team on a fork, or join the core team — see [Contact](../contact/).
+Run a remote team on a fork, or join the core team — see [Contact](../contact.md).
 </div>
 </div>
 

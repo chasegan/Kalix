@@ -10,7 +10,7 @@ Specify input data files in the `[inputs]` section of your model.
 
 - Kalix supports csv files, and alternative formats described here [Supported Data Formats](input-data.md).
 
-- Each file may contain 1 or multiple timeseries and these are accessible from within the model using via the timeseries name (i.e. column name if the input is a CSV file), or the number (counting from 1) of the timeseries. Read more about how to reference timeseries data at [Referencing Input Data](dynamic-expressions/referencing-input-data.md) .
+- Each file may contain 1 or multiple timeseries and these are accessible from within the model using via the timeseries name (i.e. column name if the input is a CSV file), or the number (counting from 1) of the timeseries. Read more about how to reference timeseries data at [Referencing Input Data](referencing-input-data.md) .
 
 [Declaring Input Data](input-data.md)[Supported Data Formats](input-data.md)
 
@@ -33,7 +33,7 @@ Kalix models declare input data using file paths. Each file path can be written 
 
 - **trailhead paths**, e.g. `^/data/climate.csv` (these are unique to Kalix and you can find out more about them in the section below)
 
-Once a file is listed here, you can reference its columns from dynamic expressions using the `data.*` namespace. See [Referencing Input Data](dynamic-expressions/referencing-input-data.md) for column lookup, name sanitisation, and temporal offset syntax.
+Once a file is listed here, you can reference its columns from dynamic expressions using the `data.*` namespace. See [Referencing Input Data](referencing-input-data.md) for column lookup, name sanitisation, and temporal offset syntax.
 
 ### Trailhead Paths
 

@@ -122,7 +122,7 @@ convention) that the table is called as `table.pump_rating(month, volume)`.
 
 - **Line breaks carry no meaning.** A table may be written on one line or
   spread over any number of indented continuation lines — the same convention
-  as node tables such as the [storage node's](../../nodes/storage/index.md)
+  as node tables such as the [storage node's](storage.md)
   `dimensions`.
 - A trailing comma is allowed.
 - The number of values must fit the declared shape exactly: an even count for

@@ -28,4 +28,4 @@ results = pd.read_csv("results.csv", parse_dates=[0], index_col=0)
 print(results.head())
 ```
 
-For a full walkthrough, see [Running from Python](../../tutorials/05-python.md).
+For a full walkthrough, see [Running from Python](../tutorials/05-python.md).

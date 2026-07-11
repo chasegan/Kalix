@@ -4,7 +4,7 @@ title: "Referencing Input Data"
 
 # Referencing Input Data
 
-The page [Declaring Input Data](../input-data.md) explains how to import data in your Kalix model. Here’s a reminder:
+The page [Declaring Input Data](input-data.md) explains how to import data in your Kalix model. Here’s a reminder:
 
 ```
 [inputs]

@@ -55,7 +55,7 @@ A few quick examples to make this concrete:
 
 This tutorial focuses on the most common case — building a single rainfall input from multiple gauges.
 
-For the full expression language reference, see [Dynamic Expressions](../docs/concepts/dynamic-expressions/index.md).
+For the full expression language reference, see [Dynamic Expressions](../docs/dynamic-expressions.md).
 
 ## Build the model
 

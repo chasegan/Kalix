@@ -90,7 +90,7 @@ Nodes send **orders** upstream to request flows from operational infrastructure.
 
 The model below has a **regulated\_user** node “0002\_user” which orders water according to a timeseries. There is a **storage** node “0001\_dam” which is upstream of the user and which tries to satisfy the order.
 
-![](../../assets/docs-concepts-ordering/image.png)
+![](../assets/docs-concepts-ordering/image.png)
 
 ```ini
 [node.0001_dam]
@@ -121,13 +121,13 @@ The plot below shows the order (solid green), the storage downstream flow (dotte
 
 - The flow at the bottom is zero (yellow line) because the flow released from the dam is diverted at the user node.
 
-![](../../assets/docs-concepts-ordering/image_1.png)
+![](../assets/docs-concepts-ordering/image_1.png)
 
 ### How do orders propagate through losses?
 
 The following model introduces a **loss** node between the user and storage. This loss node has a known flow-loss relationship (the table), and this causes flows >200 ML/d to be partly lost. When orders propagate through loss nodes, they are automatically adjusted to cover the losses.
 
-![](../../assets/docs-concepts-ordering/image_2.png)
+![](../assets/docs-concepts-ordering/image_2.png)
 
 ```ini
 [node.0001_dam]
@@ -168,7 +168,7 @@ The presence of the loss node changes the results:
 
 - The storage volume drops more quickly now, and actually becomes empty on Jan 11 meaning there is no water to release on Jan 12.
 
-![](../../assets/docs-concepts-ordering/image_3.png)
+![](../assets/docs-concepts-ordering/image_3.png)
 
 |  |  |
 | --- | --- |
@@ -181,7 +181,7 @@ Streamflow routing can cause flows, including flows intended to satisfy orders, 
 
 The model below has a **routing** node position between the user and storage. The routing node has approximately 3 days of lag (= 2 days of pwl storage routing + 1 day of pure lag).
 
-![](../../assets/docs-concepts-ordering/image_4.png)
+![](../assets/docs-concepts-ordering/image_4.png)
 
 ```ini
 [node.0001_dam]
@@ -217,11 +217,11 @@ The regulated\_user node places the same orders (the same timeseries pattern). T
 
 - The user postpones their demand (blue) by 3 days compared to the order timeseries (green). The intention is for this to allow enough time for dam releases to reach the user before the user tries to divert their demands.
 
-![](../../assets/docs-concepts-ordering/image_5.png)
+![](../assets/docs-concepts-ordering/image_5.png)
 
 - Despite attempting to account for the lag, the flows that reach the user node (red) do not match the postponed demand pattern (solid blue) exactly. Some of the flow arrives early and the peak of the demand is not met. In the end there is a shortfall between the intended diversion (solid blue) and the actual diversion (dashed blue). This happens because the storage routing in this example is nontrivial and the simplistic demand-lagging method does an imperfect job of anticipating the routed flows. This is not a bug - in some ways it reflects the practical difficulty of delivering water in a river system that contains nontrivial streamflow processes.
 
-![](../../assets/docs-concepts-ordering/image_6.png)
+![](../assets/docs-concepts-ordering/image_6.png)
 
 One way to overcome shortfalls due to nontrivial streamflow processes is to apply an overorder factor to the order. By scaling up all the orders, it is more likely that there will be enough water to meet the actual demand on any given day. Using an overorder factor comes at the cost of running the system less efficiently.
 
@@ -235,7 +235,7 @@ Inflows may satisfy some or all of the order required for a r**egulated\_user.**
 
 #### Case 1: Constant expected inflow
 
-![](../../assets/docs-concepts-ordering/image_7.png)
+![](../assets/docs-concepts-ordering/image_7.png)
 
 ```ini
 [node.0001_dam]
@@ -265,7 +265,7 @@ loc = 0, 120
 
 The regulated\_user node places the same orders (the same timeseries pattern). The inflow node (blue) causes the orders from the user (green) propagated up to and satisfied by the dam (red) to reduce by 100 ML/d compared to the case without the inflow node.
 
-![](../../assets/docs-concepts-ordering/image_8.png)
+![](../assets/docs-concepts-ordering/image_8.png)
 
 #### Case 2: Recession factor
 
@@ -282,13 +282,13 @@ ds_1 = 0002_user
 
 Here the expected inflow is set to a proportion of yesterday’s inflow, producing the following relationship:
 
-![](../../assets/docs-concepts-ordering/image_9.png)
+![](../assets/docs-concepts-ordering/image_9.png)
 
 Since the inflow and demand patterns are identical here, there is no demand shortfall on 1980-01-13 despite expected inflow being larger than the actual inflow.
 
 The volume required to be released from the dam then takes on the following saw-tooth shape (in red):
 
-![](../../assets/docs-concepts-ordering/image_10.png)
+![](../assets/docs-concepts-ordering/image_10.png)
 
 ### TODO
 

@@ -4,7 +4,7 @@ title: "GR4J"
 
 # GR4J
 
-This page is the technical reference for the GR4J rainfall-runoff model used by the [GR4J node](../../nodes/gr4j.md). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
+This page is the technical reference for the GR4J rainfall-runoff model used by the [GR4J node](gr4j.md). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
 
 ## Model overview
 
@@ -176,7 +176,7 @@ Base time of UH1 (UH2 has base time 2·X4). Controls the timing of the runoff re
 
 ## Implementation notes
 
-- The Kalix GR4J node passes the four parameters in the order X1, X2, X3, X4 (see the [GR4J node page](../../nodes/gr4j.md)).
+- The Kalix GR4J node passes the four parameters in the order X1, X2, X3, X4 (see the [GR4J node page](gr4j.md)).
 
 - All internal calculations are in mm; conversion to ML uses the configured catchment area.
 

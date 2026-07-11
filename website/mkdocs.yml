@@ -13,6 +13,13 @@ copyright: © 2026 Kalix Project · MPL 2.0
 docs_dir: docs
 site_dir: site
 
+# Promote link problems to warnings so `mkdocs build --strict` fails on any
+# broken internal link — a standing guard against link rot as pages move.
+validation:
+  links:
+    unrecognized_links: warn
+    absolute_links: warn
+
 # `mkdocs serve` also watches these (they live outside docs_dir): the per-release
 # files the Downloads page is built from, and the macros module.
 watch:
@@ -126,56 +133,56 @@ nav:
       - About Kalix: docs/about-kalix.md
       - Components:
           - docs/index.md   # make the 'Components' header link back to the Docs page
-          - "[kalix]": docs/concepts/model-file-structure.md
-          - "[inputs]": docs/concepts/input-data.md
-          - "[constants]": docs/concepts/dynamic-expressions/constants.md
+          - "[kalix]": docs/model-file-structure.md
+          - "[inputs]": docs/input-data.md
+          - "[constants]": docs/constants.md
           - "[node.*]":
-              - docs/nodes/index.md
-              - Blackhole: docs/nodes/blackhole.md
-              - Confluence: docs/nodes/confluence.md
-              - Gauge: docs/nodes/gauge.md
-              - GR4J: docs/nodes/gr4j.md
-              - Inflow: docs/nodes/inflow.md
-              - Loss: docs/nodes/loss.md
-              - Order control: docs/nodes/order-control.md
-              - Regulated user: docs/nodes/regulated-user.md
-              - Routing: docs/nodes/routing.md
-              - Sacramento: docs/nodes/sacramento.md
-              - Splitter: docs/nodes/splitter.md
+              - docs/nodes.md
+              - Blackhole: docs/blackhole.md
+              - Confluence: docs/confluence.md
+              - Gauge: docs/gauge.md
+              - GR4J: docs/gr4j.md
+              - Inflow: docs/inflow.md
+              - Loss: docs/loss.md
+              - Order control: docs/order-control.md
+              - Regulated user: docs/regulated-user.md
+              - Routing: docs/routing.md
+              - Sacramento: docs/sacramento.md
+              - Splitter: docs/splitter.md
               - Storage:
-                  - docs/nodes/storage/index.md
-                  - Storage tables: docs/nodes/storage-tables.md
-              - Unregulated user: docs/nodes/unregulated-user.md
-          - "[table.*]": docs/concepts/dynamic-expressions/tables.md
-          - "[outputs]": docs/concepts/model-outputs.md
-      - KalixIDE: docs/using/ide.md
-      - Kalix CLI: docs/using/cli.md
-      - Kalix in Python: docs/using/python.md
+                  - docs/storage.md
+                  - Storage tables: docs/storage-tables.md
+              - Unregulated user: docs/unregulated-user.md
+          - "[table.*]": docs/tables.md
+          - "[outputs]": docs/model-outputs.md
+      - KalixIDE: docs/ide.md
+      - Kalix CLI: docs/cli.md
+      - Kalix in Python: docs/python.md
       - Deep topics:
-          - Conventions: docs/concepts/conventions.md
-          - Data cache: docs/concepts/data-cache.md
+          - Conventions: docs/conventions.md
+          - Data cache: docs/data-cache.md
           - Dynamic expressions:
-              - docs/concepts/dynamic-expressions/index.md
-              - Referencing input data: docs/concepts/dynamic-expressions/referencing-input-data.md
-              - Referencing model results: docs/concepts/dynamic-expressions/referencing-model-results.md
-              - Simulation context variables: docs/concepts/dynamic-expressions/simulation-context-vars.md
-          - Kalix binary path in KalixIDE: docs/using/kalix-binary-path.md
+              - docs/dynamic-expressions.md
+              - Referencing input data: docs/referencing-input-data.md
+              - Referencing model results: docs/referencing-model-results.md
+              - Simulation context variables: docs/simulation-context-vars.md
+          - Kalix binary path in KalixIDE: docs/kalix-binary-path.md
           - Optimisation:
-              - docs/optimisation/index.md
-              - Objective functions: docs/optimisation/objective-functions.md
+              - docs/optimisation.md
+              - Objective functions: docs/objective-functions.md
               - Algorithms:
-                  - Shuffled Complex Evolution (SCE): docs/optimisation/algorithms/sce.md
-                  - CMA-ES: docs/optimisation/algorithms/cma-es.md
-                  - Differential Evolution: docs/optimisation/algorithms/differential-evolution.md
-                  - DREAM: docs/optimisation/algorithms/dream.md
-          - Ordering: docs/concepts/ordering.md
-          - Parameter types: docs/concepts/parameter-types.md
+                  - Shuffled Complex Evolution (SCE): docs/sce.md
+                  - CMA-ES: docs/cma-es.md
+                  - Differential Evolution: docs/differential-evolution.md
+                  - DREAM: docs/dream.md
+          - Ordering: docs/ordering.md
+          - Parameter types: docs/parameter-types.md
           - Rainfall-runoff models:
-              - GR4J: docs/reference/technical/gr4j.md
-              - Sacramento: docs/reference/technical/sacramento.md
-          - Run Manager: docs/using/run-manager.md
-          - Running notebooks with uv: docs/using/notebooks-uv.md
-      - Glossary: docs/reference/glossary.md
+              - GR4J: docs/gr4j-technical.md
+              - Sacramento: docs/sacramento-technical.md
+          - Run Manager: docs/run-manager.md
+          - Running notebooks with uv: docs/notebooks-uv.md
+      - Glossary: docs/glossary.md
   - Downloads: downloads.md
   - Code:
       - code/index.md

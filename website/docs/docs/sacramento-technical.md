@@ -4,7 +4,7 @@ title: "Sacramento"
 
 # Sacramento
 
-This page is the technical reference for the Sacramento Soil Moisture Accounting (SAC-SMA) rainfall-runoff model used by the [Sacramento node](../../nodes/sacramento.md). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
+This page is the technical reference for the Sacramento Soil Moisture Accounting (SAC-SMA) rainfall-runoff model used by the [Sacramento node](sacramento.md). For configuration syntax, properties, and result outputs, see the node page. This page covers the underlying model structure, equations, parameter behaviour, and calibration guidance.
 
 ## Model overview
 
