@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * modeller sees the problem in the editor rather than at model load:</p>
  * <ul>
  *   <li>Table names: lowercase letters, digits, underscores; no dots</li>
- *   <li>Allowed properties: {@code data} (required) and {@code n_cols} (integer &ge; 2, default 2)</li>
+ *   <li>Allowed properties: {@code values} (required) and {@code n_cols} (integer &ge; 2, default 2)</li>
  *   <li>1D (n_cols = 2): rows of (x, y) with an optional two-label text header;
  *       x values strictly ascending</li>
  *   <li>2D (n_cols &gt; 2): non-numeric corner marker, then column keys; each row is
@@ -54,9 +54,9 @@ public class TableSectionValidator implements ValidationStrategy {
                     ValidationRule.Severity.ERROR, "invalid_table_name");
         }
 
-        // Properties: only n_cols and data are recognised
+        // Properties: only n_cols and values are recognised
         int nCols = 2;
-        INIModelParser.Property dataProp = null;
+        INIModelParser.Property valuesProp = null;
         for (INIModelParser.Property prop : section.getProperties().values()) {
             switch (prop.getKey()) {
                 case "n_cols":
@@ -75,42 +75,42 @@ public class TableSectionValidator implements ValidationStrategy {
                         return;
                     }
                     break;
-                case "data":
-                    dataProp = prop;
+                case "values":
+                    valuesProp = prop;
                     break;
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: data, n_cols)",
+                                    + "] (allowed: values, n_cols)",
                             ValidationRule.Severity.ERROR, "unexpected_table_property");
                     break;
             }
         }
 
-        if (dataProp == null) {
+        if (valuesProp == null) {
             result.addIssue(section.getStartLine(),
-                    "Table '" + tableName + "' has no 'data' property",
-                    ValidationRule.Severity.ERROR, "missing_table_data");
+                    "Table '" + tableName + "' has no 'values' property",
+                    ValidationRule.Severity.ERROR, "missing_table_values");
             return;
         }
 
-        for (String error : checkTableData(tableName, dataProp.getValue(), nCols)) {
-            result.addIssue(dataProp.getLineNumber(), error,
-                    ValidationRule.Severity.ERROR, "invalid_table_data");
+        for (String error : checkTableValues(tableName, valuesProp.getValue(), nCols)) {
+            result.addIssue(valuesProp.getLineNumber(), error,
+                    ValidationRule.Severity.ERROR, "invalid_table_values");
         }
     }
 
     /**
-     * Validate a table's joined data value against the engine's structural
-     * rules. Returns error messages, empty if the data is well-formed.
+     * Validate a table's joined values string against the engine's structural
+     * rules. Returns error messages, empty if the values are well-formed.
      * Package-private for tests.
      */
-    static List<String> checkTableData(String tableName, String data, int nCols) {
+    static List<String> checkTableValues(String tableName, String values, int nCols) {
         List<String> errors = new ArrayList<>();
 
-        String trimmed = stripTrailingCommaAndWhitespace(data);
+        String trimmed = stripTrailingCommaAndWhitespace(values);
         if (trimmed.trim().isEmpty()) {
-            errors.add("Table '" + tableName + "': data is empty");
+            errors.add("Table '" + tableName + "': values is empty");
             return errors;
         }
         String[] tokens = trimmed.split(",");

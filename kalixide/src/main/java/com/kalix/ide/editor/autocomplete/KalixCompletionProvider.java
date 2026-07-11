@@ -279,7 +279,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                 "<html><b>[table.&lt;name&gt;]</b><br><br>"
                         + "Define a named lookup table, callable from expressions as "
                         + "<code>table.name(x)</code>.<br>"
-                        + "Add <code>data = </code> rows of x, y breakpoints (1D), or "
+                        + "Add <code>values = </code> rows of x, y breakpoints (1D), or "
                         + "<code>n_cols</code> and a keyed grid (2D).</html>");
         addCompletion(tableCompletion);
     }
@@ -304,9 +304,9 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                 addPropertyCompletion(param, nodeDef, "downstream link");
             }
         } else if (sectionName.startsWith("table.")) {
-            addCompletion(new BasicCompletion(this, "data = ",
+            addCompletion(new BasicCompletion(this, "values = ",
                     null,
-                    "<html><b>data</b> <i>(required)</i><br><br>"
+                    "<html><b>values</b> <i>(required)</i><br><br>"
                             + "The table values as comma-separated rows.<br>"
                             + "1D: rows of <code>x, y</code> breakpoints.<br>"
                             + "2D: a corner marker + column keys, then rows of "

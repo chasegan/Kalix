@@ -392,11 +392,11 @@ class FunctionExpressionValidatorTest {
     void testTableValidationWithModelContext() {
         String ini = """
             [table.rating]
-            data = 0, 0, 1, 100
+            values = 0, 0, 1, 100
 
             [table.pump]
             n_cols = 3
-            data = x, 1, 2, 0, 5, 6
+            values = x, 1, 2, 0, 5, 6
             """;
         com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model =
                 com.kalix.ide.linter.parsing.INIModelParser.parse(ini);

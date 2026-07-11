@@ -204,12 +204,12 @@ loc = 0, 0
 type = gauge
 
 [table.rating]
-data = 0, 0,
+values = 0, 0,
        1, 250,
 
 [table.monthly_demand]
 n_cols = 13
-data = x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+values = x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
        0, 9, 8, 7, 5, 3, 2, 2, 3, 5, 7,  8,  9,
 ";
     let model = IniModelIO::new().read_model_string(ini).expect("model should load");
@@ -226,17 +226,17 @@ fn test_model_table_error_cases() {
     let read = |ini: &str| IniModelIO::new().read_model_string(ini);
 
     // Invalid table name (uppercase)
-    assert!(read("[kalix]\n[table.Bad]\ndata = 0, 0, 1, 1\n").is_err());
+    assert!(read("[kalix]\n[table.Bad]\nvalues = 0, 0, 1, 1\n").is_err());
     // Invalid table name (contains a dot)
-    assert!(read("[kalix]\n[table.a.b]\ndata = 0, 0, 1, 1\n").is_err());
+    assert!(read("[kalix]\n[table.a.b]\nvalues = 0, 0, 1, 1\n").is_err());
     // Unexpected property
-    assert!(read("[kalix]\n[table.t]\ndata = 0, 0, 1, 1\nfoo = 1\n").is_err());
+    assert!(read("[kalix]\n[table.t]\nvalues = 0, 0, 1, 1\nfoo = 1\n").is_err());
     // Missing data property
     assert!(read("[kalix]\n[table.t]\nn_cols = 2\n").is_err());
     // Bad n_cols
-    assert!(read("[kalix]\n[table.t]\nn_cols = two\ndata = 0, 0, 1, 1\n").is_err());
+    assert!(read("[kalix]\n[table.t]\nn_cols = two\nvalues = 0, 0, 1, 1\n").is_err());
     // Malformed table body surfaces the table parser's error
-    let err = read("[kalix]\n[table.t]\ndata = 0, 0, 1\n").err().expect("malformed table should fail");
+    let err = read("[kalix]\n[table.t]\nvalues = 0, 0, 1\n").err().expect("malformed table should fail");
     assert!(err.contains("table.t"), "error should name the table: {}", err);
 }
 
@@ -376,7 +376,7 @@ start = 2020-01-01
 end = 2020-01-10
 
 [table.rating]
-data = 0, 0,
+values = 0, 0,
        10, 100,
 
 [node.in1]
@@ -407,7 +407,7 @@ fn test_model_table_round_trip() {
 [kalix]
 
 [table.rating]
-data = 0, 0,
+values = 0, 0,
        0.5, 120,
        3, 2200,
 

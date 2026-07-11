@@ -181,7 +181,7 @@ intended growth path of the expression language, roughly in priority order.
 - **Inline interpolation** — `interp(x, x1, y1, x2, y2, ...)` for tiny two-
   or three-point relationships that don't warrant a named `[table.*]` section.
 - **File-backed tables** — `file = ./tables/rating.csv` as an alternative to
-  inline `data` in `[table.*]` sections.
+  inline `values` in `[table.*]` sections.
 - **Bilinear 2D lookup** — a per-table opt-in interpolating across column
   keys as well as down rows, for continuous (rather than integer-like) column
   keys. Backward compatible: today's exact-match tables are unaffected.

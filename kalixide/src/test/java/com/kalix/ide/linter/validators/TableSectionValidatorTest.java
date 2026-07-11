@@ -31,13 +31,13 @@ class TableSectionValidatorTest {
     void testValidTables() {
         assertNoIssues("""
             [table.rating]
-            data = 0, 0,
+            values = 0, 0,
                    0.5, 120,
                    3, 2200
 
             [table.monthly]
             n_cols = 4
-            data = x, 1, 2, 3,
+            values = x, 1, 2, 3,
                    0, 10, 20, 30,
                    100, 11, 22, 33
             """);
@@ -48,7 +48,7 @@ class TableSectionValidatorTest {
     void testValid1dWithHeader() {
         assertNoIssues("""
             [table.rating]
-            data = stage, flow,
+            values = stage, flow,
                    0, 0,
                    1, 250
             """);
@@ -57,27 +57,27 @@ class TableSectionValidatorTest {
     @Test
     @DisplayName("Invalid table names should be flagged")
     void testInvalidTableName() {
-        assertHasIssue("[table.Bad]\ndata = 0, 0, 1, 1\n", "Invalid table name");
-        assertHasIssue("[table.a.b]\ndata = 0, 0, 1, 1\n", "Invalid table name");
+        assertHasIssue("[table.Bad]\nvalues = 0, 0, 1, 1\n", "Invalid table name");
+        assertHasIssue("[table.a.b]\nvalues = 0, 0, 1, 1\n", "Invalid table name");
     }
 
     @Test
     @DisplayName("Missing data property should be flagged")
     void testMissingData() {
-        assertHasIssue("[table.t]\nn_cols = 2\n", "has no 'data' property");
+        assertHasIssue("[table.t]\nn_cols = 2\n", "has no 'values' property");
     }
 
     @Test
     @DisplayName("Unexpected properties should be flagged")
     void testUnexpectedProperty() {
-        assertHasIssue("[table.t]\ndata = 0, 0, 1, 1\nfoo = bar\n", "Unexpected property 'foo'");
+        assertHasIssue("[table.t]\nvalues = 0, 0, 1, 1\nfoo = bar\n", "Unexpected property 'foo'");
     }
 
     @Test
     @DisplayName("Bad n_cols values should be flagged")
     void testBadNCols() {
-        assertHasIssue("[table.t]\nn_cols = two\ndata = 0, 0, 1, 1\n", "n_cols must be an integer");
-        assertHasIssue("[table.t]\nn_cols = 1\ndata = 0, 0, 1, 1\n", "n_cols must be at least 2");
+        assertHasIssue("[table.t]\nn_cols = two\nvalues = 0, 0, 1, 1\n", "n_cols must be an integer");
+        assertHasIssue("[table.t]\nn_cols = 1\nvalues = 0, 0, 1, 1\n", "n_cols must be at least 2");
     }
 
     // ==================== Data grid validation ====================
@@ -90,7 +90,7 @@ class TableSectionValidatorTest {
         assertDataError("1, 0, 0, 1", 2, "strictly ascending");
         assertDataError("0, blah, 1, 1", 2, "finite number");
         assertDataError("0, nan, 1, 1", 2, "finite number");
-        assertDataError("", 2, "data is empty");
+        assertDataError("", 2, "values is empty");
         assertDataError("stage, 0, 1, 1", 2, "header must have exactly 2 non-numeric labels");
         assertDataError("stage, flow", 2, "no data rows");
     }
@@ -109,12 +109,12 @@ class TableSectionValidatorTest {
     @Test
     @DisplayName("Well-formed data should produce no errors")
     void testGoodData() {
-        assertTrue(TableSectionValidator.checkTableData("t", "0, 0, 1, 10", 2).isEmpty());
-        assertTrue(TableSectionValidator.checkTableData("t", "0, 0, 1, 10,", 2).isEmpty(), "trailing comma tolerated");
-        assertTrue(TableSectionValidator.checkTableData("t", "x, 1, 2, 0, 5, 6", 3).isEmpty());
+        assertTrue(TableSectionValidator.checkTableValues("t", "0, 0, 1, 10", 2).isEmpty());
+        assertTrue(TableSectionValidator.checkTableValues("t", "0, 0, 1, 10,", 2).isEmpty(), "trailing comma tolerated");
+        assertTrue(TableSectionValidator.checkTableValues("t", "x, 1, 2, 0, 5, 6", 3).isEmpty());
         // Single-row tables are allowed (constant 1D; monthly-constants 2D)
-        assertTrue(TableSectionValidator.checkTableData("t", "5, 42", 2).isEmpty());
-        assertTrue(TableSectionValidator.checkTableData("t", "x, 1, 2, 3, 0, 10, 20, 30", 4).isEmpty());
+        assertTrue(TableSectionValidator.checkTableValues("t", "5, 42", 2).isEmpty());
+        assertTrue(TableSectionValidator.checkTableValues("t", "x, 1, 2, 3, 0, 10, 20, 30", 4).isEmpty());
     }
 
     // ==================== Helper methods ====================
@@ -141,7 +141,7 @@ class TableSectionValidatorTest {
     }
 
     private void assertDataError(String data, int nCols, String expectedMessage) {
-        List<String> errors = TableSectionValidator.checkTableData("t", data, nCols);
+        List<String> errors = TableSectionValidator.checkTableValues("t", data, nCols);
         boolean found = errors.stream().anyMatch(e -> e.contains(expectedMessage));
         assertTrue(found, "Expected error containing '" + expectedMessage
                 + "' for data '" + data + "', got: " + errors);

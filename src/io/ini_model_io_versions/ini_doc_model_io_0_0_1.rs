@@ -61,7 +61,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             }
 
             let mut ncols: usize = 2;
-            let mut data: Option<&str> = None;
+            let mut values: Option<&str> = None;
             for (key, ini_property) in &ini_section.properties {
                 match key.to_lowercase().as_str() {
                     "n_cols" => {
@@ -69,17 +69,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             .map_err(|_| format!("Error on line {}: n_cols for table '{}' must be an integer, got '{}'",
                                                  ini_property.line_number, table_name, ini_property.value))?;
                     }
-                    "data" => data = Some(ini_property.value.as_str()),
+                    "values" => values = Some(ini_property.value.as_str()),
                     other => {
                         return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'",
                                            ini_property.line_number, other, section_name));
                     }
                 }
             }
-            let data = data.ok_or(format!("Error on line {}: Table '{}' has no 'data' property",
-                                          ini_section.line_number, table_name))?;
+            let values = values.ok_or(format!("Error on line {}: Table '{}' has no 'values' property",
+                                              ini_section.line_number, table_name))?;
 
-            let table = LookupTable::from_ini_data(table_name, data, ncols)
+            let table = LookupTable::from_ini_data(table_name, values, ncols)
                 .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
             model.data_cache.tables.insert(table)
                 .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
@@ -744,7 +744,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         if table.ncols() > 2 {
             ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
         }
-        ini_doc.set_property(section_name.as_str(), "data", table.format_data(4).as_str());
+        ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
     }
 
     // List all nodes

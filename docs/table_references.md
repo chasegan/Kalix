@@ -9,10 +9,10 @@ called from expressions using the `table.*` namespace:
 
 ```ini
 [table.rating_52105]
-data = 0,   0,
-       0.5, 120,
-       1.2, 450,
-       3.0, 2200,
+values = 0,   0,
+         0.5, 120,
+         1.2, 450,
+         3.0, 2200,
 
 [node.gauge_52105]
 type = gauge
@@ -31,9 +31,9 @@ A 1D table is rows of `x, y` pairs. The x values must be strictly ascending.
 
 ```ini
 [table.rating]
-data = 0,   0,
-       0.5, 120,
-       3.0, 2200,
+values = 0,   0,
+         0.5, 120,
+         3.0, 2200,
 ```
 
 An optional text header row (exactly two non-numeric labels) is allowed for
@@ -41,10 +41,10 @@ readability:
 
 ```ini
 [table.rating]
-data = stage, flow,
-       0,     0,
-       0.5,   120,
-       3.0,   2200,
+values = stage, flow,
+         0,     0,
+         0.5,   120,
+         3.0,   2200,
 ```
 
 Call a 1D table with one argument — any expression:
@@ -68,10 +68,10 @@ key and its values. Both key sets must be strictly ascending.
 ; Pump rate by month (columns) and storage volume (rows)
 [table.pump_rating]
 n_cols = 4
-data = x,    1,    2,    3,
-       0,    0,    0,    0,
-       500,  1.0,  1.2,  1.5,
-       2000, 4.0,  4.8,  6.0,
+values = x,    1,    2,    3,
+         0,    0,    0,    0,
+         500,  1.0,  1.2,  1.5,
+         2000, 4.0,  4.8,  6.0,
 ```
 
 Call a 2D table with two arguments — first the **column key**, then the

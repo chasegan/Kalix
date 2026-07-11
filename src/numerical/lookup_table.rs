@@ -17,7 +17,7 @@
 ///   match** (panics with context otherwise); the second interpolates down
 ///   that column with the same clamped-linear rule as 1D.
 ///
-/// Line breaks carry no meaning in the `data` property: a table may be
+/// Line breaks carry no meaning in the `values` property: a table may be
 /// written on one line or spread over many continuation lines.
 
 use std::sync::Arc;
@@ -137,7 +137,7 @@ impl LookupTable2D {
 }
 
 impl LookupTable {
-    /// Parse and validate a table from the joined `data` string of a
+    /// Parse and validate a table from the joined `values` string of a
     /// `[table.<name>]` section. `n_cols = 2` produces a 1D table, `n_cols > 2`
     /// a 2D table. Cold path: every structural error is rejected here so the
     /// lookup methods never need to.
@@ -150,7 +150,7 @@ impl LookupTable {
         // (same tolerance as node tables in Table::from_csv_string).
         let trimmed = data.trim_end_matches(|c: char| c == ',' || c.is_whitespace());
         if trimmed.trim().is_empty() {
-            return Err(format!("Table 'table.{}': data is empty", name));
+            return Err(format!("Table 'table.{}': values is empty", name));
         }
         let tokens: Vec<&str> = trimmed.split(',').map(str::trim).collect();
 
@@ -280,7 +280,7 @@ impl LookupTable {
         }
     }
 
-    /// Render the `data` value canonically: one grid row per continuation
+    /// Render the `values` property canonically: one grid row per continuation
     /// line, indented by `n_spaces`, in the same style as
     /// `format_vec_as_multiline_table` used for node tables.
     pub fn format_data(&self, n_spaces: usize) -> String {
