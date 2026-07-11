@@ -272,6 +272,16 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                         + "Format: <code>[node.name]</code><br>"
                         + "Then add <code>type = &lt;node_type&gt;</code> on the next line.</html>");
         addCompletion(nodeCompletion);
+
+        // Table section prefix
+        BasicCompletion tableCompletion = new BasicCompletion(this, "[table.",
+                null,
+                "<html><b>[table.&lt;name&gt;]</b><br><br>"
+                        + "Define a named lookup table, callable from expressions as "
+                        + "<code>table.name(x)</code>.<br>"
+                        + "Add <code>data = </code> rows of x, y breakpoints (1D), or "
+                        + "<code>n_cols</code> and a keyed grid (2D).</html>");
+        addCompletion(tableCompletion);
     }
 
     private void addPropertyCompletions(String sectionName, String nodeType) {
@@ -293,6 +303,19 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             for (String param : nodeDef.dsnodeParams) {
                 addPropertyCompletion(param, nodeDef, "downstream link");
             }
+        } else if (sectionName.startsWith("table.")) {
+            addCompletion(new BasicCompletion(this, "data = ",
+                    null,
+                    "<html><b>data</b> <i>(required)</i><br><br>"
+                            + "The table values as comma-separated rows.<br>"
+                            + "1D: rows of <code>x, y</code> breakpoints.<br>"
+                            + "2D: a corner marker + column keys, then rows of "
+                            + "<code>row_key, values...</code></html>"));
+            addCompletion(new BasicCompletion(this, "n_cols = ",
+                    null,
+                    "<html><b>n_cols</b> <i>(optional)</i><br><br>"
+                            + "Grid width, row-key column included.<br>"
+                            + "Default 2 (a 1D table); greater than 2 declares a 2D table.</html>"));
         } else if ("kalix".equals(sectionName)) {
             SectionDefinition kalixSection = schema.getSection("kalix");
             if (kalixSection != null && kalixSection.properties != null) {
@@ -411,6 +434,43 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
         // Data series references from [inputs] section
         addDataSeriesCompletions(model);
+
+        // Lookup table calls from [table.*] sections
+        addTableCompletions(model);
+    }
+
+    private void addTableCompletions(INIModelParser.ParsedModel model) {
+        for (Map.Entry<String, INIModelParser.Section> entry : model.getSections().entrySet()) {
+            String sectionName = entry.getKey();
+            if (!sectionName.startsWith("table.")) {
+                continue;
+            }
+            String tableName = sectionName.substring("table.".length());
+            boolean is2d = tableIs2d(entry.getValue());
+            String callSignature = is2d
+                    ? sectionName + "(col_key, row_key)"
+                    : sectionName + "(x)";
+
+            BasicCompletion completion = new BasicCompletion(this, sectionName,
+                    null,
+                    "<html><b>" + callSignature + "</b>"
+                            + "<br><br>Lookup table: " + tableName
+                            + "<br>Shape: " + (is2d ? "2D (exact-match column, interpolated row)" : "1D (interpolated, clamped at ends)")
+                            + "</html>");
+            addCompletion(completion);
+        }
+    }
+
+    private boolean tableIs2d(INIModelParser.Section tableSection) {
+        INIModelParser.Property nCols = tableSection.getProperties().get("n_cols");
+        if (nCols == null) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(nCols.getValue().trim()) > 2;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private void addDataSeriesCompletions(INIModelParser.ParsedModel model) {

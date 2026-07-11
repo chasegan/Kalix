@@ -10,20 +10,25 @@ import java.util.*;
 
 /**
  * Validates function expressions used in model parameters.
- * Supports seven types of inputs:
+ * Supports these types of inputs:
  * - Data references: "data.evap", "data.field.subfield"
  * - Constant references: "c.pi", "c.node_1_demand_levels.high"
  * - Node output references: "node.node13_inflow.ds_1"
  * - This references: "this.dsflow", "this.volume" (shorthand for current node outputs)
  * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
+ * - Table lookups: "table.rating(x)" (1D), "table.pump(col_key, row_key)" (2D)
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
+ *
+ * The known-function set mirrors the engine's BuiltinFunction enum
+ * (src/functions/functions.rs) — keep the two in sync.
  *
  * Performance target: < 10ms per expression validation
  */
 public class FunctionExpressionValidator {
 
-    // Known functions with their argument counts (-1 = variable args, must be >= 2)
+    // Known functions with their argument counts.
+    // Negative value = variadic with minimum argument count of -value.
     private static final Map<String, Integer> KNOWN_FUNCTIONS = createFunctionMap();
 
     // Fast-path recognisers, compiled once: these run per expression per validation
@@ -50,11 +55,11 @@ public class FunctionExpressionValidator {
         // Conditional
         map.put("if", 3);
 
-        // Aggregation (variable args)
-        map.put("max", -1);
-        map.put("min", -1);
+        // Aggregation (variadic; negative = minimum argument count)
+        map.put("max", -2);
+        map.put("min", -2);
         map.put("sum", -1);
-        map.put("mean", -1);
+        map.put("avg", -1);
 
         // Single argument math
         map.put("abs", 1);
@@ -65,16 +70,14 @@ public class FunctionExpressionValidator {
         map.put("asin", 1);
         map.put("acos", 1);
         map.put("atan", 1);
-        map.put("sinh", 1);
-        map.put("cosh", 1);
-        map.put("tanh", 1);
         map.put("ln", 1);
-        map.put("log", 1);
         map.put("log10", 1);
+        map.put("log2", 1);
         map.put("exp", 1);
         map.put("ceil", 1);
         map.put("floor", 1);
         map.put("round", 1);
+        map.put("sign", 1);
 
         // Two argument math
         map.put("pow", 2);
@@ -251,7 +254,7 @@ public class FunctionExpressionValidator {
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, TABLE_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
     }
 
     static class Token {
@@ -388,6 +391,11 @@ public class FunctionExpressionValidator {
             // Check if this is a node reference (starts with "node.")
             if (firstSegment.equals("node") && pos < input.length() && input.charAt(pos) == '.') {
                 return readDottedReference(start, firstSegment, TokenType.NODE_REF);
+            }
+
+            // Check if this is a table reference (starts with "table.")
+            if (firstSegment.equals("table") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.TABLE_REF);
             }
 
             // Check if this is a sim reference (starts with "sim.")
@@ -682,6 +690,9 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.THIS_REF) {
                 validateThisRef(current.value, errors);
                 advance();
+            } else if (current.type == TokenType.TABLE_REF) {
+                // Table lookup call: table.<name>(args)
+                parseTableCall(errors);
             } else if (current.type == TokenType.IDENT) {
                 // Function call
                 parseFunctionCall(errors);
@@ -690,8 +701,82 @@ public class FunctionExpressionValidator {
                 parseExpression(errors);
                 expect(TokenType.RPAREN, errors);
             } else {
-                throw new ParseException("Expected number, data reference, constant reference, node reference, this reference, sim reference, function, or '(' but got " + current.type);
+                throw new ParseException("Expected number, data reference, constant reference, node reference, this reference, sim reference, table lookup, function, or '(' but got " + current.type);
             }
+        }
+
+        // TableCall := TABLE_REF '(' ArgumentList ')'
+        private void parseTableCall(List<String> errors) throws ParseException {
+            String tableRef = current.value; // e.g. "table.rating"
+
+            // Malformed reference checks BEFORE advancing - advance() can throw
+            // on the character that made the reference malformed (e.g. the second
+            // dot of "table..rating"), and the specific message must land first.
+            // A null tableName suppresses the existence/arity checks below.
+            String tableName = null;
+            if (tableRef.contains("..")) {
+                errors.add("Malformed table reference: '" + tableRef + "' (consecutive dots)");
+            } else if (tableRef.endsWith(".")) {
+                errors.add("Incomplete table reference: '" + tableRef + "'");
+            } else {
+                tableName = tableRef.substring(6); // "table.".length() == 6
+                if (tableName.contains(".")) {
+                    errors.add("Invalid table reference: '" + tableRef + "' (table names cannot contain dots)");
+                    tableName = null;
+                }
+            }
+            advance();
+
+            // A table reference is only meaningful as a call - a bare reference
+            // has no value (the engine rejects it at model load too).
+            if (current.type != TokenType.LPAREN) {
+                errors.add("Table reference '" + tableRef + "' must be called with arguments, e.g. "
+                        + tableRef + "(x)");
+                return;
+            }
+            advance(); // consume '('
+
+            int argCount = 0;
+            if (current.type != TokenType.RPAREN) {
+                argCount = parseArgumentList(errors);
+            }
+            expect(TokenType.RPAREN, errors);
+
+            // Validate existence and arity against the model when available
+            if (tableName != null && context.getModel() != null) {
+                INIModelParser.Section tableSection =
+                        context.getModel().getSections().get("table." + tableName.toLowerCase());
+                if (tableSection == null) {
+                    errors.add("Unknown table: '" + tableRef + "' (no [table." + tableName.toLowerCase()
+                            + "] section is defined)");
+                } else {
+                    int expectedArgs = tableArity(tableSection);
+                    if (argCount != expectedArgs) {
+                        errors.add(expectedArgs == 1
+                                ? "1D lookup table '" + tableRef + "' expects 1 argument, but got " + argCount
+                                : "2D lookup table '" + tableRef + "' expects 2 arguments (column key, row key), but got " + argCount);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Argument count implied by a [table.*] section: n_cols > 2 means a 2D
+         * table (column key + row key), otherwise 1D. Mirrors the engine's rule.
+         */
+        private int tableArity(INIModelParser.Section tableSection) {
+            INIModelParser.Property nCols = tableSection.getProperties().get("n_cols");
+            if (nCols != null) {
+                try {
+                    if (Integer.parseInt(nCols.getValue().trim()) > 2) {
+                        return 2;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Invalid n_cols is reported by the table section validator;
+                    // fall through to the 1D default here.
+                }
+            }
+            return 1;
         }
 
         // FunctionCall := IDENT '(' ArgumentList? ')'
@@ -713,14 +798,16 @@ public class FunctionExpressionValidator {
 
             expect(TokenType.RPAREN, errors);
 
-            // Validate argument count
+            // Validate argument count (negative = variadic with minimum of -value)
             if (KNOWN_FUNCTIONS.containsKey(funcName)) {
                 int expectedCount = KNOWN_FUNCTIONS.get(funcName);
                 if (expectedCount >= 0 && argCount != expectedCount) {
                     errors.add("Function '" + funcName + "' expects " + expectedCount +
                                " argument" + (expectedCount == 1 ? "" : "s") + ", but got " + argCount);
-                } else if (expectedCount == -1 && argCount < 2) {
-                    errors.add("Function '" + funcName + "' expects at least 2 arguments, but got " + argCount);
+                } else if (expectedCount < 0 && argCount < -expectedCount) {
+                    int minimum = -expectedCount;
+                    errors.add("Function '" + funcName + "' expects at least " + minimum +
+                               " argument" + (minimum == 1 ? "" : "s") + ", but got " + argCount);
                 }
             }
         }
@@ -838,13 +925,16 @@ public class FunctionExpressionValidator {
         }
 
         private String suggestFunction(String funcName) {
-            // Common typos and suggestions
+            // Common typos and suggestions ('log' and 'mean' were never engine
+            // functions - point users at the explicit spellings)
             Map<String, String> suggestions = Map.of(
                 "maximum", "max",
                 "minimum", "min",
-                "average", "mean",
+                "average", "avg",
+                "mean", "avg",
                 "square_root", "sqrt",
-                "logarithm", "log",
+                "logarithm", "ln",
+                "log", "ln",
                 "power", "pow"
             );
 

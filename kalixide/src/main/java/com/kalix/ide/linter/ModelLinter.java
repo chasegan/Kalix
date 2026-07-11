@@ -24,6 +24,7 @@ public class ModelLinter {
         this.schemaManager = schemaManager;
         this.validators = Arrays.asList(
             new SectionValidator(),
+            new TableSectionValidator(),
             new FileValidator(),
             new ReferenceValidator(),
             new NodeOrderingValidator(),

@@ -120,18 +120,33 @@ class FunctionExpressionValidatorTest {
         assertValid("cos(data.angle)");
         assertValid("exp(data.x)");
         assertValid("ln(data.x)");
-        assertValid("log(data.x)");
         assertValid("log10(data.x)");
+        assertValid("log2(data.x)");
+        assertValid("sign(data.x)");
 
         // Aggregation
         assertValid("max(1, 2, 3)");
         assertValid("min(data.a, data.b)");
-        assertValid("mean(data.x, data.y, data.z)");
+        assertValid("avg(data.x, data.y, data.z)");
         assertValid("sum(1, 2, 3, 4, 5)");
+        assertValid("sum(data.x)"); // sum and avg accept a single argument
+        assertValid("avg(data.x)");
 
         // Two argument
         assertValid("pow(2, 8)");
         assertValid("atan2(data.y, data.x)");
+    }
+
+    @Test
+    @DisplayName("Functions that don't exist in the engine should be invalid")
+    void testEngineDriftFunctions() {
+        // These were historically accepted by the linter but never existed in
+        // the engine's BuiltinFunction set - keep the two in sync.
+        assertInvalid("log(data.x)", "Unknown function"); // deliberately removed: use ln or log10
+        assertInvalid("mean(data.x, data.y)", "Unknown function"); // engine spelling is avg
+        assertInvalid("sinh(data.x)", "Unknown function");
+        assertInvalid("cosh(data.x)", "Unknown function");
+        assertInvalid("tanh(data.x)", "Unknown function");
     }
 
     @Test
@@ -341,6 +356,66 @@ class FunctionExpressionValidatorTest {
 
         assertValid("POW(data.a, 2)");
         assertValid("Pow(data.a, 2)");
+    }
+
+    // ==================== Table Lookups ====================
+
+    @Test
+    @DisplayName("Table lookup calls should be valid without model context")
+    void testTableCallsWithoutContext() {
+        assertValid("table.rating(data.stage)");
+        assertValid("table.pump(sim.month, node.dam.volume)");
+        assertValid("2 * table.rating(data.stage) + 1");
+        assertValid("max(table.rating(data.stage), c.floor_value)");
+        assertValid("table.rating(table.other(data.x))");
+    }
+
+    @Test
+    @DisplayName("Bare table references should be invalid")
+    void testBareTableReference() {
+        assertInvalid("table.rating", "must be called with arguments");
+        assertInvalid("2 * table.rating", "must be called with arguments");
+    }
+
+    @Test
+    @DisplayName("Malformed table references should be invalid")
+    void testMalformedTableReferences() {
+        assertInvalid("table.", "Incomplete table reference");
+        // The tokenizer stops a dotted read at a double dot, so this surfaces
+        // as an incomplete reference ("table.") rather than a dot-count error.
+        assertInvalid("table..rating(1)", "Incomplete table reference");
+        assertInvalid("table.a.b(1)", "table names cannot contain dots");
+    }
+
+    @Test
+    @DisplayName("Table existence and arity should be validated with model context")
+    void testTableValidationWithModelContext() {
+        String ini = """
+            [table.rating]
+            data = 0, 0, 1, 100
+
+            [table.pump]
+            n_cols = 3
+            data = x, 1, 2, 0, 5, 6
+            """;
+        com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model =
+                com.kalix.ide.linter.parsing.INIModelParser.parse(ini);
+        com.kalix.ide.linter.model.ValidationContext context =
+                com.kalix.ide.linter.model.ValidationContext.builder().model(model).build();
+
+        assertTrue(validator.validate("table.rating(data.stage)", context).isEmpty());
+        assertTrue(validator.validate("table.pump(sim.month, data.volume)", context).isEmpty());
+
+        // Unknown table
+        assertFalse(validator.validate("table.nope(1)", context).isEmpty());
+        // 1D table called with 2 arguments
+        List<String> errors = validator.validate("table.rating(1, 2)", context);
+        assertTrue(errors.stream().anyMatch(e -> e.contains("expects 1 argument")),
+                "Expected 1D arity error, got: " + errors);
+        // 2D table called with 1 argument
+        errors = validator.validate("table.pump(1)", context);
+        assertTrue(errors.stream().anyMatch(e -> e.contains("expects 2 arguments")),
+                "Expected 2D arity error, got: " + errors);
     }
 
     // ==================== Helper Methods ====================
