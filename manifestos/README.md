@@ -15,6 +15,10 @@ they are for, and how to write one. Read it before adding to this folder.
 - **[Context-menu style](context-menu-style.md)** — how KalixIDE structures and
   names its right-click menus (ordering skeleton, sentence case, sparse icons,
   Delete-vs-Remove), framed as Strunk & White applied to menus.
+- **[Expression naming](expression-naming.md)** — the DynamicExpression
+  vocabulary: name the precise concept in the modeller's language (`mean`, not
+  `avg`), one spelling per builtin with no aliases (`ln`/`log10`, never `log`),
+  and namespaces for everything user-defined.
 - **[Identity and labels](identity-and-labels.md)** — identity is a stable, typed
   token; the label is a projection of it, never stored, keyed on, or parsed.
   Applies to runs, nodes, datasets, files, series.
