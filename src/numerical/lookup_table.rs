@@ -210,7 +210,7 @@ impl LookupTable {
         // table's total element count is an exact multiple of ncols.
         if parse_cell(tokens[0]).is_some() {
             return Err(format!(
-                "Table 'table.{}': a 2D table must start with a non-numeric corner marker (e.g. 'x') \
+                "Table 'table.{}': a 2D table must start with a non-numeric corner label (e.g. 'y\\x') \
                  followed by its column keys, got '{}'",
                 name, tokens[0]
             ));

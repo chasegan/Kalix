@@ -98,7 +98,7 @@ class TableSectionValidatorTest {
     @Test
     @DisplayName("2D data errors should be flagged")
     void test2dDataErrors() {
-        assertDataError("0, 1, 2, 0, 0, 0", 3, "corner marker");
+        assertDataError("0, 1, 2, 0, 0, 0", 3, "corner label");
         assertDataError("x, 1, 2, 0, 0", 3, "multiple of n_cols");
         assertDataError("x, 1, 2", 3, "no data rows");
         assertDataError("x, 2, 1, 0, 0, 0", 3, "column keys must be strictly ascending");

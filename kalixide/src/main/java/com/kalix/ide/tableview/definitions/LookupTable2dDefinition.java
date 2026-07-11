@@ -75,10 +75,11 @@ public final class LookupTable2dDefinition implements TablePropertyDefinition {
         String[] cells = TableParsingUtils.splitRawCells(iniValue);
         int numRows = (cells.length + nCols - 1) / nCols;
         if (numRows <= 0) {
-            // Empty template: a key row plus one data row
+            // Empty template: a key row plus one data row. The corner label
+            // follows the printed two-way-table convention (rows\columns).
             String[][] template = new String[2][nCols];
             for (int j = 0; j < nCols; j++) {
-                template[0][j] = j == 0 ? "x" : "";
+                template[0][j] = j == 0 ? "y\\x" : "";
                 template[1][j] = "";
             }
             return template;
@@ -102,12 +103,12 @@ public final class LookupTable2dDefinition implements TablePropertyDefinition {
     public String validateCell(int row, int col, String value) {
         String trimmed = value == null ? "" : value.trim();
         if (row == 0 && col == 0) {
-            // The corner marker must read as text, per the engine's grammar
+            // The corner label must read as text, per the engine's grammar
             if (trimmed.isEmpty()) {
-                return "Corner marker cannot be empty (use e.g. 'x')";
+                return "Corner label cannot be empty (use e.g. 'y\\x' or your axis names)";
             }
             if (TableParsingUtils.isValidNumber(trimmed)) {
-                return "Corner marker must not be a number (use e.g. 'x')";
+                return "Corner label must not be a number (use e.g. 'y\\x' or your axis names)";
             }
             return null;
         }

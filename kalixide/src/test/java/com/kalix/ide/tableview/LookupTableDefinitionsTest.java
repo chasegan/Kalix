@@ -106,7 +106,7 @@ class LookupTableDefinitionsTest {
         LookupTable2dDefinition def = new LookupTable2dDefinition("pump", 4);
         String[][] grid = def.parseValues("");
         assertEquals(2, grid.length);
-        assertEquals("x", grid[0][0]);
+        assertEquals("y\\x", grid[0][0]);
         assertEquals(4, grid[0].length);
     }
 
@@ -115,7 +115,9 @@ class LookupTableDefinitionsTest {
     void test2dValidation() {
         LookupTable2dDefinition def = new LookupTable2dDefinition("pump", 3);
 
-        // Corner marker: text required
+        // Corner label: text required; the convention and real axis names both pass
+        assertNull(def.validateCell(0, 0, "y\\x"));
+        assertNull(def.validateCell(0, 0, "volume\\month"));
         assertNull(def.validateCell(0, 0, "x"));
         assertNotNull(def.validateCell(0, 0, "5"));
         assertNotNull(def.validateCell(0, 0, ""));

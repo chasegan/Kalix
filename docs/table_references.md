@@ -60,18 +60,37 @@ is returned. NaN input produces NaN output.
 ## Defining a 2D Table
 
 A 2D table is a grid. Declare its width with `n_cols` (the row-key column is
-included in the count). The first row holds a non-numeric corner marker
-(conventionally `x`) followed by the column keys; each following row is a row
-key and its values. Both key sets must be strictly ascending.
+included in the count). The first row holds a non-numeric corner label
+followed by the column keys; each following row is a row key and its values.
+Both key sets must be strictly ascending.
+
+The corner label is text, never a number — that is how the parser recognises
+the key row. The convention is `y\x`, read like the diagonally split corner
+of a printed two-way table: `y` names what runs *down* the first column, `x`
+names what runs *across* the top row. It also mirrors the call signature:
+`table.name(x, y)` takes the column key first, the row key second.
 
 ```ini
 ; Pump rate by month (columns) and storage volume (rows)
 [table.pump_rating]
 n_cols = 4
-values = x,    1,    2,    3,
+values = y\x,  1,    2,    3,
          0,    0,    0,    0,
          500,  1.0,  1.2,  1.5,
          2000, 4.0,  4.8,  6.0,
+```
+
+Better still, put your real axis names in the corner using the same
+rows\columns pattern — any non-numeric text is accepted, so the corner can
+document the table:
+
+```ini
+[table.pump_rating]
+n_cols = 4
+values = volume\month, 1,    2,    3,
+         0,            0,    0,    0,
+         500,          1.0,  1.2,  1.5,
+         2000,         4.0,  4.8,  6.0,
 ```
 
 Call a 2D table with two arguments — first the **column key**, then the
@@ -103,7 +122,7 @@ error showing the offending value.
   convention as node tables (e.g. the storage node's `dimensions`).
 - A trailing comma at the end of the data is allowed.
 - The number of values must fit the declared shape exactly: an even count for
-  1D tables, and a multiple of `n_cols` for 2D tables (the corner marker
+  1D tables, and a multiple of `n_cols` for 2D tables (the corner label
   makes the key row the same width as every other row).
 - All cells must be finite numbers — `nan` and `inf` are rejected.
 

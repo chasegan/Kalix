@@ -164,7 +164,7 @@ public class TableSectionValidator implements ValidationStrategy {
 
     private static void check2d(String tableName, String[] tokens, int nCols, List<String> errors) {
         if (isFiniteNumber(tokens[0])) {
-            errors.add("Table '" + tableName + "': a 2D table must start with a non-numeric corner marker (e.g. 'x') followed by its column keys, got '" + tokens[0] + "'");
+            errors.add("Table '" + tableName + "': a 2D table must start with a non-numeric corner label (e.g. 'y\\x') followed by its column keys, got '" + tokens[0] + "'");
             return;
         }
         if (tokens.length % nCols != 0) {
