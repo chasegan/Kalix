@@ -19,12 +19,13 @@
       <img src="{{ 'assets/wordmark.png' | url }}" alt="Kalix">
     </a>
 
-    {# primary navigation #}
+    {# primary navigation — highlight the section the current page sits in #}
+    {% set u = page.url if page else '' %}
     <nav class="kx-topnav">
-      <a href="{{ 'tutorials/' | url }}">Tutorials</a>
-      <a href="{{ 'docs/' | url }}">Docs</a>
-      <a href="{{ 'code/' | url }}">Code</a>
-      <a href="{{ 'contact/' | url }}">Contact</a>
+      <a href="{{ 'tutorials/' | url }}" class="{{ 'kx-active' if u.startswith('tutorials/') }}">Tutorials</a>
+      <a href="{{ 'docs/' | url }}" class="{{ 'kx-active' if u.startswith('docs/') }}">Docs</a>
+      <a href="{{ 'code/' | url }}" class="{{ 'kx-active' if u.startswith('code/') }}">Code</a>
+      <a href="{{ 'contact/' | url }}" class="{{ 'kx-active' if u.startswith('contact/') }}">Contact</a>
     </nav>
 
     <div class="kx-header-spacer"></div>

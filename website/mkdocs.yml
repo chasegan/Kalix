@@ -93,6 +93,7 @@ extra_css:
 
 extra_javascript:
   - javascripts/mathjax.js
+  - javascripts/cf-email.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 extra:
@@ -184,5 +185,6 @@ nav:
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
-  # Contact is a bespoke pass-through page (docs/contact/index.html) served at
-  # /contact/, bypassing the Material theme — so it is not listed here.
+  # Contact (docs/contact.md) runs inside the Material theme but hides both
+  # sidebars via its front matter, so it is deliberately kept out of the nav —
+  # the custom header already links to it.
