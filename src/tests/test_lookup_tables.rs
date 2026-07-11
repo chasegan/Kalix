@@ -333,6 +333,13 @@ fn test_expression_table_errors() {
     let err = DynamicInput::from_string("table.grid(1)", &mut data_cache, true, None)
         .err().expect("2D table with 1 arg should fail");
     assert!(err.contains("expects 2 arguments"), "got: {}", err);
+
+    // A bare (uncalled) table reference must not become a phantom data series
+    for expr in ["table.rating", "table.rating[-1, 0.0]", "2 * table.rating + 1"] {
+        let err = DynamicInput::from_string(expr, &mut data_cache, true, None)
+            .err().unwrap_or_else(|| panic!("bare table reference '{}' should fail", expr));
+        assert!(err.contains("must be called"), "got: {}", err);
+    }
 }
 
 #[test]

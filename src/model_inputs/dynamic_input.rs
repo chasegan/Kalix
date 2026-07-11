@@ -577,6 +577,19 @@ impl DynamicInput {
         let parsed = parse_function(&working_copy)
             .map_err(|e| format!("Failed to parse expression '{}': {}", trimmed, e))?;
 
+        // A bare `table.foo` (no call parentheses) parses as a variable, and would
+        // otherwise silently register a phantom data series named "table.foo".
+        // Reject it here, before linear-combination detection can capture it.
+        for var_name in parsed.get_variables() {
+            let lower_name = var_name.to_lowercase();
+            if lower_name.starts_with("table.") {
+                return Err(format!(
+                    "'{}' is a lookup table reference and must be called with arguments, e.g. {}(x)",
+                    var_name, lower_name
+                ));
+            }
+        }
+
         // Check if it's a linear combination pattern first
         let ast = parsed.get_ast();
         if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
