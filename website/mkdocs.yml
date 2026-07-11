@@ -112,13 +112,15 @@ nav:
   # site root and bypassing the Material theme — so it is not listed here.
   - Tutorials:
       - tutorials/index.md
-      - 01 · Your first model: tutorials/01-first-model.md
-      - 02 · Expressions: tutorials/02-expressions.md
-      - 03 · Relative & trailhead paths: tutorials/03-paths.md
-      - 04 · Running from the commandline: tutorials/04-commandline.md
-      - 05 · Running from Python: tutorials/05-python.md
-      - 12 · Optimisation from the commandline: tutorials/12-optimisation-cli.md
-      - 13 · Optimisation from Python: tutorials/13-optimisation-python.md
+      - The fundamentals:
+          - 01 · Your first model: tutorials/01-first-model.md
+          - 02 · Expressions: tutorials/02-expressions.md
+          - 03 · Relative & trailhead paths: tutorials/03-paths.md
+          - 04 · Running from the commandline: tutorials/04-commandline.md
+          - 05 · Running from Python: tutorials/05-python.md
+      - Calibration & analysis:
+          - 12 · Optimisation from the commandline: tutorials/12-optimisation-cli.md
+          - 13 · Optimisation from Python: tutorials/13-optimisation-python.md
   - Docs:
       - docs/index.md
       - About Kalix: docs/about-kalix.md

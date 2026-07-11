@@ -66,8 +66,16 @@
 .kx-brand { display: inline-flex; align-items: center; }
 .kx-brand img { height: 24px; width: auto; display: block; }
 .kx-topnav { display: flex; gap: 28px; font-size: 15px; font-weight: var(--kx-weight-medium); }
-.kx-topnav a { color: var(--kx-text-muted); text-decoration: none; transition: color .15s; }
-.kx-topnav a:hover, .kx-topnav a.kx-active { color: var(--kx-text); }
+/* transparent border on every item keeps heights equal so the active underline
+   doesn't nudge one link; accent underline marks the current section per the
+   tokens.css §2 doctrine ("an active tab underline"). */
+.kx-topnav a {
+  color: var(--kx-text-muted); text-decoration: none;
+  border-bottom: 2px solid transparent; padding-bottom: 2px;
+  transition: color .15s, border-color .15s;
+}
+.kx-topnav a:hover { color: var(--kx-text); }
+.kx-topnav a.kx-active { color: var(--kx-text); border-bottom-color: var(--kx-accent); }
 .kx-header-spacer { flex: 1 1 auto; }
 .kx-topnav-util { display: flex; align-items: center; gap: 16px; }
 .kx-topnav-util a {
