@@ -121,34 +121,83 @@ def _load_release_files():
     return records
 
 
-def _render_release(fm, body, is_latest) -> str:
-    ver = str(fm["version"])
-    pills = []
-    if is_latest:
-        pills.append('<span class="kx-pill kx-pill--accent">Latest</span>')
-    if fm.get("prerelease"):
-        pills.append('<span class="kx-pill">Pre-release</span>')
-    links = []
+def _asset_links(fm):
+    """(label, url, ext) for each non-empty download asset on a release.
+
+    Assets are freeform label→url pairs, so the label is whatever the release
+    author wrote; ext is the file extension when the URL ends in a plausible one
+    (a short alphanumeric suffix), else "".
+    """
+    out = []
     for label, url in (fm.get("assets") or {}).items():
         if not url:
             continue
         fname = str(url).rsplit("/", 1)[-1].split("?", 1)[0]
         ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
-        if ext and len(ext) <= 5 and ext.isalnum():
-            links.append(f'<a href="{url}">{label}&nbsp;.{ext}</a>')
-        else:
-            links.append(f'<a href="{url}">{label}</a>')
+        out.append((label, str(url), ext if (ext and len(ext) <= 5 and ext.isalnum()) else ""))
+    return out
+
+
+def _has_notes(body) -> bool:
+    """True when a release body carries real notes (not empty, not a TODO stub)."""
+    b = body.strip()
+    return bool(b) and not b.startswith("<!--")
+
+
+def _render_hero(fm, body) -> str:
+    """The latest release, front and centre — the page's one job."""
+    ver = str(fm["version"])
     date = str(fm.get("date", "")).strip()
-    parts = ['<div class="kx-release" markdown>', "", f"## v{ver}", ""]
-    if date or pills:
-        date_span = f'<span class="kx-release-date">{date}</span>' if date else ""
-        parts += [f'<div class="kx-release-head">{date_span}' + "".join(pills) + "</div>", ""]
-    if body:
-        parts += [body, ""]
-    if links:
-        parts += ['<div class="kx-release-dl">' + "".join(links) + "</div>", ""]
+    head = [f'<span class="kx-dl-version">v{ver}</span>']
+    if date:
+        head.append(f'<span class="kx-dl-date">{date}</span>')
+    if fm.get("prerelease"):
+        head.append('<span class="kx-pill">Pre-release</span>')
+    parts = [
+        '<div class="kx-dl-hero" markdown>', "",
+        '<p class="kx-dl-eyebrow">Latest release</p>',
+        f'<div class="kx-dl-hero-head">{"".join(head)}</div>', "",
+    ]
+    if _has_notes(body):
+        parts += ['<div class="kx-dl-notes" markdown>', "", body, "", "</div>", ""]
+    btns = [
+        f'<a class="kx-dl-btn" href="{url}">{label}'
+        + (f'<span class="kx-dl-btn-ext">.{ext}</span>' if ext else "")
+        + "</a>"
+        for label, url, ext in _asset_links(fm)
+    ]
+    if btns:
+        parts += ['<div class="kx-dl-btns">' + "".join(btns) + "</div>", ""]
     if fm.get("pip"):
-        parts += [f'<code class="kx-release-pip">{fm["pip"]}</code>', ""]
+        parts += [
+            '<div class="kx-dl-pip"><span class="kx-dl-pip-label">or via PyPI</span>'
+            f'<code>{fm["pip"]}</code></div>', "",
+        ]
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
+def _render_history_item(fm, body) -> str:
+    """One older release as a quiet entry on the history timeline."""
+    ver = str(fm["version"])
+    date = str(fm.get("date", "")).strip()
+    head = [f'<span class="kx-rel-version">v{ver}</span>']
+    if date:
+        head.append(f'<span class="kx-rel-date">{date}</span>')
+    if fm.get("prerelease"):
+        head.append('<span class="kx-pill">Pre-release</span>')
+    parts = [
+        '<div class="kx-rel-item" markdown>', "",
+        f'<div class="kx-rel-head">{"".join(head)}</div>', "",
+    ]
+    if _has_notes(body):
+        parts += [body, ""]
+    dl = [
+        f'<a href="{url}">{label}' + (f"&nbsp;.{ext}" if ext else "") + "</a>"
+        for label, url, ext in _asset_links(fm)
+    ]
+    if dl:
+        parts += ['<div class="kx-rel-dl">' + "".join(dl) + "</div>", ""]
     parts.append("</div>")
     return "\n".join(parts)
 
@@ -178,11 +227,16 @@ def define_env(env):
     @env.macro
     def render_releases():
         records = _load_release_files()
-        latest = records[0][0]["version"] if records else None
-        return "\n\n".join(
-            _render_release(fm, body, str(fm["version"]) == str(latest))
-            for fm, body in records
-        )
+        if not records:
+            return ""
+        parts = [_render_hero(*records[0])]
+        if len(records) > 1:
+            items = "\n\n".join(_render_history_item(fm, body) for fm, body in records[1:])
+            parts += [
+                '<p class="kx-dl-eyebrow kx-dl-eyebrow--history">Release history</p>',
+                '<div class="kx-rel-timeline" markdown>\n\n' + items + "\n\n</div>",
+            ]
+        return "\n\n".join(parts)
 
 
 def on_post_build(env):

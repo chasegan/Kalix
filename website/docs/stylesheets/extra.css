@@ -186,37 +186,81 @@
   color: var(--kx-accent-700);
 }
 
-/* ---- Downloads: release cards (rendered by render_releases in main.py) ----- */
-.kx-release {
-  border: var(--kx-border-line);
-  border-radius: var(--kx-radius-lg);
-  padding: var(--kx-space-5) var(--kx-space-6);
-  margin-bottom: var(--kx-space-5);
-  background: var(--kx-surface);
+/* ---- Downloads (rendered by render_releases in main.py) ------------------- *
+ * Centered single column (nav + toc hidden in the page front matter, matching
+ * Contact). A "latest release" panel does the page's one job — get the current
+ * build; the older releases read as a quiet chronological timeline, echoing the
+ * Tutorials timeline device. Version numbers are set in mono: a release is an
+ * engineering artifact and the type says so.
+ * ------------------------------------------------------------------------- */
+.kx-downloads { max-width: 820px; margin: 0 auto; }
+.md-typeset .kx-downloads > h1 { margin: 0 0 var(--kx-space-3); }
+.md-typeset .kx-dl-lead {
+  font-size: var(--kx-text-lg); line-height: var(--kx-leading-normal);
+  color: var(--kx-text-muted); max-width: 60ch; margin: 0 0 var(--kx-space-7);
 }
-.md-typeset .kx-release h2 {
-  font-size: var(--kx-text-2xl);
-  margin: 0;
-  scroll-margin-top: var(--kx-space-8);
-}
-.kx-release-head { display: flex; align-items: baseline; gap: var(--kx-space-3); flex-wrap: wrap; margin: var(--kx-space-2) 0 var(--kx-space-4); }
-.kx-release-date {
+.kx-dl-eyebrow {
   font-family: var(--kx-font-mono); font-size: var(--kx-text-caption);
-  color: var(--kx-text-subtle);
+  letter-spacing: var(--kx-tracking-caps); text-transform: uppercase;
+  color: var(--kx-primary-600); margin: 0 0 var(--kx-space-3);
 }
-.kx-release-dl { display: flex; flex-wrap: wrap; gap: var(--kx-space-2); margin-bottom: var(--kx-space-3); }
-.kx-release-dl a {
+
+/* latest-release hero */
+.kx-dl-hero {
+  border: var(--kx-border-line-strong); border-radius: var(--kx-radius-lg);
+  background: var(--kx-surface-sunken);
+  padding: var(--kx-space-6); margin-bottom: var(--kx-space-9);
+}
+.kx-dl-hero-head { display: flex; align-items: baseline; gap: var(--kx-space-3); flex-wrap: wrap; margin-bottom: var(--kx-space-4); }
+.kx-dl-version {
+  font-family: var(--kx-font-mono); font-weight: var(--kx-weight-semibold);
+  font-size: var(--kx-text-4xl); letter-spacing: -0.01em; line-height: 1; color: var(--kx-text);
+}
+.kx-dl-date { font-family: var(--kx-font-mono); font-size: var(--kx-text-sm); color: var(--kx-text-subtle); }
+.md-typeset .kx-dl-notes { font-size: var(--kx-text-sm); color: var(--kx-text-muted); margin-bottom: var(--kx-space-5); }
+.md-typeset .kx-dl-notes > :first-child { margin-top: 0; }
+.md-typeset .kx-dl-notes > :last-child { margin-bottom: 0; }
+.kx-dl-btns { display: flex; flex-wrap: wrap; gap: var(--kx-space-3); }
+.md-typeset .kx-dl-btns a.kx-dl-btn {
+  display: inline-flex; align-items: baseline; gap: var(--kx-space-2);
+  font-size: var(--kx-text-sm); font-weight: var(--kx-weight-semibold);
+  color: var(--kx-primary-contrast); background: var(--kx-primary-600);
+  border-radius: var(--kx-radius-sm); padding: 10px 18px; text-decoration: none;
+  transition: background-color .15s;
+}
+.md-typeset .kx-dl-btns a.kx-dl-btn:hover { background: var(--kx-primary-700); }
+.kx-dl-btn-ext { font-family: var(--kx-font-mono); font-size: var(--kx-text-caption); opacity: .8; }
+.kx-dl-pip { display: flex; align-items: center; gap: var(--kx-space-3); margin-top: var(--kx-space-4); flex-wrap: wrap; }
+.kx-dl-pip-label { font-family: var(--kx-font-mono); font-size: var(--kx-text-caption); text-transform: uppercase; letter-spacing: var(--kx-tracking-wide); color: var(--kx-text-subtle); }
+.md-typeset .kx-dl-pip code {
   font-family: var(--kx-font-mono); font-size: var(--kx-text-sm);
-  text-decoration: none; color: var(--kx-primary-600);
-  border: var(--kx-border-line-strong); border-radius: var(--kx-radius-sm);
-  padding: 5px 12px; transition: background-color .15s, border-color .15s;
+  background: var(--kx-surface); border: var(--kx-border-line-strong);
+  border-radius: var(--kx-radius-xs); padding: 5px 12px; color: var(--kx-neutral-800);
 }
-.kx-release-dl a:hover { background: var(--kx-primary-50); border-color: var(--kx-primary-300); }
-.kx-release-pip {
-  display: inline-block; font-family: var(--kx-font-mono); font-size: var(--kx-text-sm);
-  background: var(--kx-surface-sunken); border: var(--kx-border-line);
-  border-radius: var(--kx-radius-xs); padding: 4px 10px; color: var(--kx-neutral-800);
+
+/* release history — chronological timeline */
+.kx-dl-eyebrow--history { color: var(--kx-text-subtle); margin-bottom: var(--kx-space-5); }
+.kx-rel-timeline { border-left: 2px solid var(--kx-border); margin-left: 6px; padding-left: var(--kx-space-6); }
+.kx-rel-item { position: relative; padding-bottom: var(--kx-space-7); }
+.kx-rel-item:last-child { padding-bottom: 0; }
+.kx-rel-item::before {
+  content: ""; position: absolute; left: calc(-1 * var(--kx-space-6) - 7px); top: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--kx-neutral-300); border: 2px solid var(--kx-bg);
 }
+.kx-rel-head { display: flex; align-items: baseline; gap: var(--kx-space-3); flex-wrap: wrap; margin-bottom: var(--kx-space-2); }
+.kx-rel-version { font-family: var(--kx-font-mono); font-weight: var(--kx-weight-semibold); font-size: var(--kx-text-lg); color: var(--kx-text); }
+.kx-rel-date { font-family: var(--kx-font-mono); font-size: var(--kx-text-caption); color: var(--kx-text-subtle); }
+.md-typeset .kx-rel-item { font-size: var(--kx-text-sm); }
+.md-typeset .kx-rel-item ul { color: var(--kx-text-muted); margin: var(--kx-space-2) 0; }
+.kx-rel-dl { display: flex; flex-wrap: wrap; gap: var(--kx-space-2); margin-top: var(--kx-space-3); }
+.md-typeset .kx-rel-dl a {
+  font-family: var(--kx-font-mono); font-size: var(--kx-text-sm); text-decoration: none;
+  color: var(--kx-primary-600); border: var(--kx-border-line-strong);
+  border-radius: var(--kx-radius-sm); padding: 4px 11px; transition: background-color .15s, border-color .15s;
+}
+.md-typeset .kx-rel-dl a:hover { background: var(--kx-primary-50); border-color: var(--kx-primary-300); }
+.md-typeset .kx-dl-more { margin-top: var(--kx-space-8); font-size: var(--kx-text-sm); }
 
 /* ---- Commandline: flag/description reference lists (def_list) -------------- */
 .md-typeset dl { margin: var(--kx-space-2) 0 var(--kx-space-5); }
