@@ -21,6 +21,11 @@ use crate::tid::utils::date_string_to_u64;
 fn daily_cache(date: &str) -> DataCache {
     let start = date_string_to_u64(date).unwrap();
     let mut dc = DataCache::new();
+    // These tests exercise the flag machinery directly (no expression is
+    // lowered to opt the cache in), so opt in explicitly — the flags are only
+    // computed for models that reference sim.new_* (a measured per-step cost
+    // otherwise).
+    dc.needs_calendar_flags = true;
     dc.initialize(start);
     dc.set_start_and_stepsize(start, 86400);
     dc.set_current_step(0);
@@ -98,6 +103,7 @@ fn test_flags_hourly_new_day() {
     // is true for every hourly step of the day).
     let start = date_string_to_u64("2020-01-15").unwrap();
     let mut dc = DataCache::new();
+    dc.needs_calendar_flags = true; // direct flag test: opt in (see daily_cache)
     dc.initialize(start);
     dc.set_start_and_stepsize(start, 3600); // hourly
     dc.set_current_step(0);

@@ -58,37 +58,19 @@ impl ExprStateArena {
     }
 }
 
+// Field order is deliberate: the per-step hot scalars (the series Vec header,
+// current_step, timestamps, calendar flags) sit together at the front so they
+// share cache lines, with the cold registries (name lookup, tables, fns)
+// behind them. Inserting cold registry fields between the hot ones was part
+// of a measured simulation regression (July 2026).
 #[derive(Default)]
 #[derive(Clone)]
 pub struct DataCache {
     pub series: Vec<Timeseries>,
-    pub series_name: Vec<String>,
-    pub is_critical: Vec<bool>,
-
-    /// Case-insensitive name -> index lookup (keys lowercased). Mirrors
-    /// series_name so that series resolution - which nodes do for every
-    /// recorder on every initialise, and the optimiser once per evaluation -
-    /// is O(1) instead of a linear scan over every series name.
-    name_lookup: FxHashMap<String, usize>,
     pub current_step: usize,
     pub start_timestamp: u64,
     pub current_timestamp: u64,
     pub step_size: u64,
-
-    // Constants cache
-    pub constants: ConstantsCache,
-
-    // Named lookup tables ([table.*] sections), resolved by expressions at
-    // model load. Arc-shared, so cloning the cache is cheap.
-    pub tables: TableRegistry,
-
-    // Expression runtime state (program locals; stateful-builtin state in
-    // later phases). Slot ranges are allocated during expression lowering.
-    pub expr_state: ExprStateArena,
-
-    // User-defined functions ([fn] section), inlined into expressions at
-    // lowering. Arc-shared defs, so cloning the cache is cheap.
-    pub fns: crate::functions::fn_registry::FnRegistry,
 
     // These vars for model components (incl nodes) to use if they need to know the date
     timestamp_year: i32,
@@ -104,6 +86,39 @@ pub struct DataCache {
     new_day: bool,
     new_month: bool,
     new_year: bool,
+
+    /// Set at expression lowering when any sim.new_* flag is referenced, so
+    /// update_current_timestamp only computes the flags for models that read
+    /// them. Public so flag-machinery unit tests can opt in explicitly.
+    pub needs_calendar_flags: bool,
+
+    // Expression runtime state (program locals; stateful-builtin state).
+    // Slot ranges are allocated during expression lowering. Hot for models
+    // using programs or stateful functions; the Vec headers live here, the
+    // slots on the heap.
+    pub expr_state: ExprStateArena,
+
+    // Constants cache
+    pub constants: ConstantsCache,
+
+    // --- Cold from here down: touched at load/initialise, not per step ---
+
+    pub series_name: Vec<String>,
+    pub is_critical: Vec<bool>,
+
+    /// Case-insensitive name -> index lookup (keys lowercased). Mirrors
+    /// series_name so that series resolution - which nodes do for every
+    /// recorder on every initialise, and the optimiser once per evaluation -
+    /// is O(1) instead of a linear scan over every series name.
+    name_lookup: FxHashMap<String, usize>,
+
+    // Named lookup tables ([table.*] sections), resolved by expressions at
+    // model load. Arc-shared, so cloning the cache is cheap.
+    pub tables: TableRegistry,
+
+    // User-defined functions ([fn] section), inlined into expressions at
+    // lowering. Arc-shared defs, so cloning the cache is cheap.
+    pub fns: crate::functions::fn_registry::FnRegistry,
 }
 
 
@@ -204,14 +219,20 @@ impl DataCache {
         // an implicit boundary — the run start always counts. This makes the flags
         // independent of any stale prev values left over from a previous run, since
         // every run begins at set_current_step(0).
-        if self.current_step == 0 {
-            self.new_year = true;
-            self.new_month = true;
-            self.new_day = true;
-        } else {
-            self.new_year = self.timestamp_year != prev_year;
-            self.new_month = self.new_year || self.timestamp_month != prev_month;
-            self.new_day = self.new_month || self.timestamp_day != prev_day;
+        // Calendar-boundary flags cost ~5% of a lean model's step (measured on
+        // 1_sacramento_long, July 2026), so only models that actually lowered
+        // a sim.new_* reference pay for them — for everyone else this branch
+        // predicts never-taken.
+        if self.needs_calendar_flags {
+            if self.current_step == 0 {
+                self.new_year = true;
+                self.new_month = true;
+                self.new_day = true;
+            } else {
+                self.new_year = self.timestamp_year != prev_year;
+                self.new_month = self.new_year || self.timestamp_month != prev_month;
+                self.new_day = self.new_month || self.timestamp_day != prev_day;
+            }
         }
     }
 

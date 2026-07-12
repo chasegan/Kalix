@@ -215,9 +215,11 @@ pub enum OptimizedExpressionNode {
     ///   exactly as the min/max builtins do); an all-NaN window reads NaN.
     MovingWindow {
         op: WindowOp,
-        n: usize,
-        f_off: usize,
-        u_off: usize,
+        /// Boxed so this variant doesn't set the size of EVERY expression
+        /// tree node: three inline usizes grew the enum from 32 to 40 bytes,
+        /// a measured cache-pressure regression across all models. One extra
+        /// deref per window instance per step is far cheaper.
+        slots: Box<WindowSlots>,
         arg: Box<OptimizedExpressionNode>,
     },
 
@@ -271,6 +273,15 @@ pub enum WindowOp {
     Mean,
     Min,
     Max,
+}
+
+/// Arena addressing for one moving-window instance, boxed off the
+/// OptimizedExpressionNode variant to keep the enum at 32 bytes.
+#[derive(Debug, Clone)]
+pub struct WindowSlots {
+    pub n: usize,
+    pub f_off: usize,
+    pub u_off: usize,
 }
 
 /// Statistic computed by a `*_since` call.
@@ -372,13 +383,13 @@ impl OptimizedExpressionNode {
             // sampling happened in advance_state. Sum/Mean read the running
             // sum; Min/Max read the deque front (NaN when the deque is empty,
             // i.e. every real value in the window was NaN).
-            OptimizedExpressionNode::MovingWindow { op, n, f_off, u_off, .. } => match op {
-                WindowOp::Sum => data_cache.expr_state.f[*f_off + *n],
-                WindowOp::Mean => data_cache.expr_state.f[*f_off + *n] / *n as f64,
+            OptimizedExpressionNode::MovingWindow { op, slots, .. } => match op {
+                WindowOp::Sum => data_cache.expr_state.f[slots.f_off + slots.n],
+                WindowOp::Mean => data_cache.expr_state.f[slots.f_off + slots.n] / slots.n as f64,
                 WindowOp::Min | WindowOp::Max => {
-                    let head = data_cache.expr_state.u[*u_off + *n + 1];
-                    let len = data_cache.expr_state.u[*u_off + *n + 2];
-                    if len == 0 { f64::NAN } else { data_cache.expr_state.f[*f_off + head] }
+                    let head = data_cache.expr_state.u[slots.u_off + slots.n + 1];
+                    let len = data_cache.expr_state.u[slots.u_off + slots.n + 2];
+                    if len == 0 { f64::NAN } else { data_cache.expr_state.f[slots.f_off + head] }
                 }
             },
 
@@ -507,15 +518,15 @@ impl OptimizedExpressionNode {
                 row_key.advance_state(data_cache);
             }
 
-            OptimizedExpressionNode::MovingWindow { op, n, f_off, u_off, arg } => {
+            OptimizedExpressionNode::MovingWindow { op, slots, arg } => {
                 arg.advance_state(data_cache);
                 let x = arg.evaluate(data_cache);
                 match op {
                     WindowOp::Sum | WindowOp::Mean => {
-                        advance_ring(data_cache, *n, *f_off, *u_off, x);
+                        advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                     }
-                    WindowOp::Min => advance_deque(data_cache, *n, *f_off, *u_off, x, true),
-                    WindowOp::Max => advance_deque(data_cache, *n, *f_off, *u_off, x, false),
+                    WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
+                    WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
                 }
             }
 
@@ -1278,10 +1289,13 @@ impl DynamicInput {
         constant_variable_map: &HashMap<String, usize>,
         data_cache: &mut DataCache,
     ) -> Result<Self, String> {
-        let DataCache { expr_state, tables, .. } = data_cache;
+        let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
         let f_mark = expr_state.f.len();
         let u_mark = expr_state.u.len();
         let optimised_ast = transform_to_optimised_ast(parsed, data_variable_map, constant_variable_map, expr_state, tables)?;
+        if !*needs_calendar_flags && uses_calendar_flags(&optimised_ast) {
+            *needs_calendar_flags = true;
+        }
         if expr_state.f.len() > f_mark || expr_state.u.len() > u_mark {
             let guard = expr_state.alloc_u(&[0]);
             Ok(DynamicInput::StatefulFunction {
@@ -1415,7 +1429,7 @@ impl DynamicInput {
         }
         // Split borrows for the lowering section: stateful calls allocate in
         // the arena while table lookups resolve against the registry.
-        let DataCache { expr_state, tables, .. } = data_cache;
+        let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
         let frame_offset = expr_state.alloc_f(&vec![0.0; n_slots]);
         let f_mark = expr_state.f.len();
         let u_mark = expr_state.u.len();
@@ -1499,6 +1513,12 @@ impl DynamicInput {
 
         let grew = expr_state.f.len() > f_mark || expr_state.u.len() > u_mark;
 
+        if !*needs_calendar_flags
+            && (stmts_use_calendar_flags(&stmts) || uses_calendar_flags(&result))
+        {
+            *needs_calendar_flags = true;
+        }
+
         // Inlining a plain expression can produce a statement-free program
         // (zero-argument functions with expression bodies): recover the
         // plain variants so such values cost exactly what the pasted
@@ -1556,6 +1576,12 @@ impl DynamicInput {
     /// the cache's expression-state arena. Every production call site already
     /// holds `&mut DataCache` (node phases, the ordering system), so callers
     /// pass `data_cache` unchanged; the read-only variants simply never write.
+    /// Kept `#[inline]` with the Program/StatefulFunction arms outlined into
+    /// separate methods: nodes call get_value several times per step, and the
+    /// simple variants (direct references, constants) only stay inlined into
+    /// node code if this body stays small. Growing it with the phase-3/4 arms
+    /// was a measured regression on expression-light models.
+    #[inline]
     pub fn get_value(&self, data_cache: &mut DataCache) -> f64 {
         match self {
             DynamicInput::None { .. } => 0.0,
@@ -1589,30 +1615,45 @@ impl DynamicInput {
                 }
                 optimised_ast.evaluate(data_cache)
             }
-            DynamicInput::Program { program, .. } => {
-                // Same step-0 validation contract as Function (see above).
-                if data_cache.current_step == 0 {
-                    program.validate_reads(data_cache);
-                }
-                program.evaluate(data_cache)
-            }
+            DynamicInput::Program { program, .. } => Self::get_value_program(program, data_cache),
             DynamicInput::StatefulFunction { optimised_ast, guard, .. } => {
-                // Advance state exactly once per step, at this input's first
-                // evaluation — a second call in the same step (e.g. order
-                // phase then flow phase) sees identical state. The sampled
-                // input expressions are read every step by the advance walk,
-                // so step-0 validation covers them like any other read.
-                let tag = data_cache.current_step + 1;
-                if data_cache.expr_state.u[*guard] != tag {
-                    data_cache.expr_state.u[*guard] = tag;
-                    if data_cache.current_step == 0 {
-                        optimised_ast.validate_reads(data_cache);
-                    }
-                    optimised_ast.advance_state(data_cache);
-                }
-                optimised_ast.evaluate(data_cache)
+                Self::get_value_stateful(optimised_ast, *guard, data_cache)
             }
         }
+    }
+
+    /// Program-variant body of get_value, outlined to keep the hot dispatch
+    /// small (see get_value).
+    #[inline(never)]
+    fn get_value_program(program: &OptimizedProgram, data_cache: &mut DataCache) -> f64 {
+        // Same step-0 validation contract as the Function arm.
+        if data_cache.current_step == 0 {
+            program.validate_reads(data_cache);
+        }
+        program.evaluate(data_cache)
+    }
+
+    /// StatefulFunction-variant body of get_value, outlined (see get_value).
+    #[inline(never)]
+    fn get_value_stateful(
+        optimised_ast: &OptimizedExpressionNode,
+        guard: usize,
+        data_cache: &mut DataCache,
+    ) -> f64 {
+        // Advance state exactly once per step, at this input's first
+        // evaluation — a second call in the same step (e.g. order phase then
+        // flow phase) sees identical state. The sampled input expressions are
+        // read every step by the advance walk, so step-0 validation covers
+        // them like any other read.
+        let tag = data_cache.current_step + 1;
+        if data_cache.expr_state.u[guard] != tag {
+            data_cache.expr_state.u[guard] = tag;
+            if data_cache.current_step == 0 {
+                optimised_ast.validate_reads(data_cache);
+            }
+            optimised_ast.advance_state(data_cache);
+        }
+        optimised_ast.evaluate(data_cache)
     }
 
     /// Get the expression string for serialization
@@ -1664,6 +1705,57 @@ impl DynamicInput {
             DynamicInput::StatefulFunction { expression, .. } => expression.as_str(),
         }
     }
+}
+
+/// Does this lowered tree read any sim.new_* calendar flag? Cold: walked
+/// once per input at load, so update_current_timestamp only computes the
+/// flags for models that use them (a measured per-step cost otherwise).
+fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
+    match node {
+        OptimizedExpressionNode::SimContext { field } => matches!(
+            field,
+            SimField::NewDay | SimField::NewMonth | SimField::NewYear
+        ),
+        OptimizedExpressionNode::Constant { .. }
+        | OptimizedExpressionNode::DataCacheReference { .. }
+        | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. }
+        | OptimizedExpressionNode::ConstantReference { .. }
+        | OptimizedExpressionNode::Local { .. } => false,
+        OptimizedExpressionNode::BinaryOp { left, right, .. } => {
+            uses_calendar_flags(left) || uses_calendar_flags(right)
+        }
+        OptimizedExpressionNode::UnaryOp { operand, .. } => uses_calendar_flags(operand),
+        OptimizedExpressionNode::Func1 { arg, .. } => uses_calendar_flags(arg),
+        OptimizedExpressionNode::Func2 { a, b, .. } => {
+            uses_calendar_flags(a) || uses_calendar_flags(b)
+        }
+        OptimizedExpressionNode::If { cond, then_branch, else_branch } => {
+            uses_calendar_flags(cond)
+                || uses_calendar_flags(then_branch)
+                || uses_calendar_flags(else_branch)
+        }
+        OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
+        OptimizedExpressionNode::MovingWindow { arg, .. } => uses_calendar_flags(arg),
+        OptimizedExpressionNode::Since { arg, reset, .. } => {
+            arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
+        }
+        OptimizedExpressionNode::Lookup1D { arg, .. } => uses_calendar_flags(arg),
+        OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
+            uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
+        }
+    }
+}
+
+/// Statement-list form of [`uses_calendar_flags`].
+fn stmts_use_calendar_flags(stmts: &[OptStmt]) -> bool {
+    stmts.iter().any(|s| match s {
+        OptStmt::Assign { expr, .. } | OptStmt::Assert { expr, .. } => uses_calendar_flags(expr),
+        OptStmt::Cond { cond, then_stmts, else_stmts, .. } => {
+            uses_calendar_flags(cond)
+                || stmts_use_calendar_flags(then_stmts)
+                || stmts_use_calendar_flags(else_stmts)
+        }
+    })
 }
 
 /// Transform a ParsedFunction to an OptimizedExpressionNode
@@ -1883,7 +1975,11 @@ fn lower_stateful_call(
                 (arena.alloc_f(&f_init), arena.alloc_u(&u_init))
             }
         };
-        return Ok(Some(OptimizedExpressionNode::MovingWindow { op, n, f_off, u_off, arg }));
+        return Ok(Some(OptimizedExpressionNode::MovingWindow {
+            op,
+            slots: Box::new(WindowSlots { n, f_off, u_off }),
+            arg,
+        }));
     }
 
     // Event-window family: last argument is always the reset condition.
@@ -1954,3 +2050,19 @@ fn lower_table_call(
     }
 }
 
+
+#[cfg(test)]
+mod size_tests {
+    /// Cache-pressure guard: OptimizedExpressionNode is the tree node of
+    /// every lowered expression - its size sets the allocation size of every
+    /// Box'd child of every expression in every model. Growing it past 32
+    /// bytes caused a measured 7-15% simulation regression (July 2026); a
+    /// new variant needing more than 24 bytes of payload must Box its data
+    /// (see MovingWindow/WindowSlots).
+    #[test]
+    fn optimized_expression_node_stays_32_bytes() {
+        assert!(std::mem::size_of::<super::OptimizedExpressionNode>() <= 32,
+            "OptimizedExpressionNode grew past 32 bytes ({}). Box the new variant's payload.",
+            std::mem::size_of::<super::OptimizedExpressionNode>());
+    }
+}

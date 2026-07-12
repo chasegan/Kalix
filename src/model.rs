@@ -558,35 +558,57 @@ impl Model {
         // definition order (file position IS execution position for var
         // blocks, per node-definition-order §1 extended to calculations).
         set_context_phase(SimPhase::Flow);
-        for item_idx in 0..self.exec_items.len() {
-            match self.exec_items[item_idx] {
-                ExecItem::Node(node_idx) => {
-                    // Set node context for error reporting (just stores the index)
-                    set_context_node(node_idx);
+        // Two loop shapes, chosen once per timestep: models without var
+        // blocks — the overwhelmingly common case — run the original plain
+        // node loop, byte-identical to before var blocks existed (adding a
+        // per-item match to that loop was a measured regression). Only
+        // models that actually interleave var blocks pay for the dispatch.
+        // The node body is duplicated in both branches deliberately: a shared
+        // &mut self helper can't be called while iterating a borrowed field,
+        // and the disjoint field borrows only work with the body inline.
+        if self.var_blocks.is_empty() {
+            for &node_idx in &self.execution_order {
+                // Set node context for error reporting (just stores the index)
+                set_context_node(node_idx);
 
-                    // Run the node's flow phase
-                    self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                // Run the node's flow phase
+                self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
-                    // Immediately propagate outflows to downstream nodes
-                    for &link_idx in &self.outgoing_links[node_idx] {
-                        let link = &self.links[link_idx];
-                        let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
+                // Immediately propagate outflows to downstream nodes
+                for &link_idx in &self.outgoing_links[node_idx] {
+                    let link = &self.links[link_idx];
+                    let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
 
-                        if outflow > 0.0 {
-                            self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
-                        }
+                    if outflow > 0.0 {
+                        self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
                     }
                 }
-                ExecItem::VarBlock(vb_idx) => {
-                    // Evaluate the block's definitions top to bottom, each
-                    // written to its series — computed exactly once per step,
-                    // so every reader observes one value.
-                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
-                        let value = self.var_blocks[vb_idx].defs[def_idx]
-                            .input
-                            .get_value(&mut self.data_cache);
-                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
-                        self.data_cache.add_value_at_index(series_idx, value);
+            }
+        } else {
+            for &exec_item in &self.exec_items {
+                match exec_item {
+                    ExecItem::Node(node_idx) => {
+                        set_context_node(node_idx);
+                        self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                        for &link_idx in &self.outgoing_links[node_idx] {
+                            let link = &self.links[link_idx];
+                            let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
+                            if outflow > 0.0 {
+                                self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
+                            }
+                        }
+                    }
+                    ExecItem::VarBlock(vb_idx) => {
+                        // Evaluate the block's definitions top to bottom,
+                        // each written to its series — computed exactly once
+                        // per step, so every reader observes one value.
+                        for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                            let value = self.var_blocks[vb_idx].defs[def_idx]
+                                .input
+                                .get_value(&mut self.data_cache);
+                            let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                            self.data_cache.add_value_at_index(series_idx, value);
+                        }
                     }
                 }
             }
