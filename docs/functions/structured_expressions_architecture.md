@@ -210,6 +210,13 @@ every `MovingWindow`/`Since` node unconditionally.
 - After inlining, nothing downstream (lowering, evaluation, optimiser
   integration) knows functions exist. `transform_to_optimised_ast` sees
   plain expressions.
+- **Conditional execution (owner decision, July 2026):** a call inside an
+  `if` branch or short-circuit operand expands into a `Stmt::Cond`
+  statement group — taken side executes, pure untaken side is skipped
+  (calls keep expression short-circuiting economics), stateful untaken
+  side runs silently (assignments keep window inputs live per design §5,
+  asserts suppressed). A body assert is therefore a precondition, firing
+  only when its call actually runs.
 - Signature keys (`net_demand(pop, doy)`) are parsed with the same
   tokenizer; duplicate names across the section are fatal at load.
 

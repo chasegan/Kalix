@@ -34,6 +34,24 @@ pub enum Stmt {
     /// `source_text` is the statement as written, carried for the panic
     /// message (cold data; never touched on a passing assert).
     Assert { expr: ExpressionNode, source_text: String },
+
+    /// A conditional statement group. There is NO surface syntax for this —
+    /// only the fn inliner produces it, when a function call (whose expansion
+    /// hoists statements) sits inside an `if` branch or a short-circuit
+    /// operand. The taken side executes normally; a *pure* untaken side is
+    /// skipped entirely (an untaken heavy body costs nothing); an untaken
+    /// side containing stateful builtins executes silently once per step —
+    /// assignments run so state samples live inputs (path-independence,
+    /// design §5) but asserts stay quiet. Either way a body assert is a
+    /// precondition: it fires only when the call's branch is taken.
+    ///
+    /// The inliner guarantees a disciplined shape: any local read after the
+    /// Cond (the result local) is assigned on both sides.
+    Cond {
+        cond: ExpressionNode,
+        then_stmts: Vec<Stmt>,
+        else_stmts: Vec<Stmt>,
+    },
 }
 
 /// A parsed `{ ... }` program: zero or more statements and a result
@@ -56,31 +74,46 @@ impl Program {
     pub fn get_external_variables(&self) -> HashSet<String> {
         // Names are matched case-insensitively everywhere in the language, so
         // the locals set folds case too — `Total = ...; total` is one local.
-        let mut vars = HashSet::new();
-        let mut locals = HashSet::new();
-        for stmt in &self.stmts {
-            match stmt {
-                Stmt::Assign { name, expr } => {
-                    // The RHS is evaluated before the binding takes effect,
-                    // but a bare name in the RHS referencing *this* statement's
-                    // own target is only legal if an earlier Assign bound it —
-                    // which `locals` already reflects at this point.
-                    for v in expr.get_variables() {
-                        if !locals.contains(&v.to_lowercase()) {
-                            vars.insert(v);
-                        }
+        fn collect(stmts: &[Stmt], locals: &mut HashSet<String>, vars: &mut HashSet<String>) {
+            let externals = |expr: &ExpressionNode, locals: &HashSet<String>, vars: &mut HashSet<String>| {
+                for v in expr.get_variables() {
+                    if !locals.contains(&v.to_lowercase()) {
+                        vars.insert(v);
                     }
-                    locals.insert(name.to_lowercase());
                 }
-                Stmt::Assert { expr, .. } => {
-                    for v in expr.get_variables() {
-                        if !locals.contains(&v.to_lowercase()) {
-                            vars.insert(v);
-                        }
+            };
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Assign { name, expr } => {
+                        // The RHS is evaluated before the binding takes
+                        // effect, but a bare name in the RHS referencing
+                        // *this* statement's own target is only legal if an
+                        // earlier Assign bound it — which `locals` already
+                        // reflects at this point.
+                        externals(expr, locals, vars);
+                        locals.insert(name.to_lowercase());
+                    }
+                    Stmt::Assert { expr, .. } => externals(expr, locals, vars),
+                    Stmt::Cond { cond, then_stmts, else_stmts } => {
+                        externals(cond, locals, vars);
+                        // Each side sequences independently; afterwards both
+                        // sides' bindings join the outer scope. Safe because
+                        // only the inliner builds Cond, and it assigns any
+                        // later-read local (the result) on both sides.
+                        let mut then_locals = locals.clone();
+                        collect(then_stmts, &mut then_locals, vars);
+                        let mut else_locals = locals.clone();
+                        collect(else_stmts, &mut else_locals, vars);
+                        locals.extend(then_locals);
+                        locals.extend(else_locals);
                     }
                 }
             }
         }
+
+        let mut vars = HashSet::new();
+        let mut locals = HashSet::new();
+        collect(&self.stmts, &mut locals, &mut vars);
         for v in self.result.get_variables() {
             if !locals.contains(&v.to_lowercase()) {
                 vars.insert(v);

@@ -169,15 +169,25 @@ impl FnRegistry {
 
     /// Bare lowercase names of fn.* calls made by `name`'s body.
     fn callees(&self, name: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        if let Some(def) = self.map.get(name) {
-            for stmt in &def.body.stmts {
+        fn walk(stmts: &[Stmt], out: &mut Vec<String>) {
+            for stmt in stmts {
                 match stmt {
                     Stmt::Assign { expr, .. } | Stmt::Assert { expr, .. } => {
-                        collect_fn_call_names(expr, &mut out)
+                        collect_fn_call_names(expr, out)
+                    }
+                    // Parser output never contains Cond (inliner-only), but
+                    // walk it anyway so the check can't silently miss edges.
+                    Stmt::Cond { cond, then_stmts, else_stmts } => {
+                        collect_fn_call_names(cond, out);
+                        walk(then_stmts, out);
+                        walk(else_stmts, out);
                     }
                 }
             }
+        }
+        let mut out = Vec::new();
+        if let Some(def) = self.map.get(name) {
+            walk(&def.body.stmts, &mut out);
             collect_fn_call_names(&def.body.result, &mut out);
         }
         out

@@ -333,13 +333,15 @@ fn test_fn_inside_moving_argument() {
 }
 
 /// C17. A function containing a stateful builtin, called inside an untaken `if`
-/// branch, still advances (deliberate hoisting — see `inline.rs`).
-/// `if(sim.step >= 2, fn.wet_sum(data.x), -1)` with
+/// branch, still advances: the untaken side runs silently once per step —
+/// assignments keep the hidden argument binding live so the window samples
+/// real data — while its asserts stay quiet (conditional execution, see
+/// `inline.rs`). `if(sim.step >= 2, fn.wet_sum(data.x), -1)` with
 /// `wet_sum(a) = moving_sum(a, 3, 0)`: steps 0-1 read -1, but at step 2 the
 /// value is the FULL 3-window [1,2,3]=6, proving the window advanced while its
 /// branch was untaken.
 #[test]
-fn test_fn_inside_untaken_if_branch_hoists() {
+fn test_fn_inside_untaken_if_branch_still_advances() {
     let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0, 5.0]);
     dc.fns.parse_and_insert("wet_sum(a)", "moving_sum(a, 3, 0)").unwrap();
     let input = DynamicInput::from_string(
@@ -407,4 +409,122 @@ fn test_round_trip_returns_original_text() {
         "original_string() must return the pre-inlining text");
     assert_eq!(input.to_string(), original,
         "to_string() must return the pre-inlining text");
+}
+
+// ============================================================================
+// Conditional execution (owner decision July 2026): a function-body assert is
+// a PRECONDITION — it fires only when the call's branch is actually taken.
+// Pure untaken sides are skipped outright; stateful untaken sides run
+// silently so state stays path-independent. See inline.rs module doc and
+// OptStmt::Cond.
+// ============================================================================
+
+/// Run an input at step 0 expecting a panic whose message contains `needle`.
+fn expect_panic_contains(input: &DynamicInput, dc: &mut DataCache, needle: &str) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        input.get_value(dc)
+    }));
+    match result {
+        Ok(v) => panic!("expected an assert panic containing '{}', got value {}", needle, v),
+        Err(payload) => {
+            let msg = payload
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| payload.downcast_ref::<&str>().copied())
+                .unwrap_or("<non-string panic>");
+            assert!(msg.contains(needle),
+                "panic should contain '{}', got: {}", needle, msg);
+        }
+    }
+}
+
+/// A body assert inside an UNTAKEN if branch does not fire — pure body, so
+/// the untaken side is skipped entirely. data.x is 0 on the untaken steps,
+/// which would fail `assert(x > 0)` if it executed.
+#[test]
+fn test_fn_assert_suppressed_in_untaken_branch_pure() {
+    let mut dc = cache_with_x(&[0.0, 0.0, 5.0, 6.0]);
+    dc.fns.parse_and_insert("guarded(x)", "{ assert(x > 0); x }").unwrap();
+    let input = DynamicInput::from_string(
+        "if(sim.step >= 2, fn.guarded(data.x), -1)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[-1.0, -1.0, 5.0, 6.0], "pure guarded fn in branch");
+}
+
+/// Same suppression when the untaken side CONTAINS STATE: the side runs
+/// silently (its window advances on live data) but its assert stays quiet.
+#[test]
+fn test_fn_assert_suppressed_in_untaken_branch_stateful() {
+    let mut dc = cache_with_x(&[0.0, 0.0, 5.0, 6.0]);
+    dc.fns.parse_and_insert("guarded_ms(x)", "{ assert(x > 0); moving_sum(x, 2, 0) }").unwrap();
+    let input = DynamicInput::from_string(
+        "if(sim.step >= 2, fn.guarded_ms(data.x), -1)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    // Window advanced every step on live data.x: [0,0,0,0+5=5,5+6=11] →
+    // steps: 0,0,5,11; gated: -1,-1,5,11.
+    assert_series(&got, &[-1.0, -1.0, 5.0, 11.0], "stateful guarded fn in branch");
+}
+
+/// The same assert DOES fire when the branch is taken, naming the function.
+#[test]
+fn test_fn_assert_fires_when_branch_taken() {
+    let mut dc = cache_with_x(&[0.0]);
+    dc.fns.parse_and_insert("guarded(x)", "{ assert(x > 0); x }").unwrap();
+    let input = DynamicInput::from_string(
+        "if(1, fn.guarded(data.x), -1)", &mut dc, true, None).unwrap();
+    expect_panic_contains(&input, &mut dc, "fn.guarded");
+}
+
+/// Seasonal switch: two rule templates with mutually exclusive preconditions.
+/// Only the taken side's assert is live at each step — the untaken side's
+/// precondition, which the data would violate, never fires.
+#[test]
+fn test_seasonal_switch_only_taken_side_asserts() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 20.0, 30.0]);
+    dc.fns.parse_and_insert("low_rule(x)", "{ assert(x < 10); x }").unwrap();
+    dc.fns.parse_and_insert("high_rule(x)", "{ assert(x >= 10); x * 2 }").unwrap();
+    let input = DynamicInput::from_string(
+        "if(sim.step < 2, fn.low_rule(data.x), fn.high_rule(data.x))", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[1.0, 2.0, 40.0, 60.0], "seasonal switch");
+}
+
+/// `&&` short-circuits its right operand: a function call there executes —
+/// and asserts — only when the left side is truthy. Result keeps &&'s exact
+/// 1/0 truthiness.
+#[test]
+fn test_short_circuit_and_suppresses_fn_assert() {
+    let mut dc = cache_with_x(&[0.0, 5.0, 7.0]);
+    dc.fns.parse_and_insert("pos(x)", "{ assert(x > 0); x }").unwrap();
+    let input = DynamicInput::from_string(
+        "(sim.step >= 1) && fn.pos(data.x)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 3);
+    // Step 0: left false, fn.pos never runs (x=0 would trip it). Then 1, 1.
+    assert_series(&got, &[0.0, 1.0, 1.0], "&& short-circuit over fn");
+}
+
+/// `||` mirror image: the right operand runs only when the left is falsy.
+#[test]
+fn test_short_circuit_or_suppresses_fn_assert() {
+    let mut dc = cache_with_x(&[0.0, 3.0]);
+    dc.fns.parse_and_insert("pos(x)", "{ assert(x > 0); x }").unwrap();
+    let input = DynamicInput::from_string(
+        "(sim.step == 0) || fn.pos(data.x)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 2);
+    // Step 0: left true → 1, fn.pos never runs (x=0). Step 1: fn.pos(3) → 1.
+    assert_series(&got, &[1.0, 1.0], "|| short-circuit over fn");
+}
+
+/// Both branches carrying calls: the Cond result local is written by
+/// whichever side is taken, and the surrounding expression reads it
+/// correctly (pins the restructure's result plumbing).
+#[test]
+fn test_if_with_fn_calls_both_sides_result_plumbing() {
+    let mut dc = cache_with_x(&[10.0, 10.0]);
+    dc.fns.parse_and_insert("d(x)", "x * 2").unwrap();
+    dc.fns.parse_and_insert("t(x)", "x * 3").unwrap();
+    let input = DynamicInput::from_string(
+        "1 + if(sim.step == 0, fn.d(data.x), fn.t(data.x)) * 10", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 2);
+    assert_series(&got, &[201.0, 301.0], "if result plumbing inside expression");
 }

@@ -12,19 +12,26 @@
 /// tokenizer cannot produce in an identifier, so collision with user names
 /// is structurally impossible.
 ///
-/// ## Hoisting semantics (deliberate)
+/// ## Conditional execution (deliberate; owner decision July 2026)
 ///
-/// A call's argument bindings and body statements are hoisted to statement
-/// position in the enclosing program. A call inside an untaken `if` branch
-/// therefore still executes its body statements each step. For pure
-/// arithmetic this is unobservable; for the two effectful things it is the
-/// consistent choice by design: stateful builtins advance unconditionally
-/// anyway (design §5), and an `assert` inside a function body checks its
-/// invariant every step regardless of which branch the caller takes — the
-/// file says the invariant holds, not "holds when the branch is taken".
+/// A call's argument bindings and body statements hoist to statement
+/// position — but when the call sits inside an `if` branch or a
+/// short-circuit operand, the hoisted statements go into a [`Stmt::Cond`]
+/// group, so they execute only when that branch is taken. Consequences:
+/// - A body `assert` is a **precondition**: it fires only when the call
+///   actually runs. (An invariant that must hold always belongs at
+///   statement level in the caller, where asserts always run.)
+/// - An untaken pure body costs nothing — a function call costs what the
+///   equivalent pasted expression would, including its short-circuiting.
+/// - Stateful builtins still advance every step on BOTH sides (the untaken
+///   side runs silently: assignments execute so state samples live inputs,
+///   asserts stay quiet) — window and *_since values remain
+///   path-independent per design §5.
 
 use crate::functions::ast::{ExpressionNode, FunctionRef, Program, Stmt};
 use crate::functions::fn_registry::FnRegistry;
+use crate::functions::functions::BuiltinFunction;
+use crate::functions::operators::BinaryOperator;
 
 /// Does this expression reference `fn.*` anywhere (calls or bare names)?
 /// Cheap pre-check so values without functions skip inlining entirely and
@@ -50,9 +57,17 @@ pub fn expr_references_fns(e: &ExpressionNode) -> bool {
 
 /// Program-level form of [`expr_references_fns`].
 pub fn references_fns(program: &Program) -> bool {
-    program.stmts.iter().any(|s| match s {
-        Stmt::Assign { expr, .. } | Stmt::Assert { expr, .. } => expr_references_fns(expr),
-    }) || expr_references_fns(&program.result)
+    fn stmt_refs(s: &Stmt) -> bool {
+        match s {
+            Stmt::Assign { expr, .. } | Stmt::Assert { expr, .. } => expr_references_fns(expr),
+            Stmt::Cond { cond, then_stmts, else_stmts } => {
+                expr_references_fns(cond)
+                    || then_stmts.iter().any(stmt_refs)
+                    || else_stmts.iter().any(stmt_refs)
+            }
+        }
+    }
+    program.stmts.iter().any(stmt_refs) || expr_references_fns(&program.result)
 }
 
 /// Expand every `fn.*` call in `program`, returning a self-contained program.
@@ -73,18 +88,7 @@ pub fn inline_fn_calls(
     };
 
     let mut out_stmts: Vec<Stmt> = Vec::new();
-    for stmt in program.stmts {
-        match stmt {
-            Stmt::Assign { name, expr } => {
-                let expr = inliner.rewrite(expr, &mut out_stmts, &Renames::none())?;
-                out_stmts.push(Stmt::Assign { name, expr });
-            }
-            Stmt::Assert { expr, source_text } => {
-                let expr = inliner.rewrite(expr, &mut out_stmts, &Renames::none())?;
-                out_stmts.push(Stmt::Assert { expr, source_text });
-            }
-        }
-    }
+    inliner.rewrite_stmts_into(program.stmts, &mut out_stmts, &Renames::none(), None)?;
     let result = inliner.rewrite(program.result, &mut out_stmts, &Renames::none())?;
 
     Ok(Program { stmts: out_stmts, result })
@@ -114,6 +118,48 @@ struct Inliner<'a> {
 }
 
 impl<'a> Inliner<'a> {
+    /// Rewrite a statement list into `out`, expanding calls as we go.
+    /// `assert_prefix` labels asserts spliced from a function body so the
+    /// panic message names the function.
+    fn rewrite_stmts_into(
+        &mut self,
+        stmts: Vec<Stmt>,
+        out: &mut Vec<Stmt>,
+        renames: &Renames,
+        assert_prefix: Option<&str>,
+    ) -> Result<(), String> {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Assign { name, expr } => {
+                    let expr = self.rewrite(expr, out, renames)?;
+                    // Body locals were pre-seeded into `renames` by
+                    // expand_call; top-level (caller) locals pass through.
+                    let name = renames.lookup(&name).cloned().unwrap_or(name);
+                    out.push(Stmt::Assign { name, expr });
+                }
+                Stmt::Assert { expr, source_text } => {
+                    let expr = self.rewrite(expr, out, renames)?;
+                    let source_text = match assert_prefix {
+                        Some(p) => format!("{}: {}", p, source_text),
+                        None => source_text,
+                    };
+                    out.push(Stmt::Assert { expr, source_text });
+                }
+                Stmt::Cond { cond, then_stmts, else_stmts } => {
+                    // Only reachable when re-inlining an already-inlined
+                    // program (defensive): sides stay conditional.
+                    let cond = self.rewrite(cond, out, renames)?;
+                    let mut t = Vec::new();
+                    self.rewrite_stmts_into(then_stmts, &mut t, renames, assert_prefix)?;
+                    let mut e = Vec::new();
+                    self.rewrite_stmts_into(else_stmts, &mut e, renames, assert_prefix)?;
+                    out.push(Stmt::Cond { cond, then_stmts: t, else_stmts: e });
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Rewrite an expression: rename per `renames`, rebind `this.`, and
     /// expand `fn.*` calls by hoisting into `out_stmts`.
     fn rewrite(
@@ -150,6 +196,23 @@ impl<'a> Inliner<'a> {
 
             ExpressionNode::BinaryOp { left, op, right } => {
                 let left = self.rewrite(*left, out_stmts, renames)?;
+
+                // && and || short-circuit their right operand. If expanding
+                // it hoists statements, those statements must stay
+                // conditional — same treatment as `if` branches below.
+                if matches!(op, BinaryOperator::And | BinaryOperator::Or) {
+                    let mut rhs_stmts = Vec::new();
+                    let right = self.rewrite(*right, &mut rhs_stmts, renames)?;
+                    if !rhs_stmts.is_empty() {
+                        return self.restructure_short_circuit(op, left, rhs_stmts, right, out_stmts);
+                    }
+                    return Ok(ExpressionNode::BinaryOp {
+                        left: Box::new(left),
+                        op,
+                        right: Box::new(right),
+                    });
+                }
+
                 let right = self.rewrite(*right, out_stmts, renames)?;
                 Ok(ExpressionNode::BinaryOp { left: Box::new(left), op, right: Box::new(right) })
             }
@@ -160,6 +223,17 @@ impl<'a> Inliner<'a> {
             }
 
             ExpressionNode::FunctionCall { func, args } => {
+                // `if(cond, a, b)` evaluates only the taken branch. When a
+                // branch's expansion hoists statements, the whole `if`
+                // restructures into a conditional statement group so those
+                // statements execute only when their branch is taken —
+                // a body assert is a precondition, and an untaken heavy
+                // body costs nothing (state still advances on both sides;
+                // see OptStmt::Cond).
+                if matches!(&func, FunctionRef::Builtin(BuiltinFunction::If)) && args.len() == 3 {
+                    return self.rewrite_if(args, out_stmts, renames);
+                }
+
                 let fn_name = match &func {
                     FunctionRef::Named(n)
                         if n.len() >= 3 && n[..3].eq_ignore_ascii_case("fn.") =>
@@ -180,6 +254,80 @@ impl<'a> Inliner<'a> {
                 }
             }
         }
+    }
+
+    /// Restructure `if(cond, a, b)` when either branch's expansion hoists
+    /// statements: the branches become a Cond statement group assigning a
+    /// hidden result local on both sides, and the `if` expression is
+    /// replaced by that local. When neither branch hoists, the `if` passes
+    /// through untouched — existing expressions keep their exact shape.
+    fn rewrite_if(
+        &mut self,
+        args: Vec<ExpressionNode>,
+        out_stmts: &mut Vec<Stmt>,
+        renames: &Renames,
+    ) -> Result<ExpressionNode, String> {
+        let mut it = args.into_iter();
+        let cond = self.rewrite(it.next().unwrap(), out_stmts, renames)?;
+
+        let mut then_stmts = Vec::new();
+        let then_expr = self.rewrite(it.next().unwrap(), &mut then_stmts, renames)?;
+        let mut else_stmts = Vec::new();
+        let else_expr = self.rewrite(it.next().unwrap(), &mut else_stmts, renames)?;
+
+        if then_stmts.is_empty() && else_stmts.is_empty() {
+            return Ok(ExpressionNode::FunctionCall {
+                func: FunctionRef::Builtin(BuiltinFunction::If),
+                args: vec![cond, then_expr, else_expr],
+            });
+        }
+
+        self.counter += 1;
+        let res = format!("fn#{}#if", self.counter);
+        then_stmts.push(Stmt::Assign { name: res.clone(), expr: then_expr });
+        else_stmts.push(Stmt::Assign { name: res.clone(), expr: else_expr });
+        out_stmts.push(Stmt::Cond { cond, then_stmts, else_stmts });
+        Ok(ExpressionNode::Variable { name: res })
+    }
+
+    /// Restructure `left && right` / `left || right` when the right operand's
+    /// expansion hoists statements. Truthiness matches the operators exactly
+    /// (non-zero incl. NaN): the 1/0 coercion is an `if` node, not a `!= 0`
+    /// comparison, because NotEqual is epsilon-based.
+    fn restructure_short_circuit(
+        &mut self,
+        op: BinaryOperator,
+        left: ExpressionNode,
+        rhs_stmts: Vec<Stmt>,
+        right: ExpressionNode,
+        out_stmts: &mut Vec<Stmt>,
+    ) -> Result<ExpressionNode, String> {
+        let truthy_01 = |e: ExpressionNode| ExpressionNode::FunctionCall {
+            func: FunctionRef::Builtin(BuiltinFunction::If),
+            args: vec![e, ExpressionNode::Constant { value: 1.0 }, ExpressionNode::Constant { value: 0.0 }],
+        };
+
+        self.counter += 1;
+        let res = format!(
+            "fn#{}#{}",
+            self.counter,
+            if op == BinaryOperator::And { "and" } else { "or" }
+        );
+
+        let (then_stmts, else_stmts) = if op == BinaryOperator::And {
+            // left truthy: evaluate rhs, result is rhs truthiness. Else 0.
+            let mut t = rhs_stmts;
+            t.push(Stmt::Assign { name: res.clone(), expr: truthy_01(right) });
+            (t, vec![Stmt::Assign { name: res.clone(), expr: ExpressionNode::Constant { value: 0.0 } }])
+        } else {
+            // left truthy: 1. Else evaluate rhs, result is rhs truthiness.
+            let mut e = rhs_stmts;
+            e.push(Stmt::Assign { name: res.clone(), expr: truthy_01(right) });
+            (vec![Stmt::Assign { name: res.clone(), expr: ExpressionNode::Constant { value: 1.0 } }], e)
+        };
+
+        out_stmts.push(Stmt::Cond { cond: left, then_stmts, else_stmts });
+        Ok(ExpressionNode::Variable { name: res })
     }
 
     /// Rename a variable: body locals/params first, then `this.` rebinding.
@@ -252,25 +400,11 @@ impl<'a> Inliner<'a> {
         }
 
         // Splice the body's statements, renamed and recursively expanded.
+        // The assert prefix names the function in panic messages, so a
+        // template used at fifty nodes still reads clearly.
         self.stack.push(bare.to_string());
-        for stmt in def.body.stmts.clone() {
-            match stmt {
-                Stmt::Assign { name, expr } => {
-                    let expr = self.rewrite(expr, out_stmts, &renames)?;
-                    let hidden = renames.lookup(&name).cloned().expect("local was pre-renamed");
-                    out_stmts.push(Stmt::Assign { name: hidden, expr });
-                }
-                Stmt::Assert { expr, source_text } => {
-                    let expr = self.rewrite(expr, out_stmts, &renames)?;
-                    out_stmts.push(Stmt::Assert {
-                        expr,
-                        // The panic message names the function so a template
-                        // used at fifty nodes still reads clearly.
-                        source_text: format!("fn.{}: {}", bare, source_text),
-                    });
-                }
-            }
-        }
+        let prefix = format!("fn.{}", bare);
+        self.rewrite_stmts_into(def.body.stmts.clone(), out_stmts, &renames, Some(&prefix))?;
         let result = self.rewrite(def.body.result.clone(), out_stmts, &renames)?;
         self.stack.pop();
 

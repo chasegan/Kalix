@@ -768,6 +768,30 @@ pub enum OptStmt {
         expr: OptimizedExpressionNode,
         meta: u32,
     },
+    /// Conditional statement group (produced only by the fn inliner, for
+    /// calls inside `if` branches and short-circuit operands).
+    ///
+    /// Execution rules, per side:
+    /// - Taken side: executes normally (asserts fire).
+    /// - Untaken side, stateless (`*_has_state == false`): skipped entirely —
+    ///   an untaken heavy pure body costs nothing.
+    /// - Untaken side containing stateful nodes: executes SILENTLY on the
+    ///   once-per-step advance pass — assignments run so window/*_since
+    ///   inputs (including hidden argument bindings) stay live, keeping
+    ///   state path-independent (design §5), but asserts are suppressed.
+    ///
+    /// Either way a function-body assert is a precondition: it fires only
+    /// when its call's branch is taken.
+    Cond {
+        cond: OptimizedExpressionNode,
+        then_stmts: Vec<OptStmt>,
+        else_stmts: Vec<OptStmt>,
+        /// Does each side's lowered tree contain stateful nodes? Computed at
+        /// lowering; decides whether the untaken side runs silently or is
+        /// skipped.
+        then_has_state: bool,
+        else_has_state: bool,
+    },
 }
 
 /// A lowered `{ ... }` program: statements executed in order, then the result
@@ -812,7 +836,21 @@ impl OptimizedProgram {
             None => false,
         };
 
-        for stmt in &self.stmts {
+        self.run_stmts(&self.stmts, data_cache, advance, true);
+        if advance {
+            self.result.advance_state(data_cache);
+        }
+        self.result.evaluate(data_cache)
+    }
+
+    /// Execute a statement list. `advance` interleaves the once-per-step
+    /// state advance immediately before each statement evaluates (so
+    /// stateful calls sample locals at their own statement's position).
+    /// `fire_asserts` is false when running an untaken Cond side silently:
+    /// assignments execute (keeping stateful inputs live), asserts are
+    /// neither checked nor evaluated.
+    fn run_stmts(&self, stmts: &[OptStmt], data_cache: &mut DataCache, advance: bool, fire_asserts: bool) {
+        for stmt in stmts {
             match stmt {
                 OptStmt::Assign { slot, expr } => {
                     if advance {
@@ -825,20 +863,40 @@ impl OptimizedProgram {
                     if advance {
                         expr.advance_state(data_cache);
                     }
-                    let v = expr.evaluate(data_cache);
-                    // Fails on 0 AND on NaN. Written as two explicit conditions:
-                    // `!(v != 0.0)` would pass NaN through, which is exactly the
-                    // case the modeller most needs caught.
-                    if v == 0.0 || v.is_nan() {
-                        self.assert_failed(*meta, v, data_cache);
+                    if fire_asserts {
+                        let v = expr.evaluate(data_cache);
+                        // Fails on 0 AND on NaN. Written as two explicit
+                        // conditions: `!(v != 0.0)` would pass NaN through,
+                        // which is exactly the case the modeller most needs
+                        // caught.
+                        if v == 0.0 || v.is_nan() {
+                            self.assert_failed(*meta, v, data_cache);
+                        }
                     }
+                }
+                OptStmt::Cond { cond, then_stmts, else_stmts, then_has_state, else_has_state } => {
+                    if advance {
+                        cond.advance_state(data_cache);
+                    }
+                    let taken_then = cond.evaluate(data_cache) != 0.0;
+                    let (taken, untaken, untaken_has_state) = if taken_then {
+                        (then_stmts, else_stmts, *else_has_state)
+                    } else {
+                        (else_stmts, then_stmts, *then_has_state)
+                    };
+                    // A stateful untaken side runs silently on the advance
+                    // pass: its assignments keep window/*_since inputs live
+                    // (path-independent state, design §5) but its asserts
+                    // stay quiet. A pure untaken side is skipped outright.
+                    // Ordering: untaken first, so the taken side's writes —
+                    // including the shared result local — land last.
+                    if advance && untaken_has_state {
+                        self.run_stmts(untaken, data_cache, true, false);
+                    }
+                    self.run_stmts(taken, data_cache, advance, fire_asserts);
                 }
             }
         }
-        if advance {
-            self.result.advance_state(data_cache);
-        }
-        self.result.evaluate(data_cache)
     }
 
     /// Step-0 read validation: walk every statement and the result, exactly
@@ -846,12 +904,20 @@ impl OptimizedProgram {
     #[cold]
     #[inline(never)]
     pub fn validate_reads(&self, data_cache: &DataCache) {
-        for stmt in &self.stmts {
-            match stmt {
-                OptStmt::Assign { expr, .. } => expr.validate_reads(data_cache),
-                OptStmt::Assert { expr, .. } => expr.validate_reads(data_cache),
+        fn walk(stmts: &[OptStmt], data_cache: &DataCache) {
+            for stmt in stmts {
+                match stmt {
+                    OptStmt::Assign { expr, .. } => expr.validate_reads(data_cache),
+                    OptStmt::Assert { expr, .. } => expr.validate_reads(data_cache),
+                    OptStmt::Cond { cond, then_stmts, else_stmts, .. } => {
+                        cond.validate_reads(data_cache);
+                        walk(then_stmts, data_cache);
+                        walk(else_stmts, data_cache);
+                    }
+                }
             }
         }
+        walk(&self.stmts, data_cache);
         self.result.validate_reads(data_cache);
     }
 
@@ -1317,18 +1383,29 @@ impl DynamicInput {
 
         // Allocate the locals frame: one slot per distinct assigned name,
         // zero-initialised (a local is always written before it is read —
-        // the sequential lowering below guarantees it).
-        let mut n_slots = 0usize;
-        {
-            let mut seen: Vec<&str> = Vec::new();
-            for stmt in &program.stmts {
-                if let Stmt::Assign { name, .. } = stmt {
-                    if !seen.iter().any(|s| s.eq_ignore_ascii_case(name)) {
-                        seen.push(name);
-                        n_slots += 1;
+        // the sequential lowering below guarantees it; a Cond result local
+        // is written on whichever side is taken).
+        fn count_assigns<'s>(stmts: &'s [Stmt], seen: &mut Vec<&'s str>) {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Assign { name, .. } => {
+                        if !seen.iter().any(|s| s.eq_ignore_ascii_case(name)) {
+                            seen.push(name);
+                        }
+                    }
+                    Stmt::Assert { .. } => {}
+                    Stmt::Cond { then_stmts, else_stmts, .. } => {
+                        count_assigns(then_stmts, seen);
+                        count_assigns(else_stmts, seen);
                     }
                 }
             }
+        }
+        let mut n_slots = 0usize;
+        {
+            let mut seen: Vec<&str> = Vec::new();
+            count_assigns(&program.stmts, &mut seen);
+            n_slots = seen.len();
         }
         // Split borrows for the lowering section: stateful calls allocate in
         // the arena while table lookups resolve against the registry.
@@ -1338,32 +1415,78 @@ impl DynamicInput {
         let u_mark = expr_state.u.len();
 
         // Lower statements in order; `locals` grows as assignments bind.
-        let mut locals: HashMap<String, usize> = HashMap::new();
-        let mut next_slot = frame_offset;
-        let mut stmts: Vec<OptStmt> = Vec::new();
-        let mut assert_meta: Vec<String> = Vec::new();
-
-        for stmt in &program.stmts {
-            match stmt {
-                Stmt::Assign { name, expr } => {
-                    let lowered = OptimizedExpressionNode::from_expression_node(
-                        expr, &data_variable_map, &constant_variable_map, &locals, expr_state, tables)?;
-                    let slot = *locals.entry(name.to_lowercase()).or_insert_with(|| {
-                        let s = next_slot;
-                        next_slot += 1;
-                        s
-                    });
-                    stmts.push(OptStmt::Assign { slot, expr: lowered });
-                }
-                Stmt::Assert { expr, source_text } => {
-                    let lowered = OptimizedExpressionNode::from_expression_node(
-                        expr, &data_variable_map, &constant_variable_map, &locals, expr_state, tables)?;
-                    let meta = assert_meta.len() as u32;
-                    assert_meta.push(source_text.clone());
-                    stmts.push(OptStmt::Assert { expr: lowered, meta });
+        // Cond sides share the outer locals map: hidden names are hygienic
+        // by construction, and a Cond result local resolves to one slot from
+        // both sides.
+        struct LowerCtx<'c> {
+            data_variable_map: &'c HashMap<String, usize>,
+            constant_variable_map: &'c HashMap<String, usize>,
+            locals: HashMap<String, usize>,
+            next_slot: usize,
+            assert_meta: Vec<String>,
+        }
+        fn lower_stmts(
+            in_stmts: &[Stmt],
+            ctx: &mut LowerCtx,
+            expr_state: &mut crate::data_management::data_cache::ExprStateArena,
+            tables: &TableRegistry,
+        ) -> Result<Vec<OptStmt>, String> {
+            let mut out: Vec<OptStmt> = Vec::with_capacity(in_stmts.len());
+            for stmt in in_stmts {
+                match stmt {
+                    Stmt::Assign { name, expr } => {
+                        let lowered = OptimizedExpressionNode::from_expression_node(
+                            expr, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                        let next = &mut ctx.next_slot;
+                        let slot = *ctx.locals.entry(name.to_lowercase()).or_insert_with(|| {
+                            let s = *next;
+                            *next += 1;
+                            s
+                        });
+                        out.push(OptStmt::Assign { slot, expr: lowered });
+                    }
+                    Stmt::Assert { expr, source_text } => {
+                        let lowered = OptimizedExpressionNode::from_expression_node(
+                            expr, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                        let meta = ctx.assert_meta.len() as u32;
+                        ctx.assert_meta.push(source_text.clone());
+                        out.push(OptStmt::Assert { expr: lowered, meta });
+                    }
+                    Stmt::Cond { cond, then_stmts, else_stmts } => {
+                        let cond = OptimizedExpressionNode::from_expression_node(
+                            cond, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                        // Arena growth while lowering a side tells us whether
+                        // that side carries stateful nodes — the same
+                        // detection the Function/StatefulFunction split uses.
+                        let mark = (expr_state.f.len(), expr_state.u.len());
+                        let then_stmts = lower_stmts(then_stmts, ctx, expr_state, tables)?;
+                        let then_has_state = (expr_state.f.len(), expr_state.u.len()) != mark;
+                        let mark = (expr_state.f.len(), expr_state.u.len());
+                        let else_stmts = lower_stmts(else_stmts, ctx, expr_state, tables)?;
+                        let else_has_state = (expr_state.f.len(), expr_state.u.len()) != mark;
+                        out.push(OptStmt::Cond {
+                            cond,
+                            then_stmts,
+                            else_stmts,
+                            then_has_state,
+                            else_has_state,
+                        });
+                    }
                 }
             }
+            Ok(out)
         }
+
+        let mut ctx = LowerCtx {
+            data_variable_map: &data_variable_map,
+            constant_variable_map: &constant_variable_map,
+            locals: HashMap::new(),
+            next_slot: frame_offset,
+            assert_meta: Vec::new(),
+        };
+        let stmts = lower_stmts(&program.stmts, &mut ctx, expr_state, tables)?;
+        let locals = ctx.locals;
+        let assert_meta = ctx.assert_meta;
 
         let result = OptimizedExpressionNode::from_expression_node(
             &program.result, &data_variable_map, &constant_variable_map, &locals, expr_state, tables)?;

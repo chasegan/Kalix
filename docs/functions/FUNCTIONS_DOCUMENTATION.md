@@ -125,10 +125,14 @@ net_demand(pop, doy) = {
 - Functions have zero runtime cost: every call site is expanded at model
   load (arguments bind once, body locals can never collide with the
   caller's), so a function used at fifty nodes runs exactly as fast as
-  fifty pasted copies. A consequence worth knowing: a stateful builtin
-  inside a function body gets independent state per call site, and an
-  `assert` inside a body checks its invariant every step even when the
-  call sits in an untaken `if` branch.
+  fifty pasted copies — including short-circuiting: a call in an untaken
+  `if` branch (or short-circuited `&&`/`||` operand) does not execute.
+- Two consequences worth knowing: an `assert` inside a body is a
+  **precondition** — it fires only when the call's branch is actually
+  taken (an invariant that must hold always belongs at statement level,
+  where asserts always run); and a stateful builtin inside a body gets
+  independent state per call site, advancing every step even when its
+  branch is untaken, so window values never depend on branching history.
 
 ## Temporal (Stateful) Functions
 
