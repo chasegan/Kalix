@@ -96,6 +96,40 @@ pond_demand = {
 - A block is only legal as the entire value; blocks cannot be nested inside
   expressions.
 
+## User-Defined Functions
+
+Define reusable functions in a `[fn]` section — the signature is the key, so
+the name is written exactly once — and call them namespaced as `fn.name(...)`:
+
+```ini
+[fn]
+storage_frac(v, cap) = v / cap
+new_wy() = sim.new_month && sim.month == 7
+net_demand(pop, doy) = {
+    base = pop * c.per_capita;
+    peak = 1 + 0.3 * sin(2 * 3.14159 * doy / 365);
+    base * peak
+    }
+```
+
+- **Fixed signatures**: no default arguments, no overloads; calls bind
+  positionally; zero-argument functions are legal. Duplicate names are a
+  load error, even at different arities.
+- **Definitions live anywhere** in the model file, including after their
+  callers — functions are passive, like tables.
+- Bodies may be plain expressions or `{ ... }` blocks, and may reference
+  `data.*`, `node.*`, `c.*`, `sim.*`, `table.*`, other `fn.*` — and `this.`,
+  which rebinds to the **calling** node, turning a function into a rule
+  template applied at many nodes.
+- **No recursion**, direct or mutual — the call graph is checked at load.
+- Functions have zero runtime cost: every call site is expanded at model
+  load (arguments bind once, body locals can never collide with the
+  caller's), so a function used at fifty nodes runs exactly as fast as
+  fifty pasted copies. A consequence worth knowing: a stateful builtin
+  inside a function body gets independent state per call site, and an
+  `assert` inside a body checks its invariant every step even when the
+  call sits in an untaken `if` branch.
+
 ## Temporal (Stateful) Functions
 
 These functions remember earlier timesteps. Their state advances exactly
@@ -270,10 +304,6 @@ intended growth path of the expression language, roughly in priority order.
   on the `sim.*` namespace. (The boundary flags `sim.new_day/month/year`
   shipped with the temporal functions; there is deliberately no water-year
   field — see Temporal Functions above.)
-- **User-defined functions** — a `[fn]` section with signature-as-key
-  definitions (`net_demand(pop, doy) = ...`), called as `fn.net_demand(...)`.
-  Design settled in structured_expressions_design.md §8. (Named intermediate
-  values within one expression shipped as program-block locals.)
 - **Model variables** — `[var.*]` blocks: published, scheduled, recordable
   values computed at their file position (structured_expressions_design.md §9).
 - **Inline interpolation** — `interp(x, x1, y1, x2, y2, ...)` for tiny two-

@@ -86,6 +86,30 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
     }
 
+    // -------------------------------------------------------------------------------------
+    // Parsing user-defined functions (pre-pass)
+    // -------------------------------------------------------------------------------------
+    // Functions are passive — they have no execution time of their own — and may be
+    // defined anywhere in the file, even after the nodes that call them. So the [fn]
+    // section is parsed before node construction (node expressions are lowered during
+    // construction and need the registry populated), mirroring the [table.*] pre-pass
+    // above. Placed after tables because fn bodies may call table.*; that resolves at
+    // lowering, not at fn parse, so either order works.
+    //
+    // IniSection.properties is an IndexMap, so this preserves the file's definition
+    // order (nice for round-trip). Correctness does not depend on it — functions are
+    // order-independent, resolved by name at lowering.
+    if let Some(ini_section) = ini_doc.sections.get("fn") {
+        for (key, ini_property) in &ini_section.properties {
+            model.data_cache.fns.parse_and_insert(key, &ini_property.value)
+                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+        }
+        // Verify the fn call graph is a DAG (no direct or mutual recursion), once at
+        // load — so even an UNUSED cyclic definition is rejected.
+        model.data_cache.fns.check_dag()
+            .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+    }
+
     // Iterate over the sections of the ini_doc and construct the model as we go
     for (section_name, ini_section) in ini_doc.sections {
 
@@ -662,6 +686,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name == "fn" {
+            // -------------------------------------------------------------------------------------
+            // User-defined functions — already parsed in the pre-pass above
+            // -------------------------------------------------------------------------------------
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
@@ -745,6 +773,15 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
         }
         ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
+    }
+
+    // List all user-defined functions (the [fn] section). Passive, like tables —
+    // re-emit each definition from its original signature key and body text, in
+    // file order (iter_in_order), so a round-trip preserves the definitions.
+    if !model.data_cache.fns.is_empty() {
+        for def in model.data_cache.fns.iter_in_order() {
+            ini_doc.set_property("fn", def.original_key.as_str(), def.original_body.as_str());
+        }
     }
 
     // List all nodes

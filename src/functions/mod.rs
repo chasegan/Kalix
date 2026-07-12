@@ -16,7 +16,9 @@
 pub mod ast;
 pub mod errors;
 pub mod evaluator;
+pub mod fn_registry;
 pub mod functions;
+pub mod inline;
 pub mod operators;
 pub mod parser;
 

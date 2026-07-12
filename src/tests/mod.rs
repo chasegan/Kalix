@@ -115,3 +115,9 @@ mod test_sim_flags;
 
 #[cfg(test)]
 mod test_stateful_functions;
+
+#[cfg(test)]
+mod test_fn_section_io;
+
+#[cfg(test)]
+mod test_fn_inline;

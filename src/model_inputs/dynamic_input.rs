@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::data_management::data_cache::DataCache;
 use crate::functions::{parse_function, EvaluationConfig, VariableContext};
-use crate::functions::ast::{ExpressionNode, FunctionRef, evaluate_binary_op, evaluate_unary_op};
+use crate::functions::ast::{ExpressionNode, FunctionRef, Program, evaluate_binary_op, evaluate_unary_op};
 use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
 use crate::model_inputs::linear_combination::detect_linear_combination;
@@ -1003,16 +1003,17 @@ impl DynamicInput {
         // (structured_expressions_design.md §3.2). Blocks are only legal as
         // the entire value, so this one character decides the parse.
         if working_copy.trim_start().starts_with('{') {
-            return Self::program_from_string(trimmed, &working_copy, data_cache, flag_as_critical);
+            return Self::program_from_string(trimmed, &working_copy, data_cache, flag_as_critical, self_context);
         }
 
         // Parse the expression (using the expanded form)
         let parsed = parse_function(&working_copy)
             .map_err(|e| format!("Failed to parse expression '{}': {}", trimmed, e))?;
 
-        // A bare `table.foo` (no call parentheses) parses as a variable, and would
-        // otherwise silently register a phantom data series named "table.foo".
-        // Reject it here, before linear-combination detection can capture it.
+        // A bare `table.foo` or `fn.foo` (no call parentheses) parses as a
+        // variable, and would otherwise silently register a phantom data
+        // series. Reject here, before linear-combination detection can
+        // capture it.
         for var_name in parsed.get_variables() {
             let lower_name = var_name.to_lowercase();
             if lower_name.starts_with("table.") {
@@ -1021,6 +1022,26 @@ impl DynamicInput {
                     var_name, lower_name
                 ));
             }
+            if lower_name.starts_with("fn.") {
+                return Err(format!(
+                    "'{}' is a function reference and must be called with parentheses, e.g. {}(...)",
+                    var_name, lower_name
+                ));
+            }
+        }
+
+        // fn.* calls: inline before anything else inspects the tree, then
+        // lower the result as a (possibly statement-free) program. Values
+        // that call no functions skip this entirely and take their existing
+        // paths untouched.
+        if crate::functions::inline::expr_references_fns(parsed.get_ast()) {
+            let program = Program {
+                stmts: vec![],
+                result: parsed.get_ast().clone(),
+            };
+            let inlined = crate::functions::inline::inline_fn_calls(program, &data_cache.fns, self_context)
+                .map_err(|e| format!("in '{}': {}", trimmed, e))?;
+            return Self::lower_program(trimmed, &inlined, data_cache, flag_as_critical, true);
         }
 
         // Check if it's a linear combination pattern first
@@ -1218,22 +1239,54 @@ impl DynamicInput {
         working_copy: &str,
         data_cache: &mut DataCache,
         flag_as_critical: bool,
+        self_context: Option<&str>,
     ) -> Result<Self, String> {
-        use crate::functions::ast::Stmt;
-
         let parsed = crate::functions::parse_program(working_copy)
             .map_err(|e| format!("Failed to parse program '{}': {}", original, e))?;
+
+        // Expand fn.* calls before anything else looks at the tree. Values
+        // that reference no functions skip this entirely.
+        let mut program = parsed.program().clone();
+        if crate::functions::inline::references_fns(&program) {
+            program = crate::functions::inline::inline_fn_calls(program, &data_cache.fns, self_context)
+                .map_err(|e| format!("in '{}': {}", original, e))?;
+        }
+
+        // Block-syntax values always lower to the Program variant, even with
+        // zero statements — `{ data.x }` is a Program by declaration.
+        Self::lower_program(original, &program, data_cache, flag_as_critical, false)
+    }
+
+    /// Lower an inlined, self-contained Program. `unwrap_empty` lets the
+    /// plain-expression-with-fn-calls path recover the Function /
+    /// StatefulFunction variants when inlining produced no statements
+    /// (zero-argument functions with expression bodies) — block-syntax
+    /// callers pass false so `{ expr }` stays a Program.
+    fn lower_program(
+        original: &str,
+        program: &Program,
+        data_cache: &mut DataCache,
+        flag_as_critical: bool,
+        unwrap_empty: bool,
+    ) -> Result<Self, String> {
+        use crate::functions::ast::Stmt;
 
         // Register external references, partitioned by namespace exactly as
         // the plain-expression path does.
         let mut data_variable_map = HashMap::new();
         let mut constant_variable_map = HashMap::new();
-        for var_name in parsed.get_external_variables() {
+        for var_name in program.get_external_variables() {
             let lower_name = var_name.to_lowercase();
 
             if lower_name.starts_with("table.") {
                 return Err(format!(
                     "'{}' is a lookup table reference and must be called with arguments, e.g. {}(x)",
+                    var_name, lower_name
+                ));
+            }
+            if lower_name.starts_with("fn.") {
+                return Err(format!(
+                    "'{}' is a function reference and must be called with parentheses, e.g. {}(...)",
                     var_name, lower_name
                 ));
             }
@@ -1265,7 +1318,6 @@ impl DynamicInput {
         // Allocate the locals frame: one slot per distinct assigned name,
         // zero-initialised (a local is always written before it is read —
         // the sequential lowering below guarantees it).
-        let program = parsed.program();
         let mut n_slots = 0usize;
         {
             let mut seen: Vec<&str> = Vec::new();
@@ -1316,9 +1368,31 @@ impl DynamicInput {
         let result = OptimizedExpressionNode::from_expression_node(
             &program.result, &data_variable_map, &constant_variable_map, &locals, expr_state, tables)?;
 
+        let grew = expr_state.f.len() > f_mark || expr_state.u.len() > u_mark;
+
+        // Inlining a plain expression can produce a statement-free program
+        // (zero-argument functions with expression bodies): recover the
+        // plain variants so such values cost exactly what the pasted
+        // expression would.
+        if unwrap_empty && stmts.is_empty() {
+            return Ok(if grew {
+                let guard = expr_state.alloc_u(&[0]);
+                DynamicInput::StatefulFunction {
+                    expression: original.to_string(),
+                    optimised_ast: result,
+                    guard,
+                }
+            } else {
+                DynamicInput::Function {
+                    expression: original.to_string(),
+                    optimised_ast: result,
+                }
+            });
+        }
+
         // Frame slots don't need the advance guard — only window/since state
         // allocated during statement/result lowering does.
-        let advance_guard = if expr_state.f.len() > f_mark || expr_state.u.len() > u_mark {
+        let advance_guard = if grew {
             Some(expr_state.alloc_u(&[0]))
         } else {
             None

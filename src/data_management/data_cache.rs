@@ -86,6 +86,10 @@ pub struct DataCache {
     // later phases). Slot ranges are allocated during expression lowering.
     pub expr_state: ExprStateArena,
 
+    // User-defined functions ([fn] section), inlined into expressions at
+    // lowering. Arc-shared defs, so cloning the cache is cheap.
+    pub fns: crate::functions::fn_registry::FnRegistry,
+
     // These vars for model components (incl nodes) to use if they need to know the date
     timestamp_year: i32,
     timestamp_month: u32,
