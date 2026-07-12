@@ -18,6 +18,78 @@ use crate::functions::evaluator::VariableContext;
 use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
 
+/// A statement inside a `{ ... }` program block.
+///
+/// Statements are deliberately few: assignments to locals and asserts. There
+/// are no bare expression statements — expressions are pure, so a discarded
+/// value could only be a mistake, and the parser rejects it with a message.
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    /// `name = expr;` — bind (or re-bind) a local variable. `name` is always
+    /// a bare identifier: dotted names are model references and cannot be
+    /// assigned; builtin function names cannot be shadowed.
+    Assign { name: String, expr: ExpressionNode },
+
+    /// `assert(expr);` — fail the run, loudly, when `expr` is 0 or NaN.
+    /// `source_text` is the statement as written, carried for the panic
+    /// message (cold data; never touched on a passing assert).
+    Assert { expr: ExpressionNode, source_text: String },
+}
+
+/// A parsed `{ ... }` program: zero or more statements and a result
+/// expression. The "final line is a bare expression" rule from the design
+/// (structured_expressions_design.md §3.2) is encoded structurally — `result`
+/// is a separate field, so a Program without a result value cannot be
+/// represented, only rejected at parse time.
+#[derive(Debug, Clone)]
+pub struct Program {
+    pub stmts: Vec<Stmt>,
+    pub result: ExpressionNode,
+}
+
+impl Program {
+    /// All *external* variable names referenced by the program: the union of
+    /// every statement's and the result's variables, minus names bound by an
+    /// `Assign`. Bare names that remain in this set were used without being
+    /// assigned — the lowering rejects them (locals must be assigned before
+    /// use; dotted names resolve through the model namespaces as usual).
+    pub fn get_external_variables(&self) -> HashSet<String> {
+        // Names are matched case-insensitively everywhere in the language, so
+        // the locals set folds case too — `Total = ...; total` is one local.
+        let mut vars = HashSet::new();
+        let mut locals = HashSet::new();
+        for stmt in &self.stmts {
+            match stmt {
+                Stmt::Assign { name, expr } => {
+                    // The RHS is evaluated before the binding takes effect,
+                    // but a bare name in the RHS referencing *this* statement's
+                    // own target is only legal if an earlier Assign bound it —
+                    // which `locals` already reflects at this point.
+                    for v in expr.get_variables() {
+                        if !locals.contains(&v.to_lowercase()) {
+                            vars.insert(v);
+                        }
+                    }
+                    locals.insert(name.to_lowercase());
+                }
+                Stmt::Assert { expr, .. } => {
+                    for v in expr.get_variables() {
+                        if !locals.contains(&v.to_lowercase()) {
+                            vars.insert(v);
+                        }
+                    }
+                }
+            }
+        }
+        for v in self.result.get_variables() {
+            if !locals.contains(&v.to_lowercase()) {
+                vars.insert(v);
+            }
+        }
+        vars
+    }
+}
+
 /// A function reference resolved at parse time.
 ///
 /// Built-ins resolve to a tagged enum at parse time (fast dispatch via direct match).

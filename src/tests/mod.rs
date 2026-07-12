@@ -106,3 +106,6 @@ mod test_interpolation;
 
 #[cfg(test)]
 mod test_table_discontinuous;
+
+#[cfg(test)]
+mod test_programs;

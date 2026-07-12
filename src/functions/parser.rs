@@ -9,8 +9,9 @@
 /// according to mathematical conventions.
 
 use std::collections::HashSet;
-use crate::functions::ast::ExpressionNode;
+use crate::functions::ast::{ExpressionNode, Program, Stmt};
 use crate::functions::errors::ParseError;
+use crate::functions::functions::BuiltinFunction;
 use crate::functions::evaluator::VariableContext;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
 
@@ -34,6 +35,12 @@ enum Token {
     LeftBracket,
     /// Right bracket ]
     RightBracket,
+    /// Left brace { (opens a statement block)
+    LeftBrace,
+    /// Right brace } (closes a statement block)
+    RightBrace,
+    /// Statement terminator ;
+    Semicolon,
     /// Comma separator for function arguments
     Comma,
     /// End of input marker
@@ -45,6 +52,10 @@ struct Tokenizer {
     input: Vec<char>,
     position: usize,
     current_char: Option<char>,
+    /// Start position (char index) of the most recently returned token.
+    /// Used by the statement parser to slice statement source text out of
+    /// the input for assert messages.
+    last_token_start: usize,
 }
 
 impl Tokenizer {
@@ -55,7 +66,18 @@ impl Tokenizer {
             input: chars,
             position: 0,
             current_char,
+            last_token_start: 0,
         }
+    }
+
+    /// Slice the input text between two char positions (statement source
+    /// capture for assert messages). Cold path: only runs at parse time.
+    fn slice_text(&self, start: usize, end: usize) -> String {
+        self.input[start.min(self.input.len())..end.min(self.input.len())]
+            .iter()
+            .collect::<String>()
+            .trim()
+            .to_string()
     }
     
     fn advance(&mut self) {
@@ -201,6 +223,7 @@ impl Tokenizer {
     
     fn next_token(&mut self) -> Result<Token, ParseError> {
         self.skip_whitespace();
+        self.last_token_start = self.position;
 
         match self.current_char {
             None => Ok(Token::EOF),
@@ -219,6 +242,18 @@ impl Tokenizer {
             Some(']') => {
                 self.advance();
                 Ok(Token::RightBracket)
+            }
+            Some('{') => {
+                self.advance();
+                Ok(Token::LeftBrace)
+            }
+            Some('}') => {
+                self.advance();
+                Ok(Token::RightBrace)
+            }
+            Some(';') => {
+                self.advance();
+                Ok(Token::Semicolon)
             }
             Some(',') => {
                 self.advance();
@@ -373,6 +408,32 @@ impl ParsedFunction {
     }
 }
 
+/// A parsed `{ ... }` program block, ready for lowering.
+///
+/// The companion to [`ParsedFunction`] for multi-statement values. Produced
+/// by [`FunctionParser::parse_program`]; consumed by the DynamicInput
+/// lowering, which resolves locals to arena slots and external references to
+/// cache indices.
+#[derive(Debug, Clone)]
+pub struct ParsedProgram {
+    program: Program,
+    external_variables: HashSet<String>,
+}
+
+impl ParsedProgram {
+    /// The parsed statements and result expression.
+    pub fn program(&self) -> &Program {
+        &self.program
+    }
+
+    /// External variable names referenced by the program — everything except
+    /// names bound by assignment statements. Bare (dotless) names appearing
+    /// here were used before assignment; the lowering rejects them.
+    pub fn get_external_variables(&self) -> &HashSet<String> {
+        &self.external_variables
+    }
+}
+
 impl FunctionParser {
     /// Create a new function parser.
     ///
@@ -426,7 +487,199 @@ impl FunctionParser {
         
         Ok(ParsedFunction::new(ast))
     }
-    
+
+    /// Parse a `{ statement; statement; ...; result }` program block.
+    ///
+    /// Grammar (structured_expressions_design.md §3):
+    /// - The whole input must be one block: `{` ... `}` with nothing after.
+    /// - Statements are `name = expression;` (local assignment, bare names
+    ///   only, builtins cannot be shadowed) or `assert(expression);`.
+    /// - The final item before `}` must be a bare expression with no `;` —
+    ///   it is the block's value. A terminated or missing final expression
+    ///   is a parse error, never a silent default.
+    pub fn parse_program(&self, text: &str) -> Result<ParsedProgram, ParseError> {
+        let mut parser = Self {
+            tokenizer: Tokenizer::new(text),
+            current_token: Token::EOF,
+        };
+        parser.current_token = parser.tokenizer.next_token()?;
+
+        if parser.current_token != Token::LeftBrace {
+            return Err(ParseError::SyntaxError {
+                position: parser.tokenizer.last_token_start,
+                message: "a program block must start with '{'".to_string(),
+            });
+        }
+        parser.consume_token()?; // consume '{'
+
+        let mut stmts: Vec<Stmt> = Vec::new();
+        let result: ExpressionNode;
+
+        loop {
+            match &parser.current_token {
+                Token::RightBrace => {
+                    return Err(parser.no_result_error());
+                }
+                Token::EOF => {
+                    return Err(ParseError::SyntaxError {
+                        position: parser.tokenizer.position,
+                        message: "unclosed program block: missing '}'".to_string(),
+                    });
+                }
+                _ => {}
+            }
+
+            let stmt_start = parser.tokenizer.last_token_start;
+
+            // assert statement: `assert(cond);`
+            if let Token::Identifier(id) = &parser.current_token {
+                if id.eq_ignore_ascii_case("assert") {
+                    parser.consume_token()?; // consume 'assert'
+                    if parser.current_token != Token::LeftParen {
+                        return Err(ParseError::SyntaxError {
+                            position: parser.tokenizer.last_token_start,
+                            message: "'assert' is a statement and is reserved: write assert(condition);".to_string(),
+                        });
+                    }
+                    parser.consume_token()?; // consume '('
+                    let cond = parser.parse_expression()?;
+                    if parser.current_token != Token::RightParen {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: ")".to_string(),
+                            found: format!("{:?}", parser.current_token),
+                            position: parser.tokenizer.position,
+                        });
+                    }
+                    parser.consume_token()?; // consume ')'
+                    let stmt_end = parser.tokenizer.last_token_start;
+                    match &parser.current_token {
+                        Token::Semicolon => {
+                            parser.consume_token()?;
+                        }
+                        Token::RightBrace => return Err(parser.no_result_error()),
+                        _ => {
+                            return Err(ParseError::SyntaxError {
+                                position: parser.tokenizer.last_token_start,
+                                message: "expected ';' after assert(...)".to_string(),
+                            });
+                        }
+                    }
+                    let source_text = parser.tokenizer.slice_text(stmt_start, stmt_end);
+                    stmts.push(Stmt::Assert { expr: cond, source_text });
+                    continue;
+                }
+            }
+
+            // Anything else: parse an expression. A following '=' makes it an
+            // assignment target; a following '}' makes it the result.
+            let expr = parser.parse_expression()?;
+
+            let is_assign = matches!(&parser.current_token, Token::Operator(op) if op == "=");
+            if is_assign {
+                let name = match expr {
+                    ExpressionNode::Variable { name } if !name.contains('.') => name,
+                    ExpressionNode::Variable { name } => {
+                        return Err(ParseError::SyntaxError {
+                            position: stmt_start,
+                            message: format!(
+                                "cannot assign to '{}': dotted names are model references; \
+                                 local variables are bare names",
+                                name
+                            ),
+                        });
+                    }
+                    _ => {
+                        return Err(ParseError::SyntaxError {
+                            position: stmt_start,
+                            message: "invalid assignment target: expected a local variable name before '='".to_string(),
+                        });
+                    }
+                };
+                let lower = name.to_lowercase();
+                if BuiltinFunction::from_name(&lower).is_some() {
+                    return Err(ParseError::SyntaxError {
+                        position: stmt_start,
+                        message: format!(
+                            "cannot use builtin function name '{}' as a local variable",
+                            lower
+                        ),
+                    });
+                }
+                if lower == "this" {
+                    return Err(ParseError::SyntaxError {
+                        position: stmt_start,
+                        message: "'this' is reserved and cannot be used as a local variable".to_string(),
+                    });
+                }
+                parser.consume_token()?; // consume '='
+                let rhs = parser.parse_expression()?;
+                match &parser.current_token {
+                    Token::Semicolon => {
+                        parser.consume_token()?;
+                    }
+                    Token::RightBrace => return Err(parser.no_result_error()),
+                    _ => {
+                        return Err(ParseError::SyntaxError {
+                            position: parser.tokenizer.last_token_start,
+                            message: format!("expected ';' after assignment to '{}'", name),
+                        });
+                    }
+                }
+                stmts.push(Stmt::Assign { name, expr: rhs });
+                continue;
+            }
+
+            match &parser.current_token {
+                Token::RightBrace => {
+                    // The bare final expression: the block's value.
+                    result = expr;
+                    parser.consume_token()?; // consume '}'
+                    break;
+                }
+                Token::Semicolon => {
+                    parser.consume_token()?;
+                    if parser.current_token == Token::RightBrace {
+                        return Err(parser.no_result_error());
+                    }
+                    return Err(ParseError::SyntaxError {
+                        position: stmt_start,
+                        message: "statement has no effect: expected 'name = expression;', \
+                                  'assert(...);', or the final result expression (no ';')".to_string(),
+                    });
+                }
+                _ => {
+                    return Err(ParseError::SyntaxError {
+                        position: parser.tokenizer.last_token_start,
+                        message: format!("unexpected token in program: {:?}", parser.current_token),
+                    });
+                }
+            }
+        }
+
+        if parser.current_token != Token::EOF {
+            return Err(ParseError::SyntaxError {
+                position: parser.tokenizer.position,
+                message: "unexpected tokens after closing '}'".to_string(),
+            });
+        }
+
+        let program = Program { stmts, result };
+        let external_variables = program.get_external_variables();
+        Ok(ParsedProgram { program, external_variables })
+    }
+
+    /// The load error for a program whose final line is not a bare
+    /// expression. One message, used for every way of getting it wrong
+    /// (empty block, trailing ';', assignment or assert as the last line),
+    /// so modellers meet a single consistent rule.
+    fn no_result_error(&self) -> ParseError {
+        ParseError::SyntaxError {
+            position: self.tokenizer.last_token_start,
+            message: "program has no result value: the final line must be a bare \
+                      expression without ';' — its value is the block's value".to_string(),
+        }
+    }
+
     fn consume_token(&mut self) -> Result<(), ParseError> {
         self.current_token = self.tokenizer.next_token()?;
         Ok(())

@@ -32,7 +32,7 @@ pub enum BuiltinFunction {
     Sum, Mean,
 
     // Three argument (special)
-    If,
+    If, Clamp,
 }
 
 impl BuiltinFunction {
@@ -64,6 +64,7 @@ impl BuiltinFunction {
             "sum"    => BuiltinFunction::Sum,
             "mean"   => BuiltinFunction::Mean,
             "if"     => BuiltinFunction::If,
+            "clamp"  => BuiltinFunction::Clamp,
             _ => return None,
         })
     }
@@ -94,6 +95,7 @@ impl BuiltinFunction {
             BuiltinFunction::Sum => "sum",
             BuiltinFunction::Mean => "mean",
             BuiltinFunction::If => "if",
+            BuiltinFunction::Clamp => "clamp",
         }
     }
 
@@ -156,6 +158,15 @@ impl BuiltinFunction {
             BuiltinFunction::If => {
                 if args.len() != 3 { return Self::arity_err(self.name(), 3, args.len()); }
                 Ok(if args[0] != 0.0 { args[1] } else { args[2] })
+            }
+            BuiltinFunction::Clamp => {
+                if args.len() != 3 { return Self::arity_err(self.name(), 3, args.len()); }
+                // Deliberately NOT f64::clamp, which panics when lo > hi or on NaN
+                // bounds. This max/min composition is total (never panics): lo > hi
+                // yields hi (the min applied last always wins), and — consistent with
+                // the min/max builtins — f64::max/min suppress NaN (the non-NaN
+                // operand wins), so a NaN input or bound does not propagate.
+                Ok(args[0].max(args[1]).min(args[2]))
             }
         }
     }

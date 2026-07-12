@@ -185,7 +185,7 @@ mod tests {
         data_cache.set_current_step(0);
 
         // Evaluate - uses original coefficients (0.2 and 0.8)
-        let value = input.get_value(&data_cache);
+        let value = input.get_value(&mut data_cache);
         let expected = 0.2 * 10.0 + 0.8 * 20.0;  // = 2 + 16 = 18
         assert!((value - expected).abs() < 1e-6, "Got {}, expected {}", value, expected);
     }

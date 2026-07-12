@@ -303,6 +303,7 @@ impl Model {
         //optimisation barrier. Error reporting is unchanged - the simulation
         //context is thread-local, and data_cache.current_timestamp still holds
         //the failing step's timestamp after the unwind.
+        self.data_cache.expr_state.reset(); // expression state to init templates (fresh run)
         self.data_cache.set_current_step(0);
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {

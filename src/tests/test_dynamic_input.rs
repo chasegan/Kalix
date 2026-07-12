@@ -24,7 +24,7 @@ fn test_dynamic_input_constant() {
         _ => panic!("Expected Constant variant"),
     }
 
-    assert_eq!(input.get_value(&data_cache), 5.0);
+    assert_eq!(input.get_value(&mut data_cache), 5.0);
 }
 
 #[test]
@@ -74,13 +74,13 @@ fn test_dynamic_input_direct_reference() {
     }
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 10.0);
+    assert_eq!(input.get_value(&mut data_cache), 10.0);
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 20.0);
+    assert_eq!(input.get_value(&mut data_cache), 20.0);
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 30.0);
+    assert_eq!(input.get_value(&mut data_cache), 30.0);
 }
 
 #[test]
@@ -120,13 +120,13 @@ fn test_dynamic_input_function_expression() {
     }
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 20.0); // 25.0 * 0.8
+    assert_eq!(input.get_value(&mut data_cache), 20.0); // 25.0 * 0.8
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 36.0); // 30.0 * 1.2
+    assert_eq!(input.get_value(&mut data_cache), 36.0); // 30.0 * 1.2
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 13.5); // 15.0 * 0.9
+    assert_eq!(input.get_value(&mut data_cache), 13.5); // 15.0 * 0.9
 }
 
 #[test]
@@ -153,13 +153,13 @@ fn test_dynamic_input_conditional() {
     ).expect("Failed to parse conditional");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 5.0); // temp=5, not > 20
+    assert_eq!(input.get_value(&mut data_cache), 5.0); // temp=5, not > 20
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 5.0); // temp=15, not > 20
+    assert_eq!(input.get_value(&mut data_cache), 5.0); // temp=15, not > 20
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 10.0); // temp=25, > 20
+    assert_eq!(input.get_value(&mut data_cache), 10.0); // temp=25, > 20
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn test_dynamic_input_complex_expression() {
     ).expect("Failed to parse complex expression");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 15.0); // max(10.0 * 1.5, 0) = 15.0
+    assert_eq!(input.get_value(&mut data_cache), 15.0); // max(10.0 * 1.5, 0) = 15.0
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn test_dynamic_input_none() {
         _ => panic!("Expected None variant for empty string"),
     }
 
-    assert_eq!(input.get_value(&data_cache), 0.0);
+    assert_eq!(input.get_value(&mut data_cache), 0.0);
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn test_dynamic_input_case_insensitive_data_references() {
         .expect("Failed to parse capitalized reference");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 10.0); // 5.0 * 2
+    assert_eq!(input.get_value(&mut data_cache), 10.0); // 5.0 * 2
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn test_dynamic_input_mixed_case_data_references() {
         .expect("Failed to parse mixed case references");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 80.0); // 100.0 - 20.0
+    assert_eq!(input.get_value(&mut data_cache), 80.0); // 100.0 - 20.0
 }
 
 #[test]
@@ -287,27 +287,27 @@ fn test_dynamic_input_case_insensitive_functions() {
     // Test MAX (uppercase)
     let input_max = DynamicInput::from_string("MAX(data.a, data.b)", &mut data_cache, true, None)
         .expect("Failed to parse MAX");
-    assert_eq!(input_max.get_value(&data_cache), 5.0);
+    assert_eq!(input_max.get_value(&mut data_cache), 5.0);
 
     // Test Max (mixed case)
     let input_max_mixed = DynamicInput::from_string("Max(data.a, data.b)", &mut data_cache, true, None)
         .expect("Failed to parse Max");
-    assert_eq!(input_max_mixed.get_value(&data_cache), 5.0);
+    assert_eq!(input_max_mixed.get_value(&mut data_cache), 5.0);
 
     // Test IF (uppercase)
     let input_if = DynamicInput::from_string("IF(data.a > data.b, 10, 20)", &mut data_cache, true, None)
         .expect("Failed to parse IF");
-    assert_eq!(input_if.get_value(&data_cache), 10.0);
+    assert_eq!(input_if.get_value(&mut data_cache), 10.0);
 
     // Test ABS (uppercase)
     let input_abs = DynamicInput::from_string("ABS(-5)", &mut data_cache, true, None)
         .expect("Failed to parse ABS");
-    assert_eq!(input_abs.get_value(&data_cache), 5.0);
+    assert_eq!(input_abs.get_value(&mut data_cache), 5.0);
 
     // Test SQRT (uppercase)
     let input_sqrt = DynamicInput::from_string("SQRT(16)", &mut data_cache, true, None)
         .expect("Failed to parse SQRT");
-    assert_eq!(input_sqrt.get_value(&data_cache), 4.0);
+    assert_eq!(input_sqrt.get_value(&mut data_cache), 4.0);
 }
 
 #[test]
@@ -329,7 +329,7 @@ fn test_dynamic_input_direct_constant_reference() {
         _ => panic!("Expected DirectConstantReference variant for single constant"),
     }
 
-    assert_eq!(input.get_value(&data_cache), 9.81);
+    assert_eq!(input.get_value(&mut data_cache), 9.81);
 }
 
 #[test]
@@ -364,13 +364,13 @@ fn test_dynamic_input_constant_in_expression() {
     }
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 12.0); // 1.2 * 10.0
+    assert_eq!(input.get_value(&mut data_cache), 12.0); // 1.2 * 10.0
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 24.0); // 1.2 * 20.0
+    assert_eq!(input.get_value(&mut data_cache), 24.0); // 1.2 * 20.0
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 36.0); // 1.2 * 30.0
+    assert_eq!(input.get_value(&mut data_cache), 36.0); // 1.2 * 30.0
 }
 
 #[test]
@@ -393,7 +393,7 @@ fn test_dynamic_input_multiple_constants() {
         _ => panic!("Expected Function variant for multi-constant expression"),
     }
 
-    assert_eq!(input.get_value(&data_cache), 8.0); // 5.0 + 3.0
+    assert_eq!(input.get_value(&mut data_cache), 8.0); // 5.0 + 3.0
 }
 
 #[test]
@@ -423,13 +423,13 @@ fn test_dynamic_input_constant_conditional() {
     ).expect("Failed to parse conditional with constant");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 0.0); // 15.0 not > 20.0
+    assert_eq!(input.get_value(&mut data_cache), 0.0); // 15.0 not > 20.0
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 1.0); // 25.0 > 20.0
+    assert_eq!(input.get_value(&mut data_cache), 1.0); // 25.0 > 20.0
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 0.0); // 18.0 not > 20.0
+    assert_eq!(input.get_value(&mut data_cache), 0.0); // 18.0 not > 20.0
 }
 
 #[test]
@@ -443,7 +443,7 @@ fn test_dynamic_input_constant_case_insensitive() {
     let input = DynamicInput::from_string("C.MY_CONSTANT * 2", &mut data_cache, true, None)
         .expect("Failed to parse mixed case constant");
 
-    assert_eq!(input.get_value(&data_cache), 84.0); // 42.0 * 2
+    assert_eq!(input.get_value(&mut data_cache), 84.0); // 42.0 * 2
 }
 
 #[test]
@@ -469,7 +469,7 @@ fn test_dynamic_input_unassigned_constant_registers() {
     assert!(data_cache.constants.assert_all_constants_have_assigned_values().is_ok());
 
     // And the expression should evaluate correctly
-    assert_eq!(input.get_value(&data_cache), 50.0); // 5.0 * 10
+    assert_eq!(input.get_value(&mut data_cache), 50.0); // 5.0 * 10
 }
 
 #[test]
@@ -486,7 +486,7 @@ fn test_dynamic_input_mixed_case_same_constant() {
 
     // Should evaluate to 2.0 + 2.0 + 2.0 = 6.0
     // This verifies that all three references resolve to the same constant
-    assert_eq!(input.get_value(&data_cache), 6.0);
+    assert_eq!(input.get_value(&mut data_cache), 6.0);
 }
 
 #[test]
@@ -511,7 +511,7 @@ fn test_dynamic_input_mixed_case_constant_and_data() {
         .expect("Failed to parse mixed-case expression");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 30.0); // 3.0 * 10.0
+    assert_eq!(input.get_value(&mut data_cache), 30.0); // 3.0 * 10.0
 }
 
 // ============================================================================
@@ -547,13 +547,13 @@ fn test_dynamic_input_node_direct_reference() {
     }
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 100.0);
+    assert_eq!(input.get_value(&mut data_cache), 100.0);
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 150.0);
+    assert_eq!(input.get_value(&mut data_cache), 150.0);
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 200.0);
+    assert_eq!(input.get_value(&mut data_cache), 200.0);
 }
 
 #[test]
@@ -609,7 +609,7 @@ fn test_dynamic_input_node_in_expression() {
     ).expect("Failed to parse node expression");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 80.0); // 50.0 + 30.0
+    assert_eq!(input.get_value(&mut data_cache), 80.0); // 50.0 + 30.0
 }
 
 #[test]
@@ -641,7 +641,7 @@ fn test_dynamic_input_node_and_data_mixed() {
     ).expect("Failed to parse mixed expression");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 80.0); // 100.0 * 0.8
+    assert_eq!(input.get_value(&mut data_cache), 80.0); // 100.0 * 0.8
 }
 
 #[test]
@@ -669,7 +669,7 @@ fn test_dynamic_input_node_with_constant() {
     ).expect("Failed to parse node + constant expression");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 900.0); // 1000.0 * 0.9
+    assert_eq!(input.get_value(&mut data_cache), 900.0); // 1000.0 * 0.9
 }
 
 #[test]
@@ -695,10 +695,10 @@ fn test_dynamic_input_node_conditional() {
     ).expect("Failed to parse node conditional");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 50.0); // 5000 not > 10000
+    assert_eq!(input.get_value(&mut data_cache), 50.0); // 5000 not > 10000
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 100.0); // 15000 > 10000
+    assert_eq!(input.get_value(&mut data_cache), 100.0); // 15000 > 10000
 }
 
 #[test]
@@ -720,7 +720,7 @@ fn test_dynamic_input_node_case_insensitive() {
         .expect("Failed to parse mixed case node reference");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 42.0);
+    assert_eq!(input.get_value(&mut data_cache), 42.0);
 }
 
 #[test]
@@ -777,7 +777,7 @@ fn test_dynamic_input_offset_zero_same_as_direct() {
     }
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 300.0);
+    assert_eq!(input.get_value(&mut data_cache), 300.0);
 }
 
 #[test]
@@ -813,16 +813,16 @@ fn test_dynamic_input_offset_previous_timestep() {
 
     // Test at different timesteps
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 0.0); // Default because no previous value
+    assert_eq!(input.get_value(&mut data_cache), 0.0); // Default because no previous value
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 1000.0); // Yesterday was Day 0
+    assert_eq!(input.get_value(&mut data_cache), 1000.0); // Yesterday was Day 0
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 1100.0); // Yesterday was Day 1
+    assert_eq!(input.get_value(&mut data_cache), 1100.0); // Yesterday was Day 1
 
     data_cache.set_current_step(4);
-    assert_eq!(input.get_value(&data_cache), 1300.0); // Yesterday was Day 3
+    assert_eq!(input.get_value(&mut data_cache), 1300.0); // Yesterday was Day 3
 }
 
 #[test]
@@ -846,11 +846,11 @@ fn test_dynamic_input_offset_with_nonzero_default() {
 
     // At step 0, no yesterday - should return default 5000.0
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 5000.0);
+    assert_eq!(input.get_value(&mut data_cache), 5000.0);
 
     // At step 1, yesterday was 5000.0
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 5000.0);
+    assert_eq!(input.get_value(&mut data_cache), 5000.0);
 }
 
 #[test]
@@ -874,14 +874,14 @@ fn test_dynamic_input_offset_multiple_days() {
         .expect("Failed to parse offset reference");
 
     data_cache.set_current_step(5);
-    assert_eq!(input.get_value(&data_cache), 20.0); // 3 days ago was step 2 (value=20)
+    assert_eq!(input.get_value(&mut data_cache), 20.0); // 3 days ago was step 2 (value=20)
 
     data_cache.set_current_step(9);
-    assert_eq!(input.get_value(&data_cache), 60.0); // 3 days ago was step 6 (value=60)
+    assert_eq!(input.get_value(&mut data_cache), 60.0); // 3 days ago was step 6 (value=60)
 
     // Edge case: offset exceeds current step - returns default
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), -999.0); // Can't go back 3 days from day 2
+    assert_eq!(input.get_value(&mut data_cache), -999.0); // Can't go back 3 days from day 2
 }
 
 #[test]
@@ -909,13 +909,13 @@ fn test_dynamic_input_offset_in_expression() {
     ).expect("Failed to parse expression with offset");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 0.0); // 100 - 100 (default)
+    assert_eq!(input.get_value(&mut data_cache), 0.0); // 100 - 100 (default)
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 50.0); // 150 - 100
+    assert_eq!(input.get_value(&mut data_cache), 50.0); // 150 - 100
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 50.0); // 200 - 150
+    assert_eq!(input.get_value(&mut data_cache), 50.0); // 200 - 150
 }
 
 #[test]
@@ -944,16 +944,16 @@ fn test_dynamic_input_offset_in_conditional() {
     ).expect("Failed to parse conditional with offset");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 1.0); // 5000 > 0 (default)
+    assert_eq!(input.get_value(&mut data_cache), 1.0); // 5000 > 0 (default)
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 1.0); // 6000 > 5000 (increased)
+    assert_eq!(input.get_value(&mut data_cache), 1.0); // 6000 > 5000 (increased)
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 0.0); // 5500 not > 6000 (decreased)
+    assert_eq!(input.get_value(&mut data_cache), 0.0); // 5500 not > 6000 (decreased)
 
     data_cache.set_current_step(3);
-    assert_eq!(input.get_value(&data_cache), 1.0); // 7000 > 5500 (increased)
+    assert_eq!(input.get_value(&mut data_cache), 1.0); // 7000 > 5500 (increased)
 }
 
 #[test]
@@ -998,7 +998,7 @@ fn test_dynamic_input_offset_negative_default() {
         .expect("Failed to parse offset with negative default");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), -10.0); // Returns negative default
+    assert_eq!(input.get_value(&mut data_cache), -10.0); // Returns negative default
 }
 
 #[test]
@@ -1020,21 +1020,21 @@ fn test_dynamic_input_offset_nan_default() {
         .expect("Failed to parse offset with nan default");
 
     data_cache.set_current_step(0);
-    assert!(input.get_value(&data_cache).is_nan()); // Returns NaN default
+    assert!(input.get_value(&mut data_cache).is_nan()); // Returns NaN default
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 100.0); // Normal lookback works
+    assert_eq!(input.get_value(&mut data_cache), 100.0); // Normal lookback works
 
     // Also test case-insensitive: NaN, NAN
     let input2 = DynamicInput::from_string("data.flow[-1, NaN]", &mut data_cache, true, None)
         .expect("Failed to parse offset with NaN default");
     data_cache.set_current_step(0);
-    assert!(input2.get_value(&data_cache).is_nan());
+    assert!(input2.get_value(&mut data_cache).is_nan());
 
     let input3 = DynamicInput::from_string("data.flow[-1, NAN]", &mut data_cache, true, None)
         .expect("Failed to parse offset with NAN default");
     data_cache.set_current_step(0);
-    assert!(input3.get_value(&data_cache).is_nan());
+    assert!(input3.get_value(&mut data_cache).is_nan());
 }
 
 // ============================================================================
@@ -1063,17 +1063,17 @@ fn test_dynamic_input_forward_lookup() {
         .expect("Failed to parse forward lookup");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 150.0); // Tomorrow (day 1)
+    assert_eq!(input.get_value(&mut data_cache), 150.0); // Tomorrow (day 1)
 
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 200.0); // Tomorrow (day 2)
+    assert_eq!(input.get_value(&mut data_cache), 200.0); // Tomorrow (day 2)
 
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 250.0); // Tomorrow (day 3)
+    assert_eq!(input.get_value(&mut data_cache), 250.0); // Tomorrow (day 3)
 
     // Edge case: at end of data, forward lookup returns default
     data_cache.set_current_step(3);
-    assert_eq!(input.get_value(&data_cache), -999.0); // No day 4, returns default
+    assert_eq!(input.get_value(&mut data_cache), -999.0); // No day 4, returns default
 }
 
 #[test]
@@ -1103,7 +1103,7 @@ fn test_sim_year() {
     let input = DynamicInput::from_string("sim.year", &mut data_cache, true, None)
         .expect("Failed to parse sim.year");
 
-    assert_eq!(input.get_value(&data_cache), 2020.0);
+    assert_eq!(input.get_value(&mut data_cache), 2020.0);
 }
 
 #[test]
@@ -1118,7 +1118,7 @@ fn test_sim_month() {
     let input = DynamicInput::from_string("sim.month", &mut data_cache, true, None)
         .expect("Failed to parse sim.month");
 
-    assert_eq!(input.get_value(&data_cache), 6.0);
+    assert_eq!(input.get_value(&mut data_cache), 6.0);
 }
 
 #[test]
@@ -1133,7 +1133,7 @@ fn test_sim_day() {
     let input = DynamicInput::from_string("sim.day", &mut data_cache, true, None)
         .expect("Failed to parse sim.day");
 
-    assert_eq!(input.get_value(&data_cache), 15.0);
+    assert_eq!(input.get_value(&mut data_cache), 15.0);
 }
 
 #[test]
@@ -1149,7 +1149,7 @@ fn test_sim_day_of_year() {
     let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
-    assert_eq!(input.get_value(&data_cache), 167.0);
+    assert_eq!(input.get_value(&mut data_cache), 167.0);
 }
 
 #[test]
@@ -1165,7 +1165,7 @@ fn test_sim_day_of_year_non_leap() {
     let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
-    assert_eq!(input.get_value(&data_cache), 60.0);
+    assert_eq!(input.get_value(&mut data_cache), 60.0);
 }
 
 #[test]
@@ -1181,7 +1181,7 @@ fn test_sim_day_of_year_leap_year() {
     let input = DynamicInput::from_string("sim.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse sim.day_of_year");
 
-    assert_eq!(input.get_value(&data_cache), 61.0);
+    assert_eq!(input.get_value(&mut data_cache), 61.0);
 }
 
 #[test]
@@ -1195,13 +1195,13 @@ fn test_sim_step() {
         .expect("Failed to parse sim.step");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 0.0);
+    assert_eq!(input.get_value(&mut data_cache), 0.0);
 
     data_cache.set_current_step(10);
-    assert_eq!(input.get_value(&data_cache), 10.0);
+    assert_eq!(input.get_value(&mut data_cache), 10.0);
 
     data_cache.set_current_step(365);
-    assert_eq!(input.get_value(&data_cache), 365.0);
+    assert_eq!(input.get_value(&mut data_cache), 365.0);
 }
 
 #[test]
@@ -1221,7 +1221,7 @@ fn test_sim_in_expression() {
     ).expect("Failed to parse conditional with sim.month");
 
     // July is summer, should return 1.5
-    assert_eq!(input.get_value(&data_cache), 1.5);
+    assert_eq!(input.get_value(&mut data_cache), 1.5);
 }
 
 #[test]
@@ -1237,7 +1237,7 @@ fn test_sim_in_arithmetic() {
     let input = DynamicInput::from_string("sim.year + sim.month", &mut data_cache, true, None)
         .expect("Failed to parse sim arithmetic");
 
-    assert_eq!(input.get_value(&data_cache), 2026.0); // 2020 + 6
+    assert_eq!(input.get_value(&mut data_cache), 2026.0); // 2020 + 6
 }
 
 #[test]
@@ -1256,9 +1256,9 @@ fn test_sim_case_insensitive() {
     let input3 = DynamicInput::from_string("SIM.day_of_year", &mut data_cache, true, None)
         .expect("Failed to parse SIM.day_of_year");
 
-    assert_eq!(input1.get_value(&data_cache), 2020.0);
-    assert_eq!(input2.get_value(&data_cache), 6.0);
-    assert_eq!(input3.get_value(&data_cache), 167.0);
+    assert_eq!(input1.get_value(&mut data_cache), 2020.0);
+    assert_eq!(input2.get_value(&mut data_cache), 6.0);
+    assert_eq!(input3.get_value(&mut data_cache), 167.0);
 }
 
 #[test]
@@ -1298,7 +1298,7 @@ fn test_sim_with_data_reference() {
     ).expect("Failed to parse mixed expression");
 
     // month=6, so (6-6)*0.1 = 0, result = 100 * 1 = 100
-    assert_eq!(input.get_value(&data_cache), 100.0);
+    assert_eq!(input.get_value(&mut data_cache), 100.0);
 }
 
 // ============================================================================
@@ -1326,7 +1326,7 @@ fn test_this_simple_reference() {
     ).expect("Failed to parse this. reference");
 
     // Should resolve to the node output
-    assert_eq!(input.get_value(&data_cache), 42.0);
+    assert_eq!(input.get_value(&mut data_cache), 42.0);
 
     // Round-trip should preserve "this.volume"
     assert_eq!(input.to_string(), "this.volume");
@@ -1357,7 +1357,7 @@ fn test_this_in_expression() {
         "this.dsflow - data.threshold", &mut data_cache, false, Some("node.big_node")
     ).expect("Failed to parse expression with this.");
 
-    assert_eq!(input.get_value(&data_cache), 70.0);
+    assert_eq!(input.get_value(&mut data_cache), 70.0);
     assert_eq!(input.to_string(), "this.dsflow - data.threshold");
 }
 
@@ -1381,7 +1381,7 @@ fn test_this_not_replaced_inside_node_name() {
         "node.that_and_this.inflow", &mut data_cache, false, Some("node.other_node")
     ).expect("Failed to parse node reference with 'this' in name");
 
-    assert_eq!(input.get_value(&data_cache), 55.0);
+    assert_eq!(input.get_value(&mut data_cache), 55.0);
 }
 
 #[test]
@@ -1438,7 +1438,7 @@ fn test_this_multiple_references() {
         "this.dsflow - this.usflow", &mut data_cache, false, Some("node.mynode")
     ).expect("Failed to parse multiple this. references");
 
-    assert_eq!(input.get_value(&data_cache), 30.0);
+    assert_eq!(input.get_value(&mut data_cache), 30.0);
     assert_eq!(input.to_string(), "this.dsflow - this.usflow");
 }
 
@@ -1471,7 +1471,7 @@ fn eval_x(expression: &str, x: f64) -> f64 {
     let mut data_cache = cache_with_x(&[x]);
     let input = DynamicInput::from_string(expression, &mut data_cache, true, None)
         .unwrap_or_else(|e| panic!("'{}' failed to parse: {}", expression, e));
-    input.get_value(&data_cache)
+    input.get_value(&mut data_cache)
 }
 
 /// Unknown function names must be rejected at model load, not at runtime.
@@ -1537,4 +1537,61 @@ fn test_and_or_values() {
     // NaN operands are truthy, matching the non-short-circuit forms.
     assert_eq!(eval_x("data.x && 1", f64::NAN), 1.0);
     assert_eq!(eval_x("data.x || 0", f64::NAN), 1.0);
+}
+
+/// clamp(x, lo, hi) constrains x to [lo, hi]. Constant-only expressions fold to
+/// DynamicInput::Constant via the generic evaluator, so assert the folded value.
+#[test]
+fn test_clamp_constant_folding() {
+    let mut data_cache = DataCache::new();
+    for (expr, expected) in [
+        ("clamp(5, 0, 10)", 5.0),
+        ("clamp(-1, 0, 10)", 0.0),
+        ("clamp(11, 0, 10)", 10.0),
+    ] {
+        let input = DynamicInput::from_string(expr, &mut data_cache, true, None)
+            .unwrap_or_else(|e| panic!("'{}' failed to parse: {}", expr, e));
+        match input {
+            DynamicInput::Constant { value, .. } => {
+                assert_eq!(value, expected, "'{}' folded to wrong value", expr);
+            }
+            _ => panic!("'{}' should fold to a Constant", expr),
+        }
+    }
+}
+
+/// clamp with a data reference argument evaluates correctly through the lowered
+/// (min(max(x, lo), hi)) path.
+#[test]
+fn test_clamp_data_reference() {
+    assert_eq!(eval_x("clamp(data.x, 0, 10)", 5.0), 5.0);
+    assert_eq!(eval_x("clamp(data.x, 0, 10)", -3.0), 0.0);
+    assert_eq!(eval_x("clamp(data.x, 0, 10)", 42.0), 10.0);
+}
+
+/// clamp requires exactly three arguments; wrong arity is rejected at model load.
+#[test]
+fn test_clamp_wrong_arity_errors_at_load() {
+    for bad in ["clamp(data.x, 0)", "clamp(data.x, 0, 10, 20)"] {
+        let mut data_cache = cache_with_x(&[1.0]);
+        let result = DynamicInput::from_string(bad, &mut data_cache, true, None);
+        assert!(result.is_err(), "'{}' should fail at load time", bad);
+    }
+}
+
+/// A NaN input is suppressed, not propagated: f64::max/min drop NaN (the non-NaN
+/// operand wins), so clamp(NaN, lo, hi) yields lo. Deliberate: clamp is defined
+/// as min(max(x, lo), hi), so it behaves exactly as that composition of the
+/// min/max builtins does (see test_fold_builtin_values). sqrt(-1) produces the NaN.
+#[test]
+fn test_clamp_nan_input_suppressed() {
+    // clamp(NaN, 0, 10) = NaN.max(0).min(10) = 0.
+    assert_eq!(eval_x("clamp(sqrt(data.x), 0, 10)", -1.0), 0.0);
+}
+
+/// Documented composition behaviour: with lo > hi, the outer min wins, so the
+/// result is hi.
+#[test]
+fn test_clamp_lo_greater_than_hi_yields_hi() {
+    assert_eq!(eval_x("clamp(data.x, 10, 0)", 5.0), 0.0);
 }

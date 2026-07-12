@@ -4,6 +4,60 @@ use crate::numerical::lookup_table::TableRegistry;
 use crate::tid::utils::{u64_to_iso_datetime_string, u64_to_year_month_day_and_seconds};
 use crate::timeseries::Timeseries;
 
+/// Flat arena for expression runtime state: program locals now; ring buffers,
+/// deques, and accumulators for the stateful builtins in later phases (per
+/// structured_expressions_architecture.md §1).
+///
+/// Regions are allocated at lowering time — each program or stateful call
+/// instance receives an `(offset, len)` range baked into its lowered node —
+/// and the whole arena resets to its init template in two memcpys at run
+/// start. Hot-path access is a plain indexed read/write; all bookkeeping is
+/// load-time.
+#[derive(Default, Clone, Debug)]
+pub struct ExprStateArena {
+    /// f64 state: locals slots, ring-buffer storage, accumulators.
+    pub f: Vec<f64>,
+    /// usize state: ring heads, deque indices, last-advanced step guards.
+    pub u: Vec<usize>,
+    /// Templates: the arena's contents at run start.
+    init_f: Vec<f64>,
+    init_u: Vec<usize>,
+}
+
+impl ExprStateArena {
+    /// Allocate a region of f64 state, returning its offset. `init` is both
+    /// the initial contents and the value restored on every `reset()`.
+    pub fn alloc_f(&mut self, init: &[f64]) -> usize {
+        let offset = self.init_f.len();
+        self.init_f.extend_from_slice(init);
+        self.f.extend_from_slice(init);
+        offset
+    }
+
+    /// Allocate a region of usize state, returning its offset.
+    pub fn alloc_u(&mut self, init: &[usize]) -> usize {
+        let offset = self.init_u.len();
+        self.init_u.extend_from_slice(init);
+        self.u.extend_from_slice(init);
+        offset
+    }
+
+    /// Restore every region to its init template. Called at run start.
+    pub fn reset(&mut self) {
+        self.f.copy_from_slice(&self.init_f);
+        self.u.copy_from_slice(&self.init_u);
+    }
+
+    /// Discard all regions. Called when the model is (re)configured, in the
+    /// same lifecycle position as the series wipe in `DataCache::initialize`.
+    pub fn clear(&mut self) {
+        self.f.clear();
+        self.u.clear();
+        self.init_f.clear();
+        self.init_u.clear();
+    }
+}
+
 #[derive(Default)]
 #[derive(Clone)]
 pub struct DataCache {
@@ -27,6 +81,10 @@ pub struct DataCache {
     // Named lookup tables ([table.*] sections), resolved by expressions at
     // model load. Arc-shared, so cloning the cache is cheap.
     pub tables: TableRegistry,
+
+    // Expression runtime state (program locals; stateful-builtin state in
+    // later phases). Slot ranges are allocated during expression lowering.
+    pub expr_state: ExprStateArena,
 
     // These vars for model components (incl nodes) to use if they need to know the date
     timestamp_year: i32,
@@ -101,6 +159,7 @@ impl DataCache {
         self.series_name = vec![];
         self.is_critical = vec![];
         self.name_lookup.clear();
+        self.expr_state.clear();
 
         // Set up the timing
         self.start_timestamp = start_timestamp;

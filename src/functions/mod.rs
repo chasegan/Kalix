@@ -22,7 +22,7 @@ pub mod parser;
 
 pub use errors::{EvaluationError, ParseError};
 pub use evaluator::{ContextFn, EvaluationConfig, FunctionRegistry, VariableContext};
-pub use parser::{FunctionParser, ParsedFunction};
+pub use parser::{FunctionParser, ParsedFunction, ParsedProgram};
 
 use std::collections::HashMap;
 
@@ -41,6 +41,16 @@ use std::collections::HashMap;
 pub fn parse_function(expression: &str) -> Result<ParsedFunction, ParseError> {
     let parser = FunctionParser::new();
     parser.parse(expression)
+}
+
+/// Convenience function to parse a `{ ... }` program block.
+///
+/// The block form of an expression: `;`-terminated statements (local
+/// assignments and asserts) followed by a bare result expression. See
+/// [`FunctionParser::parse_program`] for the grammar.
+pub fn parse_program(text: &str) -> Result<ParsedProgram, ParseError> {
+    let parser = FunctionParser::new();
+    parser.parse_program(text)
 }
 
 /// Convenience function to evaluate an expression with variables in a single call.

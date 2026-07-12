@@ -125,6 +125,7 @@ net_flow = min(
 | Function | Arguments | Description |
 |----------|-----------|-------------|
 | `if` | 3 | Conditional: if(condition, true_val, false_val) |
+| `clamp` | 3 | Constrain to a range: clamp(x, lo, hi) = min(max(x, lo), hi) |
 | `max` | 2+ | Maximum of values |
 | `min` | 2+ | Minimum of values |
 | `sum` | 1+ | Sum of values |
@@ -172,8 +173,6 @@ intended growth path of the expression language, roughly in priority order.
   days-since-event counters, and accumulators. The largest expressive gap:
   expressions are currently pure and stateless, so anything that remembers
   earlier timesteps (beyond fixed offsets like `[-1, 0.0]`) is impossible.
-- **Convenience functions** — `clamp(x, lo, hi)` as a clearer spelling of
-  `min(max(x, lo), hi)`.
 - **Richer calendar logic** — water-year fields, `days_in_month`, leap-year
   awareness, building on the `sim.*` namespace.
 - **Named intermediate values** — `let`-style bindings or user-defined

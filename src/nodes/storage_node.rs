@@ -126,7 +126,7 @@ impl StorageNode {
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
     fn check_forced_release(
-        data_cache: &DataCache,
+        data_cache: &mut DataCache,
         forced_release_input: &DynamicInput,
         order_due: f64
     ) -> f64 {
@@ -184,7 +184,7 @@ impl StorageNode {
         &mut self,
         v_initial: f64,
         net_rain_mm: f64,
-        data_cache: &DataCache,
+        data_cache: &mut DataCache,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
         let nrows = self.dimensions.nrows();
 

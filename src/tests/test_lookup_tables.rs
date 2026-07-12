@@ -283,11 +283,11 @@ fn test_expression_1d_lookup_over_data_series() {
     }
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 50.0);   // interpolated
+    assert_eq!(input.get_value(&mut data_cache), 50.0);   // interpolated
     data_cache.set_current_step(1);
-    assert_eq!(input.get_value(&data_cache), 125.0);  // interpolated
+    assert_eq!(input.get_value(&mut data_cache), 125.0);  // interpolated
     data_cache.set_current_step(2);
-    assert_eq!(input.get_value(&data_cache), 150.0);  // clamped above range
+    assert_eq!(input.get_value(&mut data_cache), 150.0);  // clamped above range
 }
 
 #[test]
@@ -299,7 +299,7 @@ fn test_expression_2d_lookup_and_arithmetic() {
         .expect("2D table expression should lower");
 
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 2.0 * 1500.0 + 1.0); // row 5 -> 1500 in column 2
+    assert_eq!(input.get_value(&mut data_cache), 2.0 * 1500.0 + 1.0); // row 5 -> 1500 in column 2
 }
 
 #[test]
@@ -315,7 +315,7 @@ fn test_expression_constant_argument_table_lookup() {
         _ => panic!("Expected Function variant, not constant folding"),
     }
     data_cache.set_current_step(0);
-    assert_eq!(input.get_value(&data_cache), 50.0);
+    assert_eq!(input.get_value(&mut data_cache), 50.0);
 }
 
 #[test]

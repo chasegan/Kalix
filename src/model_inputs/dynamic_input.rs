@@ -178,6 +178,13 @@ pub enum OptimizedExpressionNode {
         field: SimField,
     },
 
+    /// A program-local variable, resolved at lowering to an absolute slot in
+    /// the DataCache expression-state arena. Same cost class as
+    /// ConstantReference: one indexed read.
+    Local {
+        slot: usize,
+    },
+
     /// Named 1D lookup table (`table.<name>(x)`): clamped linear interpolation.
     /// The concrete table is resolved and embedded at lowering, so evaluation
     /// is a deref + binary search with no name or dimensionality dispatch.
@@ -284,6 +291,8 @@ impl OptimizedExpressionNode {
                 SimField::Step => data_cache.current_step as f64,
             },
 
+            OptimizedExpressionNode::Local { slot } => data_cache.expr_state.f[*slot],
+
             OptimizedExpressionNode::Lookup1D { table, arg } => {
                 table.lookup(arg.evaluate(data_cache))
             }
@@ -313,6 +322,7 @@ impl OptimizedExpressionNode {
             OptimizedExpressionNode::Constant { .. }
             | OptimizedExpressionNode::ConstantReference { .. }
             | OptimizedExpressionNode::SimContext { .. }
+            | OptimizedExpressionNode::Local { .. }
             | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. } => {}
 
             OptimizedExpressionNode::DataCacheReference { cache_index } => {
@@ -351,11 +361,18 @@ impl OptimizedExpressionNode {
         }
     }
 
-    /// Transform an ExpressionNode to an OptimizedExpressionNode by resolving variables to indices
+    /// Transform an ExpressionNode to an OptimizedExpressionNode by resolving variables to indices.
+    ///
+    /// `locals` maps program-local names (lowercased) to their absolute arena
+    /// slots, containing only the locals assigned by statements *above* the
+    /// expression being lowered — so a use-before-assign reference simply
+    /// isn't in the map and falls through to the bare-name error below.
+    /// Plain (non-program) expressions pass an empty map.
     fn from_expression_node(
         node: &ExpressionNode,
         data_variable_map: &HashMap<String, usize>,
         constant_variable_map: &HashMap<String, usize>,
+        locals: &HashMap<String, usize>,
         tables: &TableRegistry
     ) -> Result<Self, String> {
         match node {
@@ -366,7 +383,13 @@ impl OptimizedExpressionNode {
                 // Convert to lowercase for case-insensitive lookup (maps use lowercase keys)
                 let lower_name = name.to_lowercase();
 
-                // Check for sim.* namespace first (no map lookup needed)
+                // Program locals first: bare names, cannot collide with the
+                // dotted model namespaces.
+                if let Some(&slot) = locals.get(&lower_name) {
+                    return Ok(OptimizedExpressionNode::Local { slot });
+                }
+
+                // Check for sim.* namespace (no map lookup needed)
                 if let Some(field) = parse_sim_field(&lower_name) {
                     return Ok(OptimizedExpressionNode::SimContext { field });
                 }
@@ -416,8 +439,8 @@ impl OptimizedExpressionNode {
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::BinaryOp { left, op, right } => {
-                let left_opt = Self::from_expression_node(left, data_variable_map, constant_variable_map, tables)?;
-                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, tables)?;
+                let left_opt = Self::from_expression_node(left, data_variable_map, constant_variable_map, locals, tables)?;
+                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, locals, tables)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -426,7 +449,7 @@ impl OptimizedExpressionNode {
                 })
             }
             ExpressionNode::UnaryOp { op, operand } => {
-                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, tables)?;
+                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, locals, tables)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -436,7 +459,7 @@ impl OptimizedExpressionNode {
             ExpressionNode::FunctionCall { func, args } => {
                 let args_opt: Result<Vec<_>, String> = args
                     .iter()
-                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, tables))
+                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, locals, tables))
                     .collect();
 
                 lower_function_call(func, args_opt?, tables)
@@ -445,6 +468,89 @@ impl OptimizedExpressionNode {
     }
 }
 
+
+/// A lowered program statement. Few by design: assignments and asserts only
+/// (see FunctionParser::parse_program for why bare expression statements are
+/// rejected at parse).
+#[derive(Debug, Clone)]
+pub enum OptStmt {
+    /// Write the expression's value into an arena slot (a program local).
+    Assign {
+        slot: usize,
+        expr: OptimizedExpressionNode,
+    },
+    /// Fail the run when the expression is 0 or NaN. `meta` indexes the
+    /// owning program's assert_meta table (cold data, only touched on failure).
+    Assert {
+        expr: OptimizedExpressionNode,
+        meta: u32,
+    },
+}
+
+/// A lowered `{ ... }` program: statements executed in order, then the result
+/// expression. Locals were resolved to absolute arena slots at lowering, so
+/// evaluation is exactly as infallible and allocation-free as a plain
+/// expression — the only difference is the statement loop and slot writes.
+#[derive(Debug, Clone)]
+pub struct OptimizedProgram {
+    stmts: Vec<OptStmt>,
+    result: OptimizedExpressionNode,
+    /// Source text for each assert, indexed by OptStmt::Assert.meta.
+    /// Cold: read only when composing a failure message.
+    assert_meta: Vec<String>,
+}
+
+impl OptimizedProgram {
+    /// Execute the statements in order, then evaluate and return the result.
+    pub fn evaluate(&self, data_cache: &mut DataCache) -> f64 {
+        for stmt in &self.stmts {
+            match stmt {
+                OptStmt::Assign { slot, expr } => {
+                    let v = expr.evaluate(data_cache);
+                    data_cache.expr_state.f[*slot] = v;
+                }
+                OptStmt::Assert { expr, meta } => {
+                    let v = expr.evaluate(data_cache);
+                    // Fails on 0 AND on NaN. Written as two explicit conditions:
+                    // `!(v != 0.0)` would pass NaN through, which is exactly the
+                    // case the modeller most needs caught.
+                    if v == 0.0 || v.is_nan() {
+                        self.assert_failed(*meta, v, data_cache);
+                    }
+                }
+            }
+        }
+        self.result.evaluate(data_cache)
+    }
+
+    /// Step-0 read validation: walk every statement and the result, exactly
+    /// as OptimizedExpressionNode::validate_reads does for plain expressions.
+    #[cold]
+    #[inline(never)]
+    pub fn validate_reads(&self, data_cache: &DataCache) {
+        for stmt in &self.stmts {
+            match stmt {
+                OptStmt::Assign { expr, .. } => expr.validate_reads(data_cache),
+                OptStmt::Assert { expr, .. } => expr.validate_reads(data_cache),
+            }
+        }
+        self.result.validate_reads(data_cache);
+    }
+
+    /// Cold assert-failure path: only reached on a run that is already dead,
+    /// so the message can afford to be helpful (statement as written, the
+    /// offending value, and the timestep).
+    #[cold]
+    #[inline(never)]
+    fn assert_failed(&self, meta: u32, value: f64, data_cache: &DataCache) -> ! {
+        panic!(
+            "Assertion failed at {}: {} (condition evaluated to {})",
+            crate::tid::utils::u64_to_iso_datetime_string(data_cache.current_timestamp),
+            self.assert_meta[meta as usize],
+            value
+        )
+    }
+}
 
 /// DynamicInput supports constants, data references, and function expressions
 ///
@@ -518,6 +624,14 @@ pub enum DynamicInput {
         expression: String,  // Original expression for error messages and serialization
         optimised_ast: OptimizedExpressionNode
     },
+
+    /// `{ ... }` program block: statements (local assignments, asserts) and a
+    /// result expression. Locals live in the DataCache expression-state arena,
+    /// resolved to absolute slots at lowering.
+    Program {
+        expression: String,  // Original text including braces, for serialization
+        program: OptimizedProgram
+    },
 }
 
 impl Default for DynamicInput {
@@ -555,6 +669,13 @@ impl DynamicInput {
             Some(ctx) => expand_this(trimmed, ctx),
             None => trimmed.to_string(),
         };
+
+        // A leading '{' means a program block — the block form of a value
+        // (structured_expressions_design.md §3.2). Blocks are only legal as
+        // the entire value, so this one character decides the parse.
+        if working_copy.trim_start().starts_with('{') {
+            return Self::program_from_string(trimmed, &working_copy, data_cache, flag_as_critical);
+        }
 
         // Parse the expression (using the expanded form)
         let parsed = parse_function(&working_copy)
@@ -732,6 +853,118 @@ impl DynamicInput {
         }
     }
 
+    /// Create a DynamicInput::Program from a `{ ... }` block.
+    ///
+    /// External (dotted) references register in the cache exactly as for
+    /// plain expressions. Locals get one arena slot per distinct assigned
+    /// name, and statements are lowered *sequentially*: each expression sees
+    /// only the locals assigned above it, so use-before-assign cannot
+    /// resolve. (The up-front bare-name check catches those with a specific
+    /// message before any series could be registered.)
+    fn program_from_string(
+        original: &str,
+        working_copy: &str,
+        data_cache: &mut DataCache,
+        flag_as_critical: bool,
+    ) -> Result<Self, String> {
+        use crate::functions::ast::Stmt;
+
+        let parsed = crate::functions::parse_program(working_copy)
+            .map_err(|e| format!("Failed to parse program '{}': {}", original, e))?;
+
+        // Register external references, partitioned by namespace exactly as
+        // the plain-expression path does.
+        let mut data_variable_map = HashMap::new();
+        let mut constant_variable_map = HashMap::new();
+        for var_name in parsed.get_external_variables() {
+            let lower_name = var_name.to_lowercase();
+
+            if lower_name.starts_with("table.") {
+                return Err(format!(
+                    "'{}' is a lookup table reference and must be called with arguments, e.g. {}(x)",
+                    var_name, lower_name
+                ));
+            }
+            if !lower_name.contains('.') {
+                // A bare name not bound by an assignment above its use.
+                // Caught here, before it could register a phantom data series.
+                return Err(format!(
+                    "local variable '{}' is used before it is assigned (locals must be \
+                     assigned above their first use; model references need a namespace \
+                     prefix like data. or node.)",
+                    var_name
+                ));
+            }
+
+            if lower_name.starts_with("sim.") {
+                continue;
+            } else if lower_name.starts_with("c.") {
+                let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
+                constant_variable_map.insert(lower_name, idx);
+            } else if lower_name.starts_with("node.") {
+                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                data_variable_map.insert(lower_name, idx);
+            } else {
+                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
+                data_variable_map.insert(lower_name, idx);
+            }
+        }
+
+        // Allocate the locals frame: one slot per distinct assigned name,
+        // zero-initialised (a local is always written before it is read —
+        // the sequential lowering below guarantees it).
+        let program = parsed.program();
+        let mut n_slots = 0usize;
+        {
+            let mut seen: Vec<&str> = Vec::new();
+            for stmt in &program.stmts {
+                if let Stmt::Assign { name, .. } = stmt {
+                    if !seen.iter().any(|s| s.eq_ignore_ascii_case(name)) {
+                        seen.push(name);
+                        n_slots += 1;
+                    }
+                }
+            }
+        }
+        let frame_offset = data_cache.expr_state.alloc_f(&vec![0.0; n_slots]);
+
+        // Lower statements in order; `locals` grows as assignments bind.
+        let mut locals: HashMap<String, usize> = HashMap::new();
+        let mut next_slot = frame_offset;
+        let mut stmts: Vec<OptStmt> = Vec::new();
+        let mut assert_meta: Vec<String> = Vec::new();
+
+        for stmt in &program.stmts {
+            match stmt {
+                Stmt::Assign { name, expr } => {
+                    let lowered = OptimizedExpressionNode::from_expression_node(
+                        expr, &data_variable_map, &constant_variable_map, &locals, &data_cache.tables)?;
+                    let slot = *locals.entry(name.to_lowercase()).or_insert_with(|| {
+                        let s = next_slot;
+                        next_slot += 1;
+                        s
+                    });
+                    stmts.push(OptStmt::Assign { slot, expr: lowered });
+                }
+                Stmt::Assert { expr, source_text } => {
+                    let lowered = OptimizedExpressionNode::from_expression_node(
+                        expr, &data_variable_map, &constant_variable_map, &locals, &data_cache.tables)?;
+                    let meta = assert_meta.len() as u32;
+                    assert_meta.push(source_text.clone());
+                    stmts.push(OptStmt::Assert { expr: lowered, meta });
+                }
+            }
+        }
+
+        let result = OptimizedExpressionNode::from_expression_node(
+            &program.result, &data_variable_map, &constant_variable_map, &locals, &data_cache.tables)?;
+
+        Ok(DynamicInput::Program {
+            expression: original.to_string(),
+            program: OptimizedProgram { stmts, result, assert_meta },
+        })
+    }
+
     /// Get the current value
     ///
     /// # Arguments
@@ -750,7 +983,12 @@ impl DynamicInput {
     /// Programming errors (unknown function names, wrong argument counts) are extremely
     /// rare and indicate bugs in the parser. If they occur, this function prints an
     /// error to stderr and returns 0.0 to allow the simulation to continue.
-    pub fn get_value(&self, data_cache: &DataCache) -> f64 {
+    ///
+    /// Takes `&mut DataCache` because Program variants write their locals into
+    /// the cache's expression-state arena. Every production call site already
+    /// holds `&mut DataCache` (node phases, the ordering system), so callers
+    /// pass `data_cache` unchanged; the read-only variants simply never write.
+    pub fn get_value(&self, data_cache: &mut DataCache) -> f64 {
         match self {
             DynamicInput::None { .. } => 0.0,
             DynamicInput::DirectReference { idx, .. } => {
@@ -782,6 +1020,13 @@ impl DynamicInput {
                     optimised_ast.validate_reads(data_cache);
                 }
                 optimised_ast.evaluate(data_cache)
+            }
+            DynamicInput::Program { program, .. } => {
+                // Same step-0 validation contract as Function (see above).
+                if data_cache.current_step == 0 {
+                    program.validate_reads(data_cache);
+                }
+                program.evaluate(data_cache)
             }
         }
     }
@@ -816,6 +1061,7 @@ impl DynamicInput {
                 }
             }
             DynamicInput::Function { expression, .. } => expression.clone(),
+            DynamicInput::Program { expression, .. } => expression.clone(),
         }
     }
 
@@ -829,6 +1075,7 @@ impl DynamicInput {
             DynamicInput::Constant { original, .. } => original.as_str(),
             DynamicInput::LinearCombination { original, .. } => original.as_str(),
             DynamicInput::Function { expression, .. } => expression.as_str(),
+            DynamicInput::Program { expression, .. } => expression.as_str(),
         }
     }
 }
@@ -840,7 +1087,9 @@ fn transform_to_optimised_ast(
     constant_variable_map: &HashMap<String, usize>,
     tables: &TableRegistry
 ) -> Result<OptimizedExpressionNode, String> {
-    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, tables)
+    // Plain expressions have no locals frame.
+    let no_locals = HashMap::new();
+    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, &no_locals, tables)
 }
 
 /// Lower a parsed function call into its specialised hot-path form, validating
@@ -945,6 +1194,20 @@ fn lower_function_call(
             }
             let op = if builtin == B::Sum { FoldOp::Sum } else { FoldOp::Mean };
             Ok(OptimizedExpressionNode::Fold { op, args })
+        }
+        B::Clamp => {
+            if args.len() != 3 {
+                return arity_err("3", args.len());
+            }
+            // Lowered as min(max(x, lo), hi); identical semantics to the generic
+            // path, including lo > hi => hi (the outer Min applied last wins) and
+            // NaN suppression (FoldOp::Max/Min use f64::max/min, so a NaN operand
+            // is dropped rather than propagated, matching the min/max builtins).
+            let hi = args.pop().unwrap();
+            let lo = args.pop().unwrap();
+            let x = args.pop().unwrap();
+            let inner = OptimizedExpressionNode::Fold { op: FoldOp::Max, args: vec![x, lo] };
+            Ok(OptimizedExpressionNode::Fold { op: FoldOp::Min, args: vec![inner, hi] })
         }
         // All single-argument built-ins were handled above.
         _ => unreachable!("built-in '{}' not handled in lowering", builtin.name()),

@@ -34,9 +34,16 @@ The signature change is:
 ```rust
 // dynamic_input.rs
 pub fn get_value(&self, data_cache: &mut DataCache) -> f64
-// OptimizedExpressionNode
-pub fn evaluate(&self, data_cache: &mut DataCache) -> f64
 ```
+
+**Refinement discovered in phase 1** (implemented this way): only the
+*statement executor* (`OptimizedProgram::evaluate`) needs `&mut DataCache` —
+locals are written between expression evaluations, never during them, so
+`OptimizedExpressionNode::evaluate` keeps its immutable `&DataCache`
+signature and the entire existing expression hot path is untouched. Phase 2
+should follow the same shape: the unconditional state-advance walk (§5) is a
+separate `&mut` pass before immutable evaluation, not `&mut` threaded
+through `evaluate` itself.
 
 **Why this and not the alternatives.** Every production call site of
 `get_value` already holds `&mut DataCache` (verified: all node
@@ -84,11 +91,17 @@ distinct implementor ever exists.
 enum Stmt {
     Assign { name: String, expr: ExpressionNode },
     Assert { expr: ExpressionNode, source_text: String },
-    Expr(ExpressionNode),            // legal only as final statement
 }
-struct Program { stmts: Vec<Stmt> } // final Stmt must be Stmt::Expr — enforced
-                                    // at parse with the "no result value" error
+struct Program {
+    stmts: Vec<Stmt>,
+    result: ExpressionNode,   // the final bare expression, as its own field
+}
 ```
+
+(Phase 1 implemented `result` as a separate typed field rather than a
+`Stmt::Expr` variant policed at parse: a Program without a result value is
+unrepresentable, so the "no result value" rule is enforced by the type
+system and the parser merely reports it well.)
 
 Tokenizer grows `{`, `}`, `;`. A value whose first non-space char is `{` is
 parsed as a block; anything else takes the existing expression path
@@ -218,10 +231,20 @@ existing fail-fast read contract in `get_current_value` + the step-0
 A `VarBlock` is a `Vec` of `(series_idx, DynamicInput)` evaluated top to
 bottom; each result is written with the existing
 `data_cache.add_value_at_index(series_idx, value)`, which makes vars
-recordable, offset-addressable, and once-per-step by construction. Vars
-with `phase = order` are evaluated at their file position within the
-ordering pass — read `simple_nodewise_ordering.rs` before wiring this;
-the flow-phase path is the template.
+recordable, offset-addressable, and once-per-step by construction.
+
+**Scheduling direction (owner decision, July 2026):** nodes and var blocks
+execute in file-definition order, and the two per-timestep passes traverse
+that order in opposite directions — the **flow phase walks top to bottom**
+(file order, as the flow loop already does) and the **order phase walks
+bottom to top** (reverse file order, matching how ordering propagates
+upstream). `phase = flow` vars therefore slot into the existing flow loop
+at their `ExecItem` position. `phase = order` vars must interleave with the
+ordering system's own bottom-up traversal, which is structured differently
+(`simple_nodewise_ordering.rs`) — implementing that interleave is
+**explicitly deferred to the owner**; ship `phase = flow` first and reject
+`phase = order` with a clear "not yet implemented" load error rather than
+approximating its timing.
 
 Var series are registered at load as non-critical (like `node.*` series).
 
