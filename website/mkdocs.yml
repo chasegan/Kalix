@@ -159,6 +159,7 @@ nav:
       - Kalix CLI: docs/cli.md
       - Kalix in Python: docs/python.md
       - Deep topics:
+          - Allocation systems: docs/allocation-systems.md
           - Conventions: docs/conventions.md
           - Data cache: docs/data-cache.md
           - Dynamic expressions:
