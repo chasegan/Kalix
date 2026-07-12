@@ -5,10 +5,11 @@ blocks, local variables, assert, temporal (windowed) functions, user-defined
 functions, and model-level variables.*
 
 **Status: design agreed 2026-07. Phase 1 (§14: grammar core — `;`, blocks,
-locals, `assert`, `clamp`) implemented July 2026 on branch
-`feat/structured-expressions-p1`; phases 2–5 pending.** This document records
-the decisions and their reasons. A manifesto will be harvested after
-implementation proves the calls out (per `on-manifestos §4`).
+locals, `assert`, `clamp`) and phase 2 (stateful builtins: `moving_*`,
+`*_since`, `sim.new_*` flags) implemented July 2026; phases 3–5 ([fn],
+[var.*], IDE) pending.** This document records the decisions and their
+reasons. A manifesto will be harvested after implementation proves the
+calls out (per `on-manifestos §4`).
 
 ---
 

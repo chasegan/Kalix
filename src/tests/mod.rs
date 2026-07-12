@@ -109,3 +109,9 @@ mod test_table_discontinuous;
 
 #[cfg(test)]
 mod test_programs;
+
+#[cfg(test)]
+mod test_sim_flags;
+
+#[cfg(test)]
+mod test_stateful_functions;

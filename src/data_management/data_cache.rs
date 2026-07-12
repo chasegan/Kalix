@@ -91,6 +91,15 @@ pub struct DataCache {
     timestamp_month: u32,
     timestamp_day: u32,
     timestamp_seconds: u32, //seconds past midnight
+
+    // Calendar-boundary flags for the sim.* namespace (structured_expressions_design.md §7).
+    // Each is true when this step's calendar field differs from the previous step's,
+    // and at step 0 (run start counts as a boundary). Recomputed once per step in
+    // update_current_timestamp so expressions never recompute a calendar fact
+    // (performance §3.5).
+    new_day: bool,
+    new_month: bool,
+    new_year: bool,
 }
 
 
@@ -178,9 +187,28 @@ impl DataCache {
       - timestamp_year, timestamp_month, timestamp_day, timestamp_seconds
      */
     fn update_current_timestamp(&mut self) {
+        // Capture the previous call's decomposed date before overwriting it, so
+        // the calendar-boundary flags can compare against it.
+        let (prev_year, prev_month, prev_day) =
+            (self.timestamp_year, self.timestamp_month, self.timestamp_day);
+
         self.current_timestamp = self.start_timestamp + self.step_size * self.current_step as u64;
         (self.timestamp_year, self.timestamp_month, self.timestamp_day, self.timestamp_seconds) =
-            u64_to_year_month_day_and_seconds(self.current_timestamp)
+            u64_to_year_month_day_and_seconds(self.current_timestamp);
+
+        // Calendar-boundary flags (structured_expressions_design.md §7). Step 0 is
+        // an implicit boundary — the run start always counts. This makes the flags
+        // independent of any stale prev values left over from a previous run, since
+        // every run begins at set_current_step(0).
+        if self.current_step == 0 {
+            self.new_year = true;
+            self.new_month = true;
+            self.new_day = true;
+        } else {
+            self.new_year = self.timestamp_year != prev_year;
+            self.new_month = self.new_year || self.timestamp_month != prev_month;
+            self.new_day = self.new_month || self.timestamp_day != prev_day;
+        }
     }
 
 
@@ -240,6 +268,29 @@ impl DataCache {
      */
     pub fn get_timestamp_seconds(&self) -> u32 {
         self.timestamp_seconds
+    }
+
+
+    /// True when this step begins a new calendar day relative to the previous
+    /// step (and at step 0). At daily timesteps this is every step; at hourly
+    /// timesteps only the first step of each day. See §7 of the structured
+    /// expressions design.
+    pub fn is_new_day(&self) -> bool {
+        self.new_day
+    }
+
+
+    /// True when this step begins a new calendar month relative to the previous
+    /// step (and at step 0).
+    pub fn is_new_month(&self) -> bool {
+        self.new_month
+    }
+
+
+    /// True when this step begins a new calendar year relative to the previous
+    /// step (and at step 0).
+    pub fn is_new_year(&self) -> bool {
+        self.new_year
     }
 
 

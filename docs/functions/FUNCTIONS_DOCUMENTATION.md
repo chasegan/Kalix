@@ -68,6 +68,94 @@ flow = table.rating(node.reach_5.dsflow)
 release = table.pump_rating(sim.month, node.dam.volume)
 ```
 
+## Program Blocks
+
+A value can be a `{ ... }` program block: `;`-terminated statements followed
+by a bare final expression, whose value is the block's value. Statements are
+local assignments (`name = expression;`) and assertions (`assert(cond);`).
+
+```ini
+pond_demand = {
+    target = table.monthly_demand(sim.month);
+    recent = moving_mean(node.headwater.ds_1, 30, 0.0);
+    assert(target >= 0);
+    min(target, recent * c.demand_fraction)
+    }
+```
+
+- The final line must be a bare expression with **no** `;` — a terminated
+  final line is a load error ("program has no result value"), never a silent
+  default.
+- Locals are bare names, private to their block, case-insensitive, and must
+  be assigned above their first use. Builtin function names cannot be used
+  as locals. Dotted names (`data.*`, `node.*`, ...) are model references and
+  cannot be assigned.
+- `assert(cond)` fails the run — loudly, naming the statement, node, and
+  timestep — when `cond` is 0 **or NaN**. NaN is exactly the case a modeller
+  most needs caught.
+- A block is only legal as the entire value; blocks cannot be nested inside
+  expressions.
+
+## Temporal (Stateful) Functions
+
+These functions remember earlier timesteps. Their state advances exactly
+once per timestep, **unconditionally** — a `moving_mean` inside an untaken
+`if` branch still updates, so its value is a property of the series, never
+of which branches past evaluations took.
+
+### Moving windows — the last n steps
+
+`moving_sum(x, n, default)`, `moving_mean(...)`, `moving_min(...)`,
+`moving_max(...)`
+
+One shared signature: `x` is any expression; `n` is a positive integer
+literal (state is sized at model load); `default` is the **element
+default** — the window is pre-filled with it at run start, so the statistic
+is well-defined from step 0 and warms up from a stated assumption.
+
+```ini
+recent_flow = moving_mean(node.gauge_1.dsflow, 30, 0.0)
+```
+
+NaN behaviour follows each function's scalar counterpart: a NaN entering
+`moving_sum`/`moving_mean` makes the statistic NaN until it leaves the
+window (n steps); `moving_min`/`moving_max` suppress NaN exactly as
+`min`/`max` do.
+
+### Event windows — since a reset condition last fired
+
+`sum_since(x, reset)`, `min_since(x, reset)`, `max_since(x, reset)`,
+`count_since(cond, reset)`, `steps_since(reset)`
+
+The **last argument is always the reset condition** (any expression, truthy
+when non-zero). `count_since` counts the steps on which `cond` held;
+`steps_since` counts steps elapsed. Semantics are **reset-then-accumulate**:
+on the step the reset fires, the accumulator clears first and that step's
+contribution is then included — on 1 July, "usage this water year" equals
+that day's usage, not zero. Run start acts as an implicit reset.
+
+```ini
+[constants]
+c.wy_month = 7
+```
+```ini
+used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == c.wy_month)
+dry_spell = steps_since(node.gauge.dsflow > c.low_flow_threshold)
+spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
+```
+
+There is deliberately no water-year concept in the engine: the boundary is
+an idiom written at the point of use (or named once per model via a
+constant), because the water-year month varies from valley to valley.
+
+### Calendar boundary flags
+
+`sim.new_day`, `sim.new_month`, `sim.new_year` — 1.0 on the first step of
+each calendar day/month/year (and at step 0), 0.0 otherwise. Timestep-agnostic:
+at hourly resolution `sim.new_month && sim.month == 7` is true only for the
+first hour of 1 July, where the naive `sim.day == 1 && sim.month == 7` would
+fire 24 times.
+
 ## Common Functions
 
 ### max and min
@@ -148,6 +236,15 @@ net_flow = min(
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+| `moving_sum` | 3 | Sum over the last n steps: moving_sum(x, n, default) |
+| `moving_mean` | 3 | Mean over the last n steps |
+| `moving_min` | 3 | Minimum over the last n steps |
+| `moving_max` | 3 | Maximum over the last n steps |
+| `sum_since` | 2 | Sum of x since reset last fired: sum_since(x, reset) |
+| `min_since` | 2 | Minimum of x since reset |
+| `max_since` | 2 | Maximum of x since reset |
+| `count_since` | 2 | Steps on which cond held since reset: count_since(cond, reset) |
+| `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
 
 Two names are deliberately absent. There is no `log`: write the explicit
 `ln` or `log10`. And there is no `avg` or `average`: the function is `mean`,
@@ -169,14 +266,16 @@ the median and mode).
 The features below are **not yet implemented**. They are recorded here as the
 intended growth path of the expression language, roughly in priority order.
 
-- **Stateful / temporal functions** — moving averages, rolling sums,
-  days-since-event counters, and accumulators. The largest expressive gap:
-  expressions are currently pure and stateless, so anything that remembers
-  earlier timesteps (beyond fixed offsets like `[-1, 0.0]`) is impossible.
-- **Richer calendar logic** — water-year fields, `days_in_month`, leap-year
-  awareness, building on the `sim.*` namespace.
-- **Named intermediate values** — `let`-style bindings or user-defined
-  functions, so a long expression can name its parts and reuse them.
+- **Richer calendar logic** — `days_in_month` and similar fields, building
+  on the `sim.*` namespace. (The boundary flags `sim.new_day/month/year`
+  shipped with the temporal functions; there is deliberately no water-year
+  field — see Temporal Functions above.)
+- **User-defined functions** — a `[fn]` section with signature-as-key
+  definitions (`net_demand(pop, doy) = ...`), called as `fn.net_demand(...)`.
+  Design settled in structured_expressions_design.md §8. (Named intermediate
+  values within one expression shipped as program-block locals.)
+- **Model variables** — `[var.*]` blocks: published, scheduled, recordable
+  values computed at their file position (structured_expressions_design.md §9).
 - **Inline interpolation** — `interp(x, x1, y1, x2, y2, ...)` for tiny two-
   or three-point relationships that don't warrant a named `[table.*]` section.
 - **File-backed tables** — `file = ./tables/rating.csv` as an alternative to
