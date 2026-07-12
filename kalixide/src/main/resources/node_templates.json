@@ -10,7 +10,7 @@
     "Templates must insert a node the engine can actually RUN, so a modeller can",
     "check a model steps through before calibrating anything. Rainfall-runoff params",
     "are plausible starting values, not zeros. Tables carry enough rows to interpolate.",
-    "Comments are '#' or ';' -- never '//', which the engine parses as part of the value.",
+    "Comments are '#' only -- never ';' or '//', which the engine parses as part of the value.",
     "Parameters that take an expression are marked '#expression' so it is clear they",
     "are not plain numbers."
   ],

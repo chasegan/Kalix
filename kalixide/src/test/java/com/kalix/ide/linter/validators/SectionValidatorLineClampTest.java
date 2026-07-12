@@ -56,7 +56,7 @@ class SectionValidatorLineClampTest {
         LinterSchema schema = loadSchema(dir);
 
         // Section header is the last line (line 3); startLine+1 = 4 is past EOF.
-        List<ValidationIssue> issues = missingPropertyIssues(schema, "; a comment\n\n[kalix]");
+        List<ValidationIssue> issues = missingPropertyIssues(schema, "# a comment\n\n[kalix]");
 
         assertEquals(1, issues.size());
         assertEquals(3, issues.get(0).getLineNumber(),

@@ -146,12 +146,12 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
     }
 
     /**
-     * Finds the start position of a comment (# or ;) in the given range.
+     * Finds the start position of a comment (#) in the given range.
      * @return comment start position, or -1 if no comment found
      */
     private int findCommentStart(char[] array, int start, int end) {
         for (int i = start; i < end; i++) {
-            if (array[i] == '#' || array[i] == ';') {
+            if (array[i] == '#') {
                 return i;
             }
         }

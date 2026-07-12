@@ -507,7 +507,7 @@ public class CommandExecutor {
     }
 
     /**
-     * Returns the column where an inline comment ({@code #} or {@code ;}) starts on
+     * Returns the column where an inline comment ({@code #}) starts on
      * the line, or the line length if there is none. Mirrors
      * {@code INIModelParser.removeComments}, so ranges computed here address the same
      * region the parser read values from.
@@ -515,7 +515,7 @@ public class CommandExecutor {
     private static int commentStartColumn(String line) {
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
-            if (c == '#' || c == ';') {
+            if (c == '#') {
                 return i;
             }
         }

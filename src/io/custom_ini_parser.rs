@@ -62,7 +62,7 @@ impl IniDocument {
             }
 
             // Handle comments
-            if trimmed.starts_with('#') || trimmed.starts_with(';') {
+            if trimmed.starts_with('#') {
                 pending_comments.push(line.to_string());
                 line_idx += 1;
                 continue;
@@ -208,7 +208,7 @@ impl IniDocument {
     }
 
     fn find_comment_start(line: &str) -> Option<usize> {
-        // Find the first # or ; that's not inside quotes
+        // Find the first # that's not inside quotes
         let mut in_quotes = false;
         let mut escape_next = false;
 
@@ -221,7 +221,7 @@ impl IniDocument {
             match ch {
                 '\\' => escape_next = true,
                 '"' => in_quotes = !in_quotes,
-                '#' | ';' if !in_quotes => return Some(i),
+                '#' if !in_quotes => return Some(i),
                 _ => {}
             }
         }

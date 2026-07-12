@@ -33,7 +33,6 @@ class PropertyHoverTooltipManagerCheapCheckTest {
         assertFalse(isPossiblePropertyKeyPosition("", 0), "empty line");
         assertFalse(isPossiblePropertyKeyPosition("\n", 0), "blank line");
         assertFalse(isPossiblePropertyKeyPosition("[node.storage1]\n", 3), "section header");
-        assertFalse(isPossiblePropertyKeyPosition("; comment = looks like one\n", 3), "comment");
         assertFalse(isPossiblePropertyKeyPosition("# comment = looks like one\n", 3), "hash comment");
         assertFalse(isPossiblePropertyKeyPosition("   3, 4\n", 4), "continuation line");
         assertFalse(isPossiblePropertyKeyPosition("node.outlet.dsflow\n", 4), "bare outputs line (no '=')");
@@ -42,7 +41,14 @@ class PropertyHoverTooltipManagerCheapCheckTest {
     @Test
     void commentedOutAssignmentIsNotCandidate() {
         // comment marker before the '=': not a property header
-        assertFalse(isPossiblePropertyKeyPosition("key ; note = 1\n", 1));
+        assertFalse(isPossiblePropertyKeyPosition("key # note = 1\n", 1));
+    }
+
+    @Test
+    void semicolonIsNotACommentChar() {
+        // ';' is reserved for future syntax, not comments: a line starting with
+        // it is an ordinary (if odd) key, so the key side is still a candidate.
+        assertTrue(isPossiblePropertyKeyPosition("; comment = looks like one\n", 3));
     }
 
     @Test

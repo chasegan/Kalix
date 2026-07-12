@@ -90,7 +90,7 @@ public final class IniContinuation {
             return false;
         }
         char first = line.charAt(0);
-        if (first == ';' || first == '#' || first == '[') {
+        if (first == '#' || first == '[') {
             return false;
         }
         return hasEqualsBeforeComment(line);
@@ -105,7 +105,7 @@ public final class IniContinuation {
             if (c == '=') {
                 return true;
             }
-            if (c == ';' || c == '#') {
+            if (c == '#') {
                 return false;
             }
         }

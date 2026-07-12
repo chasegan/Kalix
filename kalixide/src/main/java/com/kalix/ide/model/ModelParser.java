@@ -54,7 +54,7 @@ public class ModelParser {
                 line = line.trim();
 
                 // Skip empty lines and comments
-                if (line.isEmpty() || line.startsWith(";") || line.startsWith("#")) {
+                if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
 

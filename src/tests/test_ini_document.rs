@@ -35,6 +35,24 @@ params = 0.01, 40.0, 23.0,
 }
 
 #[test]
+fn test_semicolon_is_not_a_comment_char() {
+    // `;` is reserved for future syntax, so it must reach the value untouched:
+    // an inline `;` stays part of the value, and a leading-`;` line is a list
+    // item (a real line), not a comment.
+    let content = r#"[node.test]
+type = gr4j
+params = 100.0; 2.0
+; not a comment
+"#;
+
+    let doc = IniDocument::parse(content).unwrap();
+    let section = doc.sections.get("node.test").unwrap();
+
+    assert_eq!(section.properties.get("params").unwrap().value, "100.0; 2.0");
+    assert!(section.properties.contains_key("; not a comment"));
+}
+
+#[test]
 fn test_to_string_preserves_unchanged() {
     let content = r#"# Top comment
 [kalix]
@@ -311,7 +329,7 @@ node.simple_node.dsflow
 fn test_exact_round_trip_every_node_type_model() {
     // The regression model that exercises every node type, plus the awkward
     // formatting cases this DOM must survive untouched: whole-line and inline
-    // comments (both `#` and `;`), blank lines, aligned multi-line
+    // comments (`#` only — `;` is not a comment char), blank lines, aligned multi-line
     // continuations with trailing commas, bare-line [inputs]/[outputs]
     // sections, and trailing blank lines at end of file.
     //

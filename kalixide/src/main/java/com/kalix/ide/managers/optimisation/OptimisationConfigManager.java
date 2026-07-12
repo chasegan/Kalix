@@ -482,7 +482,7 @@ public class OptimisationConfigManager {
             }
 
             // If we're in the outputs section and the line is not empty or a comment
-            if (inOutputsSection && !trimmedLine.isEmpty() && !trimmedLine.startsWith("#") && !trimmedLine.startsWith(";")) {
+            if (inOutputsSection && !trimmedLine.isEmpty() && !trimmedLine.startsWith("#")) {
                 outputs.add(trimmedLine);
             }
         }

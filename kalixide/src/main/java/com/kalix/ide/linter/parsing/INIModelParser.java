@@ -240,15 +240,15 @@ public class INIModelParser {
     }
 
     /**
-     * Remove comments from a line. Comments start with ';' or '#'.
+     * Remove comments from a line. Comments start with '#'.
      */
     private static String removeComments(String line) {
         int commentIndex = -1;
 
-        // Find the first occurrence of comment characters
+        // Find the first occurrence of the comment character
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
-            if (c == ';' || c == '#') {
+            if (c == '#') {
                 commentIndex = i;
                 break;
             }

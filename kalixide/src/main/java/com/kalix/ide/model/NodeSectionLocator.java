@@ -221,7 +221,7 @@ public final class NodeSectionLocator {
     }
 
     private static boolean isBlankOrComment(String trimmed) {
-        return trimmed.isEmpty() || trimmed.charAt(0) == '#' || trimmed.charAt(0) == ';';
+        return trimmed.isEmpty() || trimmed.charAt(0) == '#';
     }
 
     /**

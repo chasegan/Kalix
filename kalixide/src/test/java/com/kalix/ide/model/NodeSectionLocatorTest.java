@@ -93,7 +93,8 @@ class NodeSectionLocatorTest {
     }
 
     @Test
-    void semicolonCommentedLocLineIsNotALocProperty() {
+    void semicolonPrefixedLocLineIsNotALocProperty() {
+        // ';' is not a comment char, but '; loc' is still not the key 'loc'.
         String text = "[node.a]\n; loc = 99, 99\n";
         NodeSection section = NodeSectionLocator.find(text, "a");
         assertNotNull(section);

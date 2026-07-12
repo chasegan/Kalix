@@ -103,7 +103,7 @@ class NodeTemplateCatalogTest {
     }
 
     /**
-     * Kalix INI comments are '#' and ';'. A '//' is not a comment — it is swallowed
+     * Kalix INI comments are '#' only. A '//' is not a comment — it is swallowed
      * into the value, and the engine panics parsing it as a number.
      */
     @Test

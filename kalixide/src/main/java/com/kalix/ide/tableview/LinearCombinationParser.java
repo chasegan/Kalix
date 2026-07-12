@@ -162,7 +162,7 @@ public final class LinearCombinationParser {
             char c = input.charAt(pos);
             if (Character.isWhitespace(c)) {
                 pos++;
-            } else if (c == '#' || c == ';') {
+            } else if (c == '#') {
                 break;  // inline comment terminates the value
             } else if (c == '+') {
                 tokens.add(new Token(TokenType.PLUS, "+", 0));

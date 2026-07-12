@@ -103,7 +103,8 @@ class IniContinuationTest {
                 "key = a",
         };
         assertEquals(-1, IniContinuation.findOwningPropertyLine(lines, 0));
-        // Semicolon variant
+        // ';' is not a comment char, but a flush-left line with no '=' is
+        // still not a continuation and owns no property.
         assertEquals(-1, IniContinuation.findOwningPropertyLine(new String[]{"; note"}, 0));
     }
 

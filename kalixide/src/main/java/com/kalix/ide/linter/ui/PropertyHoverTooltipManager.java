@@ -151,7 +151,7 @@ public class PropertyHoverTooltipManager extends DwellTooltipSupport {
             return false;
         }
         char first = lineText.charAt(0);
-        if (Character.isWhitespace(first) || first == ';' || first == '#' || first == '[') {
+        if (Character.isWhitespace(first) || first == '#' || first == '[') {
             return false;
         }
         for (int i = 0; i < lineText.length(); i++) {
@@ -159,7 +159,7 @@ public class PropertyHoverTooltipManager extends DwellTooltipSupport {
             if (c == '=') {
                 return column < i; // on the key portion, not the value
             }
-            if (c == ';' || c == '#') {
+            if (c == '#') {
                 return false; // comment before any '='
             }
         }
