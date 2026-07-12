@@ -121,3 +121,6 @@ mod test_fn_section_io;
 
 #[cfg(test)]
 mod test_fn_inline;
+
+#[cfg(test)]
+mod test_var_blocks;

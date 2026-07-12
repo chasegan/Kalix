@@ -4,13 +4,15 @@
 blocks, local variables, assert, temporal (windowed) functions, user-defined
 functions, and model-level variables.*
 
-**Status: design agreed 2026-07. Phases 1–3 implemented July 2026: grammar
+**Status: design agreed 2026-07. Phases 1–4 implemented July 2026: grammar
 core (`;`, blocks, locals, `assert`, `clamp`), stateful builtins
-(`moving_*`, `*_since`, `sim.new_*`), and `[fn]` user-defined functions
-(inline expansion, hygienic, `this.` rebinding, DAG-checked). Phases 4–5
-([var.*], IDE lockstep) pending.** This document records the decisions and
-their reasons. A manifesto will be harvested after implementation proves
-the calls out (per `on-manifestos §4`).
+(`moving_*`, `*_since`, `sim.new_*`), `[fn]` user-defined functions
+(inline expansion, hygienic, `this.` rebinding, DAG-checked, conditional
+execution in branches), and `[var.*]` blocks (flow phase at file position;
+`phase = order` rejected pending its ordering-system interleave). Phase 5
+(IDE lockstep) pending.** This document records the decisions and their
+reasons. A manifesto will be harvested after implementation proves the
+calls out (per `on-manifestos §4`).
 
 ---
 

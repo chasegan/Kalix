@@ -682,6 +682,80 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // Each property is a model result we want to record
                 model.outputs.push(name);
             }
+        } else if section_name.starts_with("var.") {
+            // -------------------------------------------------------------------------------------
+            // Var blocks: published calculations, ACTIVE at this file position
+            // (structured_expressions_design.md §9). Unlike tables and fns,
+            // their position among the node sections is part of their meaning:
+            // they execute here, reading anything computed above.
+            // -------------------------------------------------------------------------------------
+            let block_name = &section_name[4..];
+            if !is_valid_variable_name(block_name) || block_name.contains('.') {
+                return Err(format!("Error on line {}: Invalid var block name '{}'",
+                                   ini_section.line_number, block_name));
+            }
+
+            // Phase: 'flow' (default) runs at file position in the flow pass.
+            // 'order' is designed (order phase walks bottom-up) but its
+            // interleave with the ordering system is not yet implemented —
+            // rejected rather than approximated (owner decision, July 2026).
+            let mut phase_explicit: Option<String> = None;
+            if let Some(p) = ini_section.properties.get("phase") {
+                match p.value.trim().to_lowercase().as_str() {
+                    "flow" => phase_explicit = Some(p.value.trim().to_string()),
+                    "order" => {
+                        return Err(format!(
+                            "Error on line {}: phase = order is not yet implemented for \
+                             [var.*] blocks (only phase = flow is supported)",
+                            p.line_number));
+                    }
+                    other => {
+                        return Err(format!(
+                            "Error on line {}: invalid phase '{}' for [{}] (expected 'flow' or 'order')",
+                            p.line_number, other, section_name));
+                    }
+                }
+            }
+
+            let mut defs: Vec<crate::model::VarDef> = Vec::new();
+            for (key, ini_property) in &ini_section.properties {
+                if key.as_str() == "phase" {
+                    continue;
+                }
+                if !is_valid_variable_name(key) || key.contains('.') {
+                    return Err(format!("Error on line {}: Invalid var name '{}' in [{}]",
+                                       ini_property.line_number, key, section_name));
+                }
+
+                let series_name = format!("var.{}.{}", block_name, key).to_lowercase();
+                if model.data_cache.get_existing_series_idx(&series_name).is_some() {
+                    return Err(format!(
+                        "Error on line {}: series '{}' already exists (duplicate var definition?)",
+                        ini_property.line_number, series_name));
+                }
+                // The block's own output series: registered before lowering
+                // the expression, so a self-reference with a [-1, default]
+                // offset resolves to the same series.
+                let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
+
+                let input = DynamicInput::from_string(
+                    &ini_property.value, &mut model.data_cache, true, None)
+                    .map_err(|e| format!("Error on line {}: in '{}': {}",
+                                         ini_property.line_number, key, e))?;
+
+                defs.push(crate::model::VarDef {
+                    key: key.clone(),
+                    series_idx,
+                    input,
+                    original: ini_property.value.clone(),
+                });
+            }
+
+            model.add_var_block(crate::model::VarBlock {
+                name: block_name.to_string(),
+                defs,
+                phase_explicit,
+            });
         } else if section_name.starts_with("table.") {
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
@@ -784,8 +858,24 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         }
     }
 
-    // List all nodes
-    for node_enum in &model.nodes {
+    // List all nodes and var blocks, interleaved in execution (file) order —
+    // a var block's position is part of its meaning, so a round-trip must
+    // keep it where the modeller put it.
+    for exec_item in &model.exec_items {
+        let node_enum = match exec_item {
+            crate::model::ExecItem::VarBlock(i) => {
+                let vb = &model.var_blocks[*i];
+                let section_name = format!("var.{}", vb.name);
+                if let Some(p) = &vb.phase_explicit {
+                    ini_doc.set_property(section_name.as_str(), "phase", p.as_str());
+                }
+                for def in &vb.defs {
+                    ini_doc.set_property(section_name.as_str(), def.key.as_str(), def.original.as_str());
+                }
+                continue;
+            }
+            crate::model::ExecItem::Node(idx) => &model.nodes[*idx],
+        };
         match node_enum {
             NodeEnum::BlackholeNode(n) => {
                 let section_name = format!("node.{}", n.name);

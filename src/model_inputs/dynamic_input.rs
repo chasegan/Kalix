@@ -618,9 +618,10 @@ impl OptimizedExpressionNode {
                     return Err(format!("Offset syntax not supported for simulation context: {}", name));
                 }
 
-                // Node outputs cannot look forward - future values haven't been computed
-                if lower_name.starts_with("node.") && *offset > 0 {
-                    return Err(format!("Forward lookup not supported for node outputs: {}", name));
+                // Node outputs and var values cannot look forward - future values
+                // have not been computed
+                if (lower_name.starts_with("node.") || lower_name.starts_with("var.")) && *offset > 0 {
+                    return Err(format!("Forward lookup not supported for computed series: {}", name));
                 }
 
                 // Data cache variables support offset
@@ -1118,8 +1119,11 @@ impl DynamicInput {
             // Resolve variable names to data cache indices
             for var_name in &linear_info.variables {
                 let lower_name = var_name.to_lowercase();
-                // node.* references are not critical inputs (they're outputs from other nodes)
-                let is_critical = flag_as_critical && !lower_name.starts_with("node.");
+                // node.* and var.* references are not critical inputs (they are
+                // computed during the run, not loaded)
+                let is_critical = flag_as_critical
+                    && !lower_name.starts_with("node.")
+                    && !lower_name.starts_with("var.");
                 let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
                 data_indices.push(idx);
             }
@@ -1168,8 +1172,9 @@ impl DynamicInput {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
-            } else if lower_name.starts_with("node.") {
-                // Resolve to data cache but NOT as critical input (node outputs don't determine simulation period)
+            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.") {
+                // Resolve to data cache but NOT as critical input (node outputs
+                // and var values are computed during the run, not loaded)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name.clone(), idx);
             } else {
@@ -1211,9 +1216,9 @@ impl DynamicInput {
                 return Err(format!("Offset syntax not supported for simulation context: {}", var_name));
             }
 
-            // Node outputs cannot look forward
-            if lower_var.starts_with("node.") && offset > 0 {
-                return Err(format!("Forward lookup not supported for node outputs: {}", var_name));
+            // Node outputs and var values cannot look forward
+            if (lower_var.starts_with("node.") || lower_var.starts_with("var.")) && offset > 0 {
+                return Err(format!("Forward lookup not supported for computed series: {}", var_name));
             }
 
             if let Some(&idx) = data_variable_map.get(&lower_var) {
@@ -1372,7 +1377,8 @@ impl DynamicInput {
             } else if lower_name.starts_with("c.") {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
-            } else if lower_name.starts_with("node.") {
+            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.") {
+                // Computed during the run, not loaded: never critical.
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name, idx);
             } else {

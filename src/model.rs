@@ -17,6 +17,41 @@ use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
 use crate::timeseries_input::TimeseriesInput;
+use crate::model_inputs::DynamicInput;
+
+/// One entry in the model's interleaved execution layout: nodes and var
+/// blocks run in definition order, exactly as the file reads.
+#[derive(Debug, Clone, Copy)]
+pub enum ExecItem {
+    Node(usize),
+    VarBlock(usize),
+}
+
+/// One `key = expression` line of a `[var.*]` section.
+#[derive(Debug, Clone)]
+pub struct VarDef {
+    /// Bare key name as written (for serialization).
+    pub key: String,
+    /// The `var.<block>.<key>` series this definition writes each step.
+    pub series_idx: usize,
+    pub input: DynamicInput,
+    /// Expression text as written (for serialization).
+    pub original: String,
+}
+
+/// A `[var.<name>]` section: published calculations, evaluated top to bottom
+/// at the block's file position in the flow phase, each written to its own
+/// data-cache series — so vars are readable anywhere, offset-addressable,
+/// and recordable like any node output (structured_expressions_design.md §9).
+/// `phase = order` is not yet implemented and is rejected at load.
+#[derive(Debug, Clone)]
+pub struct VarBlock {
+    /// Section name minus the `var.` prefix.
+    pub name: String,
+    pub defs: Vec<VarDef>,
+    /// The `phase` key exactly as written, if present (round-trip fidelity).
+    pub phase_explicit: Option<String>,
+}
 
 #[derive(Default, Clone)]
 pub struct Model {
@@ -34,6 +69,16 @@ pub struct Model {
 
     // Nodes
     pub nodes: Vec<NodeEnum>,
+
+    // Var blocks ([var.*] sections): published calculations executed at their
+    // file position within the flow phase (structured_expressions_design.md §9)
+    pub var_blocks: Vec<VarBlock>,
+
+    // Interleaved execution layout: nodes and var blocks in definition order.
+    // Built as sections are added (add_node / add_var_block), so file order
+    // IS execution order for var blocks exactly as it is for nodes
+    // (node-definition-order §1 extended to calculations).
+    pub exec_items: Vec<ExecItem>,
 
     // Links
     pub links: Vec<Link>,
@@ -91,6 +136,8 @@ impl Model {
             data_cache: self.data_cache.clone(),
             working_directory: self.working_directory.clone(),
             nodes: self.nodes.clone(),
+            var_blocks: self.var_blocks.clone(),
+            exec_items: self.exec_items.clone(),
             links: self.links.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -111,7 +158,17 @@ impl Model {
         self.outgoing_links.push(Vec::new());
         self.incoming_links.push(Vec::new());
         self.node_lookup.insert(name.to_lowercase(), idx);
+        self.exec_items.push(ExecItem::Node(idx));
 
+        idx
+    }
+
+    /// Adds a var block at the current position in the execution layout —
+    /// definition order is execution order for calculations too.
+    pub fn add_var_block(&mut self, block: VarBlock) -> usize {
+        let idx = self.var_blocks.len();
+        self.var_blocks.push(block);
+        self.exec_items.push(ExecItem::VarBlock(idx));
         idx
     }
 
@@ -497,23 +554,40 @@ impl Model {
         set_context_phase(SimPhase::Ordering);
         self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache);
 
-        // Execute nodes with flow phase
+        // Execute nodes and var blocks with flow phase, interleaved in
+        // definition order (file position IS execution position for var
+        // blocks, per node-definition-order §1 extended to calculations).
         set_context_phase(SimPhase::Flow);
-        for &node_idx in &self.execution_order {
+        for item_idx in 0..self.exec_items.len() {
+            match self.exec_items[item_idx] {
+                ExecItem::Node(node_idx) => {
+                    // Set node context for error reporting (just stores the index)
+                    set_context_node(node_idx);
 
-            // Set node context for error reporting (just stores the index)
-            set_context_node(node_idx);
+                    // Run the node's flow phase
+                    self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
-            // Run the node's flow phase
-            self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                    // Immediately propagate outflows to downstream nodes
+                    for &link_idx in &self.outgoing_links[node_idx] {
+                        let link = &self.links[link_idx];
+                        let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
 
-            // Immediately propagate outflows to downstream nodes
-            for &link_idx in &self.outgoing_links[node_idx] {
-                let link = &self.links[link_idx];
-                let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
-
-                if outflow > 0.0 {
-                    self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
+                        if outflow > 0.0 {
+                            self.nodes[link.to_node].add_usflow(outflow, link.to_inlet);
+                        }
+                    }
+                }
+                ExecItem::VarBlock(vb_idx) => {
+                    // Evaluate the block's definitions top to bottom, each
+                    // written to its series — computed exactly once per step,
+                    // so every reader observes one value.
+                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                        let value = self.var_blocks[vb_idx].defs[def_idx]
+                            .input
+                            .get_value(&mut self.data_cache);
+                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                        self.data_cache.add_value_at_index(series_idx, value);
+                    }
                 }
             }
         }
